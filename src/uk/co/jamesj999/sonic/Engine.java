@@ -56,7 +56,8 @@ public class Engine {
 		frame.setTitle("Sonic Engine by Jamesj999 "
 				+ configService.getString(SonicConfiguration.VERSION));
 		
-		spriteManager.addSprite(new Sonic("sonic"));
+		Sonic sonic = new Sonic("Sonic", 50, 50);
+		spriteManager.addSprite(sonic);
 	}
 
 	/**

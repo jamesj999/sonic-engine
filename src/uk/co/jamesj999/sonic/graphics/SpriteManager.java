@@ -1,14 +1,11 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import javax.swing.JFrame;
 
-import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 
@@ -25,11 +22,6 @@ public class SpriteManager {
 	private static SpriteManager spriteManager;
 
 	private Map<String, Sprite> sprites;
-
-	private final BufferedImage spriteBuffer = new BufferedImage(
-			configService.getInt(SonicConfiguration.SCREEN_WIDTH),
-			configService.getInt(SonicConfiguration.SCREEN_HEIGHT),
-			BufferedImage.TYPE_INT_RGB);
 
 	private SpriteManager() {
 		sprites = new HashMap<String, Sprite>();
@@ -62,7 +54,8 @@ public class SpriteManager {
 	 */
 	public void draw(JFrame frame) {
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
-			draw(entry.getValue());
+			Sprite sprite = entry.getValue();
+			frame.getGraphics().drawImage(sprite.draw(), sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight(), frame);
 		}
 	}
 
@@ -77,9 +70,9 @@ public class SpriteManager {
 		}
 	}
 
-	private void draw(Sprite sprite) {
-		Graphics graphics = sprite.getGraphics();
-	}
+	// private void draw(Sprite sprite) {
+	// sprite.draw(spriteBuffer);
+	// }
 
 	private void update(Sprite sprite) {
 		//
