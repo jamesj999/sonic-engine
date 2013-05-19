@@ -57,8 +57,7 @@ public class Engine {
 				.getDefaultScreenDevice().getDefaultConfiguration();
 
 		frame = new JFrame();
-		// frame.addWindowListener(new FrameClose());
-		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 		frame.setSize(width * scale, height * scale);
 		frame.setVisible(true);
 		frame.setTitle("Sonic Engine by Jamesj999 and Raiscan "
@@ -72,9 +71,8 @@ public class Engine {
 		frame.add(canvas);
 		
 		canvas.createBufferStrategy(2);
-		
-		//graphics = canvas.getBufferStrategy().getDrawGraphics();
 
+		// Set up our InputHandler to deal with key presses
 		inputHandler = new InputHandler(frame);
 
 		Sonic sonic = new Sonic("Sonic", 50, 50);

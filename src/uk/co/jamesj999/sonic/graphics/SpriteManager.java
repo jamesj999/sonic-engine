@@ -82,18 +82,7 @@ public class SpriteManager {
 			Sprite sprite = entry.getValue();
 			// Check we're dealing with a playable sprite:
 			if (sprite instanceof AbstractPlayableSprite) {
-				if (left) {
-					((AbstractPlayableSprite) sprite).leftPressed();
-				}
-				if (right) {
-					((AbstractPlayableSprite) sprite).rightPressed();
-				}
-				if (up) {
-					((AbstractPlayableSprite) sprite).upPressed();
-				}
-				if (down) {
-					((AbstractPlayableSprite) sprite).downPressed();
-				}
+				((AbstractPlayableSprite) sprite).handle(left, right);
 			}
 		}
 	}

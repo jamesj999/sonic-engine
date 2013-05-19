@@ -21,22 +21,10 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	@Override
-	public void leftPressed() {
-		x -= 4;
-	}
-
-	@Override
-	public void downPressed() {
-		y += 4;
-	}
-
-	@Override
-	public void upPressed() {
-		y -= 4;
-	}
-
-	@Override
-	public void rightPressed() {
-		x += 4;
+	public void defineSpeeds() {
+		runAccel = 0.046875f;
+		runDecel = 0.5f;
+		friction = 0.046875f;
+		max = 14f;
 	}
 }
