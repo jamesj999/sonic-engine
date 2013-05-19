@@ -25,6 +25,10 @@ public class Engine {
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
 	private InputHandler inputHandler;
+	
+	private int height = configService.getInt(SonicConfiguration.SCREEN_HEIGHT);
+	private int width = configService.getInt(SonicConfiguration.SCREEN_WIDTH);
+	private int scale = configService.getInt(SonicConfiguration.SCALE);
 
 	private GraphicsConfiguration config;
 	private JFrame frame;
@@ -41,9 +45,7 @@ public class Engine {
 	public void init() {
 		// TODO this bollocks is just to get a window. It'll be made a lot more
 		// tidy once I work this shit out.
-		int height = configService.getInt(SonicConfiguration.SCREEN_HEIGHT);
-		int width = configService.getInt(SonicConfiguration.SCREEN_WIDTH);
-		int scale = configService.getInt(SonicConfiguration.SCALE);
+
 
 		// TODO change for Log4J
 		System.out.println(height + " " + width);
@@ -89,6 +91,7 @@ public class Engine {
 	}
 
 	public void update() {
+		frame.getGraphics().clearRect(0, 0, width, height);
 		spriteManager.update(inputHandler);
 	}
 
