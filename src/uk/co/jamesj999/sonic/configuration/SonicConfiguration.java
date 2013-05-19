@@ -27,7 +27,11 @@ public enum SonicConfiguration {
 	/**
 	 * Scale used with BufferedImage TODO: Work out what this does
 	 */
-	SCALE(1);
+	SCALE(1),
+	/**
+	 * Frames per second to render. Will make the game faster/slower!
+	 */
+	FPS(60);
 
 	private Object value;
 

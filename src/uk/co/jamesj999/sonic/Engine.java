@@ -6,11 +6,12 @@ import java.awt.Transparency;
 import java.awt.image.BufferedImage;
 
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.WindowConstants;
 
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.graphics.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 /**
  * Controls the game.
@@ -21,6 +22,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 public class Engine {
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
+	private final SpriteManager spriteManager = SpriteManager.getInstance();
 
 	private GraphicsConfiguration config;
 	private JFrame frame;
@@ -28,10 +30,12 @@ public class Engine {
 	// TODO Add Log4J Support
 
 	public Engine() {
-		startGame();
+		init();
+		tick();
+		System.exit(0);
 	}
 
-	public void startGame() {
+	public void init() {
 		// TODO this bollocks is just to get a window. It'll be made a lot more
 		// tidy once I work this shit out.
 		int height = configService.getInt(SonicConfiguration.SCREEN_HEIGHT);
@@ -51,8 +55,39 @@ public class Engine {
 		frame.setVisible(true);
 		frame.setTitle("Sonic Engine by Jamesj999 "
 				+ configService.getString(SonicConfiguration.VERSION));
-		frame.getContentPane().add(new JLabel("Poopings"));
-		frame.repaint();
+		
+		spriteManager.addSprite(new Sonic("sonic"));
+	}
+
+	/**
+	 * The game tick. Controls the flow of the game.
+	 */
+	public void tick() {
+		int fps = configService.getInt(SonicConfiguration.FPS);
+		while (true) {
+			long time = System.currentTimeMillis();
+
+			update();
+			draw();
+
+			time = (1000 / fps) - (System.currentTimeMillis() - time);
+
+			if (time > 0) {
+				try {
+					Thread.sleep(time);
+				} catch (InterruptedException e) {
+					// No need to worry about this one.
+				}
+			}
+		}
+	}
+	
+	public void update() {
+		spriteManager.update();
+	}
+	
+	public void draw() {
+		spriteManager.draw(frame);
 	}
 
 	public final BufferedImage create(final int width, final int height,

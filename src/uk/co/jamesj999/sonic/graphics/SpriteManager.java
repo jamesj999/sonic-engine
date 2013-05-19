@@ -1,9 +1,15 @@
 package uk.co.jamesj999.sonic.graphics;
 
+import java.awt.Graphics;
+import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import javax.swing.JFrame;
+
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 
 /**
@@ -13,10 +19,17 @@ import uk.co.jamesj999.sonic.sprites.Sprite;
  * 
  */
 public class SpriteManager {
+	private final SonicConfigurationService configService = SonicConfigurationService
+			.getInstance();
 
 	private static SpriteManager spriteManager;
 
 	private Map<String, Sprite> sprites;
+
+	private final BufferedImage spriteBuffer = new BufferedImage(
+			configService.getInt(SonicConfiguration.SCREEN_WIDTH),
+			configService.getInt(SonicConfiguration.SCREEN_HEIGHT),
+			BufferedImage.TYPE_INT_RGB);
 
 	private SpriteManager() {
 		sprites = new HashMap<String, Sprite>();
@@ -45,16 +58,31 @@ public class SpriteManager {
 	}
 
 	/**
-	 * Draws all sprites.
+	 * Draws all sprites to the provided JFrame.
 	 */
-	public void drawSprites() {
+	public void draw(JFrame frame) {
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			draw(entry.getValue());
 		}
 	}
 
+	/**
+	 * Calls all sprites to recalculate their positions.
+	 * 
+	 * @param frame
+	 */
+	public void update() {
+		for (Entry<String, Sprite> entry : sprites.entrySet()) {
+			update(entry.getValue());
+		}
+	}
+
 	private void draw(Sprite sprite) {
-		// TODO some shit to draw the fucker
+		Graphics graphics = sprite.getGraphics();
+	}
+
+	private void update(Sprite sprite) {
+		//
 	}
 
 	private Sprite getSprite(String code) {
