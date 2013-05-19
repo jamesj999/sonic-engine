@@ -58,7 +58,7 @@ public class Engine {
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		frame.setSize(width * scale, height * scale);
 		frame.setVisible(true);
-		frame.setTitle("Sonic Engine by Jamesj999 "
+		frame.setTitle("Sonic Engine by Jamesj999 and Raiscan "
 				+ configService.getString(SonicConfiguration.VERSION));
 
 		inputHandler = new InputHandler(frame);
