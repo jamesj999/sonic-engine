@@ -1,11 +1,11 @@
 package uk.co.jamesj999.sonic.graphics;
 
+import java.awt.Component;
+import java.awt.Graphics;
 import java.awt.event.KeyEvent;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
-
-import javax.swing.JFrame;
 
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
@@ -53,14 +53,15 @@ public class SpriteManager {
 	}
 
 	/**
-	 * Draws all sprites to the provided JFrame.
+	 * Draws all sprites to the provided JFrame. Takes a Graphics2D to avoid
+	 * retrieving it from Canvas/Panel every time
 	 */
-	public void draw(JFrame frame) {
+	public void draw(Graphics graphics, Component target) {
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
-			frame.getGraphics()
-					.drawImage(sprite.draw(), sprite.getX(), sprite.getY(),
-							sprite.getWidth(), sprite.getHeight(), frame);
+			graphics.drawImage(sprite.draw(), sprite.getX(),
+					sprite.getY(), sprite.getWidth(), sprite.getHeight(),
+					target);
 		}
 	}
 

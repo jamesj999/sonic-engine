@@ -1,7 +1,10 @@
 package uk.co.jamesj999.sonic;
 
+import java.awt.Canvas;
+import java.awt.Graphics;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsEnvironment;
+import java.awt.Toolkit;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
 
@@ -32,6 +35,7 @@ public class Engine {
 
 	private GraphicsConfiguration config;
 	private JFrame frame;
+	private Canvas canvas;
 
 	// TODO Add Log4J Support, or some other logging that allows proper
 	// debugging etc. Any ideas?
@@ -46,7 +50,6 @@ public class Engine {
 		// TODO this bollocks is just to get a window. It'll be made a lot more
 		// tidy once I work this shit out.
 
-
 		// TODO change for Log4J
 		System.out.println(height + " " + width);
 
@@ -60,6 +63,17 @@ public class Engine {
 		frame.setVisible(true);
 		frame.setTitle("Sonic Engine by Jamesj999 and Raiscan "
 				+ configService.getString(SonicConfiguration.VERSION));
+		
+		canvas = new Canvas();
+		canvas.setSize(width, height);
+		canvas.setVisible(true);
+		
+		// Need to add canvas to frame before creating BufferStrategy
+		frame.add(canvas);
+		
+		canvas.createBufferStrategy(2);
+		
+		//graphics = canvas.getBufferStrategy().getDrawGraphics();
 
 		inputHandler = new InputHandler(frame);
 
@@ -91,12 +105,16 @@ public class Engine {
 	}
 
 	public void update() {
-		frame.getGraphics().clearRect(0, 0, width, height);
 		spriteManager.update(inputHandler);
 	}
 
 	public void draw() {
-		spriteManager.draw(frame);
+		Graphics graphics = canvas.getBufferStrategy().getDrawGraphics();
+		graphics.clearRect(0, 0, width, height);
+		spriteManager.draw(graphics, canvas);
+		graphics.dispose();
+		canvas.getBufferStrategy().show();
+		Toolkit.getDefaultToolkit().sync();
 	}
 
 	public final BufferedImage create(final int width, final int height,
