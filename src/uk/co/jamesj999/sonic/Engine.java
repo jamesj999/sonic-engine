@@ -8,6 +8,7 @@ import java.awt.image.BufferedImage;
 import javax.swing.JFrame;
 import javax.swing.WindowConstants;
 
+import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.SpriteManager;
@@ -23,11 +24,13 @@ public class Engine {
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
+	private InputHandler inputHandler;
 
 	private GraphicsConfiguration config;
 	private JFrame frame;
 
-	// TODO Add Log4J Support
+	// TODO Add Log4J Support, or some other logging that allows proper
+	// debugging etc. Any ideas?
 
 	public Engine() {
 		init();
@@ -55,7 +58,9 @@ public class Engine {
 		frame.setVisible(true);
 		frame.setTitle("Sonic Engine by Jamesj999 "
 				+ configService.getString(SonicConfiguration.VERSION));
-		
+
+		inputHandler = new InputHandler(frame);
+
 		Sonic sonic = new Sonic("Sonic", 50, 50);
 		spriteManager.addSprite(sonic);
 	}
@@ -82,11 +87,11 @@ public class Engine {
 			}
 		}
 	}
-	
+
 	public void update() {
-		spriteManager.update();
+		spriteManager.update(inputHandler);
 	}
-	
+
 	public void draw() {
 		spriteManager.draw(frame);
 	}

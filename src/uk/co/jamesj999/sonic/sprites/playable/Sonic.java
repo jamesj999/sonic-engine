@@ -4,7 +4,6 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 
-
 public class Sonic extends AbstractPlayableSprite {
 
 	public Sonic(String code, int x, int y) {
@@ -19,5 +18,25 @@ public class Sonic extends AbstractPlayableSprite {
 		graphics.setColor(Color.BLACK);
 		graphics.fillRect(x, y, 16, 16);
 		return spriteImage;
+	}
+
+	@Override
+	public void leftPressed() {
+		x -= 4;
+	}
+
+	@Override
+	public void downPressed() {
+		y += 4;
+	}
+
+	@Override
+	public void upPressed() {
+		y -= 4;
+	}
+
+	@Override
+	public void rightPressed() {
+		x += 4;
 	}
 }

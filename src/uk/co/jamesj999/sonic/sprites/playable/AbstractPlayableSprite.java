@@ -7,4 +7,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		super(code, x, y);
 		
 	}
+	
+	public abstract void leftPressed();
+
+	public abstract void downPressed();
+
+	public abstract void upPressed();
+
+	public abstract void rightPressed();
 }
