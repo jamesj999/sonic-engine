@@ -15,6 +15,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	protected AbstractPlayableSprite(String code, int x, int y) {
 		super(code, x, y);
+		// Must define speeds before creating Manager (it will read speeds upon
+		// instantiation).
 		defineSpeeds();
 		movementManager = new PlayableSpriteMovementManager(this);
 	}
@@ -29,6 +31,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	public float getYSpeed() {
 		return ySpeed;
+	}
+
+	public void setYSpeed(float ySpeed) {
+		this.ySpeed = ySpeed;
 	}
 
 	public float getRunAccel() {

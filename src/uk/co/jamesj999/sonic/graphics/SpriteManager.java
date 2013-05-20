@@ -84,6 +84,8 @@ public class SpriteManager {
 				((AbstractPlayableSprite) sprite).getMovementManager()
 						.handleMovement(left, right);
 			}
+			((AbstractPlayableSprite) sprite).getMovementManager()
+					.handleGravity(down);
 		}
 	}
 

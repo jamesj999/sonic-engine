@@ -75,9 +75,24 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	@Override
-	public void handleGravity() {
-		// TODO Auto-generated method stub
+	public void handleGravity(boolean down) {
+		if (!down) {
+			sprite.setYSpeed(0.00f);
+		} else {
+			float ySpeed = sprite.getYSpeed();
+			if (ySpeed < max) {
+				ySpeed += sprite.getGravity();
+			} else {
+				if (ySpeed + sprite.getGravity() > max) {
+					ySpeed = max;
+				}
+			}
+			int y = sprite.getY();
+			y += ySpeed;
 
+			sprite.setYSpeed(ySpeed);
+			sprite.setY(y);
+		}
 	}
 
 	@Override
