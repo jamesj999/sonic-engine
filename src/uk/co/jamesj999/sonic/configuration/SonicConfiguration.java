@@ -19,7 +19,7 @@ public enum SonicConfiguration {
 	/**
 	 * Current width of the screen.
 	 */
-	SCREEN_WIDTH(640),
+	SCREEN_WIDTH(1280),
 	/**
 	 * Current height of the screen.
 	 */
@@ -32,7 +32,7 @@ public enum SonicConfiguration {
 	 * Frames per second to render. Will make the game faster/slower!
 	 */
 	FPS(60);
-
+	
 	private Object value;
 
 	private SonicConfiguration(final Object value) {

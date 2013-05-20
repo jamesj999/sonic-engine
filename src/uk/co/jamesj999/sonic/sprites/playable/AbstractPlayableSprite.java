@@ -1,8 +1,11 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
+import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 
 public abstract class AbstractPlayableSprite extends AbstractSprite {
+	protected final PlayableSpriteMovementManager movementManager;
+
 	protected float xSpeed = 0f;
 	protected float ySpeed = 0f;
 	protected float runAccel;
@@ -13,10 +16,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected AbstractPlayableSprite(String code, int x, int y) {
 		super(code, x, y);
 		defineSpeeds();
+		movementManager = new PlayableSpriteMovementManager(this);
 	}
 
 	public float getXSpeed() {
 		return xSpeed;
+	}
+
+	public void setXSpeed(float xSpeed) {
+		this.xSpeed = xSpeed;
 	}
 
 	public float getYSpeed() {
@@ -31,54 +39,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return runDecel;
 	}
 
-	public void handle(boolean left, boolean right) {
-		if (left) {
-			if (xSpeed <= 0.00f) {
-				if (xSpeed < 0 - max) {
-					xSpeed = 0 - max;
-				} else {
-					xSpeed -= runAccel;
-				}
-			} else {
-				if (xSpeed - runDecel < 0) {
-					xSpeed = 0;
-				} else {
-					xSpeed -= runDecel;
-				}
-			}
-		}
-		if (right) {
-			if (xSpeed >= 0.00f) {
-				if (xSpeed > max) {
-					xSpeed = max;
-				} else {
-					xSpeed += runAccel;
-				}
-			} else {
-				if (xSpeed + runDecel > 0.00f) {
-					xSpeed = 0.00f;
-				} else {
-					xSpeed += runDecel;
-				}
-			}
-		}
-		if (!left && !right) {
-			if (xSpeed > 0.00f) {
-				if (xSpeed - friction < 0.00f) {
-					xSpeed = 0.00f;
-				} else {
-					xSpeed -= friction;
-				}
-			} else {
-				if (xSpeed + friction > 0.00f) {
-					xSpeed = 0.00f;
-				} else {
-					xSpeed += friction;
-				}
-			}
-		}
+	public float getFriction() {
+		return friction;
+	}
 
-		x += xSpeed;
+	public float getMax() {
+		return max;
+	}
+
+	public PlayableSpriteMovementManager getMovementManager() {
+		return movementManager;
 	}
 
 	protected abstract void defineSpeeds();

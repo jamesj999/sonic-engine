@@ -16,7 +16,7 @@ public class Sonic extends AbstractPlayableSprite {
 	public BufferedImage draw() {
 		Graphics graphics = spriteImage.getGraphics();
 		graphics.setColor(Color.BLACK);
-		graphics.fillRect(x, y, 16, 16);
+		graphics.fillRect(x, y, width, height);
 		return spriteImage;
 	}
 

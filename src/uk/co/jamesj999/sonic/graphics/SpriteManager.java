@@ -59,9 +59,8 @@ public class SpriteManager {
 	public void draw(Graphics graphics, Component target) {
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
-			graphics.drawImage(sprite.draw(), sprite.getX(),
-					sprite.getY(), sprite.getWidth(), sprite.getHeight(),
-					target);
+			graphics.drawImage(sprite.draw(), sprite.getX(), sprite.getY(),
+					sprite.getWidth(), sprite.getHeight(), target);
 		}
 	}
 
@@ -82,7 +81,8 @@ public class SpriteManager {
 			Sprite sprite = entry.getValue();
 			// Check we're dealing with a playable sprite:
 			if (sprite instanceof AbstractPlayableSprite) {
-				((AbstractPlayableSprite) sprite).handle(left, right);
+				((AbstractPlayableSprite) sprite).getMovementManager()
+						.handleMovement(left, right);
 			}
 		}
 	}
@@ -91,7 +91,7 @@ public class SpriteManager {
 	 * These will probably be added back in when things get more complex:
 	 */
 	// private void draw(Sprite sprite) {
-	// sprite.draw(spriteBuffer);
+	// sprite.draw();
 	// }
 
 	// private void update(Sprite sprite) {
