@@ -4,96 +4,104 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
-	private final float runAccel;
-	private final float runDecel;
-	private final float friction;
-	private final float max;
+
+	private final double max;
+	private final double runAccel;
+	private final double runDecel;
+	private final double friction;
 
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
-		this.runAccel = sprite.getRunAccel();
-		this.runDecel = sprite.getRunDecel();
-		this.friction = sprite.getFriction();
-		this.max = sprite.getMax();
+		max = sprite.getMax();
+		runAccel = sprite.getRunAccel();
+		runDecel = sprite.getRunDecel();
+		friction = sprite.getFriction();
 	}
 
 	@Override
 	public void handleMovement(boolean left, boolean right) {
-		float xSpeed = sprite.getXSpeed();
-		// float ySpeed = sprite.getYSpeed();
+		double gSpeed = sprite.getGSpeed();
+
+		// Calculate Angle here
 
 		if (left) {
-			if (xSpeed <= 0.00f) {
-				if (xSpeed < 0 - max) {
-					xSpeed = 0 - max;
+			if (gSpeed <= 0.00d) {
+				if (gSpeed - runAccel < 0 - max) {
+					gSpeed = 0 - max;
 				} else {
-					xSpeed -= runAccel;
+					gSpeed -= runAccel;
 				}
 			} else {
-				if (xSpeed - runDecel < 0) {
-					xSpeed = 0;
+				if (gSpeed - runDecel < 0) {
+					gSpeed = 0;
 				} else {
-					xSpeed -= runDecel;
+					gSpeed -= runDecel;
 				}
 			}
 		}
 		if (right) {
-			if (xSpeed >= 0.00f) {
-				if (xSpeed > max) {
-					xSpeed = max;
+			if (gSpeed >= 0.00d) {
+				if (gSpeed + runAccel > max) {
+					gSpeed = max;
 				} else {
-					xSpeed += runAccel;
+					gSpeed += runAccel;
 				}
 			} else {
-				if (xSpeed + runDecel > 0.00f) {
-					xSpeed = 0.00f;
+				if (gSpeed + runDecel > 0.00d) {
+					gSpeed = 0.00d;
 				} else {
-					xSpeed += runDecel;
+					gSpeed += runDecel;
 				}
 			}
 		}
 		if (!left && !right) {
-			if (xSpeed > 0.00f) {
-				if (xSpeed - friction < 0.00f) {
-					xSpeed = 0.00f;
+			if (gSpeed > 0.00d) {
+				if (gSpeed - friction < 0.00d) {
+					gSpeed = 0.00d;
 				} else {
-					xSpeed -= friction;
+					gSpeed -= friction;
 				}
 			} else {
-				if (xSpeed + friction > 0.00f) {
-					xSpeed = 0.00f;
+				if (gSpeed + friction > 0.00d) {
+					gSpeed = 0.00d;
 				} else {
-					xSpeed += friction;
+					gSpeed += friction;
 				}
 			}
 		}
 		int x = sprite.getX();
-		x += xSpeed;
+		int y = sprite.getY();
 
-		sprite.setXSpeed(xSpeed);
+		double angle = sprite.getAngle();
+
+		sprite.setGSpeed(gSpeed);
+
+		x += gSpeed * Math.cos(angle);
+		y += gSpeed * (0 - Math.sin(angle));
 		sprite.setX(x);
+		sprite.setY(y);
 	}
 
-	@Override
-	public void handleGravity(boolean down) {
-		if (!down) {
-			sprite.setYSpeed(0.00f);
-		} else {
-			float ySpeed = sprite.getYSpeed();
-			if (ySpeed < max) {
-				ySpeed += sprite.getGravity();
-			} else {
-				if (ySpeed + sprite.getGravity() > max) {
-					ySpeed = max;
-				}
-			}
-			int y = sprite.getY();
-			y += ySpeed;
-
-			sprite.setYSpeed(ySpeed);
-			sprite.setY(y);
-		}
-	}
+	// @Override
+	// public void handleGravity(boolean down) {
+	// if (!down) {
+	// sprite.setYSpeed(0.00d);
+	// } else {
+	// float ySpeed = sprite.getYSpeed();
+	// if (ySpeed < max) {
+	// ySpeed += sprite.getGravity();
+	// } else {
+	// if (ySpeed + sprite.getGravity() > max) {
+	// ySpeed = max;
+	// }
+	// }
+	// int y = sprite.getY();
+	// y += ySpeed;
+	//
+	// sprite.setYSpeed(ySpeed);
+	// sprite.setY(y);
+	// }
+	// }
 
 	@Override
 	public void handleCollisions() {

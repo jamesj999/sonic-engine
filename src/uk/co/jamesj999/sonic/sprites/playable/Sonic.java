@@ -22,9 +22,15 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	public void defineSpeeds() {
-		runAccel = 0.046875f;
-		runDecel = 0.5f;
-		friction = 0.046875f;
-		max = 14f;
+		runAccel = 0.046875d;
+		runDecel = 0.5d;
+		friction = 0.046875d;
+		max = 14d;
+		/**
+		 * Change 'angle' to make sonic walk at an angle!
+		 */
+		angle = 0.00d;
+		slopeRunning = 0.125d;
+		slopeRolling = 0.078125d;
 	}
 }
