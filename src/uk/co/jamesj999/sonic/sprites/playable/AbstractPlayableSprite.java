@@ -59,6 +59,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return angle;
 	}
 
+	public void setAngle(double angle) {
+		this.angle = angle;
+	}
+
 	public PlayableSpriteMovementManager getMovementManager() {
 		return movementManager;
 	}

@@ -69,6 +69,7 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		}
+
 		int x = sprite.getX();
 		int y = sprite.getY();
 
@@ -104,9 +105,16 @@ public class PlayableSpriteMovementManager extends
 	// }
 
 	@Override
-	public void handleCollisions() {
-		// TODO Auto-generated method stub
+	public void handleCollisions(boolean up, boolean down) {
+		// temporarily changing the angle in here to test angled running
+		if (down) {
+			sprite.setAngle(sprite.getAngle() + 0.01d);
+			System.out.println(sprite.getAngle());
+		}
+		if (up) {
+			sprite.setAngle(sprite.getAngle() - 0.01d);
+			System.out.println(sprite.getAngle());
+		}
 
 	}
-
 }
