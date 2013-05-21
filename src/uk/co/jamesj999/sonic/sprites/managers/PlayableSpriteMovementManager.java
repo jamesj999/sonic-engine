@@ -21,62 +21,53 @@ public class PlayableSpriteMovementManager extends
 	@Override
 	public void handleMovement(boolean left, boolean right) {
 		double gSpeed = sprite.getGSpeed();
-
+		double angle = sprite.getAngle();
 		// Calculate Angle here
+		double slopeRunning = sprite.getSlopeRunning();
+		gSpeed += (slopeRunning * Math.sin(angle));
 
 		if (left) {
-			if (gSpeed <= 0.00d) {
-				if (gSpeed - runAccel < 0 - max) {
-					gSpeed = 0 - max;
-				} else {
+			if (gSpeed > 0) {
+				gSpeed -= runDecel;
+			} else {
+				if (gSpeed > -max) {
 					gSpeed -= runAccel;
-				}
-			} else {
-				if (gSpeed - runDecel < 0) {
-					gSpeed = 0;
 				} else {
-					gSpeed -= runDecel;
+					gSpeed = -max;
 				}
 			}
-		}
-		if (right) {
-			if (gSpeed >= 0.00d) {
-				if (gSpeed + runAccel > max) {
+		} else if (right) {
+			if (gSpeed < 0) {
+				gSpeed += runDecel;
+			} else {
+				if (gSpeed < max) {
+					gSpeed = gSpeed + runAccel;
+				} else {
 					gSpeed = max;
-				} else {
-					gSpeed += runAccel;
-				}
-			} else {
-				if (gSpeed + runDecel > 0.00d) {
-					gSpeed = 0.00d;
-				} else {
-					gSpeed += runDecel;
 				}
 			}
-		}
-		if (!left && !right) {
-			if (gSpeed > 0.00d) {
-				if (gSpeed - friction < 0.00d) {
-					gSpeed = 0.00d;
-				} else {
-					gSpeed -= friction;
-				}
-			} else {
-				if (gSpeed + friction > 0.00d) {
-					gSpeed = 0.00d;
-				} else {
-					gSpeed += friction;
-				}
-			}
+		} else {
+			gSpeed -= Math.min(Math.abs(gSpeed), friction)
+					* Math.signum(gSpeed);
+			// if (gSpeed > 0.00d) {
+			// if (gSpeed - friction < 0.00d) {
+			// gSpeed = 0.00d;
+			// } else {
+			// gSpeed -= friction;
+			// }
+			// } else {
+			// if (gSpeed + friction > 0.00d) {
+			// gSpeed = 0.00d;
+			// } else {
+			// gSpeed += friction;
+			// }
+			// }
 		}
 
 		int x = sprite.getX();
 		int y = sprite.getY();
 
-		double angle = sprite.getAngle();
-
 		sprite.setGSpeed(gSpeed);
-
 		x += gSpeed * Math.cos(angle);
 		y += gSpeed * (0 - Math.sin(angle));
 		sprite.setX(x);

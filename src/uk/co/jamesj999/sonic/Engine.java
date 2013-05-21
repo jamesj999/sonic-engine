@@ -75,7 +75,7 @@ public class Engine {
 		// Set up our InputHandler to deal with key presses
 		inputHandler = new InputHandler(frame);
 
-		Sonic sonic = new Sonic("Sonic", 50, 50);
+		Sonic sonic = new Sonic("Sonic", 250, 50);
 		spriteManager.addSprite(sonic);
 	}
 
