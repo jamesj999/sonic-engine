@@ -26,7 +26,7 @@ public class SonicConfigurationService {
 		}
 	}
 
-	public static SonicConfigurationService getInstance() {
+	public synchronized static SonicConfigurationService getInstance() {
 		if (sonicConfigurationService == null) {
 			sonicConfigurationService = new SonicConfigurationService();
 		}

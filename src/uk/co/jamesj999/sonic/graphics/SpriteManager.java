@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import uk.co.jamesj999.sonic.Control.InputHandler;
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -71,10 +72,14 @@ public class SpriteManager {
 	 */
 	public void update(InputHandler handler) {
 		// Firstly calculate key presses:
-		boolean left = handler.isKeyDown(KeyEvent.VK_LEFT);
-		boolean right = handler.isKeyDown(KeyEvent.VK_RIGHT);
-		boolean up = handler.isKeyDown(KeyEvent.VK_UP);
-		boolean down = handler.isKeyDown(KeyEvent.VK_DOWN);
+		boolean up = handler.isKeyDown(configService
+				.getInt(SonicConfiguration.UP));
+		boolean down = handler.isKeyDown(configService
+				.getInt(SonicConfiguration.DOWN));
+		boolean left = handler.isKeyDown(configService
+				.getInt(SonicConfiguration.LEFT));
+		boolean right = handler.isKeyDown(configService
+				.getInt(SonicConfiguration.RIGHT));
 
 		// Iterate our Sprites:
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
@@ -84,9 +89,10 @@ public class SpriteManager {
 				((AbstractPlayableSprite) sprite).getMovementManager()
 						.handleMovement(left, right);
 			}
-			((AbstractPlayableSprite) sprite).getMovementManager().handleCollisions(up, down);
-//			((AbstractPlayableSprite) sprite).getMovementManager()
-//					.handleGravity(down);
+			((AbstractPlayableSprite) sprite).getMovementManager()
+					.handleCollisions(up, down);
+			// ((AbstractPlayableSprite) sprite).getMovementManager()
+			// .handleGravity(down);
 		}
 	}
 
@@ -109,7 +115,7 @@ public class SpriteManager {
 		return (sprites.remove(sprite) != null);
 	}
 
-	public static SpriteManager getInstance() {
+	public synchronized static SpriteManager getInstance() {
 		if (spriteManager == null) {
 			spriteManager = new SpriteManager();
 		}
