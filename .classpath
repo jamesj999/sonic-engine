@@ -3,5 +3,50 @@
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="lib/commons-lang3-3.1.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-android-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-linux-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-linux-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-linux-armv6hf.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-linux-i586.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-macosx-universal.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-solaris-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-solaris-i586.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen-rt-natives-windows-i586.jar"/>
+	<classpathentry kind="lib" path="lib/gluegen.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-android-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-linux-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-linux-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-linux-armv6hf.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-linux-i586.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-macosx-universal.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-solaris-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-solaris-i586.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/joal-natives-windows-i586.jar"/>
+	<classpathentry kind="lib" path="lib/joal.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-android-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-linux-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-linux-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-linux-armv6hf.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-linux-i586.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-macosx-universal.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-solaris-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-solaris-i586.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/jocl-natives-windows-i586.jar"/>
+	<classpathentry kind="lib" path="lib/jocl.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-android-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-linux-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-linux-armv6.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-linux-armv6hf.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-linux-i586.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-macosx-universal.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-solaris-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-solaris-i586.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all-natives-windows-i586.jar"/>
+	<classpathentry kind="lib" path="lib/jogl-all.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

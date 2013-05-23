@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.configuration;
 
+import java.awt.event.KeyEvent;
+
 /**
  * All configurable properties are put here. Eventually, these will be loaded
  * from a file. Use {@link SonicConfigurationSerivce} to retrieve the values for
@@ -17,9 +19,17 @@ public enum SonicConfiguration {
 	 */
 	VERSION("Alpha V0.01"),
 	/**
+	 * Actual width of the screen (number of available x-coordinates).
+	 */
+	SCREEN_WIDTH_PIXELS(320),
+	/**
+	 * Actual height of the screen (number of available y-coordinates).
+	 */
+	SCREEN_HEIGHT_PIXELS(224),
+	/**
 	 * Current width of the screen.
 	 */
-	SCREEN_WIDTH(1280),
+	SCREEN_WIDTH(640),
 	/**
 	 * Current height of the screen.
 	 */
@@ -31,8 +41,32 @@ public enum SonicConfiguration {
 	/**
 	 * Frames per second to render. Will make the game faster/slower!
 	 */
-	FPS(60);
-	
+	FPS(60),
+	/*
+	 * ALWAYS DEFINE BUTTONS IN THE ORDER: UP, DOWN, LEFT, RIGHT. NOT FOR ANY
+	 * TECHNICAL REASON, JUST BECAUSE LEVEL SELECT.
+	 */
+	/**
+	 * Key to look up.
+	 */
+	UP(KeyEvent.VK_UP),
+	/**
+	 * Key to crouch/roll.
+	 */
+	DOWN(KeyEvent.VK_DOWN),
+	/**
+	 * Key to move Sonic left.
+	 */
+	LEFT(KeyEvent.VK_LEFT),
+	/**
+	 * Key to move Sonic right.
+	 */
+	RIGHT(KeyEvent.VK_RIGHT),
+	/**
+	 * Key to jump etc.
+	 */
+	JUMP(KeyEvent.VK_SPACE);
+
 	private Object value;
 
 	private SonicConfiguration(final Object value) {

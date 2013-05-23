@@ -1,8 +1,6 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
-import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
+import javax.media.opengl.GL2;
 
 public class Sonic extends AbstractPlayableSprite {
 
@@ -13,23 +11,24 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	@Override
-	public BufferedImage draw() {
-		Graphics graphics = spriteImage.getGraphics();
-		graphics.setColor(Color.BLACK);
-		graphics.fillRect(x, y, width, height);
-		return spriteImage;
+	public void draw(GL2 gl) {
+		gl.glBegin(GL2.GL_2D);
+		gl.glRectd(x, y, x+width, y-height);
+		gl.glEnd();
 	}
 
 	@Override
 	public void defineSpeeds() {
 		runAccel = 0.046875d;
-		runDecel = 0.5d;
+		// 0.50 seems WAY too high for runDecel... but it's what the physics
+		// guide says!
+		runDecel = 0.50d;
 		friction = 0.046875d;
 		max = 6.00d;
 		/**
 		 * Change 'angle' to make sonic walk at an angle!
 		 */
-		angle = -232.00d;
+		angle = 0;
 		slopeRunning = 0.125d;
 		slopeRolling = 0.078125d;
 	}

@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.sprites;
 
-import java.awt.image.BufferedImage;
+import javax.media.opengl.GL2;
 
 
 /**
@@ -15,7 +15,7 @@ public interface Sprite {
 
 	public void setCode(String code);
 
-	public BufferedImage draw();
+	public void draw(GL2 gl);
 	
 	public int getX();
 	public void setX(int x);

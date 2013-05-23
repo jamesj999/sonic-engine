@@ -1,11 +1,11 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import java.awt.Component;
-import java.awt.Graphics;
 import java.awt.event.KeyEvent;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import javax.media.opengl.GL2;
 
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
@@ -57,11 +57,10 @@ public class SpriteManager {
 	 * Draws all sprites to the provided JFrame. Takes a Graphics2D to avoid
 	 * retrieving it from Canvas/Panel every time
 	 */
-	public void draw(Graphics graphics, Component target) {
+	public void draw(GL2 gl) {
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
-			graphics.drawImage(sprite.draw(), sprite.getX(), sprite.getY(),
-					sprite.getWidth(), sprite.getHeight(), target);
+			sprite.draw(gl);
 		}
 	}
 
@@ -80,14 +79,14 @@ public class SpriteManager {
 				.getInt(SonicConfiguration.LEFT));
 		boolean right = handler.isKeyDown(configService
 				.getInt(SonicConfiguration.RIGHT));
-
+		boolean space = handler.isKeyDown(KeyEvent.VK_SPACE);
 		// Iterate our Sprites:
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
 			// Check we're dealing with a playable sprite:
 			if (sprite instanceof AbstractPlayableSprite) {
 				((AbstractPlayableSprite) sprite).getMovementManager()
-						.handleMovement(left, right);
+						.handleMovement(left, right, space);
 			}
 			((AbstractPlayableSprite) sprite).getMovementManager()
 					.handleCollisions(up, down);

@@ -5,7 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 public class SonicConfigurationService {
 	private static SonicConfigurationService sonicConfigurationService;
 
-	public Integer getInt(SonicConfiguration sonicConfiguration) {
+	public int getInt(SonicConfiguration sonicConfiguration) {
 		Object value = sonicConfiguration.getValue();
 		if (value instanceof Integer) {
 			return ((Integer) value).intValue();
@@ -13,7 +13,7 @@ public class SonicConfigurationService {
 			try {
 				return Integer.parseInt(getString(sonicConfiguration));
 			} catch (NumberFormatException e) {
-				return null;
+				return -1;
 			}
 		}
 	}
@@ -23,6 +23,19 @@ public class SonicConfigurationService {
 			return sonicConfiguration.getValue().toString();
 		} else {
 			return StringUtils.EMPTY;
+		}
+	}
+
+	public double getDouble(SonicConfiguration sonicConfiguration) {
+		Object value = sonicConfiguration.getValue();
+		if (value instanceof Double) {
+			return ((Double) value).doubleValue();
+		} else {
+			try {
+				return Double.parseDouble(getString(sonicConfiguration));
+			} catch (NumberFormatException e) {
+				return -1.00d;
+			}
 		}
 	}
 

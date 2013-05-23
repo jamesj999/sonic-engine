@@ -18,10 +18,21 @@ public class PlayableSpriteMovementManager extends
 		friction = sprite.getFriction();
 	}
 
+	/**
+	 * Calculates next frame of movement for this Sprite. Since this is a
+	 * PlayableSprite, we will need the left and right button presses to
+	 * calculate left/right movement.
+	 */
 	@Override
-	public void handleMovement(boolean left, boolean right) {
+	public void handleMovement(boolean left, boolean right, boolean jump) {
+		// small hack to reset position
+		if(jump) {
+			sprite.setX(50);
+			sprite.setY(200);
+			sprite.setGSpeed(0.00d);
+		}
 		double gSpeed = sprite.getGSpeed();
-		double angle = sprite.getAngle();
+		byte angle = sprite.getAngle();
 		// Calculate Angle here
 		double slopeRunning = sprite.getSlopeRunning();
 		gSpeed += (slopeRunning * Math.sin(angle));
@@ -47,8 +58,13 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		} else {
-			gSpeed -= Math.min(Math.abs(gSpeed), friction)
-					* Math.signum(gSpeed);
+			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
+					&& gSpeed < 0) {
+				gSpeed = 0;
+			} else {
+				gSpeed -= Math.min(Math.abs(gSpeed), friction)
+						* Math.signum(gSpeed);
+			}
 			// if (gSpeed > 0.00d) {
 			// if (gSpeed - friction < 0.00d) {
 			// gSpeed = 0.00d;
@@ -69,7 +85,7 @@ public class PlayableSpriteMovementManager extends
 
 		sprite.setGSpeed(gSpeed);
 		x += gSpeed * Math.cos(angle);
-		y += gSpeed * (0 - Math.sin(angle));
+		y += gSpeed * -Math.sin(angle);
 		sprite.setX(x);
 		sprite.setY(y);
 	}
@@ -99,11 +115,11 @@ public class PlayableSpriteMovementManager extends
 	public void handleCollisions(boolean up, boolean down) {
 		// temporarily changing the angle in here to test angled running
 		if (down) {
-			sprite.setAngle(sprite.getAngle() + 0.01d);
+			sprite.setAngle((byte) (sprite.getAngle() + 1));
 			System.out.println(sprite.getAngle());
 		}
 		if (up) {
-			sprite.setAngle(sprite.getAngle() - 0.01d);
+			sprite.setAngle((byte) (sprite.getAngle() - 1));
 			System.out.println(sprite.getAngle());
 		}
 

@@ -5,14 +5,41 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final PlayableSpriteMovementManager movementManager;
+	/**
+	 * gSpeed is the speed this sprite is moving across the 'ground'.
+	 * Calculations will be performed against this and 'angle' to calculate new
+	 * x/y values for each step.
+	 */
 	protected double gSpeed = 0.00f;
-	protected double angle;
+	protected byte angle;
 
+	/**
+	 * The amount this sprite's speed is effected by when running down/up a
+	 * slope.
+	 */
 	protected double slopeRunning;
+	/**
+	 * The amount this sprite's speed is effected by when rolling down/up a
+	 * slope.
+	 */
 	protected double slopeRolling;
+	/**
+	 * The speed at which this sprite accelerates when running.
+	 */
 	protected double runAccel;
+	/**
+	 * The speed at which this sprite decelerates when the opposite direction is
+	 * pressed.
+	 */
 	protected double runDecel;
+	/**
+	 * The speed at which this sprite slows down while running with no
+	 * directional keys pressed.
+	 */
 	protected double friction;
+	/**
+	 * Maximum running speed of this Sprite per step.
+	 */
 	protected double max;
 
 	protected AbstractPlayableSprite(String code, int x, int y) {
@@ -55,11 +82,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return max;
 	}
 
-	public double getAngle() {
+	public byte getAngle() {
 		return angle;
 	}
 
-	public void setAngle(double angle) {
+	public void setAngle(byte angle) {
 		this.angle = angle;
 	}
 
