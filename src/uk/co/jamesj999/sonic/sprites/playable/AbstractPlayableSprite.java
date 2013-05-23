@@ -3,6 +3,12 @@ package uk.co.jamesj999.sonic.sprites.playable;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 
+/**
+ * Movement speeds are in subpixels (256 subpixels per pixel...).
+ * 
+ * @author james
+ * 
+ */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final PlayableSpriteMovementManager movementManager;
 	/**
@@ -10,39 +16,39 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 * Calculations will be performed against this and 'angle' to calculate new
 	 * x/y values for each step.
 	 */
-	protected double gSpeed = 0.00f;
+	protected short gSpeed = 0;
 	protected byte angle;
 
 	/**
 	 * The amount this sprite's speed is effected by when running down/up a
 	 * slope.
 	 */
-	protected double slopeRunning;
+	protected short slopeRunning;
 	/**
 	 * The amount this sprite's speed is effected by when rolling down/up a
 	 * slope.
 	 */
-	protected double slopeRolling;
+	protected short slopeRolling;
 	/**
 	 * The speed at which this sprite accelerates when running.
 	 */
-	protected double runAccel;
+	protected short runAccel;
 	/**
 	 * The speed at which this sprite decelerates when the opposite direction is
 	 * pressed.
 	 */
-	protected double runDecel;
+	protected short runDecel;
 	/**
 	 * The speed at which this sprite slows down while running with no
 	 * directional keys pressed.
 	 */
-	protected double friction;
+	protected short friction;
 	/**
 	 * Maximum running speed of this Sprite per step.
 	 */
-	protected double max;
+	protected short max;
 
-	protected AbstractPlayableSprite(String code, int x, int y) {
+	protected AbstractPlayableSprite(String code, short x, short y) {
 		super(code, x, y);
 		// Must define speeds before creating Manager (it will read speeds upon
 		// instantiation).
@@ -50,35 +56,35 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		movementManager = new PlayableSpriteMovementManager(this);
 	}
 
-	public double getGSpeed() {
+	public short getGSpeed() {
 		return gSpeed;
 	}
 
-	public void setGSpeed(double gSpeed) {
+	public void setGSpeed(short gSpeed) {
 		this.gSpeed = gSpeed;
 	}
 
-	public double getRunAccel() {
+	public short getRunAccel() {
 		return runAccel;
 	}
 
-	public double getRunDecel() {
+	public short getRunDecel() {
 		return runDecel;
 	}
 
-	public double getSlopeRunning() {
+	public short getSlopeRunning() {
 		return slopeRunning;
 	}
 
-	public double getSlopeRolling() {
+	public short getSlopeRolling() {
 		return slopeRolling;
 	}
 
-	public double getFriction() {
+	public short getFriction() {
 		return friction;
 	}
 
-	public double getMax() {
+	public short getMax() {
 		return max;
 	}
 

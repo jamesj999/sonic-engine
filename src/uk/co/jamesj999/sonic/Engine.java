@@ -2,10 +2,6 @@ package uk.co.jamesj999.sonic;
 
 import static javax.media.opengl.GL.GL_COLOR_BUFFER_BIT;
 import static javax.media.opengl.GL.GL_DEPTH_BUFFER_BIT;
-import static javax.media.opengl.GL.GL_DEPTH_TEST;
-import static javax.media.opengl.GL.GL_LEQUAL;
-import static javax.media.opengl.GL.GL_NICEST;
-import static javax.media.opengl.GL2ES1.GL_PERSPECTIVE_CORRECTION_HINT;
 import static javax.media.opengl.fixedfunc.GLLightingFunc.GL_SMOOTH;
 import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_MODELVIEW;
 import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
@@ -74,7 +70,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 																// correction
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smoothes out
 									// lighting
-		Sonic sonic = new Sonic("Sonic", 50, 200);
+		Sonic sonic = new Sonic("Sonic", (short) 50, (short) 200);
 		spriteManager.addSprite(sonic);
 		// ----- Your OpenGL initialization code here -----
 	}

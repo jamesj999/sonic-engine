@@ -18,18 +18,21 @@ public abstract class AbstractSprite implements Sprite {
 
 	protected String code;
 
-	protected int x;
-	protected int y;
+	protected short xPixel;
+	protected short yPixel;
+
+	protected byte xSubpixel;
+	protected byte ySubpixel;
 
 	protected int width;
 	protected int height;
 
 	protected float gravity = 0.02f;
 
-	protected AbstractSprite(String code, int x, int y) {
+	protected AbstractSprite(String code, short xPixel, short yPixel) {
 		this.code = code;
-		this.x = x;
-		this.y = y;
+		this.xPixel = xPixel;
+		this.yPixel = yPixel;
 	}
 
 	public final String getCode() {
@@ -40,20 +43,44 @@ public abstract class AbstractSprite implements Sprite {
 		this.code = code;
 	}
 
-	public final int getX() {
-		return x;
+	public final short getX() {
+		return xPixel;
 	}
 
-	public final void setX(int x) {
-		this.x = x;
+	public final void setX(short x) {
+		this.xPixel = x;
 	}
 
-	public final int getY() {
-		return y;
+	public final short getY() {
+		return yPixel;
 	}
 
-	public final void setY(int y) {
-		this.y = y;
+	public final void setY(short y) {
+		this.yPixel = y;
+	}
+
+	public final void move(short xSpeed, short ySpeed) {
+		/*
+		 * Speeds are provied in subpixels, need to convert current
+		 * Pixel/Subpixel values to subpixels, add our speeds and convert back.
+		 */
+		long xTotal = (xPixel * 256) + ((xSubpixel & 0xFF));
+		long yTotal = (yPixel * 256) + ((ySubpixel & 0xFF));
+
+		xTotal += xSpeed;
+		yTotal += ySpeed;
+
+		short updatedXPixel = (short) (xTotal / 256);
+		short updatedYPixel = (short) (yTotal / 256);
+
+		byte updatedXSubpixel = (byte) (xTotal % 256);
+		byte updatedYSubpixel = (byte) (yTotal % 256);
+
+		xPixel = updatedXPixel;
+		yPixel = updatedYPixel;
+
+		xSubpixel = updatedXSubpixel;
+		ySubpixel = updatedYSubpixel;
 	}
 
 	public int getWidth() {

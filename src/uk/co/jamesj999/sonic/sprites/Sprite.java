@@ -17,15 +17,17 @@ public interface Sprite {
 
 	public void draw(GL2 gl);
 	
-	public int getX();
-	public void setX(int x);
+	public short getX();
+	public void setX(short x);
 	
-	public int getY();
-	public void setY(int y);
+	public short getY();
+	public void setY(short y);
 	
 	public int getHeight();
 	public void setHeight(int height);
 	
 	public int getWidth();
 	public void setWidth(int width);
+	
+	public void move(short xSpeed, short ySpeed);
 }

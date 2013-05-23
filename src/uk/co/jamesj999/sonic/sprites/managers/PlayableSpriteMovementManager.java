@@ -5,10 +5,10 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
 
-	private final double max;
-	private final double runAccel;
-	private final double runDecel;
-	private final double friction;
+	private final short max;
+	private final short runAccel;
+	private final short runDecel;
+	private final short friction;
 
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
@@ -26,12 +26,12 @@ public class PlayableSpriteMovementManager extends
 	@Override
 	public void handleMovement(boolean left, boolean right, boolean jump) {
 		// small hack to reset position
-		if(jump) {
-			sprite.setX(50);
-			sprite.setY(200);
-			sprite.setGSpeed(0.00d);
+		if (jump) {
+			sprite.setX((short) 50);
+			sprite.setY((short) 200);
+			sprite.setGSpeed((short) 0);
 		}
-		double gSpeed = sprite.getGSpeed();
+		short gSpeed = sprite.getGSpeed();
 		byte angle = sprite.getAngle();
 		// Calculate Angle here
 		double slopeRunning = sprite.getSlopeRunning();
@@ -44,7 +44,7 @@ public class PlayableSpriteMovementManager extends
 				if (gSpeed > -max) {
 					gSpeed -= runAccel;
 				} else {
-					gSpeed = -max;
+					gSpeed = (short) -max;
 				}
 			}
 		} else if (right) {
@@ -52,7 +52,7 @@ public class PlayableSpriteMovementManager extends
 				gSpeed += runDecel;
 			} else {
 				if (gSpeed < max) {
-					gSpeed = gSpeed + runAccel;
+					gSpeed = (short) (gSpeed + runAccel);
 				} else {
 					gSpeed = max;
 				}
@@ -80,14 +80,15 @@ public class PlayableSpriteMovementManager extends
 			// }
 		}
 
-		int x = sprite.getX();
-		int y = sprite.getY();
-
 		sprite.setGSpeed(gSpeed);
-		x += gSpeed * Math.cos(angle);
-		y += gSpeed * -Math.sin(angle);
-		sprite.setX(x);
-		sprite.setY(y);
+		short xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
+		short ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
+
+		/*
+		 * Once ground collisions are in, add gravity:
+		 */
+		// ySpeed -= gravity;
+		sprite.move(xSpeed, ySpeed);
 	}
 
 	// @Override
