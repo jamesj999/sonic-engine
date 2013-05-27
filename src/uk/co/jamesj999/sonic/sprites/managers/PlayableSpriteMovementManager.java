@@ -1,9 +1,12 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
+import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
+	private final TerrainCollisionManager terrainCollisionManager = TerrainCollisionManager
+			.getInstance();
 
 	private final short max;
 	private final short runAccel;
@@ -81,6 +84,9 @@ public class PlayableSpriteMovementManager extends
 		}
 
 		sprite.setGSpeed(gSpeed);
+
+		angle = terrainCollisionManager.calculateAngle(sprite);
+		
 		short xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
 		short ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
 

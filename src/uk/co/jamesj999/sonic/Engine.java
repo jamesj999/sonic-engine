@@ -9,6 +9,7 @@ import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
 import java.awt.Dimension;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.nio.FloatBuffer;
 
 import javax.media.opengl.GL2;
 import javax.media.opengl.GLAutoDrawable;
@@ -22,6 +23,8 @@ import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.SpriteManager;
+import uk.co.jamesj999.sonic.level.Level;
+import uk.co.jamesj999.sonic.level.TestLevel;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import com.jogamp.opengl.util.FPSAnimator;
@@ -43,6 +46,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 			.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
 	private double realHeight = configService
 			.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+
+	// TODO move this into a manager
+	private Level level;
 
 	private GLU glu;
 
@@ -72,6 +78,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 									// lighting
 		Sonic sonic = new Sonic("Sonic", (short) 50, (short) 200);
 		spriteManager.addSprite(sonic);
+		
+		level = new TestLevel();
 		// ----- Your OpenGL initialization code here -----
 	}
 
@@ -106,6 +114,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// Graphics graphics = canvas.getBufferStrategy().getDrawGraphics();
 		// graphics.clearRect(0, 0, width, height);
 		spriteManager.draw(gl);
+		level.draw(gl);
 		// graphics.dispose();
 		// canvas.getBufferStrategy().show();
 		// Toolkit.getDefaultToolkit().sync();

@@ -1,5 +1,10 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import uk.co.jamesj999.sonic.physics.Sensor;
+import uk.co.jamesj999.sonic.physics.TerrainSensorPair;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 
@@ -11,6 +16,17 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
  */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final PlayableSpriteMovementManager movementManager;
+
+	/**
+	 * Standard collision sensors for other objects:
+	 */
+	protected final List<Sensor> sensors = new ArrayList<Sensor>();
+
+	/**
+	 * Special Sensor Pair to calculate ground angles for running.
+	 */
+	protected TerrainSensorPair groundSensors;
+
 	/**
 	 * gSpeed is the speed this sprite is moving across the 'ground'.
 	 * Calculations will be performed against this and 'angle' to calculate new
@@ -53,6 +69,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		// Must define speeds before creating Manager (it will read speeds upon
 		// instantiation).
 		defineSpeeds();
+		createGroundSensors();
 		movementManager = new PlayableSpriteMovementManager(this);
 	}
 
@@ -99,6 +116,24 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public PlayableSpriteMovementManager getMovementManager() {
 		return movementManager;
 	}
+
+	public List<Sensor> getSensors() {
+		return sensors;
+	}
+
+	public boolean addSensor(Sensor sensor) {
+		return sensors.add(sensor);
+	}
+
+	public boolean removeSensor(Sensor sensor) {
+		return sensors.remove(sensor);
+	}
+
+	public TerrainSensorPair getGroundSensors() {
+		return groundSensors;
+	}
+	
+	public abstract void createGroundSensors();
 
 	protected abstract void defineSpeeds();
 }

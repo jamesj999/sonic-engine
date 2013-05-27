@@ -64,8 +64,8 @@ public abstract class AbstractSprite implements Sprite {
 		 * Speeds are provied in subpixels, need to convert current
 		 * Pixel/Subpixel values to subpixels, add our speeds and convert back.
 		 */
-		long xTotal = (xPixel * 256) + ((xSubpixel & 0xFF));
-		long yTotal = (yPixel * 256) + ((ySubpixel & 0xFF));
+		long xTotal = (xPixel * 256) + (xSubpixel & 0xFF);
+		long yTotal = (yPixel * 256) + (ySubpixel & 0xFF);
 
 		xTotal += xSpeed;
 		yTotal += ySpeed;

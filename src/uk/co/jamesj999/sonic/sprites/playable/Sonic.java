@@ -2,13 +2,19 @@ package uk.co.jamesj999.sonic.sprites.playable;
 
 import javax.media.opengl.GL2;
 
+import uk.co.jamesj999.sonic.physics.Sensor;
+import uk.co.jamesj999.sonic.physics.TerrainSensor;
+import uk.co.jamesj999.sonic.physics.TerrainSensorPair;
+
 public class Sonic extends AbstractPlayableSprite {
 
 	public Sonic(String code, short x, short y) {
 		super(code, x, y);
 		// width in pixels for now
-		setWidth(12);
-		setHeight(16);
+		setWidth(20);
+		setHeight(24);
+
+		// Add sensors
 	}
 
 	@Override
@@ -30,5 +36,12 @@ public class Sonic extends AbstractPlayableSprite {
 		angle = 0;
 		// slopeRunning = 1;
 		// slopeRolling = 0.078125d;
+	}
+
+	@Override
+	public void createGroundSensors() {
+		Sensor left = new TerrainSensor(-20, 0);
+		Sensor right = new TerrainSensor(20, 0);
+		groundSensors = new TerrainSensorPair(left, right);
 	}
 }
