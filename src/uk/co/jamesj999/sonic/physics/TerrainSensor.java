@@ -1,6 +1,10 @@
 package uk.co.jamesj999.sonic.physics;
 
+import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.Tile;
+
 public class TerrainSensor implements Sensor {
+	LevelManager levelManager = LevelManager.getInstance();
 	private byte xOffset;
 	private byte yOffset;
 
@@ -77,6 +81,11 @@ public class TerrainSensor implements Sensor {
 	@Override
 	public void updateY(short y) {
 		this.y = (short) (y + yOffset);
+	}
+
+	@Override
+	public Tile getTile() {
+		return levelManager.getLevel().getTileAt(x, y);
 	}
 
 }

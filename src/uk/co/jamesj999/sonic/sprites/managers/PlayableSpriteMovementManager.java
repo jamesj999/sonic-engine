@@ -85,8 +85,9 @@ public class PlayableSpriteMovementManager extends
 
 		sprite.setGSpeed(gSpeed);
 
-		angle = terrainCollisionManager.calculateAngle(sprite);
-		
+		byte height = terrainCollisionManager.calculateTerrainHeight(sprite);
+		System.out.println(height);
+
 		short xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
 		short ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
 
@@ -95,6 +96,12 @@ public class PlayableSpriteMovementManager extends
 		 */
 		// ySpeed -= gravity;
 		sprite.move(xSpeed, ySpeed);
+		sprite.getGroundSensors().updateSensors(sprite);
+		if (sprite.getY() > 20) {
+			sprite.setY((short) (height - 10));
+		} else {
+			sprite.setY(height);
+		}
 	}
 
 	// @Override

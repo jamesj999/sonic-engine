@@ -1,6 +1,5 @@
 package uk.co.jamesj999.sonic.level;
 
-import javax.media.opengl.GL;
 import javax.media.opengl.GL2;
 
 public abstract class AbstractLevel implements Level {
@@ -39,8 +38,7 @@ public abstract class AbstractLevel implements Level {
 							for(int i = height; i >= realY; i--) {
 								gl.glVertex2i(realX + heightX, i);
 							}
-							gl.glVertex2i(realX + heightX, realY + height);
-							// gl.glRecti(realX + heightX, 40, 1, height);
+							//gl.glVertex2i(realX + heightX, realY + height);
 						}
 					}
 				}
