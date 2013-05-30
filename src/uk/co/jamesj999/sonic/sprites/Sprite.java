@@ -1,6 +1,5 @@
 package uk.co.jamesj999.sonic.sprites;
 
-import javax.media.opengl.GL2;
 
 
 /**
@@ -15,7 +14,7 @@ public interface Sprite {
 
 	public void setCode(String code);
 
-	public void draw(GL2 gl);
+	public void draw();
 	
 	public short getCentreX();
 	public short getCentreY();

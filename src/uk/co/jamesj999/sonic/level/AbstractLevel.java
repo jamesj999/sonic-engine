@@ -1,11 +1,18 @@
 package uk.co.jamesj999.sonic.level;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.media.opengl.GL2;
 
+import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 
 public abstract class AbstractLevel implements Level {
-	Tile[][] tiles = new Tile[256][256];
+	protected GraphicsManager graphicsManager = GraphicsManager.getInstance();
+
+	protected Tile[][] tiles = new Tile[256][256];
 
 	public AbstractLevel() {
 		setupTiles();
@@ -30,8 +37,8 @@ public abstract class AbstractLevel implements Level {
 
 	@Override
 	public void draw() {
-		GL2 gl = GraphicsManager.getGraphics();
-		gl.glBegin(GL2.GL_POINTS);
+		List<GLCommand> commands = new ArrayList<GLCommand>();
+		//gl.glBegin(GL2.GL_POINTS);
 		for (int x = 0; x < tiles.length; x++) {
 			Tile[] tileLine = tiles[x];
 			int realX = x * 16;
@@ -43,13 +50,15 @@ public abstract class AbstractLevel implements Level {
 						for (int heightX = 0; heightX < tile.heights.length; heightX++) {
 							int height = tile.heights[heightX];
 							for (int i = height+realY; i >= realY; i--) {
-								gl.glVertex2i(realX + heightX, i);
+								commands.add(new GLCommand(GLCommand.Type.VERTEX2I, -1, 1, 1, 1, realX + heightX, i, -1, -1));
+								//gl.glVertex2i(realX + heightX, i);
 							}
 						}
 					}
 				}
 			}
 		}
-		gl.glEnd();
+		//gl.glEnd();
+		graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
 	}
 }

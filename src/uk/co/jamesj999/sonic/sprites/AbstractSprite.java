@@ -6,9 +6,12 @@ import org.apache.commons.lang3.StringUtils;
 
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 
 public abstract class AbstractSprite implements Sprite {
 	protected final SonicConfigurationService configService = SonicConfigurationService
+			.getInstance();
+	protected final GraphicsManager graphicsManager = GraphicsManager
 			.getInstance();
 
 	protected BufferedImage spriteImage = new BufferedImage(
@@ -90,11 +93,22 @@ public abstract class AbstractSprite implements Sprite {
 		byte updatedXSubpixel = (byte) (xTotal % 256);
 		byte updatedYSubpixel = (byte) (yTotal % 256);
 
-		xPixel = updatedXPixel;
-		yPixel = updatedYPixel;
+		if (updatedXPixel < 0) {
+			xPixel = 0;
+			xSubpixel = 0;
+		} else {
+			xPixel = updatedXPixel;
+			xSubpixel = updatedXSubpixel;
+		}
 
-		xSubpixel = updatedXSubpixel;
-		ySubpixel = updatedYSubpixel;
+		if (updatedYPixel < 0) {
+			yPixel = 0;
+			ySubpixel = 0;
+		} else {
+			yPixel = updatedYPixel;
+			ySubpixel = updatedYSubpixel;
+		}
+		// System.out.println("x=" + xPixel + " y=" + yPixel);
 	}
 
 	public int getWidth() {

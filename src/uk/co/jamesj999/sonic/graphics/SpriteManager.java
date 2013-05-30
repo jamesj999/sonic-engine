@@ -5,8 +5,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import javax.media.opengl.GL2;
-
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
@@ -57,10 +55,9 @@ public class SpriteManager {
 	 * Draws all sprites.
 	 */
 	public void draw() {
-		GL2 gl = GraphicsManager.getGraphics();
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
-			sprite.draw(gl);
+			sprite.draw();
 			if(sprite instanceof AbstractPlayableSprite) {
 				// TODO temp debug stuff, remove
 				((AbstractPlayableSprite) sprite).getGroundSensors().draw();

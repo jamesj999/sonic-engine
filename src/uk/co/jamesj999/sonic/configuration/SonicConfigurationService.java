@@ -18,6 +18,21 @@ public class SonicConfigurationService {
 		}
 	}
 
+	public short getShort(SonicConfiguration sonicConfiguration) {
+		Object value = sonicConfiguration.getValue();
+		if (value instanceof Short) {
+			return ((Short) value).shortValue();
+		} else if (value instanceof Integer) {
+			return (short) getInt(sonicConfiguration);
+		} else {
+			try {
+				return Short.parseShort(getString(sonicConfiguration));
+			} catch (NumberFormatException e) {
+				return -1;
+			}
+		}
+	}
+
 	public String getString(SonicConfiguration sonicConfiguration) {
 		if (sonicConfiguration.getValue() != null) {
 			return sonicConfiguration.getValue().toString();

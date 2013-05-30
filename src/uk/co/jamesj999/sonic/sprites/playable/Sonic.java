@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.sprites.playable;
 
 import javax.media.opengl.GL2;
 
+import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.TerrainSensor;
 import uk.co.jamesj999.sonic.physics.TerrainSensorPair;
@@ -18,13 +19,12 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	@Override
-	public void draw(GL2 gl) {
-		gl.glBegin(GL2.GL_2D);
-		gl.glRectd(xPixel, yPixel, xPixel + width,
-				yPixel - height);
-		// System.out.println("Sonic X: " + xPixel);
-		// System.out.println("Sonic Centre X:" + getCentreX());
-		gl.glEnd();
+	public void draw() {
+		graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI, GL2.GL_2D,
+				1, 1, 1, xPixel, yPixel, xPixel + width, yPixel - height));
+		// gl.glBegin(GL2.GL_2D);
+		// gl.glRectd(xPixel, yPixel, xPixel + width, yPixel - height);
+		// gl.glEnd();
 	}
 
 	@Override

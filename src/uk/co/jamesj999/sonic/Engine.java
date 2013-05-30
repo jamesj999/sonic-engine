@@ -19,6 +19,7 @@ import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 
 import uk.co.jamesj999.sonic.Control.InputHandler;
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
@@ -40,6 +41,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
+	private final GraphicsManager graphicsManager = GraphicsManager
+			.getInstance();
+
 	private InputHandler inputHandler;
 
 	private double realWidth = configService
@@ -73,6 +77,10 @@ public class Engine extends GLCanvas implements GLEventListener {
 		Sonic sonic = new Sonic("Sonic", (short) 30, (short) 0);
 		spriteManager.addSprite(sonic);
 
+		// Causes camera to instantiate itself... TODO Probably remove this
+		// later since it'll be used in the first update loop anyway
+		Camera.getInstance();
+
 		levelManager.setLevel(new TestLevel());
 	}
 
@@ -84,7 +92,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	public void reshape(GLAutoDrawable drawable, int x, int y, int width,
 			int height) {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL 2 graphics context
-		GraphicsManager.setGraphics(gl);
+		graphicsManager.setGraphics(gl);
 
 		// Set the view port (display area) to cover the entire window
 		gl.glViewport(0, 0, width, height);
@@ -177,8 +185,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 																// buffers
 		gl.glLoadIdentity(); // reset the model-view matrix
 		update();
-		GraphicsManager.setGraphics(gl);
+		graphicsManager.setGraphics(gl);
 		draw();
+		graphicsManager.flush();
 	}
 
 	/**

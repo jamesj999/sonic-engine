@@ -104,7 +104,7 @@ public class PlayableSpriteMovementManager extends
 		sprite.move(xSpeed, ySpeed);
 		// -1 indicates no heightmap was found meaning we're not on a solid tile
 		if (height > -1) {
-			sprite.setY((short) (height + 20));
+			sprite.setY((short) (height + sprite.getHeight() / 2));
 		}
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
