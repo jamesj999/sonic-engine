@@ -43,11 +43,22 @@ public abstract class AbstractSprite implements Sprite {
 		this.code = code;
 	}
 
+	public final short getCentreX() {
+		return (short) Math.round(xPixel + (width / 2));
+	}
+
+	public final short getCentreY() {
+		return (short) Math.round(yPixel - (height / 2));
+	}
+
 	public final short getX() {
 		return xPixel;
 	}
 
 	public final void setX(short x) {
+		if (x < 0) {
+			this.xPixel = 0;
+		}
 		this.xPixel = x;
 	}
 
@@ -56,6 +67,9 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public final void setY(short y) {
+		if (y < 0) {
+			this.yPixel = 0;
+		}
 		this.yPixel = y;
 	}
 

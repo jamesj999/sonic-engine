@@ -11,8 +11,8 @@ public class Sonic extends AbstractPlayableSprite {
 	public Sonic(String code, short x, short y) {
 		super(code, x, y);
 		// width in pixels for now
-		setWidth(20);
-		setHeight(24);
+		setWidth(28);
+		setHeight(40);
 
 		// Add sensors
 	}
@@ -20,7 +20,10 @@ public class Sonic extends AbstractPlayableSprite {
 	@Override
 	public void draw(GL2 gl) {
 		gl.glBegin(GL2.GL_2D);
-		gl.glRectd(xPixel, yPixel, xPixel + width, yPixel - height);
+		gl.glRectd(xPixel, yPixel, xPixel + width,
+				yPixel - height);
+		// System.out.println("Sonic X: " + xPixel);
+		// System.out.println("Sonic Centre X:" + getCentreX());
 		gl.glEnd();
 	}
 
@@ -40,8 +43,9 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	public void createGroundSensors() {
-		Sensor left = new TerrainSensor(-20, 0);
-		Sensor right = new TerrainSensor(20, 0);
+		Sensor left = new TerrainSensor(-9, 0);
+		Sensor right = new TerrainSensor(9, 0);
 		groundSensors = new TerrainSensorPair(left, right);
+		groundSensors.updateSensors(this);
 	}
 }

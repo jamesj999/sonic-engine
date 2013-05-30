@@ -1,5 +1,8 @@
 package uk.co.jamesj999.sonic.physics;
 
+import javax.media.opengl.GL2;
+
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 
 public class TerrainSensorPair {
@@ -18,11 +21,25 @@ public class TerrainSensorPair {
 	}
 
 	public void updateSensors(Sprite sprite) {
-		left.updateX(sprite.getX());
-		left.updateY(sprite.getY());
+		short x = sprite.getCentreX();
+		short y = sprite.getCentreY();
 
-		right.updateX(sprite.getX());
-		right.updateY(sprite.getY());
+		left.updateX(x);
+		left.updateY(y);
+
+		right.updateX(x);
+		right.updateY(y);
+	}
+
+	public void draw() {
+		GL2 gl = GraphicsManager.getGraphics();
+		if (gl != null) {
+			gl.glBegin(GL2.GL_2D);
+			gl.glColor3f(1.0f, 0, 0);
+			gl.glRecti(left.getX(), left.getY(), right.getX(), right.getY() + 1);
+			gl.glColor3f(1.0f, 1.0f, 1.0f);
+			gl.glEnd();
+		}
 	}
 
 	public Sensor getLeft() {

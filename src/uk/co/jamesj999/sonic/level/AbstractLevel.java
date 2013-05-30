@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.level;
 
 import javax.media.opengl.GL2;
 
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+
 public abstract class AbstractLevel implements Level {
 	Tile[][] tiles = new Tile[256][256];
 
@@ -17,13 +19,18 @@ public abstract class AbstractLevel implements Level {
 	public Tile getTileAt(short x, short y) {
 		short xPosition = (short) Math.floor((double) x / 16);
 		short yPosition = (short) Math.floor((double) y / 16);
-		return tiles[xPosition][yPosition];
+		if (xPosition > -1 && yPosition > -1) {
+			return tiles[xPosition][yPosition];
+		} else {
+			return null;
+		}
 	}
 
 	protected abstract void setupTiles();
 
 	@Override
-	public void draw(GL2 gl) {
+	public void draw() {
+		GL2 gl = GraphicsManager.getGraphics();
 		gl.glBegin(GL2.GL_POINTS);
 		for (int x = 0; x < tiles.length; x++) {
 			Tile[] tileLine = tiles[x];
@@ -35,10 +42,9 @@ public abstract class AbstractLevel implements Level {
 					if (tile != null) {
 						for (int heightX = 0; heightX < tile.heights.length; heightX++) {
 							int height = tile.heights[heightX];
-							for(int i = height; i >= realY; i--) {
+							for (int i = height; i >= realY; i--) {
 								gl.glVertex2i(realX + heightX, i);
 							}
-							//gl.glVertex2i(realX + heightX, realY + height);
 						}
 					}
 				}

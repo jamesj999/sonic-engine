@@ -54,13 +54,17 @@ public class SpriteManager {
 	}
 
 	/**
-	 * Draws all sprites to the provided JFrame. Takes a Graphics2D to avoid
-	 * retrieving it from Canvas/Panel every time
+	 * Draws all sprites.
 	 */
-	public void draw(GL2 gl) {
+	public void draw() {
+		GL2 gl = GraphicsManager.getGraphics();
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
 			sprite.draw(gl);
+			if(sprite instanceof AbstractPlayableSprite) {
+				// TODO temp debug stuff, remove
+				((AbstractPlayableSprite) sprite).getGroundSensors().draw();
+			}
 		}
 	}
 

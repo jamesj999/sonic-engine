@@ -21,6 +21,7 @@ import javax.swing.SwingUtilities;
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.TestLevel;
@@ -67,19 +68,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL graphics context
 		glu = new GLU(); // get GL Utilities
 		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set background (clear) color
-		//gl.glClearDepth(1.0f); // set clear depth value to farthest
-		//gl.glEnable(GL_DEPTH_TEST); // enables depth testing
-		//gl.glDepthFunc(GL_LEQUAL); // the type of depth test to do
-		//gl.glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST); // best
-																// perspective
-																// correction
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smoothes out
 									// lighting
-		Sonic sonic = new Sonic("Sonic", (short) 30, (short) 4);
+		Sonic sonic = new Sonic("Sonic", (short) 30, (short) 0);
 		spriteManager.addSprite(sonic);
-		
+
 		levelManager.setLevel(new TestLevel());
-		// ----- Your OpenGL initialization code here -----
 	}
 
 	/**
@@ -90,6 +84,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	public void reshape(GLAutoDrawable drawable, int x, int y, int width,
 			int height) {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL 2 graphics context
+		GraphicsManager.setGraphics(gl);
 
 		// Set the view port (display area) to cover the entire window
 		gl.glViewport(0, 0, width, height);
@@ -97,8 +92,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// Setup perspective projection, with aspect ratio matches viewport
 		gl.glMatrixMode(GL_PROJECTION); // choose projection matrix
 		gl.glLoadIdentity(); // reset projection matrix
-		glu.gluOrtho2D(0, realWidth, 0, realHeight); // fovy, aspect, zNear,
-		// zFar
+		glu.gluOrtho2D(0, realWidth, 0, realHeight);
 
 		// Enable the model-view transform
 		gl.glMatrixMode(GL_MODELVIEW);
@@ -109,11 +103,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 		spriteManager.update(inputHandler);
 	}
 
-	public void draw(GL2 gl) {
+	public void draw() {
 		// Graphics graphics = canvas.getBufferStrategy().getDrawGraphics();
 		// graphics.clearRect(0, 0, width, height);
-		spriteManager.draw(gl);
-		levelManager.getLevel().draw(gl);
+		spriteManager.draw();
+		levelManager.getLevel().draw();
 		// graphics.dispose();
 		// canvas.getBufferStrategy().show();
 		// Toolkit.getDefaultToolkit().sync();
@@ -183,7 +177,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 																// buffers
 		gl.glLoadIdentity(); // reset the model-view matrix
 		update();
-		draw(gl);
+		GraphicsManager.setGraphics(gl);
+		draw();
 	}
 
 	/**

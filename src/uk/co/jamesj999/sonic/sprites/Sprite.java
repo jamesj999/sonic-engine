@@ -17,6 +17,9 @@ public interface Sprite {
 
 	public void draw(GL2 gl);
 	
+	public short getCentreX();
+	public short getCentreY();
+	
 	public short getX();
 	public void setX(short x);
 	

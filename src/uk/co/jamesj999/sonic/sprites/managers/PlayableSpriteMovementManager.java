@@ -83,10 +83,14 @@ public class PlayableSpriteMovementManager extends
 			// }
 		}
 
+		if (jump) {
+
+		}
+
 		sprite.setGSpeed(gSpeed);
 
 		byte height = terrainCollisionManager.calculateTerrainHeight(sprite);
-		System.out.println(height);
+		// System.out.println(height);
 
 		short xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
 		short ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
@@ -94,14 +98,13 @@ public class PlayableSpriteMovementManager extends
 		/*
 		 * Once ground collisions are in, add gravity:
 		 */
-		// ySpeed -= gravity;
+		ySpeed -= sprite.getGravity();
 		sprite.move(xSpeed, ySpeed);
-		sprite.getGroundSensors().updateSensors(sprite);
-		if (sprite.getY() > 20) {
-			sprite.setY((short) (height - 10));
-		} else {
-			sprite.setY(height);
+		// -1 indicates no heightmap was found meaning we're not on a solid tile
+		if (height > -1) {
+			sprite.setY((short) (height + 20));
 		}
+		sprite.getGroundSensors().updateSensors(sprite);
 	}
 
 	// @Override
