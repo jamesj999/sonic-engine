@@ -3,13 +3,14 @@ package uk.co.jamesj999.sonic.camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 public class Camera {
 	private static Camera camera;
 	private short x = 0;
 	private short y = 0;
 
-	private Sprite focusedSprite;
+	private AbstractPlayableSprite focusedSprite;
 
 	private short width;
 	private short height;
@@ -26,15 +27,15 @@ public class Camera {
 		short focusedSpriteRealY = (short) (focusedSprite.getY() - y);
 		if (focusedSpriteRealX < 144) {
 			short difference = (short) (focusedSpriteRealX - 144);
-			if (difference < 6) {
-				x -= 6;
+			if (difference > 16) {
+				x -= 16;
 			} else {
 				x += difference;
 			}
 		} else if (focusedSpriteRealX > 160) {
-			short difference = (short) -(focusedSpriteRealX - 160);
-			if (difference < 6) {
-				x += 6;
+			short difference = (short) (focusedSpriteRealX - 160);
+			if (difference > 16) {
+				x += 16;
 			} else {
 				x += difference;
 			}
@@ -42,6 +43,15 @@ public class Camera {
 		if (x < 0) {
 			x = 0;
 		}
+		
+//		if(focusedSprite.getAir()) {
+//			 if(focusedSpriteRealY < 96) {
+//				 short difference = (short) (focusedSpriteRealX - 96);
+//				 if(difference)
+//			 } else if(focusedSpriteRealY > 160) {
+//				 
+//			 }
+//		}
 	}
 
 	public boolean isOnScreen(Sprite sprite) {
@@ -55,7 +65,7 @@ public class Camera {
 				&& spriteY <= yUpper;
 	}
 
-	public void setFocusedSprite(Sprite sprite) {
+	public void setFocusedSprite(AbstractPlayableSprite sprite) {
 		this.focusedSprite = sprite;
 	}
 
