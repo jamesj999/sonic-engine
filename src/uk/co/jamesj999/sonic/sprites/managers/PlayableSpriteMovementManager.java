@@ -28,12 +28,6 @@ public class PlayableSpriteMovementManager extends
 	 */
 	@Override
 	public void handleMovement(boolean left, boolean right, boolean jump) {
-		// small hack to reset position
-		if (jump) {
-			sprite.setX((short) 50);
-			sprite.setY((short) 200);
-			sprite.setGSpeed((short) 0);
-		}
 		short gSpeed = sprite.getGSpeed();
 		byte angle = sprite.getAngle();
 		// Calculate Angle here
@@ -83,22 +77,30 @@ public class PlayableSpriteMovementManager extends
 			// }
 		}
 
-		if (jump) {
-
-		}
-
 		sprite.setGSpeed(gSpeed);
-
-		byte height = terrainCollisionManager.calculateTerrainHeight(sprite);
 		// System.out.println(height);
 
-		short xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
-		short ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
+		short xSpeed;
+		short ySpeed;
+		if (!sprite.getAir()) {
+			xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
+			ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
+		} else {
+			xSpeed = sprite.getXSpeed();
+			ySpeed = sprite.getYSpeed();
+		}
 
-		/*
-		 * Once ground collisions are in, add gravity:
-		 */
-		ySpeed -= sprite.getGravity();
+		if (jump && !sprite.getAir()) {
+			sprite.setAir(true);
+			ySpeed += sprite.getJump();
+		}
+		byte height = terrainCollisionManager.calculateTerrainHeight(sprite);
+
+		if (sprite.getAir()) {
+			ySpeed -= sprite.getGravity();
+		}
+		sprite.setXSpeed(xSpeed);
+		sprite.setYSpeed(ySpeed);
 		sprite.move(xSpeed, ySpeed);
 		// -1 indicates no heightmap was found meaning we're not on a solid tile
 		if (height > -1) {

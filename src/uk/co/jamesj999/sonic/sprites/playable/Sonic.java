@@ -33,6 +33,7 @@ public class Sonic extends AbstractPlayableSprite {
 		runDecel = 128;
 		friction = 12;
 		max = 1536;
+		jump = 1664;
 		/**
 		 * Change 'angle' to make sonic walk at an angle!
 		 */

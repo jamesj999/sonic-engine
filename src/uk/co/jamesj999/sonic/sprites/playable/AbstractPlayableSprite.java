@@ -35,6 +35,41 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected short gSpeed = 0;
 	protected byte angle;
 
+	protected short jump = 0;
+
+	protected short xSpeed = 0;
+	protected short ySpeed = 0;
+
+	protected boolean air = false;
+
+	public boolean getAir() {
+		return air;
+	}
+
+	public void setAir(boolean air) {
+		this.air = air;
+	}
+
+	public short getJump() {
+		return jump;
+	}
+
+	public short getXSpeed() {
+		return xSpeed;
+	}
+
+	public void setXSpeed(short xSpeed) {
+		this.xSpeed = xSpeed;
+	}
+
+	public short getYSpeed() {
+		return ySpeed;
+	}
+
+	public void setYSpeed(short ySpeed) {
+		this.ySpeed = ySpeed;
+	}
+
 	/**
 	 * The amount this sprite's speed is effected by when running down/up a
 	 * slope.
@@ -132,7 +167,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public TerrainSensorPair getGroundSensors() {
 		return groundSensors;
 	}
-	
+
 	public abstract void createGroundSensors();
 
 	protected abstract void defineSpeeds();

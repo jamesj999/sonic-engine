@@ -11,27 +11,35 @@ public class TerrainCollisionManager {
 
 	public byte calculateTerrainHeight(Sprite sprite) {
 		if (sprite instanceof AbstractPlayableSprite) {
-			TerrainSensorPair sensors = ((AbstractPlayableSprite) sprite)
-					.getGroundSensors();
-			Sensor left = sensors.getLeft();
-			Sensor right = sensors.getRight();
-			System.out.println("Left X:" + left.getX() + ". Right X: "
-					+ right.getX());
-			System.out.println("Left Y:" + left.getY() + ". Right Y:"
-					+ right.getY());
-			Tile leftTile = left.getTile();
-			Tile rightTile = right.getTile();
-			byte leftHeight = -1;
-			byte rightHeight = -1;
-			if (leftTile != null) {
-				leftHeight = leftTile.getHeightAt((byte) (left.getX() % 16));
+			if (((AbstractPlayableSprite) sprite).getYSpeed() <= 0) {
+				TerrainSensorPair sensors = ((AbstractPlayableSprite) sprite)
+						.getGroundSensors();
+				Sensor left = sensors.getLeft();
+				Sensor right = sensors.getRight();
+				// System.out.println("Left X:" + left.getX() + ". Right X: "
+				// + right.getX());
+				// System.out.println("Left Y:" + left.getY() + ". Right Y:"
+				// + right.getY());
+				Tile leftTile = left.getTile();
+				Tile rightTile = right.getTile();
+				byte leftHeight = -1;
+				byte rightHeight = -1;
+				if (leftTile != null) {
+					leftHeight = leftTile
+							.getHeightAt((byte) (left.getX() % 16));
+				}
+				if (rightTile != null) {
+					rightHeight = rightTile
+							.getHeightAt((byte) (right.getX() % 16));
+				}
+
+				if (leftHeight > -1 || rightHeight > -1) {
+					((AbstractPlayableSprite) sprite).setAir(false);
+				}
+				return (leftHeight > rightHeight) ? leftHeight : rightHeight;
 			}
-			if (rightTile != null) {
-				rightHeight = rightTile.getHeightAt((byte) (right.getX() % 16));
-			}
-			return (leftHeight > rightHeight) ? leftHeight : rightHeight;
 		}
-		return (byte) -1; // TODO finish
+		return (byte) -1;
 	}
 
 	public synchronized static TerrainCollisionManager getInstance() {

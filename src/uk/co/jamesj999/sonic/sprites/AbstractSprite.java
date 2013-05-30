@@ -27,7 +27,7 @@ public abstract class AbstractSprite implements Sprite {
 	protected int width;
 	protected int height;
 
-	protected float gravity = 0.02f;
+	protected byte gravity = 56;
 
 	protected AbstractSprite(String code, short xPixel, short yPixel) {
 		this.code = code;

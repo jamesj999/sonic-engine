@@ -1,8 +1,5 @@
 package uk.co.jamesj999.sonic.physics;
 
-import javax.media.opengl.GL2;
-
-import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.Tile;
 

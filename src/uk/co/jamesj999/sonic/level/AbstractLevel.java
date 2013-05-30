@@ -42,7 +42,7 @@ public abstract class AbstractLevel implements Level {
 					if (tile != null) {
 						for (int heightX = 0; heightX < tile.heights.length; heightX++) {
 							int height = tile.heights[heightX];
-							for (int i = height; i >= realY; i--) {
+							for (int i = height+realY; i >= realY; i--) {
 								gl.glVertex2i(realX + heightX, i);
 							}
 						}
