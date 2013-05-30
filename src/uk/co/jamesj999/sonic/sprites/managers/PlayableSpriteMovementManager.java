@@ -94,7 +94,7 @@ public class PlayableSpriteMovementManager extends
 			sprite.setAir(true);
 			ySpeed += sprite.getJump();
 		}
-		byte height = terrainCollisionManager.calculateTerrainHeight(sprite);
+		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
 
 		if (sprite.getAir()) {
 			ySpeed -= sprite.getGravity();

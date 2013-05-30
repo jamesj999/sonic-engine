@@ -163,25 +163,25 @@ public class TestLevel extends AbstractLevel {
 //		addTile(tile2, 18, 1);
 //		addTile(tile3, 19, 1);
 //		
-//		addTile(tile1, 0, 2);
-//		addTile(tile1, 1, 2);
-//		addTile(tile1, 2, 2);
-//		addTile(tile1, 3, 2);
-//		addTile(tile2, 4, 2);
-//		addTile(tile3, 5, 2);
-//		addTile(tile4, 6, 2);
-//		addTile(tile4, 7, 2);
-//		addTile(tile4, 8, 2);
-//		addTile(tile4, 9, 2);
-//		addTile(tile4, 10, 2);
-//		addTile(tile4, 11, 2);
-//		addTile(tile5, 12, 2);
-//		addTile(tile6, 13, 2);
-//		addTile(tile1, 14, 2);
-//		addTile(tile1, 15, 2);
-//		addTile(tile1, 16, 2);
-//		addTile(tile2, 17, 2);
-//		addTile(tile2, 18, 2);
-//		addTile(tile3, 19, 2);
+		addTile(tile1, 0, 5);
+		addTile(tile1, 1, 5);
+		addTile(tile1, 2, 5);
+		addTile(tile1, 3, 5);
+		addTile(tile2, 4, 5);
+		addTile(tile3, 5, 5);
+		addTile(tile4, 6, 5);
+		addTile(tile4, 7, 5);
+		addTile(tile4, 8, 5);
+		addTile(tile4, 9, 5);
+		addTile(tile4, 10, 5);
+		addTile(tile4, 11, 5);
+		addTile(tile5, 12, 5);
+		addTile(tile6, 13, 5);
+		addTile(tile1, 14, 5);
+		addTile(tile1, 15, 5);
+		addTile(tile1, 16, 5);
+		addTile(tile2, 17, 5);
+		addTile(tile2, 18, 5);
+		addTile(tile3, 19, 5);
 	}
 }

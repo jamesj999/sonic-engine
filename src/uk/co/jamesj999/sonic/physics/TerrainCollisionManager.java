@@ -9,7 +9,7 @@ public class TerrainCollisionManager {
 
 	// private final LevelManager levelManager = LevelManager.getInstance();
 
-	public byte calculateTerrainHeight(Sprite sprite) {
+	public short calculateTerrainHeight(Sprite sprite) {
 		if (sprite instanceof AbstractPlayableSprite) {
 			if (((AbstractPlayableSprite) sprite).getYSpeed() <= 0) {
 				TerrainSensorPair sensors = ((AbstractPlayableSprite) sprite)
@@ -22,15 +22,17 @@ public class TerrainCollisionManager {
 				// + right.getY());
 				Tile leftTile = left.getTile();
 				Tile rightTile = right.getTile();
-				byte leftHeight = -1;
-				byte rightHeight = -1;
+				short leftHeight = -1;
+				short rightHeight = -1;
 				if (leftTile != null) {
-					leftHeight = leftTile
-							.getHeightAt((byte) (left.getX() % 16));
+					leftHeight = (short) ((leftTile.getHeightAt((byte) (left
+							.getX() % 16))) + 16 * Math.round(sensors
+							.getLeftY() / 16));
 				}
 				if (rightTile != null) {
-					rightHeight = rightTile
-							.getHeightAt((byte) (right.getX() % 16));
+					rightHeight = (short) ((rightTile.getHeightAt((byte) (right
+							.getX() % 16))) + 16 * Math.round(sensors
+							.getRightY() / 16));
 				}
 
 				if (leftHeight > -1 || rightHeight > -1) {
