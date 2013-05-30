@@ -44,6 +44,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
 	private final GraphicsManager graphicsManager = GraphicsManager
 			.getInstance();
+	private final Camera camera = Camera.getInstance();
 
 	private InputHandler inputHandler;
 
@@ -80,7 +81,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 		// Causes camera to instantiate itself... TODO Probably remove this
 		// later since it'll be used in the first update loop anyway
-		Camera.getInstance();
+		camera.setFocusedSprite(sonic);
 
 		levelManager.setLevel(new TestLevel());
 	}
@@ -110,20 +111,21 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public void update() {
 		// Testing camera movement
-		Camera camera = Camera.getInstance();
-		if (inputHandler.isKeyDown(KeyEvent.VK_W)) {
-			camera.incrementY((short) 1);
-		}
-		if (inputHandler.isKeyDown(KeyEvent.VK_D)) {
-			camera.incrementX((short) 1);
-		}
-		if (inputHandler.isKeyDown(KeyEvent.VK_S)) {
-			camera.incrementY((short) -1);
-		}
-		if (inputHandler.isKeyDown(KeyEvent.VK_A)) {
-			camera.incrementX((short) -1);
-		}
+//		Camera camera = Camera.getInstance();
+//		if (inputHandler.isKeyDown(KeyEvent.VK_W)) {
+//			camera.incrementY((short) 1);
+//		}
+//		if (inputHandler.isKeyDown(KeyEvent.VK_D)) {
+//			camera.incrementX((short) 1);
+//		}
+//		if (inputHandler.isKeyDown(KeyEvent.VK_S)) {
+//			camera.incrementY((short) -1);
+//		}
+//		if (inputHandler.isKeyDown(KeyEvent.VK_A)) {
+//			camera.incrementX((short) -1);
+//		}
 		spriteManager.update(inputHandler);
+		camera.updatePosition();
 	}
 
 	public void draw() {
