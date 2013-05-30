@@ -37,6 +37,8 @@ public class TerrainCollisionManager {
 
 				if (leftHeight > -1 || rightHeight > -1) {
 					((AbstractPlayableSprite) sprite).setAir(false);
+				} else {
+					((AbstractPlayableSprite) sprite).setAir(true);
 				}
 				return (leftHeight > rightHeight) ? leftHeight : rightHeight;
 			}

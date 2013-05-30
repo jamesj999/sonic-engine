@@ -1,6 +1,5 @@
 package uk.co.jamesj999.sonic.level;
 
-
 public class TestLevel extends AbstractLevel {
 
 	@Override
@@ -141,28 +140,28 @@ public class TestLevel extends AbstractLevel {
 		addTile(tile2, 17, 0);
 		addTile(tile2, 18, 0);
 		addTile(tile3, 19, 0);
-		
-//		addTile(tile1, 0, 1);
-//		addTile(tile1, 1, 1);
-//		addTile(tile1, 2, 1);
-//		addTile(tile1, 3, 1);
-//		addTile(tile2, 4, 1);
-//		addTile(tile3, 5, 1);
-//		addTile(tile4, 6, 1);
-//		addTile(tile4, 7, 1);
-//		addTile(tile4, 8, 1);
-//		addTile(tile4, 9, 1);
-//		addTile(tile4, 10, 1);
-//		addTile(tile4, 11, 1);
-//		addTile(tile5, 12, 1);
-//		addTile(tile6, 13, 1);
-//		addTile(tile1, 14, 1);
-//		addTile(tile1, 15, 1);
-//		addTile(tile1, 16, 1);
-//		addTile(tile2, 17, 1);
-//		addTile(tile2, 18, 1);
-//		addTile(tile3, 19, 1);
-//		
+
+		// addTile(tile1, 0, 1);
+		// addTile(tile1, 1, 1);
+		// addTile(tile1, 2, 1);
+		// addTile(tile1, 3, 1);
+		// addTile(tile2, 4, 1);
+		// addTile(tile3, 5, 1);
+		// addTile(tile4, 6, 1);
+		// addTile(tile4, 7, 1);
+		// addTile(tile4, 8, 1);
+		// addTile(tile4, 9, 1);
+		// addTile(tile4, 10, 1);
+		// addTile(tile4, 11, 1);
+		// addTile(tile5, 12, 1);
+		// addTile(tile6, 13, 1);
+		// addTile(tile1, 14, 1);
+		// addTile(tile1, 15, 1);
+		// addTile(tile1, 16, 1);
+		// addTile(tile2, 17, 1);
+		// addTile(tile2, 18, 1);
+		// addTile(tile3, 19, 1);
+		//
 		addTile(tile1, 0, 5);
 		addTile(tile1, 1, 5);
 		addTile(tile1, 2, 5);
@@ -177,11 +176,16 @@ public class TestLevel extends AbstractLevel {
 		addTile(tile4, 11, 5);
 		addTile(tile5, 12, 5);
 		addTile(tile6, 13, 5);
-		addTile(tile1, 14, 5);
-		addTile(tile1, 15, 5);
+//		addTile(tile1, 14, 5);
+//		addTile(tile1, 15, 5);
 		addTile(tile1, 16, 5);
 		addTile(tile2, 17, 5);
-		addTile(tile2, 18, 5);
+//		addTile(tile2, 18, 5);
 		addTile(tile3, 19, 5);
+
+		addTile(tile1, 0, 7);
+		addTile(tile1, 1, 7);
+		addTile(tile1, 2, 7);
+		addTile(tile1, 3, 7);
 	}
 }
