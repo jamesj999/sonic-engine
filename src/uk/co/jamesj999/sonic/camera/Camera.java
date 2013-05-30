@@ -43,15 +43,54 @@ public class Camera {
 		if (x < 0) {
 			x = 0;
 		}
-		
-//		if(focusedSprite.getAir()) {
-//			 if(focusedSpriteRealY < 96) {
-//				 short difference = (short) (focusedSpriteRealX - 96);
-//				 if(difference)
-//			 } else if(focusedSpriteRealY > 160) {
-//				 
-//			 }
-//		}
+
+		if (focusedSprite.getAir()) {
+			if (focusedSpriteRealY < 96) {
+				short difference = (short) (focusedSpriteRealY - 96);
+				if (difference > 16) {
+					y -= 16;
+				} else {
+					y += difference;
+				}
+			} else if (focusedSpriteRealY > 160) {
+				short difference = (short) (focusedSpriteRealY - 160);
+				if (difference > 16) {
+					y += 16;
+				} else {
+					y += difference;
+				}
+			}
+		} else {
+//			if (focusedSpriteRealY != 96) {
+//				System.out.println(focusedSprite.getYSpeed());
+//				short difference = (short) (focusedSpriteRealY - 96);
+//				if (focusedSprite.getYSpeed() >= 6) {
+//					if (difference < 6) {
+//						y += difference;
+//					} else {
+//						y += 6;
+//					}
+//				} else if (focusedSprite.getYSpeed() > 0) {
+//					if (difference < 6) {
+//						y += difference;
+//					} else {
+//						y += 6;
+//					}
+//				} else if (focusedSprite.getYSpeed() >= -6) {
+//					if (difference > -6) {
+//						y -= difference;
+//					} else {
+//						y -= 6;
+//					}
+//				} else if (focusedSprite.getYSpeed() < -6) {
+//					if (difference > -6) {
+//						y -= difference;
+//					} else {
+//						y -= 6;
+//					}
+//				}
+//			}
+		}
 	}
 
 	public boolean isOnScreen(Sprite sprite) {

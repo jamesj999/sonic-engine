@@ -99,13 +99,16 @@ public class PlayableSpriteMovementManager extends
 		if (sprite.getAir()) {
 			ySpeed -= sprite.getGravity();
 		}
+		if (height > -1) {
+			ySpeed += 16 * ((short) (height + sprite.getHeight() / 2) - sprite
+					.getY());
+			sprite.setY((short) (height + sprite.getHeight() / 2));
+		}
+		System.out.println(ySpeed);
 		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
 		sprite.move(xSpeed, ySpeed);
 		// -1 indicates no heightmap was found meaning we're not on a solid tile
-		if (height > -1) {
-			sprite.setY((short) (height + sprite.getHeight() / 2));
-		}
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
 
