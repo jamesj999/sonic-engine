@@ -7,6 +7,7 @@ import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_MODELVIEW;
 import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
 
 import java.awt.Dimension;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -108,6 +109,20 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void update() {
+		// Testing camera movement
+		Camera camera = Camera.getInstance();
+		if (inputHandler.isKeyDown(KeyEvent.VK_W)) {
+			camera.incrementY((short) 1);
+		}
+		if (inputHandler.isKeyDown(KeyEvent.VK_D)) {
+			camera.incrementX((short) 1);
+		}
+		if (inputHandler.isKeyDown(KeyEvent.VK_S)) {
+			camera.incrementY((short) -1);
+		}
+		if (inputHandler.isKeyDown(KeyEvent.VK_A)) {
+			camera.incrementX((short) -1);
+		}
 		spriteManager.update(inputHandler);
 	}
 
