@@ -36,61 +36,69 @@ public class PlayableSpriteMovementManager extends
 		double slopeRunning = sprite.getSlopeRunning();
 		gSpeed += (slopeRunning * Math.sin(angle));
 
-		if (left) {
-			if (gSpeed > 0) {
-				gSpeed -= runDecel;
-			} else {
-				if (gSpeed > -max) {
-					gSpeed -= runAccel;
-				} else {
-					gSpeed = (short) -max;
-				}
-			}
-		} else if (right) {
-			if (gSpeed < 0) {
-				gSpeed += runDecel;
-			} else {
-				if (gSpeed < max) {
-					gSpeed = (short) (gSpeed + runAccel);
-				} else {
-					gSpeed = max;
-				}
-			}
-		} else {
-			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
-					&& gSpeed < 0) {
-				gSpeed = 0;
-			} else {
-				gSpeed -= Math.min(Math.abs(gSpeed), friction)
-						* Math.signum(gSpeed);
-			}
-			// if (gSpeed > 0.00d) {
-			// if (gSpeed - friction < 0.00d) {
-			// gSpeed = 0.00d;
-			// } else {
-			// gSpeed -= friction;
-			// }
-			// } else {
-			// if (gSpeed + friction > 0.00d) {
-			// gSpeed = 0.00d;
-			// } else {
-			// gSpeed += friction;
-			// }
-			// }
-		}
-
-		sprite.setGSpeed(gSpeed);
-		// System.out.println(height);
-
 		short xSpeed;
 		short ySpeed;
+
 		if (!sprite.getAir()) {
+			if (left) {
+				if (gSpeed > 0) {
+					gSpeed -= runDecel;
+				} else {
+					if (gSpeed > -max) {
+						gSpeed -= runAccel;
+					} else {
+						gSpeed = (short) -max;
+					}
+				}
+			} else if (right) {
+				if (gSpeed < 0) {
+					gSpeed += runDecel;
+				} else {
+					if (gSpeed < max) {
+						gSpeed = (short) (gSpeed + runAccel);
+					} else {
+						gSpeed = max;
+					}
+				}
+			} else {
+				if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
+						&& gSpeed < 0) {
+					gSpeed = 0;
+				} else {
+					gSpeed -= Math.min(Math.abs(gSpeed), friction)
+							* Math.signum(gSpeed);
+				}
+				// if (gSpeed > 0.00d) {
+				// if (gSpeed - friction < 0.00d) {
+				// gSpeed = 0.00d;
+				// } else {
+				// gSpeed -= friction;
+				// }
+				// } else {
+				// if (gSpeed + friction > 0.00d) {
+				// gSpeed = 0.00d;
+				// } else {
+				// gSpeed += friction;
+				// }
+				// }
+			}
 			xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
 			ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
 		} else {
 			xSpeed = sprite.getXSpeed();
 			ySpeed = sprite.getYSpeed();
+			if (ySpeed > 0 && ySpeed < 1024) {
+				if (Math.abs(xSpeed) >= 32) {
+					xSpeed *= 0.96875;
+				}
+			}
+			// if Y speed < 0 and Y speed is > -4
+			// {
+			// if absolute(X speed) >= 0.125 then X speed = X speed * 0.96875
+			// }
+			// }
 		}
+		sprite.setGSpeed(gSpeed);
 
 		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
 
@@ -107,16 +115,18 @@ public class PlayableSpriteMovementManager extends
 			jump = true;
 			sprite.setAir(true);
 			jumpPressed = true;
-			ySpeed += sprite.getJump();
+			xSpeed -= sprite.getJump() * Math.sin(angle);
+			ySpeed += sprite.getJump() * Math.cos(angle);
+			// ySpeed += sprite.getJump();
 		}
-		
+
 		if (!jump && jumpPressed) {
 			if (ySpeed > 1024) {
 				ySpeed = (short) 1024;
 			}
 			jumpPressed = false;
 		}
-		
+
 		if (sprite.getAir()) {
 			ySpeed -= sprite.getGravity();
 		}
