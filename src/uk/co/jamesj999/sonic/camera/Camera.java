@@ -40,9 +40,6 @@ public class Camera {
 				x += difference;
 			}
 		}
-		if (x < 0) {
-			x = 0;
-		}
 
 		if (focusedSprite.getAir()) {
 			if (focusedSpriteRealY < 96) {
@@ -93,6 +90,12 @@ public class Camera {
 			} else {
 				y += difference;
 			}
+		}
+		if (x < 0) {
+			x = 0;
+		}
+		if (y < 0) {
+			y = 0;
 		}
 	}
 

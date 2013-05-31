@@ -113,12 +113,107 @@ public class TestLevel extends AbstractLevel {
 		tile6Height[14] = 4;
 		tile6Height[15] = 4;
 
+		byte[] tile7Height = new byte[16];
+		tile7Height[0] = 4;
+		tile7Height[1] = 4;
+		tile7Height[2] = 4;
+		tile7Height[3] = 4;
+		tile7Height[4] = 5;
+		tile7Height[5] = 5;
+		tile7Height[6] = 5;
+		tile7Height[7] = 5;
+		tile7Height[8] = 6;
+		tile7Height[9] = 6;
+		tile7Height[10] = 7;
+		tile7Height[11] = 7;
+		tile7Height[12] = 8;
+		tile7Height[13] = 8;
+		tile7Height[14] = 9;
+		tile7Height[15] = 9;
+
+		byte[] tile8Height = new byte[16];
+		tile8Height[0] = 10;
+		tile8Height[1] = 10;
+		tile8Height[2] = 11;
+		tile8Height[3] = 11;
+		tile8Height[4] = 12;
+		tile8Height[5] = 12;
+		tile8Height[6] = 13;
+		tile8Height[7] = 13;
+		tile8Height[8] = 14;
+		tile8Height[9] = 14;
+		tile8Height[10] = 15;
+		tile8Height[11] = 15;
+		tile8Height[12] = 16;
+		tile8Height[13] = 16;
+		tile8Height[14] = 16;
+		tile8Height[15] = 16;
+
+		byte[] tile9Height = new byte[16];
+		tile9Height[0] = 0;
+		tile9Height[1] = 0;
+		tile9Height[2] = 0;
+		tile9Height[3] = 0;
+		tile9Height[4] = 0;
+		tile9Height[5] = 0;
+		tile9Height[6] = 0;
+		tile9Height[7] = 0;
+		tile9Height[8] = 0;
+		tile9Height[9] = 0;
+		tile9Height[10] = 0;
+		tile9Height[11] = 0;
+		tile9Height[12] = 0;
+		tile9Height[13] = 0;
+		tile9Height[14] = 1;
+		tile9Height[15] = 1;
+
+		byte[] tile10Height = new byte[16];
+		tile10Height[0] = 2;
+		tile10Height[1] = 2;
+		tile10Height[2] = 3;
+		tile10Height[3] = 3;
+		tile10Height[4] = 4;
+		tile10Height[5] = 4;
+		tile10Height[6] = 5;
+		tile10Height[7] = 5;
+		tile10Height[8] = 6;
+		tile10Height[9] = 6;
+		tile10Height[10] = 7;
+		tile10Height[11] = 7;
+		tile10Height[12] = 8;
+		tile10Height[13] = 8;
+		tile10Height[14] = 9;
+		tile10Height[15] = 9;
+
+		byte[] tile11Height = new byte[16];
+		tile11Height[0] = 16;
+		tile11Height[1] = 16;
+		tile11Height[2] = 16;
+		tile11Height[3] = 16;
+		tile11Height[4] = 16;
+		tile11Height[5] = 16;
+		tile11Height[6] = 16;
+		tile11Height[7] = 16;
+		tile11Height[8] = 16;
+		tile11Height[9] = 16;
+		tile11Height[10] = 16;
+		tile11Height[11] = 16;
+		tile11Height[12] = 16;
+		tile11Height[13] = 16;
+		tile11Height[14] = 16;
+		tile11Height[15] = 16;
+
 		Tile tile1 = new Tile(tile1Height);
 		Tile tile2 = new Tile(tile2Height);
 		Tile tile3 = new Tile(tile3Height);
 		Tile tile4 = new Tile(tile4Height);
 		Tile tile5 = new Tile(tile5Height);
 		Tile tile6 = new Tile(tile6Height);
+		Tile tile7 = new Tile(tile7Height);
+		Tile tile8 = new Tile(tile8Height);
+		Tile tile9 = new Tile(tile9Height);
+		Tile tile10 = new Tile(tile10Height);
+		Tile tile11 = new Tile(tile11Height);
 
 		addTile(tile1, 0, 0);
 		addTile(tile1, 1, 0);
@@ -140,7 +235,7 @@ public class TestLevel extends AbstractLevel {
 		addTile(tile2, 17, 0);
 		addTile(tile2, 18, 0);
 		addTile(tile3, 19, 0);
-		
+
 		addTile(tile1, 20, 0);
 		addTile(tile1, 21, 0);
 		addTile(tile1, 22, 0);
@@ -176,16 +271,62 @@ public class TestLevel extends AbstractLevel {
 		addTile(tile4, 11, 5);
 		addTile(tile5, 12, 5);
 		addTile(tile6, 13, 5);
-//		addTile(tile1, 14, 5);
-//		addTile(tile1, 15, 5);
+		// addTile(tile1, 14, 5);
+		// addTile(tile1, 15, 5);
 		addTile(tile1, 16, 5);
 		addTile(tile2, 17, 5);
-//		addTile(tile2, 18, 5);
+		// addTile(tile2, 18, 5);
 		addTile(tile3, 19, 5);
 
 		addTile(tile1, 0, 7);
 		addTile(tile1, 1, 7);
 		addTile(tile1, 2, 7);
 		addTile(tile1, 3, 7);
+
+		addTile(tile1, 2, 9);
+		addTile(tile1, 3, 9);
+		addTile(tile1, 4, 9);
+
+		addTile(tile1, 5, 13);
+		addTile(tile1, 6, 13);
+		addTile(tile1, 7, 13);
+
+		addTile(tile1, 1, 18);
+		addTile(tile1, 2, 18);
+		addTile(tile1, 3, 18);
+		addTile(tile2, 3, 18);
+		addTile(tile1, 4, 18);
+		addTile(tile2, 5, 18);
+		addTile(tile1, 6, 18);
+		addTile(tile1, 7, 18);
+		addTile(tile1, 8, 18);
+		addTile(tile1, 9, 18);
+		addTile(tile1, 10, 18);
+		addTile(tile1, 11, 18);
+		addTile(tile1, 12, 18);
+		addTile(tile1, 13, 18);
+		addTile(tile1, 14, 18);
+		addTile(tile1, 15, 18);
+		addTile(tile1, 16, 18);
+		addTile(tile1, 17, 18);
+		addTile(tile1, 18, 18);
+		addTile(tile1, 19, 18);
+		addTile(tile2, 20, 18);
+		addTile(tile1, 21, 18);
+		addTile(tile1, 22, 18);
+		addTile(tile1, 23, 18);
+		addTile(tile1, 24, 18);
+		addTile(tile1, 25, 18);
+		addTile(tile1, 26, 18);
+		addTile(tile7, 27, 18);
+		addTile(tile8, 28, 18);
+		addTile(tile11, 29, 18);
+
+		addTile(tile9, 28, 19);
+		addTile(tile10, 29, 19);
+
+		/*
+		 * tile9 - tile10 tile7 - tile8 - tile11
+		 */
 	}
 }

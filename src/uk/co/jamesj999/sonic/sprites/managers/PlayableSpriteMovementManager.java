@@ -99,7 +99,7 @@ public class PlayableSpriteMovementManager extends
 		if (sprite.getAir()) {
 			ySpeed -= sprite.getGravity();
 		}
-		if (height > -1) {
+		if (height > 0) {
 			if (ySpeed < 0) {
 				ySpeed = 0;
 			}
