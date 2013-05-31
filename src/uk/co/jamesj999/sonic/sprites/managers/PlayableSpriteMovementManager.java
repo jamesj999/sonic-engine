@@ -13,6 +13,8 @@ public class PlayableSpriteMovementManager extends
 	private final short runDecel;
 	private final short friction;
 
+	private boolean jumpPressed;
+
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
 		max = sprite.getMax();
@@ -90,15 +92,8 @@ public class PlayableSpriteMovementManager extends
 			ySpeed = sprite.getYSpeed();
 		}
 
-		if (jump && !sprite.getAir()) {
-			sprite.setAir(true);
-			ySpeed += sprite.getJump();
-		}
 		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
 
-		if (sprite.getAir()) {
-			ySpeed -= sprite.getGravity();
-		}
 		if (height > 0) {
 			if (ySpeed < 0) {
 				ySpeed = 0;
@@ -107,8 +102,28 @@ public class PlayableSpriteMovementManager extends
 					.getY());
 			sprite.setY((short) (height + sprite.getHeight() / 2));
 		}
+
+		if (jump && !sprite.getAir() && !jumpPressed) {
+			jump = true;
+			sprite.setAir(true);
+			jumpPressed = true;
+			ySpeed += sprite.getJump();
+		}
+		
+		if (!jump && jumpPressed) {
+			if (ySpeed > 1024) {
+				ySpeed = (short) 1024;
+			}
+			jumpPressed = false;
+		}
+		
+		if (sprite.getAir()) {
+			ySpeed -= sprite.getGravity();
+		}
+
 		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
+
 		sprite.move(xSpeed, ySpeed);
 		// -1 indicates no heightmap was found meaning we're not on a solid tile
 		sprite.getGroundSensors().updateSensors(sprite);
