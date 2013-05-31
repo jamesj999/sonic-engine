@@ -60,36 +60,39 @@ public class Camera {
 					y += difference;
 				}
 			}
-		} else {
-//			if (focusedSpriteRealY != 96) {
-//				System.out.println(focusedSprite.getYSpeed());
-//				short difference = (short) (focusedSpriteRealY - 96);
-//				if (focusedSprite.getYSpeed() >= 6) {
-//					if (difference < 6) {
-//						y += difference;
-//					} else {
-//						y += 6;
-//					}
-//				} else if (focusedSprite.getYSpeed() > 0) {
-//					if (difference < 6) {
-//						y += difference;
-//					} else {
-//						y += 6;
-//					}
-//				} else if (focusedSprite.getYSpeed() >= -6) {
-//					if (difference > -6) {
-//						y -= difference;
-//					} else {
-//						y -= 6;
-//					}
-//				} else if (focusedSprite.getYSpeed() < -6) {
-//					if (difference > -6) {
-//						y -= difference;
-//					} else {
-//						y -= 6;
-//					}
-//				}
-//			}
+		} else if (focusedSpriteRealY > 96) {
+			short ySpeed = (short) (focusedSprite.getYSpeed() / 256);
+			short difference = (short) (focusedSpriteRealY - 96);
+			byte tolerance;
+
+			// If ySpeed greater than 6 or if ySpeed less than -6:
+			if (ySpeed > 6) {
+				tolerance = 16;
+			} else {
+				tolerance = 6;
+			}
+
+			if (difference > tolerance) {
+				y += tolerance;
+			} else {
+				y += difference;
+			}
+		} else if (focusedSpriteRealY < 96) {
+			short ySpeed = (short) (focusedSprite.getYSpeed() / 256);
+			short difference = (short) (focusedSpriteRealY - 96);
+			byte tolerance;
+
+			if (ySpeed < -6) {
+				tolerance = -16;
+			} else {
+				tolerance = -6;
+			}
+
+			if (difference < tolerance) {
+				y += tolerance;
+			} else {
+				y += difference;
+			}
 		}
 	}
 

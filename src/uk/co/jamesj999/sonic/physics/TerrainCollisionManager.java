@@ -16,6 +16,7 @@ public class TerrainCollisionManager {
 						.getGroundSensors();
 				Sensor left = sensors.getLeft();
 				Sensor right = sensors.getRight();
+				((AbstractPlayableSprite) sprite).setYSpeed((short) 0);
 				// System.out.println("Left X:" + left.getX() + ". Right X: "
 				// + right.getX());
 				// System.out.println("Left Y:" + left.getY() + ". Right Y:"

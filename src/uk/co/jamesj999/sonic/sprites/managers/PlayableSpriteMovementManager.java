@@ -100,11 +100,13 @@ public class PlayableSpriteMovementManager extends
 			ySpeed -= sprite.getGravity();
 		}
 		if (height > -1) {
+			if (ySpeed < 0) {
+				ySpeed = 0;
+			}
 			ySpeed += 16 * ((short) (height + sprite.getHeight() / 2) - sprite
 					.getY());
 			sprite.setY((short) (height + sprite.getHeight() / 2));
 		}
-		System.out.println(ySpeed);
 		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
 		sprite.move(xSpeed, ySpeed);
