@@ -23,8 +23,8 @@ public class Camera {
 	}
 
 	public void updatePosition() {
-		short focusedSpriteRealX = (short) (focusedSprite.getX() - x);
-		short focusedSpriteRealY = (short) (focusedSprite.getY() - y);
+		short focusedSpriteRealX = (short) (focusedSprite.getCentreX() - x);
+		short focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
 		if (focusedSpriteRealX < 144) {
 			short difference = (short) (focusedSpriteRealX - 144);
 			if (difference > 16) {
@@ -44,7 +44,7 @@ public class Camera {
 		if (focusedSprite.getAir()) {
 			if (focusedSpriteRealY < 96) {
 				short difference = (short) (focusedSpriteRealY - 96);
-				if (difference > 16) {
+				if (difference < -16) {
 					y -= 16;
 				} else {
 					y += difference;
@@ -62,7 +62,6 @@ public class Camera {
 			short difference = (short) (focusedSpriteRealY - 96);
 			byte tolerance;
 
-			// If ySpeed greater than 6 or if ySpeed less than -6:
 			if (ySpeed > 6) {
 				tolerance = 16;
 			} else {

@@ -40,6 +40,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected short xSpeed = 0;
 	protected short ySpeed = 0;
 
+	private short[] xHistory = new short[32];
+	private short[] yHistory = new short[32];
+
+	private byte historyPos = 0;
+
 	protected boolean air = false;
 
 	public boolean getAir() {
@@ -105,6 +110,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		// instantiation).
 		defineSpeeds();
 		createGroundSensors();
+
+		// Set our entire history for x and y to be the starting position so if
+		// the player spindashes immediately the camera effect won't be b0rked.
+		for (short i = 0; i < 32; i++) {
+			xHistory[i] = x;
+			yHistory[i] = y;
+		}
 		movementManager = new PlayableSpriteMovementManager(this);
 	}
 
@@ -148,6 +160,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		this.angle = angle;
 	}
 
+	public short[] getXHistory() {
+		return xHistory;
+	}
+
+	public short[] getYHistory() {
+		return yHistory;
+	}
+
 	public PlayableSpriteMovementManager getMovementManager() {
 		return movementManager;
 	}
@@ -171,4 +191,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public abstract void createGroundSensors();
 
 	protected abstract void defineSpeeds();
+
+	/**
+	 * Causes the sprite to update its position history as we are now at the end
+	 * of the tick so all movement calculations have been performed.
+	 */
+	public void endOfTick() {
+		if (historyPos == 31) {
+			historyPos = 0;
+		} else {
+			historyPos++;
+		}
+		xHistory[historyPos] = xPixel;
+		yHistory[historyPos] = yPixel;
+	}
 }

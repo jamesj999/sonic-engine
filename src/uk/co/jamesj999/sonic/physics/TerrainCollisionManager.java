@@ -17,23 +17,18 @@ public class TerrainCollisionManager {
 				Sensor left = sensors.getLeft();
 				Sensor right = sensors.getRight();
 				((AbstractPlayableSprite) sprite).setYSpeed((short) 0);
-				// System.out.println("Left X:" + left.getX() + ". Right X: "
-				// + right.getX());
-				// System.out.println("Left Y:" + left.getY() + ". Right Y:"
-				// + right.getY());
+
 				Tile leftTile = left.getTile();
 				Tile rightTile = right.getTile();
 				short leftHeight = -1;
 				short rightHeight = -1;
 				if (leftTile != null) {
 					leftHeight = (short) ((leftTile.getHeightAt((byte) (left
-							.getX() % 16))) + 16 * Math.round(sensors
-							.getLeftY() / 16));
+							.getX() % 16))) + 16 * (sensors.getLeftY() / 16));
 				}
 				if (rightTile != null) {
 					rightHeight = (short) ((rightTile.getHeightAt((byte) (right
-							.getX() % 16))) + 16 * Math.round(sensors
-							.getRightY() / 16));
+							.getX() % 16))) + 16 * (sensors.getRightY() / 16));
 				}
 
 				if (leftHeight > -1 || rightHeight > -1) {

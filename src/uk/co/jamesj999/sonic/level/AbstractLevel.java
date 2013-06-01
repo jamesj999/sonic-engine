@@ -11,8 +11,10 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 
 public abstract class AbstractLevel implements Level {
 	protected GraphicsManager graphicsManager = GraphicsManager.getInstance();
+	private short xTiles = 256;
+	private short yTiles = 256;
 
-	protected Tile[][] tiles = new Tile[256][256];
+	protected Tile[][] tiles = new Tile[xTiles][yTiles];
 
 	public AbstractLevel() {
 		setupTiles();
@@ -26,7 +28,8 @@ public abstract class AbstractLevel implements Level {
 	public Tile getTileAt(short x, short y) {
 		short xPosition = (short) Math.floor((double) x / 16);
 		short yPosition = (short) Math.floor((double) y / 16);
-		if (xPosition > -1 && yPosition > -1) {
+		if (xPosition > -1 && yPosition > -1 && xPosition < xTiles
+				&& yPosition < yTiles) {
 			return tiles[xPosition][yPosition];
 		} else {
 			return null;

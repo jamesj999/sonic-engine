@@ -325,6 +325,53 @@ public class TestLevel extends AbstractLevel {
 		addTile(tile9, 28, 19);
 		addTile(tile10, 29, 19);
 
+		addTile(tile1, 15, 21);
+		addTile(tile1, 16, 21);
+		addTile(tile1, 17, 21);
+		addTile(tile1, 17, 24);
+		addTile(tile1, 18, 24);
+		addTile(tile1, 19, 24);
+		addTile(tile1, 19, 27);
+		addTile(tile1, 20, 27);
+		addTile(tile1, 21, 27);
+		addTile(tile1, 22, 30);
+		addTile(tile1, 23, 30);
+		addTile(tile1, 24, 30);
+		addTile(tile1, 25, 33);
+		addTile(tile1, 26, 33);
+		addTile(tile1, 27, 33);
+		addTile(tile1, 27, 36);
+		addTile(tile1, 28, 36);
+		addTile(tile1, 29, 36);
+		addTile(tile1, 27, 39);
+		addTile(tile1, 28, 39);
+		addTile(tile1, 29, 39);
+		addTile(tile1, 27, 42);
+		addTile(tile1, 28, 42);
+		addTile(tile1, 29, 42);
+		addTile(tile1, 27, 45);
+		addTile(tile1, 28, 45);
+		addTile(tile1, 29, 45);
+		addTile(tile1, 27, 48);
+		addTile(tile1, 28, 48);
+		addTile(tile1, 29, 48);
+		addTile(tile1, 27, 51);
+		addTile(tile1, 28, 51);
+		addTile(tile1, 29, 51);
+		addTile(tile1, 27, 55);
+		addTile(tile1, 28, 55);
+		addTile(tile1, 29, 55);
+		addTile(tile1, 27, 60);
+		addTile(tile1, 28, 60);
+		addTile(tile1, 29, 60);
+		addTile(tile1, 27, 65);
+		addTile(tile1, 28, 65);
+		addTile(tile1, 29, 65);
+		addTile(tile1, 27, 70);
+		addTile(tile1, 28, 70);
+		addTile(tile1, 29, 70);
+		// addTile(tile1)
+
 		/*
 		 * tile9 - tile10 tile7 - tile8 - tile11
 		 */

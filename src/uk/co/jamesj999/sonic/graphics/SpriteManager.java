@@ -58,7 +58,7 @@ public class SpriteManager {
 		for (Entry<String, Sprite> entry : sprites.entrySet()) {
 			Sprite sprite = entry.getValue();
 			sprite.draw();
-			if(sprite instanceof AbstractPlayableSprite) {
+			if (sprite instanceof AbstractPlayableSprite) {
 				// TODO temp debug stuff, remove
 				((AbstractPlayableSprite) sprite).getGroundSensors().draw();
 			}
@@ -88,11 +88,15 @@ public class SpriteManager {
 			if (sprite instanceof AbstractPlayableSprite) {
 				((AbstractPlayableSprite) sprite).getMovementManager()
 						.handleMovement(left, right, space);
+				/*
+				 * Idea: We can put object collision handling here - although
+				 * the X and Y have been set for the sprite, we still have the
+				 * latest position in the history arrays so we can revert if
+				 * collisions are found before moving to display part of the
+				 * tick.
+				 */
+				((AbstractPlayableSprite) sprite).endOfTick();
 			}
-			((AbstractPlayableSprite) sprite).getMovementManager()
-					.handleCollisions(up, down);
-			// ((AbstractPlayableSprite) sprite).getMovementManager()
-			// .handleGravity(down);
 		}
 	}
 

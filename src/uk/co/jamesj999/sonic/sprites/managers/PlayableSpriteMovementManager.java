@@ -100,6 +100,9 @@ public class PlayableSpriteMovementManager extends
 		}
 		sprite.setGSpeed(gSpeed);
 
+		// a height of -1 indicates no heightmap was found meaning we're not on
+		// a solid tile
+		// we also ignore heights of 0 because they are meaningless
 		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
 
 		if (height > 0) {
@@ -135,7 +138,15 @@ public class PlayableSpriteMovementManager extends
 		sprite.setYSpeed(ySpeed);
 
 		sprite.move(xSpeed, ySpeed);
-		// -1 indicates no heightmap was found meaning we're not on a solid tile
+		// Temporary 'death' detection just resets X/Y of sprite.
+		if (sprite.getY() <= 0) {
+			sprite.setX((short) 50);
+			sprite.setY((short) 50);
+			sprite.setXSpeed((short) 0);
+			sprite.setYSpeed((short) 0);
+			sprite.setGSpeed((short) 0);
+		}
+
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
 

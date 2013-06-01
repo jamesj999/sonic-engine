@@ -63,6 +63,7 @@ public abstract class AbstractSprite implements Sprite {
 			this.xPixel = 0;
 		}
 		this.xPixel = x;
+		this.xSubpixel = 0;
 	}
 
 	public final short getY() {
@@ -74,6 +75,7 @@ public abstract class AbstractSprite implements Sprite {
 			this.yPixel = 0;
 		}
 		this.yPixel = y;
+		this.ySubpixel = 0;
 	}
 
 	public final void move(short xSpeed, short ySpeed) {
