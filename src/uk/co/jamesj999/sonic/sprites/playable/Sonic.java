@@ -11,11 +11,9 @@ public class Sonic extends AbstractPlayableSprite {
 
 	public Sonic(String code, short x, short y) {
 		super(code, x, y);
-		// width in pixels for now
+		// width in pixels
 		setWidth(28);
 		setHeight(40);
-
-		// Add sensors
 	}
 
 	@Override

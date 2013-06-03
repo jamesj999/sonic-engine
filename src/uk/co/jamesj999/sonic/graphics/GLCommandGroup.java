@@ -13,10 +13,10 @@ public class GLCommandGroup implements GLCommandable {
 		this.commands = commands;
 	}
 	
-	public void execute(GL2 gl, int cameraX, int cameraY) {
+	public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
 		gl.glBegin(drawMethod);
 		for(GLCommand command : commands) {
-			command.execute(gl, cameraX, cameraY);
+			command.execute(gl, cameraX, cameraY, cameraWidth, cameraHeight);
 		}
 		gl.glEnd();
 	}

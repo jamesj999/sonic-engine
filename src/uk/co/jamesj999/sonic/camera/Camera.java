@@ -18,8 +18,8 @@ public class Camera {
 	private Camera() {
 		SonicConfigurationService configService = SonicConfigurationService
 				.getInstance();
-		width = configService.getShort(SonicConfiguration.SCREEN_WIDTH);
-		height = configService.getShort(SonicConfiguration.SCREEN_HEIGHT);
+		width = configService.getShort(SonicConfiguration.SCREEN_WIDTH_PIXELS);
+		height = configService.getShort(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
 	}
 
 	public void updatePosition() {
@@ -119,6 +119,14 @@ public class Camera {
 
 	public short getY() {
 		return y;
+	}
+	
+	public short getWidth() {
+		return width;
+	}
+	
+	public short getHeight() {
+		return height;
 	}
 
 	public void incrementX(short amount) {

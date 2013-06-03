@@ -88,4 +88,9 @@ public class TerrainSensor implements Sensor {
 		return levelManager.getLevel().getTileAt(x, y);
 	}
 
+	@Override
+	public Tile getTileAbove() {
+		return levelManager.getLevel().getTileAt(x, (short) (y + 1));
+	}
+
 }

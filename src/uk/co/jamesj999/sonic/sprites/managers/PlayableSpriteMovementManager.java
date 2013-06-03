@@ -31,59 +31,59 @@ public class PlayableSpriteMovementManager extends
 	@Override
 	public void handleMovement(boolean left, boolean right, boolean jump) {
 		short gSpeed = sprite.getGSpeed();
-		byte angle = sprite.getAngle();
-		// Calculate Angle here
-		double slopeRunning = sprite.getSlopeRunning();
-		gSpeed += (slopeRunning * Math.sin(angle));
 
-		short xSpeed;
-		short ySpeed;
+		short xSpeed = sprite.getXSpeed();
+		short ySpeed = sprite.getYSpeed();
+
+		// Store whether or not we were in the air at the beginning of this tick
+		boolean initialAir = sprite.getAir();
+
+		// a height of -1 indicates no heightmap was found meaning we're not on
+		// a solid tile
+		// we also ignore heights of 0 because they are meaningless
+		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
+		int angle = (int) ((256 - sprite.getAngle()) * 1.40625);
+		// sprite.getAngle();
+		// & 0xFF);
 
 		if (!sprite.getAir()) {
-			if (left) {
-				if (gSpeed > 0) {
-					gSpeed -= runDecel;
-				} else {
-					if (gSpeed > -max) {
-						gSpeed -= runAccel;
+			if (!initialAir) {
+				if (left) {
+					if (gSpeed > 0) {
+						gSpeed -= runDecel;
 					} else {
-						gSpeed = (short) -max;
+						if (gSpeed > -max) {
+							gSpeed -= runAccel;
+						} else {
+							gSpeed = (short) -max;
+						}
+					}
+				} else if (right) {
+					if (gSpeed < 0) {
+						gSpeed += runDecel;
+					} else {
+						if (gSpeed < max) {
+							gSpeed = (short) (gSpeed + runAccel);
+						} else {
+							gSpeed = max;
+						}
+					}
+				} else {
+					if ((gSpeed < friction && gSpeed > 0)
+							|| (gSpeed > -friction) && gSpeed < 0) {
+						gSpeed = 0;
+					} else {
+						gSpeed -= Math.min(Math.abs(gSpeed), friction)
+								* Math.signum(gSpeed);
 					}
 				}
-			} else if (right) {
-				if (gSpeed < 0) {
-					gSpeed += runDecel;
-				} else {
-					if (gSpeed < max) {
-						gSpeed = (short) (gSpeed + runAccel);
-					} else {
-						gSpeed = max;
-					}
-				}
+				xSpeed = (short) Math.round(gSpeed
+						* Math.cos(Math.toRadians(angle)));
+				ySpeed = 0;// (short) Math.round(gSpeed * -Math.sin(angle &
+							// 0xFF));
 			} else {
-				if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
-						&& gSpeed < 0) {
-					gSpeed = 0;
-				} else {
-					gSpeed -= Math.min(Math.abs(gSpeed), friction)
-							* Math.signum(gSpeed);
-				}
-				// if (gSpeed > 0.00d) {
-				// if (gSpeed - friction < 0.00d) {
-				// gSpeed = 0.00d;
-				// } else {
-				// gSpeed -= friction;
-				// }
-				// } else {
-				// if (gSpeed + friction > 0.00d) {
-				// gSpeed = 0.00d;
-				// } else {
-				// gSpeed += friction;
-				// }
-				// }
+				gSpeed = xSpeed;
 			}
-			xSpeed = (short) Math.round(gSpeed * Math.cos(angle));
-			ySpeed = (short) Math.round(gSpeed * -Math.sin(angle));
 		} else {
 			xSpeed = sprite.getXSpeed();
 			ySpeed = sprite.getYSpeed();
@@ -92,35 +92,24 @@ public class PlayableSpriteMovementManager extends
 					xSpeed *= 0.96875;
 				}
 			}
-			// if Y speed < 0 and Y speed is > -4
-			// {
-			// if absolute(X speed) >= 0.125 then X speed = X speed * 0.96875
-			// }
-			// }
 		}
-		sprite.setGSpeed(gSpeed);
-
-		// a height of -1 indicates no heightmap was found meaning we're not on
-		// a solid tile
-		// we also ignore heights of 0 because they are meaningless
-		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
 
 		if (height > 0) {
 			if (ySpeed < 0) {
 				ySpeed = 0;
 			}
-			ySpeed += 16 * ((short) (height + sprite.getHeight() / 2) - sprite
-					.getY());
+			ySpeed += 256 * (((short) (height + sprite.getHeight() / 2) - sprite
+					.getY()));
 			sprite.setY((short) (height + sprite.getHeight() / 2));
 		}
+		sprite.setGSpeed(gSpeed);
 
 		if (jump && !sprite.getAir() && !jumpPressed) {
 			jump = true;
 			sprite.setAir(true);
 			jumpPressed = true;
-			xSpeed -= sprite.getJump() * Math.sin(angle);
-			ySpeed += sprite.getJump() * Math.cos(angle);
-			// ySpeed += sprite.getJump();
+			xSpeed -= sprite.getJump() * Math.sin(Math.toRadians(angle));
+			ySpeed += sprite.getJump() * Math.cos(Math.toRadians(angle));
 		}
 
 		if (!jump && jumpPressed) {
@@ -137,7 +126,11 @@ public class PlayableSpriteMovementManager extends
 		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
 
-		sprite.move(xSpeed, ySpeed);
+		if (height > 0) {
+			sprite.move(xSpeed, (short) 0);
+		} else {
+			sprite.move(xSpeed, ySpeed);
+		}
 		// Temporary 'death' detection just resets X/Y of sprite.
 		if (sprite.getY() <= 0) {
 			sprite.setX((short) 50);
@@ -146,30 +139,11 @@ public class PlayableSpriteMovementManager extends
 			sprite.setYSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
 		}
-
+//		System.out.println(sprite.getX() + "," + sprite.getY());
+//		System.out.println(height);
+//		System.out.println(ySpeed);
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
-
-	// @Override
-	// public void handleGravity(boolean down) {
-	// if (!down) {
-	// sprite.setYSpeed(0.00d);
-	// } else {
-	// float ySpeed = sprite.getYSpeed();
-	// if (ySpeed < max) {
-	// ySpeed += sprite.getGravity();
-	// } else {
-	// if (ySpeed + sprite.getGravity() > max) {
-	// ySpeed = max;
-	// }
-	// }
-	// int y = sprite.getY();
-	// y += ySpeed;
-	//
-	// sprite.setYSpeed(ySpeed);
-	// sprite.setY(y);
-	// }
-	// }
 
 	@Override
 	public void handleCollisions(boolean up, boolean down) {

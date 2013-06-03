@@ -22,8 +22,10 @@ public class GraphicsManager {
 	public void flush() {
 		short cameraX = camera.getX();
 		short cameraY = camera.getY();
+		short cameraWidth = camera.getWidth();
+		short cameraHeight = camera.getHeight();
 		for (GLCommandable command : commands) {
-			command.execute(graphics, cameraX, cameraY);
+			command.execute(graphics, cameraX, cameraY, cameraWidth, cameraHeight);
 		}
 		commands.clear();
 	}

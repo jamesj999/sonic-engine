@@ -44,7 +44,19 @@ public class GLCommand implements GLCommandable {
 	}
 
 	@Override
-	public void execute(GL2 gl, int cameraX, int cameraY) {
+	public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth,
+			int cameraHeight) {
+		// int xLeftBound = cameraX;
+		// int xRightBound = cameraX + cameraWidth;
+		// int yBottomBound = cameraY;
+		// int yTopBound = cameraY + cameraHeight;
+		//
+		// if ((x1 < xLeftBound && x2 < xLeftBound)
+		// || (x1 > xRightBound && x2 > xRightBound)
+		// || (y1 < yBottomBound && x2 < yBottomBound)
+		// || (y1 > yTopBound && y2 > yTopBound)) {
+		// return;
+		// }
 		boolean single = drawMethod != -1;
 		if (single) {
 			gl.glBegin(drawMethod);

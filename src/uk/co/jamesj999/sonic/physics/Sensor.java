@@ -34,4 +34,6 @@ public interface Sensor {
 	 * @param y
 	 */
 	public void updateY(short y);
+	
+	public Tile getTileAbove();
 }
