@@ -4,14 +4,6 @@ public class TestLevel extends AbstractLevel {
 
 	@Override
 	protected void setupTiles() {
-		byte test = (byte) 0xFF;
-		byte test2 = (byte) 0xA2;
-		byte test3 = (byte) 18;
-
-		System.out.println(test);
-		System.out.println(test2);
-		System.out.println(test3);
-
 		Tile halfFlat = new Tile(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
 				8, (byte) 0x00);
 		Tile lowFlat = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
