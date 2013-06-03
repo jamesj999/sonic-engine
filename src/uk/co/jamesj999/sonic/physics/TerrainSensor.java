@@ -90,7 +90,7 @@ public class TerrainSensor implements Sensor {
 
 	@Override
 	public Tile getTileAbove() {
-		return levelManager.getLevel().getTileAt(x, (short) (y + 1));
+		return levelManager.getLevel().getTileAt(x, (short) (y + 16));
 	}
 
 }

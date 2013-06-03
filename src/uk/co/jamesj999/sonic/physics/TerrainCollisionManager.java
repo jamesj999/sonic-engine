@@ -22,6 +22,8 @@ public class TerrainCollisionManager {
 			Tile rightTile = right.getTile();
 			short leftHeight = -1;
 			short rightHeight = -1;
+			byte realLeftX = (byte) (left.getX() % 16);
+			byte realRightX = (byte) (right.getX() % 16);
 			if (leftTile != null) {
 				/*
 				 * Ok, so these calculations seem a little weird, so I'll
@@ -31,13 +33,12 @@ public class TerrainCollisionManager {
 				 * multiply/divide the left (or right) sensor's Y value so that
 				 * we get it 'floored' to the nearest 16.
 				 */
-				leftHeight = (short) ((leftTile
-						.getHeightAt((byte) (left.getX() % 16))) + 16 * (left
-						.getY() / 16));
+				leftHeight = (short) leftTile.getHeightAt(realLeftX);
 			}
 			if (rightTile != null) {
-				rightHeight = (short) ((rightTile.getHeightAt((byte) (right
-						.getX() % 16))) + 16 * (right.getY() / 16));
+				rightHeight = (short) rightTile.getHeightAt(realRightX);
+				// rightHeight = (short) ((rightTile.getHeightAt((byte) (right
+				// .getX() % 16))) + 16 * (right.getY() / 16));
 			}
 
 			if (leftHeight > -1 || rightHeight > -1) {
@@ -45,30 +46,52 @@ public class TerrainCollisionManager {
 			} else {
 				((AbstractPlayableSprite) sprite).setAir(true);
 			}
+			boolean upperLeft = false;
+			boolean upperRight = false;
 			if (leftHeight > -1 || rightHeight > -1) {
 				if (leftHeight == 16) {
 					Tile leftAbove = left.getTileAbove();
-					if (leftAbove != null) {
-						leftHeight = (short) ((leftAbove
-								.getHeightAt((byte) ((left.getX() + 16) % 16))) + 16 * (left
-								.getY() / 16));
+					if (leftAbove != null
+							&& leftAbove.getHeightAt(realLeftX) > 0) {
+						leftHeight = (short) (((leftAbove
+								.getHeightAt(realLeftX)) + 16 * (left.getY() / 16)) + 16);
+						upperLeft = true;
+					} else {
+						leftHeight += 16 * (left.getY() / 16);
 					}
+				} else {
+					leftHeight += 16 * (left.getY() / 16);
 				}
 				if (rightHeight == 16) {
 					Tile rightAbove = right.getTileAbove();
-					if (rightAbove != null) {
-						rightHeight = (short) ((rightAbove
-								.getHeightAt((byte) ((right.getX() + 16) % 16))) + 16 * (left
-								.getY() / 16));
+					if (rightAbove != null
+							&& rightAbove.getHeightAt(realRightX) > 0) {
+						rightHeight = (short) (((rightAbove
+								.getHeightAt(realRightX)) + 16 * (right.getY() / 16)) + 16);
+						upperRight = true;
+					} else {
+						rightHeight += 16 * (right.getY() / 16);
 					}
+				} else {
+					rightHeight += 16 * (right.getY() / 16);
 				}
 				if (leftHeight > rightHeight) {
-					((AbstractPlayableSprite) sprite).setAngle(leftTile
-							.getAngle());
+					if (upperLeft) {
+						((AbstractPlayableSprite) sprite).setAngle(left
+								.getTileAbove().getAngle());
+					} else {
+						((AbstractPlayableSprite) sprite).setAngle(leftTile
+								.getAngle());
+					}
 					return leftHeight;
 				} else {
-					((AbstractPlayableSprite) sprite).setAngle(rightTile
-							.getAngle());
+					if (upperRight) {
+						((AbstractPlayableSprite) sprite).setAngle(right
+								.getTileAbove().getAngle());
+					} else {
+						((AbstractPlayableSprite) sprite).setAngle(rightTile
+								.getAngle());
+					}
 					return rightHeight;
 				}
 			}
