@@ -46,6 +46,33 @@ public class PlayableSpriteMovementManager extends
 		// sprite.getAngle();
 		// & 0xFF);
 
+		// Landing:
+		if (initialAir && !sprite.getAir()) {
+			if (ySpeed < 0) {
+				byte originalAngle = sprite.getAngle();
+				if ((originalAngle >= (byte) 0xF0 && originalAngle <= (byte) 0xFF)
+						|| (originalAngle >= (byte) 0x00 && originalAngle <= (byte) 0x0F)) {
+					gSpeed = xSpeed;
+				} else if ((originalAngle >= (byte) 0xE0 && originalAngle <= (byte) 0xEF)
+						|| (originalAngle >= (byte) 0x10 && originalAngle <= (byte) 0x1F)) {
+					if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
+						gSpeed = xSpeed;
+					} else {
+						gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
+								.cos(Math.toRadians(angle)))));
+					}
+				} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
+						|| (originalAngle >= (byte) 0x20 && originalAngle <= (byte) 0x3F)) {
+					if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
+						gSpeed = xSpeed;
+					} else {
+						gSpeed = (short) (ySpeed * -(Math.signum(Math.cos(Math
+								.toRadians(angle)))));
+					}
+				}
+			}
+		}
+
 		if (!sprite.getAir()) {
 			if (!initialAir) {
 				if (left) {
@@ -79,14 +106,25 @@ public class PlayableSpriteMovementManager extends
 				}
 				xSpeed = (short) Math.round(gSpeed
 						* Math.cos(Math.toRadians(angle)));
+
 				ySpeed = 0;// (short) Math.round(gSpeed * -Math.sin(angle &
 							// 0xFF));
-			} else {
-				gSpeed = xSpeed;
 			}
 		} else {
-			xSpeed = sprite.getXSpeed();
-			ySpeed = sprite.getYSpeed();
+			if (left) {
+				if (xSpeed - (2 * runAccel) < -max) {
+					xSpeed = (short) -max;
+				} else {
+					xSpeed -= (2 * runAccel);
+				}
+			} else if (right) {
+				if (xSpeed + (2 * runAccel) > max) {
+					xSpeed = max;
+				} else {
+					xSpeed += (2 * runAccel);
+				}
+			}
+			// xSpeed = gSpeed;
 			if (ySpeed > 0 && ySpeed < 1024) {
 				if (Math.abs(xSpeed) >= 32) {
 					xSpeed *= 0.96875;
@@ -139,9 +177,9 @@ public class PlayableSpriteMovementManager extends
 			sprite.setYSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
 		}
-//		System.out.println(sprite.getX() + "," + sprite.getY());
-//		System.out.println(height);
-//		System.out.println(ySpeed);
+		// System.out.println(sprite.getX() + "," + sprite.getY());
+		// System.out.println(height);
+		// System.out.println(ySpeed);
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
 
