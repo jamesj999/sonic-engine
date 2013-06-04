@@ -93,5 +93,30 @@ public class TestLevel extends AbstractLevel {
 		addTile(lowFlatToSlope5, 45, 1);
 
 		drawRange(0, 255, 0, 0, full);
+
+		drawRange(46, 255, 1, 1, lowFlat);
+
+		drawRange(6, 25, 8, 8, halfFlat);
+		drawRange(1, 9, 11, 11, halfFlat);
+		drawRange(14, 29, 14, 14, halfFlat);
+		drawRange(26, 38, 19, 19, halfFlat);
+		drawRange(45, 48, 23, 23, halfFlat);
+		drawRange(20, 40, 21, 21, halfFlat);
+		drawRange(49, 52, 27, 27, halfFlat);
+		drawRange(49, 52, 31, 31, halfFlat);
+		drawRange(49, 52, 35, 35, halfFlat);
+		drawRange(49, 52, 39, 39, halfFlat);
+		drawRange(49, 52, 43, 43, halfFlat);
+		drawRange(49, 52, 47, 47, halfFlat);
+		drawRange(49, 52, 51, 51, halfFlat);
+		drawRange(49, 52, 55, 55, halfFlat);
+		drawRange(49, 52, 59, 59, halfFlat);
+		drawRange(49, 52, 63, 63, halfFlat);
+		drawRange(49, 52, 68, 68, halfFlat);
+		drawRange(49, 52, 72, 72, halfFlat);
+		drawRange(49, 52, 77, 77, halfFlat);
+		drawRange(49, 52, 82, 82, halfFlat);
+		drawRange(49, 52, 87, 87, halfFlat);
+		drawRange(49, 52, 92, 92	, halfFlat);
 	}
 }
