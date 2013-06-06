@@ -186,9 +186,9 @@ public class PlayableSpriteMovementManager extends
 				if (ySpeed < 0) {
 					ySpeed = 0;
 				}
-				ySpeed += 256 * (((short) (height + sprite.getHeight() / 2) - sprite
+				ySpeed += 256 * (((short) (height + sprite.getHeight()) - sprite
 						.getY()));
-				sprite.setY((short) (height + sprite.getHeight() / 2));
+				sprite.setY((short) (height + sprite.getHeight()));
 
 				if (jump && !jumpPressed) {
 					jump = true;

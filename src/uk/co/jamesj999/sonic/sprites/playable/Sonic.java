@@ -47,8 +47,8 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	public void createGroundSensors() {
-		Sensor left = new TerrainSensor(-9, 0);
-		Sensor right = new TerrainSensor(9, 0);
+		Sensor left = new TerrainSensor(-9, - height / 2);
+		Sensor right = new TerrainSensor(9, - height / 2);
 		groundSensors = new TerrainSensorPair(left, right);
 		groundSensors.updateSensors(this);
 	}

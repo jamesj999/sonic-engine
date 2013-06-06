@@ -33,7 +33,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 * x/y values for each step.
 	 */
 	protected short gSpeed = 0;
-	
+
 	/**
 	 * Current angle of the terrain this sprite is on.
 	 */
@@ -142,17 +142,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 * Speed at which to stop rolling
 	 */
 	protected short minRollSpeed;
-	
+
 	/**
 	 * Height when rolling
 	 */
 	protected short rollHeight;
-	
+
 	/**
 	 * Height when running
 	 */
 	protected short runHeight;
-	
 
 	protected AbstractPlayableSprite(String code, short x, short y) {
 		super(code, x, y);
@@ -227,12 +226,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setRolling(boolean rolling) {
-		if(rolling) {
-			height = rollHeight;
+		if (rolling) {
+			setHeight(rollHeight);
 		} else {
-			height = runHeight;
+			setHeight(runHeight);
 		}
 		this.rolling = rolling;
+	}
+
+	@Override
+	public void setHeight(int height) {
+		super.setHeight(height);
+		if (groundSensors != null) {
+			groundSensors.getLeft().setYOffset((byte) (-height / 2));
+			groundSensors.getRight().setYOffset((byte) (-height / 2));
+		}
 	}
 
 	public short getRollDecel() {
