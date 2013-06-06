@@ -33,8 +33,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 * x/y values for each step.
 	 */
 	protected short gSpeed = 0;
+	
+	/**
+	 * Current angle of the terrain this sprite is on.
+	 */
 	protected byte angle;
 
+	/**
+	 * Speed (in subpixels) at which this sprite walks
+	 */
 	protected short jump = 0;
 
 	protected short xSpeed = 0;
@@ -45,6 +52,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	private byte historyPos = 0;
 
+	/**
+	 * Whether or not this sprite is rolling
+	 */
+	protected boolean rolling = false;
+
+	/**
+	 * Whether or not this sprite is in the air
+	 */
 	protected boolean air = false;
 
 	public boolean getAir() {
@@ -81,13 +96,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected short slopeRunning;
 	/**
-	 * The amount this sprite's speed is effected by when rolling down/up a
-	 * slope.
+	 * The amount this sprite's speed is effected by when rolling up a slope.
 	 */
-	protected short slopeRolling;
+	protected short slopeRollingUp;
+	/**
+	 * The amount this sprite's speed is effected by when rolling down a slope.
+	 */
+	protected short slopeRollingDown;
 	/**
 	 * The speed at which this sprite accelerates when running.
 	 */
+
 	protected short runAccel;
 	/**
 	 * The speed at which this sprite decelerates when the opposite direction is
@@ -100,9 +119,40 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected short friction;
 	/**
+	 * Maximum rolling speed of this Sprite per step.
+	 */
+	protected short maxRoll;
+	/**
 	 * Maximum running speed of this Sprite per step.
 	 */
 	protected short max;
+
+	/**
+	 * The speed at which this sprite slows down while rolling with no
+	 * directional keys pressed.
+	 */
+	protected short rollDecel;
+
+	/**
+	 * Minimum speed required to start rolling.
+	 */
+	protected short minStartRollSpeed;
+
+	/**
+	 * Speed at which to stop rolling
+	 */
+	protected short minRollSpeed;
+	
+	/**
+	 * Height when rolling
+	 */
+	protected short rollHeight;
+	
+	/**
+	 * Height when running
+	 */
+	protected short runHeight;
+	
 
 	protected AbstractPlayableSprite(String code, short x, short y) {
 		super(code, x, y);
@@ -140,8 +190,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return slopeRunning;
 	}
 
-	public short getSlopeRolling() {
-		return slopeRolling;
+	public short getSlopeRollingUp() {
+		return slopeRollingUp;
+	}
+
+	public short getSlopeRollingDown() {
+		return slopeRollingDown;
 	}
 
 	public short getFriction() {
@@ -166,6 +220,35 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	public short[] getYHistory() {
 		return yHistory;
+	}
+
+	public boolean getRolling() {
+		return rolling;
+	}
+
+	public void setRolling(boolean rolling) {
+		if(rolling) {
+			height = rollHeight;
+		} else {
+			height = runHeight;
+		}
+		this.rolling = rolling;
+	}
+
+	public short getRollDecel() {
+		return rollDecel;
+	}
+
+	public short getMaxRoll() {
+		return maxRoll;
+	}
+
+	public short getMinStartRollSpeed() {
+		return minStartRollSpeed;
+	}
+
+	public short getMinRollSpeed() {
+		return minRollSpeed;
 	}
 
 	public PlayableSpriteMovementManager getMovementManager() {

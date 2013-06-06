@@ -11,7 +11,13 @@ public class PlayableSpriteMovementManager extends
 	private final short max;
 	private final short runAccel;
 	private final short runDecel;
-	private final short friction;
+	private final short slopeRunning;
+	private final short minStartRollSpeed;
+	private final short minRollSpeed;
+	private final short maxRoll;
+	private final short slopeRollingUp;
+	private final short slopeRollingDown;
+	private final short rollDecel;
 
 	private boolean jumpPressed;
 
@@ -20,7 +26,13 @@ public class PlayableSpriteMovementManager extends
 		max = sprite.getMax();
 		runAccel = sprite.getRunAccel();
 		runDecel = sprite.getRunDecel();
-		friction = sprite.getFriction();
+		slopeRunning = sprite.getSlopeRunning();
+		minStartRollSpeed = sprite.getMinStartRollSpeed();
+		minRollSpeed = sprite.getMinRollSpeed();
+		maxRoll = sprite.getMaxRoll();
+		slopeRollingUp = sprite.getSlopeRollingUp();
+		slopeRollingDown = sprite.getSlopeRollingDown();
+		rollDecel = sprite.getRollDecel();
 	}
 
 	/**
@@ -29,7 +41,8 @@ public class PlayableSpriteMovementManager extends
 	 * calculate left/right movement.
 	 */
 	@Override
-	public void handleMovement(boolean left, boolean right, boolean jump) {
+	public void handleMovement(boolean left, boolean right, boolean down,
+			boolean jump) {
 		short gSpeed = sprite.getGSpeed();
 
 		short xSpeed = sprite.getXSpeed();
@@ -38,15 +51,39 @@ public class PlayableSpriteMovementManager extends
 		// Store whether or not we were in the air at the beginning of this tick
 		boolean initialAir = sprite.getAir();
 
+		// If the player is pressing down, we're not in the air, we're not
+		// currently rolling and our ground speed is greater than the minimum
+		// speed, start rolling:
+		if (down && !sprite.getAir() && !sprite.getRolling()
+				&& (gSpeed > minStartRollSpeed || gSpeed < -minStartRollSpeed)) {
+			sprite.setRolling(true);
+		}
+
+		// If we're rolling and our ground speed is less than the minimum roll
+		// speed then stop rolling:
+		if (sprite.getRolling()
+				&& ((gSpeed < minRollSpeed && gSpeed > 0) || (gSpeed > -minRollSpeed && gSpeed < 0))) {
+			sprite.setRolling(false);
+		}
+
 		// a height of -1 indicates no heightmap was found meaning we're not on
 		// a solid tile
 		// we also ignore heights of 0 because they are meaningless
 		short height = terrainCollisionManager.calculateTerrainHeight(sprite);
 		int angle = (int) ((256 - sprite.getAngle()) * 1.40625);
+
+		// Small hack to make sure the angle is between -360 and 360.
+		while (angle >= 360) {
+			angle -= 360;
+		}
+		while (angle <= -360) {
+			angle += 360;
+		}
+
 		// sprite.getAngle();
 		// & 0xFF);
 
-		// Landing:
+		// Landing, so calculate our ground speed from the angle of the slope:
 		if (initialAir && !sprite.getAir()) {
 			if (ySpeed < 0) {
 				byte originalAngle = sprite.getAngle();
@@ -74,43 +111,98 @@ public class PlayableSpriteMovementManager extends
 		}
 
 		if (!sprite.getAir()) {
-			if (!initialAir) {
-				if (left) {
-					if (gSpeed > 0) {
-						gSpeed -= runDecel;
-					} else {
-						if (gSpeed > -max) {
-							gSpeed -= runAccel;
-						} else {
-							gSpeed = (short) -max;
-						}
-					}
-				} else if (right) {
-					if (gSpeed < 0) {
-						gSpeed += runDecel;
-					} else {
-						if (gSpeed < max) {
-							gSpeed = (short) (gSpeed + runAccel);
-						} else {
-							gSpeed = max;
-						}
-					}
+			short friction;
+			short slopeRunningVariant;
+			short maxSpeed;
+			short accel;
+			short decel;
+			if (!sprite.getRolling()) {
+				// Running, on ground
+				friction = sprite.getFriction();
+				slopeRunningVariant = slopeRunning;
+				maxSpeed = max;
+				accel = runAccel;
+				decel = runDecel;
+			} else {
+				// Rolling, on ground
+				// Halve the friction because we're rolling:
+				friction = (short) (sprite.getFriction() / 2);
+				/*
+				 * slp is 0.078125 ($001E). When Sonic is rolling downhill (the
+				 * sign of Gsp is equal to the sign of sin(angle)), slp is
+				 * 0.3125 ($0050)
+				 */
+				double gSpeedSign = Math.signum(gSpeed);
+				double angleSign = Math.signum(Math.sin(Math.toRadians(angle)));
+				if (gSpeedSign == angleSign) {
+					slopeRunningVariant = 80;
 				} else {
-					if ((gSpeed < friction && gSpeed > 0)
-							|| (gSpeed > -friction) && gSpeed < 0) {
-						gSpeed = 0;
+					slopeRunningVariant = 20;
+				}
+				// sloperunningvariant = //TODO work this out from angle
+				accel = 0;
+				decel = rollDecel;
+				maxSpeed = maxRoll;
+			}
+			// On the ground, running or rolling
+			gSpeed -= slopeRunningVariant
+					* Math.sin(Math.toRadians((256 - sprite.getAngle()) * 1.40625));
+			if (left) {
+				if (gSpeed > 0) {
+					gSpeed -= decel;
+				} else {
+					if (gSpeed > -maxSpeed) {
+						gSpeed -= accel;
 					} else {
-						gSpeed -= Math.min(Math.abs(gSpeed), friction)
-								* Math.signum(gSpeed);
+						gSpeed = (short) -maxSpeed;
 					}
 				}
-				xSpeed = (short) Math.round(gSpeed
-						* Math.cos(Math.toRadians(angle)));
+			} else if (right) {
+				if (gSpeed < 0) {
+					gSpeed += decel;
+				} else {
+					if (gSpeed < maxSpeed) {
+						gSpeed = (short) (gSpeed + accel);
+					} else {
+						gSpeed = maxSpeed;
+					}
+				}
+			}
+			if (!left && !right) {
+				if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
+						&& gSpeed < 0) {
+					gSpeed = 0;
+				} else {
+					gSpeed -= Math.min(Math.abs(gSpeed), friction)
+							* Math.signum(gSpeed);
+				}
+			}
+			xSpeed = (short) Math.round(gSpeed
+					* Math.cos(Math.toRadians(angle)));
 
-				ySpeed = 0;// (short) Math.round(gSpeed * -Math.sin(angle &
-							// 0xFF));
+			ySpeed = 0;// (short) Math.round(gSpeed * -Math.sin(angle &
+						// 0xFF));
+			if (height > 0) {
+				if (ySpeed < 0) {
+					ySpeed = 0;
+				}
+				ySpeed += 256 * (((short) (height + sprite.getHeight() / 2) - sprite
+						.getY()));
+				sprite.setY((short) (height + sprite.getHeight() / 2));
+
+				if (jump && !jumpPressed) {
+					jump = true;
+					sprite.setAir(true);
+					sprite.setRolling(true);
+					jumpPressed = true;
+					xSpeed -= sprite.getJump()
+							* Math.sin(Math.toRadians(angle));
+					ySpeed += sprite.getJump()
+							* Math.cos(Math.toRadians(angle));
+				}
 			}
 		} else {
+			// In the air
 			if (left) {
 				if (xSpeed - (2 * runAccel) < -max) {
 					xSpeed = (short) -max;
@@ -130,24 +222,15 @@ public class PlayableSpriteMovementManager extends
 					xSpeed *= 0.96875;
 				}
 			}
-		}
-
-		if (height > 0) {
-			if (ySpeed < 0) {
-				ySpeed = 0;
+			if (height > 0) {
+				if (ySpeed < 0) {
+					if (sprite.getY() < height) {
+						// ySpeed = sprite.getY();
+						sprite.setY((short) (height + sprite.getHeight() / 2));
+					}
+				}
 			}
-			ySpeed += 256 * (((short) (height + sprite.getHeight() / 2) - sprite
-					.getY()));
-			sprite.setY((short) (height + sprite.getHeight() / 2));
-		}
-		sprite.setGSpeed(gSpeed);
-
-		if (jump && !sprite.getAir() && !jumpPressed) {
-			jump = true;
-			sprite.setAir(true);
-			jumpPressed = true;
-			xSpeed -= sprite.getJump() * Math.sin(Math.toRadians(angle));
-			ySpeed += sprite.getJump() * Math.cos(Math.toRadians(angle));
+			ySpeed -= sprite.getGravity();
 		}
 
 		if (!jump && jumpPressed) {
@@ -156,10 +239,7 @@ public class PlayableSpriteMovementManager extends
 			}
 			jumpPressed = false;
 		}
-
-		if (sprite.getAir()) {
-			ySpeed -= sprite.getGravity();
-		}
+		sprite.setGSpeed(gSpeed);
 
 		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
@@ -177,9 +257,8 @@ public class PlayableSpriteMovementManager extends
 			sprite.setYSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
 		}
-		// System.out.println(sprite.getX() + "," + sprite.getY());
-		// System.out.println(height);
-		// System.out.println(ySpeed);
+		// System.out.println(sprite.getX() + "," + sprite.getXSubpixel() + "x"
+		// + sprite.getY() + "," + sprite.getYSubpixel());
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
 

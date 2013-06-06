@@ -6,6 +6,7 @@ public class TestLevel extends AbstractLevel {
 	protected void setupTiles() {
 		Tile halfFlat = new Tile(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
 				8, (byte) 0x00);
+
 		Tile lowFlat = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 				(byte) 0x00);
 		Tile lowFlatToSlope = new Tile(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
@@ -32,15 +33,27 @@ public class TestLevel extends AbstractLevel {
 				3, 3, (byte) 0xFC);
 		Tile lowLessSteep2 = new Tile(3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
 				7, 7, (byte) 0xF8);
-
 		Tile highSlopeDown = new Tile(16, 16, 15, 14, 14, 13, 12, 11, 11, 10,
 				10, 9, 8, 8, 7, 7, (byte) 0x18);
-
 		Tile highSlopeDown2 = new Tile(6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0,
 				0, 0, 0, (byte) 0x10);
-
 		Tile full = new Tile(16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
 				16, 16, 16, 16, (byte) 0x00);
+
+		Tile famousCurve1 = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
+				3, 3, (byte) 0xFC);
+		Tile famousCurve2 = new Tile(3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 8, 8,
+				9, 9, (byte) 0xF0);
+		Tile famousCurve3 = new Tile(10, 10, 11, 12, 12, 13, 14, 14, 15, 16,
+				16, 16, 16, 16, 16, 16, (byte) 0xE8);
+		Tile famousCurve4 = new Tile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4,
+				5, 6, (byte) 0xE0);
+		Tile famousCurve5 = new Tile(7, 8, 10, 11, 13, 14, 16, 16, 16, 16, 16,
+				16, 16, 16, 16, 16, (byte) 0xD8);
+		Tile famousCurve6 = new Tile(0, 0, 0, 0, 0, 0, 0, 2, 4, 6, 8, 11, 14,
+				16, 16, 16, (byte) 0xD0);
+		Tile famousCurve7 = new Tile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+				8, 16, (byte) 0xC4);
 
 		addTile(lowSteepSlope, 10, 1);
 		addTile(lowSteepSlope2, 11, 1);
@@ -84,7 +97,12 @@ public class TestLevel extends AbstractLevel {
 
 		drawRange(30, 33, 1, 5, full);
 
-		drawRange(34, 40, 1, 1, lowFlat);
+		addTile(highSlopeDown, 34, 6);
+		addTile(highSlopeDown2, 35, 6);
+
+		addTile(highSlopeDown, 36, 5);
+
+		drawRange(37, 40, 1, 1, lowFlat);
 
 		addTile(lowFlatToSlope, 41, 1);
 		addTile(lowFlatToSlope2, 42, 1);
@@ -92,9 +110,19 @@ public class TestLevel extends AbstractLevel {
 		addTile(lowFlatToSlope4, 44, 1);
 		addTile(lowFlatToSlope5, 45, 1);
 
+		drawRange(46, 50, 1, 1, lowFlat);
+		
+		addTile(famousCurve1, 50, 1);
+		addTile(famousCurve2, 51, 1);
+		addTile(famousCurve3, 52, 1);
+		addTile(famousCurve4, 52, 2);
+		addTile(famousCurve5, 53, 2);
+		addTile(famousCurve6, 53, 3);
+		addTile(famousCurve7, 53, 4);
+
 		drawRange(0, 255, 0, 0, full);
 
-		drawRange(46, 255, 1, 1, lowFlat);
+		drawRange(54, 255, 1, 1, lowFlat);
 
 		drawRange(6, 25, 8, 8, halfFlat);
 		drawRange(1, 9, 11, 11, halfFlat);
@@ -117,6 +145,6 @@ public class TestLevel extends AbstractLevel {
 		drawRange(49, 52, 77, 77, halfFlat);
 		drawRange(49, 52, 82, 82, halfFlat);
 		drawRange(49, 52, 87, 87, halfFlat);
-		drawRange(49, 52, 92, 92	, halfFlat);
+		drawRange(49, 52, 92, 92, halfFlat);
 	}
 }

@@ -132,4 +132,12 @@ public abstract class AbstractSprite implements Sprite {
 	public float getGravity() {
 		return gravity;
 	}
+
+	public byte getXSubpixel() {
+		return xSubpixel;
+	}
+
+	public byte getYSubpixel() {
+		return ySubpixel;
+	}
 }

@@ -1,12 +1,25 @@
 package uk.co.jamesj999.sonic.level;
 
+import org.apache.commons.lang3.ArrayUtils;
+
 public class Tile {
-	byte[] heights;
-	byte angle;
+	public byte[] heights;
+	private byte angle;
 
 	public Tile(byte[] heights, byte angle) {
+		this(heights, angle, false, false);
+	}
+
+	private Tile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
 		if (heights.length == 16) {
 			this.heights = heights;
+			if (flipX) {
+				ArrayUtils.reverse(heights);
+			}
+			if(flipY) {
+				reverseY();
+			}
+			// TODO add angle recalculations
 		} else {
 			System.out.println("NO FUCKING WAY MAN");
 		}
@@ -46,4 +59,15 @@ public class Tile {
 	public byte getAngle() {
 		return angle;
 	}
+
+	public Tile copy(boolean flipX, boolean flipY) {
+		return new Tile(heights, angle, flipX, flipY);
+	}
+	
+	private void reverseY() {
+		for(int i = 0; i < heights.length; i++) {
+			heights[i] = (byte) (16 - heights[i]);
+		}
+	}
+
 }

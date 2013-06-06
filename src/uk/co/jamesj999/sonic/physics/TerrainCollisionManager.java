@@ -42,6 +42,9 @@ public class TerrainCollisionManager {
 			}
 
 			if (leftHeight > -1 || rightHeight > -1) {
+				if(((AbstractPlayableSprite) sprite).getAir()) {
+					((AbstractPlayableSprite) sprite).setRolling(false);
+				}
 				((AbstractPlayableSprite) sprite).setAir(false);
 			} else {
 				((AbstractPlayableSprite) sprite).setAir(true);
