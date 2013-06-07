@@ -25,24 +25,14 @@ public class TerrainCollisionManager {
 			byte realLeftX = (byte) (left.getX() % 16);
 			byte realRightX = (byte) (right.getX() % 16);
 			if (leftTile != null) {
-				/*
-				 * Ok, so these calculations seem a little weird, so I'll
-				 * explain them... We're calculating the 'actual' y value of the
-				 * height for this x position of the tile by getting its
-				 * remainder from 16 and adding 16 times the left Y over 16. We
-				 * multiply/divide the left (or right) sensor's Y value so that
-				 * we get it 'floored' to the nearest 16.
-				 */
 				leftHeight = (short) leftTile.getHeightAt(realLeftX);
 			}
 			if (rightTile != null) {
 				rightHeight = (short) rightTile.getHeightAt(realRightX);
-				// rightHeight = (short) ((rightTile.getHeightAt((byte) (right
-				// .getX() % 16))) + 16 * (right.getY() / 16));
 			}
 
 			if (leftHeight > -1 || rightHeight > -1) {
-				if(((AbstractPlayableSprite) sprite).getAir()) {
+				if (((AbstractPlayableSprite) sprite).getAir()) {
 					((AbstractPlayableSprite) sprite).setRolling(false);
 				}
 				((AbstractPlayableSprite) sprite).setAir(false);
@@ -55,7 +45,16 @@ public class TerrainCollisionManager {
 				if (leftHeight == 16) {
 					Tile leftAbove = left.getTileAbove();
 					if (leftAbove != null
-							&& leftAbove.getHeightAt(realLeftX) > 0) {
+							&& leftAbove.getHeightAt(realLeftX) >= 0) {
+						/*
+						 * Ok, so these calculations seem a little weird, so
+						 * I'll explain them... We're calculating the 'actual' y
+						 * value of the height for this x position of the tile
+						 * by getting its remainder from 16 and adding 16 times
+						 * the left Y over 16. We multiply/divide the left (or
+						 * right) sensor's Y value so that we get it 'floored'
+						 * to the nearest 16.
+						 */
 						leftHeight = (short) (((leftAbove
 								.getHeightAt(realLeftX)) + 16 * (left.getY() / 16)) + 16);
 						upperLeft = true;
@@ -68,7 +67,7 @@ public class TerrainCollisionManager {
 				if (rightHeight == 16) {
 					Tile rightAbove = right.getTileAbove();
 					if (rightAbove != null
-							&& rightAbove.getHeightAt(realRightX) > 0) {
+							&& rightAbove.getHeightAt(realRightX) >= 0) {
 						rightHeight = (short) (((rightAbove
 								.getHeightAt(realRightX)) + 16 * (right.getY() / 16)) + 16);
 						upperRight = true;

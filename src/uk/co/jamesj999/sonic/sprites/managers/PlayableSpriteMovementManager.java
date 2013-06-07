@@ -183,11 +183,11 @@ public class PlayableSpriteMovementManager extends
 			ySpeed = 0;// (short) Math.round(gSpeed * -Math.sin(angle &
 						// 0xFF));
 			if (height > 0) {
-				if (ySpeed < 0) {
-					ySpeed = 0;
-				}
-				ySpeed += 256 * (((short) (height + sprite.getHeight()) - sprite
-						.getY()));
+				// if (ySpeed < 0) {
+				// ySpeed = 0;
+				// }
+				ySpeed = (short) (256 * (((short) (height + sprite.getHeight()) - sprite
+						.getY())));
 				sprite.setY((short) (height + sprite.getHeight()));
 
 				if (jump && !jumpPressed) {
@@ -237,7 +237,9 @@ public class PlayableSpriteMovementManager extends
 			if (ySpeed > 1024) {
 				ySpeed = (short) 1024;
 			}
-			jumpPressed = false;
+			if (ySpeed == 0) {
+				jumpPressed = false;
+			}
 		}
 		sprite.setGSpeed(gSpeed);
 
@@ -259,6 +261,7 @@ public class PlayableSpriteMovementManager extends
 		}
 		// System.out.println(sprite.getX() + "," + sprite.getXSubpixel() + "x"
 		// + sprite.getY() + "," + sprite.getYSubpixel());
+		// System.out.println(height);
 		sprite.getGroundSensors().updateSensors(sprite);
 	}
 

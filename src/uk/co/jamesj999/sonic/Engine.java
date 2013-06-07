@@ -7,7 +7,6 @@ import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_MODELVIEW;
 import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
 
 import java.awt.Dimension;
-import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -23,6 +22,7 @@ import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -45,6 +45,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final GraphicsManager graphicsManager = GraphicsManager
 			.getInstance();
 	private final Camera camera = Camera.getInstance();
+	private final DebugRenderer debugRenderer = DebugRenderer.getInstance();
 
 	private InputHandler inputHandler;
 
@@ -76,7 +77,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set background (clear) color
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smoothes out
 									// lighting
-		Sonic sonic = new Sonic("Sonic", (short) 30, (short) 0);
+		Sonic sonic = new Sonic(
+				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
+				(short) 30, (short) 0);
 		spriteManager.addSprite(sonic);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
@@ -110,32 +113,13 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void update() {
-		// Testing camera movement
-//		Camera camera = Camera.getInstance();
-//		if (inputHandler.isKeyDown(KeyEvent.VK_W)) {
-//			camera.incrementY((short) 1);
-//		}
-//		if (inputHandler.isKeyDown(KeyEvent.VK_D)) {
-//			camera.incrementX((short) 1);
-//		}
-//		if (inputHandler.isKeyDown(KeyEvent.VK_S)) {
-//			camera.incrementY((short) -1);
-//		}
-//		if (inputHandler.isKeyDown(KeyEvent.VK_A)) {
-//			camera.incrementX((short) -1);
-//		}
 		spriteManager.update(inputHandler);
 		camera.updatePosition();
 	}
 
 	public void draw() {
-		// Graphics graphics = canvas.getBufferStrategy().getDrawGraphics();
-		// graphics.clearRect(0, 0, width, height);
 		spriteManager.draw();
 		levelManager.getLevel().draw();
-		// graphics.dispose();
-		// canvas.getBufferStrategy().show();
-		// Toolkit.getDefaultToolkit().sync();
 	}
 
 	public static void main(String[] args) {
@@ -169,7 +153,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 				frame.addWindowListener(new WindowAdapter() {
 					@Override
 					public void windowClosing(WindowEvent e) {
-						// Use a dedicate thread to run the stop() to ensure
+						// Use a dedicated thread to run the stop() to ensure
 						// that the
 						// animator stops before program exits.
 						new Thread() {
@@ -205,6 +189,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
+		debugRenderer.renderDebugInfo();
 	}
 
 	/**

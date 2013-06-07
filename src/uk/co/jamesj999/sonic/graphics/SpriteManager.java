@@ -111,7 +111,7 @@ public class SpriteManager {
 	// //
 	// }
 
-	private Sprite getSprite(String code) {
+	public Sprite getSprite(String code) {
 		return sprites.get(code);
 	}
 

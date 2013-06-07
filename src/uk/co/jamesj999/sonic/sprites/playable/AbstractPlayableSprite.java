@@ -67,6 +67,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setAir(boolean air) {
+		TerrainSensorPair groundSensors = getGroundSensors();
+		if (air) {
+			groundSensors.getLeft().setXOffset((byte) -8);
+			groundSensors.getRight().setXOffset((byte) 8);
+		} else {
+			groundSensors.getLeft().setXOffset((byte) -10);
+			groundSensors.getRight().setXOffset((byte) 10);
+		}
 		this.air = air;
 	}
 

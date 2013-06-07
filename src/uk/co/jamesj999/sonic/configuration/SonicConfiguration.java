@@ -17,7 +17,7 @@ public enum SonicConfiguration {
 	/**
 	 * Current Version number.
 	 */
-	VERSION("Alpha V0.01"),
+	VERSION("Alpha V0.05"),
 	/**
 	 * Actual width of the screen (number of available x-coordinates).
 	 */
@@ -65,7 +65,11 @@ public enum SonicConfiguration {
 	/**
 	 * Key to jump etc.
 	 */
-	JUMP(KeyEvent.VK_SPACE);
+	JUMP(KeyEvent.VK_SPACE),
+	/**
+	 * Code of the sprite of the main playable character.
+	 */
+	MAIN_CHARACTER_CODE("sonic");
 
 	private Object value;
 

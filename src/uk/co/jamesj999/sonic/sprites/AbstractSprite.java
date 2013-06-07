@@ -55,6 +55,10 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public final short getX() {
+		// TODO Not sure if this is needed, round to nearest subpixel?
+		if ((xPixel & 0xFF) > 128) {
+			return (short) (xPixel + 1);
+		}
 		return xPixel;
 	}
 
@@ -67,6 +71,10 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public final short getY() {
+		// TODO Not sure if this is needed, round to nearest subpixel?
+		if ((ySubpixel & 0xFF) > 128) {
+			return (short) (yPixel + 1);
+		}
 		return yPixel;
 	}
 
