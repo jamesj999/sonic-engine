@@ -1,12 +1,15 @@
 package uk.co.jamesj999.sonic.sprites;
 
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
 
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+import uk.co.jamesj999.sonic.physics.SensorLine;
 
 public abstract class AbstractSprite implements Sprite {
 	protected final SonicConfigurationService configService = SonicConfigurationService
@@ -29,6 +32,8 @@ public abstract class AbstractSprite implements Sprite {
 
 	protected int width;
 	protected int height;
+	
+	protected final List<SensorLine> sensorLines = new ArrayList<SensorLine>();
 
 	protected byte gravity = 56;
 
@@ -36,6 +41,7 @@ public abstract class AbstractSprite implements Sprite {
 		this.code = code;
 		this.xPixel = xPixel;
 		this.yPixel = yPixel;
+		createSensorLines();
 	}
 
 	public final String getCode() {
@@ -106,6 +112,7 @@ public abstract class AbstractSprite implements Sprite {
 		if (updatedXPixel < 0) {
 			xPixel = 0;
 			xSubpixel = 0;
+			xSpeed = 0;
 		} else {
 			xPixel = updatedXPixel;
 			xSubpixel = updatedXSubpixel;
@@ -114,6 +121,7 @@ public abstract class AbstractSprite implements Sprite {
 		if (updatedYPixel < 0) {
 			yPixel = 0;
 			ySubpixel = 0;
+			ySpeed = 0;
 		} else {
 			yPixel = updatedYPixel;
 			ySubpixel = updatedYSubpixel;
@@ -148,4 +156,10 @@ public abstract class AbstractSprite implements Sprite {
 	public byte getYSubpixel() {
 		return ySubpixel;
 	}
+	
+	public List<SensorLine> getSensorLines() {
+		return sensorLines;
+	}
+	
+	protected abstract void createSensorLines();
 }

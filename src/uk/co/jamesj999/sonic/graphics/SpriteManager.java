@@ -8,6 +8,8 @@ import java.util.Map.Entry;
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.physics.SensorLine;
+import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -60,7 +62,10 @@ public class SpriteManager {
 			sprite.draw();
 			if (sprite instanceof AbstractPlayableSprite) {
 				// TODO temp debug stuff, remove
-				((AbstractPlayableSprite) sprite).getGroundSensors().draw();
+				for (SensorLine sensorLine : ((AbstractSprite) sprite)
+						.getSensorLines()) {
+					sensorLine.draw((AbstractSprite) sprite);
+				}
 			}
 		}
 	}

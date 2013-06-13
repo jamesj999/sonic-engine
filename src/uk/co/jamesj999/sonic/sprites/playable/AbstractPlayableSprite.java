@@ -1,10 +1,5 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import uk.co.jamesj999.sonic.physics.Sensor;
-import uk.co.jamesj999.sonic.physics.TerrainSensorPair;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 
@@ -16,16 +11,6 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
  */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final PlayableSpriteMovementManager movementManager;
-
-	/**
-	 * Standard collision sensors for other objects:
-	 */
-	protected final List<Sensor> sensors = new ArrayList<Sensor>();
-
-	/**
-	 * Special Sensor Pair to calculate ground angles for running.
-	 */
-	protected TerrainSensorPair groundSensors;
 
 	/**
 	 * gSpeed is the speed this sprite is moving across the 'ground'.
@@ -67,14 +52,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setAir(boolean air) {
-		TerrainSensorPair groundSensors = getGroundSensors();
-		if (air) {
-			groundSensors.getLeft().setXOffset((byte) -8);
-			groundSensors.getRight().setXOffset((byte) 8);
-		} else {
-			groundSensors.getLeft().setXOffset((byte) -10);
-			groundSensors.getRight().setXOffset((byte) 10);
-		}
+		// TerrainSensorBox terrainSensorBox = getTerrainSensorBox();
+		// if (air) {
+		// terrainSensorBox.setXOffset((short) -8);
+		// terrainSensorBox.setWidth((short) 16);
+		// } else {
+		// terrainSensorBox.setXOffset((short) -10);
+		// terrainSensorBox.setWidth((short) 20);
+		// }
 		this.air = air;
 	}
 
@@ -166,7 +151,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		// Must define speeds before creating Manager (it will read speeds upon
 		// instantiation).
 		defineSpeeds();
-		createGroundSensors();
 
 		// Set our entire history for x and y to be the starting position so if
 		// the player spindashes immediately the camera effect won't be b0rked.
@@ -245,10 +229,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	@Override
 	public void setHeight(int height) {
 		super.setHeight(height);
-		if (groundSensors != null) {
-			groundSensors.getLeft().setYOffset((byte) (-height / 2));
-			groundSensors.getRight().setYOffset((byte) (-height / 2));
-		}
+//		if (terrainSensorBox != null) {
+//			terrainSensorBox.setYOffset((short) (-(height / 2) - 16));
+//		}
 	}
 
 	public short getRollDecel() {
@@ -270,24 +253,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public PlayableSpriteMovementManager getMovementManager() {
 		return movementManager;
 	}
-
-	public List<Sensor> getSensors() {
-		return sensors;
-	}
-
-	public boolean addSensor(Sensor sensor) {
-		return sensors.add(sensor);
-	}
-
-	public boolean removeSensor(Sensor sensor) {
-		return sensors.remove(sensor);
-	}
-
-	public TerrainSensorPair getGroundSensors() {
-		return groundSensors;
-	}
-
-	public abstract void createGroundSensors();
 
 	protected abstract void defineSpeeds();
 

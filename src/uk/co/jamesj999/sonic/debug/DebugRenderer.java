@@ -34,21 +34,23 @@ public class DebugRenderer {
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {
 				if (((AbstractPlayableSprite) sprite).getAir()) {
-					renderer.draw("Air", 2, 77);
+					renderer.draw("Air", 2, 90);
 				}
 				if (((AbstractPlayableSprite) sprite).getRolling()) {
-					renderer.draw("Rolling", 24, 77);
+					renderer.draw("Rolling", 24, 90);
 				}
 			}
 			renderer.draw(
 					"gSpeed:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
-					2, 64);
+					2, 77);
 			renderer.draw(
 					"xSpeed:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
-					2, 51);
+					2, 64);
 			renderer.draw(
 					"ySpeed:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
-					2, 38);
+					2, 51);
+			renderer.draw("Angle:"
+					+ ((AbstractPlayableSprite) sprite).getAngle(), 2, 38);
 			StringBuilder xString = new StringBuilder(Integer.toHexString(
 					sprite.getX()).toUpperCase());
 			StringBuilder yString = new StringBuilder(Integer.toHexString(

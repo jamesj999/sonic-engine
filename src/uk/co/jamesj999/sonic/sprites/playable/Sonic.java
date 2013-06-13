@@ -3,9 +3,7 @@ package uk.co.jamesj999.sonic.sprites.playable;
 import javax.media.opengl.GL2;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
-import uk.co.jamesj999.sonic.physics.Sensor;
-import uk.co.jamesj999.sonic.physics.TerrainSensor;
-import uk.co.jamesj999.sonic.physics.TerrainSensorPair;
+import uk.co.jamesj999.sonic.physics.SensorLine;
 
 public class Sonic extends AbstractPlayableSprite {
 
@@ -21,6 +19,8 @@ public class Sonic extends AbstractPlayableSprite {
 		graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
 				GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
 						- height));
+		graphicsManager.registerCommand(new GLCommand(GLCommand.Type.VERTEX2I,
+				-1, 1, 0, 0, getCentreX(), getCentreY(), 0, 0));
 	}
 
 	@Override
@@ -46,10 +46,14 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	@Override
-	public void createGroundSensors() {
-		Sensor left = new TerrainSensor(-9, - height / 2);
-		Sensor right = new TerrainSensor(9, - height / 2);
-		groundSensors = new TerrainSensorPair(left, right);
-		groundSensors.updateSensors(this);
+	protected void createSensorLines() {
+		/**
+		 * fix this - A/B sensor lines run at: x = -9, x= 9, vertical, y = 0, y
+		 * = 0, length = -20
+		 * 
+		 * But the ground sensors need to be separate.
+		 */
+		sensorLines.add(new SensorLine(this, 9, -36, 36, false));
+		sensorLines.add(new SensorLine(this, -9, -36, 36, false));
 	}
 }
