@@ -35,6 +35,8 @@ public class Sonic extends AbstractPlayableSprite {
 		 */
 		angle = 0;
 		slopeRunning = 32;
+		slopeRollingDown = 20;
+		slopeRollingUp = 80;
 		rollDecel = 32;
 		minStartRollSpeed = 264;
 		minRollSpeed = 128;

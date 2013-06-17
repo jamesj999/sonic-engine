@@ -12,6 +12,8 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final PlayableSpriteMovementManager movementManager;
 
+	protected SpriteRunningMode runningMode = SpriteRunningMode.GROUND;
+
 	/**
 	 * gSpeed is the speed this sprite is moving across the 'ground'.
 	 * Calculations will be performed against this and 'angle' to calculate new
@@ -229,9 +231,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	@Override
 	public void setHeight(int height) {
 		super.setHeight(height);
-//		if (terrainSensorBox != null) {
-//			terrainSensorBox.setYOffset((short) (-(height / 2) - 16));
-//		}
+		// if (terrainSensorBox != null) {
+		// terrainSensorBox.setYOffset((short) (-(height / 2) - 16));
+		// }
 	}
 
 	public short getRollDecel() {
@@ -255,6 +257,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	protected abstract void defineSpeeds();
+
+	public final void move() {
+		move(xSpeed, ySpeed);
+	}
+
+	public SpriteRunningMode getRunningMode() {
+		return runningMode;
+	}
+
+	public void setRunningMode(SpriteRunningMode runningMode) {
+		this.runningMode = runningMode;
+	}
 
 	/**
 	 * Causes the sprite to update its position history as we are now at the end

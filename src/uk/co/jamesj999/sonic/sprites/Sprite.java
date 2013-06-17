@@ -31,5 +31,10 @@ public interface Sprite {
 	public int getWidth();
 	public void setWidth(int width);
 	
+	public short getBottomY();
+	public short getTopY();
+	public short getLeftX();
+	public short getRightX();
+	
 	public void move(short xSpeed, short ySpeed);
 }

@@ -32,7 +32,7 @@ public abstract class AbstractSprite implements Sprite {
 
 	protected int width;
 	protected int height;
-	
+
 	protected final List<SensorLine> sensorLines = new ArrayList<SensorLine>();
 
 	protected byte gravity = 56;
@@ -82,6 +82,26 @@ public abstract class AbstractSprite implements Sprite {
 			return (short) (yPixel + 1);
 		}
 		return yPixel;
+	}
+
+	@Override
+	public short getBottomY() {
+		return (short) (getCentreY() - (getHeight() / 2));
+	}
+
+	@Override
+	public short getTopY() {
+		return (short) (getCentreY() + (getHeight() / 2));
+	}
+
+	@Override
+	public short getLeftX() {
+		return (short) (getCentreX() - (getWidth() / 2));
+	}
+
+	@Override
+	public short getRightX() {
+		return (short) (getCentreX() + (getWidth() / 2));
 	}
 
 	public final void setY(short y) {
@@ -156,10 +176,10 @@ public abstract class AbstractSprite implements Sprite {
 	public byte getYSubpixel() {
 		return ySubpixel;
 	}
-	
+
 	public List<SensorLine> getSensorLines() {
 		return sensorLines;
 	}
-	
+
 	protected abstract void createSensorLines();
 }
