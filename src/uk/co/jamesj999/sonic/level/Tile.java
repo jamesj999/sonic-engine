@@ -5,6 +5,7 @@ import org.apache.commons.lang3.ArrayUtils;
 public class Tile {
 	public byte[] heights;
 	private byte angle;
+	private boolean jumpThrough;
 
 	public Tile(byte[] heights, byte angle) {
 		this(heights, angle, false, false);
@@ -31,7 +32,7 @@ public class Tile {
 	 * separately.
 	 */
 	public Tile(int a, int b, int c, int d, int e, int f, int g, int h, int i,
-			int j, int k, int l, int m, int n, int o, int p, byte angle) {
+			int j, int k, int l, int m, int n, int o, int p, byte angle, boolean jumpThrough) {
 		heights = new byte[16];
 		heights[0] = (byte) a;
 		heights[1] = (byte) b;
@@ -50,6 +51,7 @@ public class Tile {
 		heights[14] = (byte) o;
 		heights[15] = (byte) p;
 		this.angle = angle;
+		this.jumpThrough = jumpThrough;
 	}
 
 	public byte getHeightAt(byte y) {
@@ -68,6 +70,10 @@ public class Tile {
 		for(int i = 0; i < heights.length; i++) {
 			heights[i] = (byte) (16 - heights[i]);
 		}
+	}
+	
+	public boolean getJumpThrough() {
+		return jumpThrough;
 	}
 
 }

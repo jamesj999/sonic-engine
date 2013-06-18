@@ -49,13 +49,11 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
-		/**
-		 * fix this - A/B sensor lines run at: x = -9, x= 9, vertical, y = 0, y
-		 * = 0, length = -20
-		 * 
-		 * But the ground sensors need to be separate.
-		 */
-		sensorLines.add(new SensorLine(this, 9, -36, 36, false));
-		sensorLines.add(new SensorLine(this, -9, -36, 36, false));
+		// Terrain sensors
+		terrainSensorLines.add(new SensorLine(this, 9, -36, 36, false));
+		terrainSensorLines.add(new SensorLine(this, -9, -36, 36, false));
+
+		// Wall Sensors
+		wallSensorLine = new SensorLine(this, -10, -4, 20, true);
 	}
 }

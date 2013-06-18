@@ -33,7 +33,9 @@ public abstract class AbstractSprite implements Sprite {
 	protected int width;
 	protected int height;
 
-	protected final List<SensorLine> sensorLines = new ArrayList<SensorLine>();
+	protected final List<SensorLine> terrainSensorLines = new ArrayList<SensorLine>();
+	
+	protected SensorLine wallSensorLine;
 
 	protected byte gravity = 56;
 
@@ -177,8 +179,12 @@ public abstract class AbstractSprite implements Sprite {
 		return ySubpixel;
 	}
 
-	public List<SensorLine> getSensorLines() {
-		return sensorLines;
+	public List<SensorLine> getTerrainSensorLines() {
+		return terrainSensorLines;
+	}
+	
+	public SensorLine getWallSensorLine() {
+		return wallSensorLine;
 	}
 
 	protected abstract void createSensorLines();

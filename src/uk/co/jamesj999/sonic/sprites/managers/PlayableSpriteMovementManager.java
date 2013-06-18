@@ -93,6 +93,12 @@ public class PlayableSpriteMovementManager extends
 			sprite.move(sprite.getXSpeed(), (short) 0);
 
 		}
+		
+		short wallPosition = terrainCollisionManager.calculateWallPosition(sprite);
+		System.out.println(wallPosition);
+		if(wallPosition > -1) {
+			sprite.setX(wallPosition);
+		}
 
 		// Temporary 'death' detection just resets X/Y of sprite.
 		if (sprite.getY() <= 0) {

@@ -63,9 +63,10 @@ public class SpriteManager {
 			if (sprite instanceof AbstractPlayableSprite) {
 				// TODO temp debug stuff, remove
 				for (SensorLine sensorLine : ((AbstractSprite) sprite)
-						.getSensorLines()) {
-					sensorLine.draw((AbstractSprite) sprite);
+						.getTerrainSensorLines()) {
+					sensorLine.draw();
 				}
+				((AbstractPlayableSprite) sprite).getWallSensorLine().draw();
 			}
 		}
 	}

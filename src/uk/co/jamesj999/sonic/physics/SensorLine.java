@@ -94,8 +94,51 @@ public class SensorLine {
 		}
 		return highestRealY;
 	}
+	
+	public short getX() {
+		short spriteX = sprite.getX();
+		short spriteY = sprite.getY();
+		
+		Level level = levelManager.getLevel();
+		
+		int startX = spriteX + x;
+		int startY = spriteY + y;
+		int endX;
+		int endY;
+		if (horizontal) {
+			endX = startX + length;
+			endY = startY;
+		} else {
+			endX = startX;
+			endY = startY + length;
+		}
 
-	public void draw(AbstractSprite sprite) {
+		short highestRealX = -1;
+		short lowestRealX = -1;
+
+		for (int checkX = startX; checkX <= endX; checkX++) {
+			// short tileX = (short) Math.floor((double) checkX / 16);
+			for (int checkY = startY; checkY <= endY; checkY++) {
+				Tile tile = level.getTileAt((short) checkX, (short) checkY);
+				if (tile != null && !tile.getJumpThrough()) {
+					if(checkX > highestRealX) {
+						highestRealX = (short) checkX;
+					}
+					if(checkX < lowestRealX || lowestRealX == -1) {
+						lowestRealX = (short) checkX;
+					}
+				}
+			}
+		}
+		
+		if(((AbstractPlayableSprite) sprite).getGSpeed() > 0) {
+			return lowestRealX;
+		} else {
+			return highestRealX;
+		}
+	}
+
+	public void draw() {
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
 		int startX = spriteX + x;

@@ -5,55 +5,55 @@ public class TestLevel extends AbstractLevel {
 	@Override
 	protected void setupTiles() {
 		Tile halfFlat = new Tile(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-				8, (byte) 0x00);
+				8, (byte) 0x00, true);
 
 		Tile lowFlat = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-				(byte) 0x00);
+				(byte) 0x00, false);
 		Tile lowFlatToSlope = new Tile(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
-				3, 3, 3, (byte) 0xFE);
+				3, 3, 3, (byte) 0xFE, false);
 		Tile lowFlatToSlope2 = new Tile(3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5,
-				5, 5, 5, (byte) 0xFC);
+				5, 5, 5, (byte) 0xFC, false);
 		Tile lowFlatToSlope3 = new Tile(5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8,
-				8, 8, 8, (byte) 0xFA);
+				8, 8, 8, (byte) 0xFA, false);
 		Tile lowFlatToSlope4 = new Tile(9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11,
-				12, 12, 12, 12, 13, (byte) 0xF8);
+				12, 12, 12, 12, 13, (byte) 0xF8, false);
 		Tile lowFlatToSlope5 = new Tile(13, 13, 14, 14, 14, 15, 15, 15, 16, 16,
-				16, 16, 16, 16, 16, 16, (byte) 0xF6);
+				16, 16, 16, 16, 16, 16, (byte) 0xF6, false);
 		Tile lowSteepSlope = new Tile(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4,
-				4, 4, (byte) 0xF8);
+				4, 4, (byte) 0xF8, false);
 		Tile lowSteepSlope2 = new Tile(5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8,
-				8, 8, 8, (byte) 0xF8);
+				8, 8, 8, (byte) 0xF8, false);
 		Tile lowSteepSlope3 = new Tile(9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11,
-				11, 12, 12, 12, 12, (byte) 0xF8);
+				11, 12, 12, 12, 12, (byte) 0xF8, false);
 		Tile lowSteepSlope4 = new Tile(13, 13, 13, 13, 14, 14, 14, 14, 15, 15,
-				15, 15, 16, 16, 16, 16, (byte) 0xF8);
+				15, 15, 16, 16, 16, 16, (byte) 0xF8, false);
 		Tile halfHighPlatform = new Tile(16, 16, 16, 16, 16, 16, 16, 16, 0, 0,
-				0, 0, 0, 0, 0, 0, (byte) 0xFF);
+				0, 0, 0, 0, 0, 0, (byte) 0xFF, false);
 		Tile lowLessSteep = new Tile(1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3,
-				3, 3, (byte) 0xFC);
+				3, 3, (byte) 0xFC, false);
 		Tile lowLessSteep2 = new Tile(3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
-				7, 7, (byte) 0xF8);
+				7, 7, (byte) 0xF8, false);
 		Tile highSlopeDown = new Tile(16, 16, 15, 14, 14, 13, 12, 11, 11, 10,
-				10, 9, 8, 8, 7, 7, (byte) 0x18);
+				10, 9, 8, 8, 7, 7, (byte) 0x18, false);
 		Tile highSlopeDown2 = new Tile(6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0,
-				0, 0, 0, (byte) 0x10);
+				0, 0, 0, (byte) 0x10, false);
 		Tile full = new Tile(16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-				16, 16, 16, 16, (byte) 0x00);
+				16, 16, 16, 16, (byte) 0x00, false);
 
 		Tile famousCurve1 = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
-				3, 3, (byte) 0xFC);
+				3, 3, (byte) 0xFC, false);
 		Tile famousCurve2 = new Tile(3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 8, 8,
-				9, 9, (byte) 0xF0);
+				9, 9, (byte) 0xF0, false);
 		Tile famousCurve3 = new Tile(10, 10, 11, 12, 12, 13, 14, 14, 15, 16,
-				16, 16, 16, 16, 16, 16, (byte) 0xE8);
+				16, 16, 16, 16, 16, 16, (byte) 0xE8, false);
 		Tile famousCurve4 = new Tile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4,
-				5, 6, (byte) 0xE0);
+				5, 6, (byte) 0xE0, false);
 		Tile famousCurve5 = new Tile(7, 8, 10, 11, 13, 14, 16, 16, 16, 16, 16,
-				16, 16, 16, 16, 16, (byte) 0xD8);
+				16, 16, 16, 16, 16, (byte) 0xD8, false);
 		Tile famousCurve6 = new Tile(0, 0, 0, 0, 0, 0, 0, 2, 4, 6, 8, 11, 14,
-				16, 16, 16, (byte) 0xD0);
+				16, 16, 16, (byte) 0xD0, false);
 		Tile famousCurve7 = new Tile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
-				8, 16, (byte) 0xC4);
+				8, 16, (byte) 0xC4, false);
 
 		addTile(lowSteepSlope, 10, 1);
 		addTile(lowSteepSlope2, 11, 1);
@@ -123,6 +123,8 @@ public class TestLevel extends AbstractLevel {
 		drawRange(0, 255, 0, 0, full);
 
 		drawRange(54, 255, 1, 1, lowFlat);
+		
+		drawRange(60, 60, 1, 200, full);
 
 		drawRange(6, 25, 8, 8, halfFlat);
 		drawRange(1, 9, 11, 11, halfFlat);
