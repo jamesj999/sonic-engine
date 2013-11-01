@@ -34,7 +34,7 @@ public abstract class AbstractSprite implements Sprite {
 	protected int height;
 
 	protected final List<SensorLine> terrainSensorLines = new ArrayList<SensorLine>();
-	
+
 	protected SensorLine wallSensorLine;
 
 	protected byte gravity = 56;
@@ -55,11 +55,23 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public final short getCentreX() {
-		return (short) Math.round(xPixel + (width / 2));
+		return (short) (xPixel + (width / 2));
 	}
 
 	public final short getCentreY() {
-		return (short) Math.round(yPixel - (height / 2));
+		return (short) (yPixel - (height / 2));
+	}
+
+	@Override
+	public void setCentreX(short x) {
+		this.xPixel = (short) (x - (width / 2));
+		this.xSubpixel = (short) 0;
+	}
+
+	@Override
+	public void setCentreY(short y) {
+		this.yPixel = (short) (y + (width / 2));
+		this.ySubpixel = (short) 0;
 	}
 
 	public final short getX() {
@@ -182,7 +194,7 @@ public abstract class AbstractSprite implements Sprite {
 	public List<SensorLine> getTerrainSensorLines() {
 		return terrainSensorLines;
 	}
-	
+
 	public SensorLine getWallSensorLine() {
 		return wallSensorLine;
 	}

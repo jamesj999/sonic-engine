@@ -10,7 +10,7 @@ public class Sonic extends AbstractPlayableSprite {
 	public Sonic(String code, short x, short y) {
 		super(code, x, y);
 		// width in pixels
-		setWidth(28);
+		setWidth(20);
 		setHeight(40);
 	}
 
@@ -43,15 +43,13 @@ public class Sonic extends AbstractPlayableSprite {
 		maxRoll = 4096;
 		rollHeight = 30;
 		runHeight = 40;
-		// slopeRunning = 1;
-		// slopeRolling = 0.078125d;
 	}
 
 	@Override
 	protected void createSensorLines() {
 		// Terrain sensors
-		terrainSensorLines.add(new SensorLine(this, 9, -36, 36, false));
-		terrainSensorLines.add(new SensorLine(this, -9, -36, 36, false));
+		terrainSensorLines.add(new SensorLine(this, 9, -20, 20, false));
+		terrainSensorLines.add(new SensorLine(this, -9, -20, 20, false));
 
 		// Wall Sensors
 		wallSensorLine = new SensorLine(this, -10, -4, 20, true);

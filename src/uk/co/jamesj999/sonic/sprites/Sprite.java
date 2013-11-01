@@ -19,6 +19,9 @@ public interface Sprite {
 	public short getCentreX();
 	public short getCentreY();
 	
+	public void setCentreX(short x);
+	public void setCentreY(short y);
+	
 	public short getX();
 	public void setX(short x);
 	

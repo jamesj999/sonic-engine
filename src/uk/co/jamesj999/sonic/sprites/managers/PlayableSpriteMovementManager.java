@@ -86,18 +86,32 @@ public class PlayableSpriteMovementManager extends
 				moveY = false;
 			}
 		}
+
+		// short yMoved;
 		if (moveY) {
 			sprite.move();
+			// yMoved = (short) (sprite.getYSpeed() / 256);
 		} else {
-			sprite.setY((short) (realHeight + 16 + (sprite.getHeight() / 2)));
+			// yMoved = (short) -(sprite.getY() - (realHeight + 16 + (sprite
+			// .getHeight() / 2)));
+			// No fucking clue where the +4 comes from...
+			sprite.setY((short) (realHeight + 16 + (sprite.getHeight() / 2) + 4));
 			sprite.move(sprite.getXSpeed(), (short) 0);
-
 		}
-		
-		short wallPosition = terrainCollisionManager.calculateWallPosition(sprite);
-		System.out.println(wallPosition);
-		if(wallPosition > -1) {
-			sprite.setX(wallPosition);
+
+		// System.out.println(yMoved);
+		short wallPosition = terrainCollisionManager
+				.calculateWallPosition(sprite);
+
+		// System.out.println(wallPosition);
+		if (wallPosition > -1) {
+			// if (!sprite.getAir()) {
+			// sprite.setY((short) (sprite.getY() - yMoved));
+			// }
+			sprite.setGSpeed((short) 0);
+			sprite.setXSpeed((short) 0);
+			sprite.setCentreX(wallPosition);
+			// calculateXYFromGSpeed(sprite);
 		}
 
 		// Temporary 'death' detection just resets X/Y of sprite.
@@ -194,7 +208,7 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	/**
-	 * Causes current sprite to jump. Only to be used when sprite is in the air.
+	 * Causes current sprite to jump. Only to be used when sprite on the ground.
 	 * 
 	 * @param sprite
 	 *            The sprite in question
@@ -303,6 +317,9 @@ public class PlayableSpriteMovementManager extends
 		if (down && !sprite.getAir() && !sprite.getRolling()
 				&& (gSpeed > minStartRollSpeed || gSpeed < -minStartRollSpeed)) {
 			sprite.setRolling(true);
+			// Return here so that we don't immediately stop rolling (although
+			// we shouldn't anyway).
+			return;
 		}
 
 		// If we're rolling and our ground speed is less than the minimum roll

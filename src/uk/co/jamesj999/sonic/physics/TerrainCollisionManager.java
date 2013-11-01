@@ -24,10 +24,18 @@ public class TerrainCollisionManager {
 		if (wallPos == -1) {
 			return wallPos;
 		} else {
-			if (((AbstractPlayableSprite) sprite).getGSpeed() > 0) {
+			/**
+			 * I anticipate that in the future there will be a better way of
+			 * working out which way sonic is facing. Since the graphics will be
+			 * implemented, the engine will need to know even if the gSpeed is
+			 * 0. Therefore, this will need changing at that point. TODO
+			 */
+			if (sprite.getLeftX() < wallPos) {
 				return (short) (wallPos - 11);
-			} else {
+			} else if (sprite.getRightX() > wallPos) {
 				return (short) (wallPos + 11);
+			} else {
+				return -1;
 			}
 		}
 	}
