@@ -33,6 +33,10 @@ public class DebugRenderer {
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {
+				renderer.draw(
+						"Mode: "
+								+ ((AbstractPlayableSprite) sprite)
+										.getRunningMode(), 2, 103);
 				if (((AbstractPlayableSprite) sprite).getAir()) {
 					renderer.draw("Air", 2, 90);
 				}
@@ -49,8 +53,9 @@ public class DebugRenderer {
 			renderer.draw(
 					"ySpeed:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
 					2, 51);
-			renderer.draw("Angle:"
-					+ ((AbstractPlayableSprite) sprite).getAngle(), 2, 38);
+			renderer.draw(
+					"Angle:" + ((AbstractPlayableSprite) sprite).getAngle(), 2,
+					38);
 			StringBuilder xString = new StringBuilder(Integer.toHexString(
 					sprite.getX()).toUpperCase());
 			StringBuilder yString = new StringBuilder(Integer.toHexString(

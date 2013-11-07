@@ -261,7 +261,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	public void setRunningMode(SpriteRunningMode runningMode) {
 		this.runningMode = runningMode;
+		updateSensorLinesForRunningMode(runningMode);
 	}
+	
+	protected abstract void updateSensorLinesForRunningMode(SpriteRunningMode runningMode);
 
 	/**
 	 * Causes the sprite to update its position history as we are now at the end

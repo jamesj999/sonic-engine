@@ -41,6 +41,13 @@ public class SensorLine {
 		this.horizontal = horizontal;
 	}
 
+	public void updateParameters(int x, int y, int length, boolean horizontal) {
+		this.x = (byte) x;
+		this.y = (byte) y;
+		this.length = (byte) length;
+		this.horizontal = horizontal;
+	}
+
 	public short getHeight() {
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
@@ -140,27 +147,32 @@ public class SensorLine {
 		if (((AbstractPlayableSprite) sprite).getGSpeed() > 0) {
 			if (lowestRealX > -1) {
 				System.out.println("\n\n>>>>COLLISION<<<<");
-				System.out.println("Sonic: " + spriteX + ","
-						+ spriteY);
+				System.out.println("Sonic: " + spriteX + "," + spriteY);
 				System.out.println("Me: " + x + "," + y);
 				System.out.println("Scanning: " + startX + "-" + endX + ","
 						+ startY + "," + endY);
 				System.out.println("Result: " + lowestRealX);
 			}
+			graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
+					-1, 1, 0, 0, lowestRealX - 5, spriteY + y - 5,
+					lowestRealX + 5, spriteY + y + 5));
 			return lowestRealX;
-		} else if (((AbstractPlayableSprite) sprite).getGSpeed() == 0) {
-			// System.out.println("Result: -1");
-			return -1;
+			// This has been removed because it breaks wall collisions whilst in
+			// the air... (Gspeed can be 0 in this case)
+			// } else if (((AbstractPlayableSprite) sprite).getGSpeed() == 0) {
+			// return -1;
 		} else {
 			if (highestRealX > -1) {
 				System.out.println("\n\n>>>>COLLISION<<<<");
-				System.out.println("Sonic: " + spriteX + ","
-						+ spriteY);
+				System.out.println("Sonic: " + spriteX + "," + spriteY);
 				System.out.println("Me: " + x + "," + y);
 				System.out.println("Scanning: " + startX + "-" + endX + ","
 						+ startY + "," + endY);
 				System.out.println("Result: " + highestRealX);
 			}
+			graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
+					-1, 1, 0, 0, highestRealX - 5, spriteY + y - 5,
+					highestRealX + 5, spriteY + y + 5));
 			return highestRealX;
 		}
 	}

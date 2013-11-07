@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.sprites.managers;
 
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
 
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
@@ -42,7 +43,16 @@ public class PlayableSpriteMovementManager extends
 	 */
 	@Override
 	public void handleMovement(boolean left, boolean right, boolean down,
-			boolean jump) {
+			boolean jump, boolean testKey) {
+
+		// A simple way to test our running modes...
+		if (testKey) {
+			if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
+				sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
+			} else {
+				sprite.setRunningMode(SpriteRunningMode.GROUND);
+			}
+		}
 		// First thing to do is calculate whether or not to start/stop rolling.
 		// If we are in the air, the roll status cannot change, so we don't need
 		// to call this method
@@ -56,6 +66,30 @@ public class PlayableSpriteMovementManager extends
 		short realHeight = terrainCollisionManager
 				.calculateTerrainHeight(sprite);
 		short height = (short) (realHeight % 16);
+
+		// Can't calculate wall position early because we need to do it at the
+		// end of the tick to ensure we haven't caused a collision during the
+		// tick.
+
+		// Work out if the wall is on the left or right. If so, we should not
+		// allow any movement in that direction. For now, disable that direction
+		// button for this tick. This *may* cause issues in the future, so keep
+		// an eye on it //TODO
+
+		// Shouldn't need any of this rubbish - the wall collision should 'pop'
+		// sonic out of the wall at the end of the tick and before drawing.
+
+		// boolean wallCollisionLeft = false;
+		// boolean wallCollisionRight = false;
+		// if (wallPosition < -1) {
+		// if (sprite.getLeftX() < wallPosition) {
+		// right = false;
+		// wallCollisionRight = true;
+		// } else if (sprite.getRightX() > wallPosition) {
+		// left = false;
+		// wallCollisionLeft = true;
+		// }
+		// }
 
 		// Extra handling for jumps. If we have jumped recently we need to check
 		// the status of the jump button:
@@ -87,23 +121,9 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 
-		// short yMoved;
-		if (moveY) {
-			sprite.move();
-			// yMoved = (short) (sprite.getYSpeed() / 256);
-		} else {
-			// yMoved = (short) -(sprite.getY() - (realHeight + 16 + (sprite
-			// .getHeight() / 2)));
-			// No fucking clue where the +4 comes from...
-			sprite.setY((short) (realHeight + 16 + (sprite.getHeight() / 2) + 4));
-			sprite.move(sprite.getXSpeed(), (short) 0);
-		}
-
-		// System.out.println(yMoved);
 		short wallPosition = terrainCollisionManager
 				.calculateWallPosition(sprite);
 
-		// System.out.println(wallPosition);
 		if (wallPosition > -1) {
 			// if (!sprite.getAir()) {
 			// sprite.setY((short) (sprite.getY() - yMoved));
@@ -114,6 +134,17 @@ public class PlayableSpriteMovementManager extends
 			// calculateXYFromGSpeed(sprite);
 		}
 
+		// short yMoved;
+		if (moveY) {
+			sprite.move();
+			// yMoved = (short) (sprite.getYSpeed() / 256);
+		} else {
+			// yMoved = (short) -(sprite.getY() - (realHeight + 16 + (sprite
+			// .getHeight() / 2)));
+			sprite.setY((short) (realHeight + 20 + (sprite.getHeight() / 2)));
+			sprite.move(sprite.getXSpeed(), (short) 0);
+		}
+
 		// Temporary 'death' detection just resets X/Y of sprite.
 		if (sprite.getY() <= 0) {
 			sprite.setX((short) 50);
@@ -122,11 +153,6 @@ public class PlayableSpriteMovementManager extends
 			sprite.setYSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
 		}
-	}
-
-	@Override
-	public void handleCollisions(boolean up, boolean down) {
-		// TODO remove this old method.
 	}
 
 	/**

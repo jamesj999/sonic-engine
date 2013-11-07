@@ -30,9 +30,6 @@ public class Sonic extends AbstractPlayableSprite {
 		friction = 12;
 		max = 1536;
 		jump = 1664;
-		/**
-		 * Change 'angle' to make sonic walk at an angle!
-		 */
 		angle = 0;
 		slopeRunning = 32;
 		slopeRollingDown = 20;
@@ -47,11 +44,35 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
-		// Terrain sensors
-		terrainSensorLines.add(new SensorLine(this, 9, -20, 20, false));
-		terrainSensorLines.add(new SensorLine(this, -9, -20, 20, false));
+		// Terrain sensors - these seem way too long, but for some reason they
+		// work best this way.
+		terrainSensorLines.add(new SensorLine(this, 9, -40, 40, false));
+		terrainSensorLines.add(new SensorLine(this, -9, -40, 40, false));
 
 		// Wall Sensors
 		wallSensorLine = new SensorLine(this, -10, -4, 20, true);
+	}
+
+	@Override
+	protected void updateSensorLinesForRunningMode(SpriteRunningMode runningMode) {
+		// Sad to hard-code this, but meh.
+		if (terrainSensorLines.size() == 2) {
+			SensorLine terrain1 = terrainSensorLines.get(0);
+			SensorLine terrain2 = terrainSensorLines.get(1);
+			if (runningMode.equals(SpriteRunningMode.LEFTWALL)) {
+				terrain1.updateParameters(-40, 9, 40, true);
+				terrain2.updateParameters(-40, -9, 40, true);
+			} else if (runningMode.equals(SpriteRunningMode.GROUND)) {
+				terrain1.updateParameters(9, -40, 40, false);
+				terrain2.updateParameters(-9, -40, 40, false);
+			}
+
+		} else {
+			// TODO: Change to proper logging
+			System.out
+					.println("ERROR - Couldn't find 2 wall sensors... Wut do? Sprite "
+							+ getCode()
+							+ "'s sensor lines will not update to match new running mode.");
+		}
 	}
 }
