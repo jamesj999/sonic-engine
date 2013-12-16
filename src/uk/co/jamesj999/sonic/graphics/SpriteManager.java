@@ -66,7 +66,12 @@ public class SpriteManager {
 						.getTerrainSensorLines()) {
 					sensorLine.draw();
 				}
-				((AbstractPlayableSprite) sprite).getWallSensorLine().draw();
+				SensorLine wallSensorLine = ((AbstractPlayableSprite) sprite)
+						.getWallSensorLine();
+				if (wallSensorLine != null) {
+					((AbstractPlayableSprite) sprite).getWallSensorLine()
+							.draw();
+				}
 			}
 		}
 	}

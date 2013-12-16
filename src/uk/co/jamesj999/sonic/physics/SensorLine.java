@@ -114,10 +114,13 @@ public class SensorLine {
 
 		Level level = levelManager.getLevel();
 
+		// Starting positions will always be the same
 		int startX = spriteX + x;
 		int startY = spriteY + y;
 		int endX;
 		int endY;
+		// If we are horizontal, we go along the x axis, otherwise we go along
+		// the y axis.
 		if (horizontal) {
 			endX = startX + length;
 			endY = startY;
@@ -126,19 +129,23 @@ public class SensorLine {
 			endY = startY + length;
 		}
 
+		// Returning -1 means we did not find a collision:
 		short highestRealX = -1;
 		short lowestRealX = -1;
 
+		// Iterate through our line checking the tile at each point:
 		for (int checkX = startX; checkX <= endX; checkX++) {
 			// short tileX = (short) Math.floor((double) checkX / 16);
 			for (int checkY = startY; checkY <= endY; checkY++) {
 				Tile tile = level.getTileAt((short) checkX, (short) checkY);
-				if (tile != null && !tile.getJumpThrough()) {
+				if (tile != null
+						&& (!horizontal || (horizontal && !tile
+								.getJumpThrough()))) {
 					if (checkX > highestRealX) {
 						highestRealX = (short) checkX;
-					}
-					if (checkX < lowestRealX || lowestRealX == -1) {
-						lowestRealX = (short) checkX;
+						if (checkX < lowestRealX || lowestRealX == -1) {
+							lowestRealX = (short) checkX;
+						}
 					}
 				}
 			}
@@ -152,10 +159,10 @@ public class SensorLine {
 				System.out.println("Scanning: " + startX + "-" + endX + ","
 						+ startY + "," + endY);
 				System.out.println("Result: " + lowestRealX);
+				graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
+						-1, 1, 0, 0, lowestRealX - 5, spriteY + y - 5,
+						lowestRealX + 5, spriteY + y + 5));
 			}
-			graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
-					-1, 1, 0, 0, lowestRealX - 5, spriteY + y - 5,
-					lowestRealX + 5, spriteY + y + 5));
 			return lowestRealX;
 			// This has been removed because it breaks wall collisions whilst in
 			// the air... (Gspeed can be 0 in this case)
@@ -169,10 +176,10 @@ public class SensorLine {
 				System.out.println("Scanning: " + startX + "-" + endX + ","
 						+ startY + "," + endY);
 				System.out.println("Result: " + highestRealX);
+				graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
+						-1, 1, 0, 0, highestRealX - 5, spriteY + y - 5,
+						highestRealX + 5, spriteY + y + 5));
 			}
-			graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
-					-1, 1, 0, 0, highestRealX - 5, spriteY + y - 5,
-					highestRealX + 5, spriteY + y + 5));
 			return highestRealX;
 		}
 	}

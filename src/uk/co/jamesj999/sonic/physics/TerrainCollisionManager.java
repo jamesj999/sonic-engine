@@ -19,6 +19,9 @@ public class TerrainCollisionManager {
 	}
 
 	public short calculateWallPosition(AbstractSprite sprite) {
+		if (sprite.getWallSensorLine() == null) {
+			return -1;
+		}
 		short wallPos = sprite.getWallSensorLine().getX();
 		// System.out.println(wallPos);
 		if (wallPos == -1) {
@@ -32,7 +35,7 @@ public class TerrainCollisionManager {
 			 */
 			if (sprite.getLeftX() < wallPos) {
 				return (short) (wallPos - 11);
-			} else if (sprite.getRightX() > wallPos) {
+			} else if (sprite.getRightX() >= wallPos) {
 				return (short) (wallPos + 11);
 			} else {
 				return -1;

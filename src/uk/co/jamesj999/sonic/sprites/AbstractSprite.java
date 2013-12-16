@@ -39,11 +39,20 @@ public abstract class AbstractSprite implements Sprite {
 
 	protected byte gravity = 56;
 
+	protected Direction direction;
+
 	protected AbstractSprite(String code, short xPixel, short yPixel) {
 		this.code = code;
 		this.xPixel = xPixel;
 		this.yPixel = yPixel;
+		direction = Direction.RIGHT;
 		createSensorLines();
+	}
+
+	protected AbstractSprite(String code, short xPixel, short yPixel,
+			Direction direction) {
+		this(code, xPixel, yPixel);
+		this.direction = direction;
 	}
 
 	public final String getCode() {
@@ -116,6 +125,16 @@ public abstract class AbstractSprite implements Sprite {
 	@Override
 	public short getRightX() {
 		return (short) (getCentreX() + (getWidth() / 2));
+	}
+
+	@Override
+	public Direction getDirection() {
+		return direction;
+	}
+
+	@Override
+	public void setDirection(Direction direction) {
+		this.direction = direction;
 	}
 
 	public final void setY(short y) {

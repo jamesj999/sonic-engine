@@ -67,29 +67,8 @@ public class PlayableSpriteMovementManager extends
 				.calculateTerrainHeight(sprite);
 		short height = (short) (realHeight % 16);
 
-		// Can't calculate wall position early because we need to do it at the
-		// end of the tick to ensure we haven't caused a collision during the
-		// tick.
-
-		// Work out if the wall is on the left or right. If so, we should not
-		// allow any movement in that direction. For now, disable that direction
-		// button for this tick. This *may* cause issues in the future, so keep
-		// an eye on it //TODO
-
-		// Shouldn't need any of this rubbish - the wall collision should 'pop'
-		// sonic out of the wall at the end of the tick and before drawing.
-
-		// boolean wallCollisionLeft = false;
-		// boolean wallCollisionRight = false;
-		// if (wallPosition < -1) {
-		// if (sprite.getLeftX() < wallPosition) {
-		// right = false;
-		// wallCollisionRight = true;
-		// } else if (sprite.getRightX() > wallPosition) {
-		// left = false;
-		// wallCollisionLeft = true;
-		// }
-		// }
+		// DO NOT ADD ANYTHING HERE THAT WORKS OUT WHICH WAY WE'RE FACING AND
+		// LIMITS THINGS BASED ON THIS. IT'S NOT THE WAY TO DO IT!
 
 		// Extra handling for jumps. If we have jumped recently we need to check
 		// the status of the jump button:
@@ -121,6 +100,10 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 
+		if (realHeight > -1) {
+			moveSprite(moveY, realHeight);
+		}
+
 		short wallPosition = terrainCollisionManager
 				.calculateWallPosition(sprite);
 
@@ -134,15 +117,8 @@ public class PlayableSpriteMovementManager extends
 			// calculateXYFromGSpeed(sprite);
 		}
 
-		// short yMoved;
-		if (moveY) {
-			sprite.move();
-			// yMoved = (short) (sprite.getYSpeed() / 256);
-		} else {
-			// yMoved = (short) -(sprite.getY() - (realHeight + 16 + (sprite
-			// .getHeight() / 2)));
-			sprite.setY((short) (realHeight + 20 + (sprite.getHeight() / 2)));
-			sprite.move(sprite.getXSpeed(), (short) 0);
+		if (wallPosition > -1 || realHeight == -1) {
+			moveSprite(moveY, realHeight);
 		}
 
 		// Temporary 'death' detection just resets X/Y of sprite.
@@ -152,6 +128,18 @@ public class PlayableSpriteMovementManager extends
 			sprite.setXSpeed((short) 0);
 			sprite.setYSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
+		}
+	}
+
+	private void moveSprite(boolean moveY, short realHeight) {
+		if (moveY) {
+			sprite.move();
+			// yMoved = (short) (sprite.getYSpeed() / 256);
+		} else {
+			// yMoved = (short) -(sprite.getY() - (realHeight + 16 + (sprite
+			// .getHeight() / 2)));
+			sprite.setY((short) (realHeight + 20 + (sprite.getHeight() / 2)));
+			sprite.move(sprite.getXSpeed(), (short) 0);
 		}
 	}
 
