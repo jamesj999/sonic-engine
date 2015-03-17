@@ -108,6 +108,7 @@ public class PlayableSpriteMovementManager extends
         short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
 
         if(wallCollisionXPos > -1) {
+            sprite.setY(beforeTerrainCollisionY);
             System.out.println("Collision position: " + wallCollisionXPos);
             // Sprite has collided with a wall, we need to pop it out and stop it moving before rendering.
             // TODO: Change this logic once we store the direction sonic is facing...
@@ -120,7 +121,6 @@ public class PlayableSpriteMovementManager extends
                 System.out.println("Left");
                 sprite.setX((short) (wallCollisionXPos + 1));
             }
-            sprite.setY(beforeTerrainCollisionY);
             sprite.setXSpeed((short) 0);
             sprite.setGSpeed((short) 0);
         }
