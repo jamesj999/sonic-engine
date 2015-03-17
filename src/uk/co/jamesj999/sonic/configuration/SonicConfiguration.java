@@ -69,7 +69,11 @@ public enum SonicConfiguration {
 	/**
 	 * Code of the sprite of the main playable character.
 	 */
-	MAIN_CHARACTER_CODE("sonic");
+	MAIN_CHARACTER_CODE("sonic"),
+    /**
+     * Whether to display debugging information on screen.
+     */
+    DEBUG_ENABLED(true);
 
 	private Object value;
 

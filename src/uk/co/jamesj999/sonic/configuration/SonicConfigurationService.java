@@ -54,6 +54,15 @@ public class SonicConfigurationService {
 		}
 	}
 
+    public boolean getBoolean(SonicConfiguration sonicConfiguration) {
+        Object value = sonicConfiguration.getValue();
+        if(value instanceof Boolean) {
+            return ((Boolean) value).booleanValue();
+        } else {
+            return Boolean.parseBoolean(getString(sonicConfiguration));
+        }
+    }
+
 	public synchronized static SonicConfigurationService getInstance() {
 		if (sonicConfigurationService == null) {
 			sonicConfigurationService = new SonicConfigurationService();

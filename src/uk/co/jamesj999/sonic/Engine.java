@@ -54,6 +54,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private double realHeight = configService
 			.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
 
+    private boolean debugEnabled = configService.getBoolean(SonicConfiguration.DEBUG_ENABLED);
+
 	// TODO move this into a manager
 	private LevelManager levelManager = LevelManager.getInstance();
 
@@ -189,7 +191,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
-		debugRenderer.renderDebugInfo();
+        if(debugEnabled) {
+            debugRenderer.renderDebugInfo();
+        }
 	}
 
 	/**
