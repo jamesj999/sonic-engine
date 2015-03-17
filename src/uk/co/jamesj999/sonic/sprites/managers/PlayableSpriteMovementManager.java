@@ -81,6 +81,9 @@ public class PlayableSpriteMovementManager extends
 			calculateRoll(sprite, down);
 		}
 
+        // We'll need this when we calculate the wall position to undo any terrain movements inside a wall:
+        short beforeTerrainCollisionY = sprite.getY();
+
         // Let's see if the terrain height has changed:
         short terrainHeight = terrainCollisionManager.calculateTerrainHeight(sprite);
 
@@ -117,6 +120,7 @@ public class PlayableSpriteMovementManager extends
                 System.out.println("Left");
                 sprite.setX((short) (wallCollisionXPos + 1));
             }
+            sprite.setY(beforeTerrainCollisionY);
             sprite.setXSpeed((short) 0);
             sprite.setGSpeed((short) 0);
         }
@@ -326,7 +330,7 @@ public class PlayableSpriteMovementManager extends
 
 	/**
 	 * Causes current sprite to jump. Only to be used when sprite on the ground.
-	 * 
+	 *
 	 * @param sprite
 	 *            The sprite in question
 	 */
@@ -344,7 +348,7 @@ public class PlayableSpriteMovementManager extends
 	/**
 	 * Calculates air movement for sprite based on gravity and current
 	 * left/right keypresses. Only to be used when sprite is in the air.
-	 * 
+	 *
 	 * @param sprite
 	 *            The sprite in question
 	 * @param left
@@ -388,7 +392,7 @@ public class PlayableSpriteMovementManager extends
 	 * only be used in the frame the sprite regains contact with the ground,
 	 * that is when at the start of the tick the sprite is in the air, but a
 	 * height >0 is returned from the Terrain Collision Manager.
-	 * 
+	 *
 	 * @param sprite
 	 *            The sprite in question
 	 */
@@ -448,7 +452,7 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	/**
-	 * 
+	 *
 	 * @param sprite
 	 *            The sprite in question
 	 * @return The correct angle, based on 360 degree rotation. Convert this to
