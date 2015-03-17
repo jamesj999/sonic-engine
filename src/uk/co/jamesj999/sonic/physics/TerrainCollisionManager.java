@@ -22,25 +22,7 @@ public class TerrainCollisionManager {
 		if (sprite.getWallSensorLine() == null) {
 			return -1;
 		}
-		short wallPos = sprite.getWallSensorLine().getX();
-		// System.out.println(wallPos);
-		if (wallPos == -1) {
-			return wallPos;
-		} else {
-			/**
-			 * I anticipate that in the future there will be a better way of
-			 * working out which way sonic is facing. Since the graphics will be
-			 * implemented, the engine will need to know even if the gSpeed is
-			 * 0. Therefore, this will need changing at that point. TODO
-			 */
-			if (sprite.getLeftX() < wallPos) {
-				return (short) (wallPos - 11);
-			} else if (sprite.getRightX() >= wallPos) {
-				return (short) (wallPos + 11);
-			} else {
-				return -1;
-			}
-		}
+		return sprite.getWallSensorLine().getX();
 	}
 
 	// private final LevelManager levelManager = LevelManager.getInstance();

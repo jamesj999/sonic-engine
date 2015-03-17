@@ -36,100 +36,203 @@ public class PlayableSpriteMovementManager extends
 		rollDecel = sprite.getRollDecel();
 	}
 
+    @Override
+    public void handleMovement(boolean left, boolean right, boolean down, boolean jump, boolean testKey) {
+        // A simple way to test our running modes...
+        if (testKey) {
+            if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
+                sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
+            } else {
+                sprite.setRunningMode(SpriteRunningMode.GROUND);
+            }
+        }
+
+        short originalX = sprite.getX();
+        short originalY = sprite.getY();
+
+        // First thing to do is run this additional method to find out if the jump button has been released recently
+        // in order to shorten the jump.
+        if (jumpPressed) {
+            jumpHandler(jump);
+        }
+
+        // Next thing to do is calculate movement and acceleration.
+        if(sprite.getAir()) {
+            // Sonic is in the air
+            calculateAirMovement(sprite, left, right);
+        } else {
+            // Sonic is on the ground
+            if (jump && !jumpPressed) {
+                // Commence jump
+                jump(sprite);
+            } else {
+                calculateGSpeed(sprite, left, right);
+                // Since this will update the gSpeed, we now need to update the X/Y from this.
+                calculateXYFromGSpeed(sprite);
+            }
+        }
+
+        // Now, move the sprite as per the air movement or GSpeed rules:
+        sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
+
+        // Has the sprite slowed down enough to stop rolling? Do we need to start rolling?
+        // (Only applicable if not in the air)
+        if (!sprite.getAir()) {
+			calculateRoll(sprite, down);
+		}
+
+        // Let's see if the terrain height has changed:
+        short terrainHeight = terrainCollisionManager.calculateTerrainHeight(sprite);
+
+        if(terrainHeight == -1) {
+            // This means Sonic is now in the air...
+            sprite.setAir(true);
+        } else if(terrainHeight > -1) {
+            // This means that sonic is on the ground
+            if (sprite.getAir() && sprite.getYSpeed() < 0 && (sprite.getCentreY() - (sprite.getHeight() / 2)) < terrainHeight) {
+                // This sprite currently in the air, moving to the ground so we need to reset its X/Y speeds:
+                calculateLanding(sprite);
+            }
+
+            // Check again if we're in the air - we may have just landed.
+            if(!sprite.getAir()) {
+                // TODO: Figure out why the 20 is here...
+                sprite.setY((short) (terrainHeight + 20 + (sprite.getHeight() / 2)));
+            }
+        }
+
+        // Let's see if we have any collisions:
+        short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
+
+        if(wallCollisionXPos > -1) {
+            System.out.println("Collision position: " + wallCollisionXPos);
+            // Sprite has collided with a wall, we need to pop it out and stop it moving before rendering.
+            // TODO: Change this logic once we store the direction sonic is facing...
+            if(sprite.getX() > originalX) {
+                // Moving right
+                System.out.println("Right");
+                sprite.setX((short) (wallCollisionXPos - (sprite.getWidth() / 2) - 1));
+            } else {
+                // Moving left
+                System.out.println("Left");
+                sprite.setX((short) (wallCollisionXPos + (sprite.getWidth() / 2) + 1));
+            }
+            sprite.setXSpeed((short) 0);
+            sprite.setGSpeed((short) 0);
+        }
+
+        // Temporary 'death' detection - just resets X/Y of sprite.
+        if (sprite.getY() <= 0) {
+            sprite.setX((short) 50);
+            sprite.setY((short) 50);
+            sprite.setXSpeed((short) 0);
+            sprite.setYSpeed((short) 0);
+            sprite.setGSpeed((short) 0);
+        }
+    }
+
 	/**
 	 * Calculates next frame of movement for this Sprite. Since this is a
 	 * PlayableSprite, we will need the left and right button presses to
 	 * calculate left/right movement.
 	 */
-	@Override
-	public void handleMovement(boolean left, boolean right, boolean down,
-			boolean jump, boolean testKey) {
-
-		// A simple way to test our running modes...
-		if (testKey) {
-			if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
-				sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
-			} else {
-				sprite.setRunningMode(SpriteRunningMode.GROUND);
-			}
-		}
-		// First thing to do is calculate whether or not to start/stop rolling.
-		// If we are in the air, the roll status cannot change, so we don't need
-		// to call this method
-		if (!sprite.getAir()) {
-			calculateRoll(sprite, down);
-		}
-
-		// a height of -1 indicates no heightmap was found meaning we're not on
-		// a solid tile
-		// we also ignore heights of 0 because they are meaningless
-		short realHeight = terrainCollisionManager
-				.calculateTerrainHeight(sprite);
-		short height = (short) (realHeight % 16);
-
-		// DO NOT ADD ANYTHING HERE THAT WORKS OUT WHICH WAY WE'RE FACING AND
-		// LIMITS THINGS BASED ON THIS. IT'S NOT THE WAY TO DO IT!
-
-		// Extra handling for jumps. If we have jumped recently we need to check
-		// the status of the jump button:
-		if (jumpPressed) {
-			jumpHandler(jump);
-		}
-
-		boolean moveY = true;
-
-		if (sprite.getAir()) {
-			if (realHeight > -1
-					&& sprite.getYSpeed() < 0
-					&& (sprite.getCentreY() - (sprite.getHeight() / 2)) < realHeight) {
-				calculateLanding(sprite);
-				calculateXYFromGSpeed(sprite);
-			} else {
-				calculateAirMovement(sprite, left, right);
-			}
-		} else {
-			if (jump && !jumpPressed) {
-				jump(sprite);
-			} else if (height <= -1) {
-				sprite.setAir(true);
-				calculateAirMovement(sprite, left, right);
-			} else {
-				calculateGSpeed(sprite, left, right, realHeight);
-				calculateXYFromGSpeed(sprite);
-				moveY = false;
-			}
-		}
-
-		if (realHeight > -1) {
-			moveSprite(moveY, realHeight);
-		}
-
-		short wallPosition = terrainCollisionManager
-				.calculateWallPosition(sprite);
-
-		if (wallPosition > -1) {
-			// if (!sprite.getAir()) {
-			// sprite.setY((short) (sprite.getY() - yMoved));
-			// }
-			sprite.setGSpeed((short) 0);
-			sprite.setXSpeed((short) 0);
-			sprite.setCentreX(wallPosition);
-			// calculateXYFromGSpeed(sprite);
-		}
-
-		if (wallPosition > -1 || realHeight == -1) {
-			moveSprite(moveY, realHeight);
-		}
-
-		// Temporary 'death' detection just resets X/Y of sprite.
-		if (sprite.getY() <= 0) {
-			sprite.setX((short) 50);
-			sprite.setY((short) 50);
-			sprite.setXSpeed((short) 0);
-			sprite.setYSpeed((short) 0);
-			sprite.setGSpeed((short) 0);
-		}
-	}
+//	@Override
+//	public void handleMovement(boolean left, boolean right, boolean down,
+//			boolean jump, boolean testKey) {
+//
+//		// A simple way to test our running modes...
+//		if (testKey) {
+//			if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
+//				sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
+//			} else {
+//				sprite.setRunningMode(SpriteRunningMode.GROUND);
+//			}
+//		}
+//		// First thing to do is calculate whether or not to start/stop rolling.
+//		// If we are in the air, the roll status cannot change, so we don't need
+//		// to call this method
+//		if (!sprite.getAir()) {
+//			calculateRoll(sprite, down);
+//		}
+//
+//		// a height of -1 indicates no heightmap was found meaning we're not on
+//		// a solid tile
+//		// we also ignore heights of 0 because they are meaningless
+//		short realHeight = terrainCollisionManager
+//				.calculateTerrainHeight(sprite);
+//		short height = (short) (realHeight % 16);
+//
+//		// DO NOT ADD ANYTHING HERE THAT WORKS OUT WHICH WAY WE'RE FACING AND
+//		// LIMITS THINGS BASED ON THIS. IT'S NOT THE WAY TO DO IT!
+//
+//		// Extra handling for jumps. If we have jumped recently we need to check
+//		// the status of the jump button:
+//		if (jumpPressed) {
+//			jumpHandler(jump);
+//		}
+//
+//		boolean moveY = true;
+//
+//		if (sprite.getAir()) {
+//            // We are in the air
+//			if (realHeight > -1
+//					&& sprite.getYSpeed() < 0
+//					&& (sprite.getCentreY() - (sprite.getHeight() / 2)) < realHeight) {
+//                // We have landed - calculate correct speeds
+//				calculateLanding(sprite);
+//				calculateXYFromGSpeed(sprite);
+//			} else {
+//                // We are still in the air - calculate air movement.
+//				calculateAirMovement(sprite, left, right);
+//			}
+//		} else {
+//            // Engine currently thinks we are on the ground
+//			if (jump && !jumpPressed) {
+//                // Commence jump
+//				jump(sprite);
+//			} else if (height <= -1) {
+//                // We've fallen off a platform - instruct engine that this sprite is now in the air.
+//				sprite.setAir(true);
+//				calculateAirMovement(sprite, left, right);
+//			} else {
+//                // Calculate ground movement.
+//				calculateGSpeed(sprite, left, right, realHeight);
+//				calculateXYFromGSpeed(sprite);
+//				moveY = false;
+//			}
+//		}
+//
+//		if (realHeight > -1) {
+//            // Terrain height has changed. Adjust Y accordingly.
+//			moveSprite(moveY, realHeight);
+//		}
+//
+//		short wallPosition = terrainCollisionManager
+//				.calculateWallPosition(sprite);
+//
+//		if (wallPosition > -1) {
+//			// if (!sprite.getAir()) {
+//			// sprite.setY((short) (sprite.getY() - yMoved));
+//			// }
+//			sprite.setGSpeed((short) 0);
+//			sprite.setXSpeed((short) 0);
+//			sprite.setCentreX(wallPosition);
+//			// calculateXYFromGSpeed(sprite);
+//		}
+//
+//		if (wallPosition > -1 || realHeight == -1) {
+//			moveSprite(moveY, realHeight);
+//		}
+//
+//		// Temporary 'death' detection just resets X/Y of sprite.
+//		if (sprite.getY() <= 0) {
+//			sprite.setX((short) 50);
+//			sprite.setY((short) 50);
+//			sprite.setXSpeed((short) 0);
+//			sprite.setYSpeed((short) 0);
+//			sprite.setGSpeed((short) 0);
+//		}
+//	}
 
 	private void moveSprite(boolean moveY, short realHeight) {
 		if (moveY) {
@@ -147,7 +250,7 @@ public class PlayableSpriteMovementManager extends
 	 * Will calculate gSpeed for Sprite based on current terrain and left/right
 	 * keypresses. Only to be used when sprite is on ground. This will only
 	 * calculate gSpeed, X/Y speeds must be calculated afterwards.
-	 * 
+	 *
 	 * @param sprite
 	 *            The sprite in question
 	 * @param left
@@ -156,7 +259,7 @@ public class PlayableSpriteMovementManager extends
 	 *            Whether or not the right key is pressed
 	 */
 	private void calculateGSpeed(AbstractPlayableSprite sprite, boolean left,
-			boolean right, short realHeight) {
+			boolean right) {
 		short gSpeed = sprite.getGSpeed();
 		int angle = calculateAngle(sprite);
 

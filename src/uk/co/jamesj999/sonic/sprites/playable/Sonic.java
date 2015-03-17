@@ -44,10 +44,9 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
-		// Terrain sensors - these seem way too long, but for some reason they
-		// work best this way.
-		terrainSensorLines.add(new SensorLine(this, 9, -40, 40, false));
-		terrainSensorLines.add(new SensorLine(this, -9, -40, 40, false));
+        // Terrain Sensors
+		terrainSensorLines.add(new SensorLine(this, 9, -36, 36, false));
+		terrainSensorLines.add(new SensorLine(this, -9, -36, 36, false));
 
 		// Wall Sensors
 		wallSensorLine = new SensorLine(this, -10, -4, 20, true);

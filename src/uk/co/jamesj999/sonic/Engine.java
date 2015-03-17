@@ -77,11 +77,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL graphics context
 		glu = new GLU(); // get GL Utilities
 		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set background (clear) color
-		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smoothes out
+		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smooths out
 									// lighting
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 30, (short) 0);
+				(short) 100, (short) 100);
 		spriteManager.addSprite(sonic);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
