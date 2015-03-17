@@ -111,11 +111,11 @@ public class PlayableSpriteMovementManager extends
             if(sprite.getX() > originalX) {
                 // Moving right
                 System.out.println("Right");
-                sprite.setX((short) (wallCollisionXPos - (sprite.getWidth() / 2) - 1));
+                sprite.setX((short) (wallCollisionXPos - (sprite.getWidth()) - 1));
             } else {
                 // Moving left
                 System.out.println("Left");
-                sprite.setX((short) (wallCollisionXPos + (sprite.getWidth() / 2) + 1));
+                sprite.setX((short) (wallCollisionXPos + 1));
             }
             sprite.setXSpeed((short) 0);
             sprite.setGSpeed((short) 0);
