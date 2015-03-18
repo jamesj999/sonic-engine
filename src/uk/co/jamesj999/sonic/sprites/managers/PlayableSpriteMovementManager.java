@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
+import uk.co.jamesj999.sonic.sprites.Direction;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
 
@@ -80,13 +81,67 @@ public class PlayableSpriteMovementManager extends
         if (!sprite.getAir()) {
 			calculateRoll(sprite, down);
 		}
+/**
+ * If there is a terrain collision, it could be because we're in a wall but it could be because we're running up a slope.
+ * Move according to the terrain collision, then check if there is a wall collision. If there is, we need to undo the terrain collision.
+ */
 
-        // We'll need this when we calculate the wall position to undo any terrain movements inside a wall:
-        short beforeTerrainCollisionY = sprite.getY();
-
-        // Let's see if the terrain height has changed:
+        // Check if there are any terrain collisions:
         short terrainHeight = terrainCollisionManager.calculateTerrainHeight(sprite);
+        short yBeforeTerrainCollision = sprite.getY();
+        doTerrainCollision(sprite, terrainHeight);
 
+        // Check if there are any wall collisions:
+        short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
+        doWallCollision(sprite, wallCollisionXPos);
+
+        if(terrainHeight > -1 && wallCollisionXPos > -1) {
+            sprite.setY(yBeforeTerrainCollision);
+        }
+
+        // This won't work when graphics are involved...
+        if(sprite.getX() > originalX) {
+            sprite.setDirection(Direction.RIGHT);
+        } else if(sprite.getX() < originalX) {
+            sprite.setDirection(Direction.LEFT);
+        }
+
+        // Temporary 'death' detection - just resets X/Y of sprite.
+        if (sprite.getY() <= 0) {
+            sprite.setX((short) 50);
+            sprite.setY((short) 50);
+            sprite.setXSpeed((short) 0);
+            sprite.setYSpeed((short) 0);
+            sprite.setGSpeed((short) 0);
+        }
+    }
+
+    private void doWallCollision (AbstractPlayableSprite sprite) {
+        doWallCollision(sprite, terrainCollisionManager.calculateWallPosition(sprite));
+    }
+
+    private void doWallCollision(AbstractPlayableSprite sprite, short wallCollisionXPos) {
+        if(wallCollisionXPos > -1) {
+            System.out.println("Collision position: " + wallCollisionXPos);
+            // Sprite has collided with a wall, we need to pop it out and stop it moving before rendering.
+            // TODO: Change this logic once we store the direction sonic is facing...
+            if(Direction.RIGHT.equals(sprite.getDirection())) {
+                // Moving right
+                sprite.setX((short) (wallCollisionXPos - (sprite.getWidth()) -1));
+            } else if(Direction.LEFT.equals(sprite.getDirection())) {
+                // Moving left
+                sprite.setX((short) (wallCollisionXPos + 1));
+            }
+            sprite.setXSpeed((short) 0);
+            sprite.setGSpeed((short) 0);
+        }
+    }
+
+    private void doTerrainCollision (AbstractPlayableSprite sprite) {
+        doTerrainCollision(sprite, terrainCollisionManager.calculateTerrainHeight(sprite));
+    }
+
+    private void doTerrainCollision(AbstractPlayableSprite sprite, short terrainHeight) {
         if(terrainHeight == -1) {
             // This means Sonic is now in the air...
             sprite.setAir(true);
@@ -103,140 +158,7 @@ public class PlayableSpriteMovementManager extends
                 sprite.setY((short) (terrainHeight + 20 + (sprite.getHeight() / 2)));
             }
         }
-
-        // Let's see if we have any collisions:
-        short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
-
-        if(wallCollisionXPos > -1) {
-            sprite.setY(beforeTerrainCollisionY);
-            System.out.println("Collision position: " + wallCollisionXPos);
-            // Sprite has collided with a wall, we need to pop it out and stop it moving before rendering.
-            // TODO: Change this logic once we store the direction sonic is facing...
-            if(sprite.getX() > originalX) {
-                // Moving right
-                System.out.println("Right");
-                sprite.setX((short) (wallCollisionXPos - (sprite.getWidth()) - 1));
-            } else {
-                // Moving left
-                System.out.println("Left");
-                sprite.setX((short) (wallCollisionXPos + 1));
-            }
-            sprite.setXSpeed((short) 0);
-            sprite.setGSpeed((short) 0);
-        }
-
-        // Temporary 'death' detection - just resets X/Y of sprite.
-        if (sprite.getY() <= 0) {
-            sprite.setX((short) 50);
-            sprite.setY((short) 50);
-            sprite.setXSpeed((short) 0);
-            sprite.setYSpeed((short) 0);
-            sprite.setGSpeed((short) 0);
-        }
     }
-
-	/**
-	 * Calculates next frame of movement for this Sprite. Since this is a
-	 * PlayableSprite, we will need the left and right button presses to
-	 * calculate left/right movement.
-	 */
-//	@Override
-//	public void handleMovement(boolean left, boolean right, boolean down,
-//			boolean jump, boolean testKey) {
-//
-//		// A simple way to test our running modes...
-//		if (testKey) {
-//			if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
-//				sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
-//			} else {
-//				sprite.setRunningMode(SpriteRunningMode.GROUND);
-//			}
-//		}
-//		// First thing to do is calculate whether or not to start/stop rolling.
-//		// If we are in the air, the roll status cannot change, so we don't need
-//		// to call this method
-//		if (!sprite.getAir()) {
-//			calculateRoll(sprite, down);
-//		}
-//
-//		// a height of -1 indicates no heightmap was found meaning we're not on
-//		// a solid tile
-//		// we also ignore heights of 0 because they are meaningless
-//		short realHeight = terrainCollisionManager
-//				.calculateTerrainHeight(sprite);
-//		short height = (short) (realHeight % 16);
-//
-//		// DO NOT ADD ANYTHING HERE THAT WORKS OUT WHICH WAY WE'RE FACING AND
-//		// LIMITS THINGS BASED ON THIS. IT'S NOT THE WAY TO DO IT!
-//
-//		// Extra handling for jumps. If we have jumped recently we need to check
-//		// the status of the jump button:
-//		if (jumpPressed) {
-//			jumpHandler(jump);
-//		}
-//
-//		boolean moveY = true;
-//
-//		if (sprite.getAir()) {
-//            // We are in the air
-//			if (realHeight > -1
-//					&& sprite.getYSpeed() < 0
-//					&& (sprite.getCentreY() - (sprite.getHeight() / 2)) < realHeight) {
-//                // We have landed - calculate correct speeds
-//				calculateLanding(sprite);
-//				calculateXYFromGSpeed(sprite);
-//			} else {
-//                // We are still in the air - calculate air movement.
-//				calculateAirMovement(sprite, left, right);
-//			}
-//		} else {
-//            // Engine currently thinks we are on the ground
-//			if (jump && !jumpPressed) {
-//                // Commence jump
-//				jump(sprite);
-//			} else if (height <= -1) {
-//                // We've fallen off a platform - instruct engine that this sprite is now in the air.
-//				sprite.setAir(true);
-//				calculateAirMovement(sprite, left, right);
-//			} else {
-//                // Calculate ground movement.
-//				calculateGSpeed(sprite, left, right, realHeight);
-//				calculateXYFromGSpeed(sprite);
-//				moveY = false;
-//			}
-//		}
-//
-//		if (realHeight > -1) {
-//            // Terrain height has changed. Adjust Y accordingly.
-//			moveSprite(moveY, realHeight);
-//		}
-//
-//		short wallPosition = terrainCollisionManager
-//				.calculateWallPosition(sprite);
-//
-//		if (wallPosition > -1) {
-//			// if (!sprite.getAir()) {
-//			// sprite.setY((short) (sprite.getY() - yMoved));
-//			// }
-//			sprite.setGSpeed((short) 0);
-//			sprite.setXSpeed((short) 0);
-//			sprite.setCentreX(wallPosition);
-//			// calculateXYFromGSpeed(sprite);
-//		}
-//
-//		if (wallPosition > -1 || realHeight == -1) {
-//			moveSprite(moveY, realHeight);
-//		}
-//
-//		// Temporary 'death' detection just resets X/Y of sprite.
-//		if (sprite.getY() <= 0) {
-//			sprite.setX((short) 50);
-//			sprite.setY((short) 50);
-//			sprite.setXSpeed((short) 0);
-//			sprite.setYSpeed((short) 0);
-//			sprite.setGSpeed((short) 0);
-//		}
-//	}
 
 	private void moveSprite(boolean moveY, short realHeight) {
 		if (moveY) {

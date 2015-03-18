@@ -33,6 +33,7 @@ public class DebugRenderer {
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {
+                renderer.draw("Direction: "+((AbstractPlayableSprite) sprite).getDirection(), 2, 120);
 				renderer.draw(
 						"Mode: "
 								+ ((AbstractPlayableSprite) sprite)
