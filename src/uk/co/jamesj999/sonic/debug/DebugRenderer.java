@@ -54,9 +54,14 @@ public class DebugRenderer {
 			renderer.draw(
 					"ySpeed:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
 					2, 51);
-			renderer.draw(
-					"Angle:" + ((AbstractPlayableSprite) sprite).getAngle(), 2,
-					38);
+            // DECIMAL VERSION:
+            renderer.draw("Angle:" + (((AbstractPlayableSprite) sprite).getAngle()), 2, 38);
+
+            // HEX VERSION:
+//			renderer.draw(
+//					"Angle:" + Integer.toHexString(((AbstractPlayableSprite) sprite).getAngle()), 2,
+//					38);
+
 			StringBuilder xString = new StringBuilder(Integer.toHexString(
 					sprite.getX()).toUpperCase());
 			StringBuilder yString = new StringBuilder(Integer.toHexString(

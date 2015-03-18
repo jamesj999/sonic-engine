@@ -153,12 +153,6 @@ public class SensorLine {
 
 		if (((AbstractPlayableSprite) sprite).getGSpeed() > 0) {
 			if (lowestRealX > -1) {
-				System.out.println("\n\n>>>>COLLISION<<<<");
-				System.out.println("Sonic: " + spriteX + "," + spriteY);
-				System.out.println("Me: " + x + "," + y);
-				System.out.println("Scanning: " + startX + "-" + endX + ","
-						+ startY + "," + endY);
-				System.out.println("Result: " + lowestRealX);
 				graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
 						-1, 1, 0, 0, lowestRealX - 5, spriteY + y - 5,
 						lowestRealX + 5, spriteY + y + 5));
@@ -170,12 +164,6 @@ public class SensorLine {
 			// return -1;
 		} else {
 			if (highestRealX > -1) {
-				System.out.println("\n\n>>>>COLLISION<<<<");
-				System.out.println("Sonic: " + spriteX + "," + spriteY);
-				System.out.println("Me: " + x + "," + y);
-				System.out.println("Scanning: " + startX + "-" + endX + ","
-						+ startY + "," + endY);
-				System.out.println("Result: " + highestRealX);
 				graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
 						-1, 1, 0, 0, highestRealX - 5, spriteY + y - 5,
 						highestRealX + 5, spriteY + y + 5));

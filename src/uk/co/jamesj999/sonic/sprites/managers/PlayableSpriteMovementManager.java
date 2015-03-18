@@ -42,7 +42,7 @@ public class PlayableSpriteMovementManager extends
         // A simple way to test our running modes...
         if (testKey) {
             if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
-                sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
+                sprite.setRunningMode(SpriteRunningMode.RIGHTWALL);
             } else {
                 sprite.setRunningMode(SpriteRunningMode.GROUND);
             }
@@ -81,21 +81,24 @@ public class PlayableSpriteMovementManager extends
         if (!sprite.getAir()) {
 			calculateRoll(sprite, down);
 		}
-/**
- * If there is a terrain collision, it could be because we're in a wall but it could be because we're running up a slope.
- * Move according to the terrain collision, then check if there is a wall collision. If there is, we need to undo the terrain collision.
- */
+
+        // Store some attributes in case we need to 'reset' the terrain collision:
+        short yBeforeTerrainCollision = sprite.getY();
+        boolean inAir = sprite.getAir();
+        boolean isRoll = sprite.getRolling();
 
         // Check if there are any terrain collisions:
         short terrainHeight = terrainCollisionManager.calculateTerrainHeight(sprite);
-        short yBeforeTerrainCollision = sprite.getY();
         doTerrainCollision(sprite, terrainHeight);
 
         // Check if there are any wall collisions:
         short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
         doWallCollision(sprite, wallCollisionXPos);
 
+        // If there is a terrain AND wall collision, 'undo' the terrain collision, since we've probably just hit a wall.
         if(terrainHeight > -1 && wallCollisionXPos > -1) {
+            sprite.setAir(inAir);
+            sprite.setRolling(isRoll);
             sprite.setY(yBeforeTerrainCollision);
         }
 
@@ -159,18 +162,6 @@ public class PlayableSpriteMovementManager extends
             }
         }
     }
-
-	private void moveSprite(boolean moveY, short realHeight) {
-		if (moveY) {
-			sprite.move();
-			// yMoved = (short) (sprite.getYSpeed() / 256);
-		} else {
-			// yMoved = (short) -(sprite.getY() - (realHeight + 16 + (sprite
-			// .getHeight() / 2)));
-			sprite.setY((short) (realHeight + 20 + (sprite.getHeight() / 2)));
-			sprite.move(sprite.getXSpeed(), (short) 0);
-		}
-	}
 
 	/**
 	 * Will calculate gSpeed for Sprite based on current terrain and left/right

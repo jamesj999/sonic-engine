@@ -58,14 +58,19 @@ public class Sonic extends AbstractPlayableSprite {
 		if (terrainSensorLines.size() == 2) {
 			SensorLine terrain1 = terrainSensorLines.get(0);
 			SensorLine terrain2 = terrainSensorLines.get(1);
-			if (runningMode.equals(SpriteRunningMode.LEFTWALL)) {
-				terrain1.updateParameters(-40, 9, 40, true);
-				terrain2.updateParameters(-40, -9, 40, true);
-			} else if (runningMode.equals(SpriteRunningMode.GROUND)) {
-				terrain1.updateParameters(9, -40, 40, false);
-				terrain2.updateParameters(-9, -40, 40, false);
-			}
-
+			if (SpriteRunningMode.LEFTWALL.equals(runningMode)) {
+				terrain1.updateParameters(-36, 9, 36, true);
+				terrain2.updateParameters(-36, -9, 36, true);
+			} else if (SpriteRunningMode.GROUND.equals(runningMode)) {
+				terrain1.updateParameters(9, -36, 36, false);
+				terrain2.updateParameters(-9, -36, 36, false);
+			} else if (SpriteRunningMode.RIGHTWALL.equals(runningMode)) {
+                terrain1.updateParameters(36, 9, 36, true);
+                terrain2.updateParameters(36, -9, 36, true);
+            } else if(SpriteRunningMode.CEILING.equals(runningMode)) {
+                terrain1.updateParameters(9, -72, -36, false);
+                terrain2.updateParameters(-9, -72, -36, false);
+            }
 		} else {
 			// TODO: Change to proper logging
 			System.out
@@ -74,4 +79,17 @@ public class Sonic extends AbstractPlayableSprite {
 							+ "'s sensor lines will not update to match new running mode.");
 		}
 	}
+
+    @Override
+    protected void updateSpriteShapeForRunningMode(SpriteRunningMode newRunningMode, SpriteRunningMode oldRunningMode) {
+        // Best if statement ever...
+        if(((SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) &&
+                (SpriteRunningMode.LEFTWALL.equals(oldRunningMode) || SpriteRunningMode.RIGHTWALL.equals(oldRunningMode))) ||
+                ((SpriteRunningMode.RIGHTWALL.equals(runningMode) || SpriteRunningMode.LEFTWALL.equals(runningMode)) &&
+                ((SpriteRunningMode.CEILING.equals(oldRunningMode) || SpriteRunningMode.GROUND.equals(oldRunningMode))))) {
+            int oldHeight = getHeight();
+            setHeight(width);
+            setWidth(oldHeight);
+        }
+    }
 }

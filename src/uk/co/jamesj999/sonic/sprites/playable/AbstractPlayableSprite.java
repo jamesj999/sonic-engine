@@ -213,20 +213,25 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setRolling(boolean rolling) {
-		if (rolling) {
-			setHeight(rollHeight);
-		} else {
-			setHeight(runHeight);
-		}
+        if(SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) {
+            if (rolling) {
+                setHeight(rollHeight);
+            } else {
+                setHeight(runHeight);
+            }
+        } else {
+            if(rolling) {
+                setWidth(rollHeight);
+            } else {
+                setWidth(runHeight);
+            }
+        }
 		this.rolling = rolling;
 	}
 
 	@Override
 	public void setHeight(int height) {
 		super.setHeight(height);
-		// if (terrainSensorBox != null) {
-		// terrainSensorBox.setYOffset((short) (-(height / 2) - 16));
-		// }
 	}
 
 	public short getRollDecel() {
@@ -260,11 +265,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setRunningMode(SpriteRunningMode runningMode) {
+        SpriteRunningMode oldRunningMode = this.runningMode;
 		this.runningMode = runningMode;
 		updateSensorLinesForRunningMode(runningMode);
+        updateSpriteShapeForRunningMode(runningMode, oldRunningMode);
 	}
 	
 	protected abstract void updateSensorLinesForRunningMode(SpriteRunningMode runningMode);
+
+    protected abstract void updateSpriteShapeForRunningMode(SpriteRunningMode runningMode, SpriteRunningMode oldRunningMode);
 
 	/**
 	 * Causes the sprite to update its position history as we are now at the end
