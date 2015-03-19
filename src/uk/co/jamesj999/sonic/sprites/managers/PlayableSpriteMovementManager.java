@@ -215,7 +215,9 @@ public class PlayableSpriteMovementManager extends
 				} else {
 					gSpeed = (short) -maxSpeed;
 				}
-			}
+			} else {
+                gSpeed += friction;
+            }
 		}
 		if (right) {
 			if (gSpeed < 0) {
@@ -226,7 +228,9 @@ public class PlayableSpriteMovementManager extends
 				} else {
 					gSpeed = maxSpeed;
 				}
-			}
+			} else {
+                gSpeed -= friction;
+            }
 		}
 		if (!left && !right) {
 			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
