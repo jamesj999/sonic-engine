@@ -215,9 +215,7 @@ public class PlayableSpriteMovementManager extends
 				} else {
 					gSpeed = (short) -maxSpeed;
 				}
-			} else {
-                gSpeed += friction;
-            }
+			}
 		}
 		if (right) {
 			if (gSpeed < 0) {
@@ -228,11 +226,9 @@ public class PlayableSpriteMovementManager extends
 				} else {
 					gSpeed = maxSpeed;
 				}
-			} else {
-                gSpeed -= friction;
-            }
+			}
 		}
-		if (!left && !right) {
+		if ((!left && !right) || (sprite.getRolling() && left && gSpeed < 0) || (sprite.getRolling() && right && gSpeed > 0)) {
 			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
 					&& gSpeed < 0) {
 				gSpeed = 0;
