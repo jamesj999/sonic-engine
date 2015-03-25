@@ -22,6 +22,7 @@ public class PlayableSpriteMovementManager extends
 	private final short rollDecel;
 
 	private boolean jumpPressed;
+    private boolean jumpHeld;
 
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
@@ -55,6 +56,38 @@ public class PlayableSpriteMovementManager extends
         // in order to shorten the jump.
         if (jumpPressed) {
             jumpHandler(jump);
+        }
+
+        if(sprite.getSpindash()) {
+             //A little bit of logic to make sure holding jump doesn't accelerate the spindash on each frame.
+            if(jumpHeld && jump) {
+                jump = false;
+            } else if(jumpHeld && !jump) {
+                jumpHeld = false;
+            } else if(!jumpHeld && jump) {
+                jumpHeld = true;
+            }
+
+            if(!down) {
+                releaseSpindash(sprite);
+                // Can't jump straight out of a spindash:
+                jump = false;
+
+                // This won't actually work IRL as it will cause the sprite to be able to clip through walls etc.
+                // (It's just here for testing until I can work out a better way to do this):
+                return;
+            }
+
+            if(down && !jump) {
+                spindashCooldown(sprite);
+                return;
+            }
+        }
+
+         //Detect the start of spindash or deal with 'revving'.
+        if(down && !left && !right && sprite.getGSpeed() == 0 && jump && !sprite.getAir()) {
+            handleSpindash(sprite);
+            return;
         }
 
         // Next thing to do is calculate movement and acceleration.
@@ -161,6 +194,34 @@ public class PlayableSpriteMovementManager extends
                 sprite.setY((short) (terrainHeight + 20 + (sprite.getHeight() / 2)));
             }
         }
+    }
+
+    private void handleSpindash(AbstractPlayableSprite sprite) {
+        if (!sprite.getSpindash()) {
+            sprite.setSpindash(true);
+            sprite.setSpindashConstant(2f);
+        } else {
+            sprite.setSpindashConstant(sprite.getSpindashConstant() + 2f);
+        }
+    }
+
+    private void releaseSpindash(AbstractPlayableSprite sprite) {
+        sprite.setSpindash(false);
+        short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
+        if(Direction.LEFT.equals(sprite.getDirection())) {
+            sprite.setGSpeed((short) (0 - spindashGSpeed));
+        } else if(Direction.RIGHT.equals(sprite.getDirection())) {
+            sprite.setGSpeed(spindashGSpeed);
+        }
+    }
+
+    private void spindashCooldown(AbstractPlayableSprite sprite) {
+        float spindashConstant = sprite.getSpindashConstant();
+        spindashConstant -= ((spindashConstant / 0.125) / 256);
+        if(spindashConstant < 0.01) {
+            spindashConstant = 0f;
+        }
+        sprite.setSpindashConstant(spindashConstant);
     }
 
 	/**
