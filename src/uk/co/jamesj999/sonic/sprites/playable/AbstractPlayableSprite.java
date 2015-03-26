@@ -298,6 +298,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
     protected abstract void updateSpriteShapeForRunningMode(SpriteRunningMode runningMode, SpriteRunningMode oldRunningMode);
 
+	public final short getCentreX(int framesBehind) {
+		return (short) (xHistory[historyPos - framesBehind] + (width / 2));
+	}
+
+	public final short getCentreY(int framesBehind) {
+		return (short) (xHistory[historyPos - framesBehind] - (height / 2));
+	}
+
 	/**
 	 * Causes the sprite to update its position history as we are now at the end
 	 * of the tick so all movement calculations have been performed.
