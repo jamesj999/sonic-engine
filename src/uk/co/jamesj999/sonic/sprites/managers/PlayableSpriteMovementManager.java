@@ -218,7 +218,7 @@ public class PlayableSpriteMovementManager extends
             sprite.setGSpeed(spindashGSpeed);
         }
 		Camera.getInstance().setFrozen(true);
-		TimerManager.getInstance().registerTimer(new SpindashCameraTimer("spindash", (int) sprite.getSpindashConstant()));
+		TimerManager.getInstance().registerTimer(new SpindashCameraTimer("spindash", (32 - (int) sprite.getSpindashConstant())));
 
 		sprite.setSpindashConstant(0f);
     }
