@@ -30,6 +30,7 @@ import uk.co.jamesj999.sonic.level.TestLevel;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import com.jogamp.opengl.util.FPSAnimator;
+import uk.co.jamesj999.sonic.timer.TimerManager;
 
 /**
  * Controls the game.
@@ -46,6 +47,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 			.getInstance();
 	private final Camera camera = Camera.getInstance();
 	private final DebugRenderer debugRenderer = DebugRenderer.getInstance();
+    private final TimerManager timerManager = TimerManager.getInstance();
 
 	private InputHandler inputHandler;
 
@@ -115,6 +117,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void update() {
+        timerManager.update();
 		spriteManager.update(inputHandler);
 		camera.updatePosition();
 	}
