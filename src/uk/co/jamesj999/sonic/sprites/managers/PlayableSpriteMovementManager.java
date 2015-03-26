@@ -213,6 +213,7 @@ public class PlayableSpriteMovementManager extends
         } else if(Direction.RIGHT.equals(sprite.getDirection())) {
             sprite.setGSpeed(spindashGSpeed);
         }
+        sprite.setSpindashConstant(0f);
     }
 
     private void spindashCooldown(AbstractPlayableSprite sprite) {
