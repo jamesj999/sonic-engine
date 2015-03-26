@@ -22,7 +22,7 @@ public class Tile {
 			}
 			// TODO add angle recalculations
 		} else {
-			System.out.println("NO FUCKING WAY MAN");
+			System.out.println("Error flipping tile...");
 		}
 		this.angle = angle;
 	}

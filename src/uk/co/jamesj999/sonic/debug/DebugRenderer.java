@@ -33,7 +33,8 @@ public class DebugRenderer {
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {
-                renderer.draw("Direction: "+((AbstractPlayableSprite) sprite).getDirection(), 2, 120);
+                renderer.draw("Spindash constant: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, 129);
+                renderer.draw("Direction: "+((AbstractPlayableSprite) sprite).getDirection(), 2, 116);
 				renderer.draw(
 						"Mode: "
 								+ ((AbstractPlayableSprite) sprite)
@@ -44,6 +45,9 @@ public class DebugRenderer {
 				if (((AbstractPlayableSprite) sprite).getRolling()) {
 					renderer.draw("Rolling", 24, 90);
 				}
+                if (((AbstractPlayableSprite) sprite).getSpindash()) {
+                    renderer.draw("Spindash", 2, 90);
+                }
 			}
 			renderer.draw(
 					"gSpeed:" + ((AbstractPlayableSprite) sprite).getGSpeed(),

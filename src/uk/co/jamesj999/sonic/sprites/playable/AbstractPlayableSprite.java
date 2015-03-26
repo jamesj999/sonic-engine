@@ -49,6 +49,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected boolean air = false;
 
+    /**
+     * Whether or not this sprite is preparing for a spindash.
+     */
+    protected boolean spindash = false;
+
+    protected float spindashConstant = 0f;
+
 	public boolean getAir() {
 		return air;
 	}
@@ -61,6 +68,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public short getJump() {
 		return jump;
 	}
+
+    public boolean getSpindash() {
+        return spindash;
+    }
+
+    public void setSpindash(boolean spindash) {
+        this.spindash = spindash;
+    }
+
+    public float getSpindashConstant() {
+        return spindashConstant;
+    }
+
+    public void setSpindashConstant(float spindashConstant) {
+        this.spindashConstant = spindashConstant;
+    }
 
 	public short getXSpeed() {
 		return xSpeed;
