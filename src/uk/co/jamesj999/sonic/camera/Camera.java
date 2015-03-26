@@ -10,6 +10,10 @@ public class Camera {
 	private short x = 0;
 	private short y = 0;
 
+	private int framesBehind = 0;
+
+	private boolean frozen = false;
+
 	private AbstractPlayableSprite focusedSprite;
 
 	private short width;
@@ -23,8 +27,20 @@ public class Camera {
 	}
 
 	public void updatePosition() {
-		short focusedSpriteRealX = (short) (focusedSprite.getCentreX() - x);
-		short focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
+		if(frozen) {
+			framesBehind++;
+			return;
+		}
+		short focusedSpriteRealX;
+		short focusedSpriteRealY;
+		if(framesBehind > 0) {
+			focusedSpriteRealX = (short) (focusedSprite.getCentreX(framesBehind) - x);
+			focusedSpriteRealY = (short) (focusedSprite.getCentreY(framesBehind) - y);
+		} else {
+			focusedSpriteRealX = (short) (focusedSprite.getCentreX() - x);
+			focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
+		}
+
 		if (focusedSpriteRealX < 144) {
 			short difference = (short) (focusedSpriteRealX - 144);
 			if (difference > 16) {
@@ -96,6 +112,15 @@ public class Camera {
 		if (y < 0) {
 			y = 0;
 		}
+		framesBehind--;
+	}
+
+	public void setFrozen(boolean frozen) {
+		this.frozen = frozen;
+	}
+
+	public boolean getFrozen() {
+		return frozen;
 	}
 
 	public boolean isOnScreen(Sprite sprite) {

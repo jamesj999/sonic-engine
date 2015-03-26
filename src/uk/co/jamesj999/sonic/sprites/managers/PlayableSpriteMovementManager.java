@@ -1,9 +1,13 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.Direction;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
+import uk.co.jamesj999.sonic.timer.Timer;
+import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
@@ -213,7 +217,10 @@ public class PlayableSpriteMovementManager extends
         } else if(Direction.RIGHT.equals(sprite.getDirection())) {
             sprite.setGSpeed(spindashGSpeed);
         }
-        sprite.setSpindashConstant(0f);
+		Camera.getInstance().setFrozen(true);
+		TimerManager.getInstance().registerTimer(new SpindashCameraTimer("spindash", (int) sprite.getSpindashConstant()));
+
+		sprite.setSpindashConstant(0f);
     }
 
     private void spindashCooldown(AbstractPlayableSprite sprite) {

@@ -106,22 +106,12 @@ public class SpriteManager {
 				 * latest position in the history arrays so we can revert if
 				 * collisions are found before moving to display part of the
 				 * tick.
+				 * Update: lol, we never did that.
 				 */
 				((AbstractPlayableSprite) sprite).endOfTick();
 			}
 		}
 	}
-
-	/*
-	 * These will probably be added back in when things get more complex:
-	 */
-	// private void draw(Sprite sprite) {
-	// sprite.draw();
-	// }
-
-	// private void update(Sprite sprite) {
-	// //
-	// }
 
 	public Sprite getSprite(String code) {
 		return sprites.get(code);
