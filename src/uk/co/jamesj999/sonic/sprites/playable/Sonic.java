@@ -61,15 +61,19 @@ public class Sonic extends AbstractPlayableSprite {
 			if (SpriteRunningMode.LEFTWALL.equals(runningMode)) {
 				terrain1.updateParameters(-36, 9, 36, true);
 				terrain2.updateParameters(-36, -9, 36, true);
+				wallSensorLine.updateParameters(-4, -10, 20, false);
 			} else if (SpriteRunningMode.GROUND.equals(runningMode)) {
 				terrain1.updateParameters(9, -36, 36, false);
 				terrain2.updateParameters(-9, -36, 36, false);
+				wallSensorLine.updateParameters(-10, -4, 20, true);
 			} else if (SpriteRunningMode.RIGHTWALL.equals(runningMode)) {
-                terrain1.updateParameters(36, 9, 36, true);
-                terrain2.updateParameters(36, -9, 36, true);
+				terrain1.updateParameters(0, 9, 36, true);
+				terrain2.updateParameters(0, -9, 36, true);
+				wallSensorLine.updateParameters(4, -10, 20, false);
             } else if(SpriteRunningMode.CEILING.equals(runningMode)) {
-                terrain1.updateParameters(9, -72, -36, false);
-                terrain2.updateParameters(-9, -72, -36, false);
+                terrain1.updateParameters(9, 0, 36, false);
+                terrain2.updateParameters(-9, 0, 36, false);
+				wallSensorLine.updateParameters(-10, 4, 20, true);
             }
 		} else {
 			// TODO: Change to proper logging

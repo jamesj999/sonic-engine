@@ -28,6 +28,8 @@ public class PlayableSpriteMovementManager extends
 	private boolean jumpPressed;
     private boolean jumpHeld;
 
+	private boolean testKeyPressed;
+
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
 		max = sprite.getMax();
@@ -45,13 +47,23 @@ public class PlayableSpriteMovementManager extends
     @Override
     public void handleMovement(boolean left, boolean right, boolean down, boolean jump, boolean testKey) {
         // A simple way to test our running modes...
-        if (testKey) {
-            if (sprite.getRunningMode().equals(SpriteRunningMode.GROUND)) {
+
+        if (testKey && !testKeyPressed) {
+			testKeyPressed = true;
+            if ((SpriteRunningMode.GROUND.equals(sprite.getRunningMode()))) {
                 sprite.setRunningMode(SpriteRunningMode.RIGHTWALL);
-            } else {
-                sprite.setRunningMode(SpriteRunningMode.GROUND);
-            }
+            } else if(SpriteRunningMode.RIGHTWALL.equals(sprite.getRunningMode())) {
+				sprite.setRunningMode(SpriteRunningMode.CEILING);
+			} else if(SpriteRunningMode.CEILING.equals(sprite.getRunningMode())) {
+				sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
+			} else {
+				sprite.setRunningMode(SpriteRunningMode.GROUND);
+			}
         }
+
+		if(testKeyPressed && !testKey) {
+			testKeyPressed = false;
+		}
 
         short originalX = sprite.getX();
         short originalY = sprite.getY();
