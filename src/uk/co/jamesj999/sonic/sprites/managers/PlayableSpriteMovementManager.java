@@ -46,8 +46,7 @@ public class PlayableSpriteMovementManager extends
 
     @Override
     public void handleMovement(boolean left, boolean right, boolean down, boolean jump, boolean testKey) {
-        // A simple way to test our running modes...
-
+		// A simple way to test our running modes...
         if (testKey && !testKeyPressed) {
 			testKeyPressed = true;
             if ((SpriteRunningMode.GROUND.equals(sprite.getRunningMode()))) {
@@ -207,8 +206,8 @@ public class PlayableSpriteMovementManager extends
             // Check again if we're in the air - we may have just landed.
             if(!sprite.getAir()) {
                 // TODO: Figure out why the 20 is here...
-                sprite.setY((short) (terrainHeight + 20 + (sprite.getHeight() / 2)));
-            }
+				sprite.setY((short) (terrainHeight + 20 + (sprite.getHeight() / 2)));
+			}
         }
     }
 

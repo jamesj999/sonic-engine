@@ -27,6 +27,7 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.TestLevel;
+import uk.co.jamesj999.sonic.sprites.interactive.monitors.RingMonitor;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import com.jogamp.opengl.util.FPSAnimator;

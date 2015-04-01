@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.level;
 
+import uk.co.jamesj999.sonic.sprites.interactive.monitors.RingMonitor;
+
 public class TestLevel extends AbstractLevel {
 
 	@Override
@@ -148,5 +150,10 @@ public class TestLevel extends AbstractLevel {
 		drawRange(49, 52, 82, 82, halfFlat);
 		drawRange(49, 52, 87, 87, halfFlat);
 		drawRange(49, 52, 92, 92, halfFlat);
+	}
+
+	protected void registerSprites() {
+		spriteManager.addSprite(new RingMonitor("001", (short) 533, (short) 364, 10));
+		spriteManager.addSprite(new RingMonitor("002", (short) 560, (short) 36, 10));
 	}
 }
