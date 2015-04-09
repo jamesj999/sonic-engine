@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="Maven: org.jogamp.jocl:jocl:natives-solaris-i586:2.0.2">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/jogamp/jocl/jocl/2.0.2/jocl-2.0.2-natives-solaris-i586.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$MAVEN_REPOSITORY$/org/jogamp/jocl/jocl/2.0.2/jocl-2.0.2-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/jogamp/jocl/jocl/2.0.2/jocl-2.0.2-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
