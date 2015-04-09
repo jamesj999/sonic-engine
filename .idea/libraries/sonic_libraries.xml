@@ -1,0 +1,53 @@
+<component name="libraryTable">
+  <library name="sonic-libraries">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/src/main/resources/commons-lang3-3.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <NATIVE>
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-android-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-linux-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-linux-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-linux-armv6hf.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-linux-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-solaris-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-solaris-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-windows-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/gluegen-rt-natives-windows-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-android-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-linux-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-linux-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-linux-armv6hf.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-linux-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-solaris-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-solaris-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-windows-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/joal-natives-windows-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-android-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-linux-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-linux-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-linux-armv6hf.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-linux-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-macosx-universal.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-solaris-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-solaris-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-windows-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jocl-natives-windows-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-android-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-linux-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-linux-armv6.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-linux-armv6hf.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-linux-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-solaris-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-solaris-i586.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-windows-amd64.jar!/" />
+      <root url="jar://$PROJECT_DIR$/src/main/resources/jogl-all-natives-windows-i586.jar!/" />
+    </NATIVE>
+    <SOURCES />
+  </library>
+</component>
