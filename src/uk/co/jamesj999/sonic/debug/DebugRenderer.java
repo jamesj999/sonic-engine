@@ -4,7 +4,7 @@ import java.awt.Font;
 
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
-import uk.co.jamesj999.sonic.graphics.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 

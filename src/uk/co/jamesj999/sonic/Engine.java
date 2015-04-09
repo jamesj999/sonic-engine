@@ -24,10 +24,11 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.graphics.SpriteManager;
+import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.TestLevel;
-import uk.co.jamesj999.sonic.sprites.interactive.monitors.RingMonitor;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import com.jogamp.opengl.util.FPSAnimator;
@@ -44,6 +45,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
+	private final SpriteRenderManager spriteRenderManager = SpriteRenderManager.getInstance();
+	private final SpriteCollisionManager spriteCollisionManager = SpriteCollisionManager.getInstance();
 	private final GraphicsManager graphicsManager = GraphicsManager
 			.getInstance();
 	private final Camera camera = Camera.getInstance();
@@ -119,12 +122,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public void update() {
         timerManager.update();
-		spriteManager.update(inputHandler);
+		spriteCollisionManager.update(inputHandler);
 		camera.updatePosition();
 	}
 
 	public void draw() {
-		spriteManager.draw();
+		spriteRenderManager.draw();
 		levelManager.getLevel().draw();
 	}
 

@@ -296,7 +296,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	
 	protected abstract void updateSensorLinesForRunningMode(SpriteRunningMode runningMode);
 
-    protected abstract void updateSpriteShapeForRunningMode(SpriteRunningMode runningMode, SpriteRunningMode oldRunningMode);
+	protected void updateSpriteShapeForRunningMode(SpriteRunningMode newRunningMode, SpriteRunningMode oldRunningMode) {
+		// Best if statement ever...
+		if(((SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) &&
+				(SpriteRunningMode.LEFTWALL.equals(oldRunningMode) || SpriteRunningMode.RIGHTWALL.equals(oldRunningMode))) ||
+				((SpriteRunningMode.RIGHTWALL.equals(runningMode) || SpriteRunningMode.LEFTWALL.equals(runningMode)) &&
+						((SpriteRunningMode.CEILING.equals(oldRunningMode) || SpriteRunningMode.GROUND.equals(oldRunningMode))))) {
+			int oldHeight = getHeight();
+			setHeight(width);
+			setWidth(oldHeight);
+		}
+	}
 
 	public final short getCentreX(int framesBehind) {
 		return (short) (xHistory[historyPos - framesBehind] + (width / 2));

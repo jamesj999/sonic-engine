@@ -1,6 +1,8 @@
 package uk.co.jamesj999.sonic.sprites.interactive.monitors;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.sprites.AbstractSprite;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import javax.media.opengl.GL2;
 
@@ -34,5 +36,14 @@ public class RingMonitor extends AbstractMonitor {
                 - height));
         graphicsManager.registerCommand(new GLCommand(GLCommand.Type.VERTEX2I,
                 -1, 1, 0, 0, getCentreX(), getCentreY(), 0, 0));
+    }
+
+    @Override
+    public boolean onCollide(AbstractSprite sprite) {
+        // Add rings here:
+
+
+        // Call standard method for monitor collision:
+        return super.onCollide(sprite);
     }
 }

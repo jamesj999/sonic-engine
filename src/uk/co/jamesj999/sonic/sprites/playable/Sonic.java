@@ -83,17 +83,4 @@ public class Sonic extends AbstractPlayableSprite {
 							+ "'s sensor lines will not update to match new running mode.");
 		}
 	}
-
-    @Override
-    protected void updateSpriteShapeForRunningMode(SpriteRunningMode newRunningMode, SpriteRunningMode oldRunningMode) {
-        // Best if statement ever...
-        if(((SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) &&
-                (SpriteRunningMode.LEFTWALL.equals(oldRunningMode) || SpriteRunningMode.RIGHTWALL.equals(oldRunningMode))) ||
-                ((SpriteRunningMode.RIGHTWALL.equals(runningMode) || SpriteRunningMode.LEFTWALL.equals(runningMode)) &&
-                ((SpriteRunningMode.CEILING.equals(oldRunningMode) || SpriteRunningMode.GROUND.equals(oldRunningMode))))) {
-            int oldHeight = getHeight();
-            setHeight(width);
-            setWidth(oldHeight);
-        }
-    }
 }

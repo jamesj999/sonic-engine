@@ -9,7 +9,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.graphics.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 
 public abstract class AbstractLevel implements Level {
 	protected GraphicsManager graphicsManager = GraphicsManager.getInstance();

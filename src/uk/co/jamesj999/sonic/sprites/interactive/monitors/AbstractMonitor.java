@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.Direction;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.interactive.InteractiveSprite;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 /**
  * Created by Jamesjohnstone on 01/04/15.
@@ -15,5 +16,13 @@ public abstract class AbstractMonitor extends AbstractSprite implements Interact
         //TODO: Find out the real dimensions
         setWidth(20);
         setHeight(20);
+    }
+
+    @Override
+    public boolean onCollide(AbstractSprite sprite) {
+        // Do the physics part here:
+
+
+        return true;
     }
 }
