@@ -18,7 +18,6 @@ public abstract class AbstractMonitor extends AbstractSprite implements Interact
         setHeight(20);
     }
 
-    @Override
     public boolean onCollide(AbstractSprite sprite) {
         // Do the physics part here:
 

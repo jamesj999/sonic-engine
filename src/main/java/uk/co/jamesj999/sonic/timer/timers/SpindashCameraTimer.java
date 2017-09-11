@@ -15,7 +15,6 @@ public class SpindashCameraTimer extends AbstractTimer {
         super(code, ticks);
     }
 
-    @Override
     public boolean perform() {
         camera.setFrozen(false);
         return true;
