@@ -32,8 +32,13 @@ public class TimerManager {
             // Check if the tick is less than 1.
             if(timer.getTicks() < 1) {
                 // Perform event
-                timer.perform();
-                timers.remove(timerEntry.getKey());
+                // TODO: Improve the error reporting - use a proper Exception structure
+                if(timer.perform()) {
+                    timers.remove(timerEntry.getKey());
+                } else {
+                    System.out.println("ERROR: " + timer.getClass() + " " + timer.getCode() + " failed to complete successfully.");
+                    timers.remove(timerEntry.getKey());
+                }
             }
         }
     }
