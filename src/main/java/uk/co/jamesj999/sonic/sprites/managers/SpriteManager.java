@@ -1,76 +1,67 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
-import java.awt.event.KeyEvent;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.sprites.Sprite;
+
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-
-import uk.co.jamesj999.sonic.Control.InputHandler;
-import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
-import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
-import uk.co.jamesj999.sonic.physics.SensorLine;
-import uk.co.jamesj999.sonic.sprites.AbstractSprite;
-import uk.co.jamesj999.sonic.sprites.Sprite;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 /**
  * Manages collection of available sprites to be provided to renderer and collision manager.
- * 
+ *
  * @author james
- * 
  */
 public class SpriteManager {
-	private final SonicConfigurationService configService = SonicConfigurationService
-			.getInstance();
+   private final SonicConfigurationService configService = SonicConfigurationService
+           .getInstance();
 
-	private static SpriteManager spriteManager;
+   private static SpriteManager spriteManager;
 
-	private Map<String, Sprite> sprites;
+   private Map<String, Sprite> sprites;
 
-	private SpriteManager() {
-		sprites = new HashMap<String, Sprite>();
-	}
+   private SpriteManager() {
+      sprites = new HashMap<String, Sprite>();
+   }
 
-	/**
-	 * Adds the given sprite to the SpriteManager. Returns true if we have
-	 * overwritten a sprite, false if we are creating a new one.
-	 * 
-	 * @param sprite
-	 * @return
-	 */
-	public boolean addSprite(Sprite sprite) {
-		return (sprites.put(sprite.getCode(), sprite) != null);
-	}
+   /**
+    * Adds the given sprite to the SpriteManager. Returns true if we have
+    * overwritten a sprite, false if we are creating a new one.
+    *
+    * @param sprite
+    * @return
+    */
+   public boolean addSprite(Sprite sprite) {
+      return (sprites.put(sprite.getCode(), sprite) != null);
+   }
 
-	/**
-	 * Removes the Sprite with provided code from the SpriteManager. Returns
-	 * true if a Sprite was removed and false if none could be found.
-	 * 
-	 * @param code
-	 * @return
-	 */
-	public boolean removeSprite(String code) {
-		return removeSprite(getSprite(code));
-	}
+   /**
+    * Removes the Sprite with provided code from the SpriteManager. Returns
+    * true if a Sprite was removed and false if none could be found.
+    *
+    * @param code
+    * @return
+    */
+   public boolean removeSprite(String code) {
+      return removeSprite(getSprite(code));
+   }
 
-	public Collection<Sprite> getAllSprites() {
-		return sprites.values();
-	}
+   public Collection<Sprite> getAllSprites() {
+      return sprites.values();
+   }
 
-	public Sprite getSprite(String code) {
-		return sprites.get(code);
-	}
+   public Sprite getSprite(String code) {
+      return sprites.get(code);
+   }
 
-	private boolean removeSprite(Sprite sprite) {
-		return (sprites.remove(sprite) != null);
-	}
+   private boolean removeSprite(Sprite sprite) {
+      return (sprites.remove(sprite) != null);
+   }
 
-	public synchronized static SpriteManager getInstance() {
-		if (spriteManager == null) {
-			spriteManager = new SpriteManager();
-		}
-		return spriteManager;
-	}
+   public synchronized static SpriteManager getInstance() {
+      if (spriteManager == null) {
+         spriteManager = new SpriteManager();
+      }
+      return spriteManager;
+   }
 }

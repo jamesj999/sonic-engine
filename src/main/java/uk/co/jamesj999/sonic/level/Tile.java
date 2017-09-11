@@ -8,11 +8,7 @@ public class Tile {
    private byte angle;
    private boolean jumpThrough;
 
-   public Tile(byte[] groundHeights, byte[] rightWallHeights, byte angle) {
-      this(groundHeights, rightWallHeights, angle, false, false);
-   }
-
-   private Tile(byte[] groundHeights, byte[] rightWallHeights, byte angle, boolean flipX, boolean flipY) {
+   public Tile(byte[] groundHeights, byte[] rightWallHeights, byte angle, boolean jumpThrough) {
       if (groundHeights.length == 16) {
          this.groundHeights = groundHeights;
 
@@ -29,6 +25,31 @@ public class Tile {
 
       // TODO add angle recalculations - if the tile is flipped then the angle needs to be recalculated.
       this.angle = angle;
+   }
+
+   public Tile(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l, int m, int n, int o,
+               int p, byte angle, boolean jumpThrough) {
+      groundHeights = new byte[16];
+      groundHeights[0] = (byte) a;
+      groundHeights[1] = (byte) b;
+      groundHeights[2] = (byte) c;
+      groundHeights[3] = (byte) d;
+      groundHeights[4] = (byte) e;
+      groundHeights[5] = (byte) f;
+      groundHeights[6] = (byte) g;
+      groundHeights[7] = (byte) h;
+      groundHeights[8] = (byte) i;
+      groundHeights[9] = (byte) j;
+      groundHeights[10] = (byte) k;
+      groundHeights[11] = (byte) l;
+      groundHeights[12] = (byte) m;
+      groundHeights[13] = (byte) n;
+      groundHeights[14] = (byte) o;
+      groundHeights[15] = (byte) p;
+
+      this.angle = angle;
+      this.jumpThrough = jumpThrough;
+
    }
 
    /**
@@ -89,15 +110,18 @@ public class Tile {
          case LEFTWALL:
             return (byte) (16 - rightWallHeights[y]);
       }
+      //TODO: Proper exception handling.
+      System.out.println("No Sprite Running Mode provided to Tile for height calculation...");
+      return -1;
    }
 
    public byte getAngle() {
       return angle;
    }
 
-   public Tile copy(boolean flipX, boolean flipY) {
-      return new Tile(groundHeights, rightWallHeights angle, flipX, flipY);
-   }
+//   public Tile copy(boolean flipX, boolean flipY) {
+//      return new Tile(groundHeights, rightWallHeights, angle, flipX, flipY);
+//   }
 
    public boolean getJumpThrough() {
       return jumpThrough;
