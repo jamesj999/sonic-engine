@@ -1,7 +1,6 @@
 package uk.co.jamesj999.sonic.timer.timers;
 
 import uk.co.jamesj999.sonic.camera.Camera;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.timer.AbstractTimer;
 
 /**
@@ -15,7 +14,7 @@ public class SpindashCameraTimer extends AbstractTimer {
 
     public boolean perform() {
         Camera camera = Camera.getInstance();
-        if(camera != null) {
+        if (camera != null) {
             camera.setFrozen(false);
             return true;
         } else {

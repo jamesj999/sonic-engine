@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.timer;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by James on 26/03/15.
@@ -24,16 +25,16 @@ public class TimerManager {
 
     public void update() {
         // Iterate all our timers:
-        for(Map.Entry<String, Timer> timerEntry : timers.entrySet()) {
+        for (Map.Entry<String, Timer> timerEntry : timers.entrySet()) {
             Timer timer = timerEntry.getValue();
             // Decrement the tick value to indicate a tick has passed:
             timer.decrementTick();
 
             // Check if the tick is less than 1.
-            if(timer.getTicks() < 1) {
+            if (timer.getTicks() < 1) {
                 // Perform event
                 // TODO: Improve the error reporting - use a proper Exception structure
-                if(timer.perform()) {
+                if (timer.perform()) {
                     timers.remove(timerEntry.getKey());
                 } else {
                     System.out.println("ERROR: " + timer.getClass() + " " + timer.getCode() + " failed to complete successfully.");

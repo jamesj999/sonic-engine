@@ -1,6 +1,5 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.SensorLine;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.Sprite;
@@ -8,7 +7,6 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.Collection;
-import java.util.Map;
 
 /**
  * Created by Jamesjohnstone on 09/04/15.
@@ -39,7 +37,7 @@ public class SpriteRenderManager {
     }
 
     public static synchronized SpriteRenderManager getInstance() {
-        if(spriteRenderManager == null) {
+        if (spriteRenderManager == null) {
             spriteRenderManager = new SpriteRenderManager();
         }
         return spriteRenderManager;

@@ -8,7 +8,6 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.awt.event.KeyEvent;
 import java.util.Collection;
-import java.util.Map;
 
 /**
  * Created by Jamesjohnstone on 09/04/15.
@@ -41,7 +40,7 @@ public class SpriteCollisionManager {
             if (sprite instanceof AbstractPlayableSprite) {
                 ((AbstractPlayableSprite) sprite).getMovementManager()
                         .handleMovement(left, right, down, space, z);
-				/*
+                /*
 				 * Idea: We can put object collision handling here - although
 				 * the X and Y have been set for the sprite, we still have the
 				 * latest position in the history arrays so we can revert if
@@ -54,17 +53,17 @@ public class SpriteCollisionManager {
         }
 
         // Iterate our sprites again to make sure there are no collisions:
-        for(Sprite sprite : sprites) {
-            for(Sprite sprite1 : sprites) {
+        for (Sprite sprite : sprites) {
+            for (Sprite sprite1 : sprites) {
                 boolean verticalOverlap = false;
                 boolean horizontalOverlap = false;
-                if(sprite.getTopY() < sprite1.getTopY() || sprite.getBottomY() > sprite1.getBottomY()) {
+                if (sprite.getTopY() < sprite1.getTopY() || sprite.getBottomY() > sprite1.getBottomY()) {
                     verticalOverlap = true;
                 }
-                if(sprite.getLeftX() > sprite1.getLeftX() && sprite.getRightX() < sprite1.getRightX()) {
+                if (sprite.getLeftX() > sprite1.getLeftX() && sprite.getRightX() < sprite1.getRightX()) {
                     horizontalOverlap = true;
                 }
-                if(verticalOverlap && horizontalOverlap) {
+                if (verticalOverlap && horizontalOverlap) {
                     System.out.println("There has been a collision");
                 }
             }
@@ -72,7 +71,7 @@ public class SpriteCollisionManager {
     }
 
     public synchronized static SpriteCollisionManager getInstance() {
-        if(spriteCollisionManager == null) {
+        if (spriteCollisionManager == null) {
             spriteCollisionManager = new SpriteCollisionManager();
         }
         return spriteCollisionManager;
