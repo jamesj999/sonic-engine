@@ -52,6 +52,23 @@ public class SpriteCollisionManager {
                 ((AbstractPlayableSprite) sprite).endOfTick();
             }
         }
+
+        // Iterate our sprites again to make sure there are no collisions:
+        for(Sprite sprite : sprites) {
+            for(Sprite sprite1 : sprites) {
+                boolean verticalOverlap = false;
+                boolean horizontalOverlap = false;
+                if(sprite.getTopY() < sprite1.getTopY() || sprite.getBottomY() > sprite1.getBottomY()) {
+                    verticalOverlap = true;
+                }
+                if(sprite.getLeftX() > sprite1.getLeftX() && sprite.getRightX() < sprite1.getRightX()) {
+                    horizontalOverlap = true;
+                }
+                if(verticalOverlap && horizontalOverlap) {
+                    System.out.println("There has been a collision");
+                }
+            }
+        }
     }
 
     public synchronized static SpriteCollisionManager getInstance() {

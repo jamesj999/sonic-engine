@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.graphics;
 
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.SensorLine;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.Sprite;
