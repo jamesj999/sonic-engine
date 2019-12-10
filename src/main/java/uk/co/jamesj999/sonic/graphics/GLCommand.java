@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import javax.media.opengl.GL2;
+import com.jogamp.opengl.GL2;
 
 public class GLCommand implements GLCommandable {
 	public enum Type {

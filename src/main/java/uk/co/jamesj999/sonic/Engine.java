@@ -1,23 +1,6 @@
 package uk.co.jamesj999.sonic;
 
-import static javax.media.opengl.GL.GL_COLOR_BUFFER_BIT;
-import static javax.media.opengl.GL.GL_DEPTH_BUFFER_BIT;
-import static javax.media.opengl.fixedfunc.GLLightingFunc.GL_SMOOTH;
-import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_MODELVIEW;
-import static javax.media.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
-
-import java.awt.Dimension;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-
-import javax.media.opengl.GL2;
-import javax.media.opengl.GLAutoDrawable;
-import javax.media.opengl.GLEventListener;
-import javax.media.opengl.awt.GLCanvas;
-import javax.media.opengl.glu.GLU;
-import javax.swing.JFrame;
-import javax.swing.SwingUtilities;
-
+import com.jogamp.opengl.util.FPSAnimator;
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
@@ -25,14 +8,28 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
-import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
-import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.TestLevel;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
-
-import com.jogamp.opengl.util.FPSAnimator;
 import uk.co.jamesj999.sonic.timer.TimerManager;
+
+import com.jogamp.opengl.GL2;
+import com.jogamp.opengl.GLAutoDrawable;
+import com.jogamp.opengl.GLEventListener;
+import com.jogamp.opengl.awt.GLCanvas;
+import com.jogamp.opengl.glu.GLU;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+
+import static com.jogamp.opengl.GL.GL_COLOR_BUFFER_BIT;
+import static com.jogamp.opengl.GL.GL_DEPTH_BUFFER_BIT;
+import static com.jogamp.opengl.fixedfunc.GLLightingFunc.GL_SMOOTH;
+import static com.jogamp.opengl.fixedfunc.GLMatrixFunc.GL_MODELVIEW;
+import static com.jogamp.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
 
 /**
  * Controls the game.

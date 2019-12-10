@@ -1,11 +1,10 @@
 package uk.co.jamesj999.sonic.graphics;
 
+import uk.co.jamesj999.sonic.camera.Camera;
+
+import com.jogamp.opengl.GL2;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.media.opengl.GL2;
-
-import uk.co.jamesj999.sonic.camera.Camera;
 
 public class GraphicsManager {
 	private static GraphicsManager graphicsManager;

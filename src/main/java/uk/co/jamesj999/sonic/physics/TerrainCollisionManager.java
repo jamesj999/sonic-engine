@@ -1,7 +1,6 @@
 package uk.co.jamesj999.sonic.physics;
 
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 public class TerrainCollisionManager {
 	private static TerrainCollisionManager terrainCollisionManager;

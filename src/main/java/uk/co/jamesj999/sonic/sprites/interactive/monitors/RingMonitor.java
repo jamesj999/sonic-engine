@@ -2,9 +2,8 @@ package uk.co.jamesj999.sonic.sprites.interactive.monitors;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
-import javax.media.opengl.GL2;
+import com.jogamp.opengl.GL2;
 
 /**
  * Created by Jamesjohnstone on 01/04/15.

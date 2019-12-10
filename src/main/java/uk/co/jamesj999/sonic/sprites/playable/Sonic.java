@@ -1,9 +1,9 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
-import javax.media.opengl.GL2;
-
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.physics.SensorLine;
+
+import com.jogamp.opengl.GL2;
 
 public class Sonic extends AbstractPlayableSprite {
 

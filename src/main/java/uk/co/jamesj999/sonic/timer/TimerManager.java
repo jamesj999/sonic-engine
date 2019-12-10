@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.timer;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by James on 26/03/15.

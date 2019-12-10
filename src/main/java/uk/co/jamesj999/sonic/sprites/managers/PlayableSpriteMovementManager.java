@@ -5,7 +5,6 @@ import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.Direction;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
-import uk.co.jamesj999.sonic.timer.Timer;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 

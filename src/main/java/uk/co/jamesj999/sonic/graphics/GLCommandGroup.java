@@ -1,8 +1,7 @@
 package uk.co.jamesj999.sonic.graphics;
 
+import com.jogamp.opengl.GL2;
 import java.util.List;
-
-import javax.media.opengl.GL2;
 
 public class GLCommandGroup implements GLCommandable {
 	private int drawMethod;

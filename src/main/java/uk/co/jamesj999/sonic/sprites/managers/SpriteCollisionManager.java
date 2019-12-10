@@ -8,7 +8,6 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.awt.event.KeyEvent;
 import java.util.Collection;
-import java.util.Map;
 
 /**
  * Created by Jamesjohnstone on 09/04/15.

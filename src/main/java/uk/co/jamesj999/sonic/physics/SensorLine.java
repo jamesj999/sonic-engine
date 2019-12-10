@@ -1,19 +1,17 @@
 package uk.co.jamesj999.sonic.physics;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.media.opengl.GL2;
-
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.Tile;
-import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+
+import com.jogamp.opengl.GL2;
+import java.util.ArrayList;
+import java.util.List;
 
 public class SensorLine {
 	private final LevelManager levelManager = LevelManager.getInstance();

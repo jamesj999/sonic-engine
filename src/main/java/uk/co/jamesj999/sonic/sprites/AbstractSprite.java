@@ -1,15 +1,14 @@
 package uk.co.jamesj999.sonic.sprites;
 
-import java.awt.image.BufferedImage;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.commons.lang3.StringUtils;
-
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.physics.SensorLine;
+
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
 public abstract class AbstractSprite implements Sprite {
 	protected final SonicConfigurationService configService = SonicConfigurationService

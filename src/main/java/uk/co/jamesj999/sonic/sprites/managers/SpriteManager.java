@@ -1,19 +1,11 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
-import java.awt.event.KeyEvent;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.sprites.Sprite;
+
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-
-import uk.co.jamesj999.sonic.Control.InputHandler;
-import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
-import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
-import uk.co.jamesj999.sonic.physics.SensorLine;
-import uk.co.jamesj999.sonic.sprites.AbstractSprite;
-import uk.co.jamesj999.sonic.sprites.Sprite;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 /**
  * Manages collection of available sprites to be provided to renderer and collision manager.

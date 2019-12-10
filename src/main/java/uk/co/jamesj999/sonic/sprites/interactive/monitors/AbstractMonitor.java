@@ -1,10 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.interactive.monitors;
 
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
-import uk.co.jamesj999.sonic.sprites.Direction;
-import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.interactive.InteractiveSprite;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 /**
  * Created by Jamesjohnstone on 01/04/15.

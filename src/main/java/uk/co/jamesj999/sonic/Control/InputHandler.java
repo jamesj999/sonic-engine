@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.Control;
 
-import java.awt.Component;
+import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
