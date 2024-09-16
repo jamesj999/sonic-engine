@@ -16,8 +16,7 @@ public class DebugRenderer {
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
-	private final TextRenderer renderer = new TextRenderer(new Font(
-			"SansSerif", Font.BOLD, 12));
+	private TextRenderer renderer;
 
 	private int width = configService
 			.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
@@ -28,7 +27,13 @@ public class DebugRenderer {
 			.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
 
 	public void renderDebugInfo() {
+		if (renderer == null) {
+			renderer = new TextRenderer(new Font(
+					"SansSerif", Font.BOLD, 8));
+		}
+
 		renderer.beginRendering(width, height);
+
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {

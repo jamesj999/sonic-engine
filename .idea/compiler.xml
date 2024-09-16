@@ -9,8 +9,5 @@
         <module name="sonic-engine" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="sonic-engine" target="8" />
-    </bytecodeTargetLevel>
   </component>
 </project>
