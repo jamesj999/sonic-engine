@@ -9,7 +9,7 @@ import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.level.TestLevel;
+import uk.co.jamesj999.sonic.level.TestOldLevel;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
@@ -90,7 +90,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// later since it'll be used in the first update loop anyway
 		camera.setFocusedSprite(sonic);
 
-		levelManager.setLevel(new TestLevel());
+		levelManager.setLevel(new TestOldLevel());
 	}
 
 	/**

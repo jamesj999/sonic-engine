@@ -3,7 +3,7 @@ package uk.co.jamesj999.sonic.physics;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.level.Level;
+import uk.co.jamesj999.sonic.level.OldLevel;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.Tile;
 import uk.co.jamesj999.sonic.sprites.Sprite;
@@ -50,7 +50,7 @@ public class SensorLine {
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
 
-		Level level = levelManager.getLevel();
+		OldLevel level = levelManager.getLevel();
 
 		int startX = spriteX + x;
 		int startY = spriteY + y;
@@ -110,7 +110,7 @@ public class SensorLine {
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
 
-		Level level = levelManager.getLevel();
+		OldLevel level = levelManager.getLevel();
 
 		// Starting positions will always be the same
 		int startX = spriteX + x;

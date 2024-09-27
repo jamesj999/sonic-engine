@@ -3,8 +3,15 @@ package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.tools.KosinskiDecompressor;
+import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.ByteChannel;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 
 import static org.junit.Assert.assertArrayEquals;
 
@@ -35,5 +42,11 @@ public class TestKosinskiDecompressor {
 
         // Assert the decompressed data matches the expected output
         assertArrayEquals(expectedOutput, decompressedData);
+
+        KosinskiReader reader = new KosinskiReader();
+        byte[] buffer = new byte[0xFFFF];
+        KosinskiReader.Result result = reader.decompress(Channels.newChannel(new ByteArrayInputStream(compressedData)),buffer, buffer.length);
+
+        assertArrayEquals(expectedOutput, buffer);
     }
 }

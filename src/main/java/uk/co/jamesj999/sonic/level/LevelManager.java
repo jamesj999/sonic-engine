@@ -2,13 +2,13 @@ package uk.co.jamesj999.sonic.level;
 
 public class LevelManager {
 	private static LevelManager levelManager;
-	private Level level;
+	private OldLevel level;
 
-	public void setLevel(Level level) {
+	public void setLevel(OldLevel level) {
 		this.level = level;
 	}
 
-	public Level getLevel() {
+	public OldLevel getLevel() {
 		return level;
 	}
 

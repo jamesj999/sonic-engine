@@ -10,7 +10,7 @@ import com.jogamp.opengl.GL2;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class AbstractLevel implements Level {
+public abstract class AbstractOldLevel implements OldLevel {
 	protected GraphicsManager graphicsManager = GraphicsManager.getInstance();
 	protected SpriteManager spriteManager = SpriteManager.getInstance();
 	private short xTiles = 256;
@@ -18,7 +18,7 @@ public abstract class AbstractLevel implements Level {
 
 	protected Tile[][] tiles = new Tile[xTiles][yTiles];
 
-	public AbstractLevel() {
+	public AbstractOldLevel() {
 		setupTiles();
 		registerSprites();
 	}

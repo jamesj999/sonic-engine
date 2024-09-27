@@ -2,7 +2,7 @@ package uk.co.jamesj999.sonic.level;
 
 import uk.co.jamesj999.sonic.sprites.interactive.monitors.RingMonitor;
 
-public class TestLevel extends AbstractLevel {
+public class TestOldLevel extends AbstractOldLevel {
 
     @Override
     protected void setupTiles() {
