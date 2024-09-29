@@ -2,51 +2,90 @@ package uk.co.jamesj999.sonic.tests;
 
 
 import org.junit.Test;
-import uk.co.jamesj999.sonic.tools.KosinskiDecompressor;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.channels.ByteChannel;
 import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
+import java.util.logging.Logger;
 
 import static org.junit.Assert.assertArrayEquals;
 
 
 public class TestKosinskiDecompressor {
+
+    private static final Logger LOG = Logger.getLogger(TestKosinskiDecompressor.class.getName());
+
     @Test
     public void testDecompression() throws IOException {
-        // Input compressed data
-        byte[] compressedData = new byte[]{
-                (byte) 0xFF, (byte) 0x3F, (byte) 0x54, (byte) 0x3b, (byte) 0xc4, (byte) 0x44, (byte) 0x54, (byte) 0x33,
-                (byte) 0x33, (byte) 0x5b, (byte) 0x2d, (byte) 0x5c, (byte) 0x44, (byte) 0x5c, (byte) 0xc4, (byte) 0xc5,
-                (byte) 0xFc, (byte) 0x15, (byte) 0xfe, (byte) 0xc3, (byte) 0x44, (byte) 0x78, (byte) 0x88, (byte) 0x98,
-                (byte) 0x44, (byte) 0x30, (byte) 0xff, (byte) 0xff, (byte) 0x00, (byte) 0xf8, (byte) 0x00
+
+        byte[] uncompressedKosinskiData = new byte[] {
+                (byte) 0xFF, (byte) 0x5F, (byte) 0x00, (byte) 0x01, (byte) 0x02, (byte) 0x03, (byte) 0x04,
+                (byte) 0x05, (byte) 0x06, (byte) 0x07, (byte) 0x08, (byte) 0x09, (byte) 0x0A, (byte) 0x0B,
+                (byte) 0x0C, (byte) 0x00, (byte) 0xF0, (byte) 0x00
         };
 
-        // Expected decompressed output
-        byte[] expectedOutput = new byte[]{
-                (byte) 0x54, (byte) 0x3B, (byte) 0xC4, (byte) 0x44, (byte) 0x54, (byte) 0x33, (byte) 0x33, (byte) 0x5B,
-                (byte) 0x2D, (byte) 0x5C, (byte) 0x44, (byte) 0x5C, (byte) 0xC4, (byte) 0xC5, (byte) 0xC3, (byte) 0x44,
-                (byte) 0x78, (byte) 0x88, (byte) 0x98, (byte) 0x44, (byte) 0x30
+        byte[] uncompressedData = new byte[] {
+                (byte) 0x00, (byte) 0x01, (byte) 0x02, (byte) 0x03, (byte) 0x04,
+                (byte) 0x05, (byte) 0x06, (byte) 0x07, (byte) 0x08, (byte) 0x09, (byte) 0x0A, (byte) 0x0B,
+                (byte) 0x0C
         };
 
-        // Instantiate the decompressor
-        KosinskiDecompressor decompressor = new KosinskiDecompressor(compressedData);
+        byte[] kosinskiInlineCompressedData = new byte[] {
+                (byte) 0x51, (byte) 0x00, (byte) 0x25, (byte) 0xFF, (byte) 0x00, (byte) 0xF0, (byte) 0x00
+        };
 
-        // Perform decompression
-        byte[] decompressedData = decompressor.decompress();
+        byte[] kosinskiInlineDecompressedData = new byte[] {
+                (byte) 0x25, 0x25, 0x25, 0x25
+        };
 
-        // Assert the decompressed data matches the expected output
-        assertArrayEquals(expectedOutput, decompressedData);
+        byte[] kosinskiTest2CompressedData = new byte[] {
+                (byte) 0xFF, (byte) 0x3F, (byte) 0x54, (byte) 0x3B, (byte) 0xC4, (byte) 0x44, (byte) 0x54,
+                (byte) 0x33, (byte) 0x33, (byte) 0x5B, (byte) 0x2D, (byte) 0x5C, (byte) 0x44, (byte) 0x5C,
+                (byte) 0xC4, (byte) 0xC5, (byte) 0xFC, (byte) 0x15, (byte) 0xFE, (byte) 0xC3, (byte) 0x44,
+                (byte) 0x78, (byte) 0x88, (byte) 0x98, (byte) 0x44, (byte) 0x30, (byte) 0xFF, (byte) 0xFF,
+                (byte) 0x00, (byte) 0xF8, (byte) 0x00
+        };
+
+        byte[] kosinskiTest2DecompressedData = new byte[] {
+                (byte) 0x54, (byte) 0x3B, (byte) 0xC4, (byte) 0x44, (byte) 0x54, (byte) 0x33, (byte) 0x33,
+                (byte) 0x5B, (byte) 0x2D, (byte) 0x5C, (byte) 0x44, (byte) 0x5C, (byte) 0xC4, (byte) 0xC5,
+                (byte) 0xC4, (byte) 0xC5, (byte) 0xC3, (byte) 0x44, (byte) 0x78, (byte) 0x88, (byte) 0x98,
+                (byte) 0x44, (byte) 0x30, (byte) 0x30, (byte) 0x30, (byte) 0x30, (byte) 0x30, (byte) 0x30,
+                (byte) 0x30, (byte) 0x30, (byte) 0x30, (byte) 0x30
+        };
+
+       // LOG.info("Uncompressed Kosinski Data");
+        test(uncompressedKosinskiData, uncompressedData);
+
+        LOG.info("Inline Compressed Kosinski Data");
+        test(kosinskiInlineCompressedData, kosinskiInlineDecompressedData);
+
+        LOG.info("Test from https://segaretro.org/Kosinski_compression");
+        test(kosinskiTest2CompressedData, kosinskiTest2DecompressedData);
+    }
+
+    private static void test(byte[] input, byte[] expected) throws IOException {
+        LOG.info("Input: " + bytesToHexString(input));
+        LOG.info("Expected Output " + bytesToHexString(expected));
 
         KosinskiReader reader = new KosinskiReader();
-        byte[] buffer = new byte[0xFFFF];
-        KosinskiReader.Result result = reader.decompress(Channels.newChannel(new ByteArrayInputStream(compressedData)),buffer, buffer.length);
+        byte[] buffer = new byte[expected.length];
+        var result = reader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),buffer, expected.length);
+        LOG.info("Our Output: " + bytesToHexString(buffer));
 
-        assertArrayEquals(expectedOutput, buffer);
+        assertArrayEquals(expected, buffer);
+
+    }
+
+    public static String bytesToHexString(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            hexString.append(String.format("0x%02X", bytes[i]));
+            if (i < bytes.length - 1) {
+                hexString.append(", ");
+            }
+        }
+        return hexString.toString();
     }
 }

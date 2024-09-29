@@ -112,6 +112,7 @@ public class Rom {
         }
         fileChannel.position(offset);
         int bytesRead = fileChannel.read(buffer);
+
         buffer.flip();
         return (Byte.toUnsignedInt(buffer.get()) << 8) | Byte.toUnsignedInt(buffer.get());
     }
@@ -119,13 +120,14 @@ public class Rom {
     public int read32BitAddr(long offset) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(4);
         fileChannel.position(offset);
-        fileChannel.read(buffer);
+        int bytesRead = fileChannel.read(buffer);
+
         buffer.flip();
 
         int result = (Byte.toUnsignedInt(buffer.get()) << 24) |
                 (Byte.toUnsignedInt(buffer.get()) << 16) |
                 (Byte.toUnsignedInt(buffer.get()) << 8) |
-                Byte.toUnsignedInt(buffer.get());
+                        Byte.toUnsignedInt(buffer.get());
 
         return result;
     }

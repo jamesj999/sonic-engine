@@ -3,12 +3,9 @@ package uk.co.jamesj999.sonic.data.games;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.Level;
-import uk.co.jamesj999.sonic.tools.KosinskiDecompressor;
-import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Optional;
 
 public class Sonic2 extends Game {
     private static final int DEFAULT_ROM_SIZE = 0x100000;  // 1MB
@@ -72,7 +69,7 @@ public class Sonic2 extends Game {
         System.out.printf("Patterns addr: 0x%08X%n", patternsAddr);
         System.out.printf("Chunks addr: 0x%08X%n", chunksAddr);
         System.out.printf("Blocks addr: 0x%08X%n", blocksAddr);
-        System.out.printf("Map addr: 0x%08X%n", mapAddr);
+        System.out.printf("Map/Tiles addr: 0x%08X%n", mapAddr);
 
         return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr);
     }

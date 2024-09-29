@@ -1,0 +1,126 @@
+Sonic/SEGA Compression Format  [KOSINSKI FORMAT]
+
+Documented by Brett Kosinski
+
+Overview:
+
+The compression scheme used in Sonic 2 provides four different ways
+for storing data.  The first method simply specifies uncompressed
+data.  The other three are different methods of indicating the copy
+offset and length for decompression.  These methods each have
+tradeoffs in terms of amount of bytes needed to represent them, the
+offset range, and the maximum count expressible.  Thus, during
+compression, one could choose the best method given a particular set
+of data.
+
+Now, the disadvantage of such a format is thatit does create added
+complexity, and requires some way of indicating the compression method
+for each segment.  In the next section I'll go over the details of the
+compression format and we'll see how this indication is achieved.
+
+The Details:
+
+The compressed data is composed of 16-bit bitfields stored in
+little-endian format, which are used to indicate the compression
+methods used for the next chunk of data, and the data itself.  The
+bitfield is read starting at the right, and each bit is used to
+determine how to treat the next byte (or two or three) of data.  There
+are three bit combinations:
+
+1  - Straight byte copy (no compression)
+10 - Embedded/Separate compression
+00 - Inline compression
+
+In the straight byte copy format, the data is simply not compressed.
+So, read it as is.
+
+The Embedded/Separate compression formats are slightly more complex.
+The next two or three bytes contain data about the compression format.
+The format for these bytes is as follows:
+
+OOOOOCCC OOOOOOOO [CCCCCCCC]  <- optional
+
+O - Offset bit
+C - Count bit
+
+To construct the offset from this data, take the five offset bits from
+the first byte and prepend them to the offset bits from the second
+byte.  The result is a 13-bit offset.
+
+The count is slightly more complicated.  By default, take the count
+from the bottom three bits of the first byte and add one.  However, if
+these bits are all zero then you must read the next byte to get the
+count.  If, at this point, the count is zero, we're at the end of the
+data buffer.  If the count is a one, we do nothing.
+
+Now, the first case (where the 3 count bits are non-zero) is what I
+refer to as the Embedded format.  The second format is the Separate
+compression format.
+
+The Inline compression format is the easiest compression format.  The
+next byte contains data about the compressed format.  This byte is
+used as an offset.  The count is acquired by taking the next two bits
+from the bitfield, reversing them, and adding one.  So, for example,
+if the next two bits are a 1 and a 0, then the count is 01 + 1
+(binary), or 2.
+
+Now, in ALL cases, the number of bytes actually copied during
+decompression is equal to the countPLUS 1*.  So, in the above
+example, three bytes would actually be copied from the specified
+offset.  As well, the offsets are all stored in signed two's complement.
+
+Also, if, at any time during reading bits from the bitfield, you run
+out of bits,immediately* read the next two bytes from the data
+buffer and use them as your bitfield.
+
+Decompression Pseudo-Code
+-------------------------
+
+Read bitfield from data buffer
+
+MainLoop:
+Shift bit from right side of bitfield
+If no bits left, read next bitfield
+
+If bit = 1
+ Append next byte from data buffer to decompressed buffer
+ Position = Position + 1
+
+ Goto MainLoop
+Else
+ Shift bit from right side of bitfield
+ If no bits left, read next bitfield
+
+ If bit = 1
+   Low = Next byte from buffer
+   Hi = Next byte from buffer
+
+   Offset = (Hi << 5) | Low
+   Count = Hi & 0x07
+
+   If Count != 0
+     Count = Count + 1
+   Else
+     Count = Next byte from buffer
+
+     If Count = 0 terminate
+     If Count = 1 goto MainLoop
+
+ Else
+   Shift bit from right side of bitfield
+   If no bits left, read next bitfield
+
+   Count |= Bit << 1
+
+   Shift bit from right side of bitfield
+   If no bits left, read next bitfield
+
+   Count |= Bit
+
+   Offset = Next byte from buffer
+
+Count = Count + 1
+
+while (Count > 0)
+ decompressed_buffer[position] = decompressed_buffer[offset + position]
+ position = position + 1

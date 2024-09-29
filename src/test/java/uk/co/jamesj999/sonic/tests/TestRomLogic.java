@@ -11,6 +11,9 @@ import java.io.IOException;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Loads a ROM as Sonic2, checks if the game is compatible, reads and validates the checksum, then loads a level.
+ */
 public class TestRomLogic {
     @Test
     public void testRomLogic() throws IOException {

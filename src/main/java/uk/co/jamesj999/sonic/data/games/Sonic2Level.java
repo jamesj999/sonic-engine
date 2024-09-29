@@ -219,6 +219,6 @@ public class Sonic2Level extends Level {
 
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
-        System.out.println("Map loaded successfully. Byte count: " + result.byteCount());
+        System.out.println("Map loaded successfully. Byte count: " + result.success());
     }
 }

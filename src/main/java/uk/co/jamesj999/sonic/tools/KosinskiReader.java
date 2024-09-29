@@ -42,25 +42,30 @@ public class KosinskiReader {
 
         loadBitfield(channel);
 
-        while (true) {
+        while (pos < bufferSize) {
+
+            // Uncompressed data mode. Copy directly from next byte.
             if (getBit(channel) == 1) {
                 buffer[pos++] = readByte(channel);
-
-                if (pos >= bufferSize) {
-                    return new Result(false, pos);
-                }
 
                 continue;
             }
 
+            // Inline compression mode. Get Two's complement for repeat count and add 2.
+            // [LLLL LLLL] [HHHH HCCC]
+            // If CCC is 0, then we get the following two bytes and add 1.
+            // [LLLL LLLL] [HHHH H000] [CCCC CCCC]
             if (getBit(channel) == 1) {
-                byte lo = readByte(channel);
-                byte hi = readByte(channel);
+                int low = readByte(channel);
+                int high = readByte(channel);
 
-                // Use 13-bit two's complement for offset
-                offset = ((hi << 8) | (lo & 0xFF)) | 0xFF00;
-                count = hi & 0x07;
+                offset = (0xFFFFFF00 | high) << 5;
+                offset = (offset & 0xFFFFFF00) | low;
 
+
+                count = high & 0x07;
+
+                //
                 if (count == 0) {
                     count = readByte(channel) & 0xFF;
 
@@ -71,14 +76,17 @@ public class KosinskiReader {
                     if (count <= 1) {
                         continue;
                     }
-                } else {
                     count++;
                 }
-            } else {
+                else {
+                    count +=2;
+                }
+            }
+            else {
                 count = (getBit(channel) << 1) | getBit(channel);
-                count++;
+                count += 2;
 
-                offset = (readByte(channel) & 0xFF) | 0xFF00;
+                offset = (readByte(channel) & 0xFF) | 0xFFFFFF00;
             }
 
             // Ensure we don't go out of bounds while copying
@@ -87,9 +95,6 @@ public class KosinskiReader {
                 pos++;
                 count--;
 
-                if (pos >= bufferSize) {
-                    return new Result(false, pos);
-                }
             }
         }
 
