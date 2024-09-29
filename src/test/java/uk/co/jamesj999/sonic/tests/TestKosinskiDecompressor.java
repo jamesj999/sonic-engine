@@ -71,7 +71,7 @@ public class TestKosinskiDecompressor {
 
         KosinskiReader reader = new KosinskiReader();
         byte[] buffer = new byte[expected.length];
-        var result = reader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),buffer, expected.length);
+        reader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),buffer, expected.length);
         LOG.info("Our Output: " + bytesToHexString(buffer));
 
         assertArrayEquals(expected, buffer);
