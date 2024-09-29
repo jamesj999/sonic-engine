@@ -16,7 +16,7 @@ public class KosinskiReader {
 
     private short bitfield;
     private short bitcount;
-
+    private final ByteBuffer singleByteBuffer = ByteBuffer.allocate(1);
     public KosinskiReader() {
         this.bitfield = 0;
         this.bitcount = 0;
@@ -51,9 +51,9 @@ public class KosinskiReader {
                 continue;
             }
 
-            // Inline compression mode. Get Two's complement for repeat count and add 2.
+            // Full Dictionary Mode. Get Two's complement number for the repeat count and add 2 to it.
             // [LLLL LLLL] [HHHH HCCC]
-            // If CCC is 0, then we get the following two bytes and add 1.
+            // If CCC is 0, then to get the repeat count we get the following two bytes and add 1 to it.
             // [LLLL LLLL] [HHHH H000] [CCCC CCCC]
             if (getBit(channel) == 1) {
                 int low = readByte(channel);
@@ -62,10 +62,9 @@ public class KosinskiReader {
                 offset = (0xFFFFFF00 | high) << 5;
                 offset = (offset & 0xFFFFFF00) | low;
 
-
                 count = high & 0x07;
 
-                //
+                // count is next 2 bytes, +1.
                 if (count == 0) {
                     count = readByte(channel) & 0xFF;
 
@@ -82,6 +81,9 @@ public class KosinskiReader {
                     count +=2;
                 }
             }
+            // Inline dictionary format.
+            // [00XX]
+            // XX+2 is count. Offset is next data byte.
             else {
                 count = (getBit(channel) << 1) | getBit(channel);
                 count += 2;
@@ -94,7 +96,6 @@ public class KosinskiReader {
                 buffer[pos] = buffer[pos + offset];
                 pos++;
                 count--;
-
             }
         }
 
@@ -119,12 +120,14 @@ public class KosinskiReader {
     }
 
     private byte readByte(ReadableByteChannel channel) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(1);
-        int bytesRead = channel.read(buffer);
+        singleByteBuffer.clear();
+        int bytesRead = channel.read(singleByteBuffer);
+
         if (bytesRead == -1) {
             throw new IOException("Unexpected end of channel");
         }
-        buffer.flip();
-        return buffer.get();
+
+        singleByteBuffer.flip();
+        return singleByteBuffer.get();
     }
 }
