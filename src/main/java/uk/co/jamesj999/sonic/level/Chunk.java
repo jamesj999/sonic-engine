@@ -20,7 +20,7 @@ public class Chunk {
     // Default constructor
     public Chunk() {
         this.patternDescs = new PatternDesc[PATTERNS_PER_CHUNK];
-        Arrays.setAll(this.patternDescs, i -> new PatternDesc());  // Initialize array with new PatternDesc instances
+        Arrays.setAll(this.patternDescs, i -> PatternDesc.EMPTY);  // Initialize array with new PatternDesc instances
     }
 
     // Load chunk from Sega format (big-endian 16-bit values)
@@ -31,7 +31,10 @@ public class Chunk {
 
         for (int i = 0; i < PATTERNS_PER_CHUNK; i++) {
             int index = ((buffer[i * 2] & 0xFF) << 8) | (buffer[i * 2 + 1] & 0xFF);  // Big-endian
-            patternDescs[i].set(index);
+            if (index != 0) {
+                patternDescs[i] = new PatternDesc(index);
+            }
+
         }
     }
 

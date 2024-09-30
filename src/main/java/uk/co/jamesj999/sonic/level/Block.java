@@ -17,7 +17,8 @@ public class Block {
     // Default constructor
     public Block() {
         this.chunkDescs = new ChunkDesc[CHUNKS_PER_BLOCK];
-        Arrays.setAll(this.chunkDescs, i -> new ChunkDesc());  // Initialize array with new ChunkDesc instances
+        // Initialize array with references to empty ChunkDesc instance (to save on pointlessly making objects)
+        Arrays.setAll(this.chunkDescs, i -> ChunkDesc.EMPTY);
     }
 
     // Parses a block of data from Sega's format (big-endian 16-bit values)
@@ -28,7 +29,7 @@ public class Block {
 
         for (int i = 0; i < CHUNKS_PER_BLOCK; i++) {
             int index = ((buffer[i * 2] & 0xFF) << 8) | (buffer[i * 2 + 1] & 0xFF); // Big-endian
-            chunkDescs[i].set(index);
+            chunkDescs[i] = new ChunkDesc(index);
         }
     }
 

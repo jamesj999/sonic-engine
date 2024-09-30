@@ -15,23 +15,28 @@ package uk.co.jamesj999.sonic.level;
  *     H    - horizontal flip flag  [0..1]
  *     I... - pattern index         [0..2047]
  */
-public class PatternDesc {
+public final class PatternDesc {
     private int index;  // Stored as int for bitwise operations, representing 16-bit value
 
+    private boolean priority;  // Cached priority flag
+    private int paletteIndex;  // Cached palette index
+    private boolean hFlip;  // Cached horizontal flip flag
+    private boolean vFlip;  // Cached vertical flip flag
+    private int patternIndex;  // Cached pattern index
+
+    // Default instance of an empty pattern descriptor
+    public static PatternDesc EMPTY = new PatternDesc();
+
     // Default constructor
-    public PatternDesc() {
+    private PatternDesc() {
         this.index = 0;
+        updateFields();  // Initialize cached fields
     }
 
-    // Copy constructor
-    public PatternDesc(PatternDesc desc) {
-        this.index = desc.index;
-    }
-
-    // Constructor with patternIndex and paletteIndex
-    public PatternDesc(int patternIndex, int paletteIndex) {
-        this.index = (paletteIndex & 0x3) << 13;
-        this.index |= (patternIndex & 0x7FF);
+    // Constructor with index
+    public PatternDesc(int index) {
+        this.index = index;
+        updateFields();
     }
 
     // Getter for the raw index value
@@ -41,32 +46,42 @@ public class PatternDesc {
 
     // Getter for palette index (2-bit value)
     public int getPaletteIndex() {
-        return (index >> 13) & 0x3;
+        return paletteIndex;
     }
 
     // Getter for pattern index (11-bit value)
     public int getPatternIndex() {
-        return index & 0x7FF;
+        return patternIndex;
     }
 
     // Check for priority flag (bit 15)
     public boolean getPriority() {
-        return (index & 0x8000) != 0;
+        return priority;
     }
 
     // Check for horizontal flip flag (bit 11)
     public boolean getHFlip() {
-        return (index & 0x800) != 0;
+        return hFlip;
     }
 
     // Check for vertical flip flag (bit 12)
     public boolean getVFlip() {
-        return (index & 0x1000) != 0;
+        return vFlip;
+    }
+
+    // Update all cached fields from index
+    private void updateFields() {
+        this.priority = (index & 0x8000) != 0;  // Extract priority flag (bit 15)
+        this.paletteIndex = (index >> 13) & 0x3;  // Extract palette index (2-bit value from bits 13-14)
+        this.hFlip = (index & 0x800) != 0;  // Extract horizontal flip flag (bit 11)
+        this.vFlip = (index & 0x1000) != 0;  // Extract vertical flip flag (bit 12)
+        this.patternIndex = index & 0x7FF;  // Extract pattern index (lower 11 bits)
     }
 
     // Setter for the raw index value (assumes correct bit layout)
     public void set(int newIndex) {
         this.index = newIndex;
+        updateFields();  // Update cached fields whenever index changes
     }
 
     // Static method to get the size of the index
