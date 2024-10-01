@@ -5,9 +5,13 @@ import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
+import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.TestOldLevel;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
@@ -24,6 +28,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
 
 import static com.jogamp.opengl.GL.GL_COLOR_BUFFER_BIT;
 import static com.jogamp.opengl.GL.GL_DEPTH_BUFFER_BIT;
@@ -90,7 +95,20 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// later since it'll be used in the first update loop anyway
 		camera.setFocusedSprite(sonic);
 
-		levelManager.setLevel(new TestOldLevel());
+		// Logic to test the new Rom loading
+		Rom rom = new Rom();
+		rom.open("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+
+		Game game = new Sonic2(rom);
+		Level level;
+
+		try {
+			level = game.loadLevel(0);
+		} catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        levelManager.setLevel(new TestOldLevel());
 	}
 
 	/**

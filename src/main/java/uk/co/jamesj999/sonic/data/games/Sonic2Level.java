@@ -19,11 +19,13 @@ public class Sonic2Level extends Level {
     private Pattern[] patterns;
     private Chunk[] chunks;
     private Block[] blocks;
+    private Tile[] tiles;
     private Map map;
 
     private int patternCount;
     private int chunkCount;
     private int blockCount;
+    private int tileCount;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
@@ -97,6 +99,19 @@ public class Sonic2Level extends Level {
     @Override
     public Map getMap() {
         return map;
+    }
+
+    @Override
+    public Tile getTile(int index) {
+        if (index >= tileCount) {
+            throw new IllegalArgumentException("Invalid Tile index");
+        }
+        return tiles[index];
+    }
+
+    @Override
+    public int getTileCount() {
+        return tileCount;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
@@ -187,14 +202,20 @@ public class Sonic2Level extends Level {
 
         var result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
 
-        for (int i=0; i< collisionBuffer.length; i++) {
-            collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
-        }
         if (!result.success()) {
             throw new IOException("Collision decompression error");
         }
 
+        for (int i=0; i< collisionBuffer.length; i++) {
+            collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
+        }
 
+        tileCount = result.byteCount() / Tile.TILE_SIZE_IN_ROM;
+
+        Tile[] tiles = new Tile[tileCount];
+        for(int i = 0; i < tileCount; i++) {
+            tiles[i] = new Tile(Arrays.copyOfRange(collisionBuffer, i * Tile.TILE_SIZE_IN_ROM, (i+ 1) * Tile.TILE_SIZE_IN_ROM));
+        }
 
         channel.position(blocksAddr);
         result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);

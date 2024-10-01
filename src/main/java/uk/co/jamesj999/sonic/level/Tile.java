@@ -3,12 +3,24 @@ package uk.co.jamesj999.sonic.level;
 import org.apache.commons.lang3.ArrayUtils;
 
 public class Tile {
+	public static final int TILE_SIZE_IN_ROM = 32;
+
 	public byte[] heights;
+	public byte[] widths;
 	private byte angle;
 	private boolean jumpThrough;
+	private CollisionMode collisionMode;
 
 	public Tile(byte[] heights, byte angle) {
 		this(heights, angle, false, false);
+	}
+
+	/**
+	 * To be called from Level loading ROM logic.
+	 * @param buffer
+	 */
+	public Tile(byte[] buffer) {
+		// TODO Figure out what to do with these and load the height/width arrays and collision mode.
 	}
 
 	private Tile(byte[] heights, byte angle, boolean flipX, boolean flipY) {

@@ -33,4 +33,8 @@ public abstract class Level {
 
     // Abstract method to get the map associated with the level
     public abstract Map getMap();
+
+    public abstract Tile getTile(int index);
+
+    public abstract int getTileCount();
 }
