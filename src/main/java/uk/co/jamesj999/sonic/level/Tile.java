@@ -20,7 +20,13 @@ public class Tile {
 	 * @param buffer
 	 */
 	public Tile(byte[] buffer) {
-		// TODO Figure out what to do with these and load the height/width arrays and collision mode.
+		if (buffer.length != TILE_SIZE_IN_ROM) {
+			throw new IllegalArgumentException("Tile size does not match tile size in ROM");
+		}
+
+		for(byte value : buffer) {
+			System.out.println(value & 0xFF);
+		}
 	}
 
 	private Tile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
