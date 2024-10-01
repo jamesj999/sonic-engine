@@ -17,6 +17,7 @@ public class Sonic2 extends Game {
     private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 12;
     private static final int LEVEL_PALETTE_DIR = 0x2782;
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
+    private static final int COLLISION_INDEX_ADDR = 0x49E8;
 
     private final Rom rom;
 
@@ -99,6 +100,11 @@ public class Sonic2 extends Game {
         return rom.read32BitAddr(LEVEL_DATA_DIR + levelDataIdx * LEVEL_DATA_DIR_ENTRY_SIZE + entryOffset);
     }
 
+    private int getCollisionDataAddress(int levelIdx) throws IOException {
+        int levelDataIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2);
+        return rom.read32BitAddr(levelDataIdx);
+    }
+
     private int getCharacterPaletteAddr() {
         return SONIC_TAILS_PALETTE_ADDR;
     }
@@ -132,5 +138,12 @@ public class Sonic2 extends Game {
 
         int levelOffset = rom.read16BitAddr(levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2);
         return levelLayoutDirAddr + levelOffset;
+    }
+
+    private int getCollisionAddr(int levelIdx) throws IOException {
+        int zoneIdxLoc = COLLISION_INDEX_ADDR + levelIdx * 2;
+        int zoneIdx = rom.readByte(zoneIdxLoc);
+
+        return zoneIdx;
     }
 }

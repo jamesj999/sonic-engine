@@ -33,11 +33,12 @@ public class Sonic2Level extends Level {
                        int patternsAddr,
                        int chunksAddr,
                        int blocksAddr,
-                       int mapAddr) throws IOException {
+                       int mapAddr,
+                       int collisionsAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadChunks(rom, chunksAddr);
-        loadBlocks(rom, blocksAddr);
+        loadBlocks(rom, blocksAddr, collisionsAddr);
         loadMap(rom, mapAddr);
     }
 
@@ -172,14 +173,18 @@ public class Sonic2Level extends Level {
         LOG.info("Chunk count: " + chunkCount + " (" + result.byteCount() + " bytes)");
     }
 
-    private void loadBlocks(Rom rom, int blocksAddr) throws IOException {
+    private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        byte[] buffer = new byte[BLOCK_BUFFER_SIZE];
+        final int COLLISION_BUFFER_LENGTH = 16;
+        
+        byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
+        byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
+
         FileChannel channel = rom.getFileChannel();
         channel.position(blocksAddr);
 
         KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, buffer, BLOCK_BUFFER_SIZE);
+        var result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
 
         if (!result.success()) {
             throw new IOException("Block decompression error");
@@ -194,7 +199,7 @@ public class Sonic2Level extends Level {
         for (int i = 0; i < blockCount; i++) {
             blocks[i] = new Block();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
             blocks[i].fromSegaFormat(subArray);
         }
 
