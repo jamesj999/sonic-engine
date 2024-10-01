@@ -175,16 +175,29 @@ public class Sonic2Level extends Level {
 
     private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        final int COLLISION_BUFFER_LENGTH = 16;
+        final int COLLISION_BUFFER_LENGTH = 0x300;
         
         byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
         byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
-
+        int[] collisionArray = new int[COLLISION_BUFFER_LENGTH];
         FileChannel channel = rom.getFileChannel();
-        channel.position(blocksAddr);
 
+        channel.position(collisionAddr);
         KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
+
+        var result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
+
+        for (int i=0; i< collisionBuffer.length; i++) {
+            collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
+        }
+        if (!result.success()) {
+            throw new IOException("Collision decompression error");
+        }
+
+
+
+        channel.position(blocksAddr);
+        result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
 
         if (!result.success()) {
             throw new IOException("Block decompression error");

@@ -64,6 +64,7 @@ public class Sonic2 extends Game {
         int chunksAddr = getChunksAddr(levelIdx);
         int blocksAddr = getBlocksAddr(levelIdx);
         int mapAddr = getTilesAddr(levelIdx);
+        int collisionAddr = getCollisionAddr(levelIdx);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -71,8 +72,9 @@ public class Sonic2 extends Game {
         System.out.printf("Chunks addr: 0x%08X%n", chunksAddr);
         System.out.printf("Blocks addr: 0x%08X%n", blocksAddr);
         System.out.printf("Map/Tiles addr: 0x%08X%n", mapAddr);
+        System.out.printf("Collision addr: 0x%08X%n", collisionAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr);
     }
 
     @Override
@@ -142,8 +144,9 @@ public class Sonic2 extends Game {
 
     private int getCollisionAddr(int levelIdx) throws IOException {
         int zoneIdxLoc = COLLISION_INDEX_ADDR + levelIdx * 2;
-        int zoneIdx = rom.readByte(zoneIdxLoc);
 
-        return zoneIdx;
+        int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
+
+        return collisionAddr;
     }
 }

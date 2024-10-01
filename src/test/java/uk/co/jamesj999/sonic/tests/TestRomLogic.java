@@ -28,7 +28,7 @@ public class TestRomLogic {
 
         assertEquals(actualChecksum,storedChecksum);
 
-        Level level = game.loadLevel(2);
+        Level level = game.loadLevel(0);
         level.getBlockCount();
     }
 
