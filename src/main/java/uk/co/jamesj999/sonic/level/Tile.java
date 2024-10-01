@@ -23,9 +23,9 @@ public class Tile {
 		if (buffer.length != TILE_SIZE_IN_ROM) {
 			throw new IllegalArgumentException("Tile size does not match tile size in ROM");
 		}
-
+		System.out.println("----------");
 		for(byte value : buffer) {
-			System.out.println(value & 0xFF);
+			System.out.print((value & 0xFF) + ",");
 		}
 	}
 
