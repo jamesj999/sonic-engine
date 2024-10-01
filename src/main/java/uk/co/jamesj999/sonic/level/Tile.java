@@ -26,6 +26,7 @@ public class Tile {
 		for(byte value : buffer) {
 			System.out.print((value & 0xFF) + ",");
 		}
+		System.out.println();
 	}
 
 	private Tile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
