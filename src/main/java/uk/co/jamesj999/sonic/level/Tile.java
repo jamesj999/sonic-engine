@@ -23,10 +23,30 @@ public class Tile {
 		if (buffer.length != TILE_SIZE_IN_ROM) {
 			throw new IllegalArgumentException("Tile size does not match tile size in ROM");
 		}
+		System.out.println();
 		for(byte value : buffer) {
 			System.out.print((value & 0xFF) + ",");
 		}
 		System.out.println();
+
+		// Extract 16 bytes into two arrays of nibbles and see if they look anything like tile definitions (they don't):
+		int[] starts = new int[16];
+		int[] stops = new int[16];
+		for(byte i = 0; i < 16; i++) {
+			starts[i] = ((buffer[i] & 0xFF) & 0x0F);
+			stops[i] = (((buffer[i] & 0xFF) >> 4) & 0X0F);
+		}
+
+		System.out.println("Starts:");
+		for(int i = 0; i < 16; i++) {
+			System.out.print(starts[i] + ",");
+		}
+
+		System.out.println("\nStops:");
+		for(int i = 0; i < 16; i++) {
+			System.out.print(stops[i] + ",");
+		}
+
 	}
 
 	private Tile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
