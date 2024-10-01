@@ -217,6 +217,8 @@ public class Sonic2Level extends Level {
             tiles[i] = new Tile(Arrays.copyOfRange(collisionBuffer, i * Tile.TILE_SIZE_IN_ROM, (i+ 1) * Tile.TILE_SIZE_IN_ROM));
         }
 
+        LOG.info("Tile count: " + tileCount + " (" + result.byteCount() + " bytes)");
+
         channel.position(blocksAddr);
         result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
 

@@ -3,7 +3,7 @@ package uk.co.jamesj999.sonic.level;
 import org.apache.commons.lang3.ArrayUtils;
 
 public class Tile {
-	public static final int TILE_SIZE_IN_ROM = 32;
+	public static final int TILE_SIZE_IN_ROM = 16;
 
 	public byte[] heights;
 	public byte[] widths;
@@ -23,11 +23,10 @@ public class Tile {
 		if (buffer.length != TILE_SIZE_IN_ROM) {
 			throw new IllegalArgumentException("Tile size does not match tile size in ROM");
 		}
-		System.out.println();
+		System.out.println("\nByte Array (unsigned): ");
 		for(byte value : buffer) {
 			System.out.print((value & 0xFF) + ",");
 		}
-		System.out.println();
 
 		// Extract 16 bytes into two arrays of nibbles and see if they look anything like tile definitions (they don't):
 		int[] starts = new int[16];
@@ -37,7 +36,7 @@ public class Tile {
 			stops[i] = (((buffer[i] & 0xFF) >> 4) & 0X0F);
 		}
 
-		System.out.println("Starts:");
+		System.out.println("\nStarts:");
 		for(int i = 0; i < 16; i++) {
 			System.out.print(starts[i] + ",");
 		}
