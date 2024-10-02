@@ -1,0 +1,44 @@
+Collision Arrays :
+
+Sonic 1 (US version) :
+Primary collision array: $62A00
+Secondary collision array: $63A00
+Angle/curve array: $62900
+
+Sonic 2 :
+Collision array: $42E50
+Angle/curve array: $42D50
+
+Sonic 3 :
+Collision array: $706A0
+
+Sonic & Knuckles :
+Collision array: $96100
+
+
+Collision Indexes :
+
+Sonic 1 (US version) :
+GHZ : $64A00
+LZ : $64B9A
+MZ : $64C62
+SLZ : $64DF2
+SYZ : $64FE6
+SBZ : $651DA
+
+Sonic 2 (Note: Data compressed with Kosinski format) :
+Offset index for primary collision indexes: $49E8
+Offset index for secondary collision indexes: $4A2C
+EHZ and HTZ primary : $44E50
+EHZ and HTZ secondary : $44F40
+MZ : $45040
+OOZ : $45100
+MCZ : $45200
+CNZ primary : $452A0
+CNZ secondary : $45330
+CPZ and DEZ primary : $453C0
+CPZ and DEZ secondary : $454E0
+ARZ primary : $45610
+ARZ secondary : $45760
+WFZ and SCZ primary : $458C0
+WFZ and SCZ secondary : $459A0
