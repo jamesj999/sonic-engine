@@ -209,13 +209,16 @@ public class Sonic2Level extends Level {
 
         byte[] solidTileBuffer = rom.readBytes(tilesAddr, Sonic2.SOLID_TILE_MAP_SIZE);
 
-        SolidTile[] solidTiles = new SolidTile[TILE_COUNT];
+        solidTiles = new SolidTile[TILE_COUNT];
         for(int i = 0; i < TILE_COUNT; i++) {
             byte tileAngle = rom.readByte(anglesAddr+i);
             byte[] totallyLegitimateByteArraySir = Arrays.copyOfRange(solidTileBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
 
             solidTiles[i] = new SolidTile(totallyLegitimateByteArraySir, tileAngle);
         }
+
+        LOG.info("SolidTiles loaded");
+
     }
 
     private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
