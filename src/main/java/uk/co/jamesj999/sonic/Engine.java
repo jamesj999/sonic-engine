@@ -13,7 +13,6 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.level.TestOldLevel;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
@@ -108,7 +107,7 @@ public class Engine extends GLCanvas implements GLEventListener {
             throw new RuntimeException(e);
         }
 
-        levelManager.setLevel(new TestOldLevel());
+        //levelManager.setLevel(new TestOldLevel());
 	}
 
 	/**
@@ -141,7 +140,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public void draw() {
 		spriteRenderManager.draw();
-		levelManager.getLevel().draw();
+		levelManager.draw();
 	}
 
 	public static void main(String[] args) {

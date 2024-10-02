@@ -17,7 +17,7 @@ public enum SonicConfiguration {
 	/**
 	 * Current Version number.
 	 */
-	VERSION("Alpha V0.05"),
+	VERSION("Alpha With ROM Loading Logic - V0.06"),
 	/**
 	 * Actual width of the screen (number of available x-coordinates).
 	 */
@@ -73,7 +73,12 @@ public enum SonicConfiguration {
     /**
      * Whether to display debugging information on screen.
      */
-    DEBUG_ENABLED(true);
+    DEBUG_ENABLED(true),
+
+	/**
+	 * Filename of ROM to use (temporary)
+	 */
+	ROM_FILENAME("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
 
 	private Object value;
 

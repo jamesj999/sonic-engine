@@ -1,14 +1,29 @@
 package uk.co.jamesj999.sonic.level;
 
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.games.Sonic2;
+
+import java.io.IOException;
+
 public class LevelManager {
 	private static LevelManager levelManager;
-	private OldLevel level;
+	private Level level;
+	private Rom rom;
 
-	public void setLevel(OldLevel level) {
-		this.level = level;
+	public void loadLevel(int levelIndex) throws IOException {
+		rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
+		Game game = new Sonic2(rom);
+		level = game.loadLevel(levelIndex);
 	}
 
-	public OldLevel getLevel() {
+	public void draw() {
+		// TODO
+	}
+
+	public Level getCurrentLevel() {
 		return level;
 	}
 

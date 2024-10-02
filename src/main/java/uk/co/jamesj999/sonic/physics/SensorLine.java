@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.physics;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.OldLevel;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
@@ -50,7 +51,7 @@ public class SensorLine {
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
 
-		OldLevel level = levelManager.getLevel();
+		Level level = levelManager.getCurrentLevel();
 
 		int startX = spriteX + x;
 		int startY = spriteY + y;
@@ -73,7 +74,7 @@ public class SensorLine {
 			for (int checkY = startY; checkY <= endY; checkY++) {
 				SolidTile toUse;
 				short tileY = (short) ((checkY / 16) * 16);
-				SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
+				/*TODO SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
 				if (solidTile != null) {
 					byte heightOfTile = solidTile.getHeightAt(offset);
 					toUse = solidTile;
@@ -97,7 +98,7 @@ public class SensorLine {
 						highestRealY = thisHeight;
 						angle = solidTile.getAngle();
 					}
-				}
+				}*/
 			}
 		}
 		if (sprite instanceof AbstractPlayableSprite) {
@@ -110,7 +111,7 @@ public class SensorLine {
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
 
-		OldLevel level = levelManager.getLevel();
+		Level level = levelManager.getCurrentLevel();
 
 		// Starting positions will always be the same
 		int startX = spriteX + x;
@@ -135,17 +136,16 @@ public class SensorLine {
 		for (int checkX = startX; checkX <= endX; checkX++) {
 			// short tileX = (short) Math.floor((double) checkX / 16);
 			for (int checkY = startY; checkY <= endY; checkY++) {
-				SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
+				/**SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
 				if (solidTile != null
-						&& (!horizontal || (horizontal && !solidTile
-								.getJumpThrough()))) {
+						&& (!horizontal)) { // TODO Update: || (horizontal && !solidTile.getJumpThrough()))) {
 					if (checkX > highestRealX) {
 						highestRealX = (short) checkX;
 						if (checkX < lowestRealX || lowestRealX == -1) {
 							lowestRealX = (short) checkX;
 						}
 					}
-				}
+				}**/
 			}
 		}
 

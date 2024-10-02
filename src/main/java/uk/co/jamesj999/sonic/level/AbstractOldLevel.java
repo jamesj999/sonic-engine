@@ -63,8 +63,8 @@ public abstract class AbstractOldLevel implements OldLevel {
 					int realY = y * 16;
 					SolidTile solidTile = solidTileLine[y];
 					if (solidTile != null) {
-						for (int heightX = 0; heightX < solidTile.heights.length; heightX++) {
-							int height = solidTile.heights[heightX];
+						for (int heightX = 0; heightX < SolidTile.TILE_SIZE_IN_ROM; heightX++) {
+							int height = solidTile.getHeightAt((byte)heightX);
 							if (height > 0) {
 								for (int i = height + realY; i >= realY; i--) {
 									commands.add(new GLCommand(
