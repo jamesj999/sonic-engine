@@ -27,7 +27,16 @@ public class Camera {
 	}
 
 	public void updatePosition() {
-		if(frozen) {
+		updatePosition(false);
+	}
+
+	public void updatePosition(boolean force) {
+		if (force) {
+			x = focusedSprite.getCentreX();
+			y = focusedSprite.getCentreY();
+			return;
+		}
+		if (frozen) {
 			framesBehind++;
 			return;
 		}
@@ -112,7 +121,9 @@ public class Camera {
 		if (y < 0) {
 			y = 0;
 		}
-		framesBehind--;
+		if (framesBehind > 0) {
+			framesBehind--;
+		}
 	}
 
 	public void setFrozen(boolean frozen) {
