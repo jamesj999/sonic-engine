@@ -22,6 +22,9 @@ public class LevelManager {
     private GraphicsManager graphicsManager;
 
     public void loadLevel(int levelIndex) throws IOException {
+        //TODO proper error handling for ROM checksum etc.
+        //and maybe refactor this so Game/Rom are handled elsewhere.
+        Rom rom = new Rom();
         rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
         Game game = new Sonic2(rom);
         level = game.loadLevel(levelIndex);
@@ -67,6 +70,15 @@ public class LevelManager {
 
     public SolidTile getSolidTileAt(int x, int y) {
         // TODO
+        int mapX = x / 128;
+        int mapY = y / 128;
+        if(level == null) {
+            return null;
+        }
+        Map map = level.getMap();
+        byte value = map.getValue(0, x, y);
+        Block block = level.getBlock(value);
+        ChunkDesc chunkDesc = block.getChunkDesc(x % 128, y % 128);
         return null;
     }
 

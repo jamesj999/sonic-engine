@@ -85,6 +85,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set background (clear) color
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smooths out
 									// lighting
+
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
 				(short) 100, (short) 100);
@@ -94,19 +95,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// later since it'll be used in the first update loop anyway
 		camera.setFocusedSprite(sonic);
 
-		// Logic to test the new Rom loading
-		Rom rom = new Rom();
-		rom.open("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
-
-		Game game = new Sonic2(rom);
-		Level level;
-
+		// Load our ROM and Level
 		try {
-			level = game.loadLevel(0);
+			levelManager.loadLevel(0);
 		} catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
+			throw new RuntimeException(e);
+		}
         //levelManager.setLevel(new TestOldLevel());
 	}
 
