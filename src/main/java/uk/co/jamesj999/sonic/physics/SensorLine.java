@@ -5,7 +5,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.OldLevel;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.level.Tile;
+import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -18,7 +18,7 @@ public class SensorLine {
 	private final GraphicsManager graphicsManager = GraphicsManager
 			.getInstance();
 
-	Tile tileToHighlight;
+	SolidTile solidTileToHighlight;
 
 	private Sprite sprite;
 
@@ -71,21 +71,21 @@ public class SensorLine {
 			byte offset = (byte) (checkX % 16);
 			// short tileX = (short) Math.floor((double) checkX / 16);
 			for (int checkY = startY; checkY <= endY; checkY++) {
-				Tile toUse;
+				SolidTile toUse;
 				short tileY = (short) ((checkY / 16) * 16);
-				Tile tile = level.getTileAt((short) checkX, (short) checkY);
-				if (tile != null) {
-					byte heightOfTile = tile.getHeightAt(offset);
-					toUse = tile;
+				SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
+				if (solidTile != null) {
+					byte heightOfTile = solidTile.getHeightAt(offset);
+					toUse = solidTile;
 					if (((startY == endY) && (checkX == endX))
 							|| ((startX == endX) && (checkY == endY))) {
-						Tile tileAbove = level.getTileAt((short) checkX,
+						SolidTile solidTileAbove = level.getTileAt((short) checkX,
 								(short) (checkY + 16));
-						if (tileAbove != null) {
-							byte heightOfTileAbove = tileAbove
+						if (solidTileAbove != null) {
+							byte heightOfTileAbove = solidTileAbove
 									.getHeightAt(offset);
 							if (heightOfTileAbove > 0) {
-								toUse = tileAbove;
+								toUse = solidTileAbove;
 								heightOfTile = (byte) (heightOfTileAbove + 16);
 								tileY++;
 							}
@@ -93,9 +93,9 @@ public class SensorLine {
 					}
 					short thisHeight = (short) (heightOfTile + tileY);
 					if (thisHeight > highestRealY) {
-						tileToHighlight = toUse;
+						solidTileToHighlight = toUse;
 						highestRealY = thisHeight;
-						angle = tile.getAngle();
+						angle = solidTile.getAngle();
 					}
 				}
 			}
@@ -135,9 +135,9 @@ public class SensorLine {
 		for (int checkX = startX; checkX <= endX; checkX++) {
 			// short tileX = (short) Math.floor((double) checkX / 16);
 			for (int checkY = startY; checkY <= endY; checkY++) {
-				Tile tile = level.getTileAt((short) checkX, (short) checkY);
-				if (tile != null
-						&& (!horizontal || (horizontal && !tile
+				SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
+				if (solidTile != null
+						&& (!horizontal || (horizontal && !solidTile
 								.getJumpThrough()))) {
 					if (checkX > highestRealX) {
 						highestRealX = (short) checkX;

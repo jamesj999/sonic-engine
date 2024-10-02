@@ -2,7 +2,7 @@ package uk.co.jamesj999.sonic.level;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-public class Tile {
+public class SolidTile {
 	public static final int TILE_SIZE_IN_ROM = 16;
 
 	public byte[] heights;
@@ -11,7 +11,7 @@ public class Tile {
 	private boolean jumpThrough;
 	private CollisionMode collisionMode;
 
-	public Tile(byte[] heights, byte angle) {
+	public SolidTile(byte[] heights, byte angle) {
 		this(heights, angle, false, false);
 	}
 
@@ -19,7 +19,7 @@ public class Tile {
 	 * To be called from Level loading ROM logic.
 	 * @param buffer
 	 */
-	public Tile(byte[] buffer) {
+	public SolidTile(byte[] buffer) {
 		if (buffer.length != TILE_SIZE_IN_ROM) {
 			throw new IllegalArgumentException("Tile size does not match tile size in ROM");
 		}
@@ -48,7 +48,7 @@ public class Tile {
 
 	}
 
-	private Tile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
+	private SolidTile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
 		if (heights.length == 16) {
 			this.heights = heights;
 			if (flipX) {
@@ -68,8 +68,8 @@ public class Tile {
 	 * Shorthand to create a tile without having to create the height map
 	 * separately.
 	 */
-	public Tile(int a, int b, int c, int d, int e, int f, int g, int h, int i,
-			int j, int k, int l, int m, int n, int o, int p, byte angle, boolean jumpThrough) {
+	public SolidTile(int a, int b, int c, int d, int e, int f, int g, int h, int i,
+					 int j, int k, int l, int m, int n, int o, int p, byte angle, boolean jumpThrough) {
 		heights = new byte[16];
 		heights[0] = (byte) a;
 		heights[1] = (byte) b;
@@ -99,8 +99,8 @@ public class Tile {
 		return angle;
 	}
 
-	public Tile copy(boolean flipX, boolean flipY) {
-		return new Tile(heights, angle, flipX, flipY);
+	public SolidTile copy(boolean flipX, boolean flipY) {
+		return new SolidTile(heights, angle, flipX, flipY);
 	}
 	
 	private void reverseY() {

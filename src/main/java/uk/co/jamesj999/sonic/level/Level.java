@@ -34,7 +34,8 @@ public abstract class Level {
     // Abstract method to get the map associated with the level
     public abstract Map getMap();
 
-    public abstract Tile getTile(int index);
+    //TODO refactor out of level?
+    public abstract SolidTile getSolidTile(int index);
 
-    public abstract int getTileCount();
+    public abstract int getSolidTileCount();
 }

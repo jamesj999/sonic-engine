@@ -19,13 +19,13 @@ public class Sonic2Level extends Level {
     private Pattern[] patterns;
     private Chunk[] chunks;
     private Block[] blocks;
-    private Tile[] tiles;
+    private SolidTile[] solidTiles;
     private Map map;
 
     private int patternCount;
     private int chunkCount;
     private int blockCount;
-    private int tileCount;
+    private int solidTileCount;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
@@ -36,12 +36,15 @@ public class Sonic2Level extends Level {
                        int chunksAddr,
                        int blocksAddr,
                        int mapAddr,
-                       int collisionsAddr) throws IOException {
+                       int collisionsAddr,
+                       int solidTilesAddr,
+                       int solidTilesAngleAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadChunks(rom, chunksAddr);
         loadBlocks(rom, blocksAddr, collisionsAddr);
         loadMap(rom, mapAddr);
+        loadSolidTiles(rom, solidTilesAddr, solidTilesAngleAddr);
     }
 
     @Override
@@ -102,16 +105,16 @@ public class Sonic2Level extends Level {
     }
 
     @Override
-    public Tile getTile(int index) {
-        if (index >= tileCount) {
-            throw new IllegalArgumentException("Invalid Tile index");
+    public SolidTile getSolidTile(int index) {
+        if (index >= solidTileCount) {
+            throw new IllegalArgumentException("Invalid Solid Tile index");
         }
-        return tiles[index];
+        return solidTiles[index];
     }
 
     @Override
-    public int getTileCount() {
-        return tileCount;
+    public int getSolidTileCount() {
+        return solidTileCount;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
@@ -188,39 +191,45 @@ public class Sonic2Level extends Level {
         LOG.info("Chunk count: " + chunkCount + " (" + result.byteCount() + " bytes)");
     }
 
+    /**
+     *
+     * @param rom
+     * @param tilesAddr
+     * @param anglesAddr
+     * @throws IOException
+     */
+    private void loadSolidTiles(Rom rom, int tilesAddr, int anglesAddr) throws IOException {
+
+        final int SOLID_TILE_SIZE = 16*16;
+        final int TILE_COUNT = Sonic2.SOLID_TILE_MAP_SIZE / SolidTile.TILE_SIZE_IN_ROM;
+        LOG.info("how many solid tiles fit?:" + TILE_COUNT);
+
+        FileChannel channel = rom.getFileChannel();
+        channel.position(tilesAddr);
+
+        byte[] solidTileBuffer = rom.readBytes(tilesAddr, Sonic2.SOLID_TILE_MAP_SIZE);
+
+        SolidTile[] solidTiles = new SolidTile[TILE_COUNT];
+        for(int i = 0; i < TILE_COUNT; i++) {
+            byte tileAngle = rom.readByte(anglesAddr+i);
+            byte[] totallyLegitimateByteArraySir = Arrays.copyOfRange(solidTileBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
+
+            solidTiles[i] = new SolidTile(totallyLegitimateByteArraySir, tileAngle);
+        }
+    }
+
     private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
         final int COLLISION_BUFFER_LENGTH = 0x300;
         
         byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
-        byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
-        int[] collisionArray = new int[COLLISION_BUFFER_LENGTH];
+        //byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
+        //int[] collisionArray = new int[COLLISION_BUFFER_LENGTH];
         FileChannel channel = rom.getFileChannel();
-
-        channel.position(collisionAddr);
         KosinskiReader reader = new KosinskiReader();
 
-        var result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
-        }
-
-        for (int i=0; i< collisionBuffer.length; i++) {
-            collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
-        }
-
-        tileCount = result.byteCount() / Tile.TILE_SIZE_IN_ROM;
-
-        Tile[] tiles = new Tile[tileCount];
-        for(int i = 0; i < tileCount; i++) {
-            tiles[i] = new Tile(Arrays.copyOfRange(collisionBuffer, i * Tile.TILE_SIZE_IN_ROM, (i+ 1) * Tile.TILE_SIZE_IN_ROM));
-        }
-
-        LOG.info("Tile count: " + tileCount + " (" + result.byteCount() + " bytes)");
-
         channel.position(blocksAddr);
-        result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
+        var result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
 
         if (!result.success()) {
             throw new IOException("Block decompression error");
@@ -240,6 +249,33 @@ public class Sonic2Level extends Level {
         }
 
         LOG.info("Block count: " + blockCount + " (" + result.byteCount() + " bytes)");
+
+              /*
+        FIXME: This needs to read collision data alongside block loading, placing both at the same position(?).
+          It also needs to use references to the solid tile index above
+
+        channel.position(collisionAddr);
+
+
+        result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
+
+        if (!result.success()) {
+            throw new IOException("Collision decompression error");
+        }
+
+        for (int i=0; i< collisionBuffer.length; i++) {
+            collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
+        }
+
+        tileCount = result.byteCount() / SolidTile.TILE_SIZE_IN_ROM;
+
+        SolidTile[] solidTiles = new SolidTile[tileCount];
+        for(int i = 0; i < tileCount; i++) {
+            solidTiles[i] = new SolidTile(Arrays.copyOfRange(collisionBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM));
+        }
+
+        LOG.info("Tile count: " + tileCount + " (" + result.byteCount() + " bytes)");
+        */
     }
 
     private void loadMap(Rom rom, int mapAddr) throws IOException {

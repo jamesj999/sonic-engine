@@ -16,23 +16,23 @@ public abstract class AbstractOldLevel implements OldLevel {
 	private short xTiles = 256;
 	private short yTiles = 256;
 
-	protected Tile[][] tiles = new Tile[xTiles][yTiles];
+	protected SolidTile[][] solidTiles = new SolidTile[xTiles][yTiles];
 
 	public AbstractOldLevel() {
 		setupTiles();
 		registerSprites();
 	}
 
-	public void addTile(Tile tile, int x, int y) {
-		tiles[x][y] = tile;
+	public void addTile(SolidTile solidTile, int x, int y) {
+		solidTiles[x][y] = solidTile;
 	}
 
-	public Tile getTileAt(short x, short y) {
+	public SolidTile getTileAt(short x, short y) {
 		short xPosition = (short) Math.floor((double) x / 16);
 		short yPosition = (short) Math.floor((double) y / 16);
 		if (xPosition > -1 && yPosition > -1 && xPosition < xTiles
 				&& yPosition < yTiles) {
-			return tiles[xPosition][yPosition];
+			return solidTiles[xPosition][yPosition];
 		} else {
 			return null;
 		}
@@ -56,15 +56,15 @@ public abstract class AbstractOldLevel implements OldLevel {
 		int yTopBound = (cameraY + cameraHeight) / 16;
 		List<GLCommand> commands = new ArrayList<GLCommand>();
 		for (int x = xLeftBound; x <= xRightBound; x++) {
-			Tile[] tileLine = tiles[x];
+			SolidTile[] solidTileLine = solidTiles[x];
 			int realX = x * 16;
-			if (tileLine != null) {
+			if (solidTileLine != null) {
 				for (int y = yBottomBound; y <= yTopBound; y++) {
 					int realY = y * 16;
-					Tile tile = tileLine[y];
-					if (tile != null) {
-						for (int heightX = 0; heightX < tile.heights.length; heightX++) {
-							int height = tile.heights[heightX];
+					SolidTile solidTile = solidTileLine[y];
+					if (solidTile != null) {
+						for (int heightX = 0; heightX < solidTile.heights.length; heightX++) {
+							int height = solidTile.heights[heightX];
 							if (height > 0) {
 								for (int i = height + realY; i >= realY; i--) {
 									commands.add(new GLCommand(
@@ -82,10 +82,10 @@ public abstract class AbstractOldLevel implements OldLevel {
 				commands));
 	}
 
-	public void drawRange(int xMin, int xMax, int yMin, int yMax, Tile tile) {
+	public void drawRange(int xMin, int xMax, int yMin, int yMax, SolidTile solidTile) {
 		for (int x = xMin; x <= xMax; x++) {
 			for (int y = yMin; y <= yMax; y++) {
-				addTile(tile, x, y);
+				addTile(solidTile, x, y);
 			}
 		}
 	}

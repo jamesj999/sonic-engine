@@ -17,7 +17,11 @@ public class Sonic2 extends Game {
     private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 12;
     private static final int LEVEL_PALETTE_DIR = 0x2782;
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
-    private static final int COLLISION_INDEX_ADDR = 0x49E8;
+    private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
+    private static final int SOLID_TILE_MAP_ADDR = 0x42E50;
+    public static final int SOLID_TILE_MAP_SIZE = 0x300; //TODO are we sure?
+    private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
+    public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
     private final Rom rom;
 
@@ -64,7 +68,9 @@ public class Sonic2 extends Game {
         int chunksAddr = getChunksAddr(levelIdx);
         int blocksAddr = getBlocksAddr(levelIdx);
         int mapAddr = getTilesAddr(levelIdx);
-        int collisionAddr = getCollisionAddr(levelIdx);
+        int collisionAddr = getCollisionMapAddr(levelIdx);
+        int solidTileAddr = getSolidTileAddr();
+        int solidTileAngleAddr = getSolidTileAngleAddr();
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -73,8 +79,19 @@ public class Sonic2 extends Game {
         System.out.printf("Blocks addr: 0x%08X%n", blocksAddr);
         System.out.printf("Map/Tiles addr: 0x%08X%n", mapAddr);
         System.out.printf("Collision addr: 0x%08X%n", collisionAddr);
+        System.out.printf("Solid Tile addr: 0x%08X%n", solidTileAddr);
+        System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr);
+
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, solidTileAddr, solidTileAngleAddr);
+    }
+
+    private int getSolidTileAddr() {
+        return SOLID_TILE_MAP_ADDR;
+    }
+
+    private int getSolidTileAngleAddr() {
+        return SOLID_TILE_ANGLE_ADDR;
     }
 
     @Override
@@ -102,11 +119,6 @@ public class Sonic2 extends Game {
         return rom.read32BitAddr(LEVEL_DATA_DIR + levelDataIdx * LEVEL_DATA_DIR_ENTRY_SIZE + entryOffset);
     }
 
-    private int getCollisionDataAddress(int levelIdx) throws IOException {
-        int levelDataIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2);
-        return rom.read32BitAddr(levelDataIdx);
-    }
-
     private int getCharacterPaletteAddr() {
         return SONIC_TAILS_PALETTE_ADDR;
     }
@@ -129,6 +141,9 @@ public class Sonic2 extends Game {
         return getDataAddress(levelIdx, 0) & 0xFFFFFF;
     }
 
+    /*
+        FIXME: Level Layout, not 'tiles'
+     */
     private int getTilesAddr(int levelIdx) throws IOException {
         int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
         int zoneIdx = rom.readByte(zoneIdxLoc);
@@ -142,8 +157,8 @@ public class Sonic2 extends Game {
         return levelLayoutDirAddr + levelOffset;
     }
 
-    private int getCollisionAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = COLLISION_INDEX_ADDR + levelIdx * 2;
+    private int getCollisionMapAddr(int levelIdx) throws IOException {
+        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 2;
 
         int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
 

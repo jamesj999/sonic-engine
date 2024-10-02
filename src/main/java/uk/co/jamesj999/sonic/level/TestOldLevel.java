@@ -6,55 +6,55 @@ public class TestOldLevel extends AbstractOldLevel {
 
     @Override
     protected void setupTiles() {
-        Tile halfFlat = new Tile(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+        SolidTile halfFlat = new SolidTile(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
                 8, (byte) 0x00, true);
 
-        Tile lowFlat = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        SolidTile lowFlat = new SolidTile(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                 (byte) 0x00, false);
-        Tile lowFlatToSlope = new Tile(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
+        SolidTile lowFlatToSlope = new SolidTile(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
                 3, 3, 3, (byte) 0xFE, false);
-        Tile lowFlatToSlope2 = new Tile(3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5,
+        SolidTile lowFlatToSlope2 = new SolidTile(3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5,
                 5, 5, 5, (byte) 0xFC, false);
-        Tile lowFlatToSlope3 = new Tile(5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8,
+        SolidTile lowFlatToSlope3 = new SolidTile(5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8,
                 8, 8, 8, (byte) 0xFA, false);
-        Tile lowFlatToSlope4 = new Tile(9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11,
+        SolidTile lowFlatToSlope4 = new SolidTile(9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11,
                 12, 12, 12, 12, 13, (byte) 0xF8, false);
-        Tile lowFlatToSlope5 = new Tile(13, 13, 14, 14, 14, 15, 15, 15, 16, 16,
+        SolidTile lowFlatToSlope5 = new SolidTile(13, 13, 14, 14, 14, 15, 15, 15, 16, 16,
                 16, 16, 16, 16, 16, 16, (byte) 0xF6, false);
-        Tile lowSteepSlope = new Tile(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4,
+        SolidTile lowSteepSlope = new SolidTile(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4,
                 4, 4, (byte) 0xF8, false);
-        Tile lowSteepSlope2 = new Tile(5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8,
+        SolidTile lowSteepSlope2 = new SolidTile(5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8,
                 8, 8, 8, (byte) 0xF8, false);
-        Tile lowSteepSlope3 = new Tile(9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11,
+        SolidTile lowSteepSlope3 = new SolidTile(9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11,
                 11, 12, 12, 12, 12, (byte) 0xF8, false);
-        Tile lowSteepSlope4 = new Tile(13, 13, 13, 13, 14, 14, 14, 14, 15, 15,
+        SolidTile lowSteepSlope4 = new SolidTile(13, 13, 13, 13, 14, 14, 14, 14, 15, 15,
                 15, 15, 16, 16, 16, 16, (byte) 0xF8, false);
-        Tile halfHighPlatform = new Tile(16, 16, 16, 16, 16, 16, 16, 16, 0, 0,
+        SolidTile halfHighPlatform = new SolidTile(16, 16, 16, 16, 16, 16, 16, 16, 0, 0,
                 0, 0, 0, 0, 0, 0, (byte) 0xFF, false);
-        Tile lowLessSteep = new Tile(1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3,
+        SolidTile lowLessSteep = new SolidTile(1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3,
                 3, 3, (byte) 0xFC, false);
-        Tile lowLessSteep2 = new Tile(3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
+        SolidTile lowLessSteep2 = new SolidTile(3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
                 7, 7, (byte) 0xF8, false);
-        Tile highSlopeDown = new Tile(16, 16, 15, 14, 14, 13, 12, 11, 11, 10,
+        SolidTile highSlopeDown = new SolidTile(16, 16, 15, 14, 14, 13, 12, 11, 11, 10,
                 10, 9, 8, 8, 7, 7, (byte) 0x18, false);
-        Tile highSlopeDown2 = new Tile(6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0,
+        SolidTile highSlopeDown2 = new SolidTile(6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0,
                 0, 0, 0, (byte) 0x10, false);
-        Tile full = new Tile(16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+        SolidTile full = new SolidTile(16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
                 16, 16, 16, 16, (byte) 0x00, false);
 
-        Tile famousCurve1 = new Tile(1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
+        SolidTile famousCurve1 = new SolidTile(1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
                 3, 3, (byte) 0xFC, false);
-        Tile famousCurve2 = new Tile(3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 8, 8,
+        SolidTile famousCurve2 = new SolidTile(3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 8, 8,
                 9, 9, (byte) 0xF0, false);
-        Tile famousCurve3 = new Tile(10, 10, 11, 12, 12, 13, 14, 14, 15, 16,
+        SolidTile famousCurve3 = new SolidTile(10, 10, 11, 12, 12, 13, 14, 14, 15, 16,
                 16, 16, 16, 16, 16, 16, (byte) 0xE8, false);
-        Tile famousCurve4 = new Tile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4,
+        SolidTile famousCurve4 = new SolidTile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4,
                 5, 6, (byte) 0xE0, false);
-        Tile famousCurve5 = new Tile(7, 8, 10, 11, 13, 14, 16, 16, 16, 16, 16,
+        SolidTile famousCurve5 = new SolidTile(7, 8, 10, 11, 13, 14, 16, 16, 16, 16, 16,
                 16, 16, 16, 16, 16, (byte) 0xD8, false);
-        Tile famousCurve6 = new Tile(0, 0, 0, 0, 0, 0, 0, 2, 4, 6, 8, 11, 14,
+        SolidTile famousCurve6 = new SolidTile(0, 0, 0, 0, 0, 0, 0, 2, 4, 6, 8, 11, 14,
                 16, 16, 16, (byte) 0xD0, false);
-        Tile famousCurve7 = new Tile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+        SolidTile famousCurve7 = new SolidTile(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
                 8, 16, (byte) 0xC4, false);
 
         addTile(lowSteepSlope, 10, 1);
