@@ -90,11 +90,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
 				(short) 96, (short) 656);
 		spriteManager.addSprite(sonic);
-		camera.updatePosition(true);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
 		// later since it'll be used in the first update loop anyway
 		camera.setFocusedSprite(sonic);
+		camera.updatePosition(true);
 
 		// Load our ROM and Level
 		try {
