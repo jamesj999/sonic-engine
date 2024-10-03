@@ -20,6 +20,7 @@ public class LevelManager {
     private Level level;
     private Rom rom;
     private GraphicsManager graphicsManager;
+    private int currentLayer = 0;
 
     public void loadLevel(int levelIndex) throws IOException {
         //TODO proper error handling for ROM checksum etc.
@@ -44,12 +45,13 @@ public class LevelManager {
         int xRightBound = (cameraX + cameraWidth) / 16;
         int yBottomBound = cameraY / 16;
         int yTopBound = (cameraY + cameraHeight) / 16;
+
         List<GLCommand> commands = new ArrayList<GLCommand>();
         for (int x = xLeftBound; x <= xRightBound; x++) {
             int realX = x * 16;
             for (int y = yBottomBound; y <= yTopBound; y++) {
                 int realY = y * 16;
-                SolidTile solidTile = getSolidTileAt(0, realX, realY);
+                SolidTile solidTile = getSolidTileAt(currentLayer, realX, realY);
                 if (solidTile != null) {
                     for (int heightX = 0; heightX < SolidTile.TILE_SIZE_IN_ROM; heightX++) {
                         int height = solidTile.getHeightAt((byte) heightX);
@@ -100,5 +102,13 @@ public class LevelManager {
             levelManager = new LevelManager();
         }
         return levelManager;
+    }
+
+    public int getCurrentLayer() {
+        return currentLayer;
+    }
+
+    public void setCurrentLayer(int currentLayer) {
+        this.currentLayer = currentLayer;
     }
 }
