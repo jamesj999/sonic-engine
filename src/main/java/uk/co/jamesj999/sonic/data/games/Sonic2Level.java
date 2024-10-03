@@ -41,10 +41,11 @@ public class Sonic2Level extends Level {
                        int solidTilesAngleAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
+        loadSolidTiles(rom, solidTilesAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr);
         loadBlocks(rom, blocksAddr, collisionsAddr);
         loadMap(rom, mapAddr);
-        loadSolidTiles(rom, solidTilesAddr, solidTilesAngleAddr);
+
     }
 
     @Override
@@ -223,11 +224,12 @@ public class Sonic2Level extends Level {
 
     private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        final int COLLISION_BUFFER_LENGTH = 0x300;
+        final int COLLISION_BUFFER_LENGTH = 0xF00;
         
         byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
-        //byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
-        //int[] collisionArray = new int[COLLISION_BUFFER_LENGTH];
+        byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
+        int[] solidTileIdxArray = new int[COLLISION_BUFFER_LENGTH];
+
         FileChannel channel = rom.getFileChannel();
         KosinskiReader reader = new KosinskiReader();
 
@@ -243,12 +245,33 @@ public class Sonic2Level extends Level {
             throw new IOException("Inconsistent block data");
         }
 
+        channel.position(collisionAddr);
+
+
+        result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
+
+        if (!result.success()) {
+            throw new IOException("Collision decompression error");
+        }
+
+        for (int i=0; i< collisionBuffer.length; i++) {
+            solidTileIdxArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
+        }
+
         blocks = new Block[blockCount];
         for (int i = 0; i < blockCount; i++) {
             blocks[i] = new Block();
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(blockBuffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
-            blocks[i].fromSegaFormat(subArray);
+
+            //FIXME why is this going out of bounds with "256" entries? is 256 empty?
+            int solidTileIdx = 0;
+            if (i < solidTiles.length) {
+                solidTileIdx = i;
+            }
+            SolidTile tileRef = solidTiles[solidTileIdxArray[solidTileIdx]];
+
+            blocks[i].fromSegaFormat(subArray, tileRef);
         }
 
         LOG.info("Block count: " + blockCount + " (" + result.byteCount() + " bytes)");

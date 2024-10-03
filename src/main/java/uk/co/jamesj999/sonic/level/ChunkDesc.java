@@ -26,6 +26,7 @@ public final class ChunkDesc {
     private boolean yFlip;  // Cached Y flip
     private CollisionMode primaryCollisionMode;  // Cached primary collision mode
     private CollisionMode secondaryCollisionMode;  // Cached secondary collision mode
+    private SolidTile solidTile;
 
     //A Chunk Descriptor that is empty (the default state)
     public static ChunkDesc EMPTY = new ChunkDesc();
@@ -34,8 +35,9 @@ public final class ChunkDesc {
         this.index = 0;
     }
 
-    public ChunkDesc(int index) {
+    public ChunkDesc(int index, SolidTile solidTile) {
         this.index = index;
+        this.solidTile = solidTile;
         updateFields();
     }
 
@@ -84,5 +86,13 @@ public final class ChunkDesc {
 
     public static int getIndexSize() {
         return Short.BYTES;  // Java equivalent of C++ sizeof(uint16_t)
+    }
+
+    public SolidTile getSolidTile() {
+        return solidTile;
+    }
+
+    public void setSolidTile(SolidTile solidTile) {
+        this.solidTile = solidTile;
     }
 }

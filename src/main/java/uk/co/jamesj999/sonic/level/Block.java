@@ -22,14 +22,14 @@ public class Block {
     }
 
     // Parses a block of data from Sega's format (big-endian 16-bit values)
-    public void fromSegaFormat(byte[] buffer) {
-        if (buffer.length != BLOCK_SIZE_IN_ROM) {
+    public void fromSegaFormat(byte[] blockBuffer, SolidTile solidTile) {
+        if (blockBuffer.length != BLOCK_SIZE_IN_ROM) {
             throw new IllegalArgumentException("Buffer size does not match block size in ROM");
         }
 
         for (int i = 0; i < CHUNKS_PER_BLOCK; i++) {
-            int index = ((buffer[i * 2] & 0xFF) << 8) | (buffer[i * 2 + 1] & 0xFF); // Big-endian
-            chunkDescs[i] = new ChunkDesc(index);
+            int index = ((blockBuffer[i * 2] & 0xFF) << 8) | (blockBuffer[i * 2 + 1] & 0xFF); // Big-endian
+            chunkDescs[i] = new ChunkDesc(index, solidTile);
         }
     }
 
