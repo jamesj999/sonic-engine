@@ -88,8 +88,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 100, (short) 100);
+				(short) 96, (short) 656);
 		spriteManager.addSprite(sonic);
+		camera.updatePosition(true);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
 		// later since it'll be used in the first update loop anyway
@@ -128,8 +129,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public void update() {
         timerManager.update();
-		spriteCollisionManager.update(inputHandler);
-		camera.updatePosition();
+		//spriteCollisionManager.update(inputHandler);
+		//camera.updatePosition();
 	}
 
 	public void draw() {
