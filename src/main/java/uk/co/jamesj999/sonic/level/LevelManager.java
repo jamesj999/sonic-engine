@@ -72,12 +72,13 @@ public class LevelManager {
         if(level == null) {
             return null;
         }
+        System.out.println(x + "," + y);
         int mapX = x / 128;
         int mapY = y / 128;
         Map map = level.getMap();
         byte value = map.getValue(layer, mapX, mapY);
         Block block = level.getBlock(value);
-        ChunkDesc chunkDesc = block.getChunkDesc(x % (128 / 16), (y % 128) / 16);
+        ChunkDesc chunkDesc = block.getChunkDesc(((x % 128) / 16), ((y % 128) / 16));
         return null;
     }
 
