@@ -69,14 +69,13 @@ public class LevelManager {
     }
 
     public SolidTile getSolidTileAt(int layer, int x, int y) {
-        // TODO
-        int mapX = x / 128;
-        int mapY = y / 128;
         if(level == null) {
             return null;
         }
+        int mapX = x / 128;
+        int mapY = y / 128;
         Map map = level.getMap();
-        byte value = map.getValue(layer, x, y);
+        byte value = map.getValue(layer, mapX, mapY);
         Block block = level.getBlock(value);
         ChunkDesc chunkDesc = block.getChunkDesc(x % (128 / 16), (y % 128) / 16);
         return null;
