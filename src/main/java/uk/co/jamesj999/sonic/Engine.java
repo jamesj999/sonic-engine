@@ -61,7 +61,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private double realHeight = configService
 			.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
 
-    private boolean debugEnabled = configService.getBoolean(SonicConfiguration.DEBUG_ENABLED);
+    private boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
+	private boolean debugModeEnabled = configService.getBoolean(SonicConfiguration.DEBUG_MODE);
 
 	// TODO move this into a manager
 	private LevelManager levelManager = LevelManager.getInstance();
@@ -88,7 +89,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 96, (short) 656);
+				(short) 96, (short) 656, debugModeEnabled);
 		spriteManager.addSprite(sonic);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
@@ -203,7 +204,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
-        if(debugEnabled) {
+        if(debugViewEnabled) {
             debugRenderer.renderDebugInfo();
         }
 	}

@@ -73,12 +73,17 @@ public enum SonicConfiguration {
     /**
      * Whether to display debugging information on screen.
      */
-    DEBUG_ENABLED(true),
+    DEBUG_VIEW_ENABLED(true),
 
 	/**
 	 * Filename of ROM to use (temporary)
 	 */
-	ROM_FILENAME("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+	ROM_FILENAME("Sonic The Hedgehog 2 (W) (REV01) [!].gen"),
+
+	/**
+	 * Whether to enable Debug Movement Mode
+	 */
+	DEBUG_MODE(true);
 
 	private Object value;
 

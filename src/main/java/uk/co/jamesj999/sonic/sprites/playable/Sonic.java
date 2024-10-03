@@ -7,8 +7,8 @@ import com.jogamp.opengl.GL2;
 
 public class Sonic extends AbstractPlayableSprite {
 
-	public Sonic(String code, short x, short y) {
-		super(code, x, y, true);
+	public Sonic(String code, short x, short y, boolean debug) {
+		super(code, x, y, debug);
 		// width in pixels
 		setWidth(20);
 		setHeight(40);
