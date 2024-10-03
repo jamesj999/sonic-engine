@@ -1,7 +1,9 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
+import uk.co.jamesj999.sonic.sprites.managers.DebugSpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteMovementManager;
 
 /**
  * Movement speeds are in subpixels (256 subpixels per pixel...).
@@ -10,7 +12,7 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
  * 
  */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
-	protected final PlayableSpriteMovementManager movementManager;
+	protected final SpriteMovementManager movementManager;
 
 	protected SpriteRunningMode runningMode = SpriteRunningMode.GROUND;
 
@@ -164,7 +166,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected short runHeight;
 
-	protected AbstractPlayableSprite(String code, short x, short y) {
+	protected AbstractPlayableSprite(String code, short x, short y, boolean debug) {
 		super(code, x, y);
 		// Must define speeds before creating Manager (it will read speeds upon
 		// instantiation).
@@ -176,7 +178,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 			xHistory[i] = x;
 			yHistory[i] = y;
 		}
-		movementManager = new PlayableSpriteMovementManager(this);
+		if(debug) {
+			movementManager = new DebugSpriteMovementManager(this);
+		} else {
+			movementManager = new PlayableSpriteMovementManager(this);
+		}
 	}
 
 	public short getGSpeed() {
@@ -273,7 +279,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return minRollSpeed;
 	}
 
-	public PlayableSpriteMovementManager getMovementManager() {
+	public SpriteMovementManager getMovementManager() {
 		return movementManager;
 	}
 

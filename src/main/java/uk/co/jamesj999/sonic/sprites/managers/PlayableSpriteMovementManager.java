@@ -29,6 +29,7 @@ public class PlayableSpriteMovementManager extends
 
 	private boolean testKeyPressed;
 
+
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
 		max = sprite.getMax();
@@ -42,8 +43,8 @@ public class PlayableSpriteMovementManager extends
 		slopeRollingDown = sprite.getSlopeRollingDown();
 		rollDecel = sprite.getRollDecel();
 	}
-
-    public void handleMovement(boolean left, boolean right, boolean down, boolean jump, boolean testKey) {
+	@Override
+    public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
 		// A simple way to test our running modes...
         if (testKey && !testKeyPressed) {
 			testKeyPressed = true;

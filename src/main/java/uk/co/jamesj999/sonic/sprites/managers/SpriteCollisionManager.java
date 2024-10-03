@@ -39,7 +39,7 @@ public class SpriteCollisionManager {
             // Check we're dealing with a playable sprite:
             if (sprite instanceof AbstractPlayableSprite) {
                 ((AbstractPlayableSprite) sprite).getMovementManager()
-                        .handleMovement(left, right, down, space, z);
+                        .handleMovement(up, down, left, right, space, z);
 				/*
 				 * Idea: We can put object collision handling here - although
 				 * the X and Y have been set for the sprite, we still have the

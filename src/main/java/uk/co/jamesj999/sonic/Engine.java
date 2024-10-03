@@ -129,8 +129,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public void update() {
         timerManager.update();
-		//spriteCollisionManager.update(inputHandler);
-		//camera.updatePosition();
+		spriteCollisionManager.update(inputHandler);
+		camera.updatePosition();
 	}
 
 	public void draw() {

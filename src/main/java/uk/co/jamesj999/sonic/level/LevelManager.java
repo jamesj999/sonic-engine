@@ -49,7 +49,7 @@ public class LevelManager {
             int realX = x * 16;
             for (int y = yBottomBound; y <= yTopBound; y++) {
                 int realY = y * 16;
-                SolidTile solidTile = getSolidTileAt(1, realX, realY);
+                SolidTile solidTile = getSolidTileAt(0, realX, realY);
                 if (solidTile != null) {
                     for (int heightX = 0; heightX < SolidTile.TILE_SIZE_IN_ROM; heightX++) {
                         int height = solidTile.getHeightAt((byte) heightX);
@@ -69,17 +69,19 @@ public class LevelManager {
     }
 
     public SolidTile getSolidTileAt(int layer, int x, int y) {
-        if(level == null) {
+        if(level == null || x < 0 || y < 0) {
             return null;
         }
-        System.out.println(x + "," + y);
         int mapX = x / 128;
         int mapY = y / 128;
         Map map = level.getMap();
         byte value = map.getValue(layer, mapX, mapY);
-        Block block = level.getBlock(value);
+        if (value < 0) {
+            return null;
+        }
+        Block block = level.getBlock(value & 0xFF);
         ChunkDesc chunkDesc = block.getChunkDesc(((x % 128) / 16), ((y % 128) / 16));
-        return null;
+        return chunkDesc.getSolidTile();
     }
 
     private GraphicsManager getGraphicsManager() {
