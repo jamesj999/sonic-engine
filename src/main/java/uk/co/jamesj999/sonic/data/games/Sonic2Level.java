@@ -266,7 +266,6 @@ public class Sonic2Level extends Level {
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(blockBuffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
 
-            //FIXME why is this going out of bounds with "256" entries? is 256 empty?
             int solidTileIdx = 0;
             if (i < solidTiles.length) {
                 solidTileIdx = i;
@@ -278,32 +277,6 @@ public class Sonic2Level extends Level {
 
         LOG.info("Block count: " + blockCount + " (" + result.byteCount() + " bytes)");
 
-              /*
-        FIXME: This needs to read collision data alongside block loading, placing both at the same position(?).
-          It also needs to use references to the solid tile index above
-
-        channel.position(collisionAddr);
-
-
-        result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
-        }
-
-        for (int i=0; i< collisionBuffer.length; i++) {
-            collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
-        }
-
-        tileCount = result.byteCount() / SolidTile.TILE_SIZE_IN_ROM;
-
-        SolidTile[] solidTiles = new SolidTile[tileCount];
-        for(int i = 0; i < tileCount; i++) {
-            solidTiles[i] = new SolidTile(Arrays.copyOfRange(collisionBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM));
-        }
-
-        LOG.info("Tile count: " + tileCount + " (" + result.byteCount() + " bytes)");
-        */
     }
 
     private void loadMap(Rom rom, int mapAddr) throws IOException {
