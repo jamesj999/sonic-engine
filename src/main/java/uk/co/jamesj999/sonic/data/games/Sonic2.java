@@ -19,7 +19,7 @@ public class Sonic2 extends Game {
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
     private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
     private static final int SOLID_TILE_MAP_ADDR = 0x42E50;
-    public static final int SOLID_TILE_MAP_SIZE = 0xF00; //TODO are we sure?
+    public static final int SOLID_TILE_MAP_SIZE = 0xFFF; //TODO are we sure?
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
@@ -158,7 +158,7 @@ public class Sonic2 extends Game {
     }
 
     private int getCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 2;
+        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx;
 
         int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
 

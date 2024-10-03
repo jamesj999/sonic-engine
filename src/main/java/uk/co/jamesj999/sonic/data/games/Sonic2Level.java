@@ -201,8 +201,7 @@ public class Sonic2Level extends Level {
      */
     private void loadSolidTiles(Rom rom, int tilesAddr, int anglesAddr) throws IOException {
 
-        final int SOLID_TILE_SIZE = 16*16;
-        solidTileCount = Sonic2.SOLID_TILE_MAP_SIZE / SolidTile.TILE_SIZE_IN_ROM;
+        solidTileCount = (Sonic2.SOLID_TILE_MAP_SIZE+1) / SolidTile.TILE_SIZE_IN_ROM;
         LOG.info("how many solid tiles fit?:" + solidTileCount);
 
         FileChannel channel = rom.getFileChannel();
@@ -228,7 +227,7 @@ public class Sonic2Level extends Level {
 
     private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        final int COLLISION_BUFFER_LENGTH = 0xF00;
+        final int COLLISION_BUFFER_LENGTH = 0x300;
         
         byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
         byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
@@ -250,7 +249,6 @@ public class Sonic2Level extends Level {
         }
 
         channel.position(collisionAddr);
-
 
         result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
 
