@@ -202,16 +202,20 @@ public class Sonic2Level extends Level {
     private void loadSolidTiles(Rom rom, int tilesAddr, int anglesAddr) throws IOException {
 
         final int SOLID_TILE_SIZE = 16*16;
-        final int TILE_COUNT = Sonic2.SOLID_TILE_MAP_SIZE / SolidTile.TILE_SIZE_IN_ROM;
-        LOG.info("how many solid tiles fit?:" + TILE_COUNT);
+        solidTileCount = Sonic2.SOLID_TILE_MAP_SIZE / SolidTile.TILE_SIZE_IN_ROM;
+        LOG.info("how many solid tiles fit?:" + solidTileCount);
 
         FileChannel channel = rom.getFileChannel();
         channel.position(tilesAddr);
 
         byte[] solidTileBuffer = rom.readBytes(tilesAddr, Sonic2.SOLID_TILE_MAP_SIZE);
 
-        solidTiles = new SolidTile[TILE_COUNT];
-        for(int i = 0; i < TILE_COUNT; i++) {
+        if (solidTileBuffer.length % Sonic2.SOLID_TILE_MAP_SIZE != 0) {
+            throw new IOException("Inconsistent SolidTile data");
+        }
+
+        solidTiles = new SolidTile[solidTileCount];
+        for(int i = 0; i < solidTileCount; i++) {
             byte tileAngle = rom.readByte(anglesAddr+i);
             byte[] totallyLegitimateByteArraySir = Arrays.copyOfRange(solidTileBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
 

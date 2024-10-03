@@ -74,13 +74,13 @@ public class SensorLine {
 			for (int checkY = startY; checkY <= endY; checkY++) {
 				SolidTile toUse;
 				short tileY = (short) ((checkY / 16) * 16);
-				/*TODO SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
+				SolidTile solidTile = levelManager.getSolidTileAt(0, (short) checkX, (short) checkY);
 				if (solidTile != null) {
 					byte heightOfTile = solidTile.getHeightAt(offset);
 					toUse = solidTile;
 					if (((startY == endY) && (checkX == endX))
 							|| ((startX == endX) && (checkY == endY))) {
-						SolidTile solidTileAbove = level.getTileAt((short) checkX,
+						SolidTile solidTileAbove = levelManager.getSolidTileAt(0, (short) checkX,
 								(short) (checkY + 16));
 						if (solidTileAbove != null) {
 							byte heightOfTileAbove = solidTileAbove
@@ -98,7 +98,7 @@ public class SensorLine {
 						highestRealY = thisHeight;
 						angle = solidTile.getAngle();
 					}
-				}*/
+				}
 			}
 		}
 		if (sprite instanceof AbstractPlayableSprite) {
@@ -136,7 +136,7 @@ public class SensorLine {
 		for (int checkX = startX; checkX <= endX; checkX++) {
 			// short tileX = (short) Math.floor((double) checkX / 16);
 			for (int checkY = startY; checkY <= endY; checkY++) {
-				/**SolidTile solidTile = level.getTileAt((short) checkX, (short) checkY);
+				SolidTile solidTile = levelManager.getSolidTileAt(0, (short) checkX, (short) checkY);
 				if (solidTile != null
 						&& (!horizontal)) { // TODO Update: || (horizontal && !solidTile.getJumpThrough()))) {
 					if (checkX > highestRealX) {
@@ -145,7 +145,7 @@ public class SensorLine {
 							lowestRealX = (short) checkX;
 						}
 					}
-				}**/
+				}
 			}
 		}
 
