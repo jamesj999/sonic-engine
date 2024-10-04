@@ -52,21 +52,24 @@ public abstract class AbstractLevel implements Level {
 		int cameraHeight = camera.getHeight();
 		int xLeftBound = cameraX / 16;
 		int xRightBound = (cameraX + cameraWidth) / 16;
-		int yBottomBound = cameraY / 16;
-		int yTopBound = (cameraY + cameraHeight) / 16;
+		int yBottomBound = ((cameraY + cameraHeight) < 0) ? 0 : (cameraY + cameraHeight) / 16;
+		int yTopBound = cameraY / 16;
 		List<GLCommand> commands = new ArrayList<GLCommand>();
 		for (int x = xLeftBound; x <= xRightBound; x++) {
 			Tile[] tileLine = tiles[x];
 			int realX = x * 16;
 			if (tileLine != null) {
-				for (int y = yBottomBound; y <= yTopBound; y++) {
+				for (int y = yTopBound; y <= yBottomBound; y++){
+					if(y >= tileLine.length) {
+						continue;
+					}
 					int realY = y * 16;
 					Tile tile = tileLine[y];
 					if (tile != null) {
 						for (int heightX = 0; heightX < tile.heights.length; heightX++) {
 							int height = tile.heights[heightX];
 							if (height > 0) {
-								for (int i = height + realY; i >= realY; i--) {
+								for (int i = realY - height; i <= realY; i++) {
 									commands.add(new GLCommand(
 											GLCommand.Type.VERTEX2I, -1, 1, 1,
 											1, realX + heightX, i, -1, -1));

@@ -83,7 +83,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 									// lighting
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 100, (short) 100);
+				(short) 100, (short) 3700);
 		spriteManager.addSprite(sonic);
 
 		// Causes camera to instantiate itself... TODO Probably remove this

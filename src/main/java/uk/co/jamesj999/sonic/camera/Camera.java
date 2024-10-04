@@ -136,6 +136,8 @@ public class Camera {
 
 	public void setFocusedSprite(AbstractPlayableSprite sprite) {
 		this.focusedSprite = sprite;
+		x = sprite.getX();
+		y = sprite.getY();
 	}
 
 	public short getX() {
