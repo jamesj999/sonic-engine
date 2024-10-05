@@ -48,6 +48,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final SpriteCollisionManager spriteCollisionManager = SpriteCollisionManager.getInstance();
 	private final GraphicsManager graphicsManager = GraphicsManager
 			.getInstance();
+
 	private final Camera camera = Camera.getInstance();
 	private final DebugRenderer debugRenderer = DebugRenderer.getInstance();
     private final TimerManager timerManager = TimerManager.getInstance();

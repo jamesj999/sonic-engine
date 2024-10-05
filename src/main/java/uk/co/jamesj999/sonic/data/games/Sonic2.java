@@ -2,7 +2,6 @@ package uk.co.jamesj999.sonic.data.games;
 
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
-import uk.co.jamesj999.sonic.level.AbstractLevel;
 import uk.co.jamesj999.sonic.level.Level;
 
 import java.io.IOException;
@@ -62,7 +61,7 @@ public class Sonic2 extends Game {
     }
 
     @Override
-    public AbstractLevel loadLevel(int levelIdx) throws IOException {
+    public Level loadLevel(int levelIdx) throws IOException {
         int characterPaletteAddr = getCharacterPaletteAddr();
         int levelPalettesAddr = getLevelPalettesAddr(levelIdx);
         int patternsAddr = getPatternsAddr(levelIdx);

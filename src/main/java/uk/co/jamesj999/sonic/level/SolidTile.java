@@ -5,7 +5,7 @@ import org.apache.commons.lang3.ArrayUtils;
 public class SolidTile {
 	public static final int TILE_SIZE_IN_ROM = 16;
 
-	private final byte[] heights;
+	public final byte[] heights;
 	private byte[] widths;
 	private final byte angle;
 	private boolean jumpThrough;

@@ -9,7 +9,7 @@ import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.logging.Logger;
 
-public class Sonic2Level extends AbstractLevel {
+public class Sonic2Level implements Level {
     private static final int PALETTE_COUNT = 4;
     private static final int MAP_LAYERS = 2;
     private static final int MAP_HEIGHT = 16;
