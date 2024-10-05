@@ -5,13 +5,11 @@ import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
-import uk.co.jamesj999.sonic.data.Game;
-import uk.co.jamesj999.sonic.data.Rom;
-import uk.co.jamesj999.sonic.data.games.Sonic2;
+
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
-import uk.co.jamesj999.sonic.level.Level;
+
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
@@ -65,7 +63,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private boolean debugModeEnabled = configService.getBoolean(SonicConfiguration.DEBUG_MODE);
 
 	// TODO move this into a manager
-	private LevelManager levelManager = LevelManager.getInstance();
+	private final LevelManager levelManager = LevelManager.getInstance();
 
 	private GLU glu;
 
@@ -89,7 +87,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 100, (short) 656);
+				(short) 100, (short) 656, debugViewEnabled);
 		spriteManager.addSprite(sonic);
 
 		// Causes camera to instantiate itself... TODO Probably remove this

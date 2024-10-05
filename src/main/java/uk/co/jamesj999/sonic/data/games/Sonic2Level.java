@@ -9,7 +9,7 @@ import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.logging.Logger;
 
-public class Sonic2Level extends Level {
+public class Sonic2Level extends AbstractLevel {
     private static final int PALETTE_COUNT = 4;
     private static final int MAP_LAYERS = 2;
     private static final int MAP_HEIGHT = 16;
@@ -103,19 +103,6 @@ public class Sonic2Level extends Level {
     @Override
     public Map getMap() {
         return map;
-    }
-
-    @Override
-    public SolidTile getSolidTile(int index) {
-        if (index >= solidTileCount) {
-            throw new IllegalArgumentException("Invalid Solid Tile index");
-        }
-        return solidTiles[index];
-    }
-
-    @Override
-    public int getSolidTileCount() {
-        return solidTileCount;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {

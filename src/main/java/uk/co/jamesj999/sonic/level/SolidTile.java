@@ -37,7 +37,7 @@ public class SolidTile {
 	 * separately.
 	 */
 	public SolidTile(int a, int b, int c, int d, int e, int f, int g, int h, int i,
-					 int j, int k, int l, int m, int n, int o, int p, byte angle) {
+					 int j, int k, int l, int m, int n, int o, int p, byte angle, boolean jumpThrough) {
 		heights = new byte[16];
 		heights[0] = (byte) a;
 		heights[1] = (byte) b;
@@ -56,6 +56,7 @@ public class SolidTile {
 		heights[14] = (byte) o;
 		heights[15] = (byte) p;
 		this.angle = angle;
+		this.jumpThrough = jumpThrough;
 	}
 
 	public byte getHeightAt(byte y) {
@@ -76,4 +77,7 @@ public class SolidTile {
 		}
 	}
 
+	public boolean getJumpThrough() {
+		return jumpThrough;
+	}
 }

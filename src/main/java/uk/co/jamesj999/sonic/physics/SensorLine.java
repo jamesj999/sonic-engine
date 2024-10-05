@@ -28,6 +28,7 @@ public class SensorLine {
 	private byte y;
 	private byte x2;
 	private byte y2;
+	private int layer = 0;
 	private SensorDirection direction;
 
 	/**
@@ -66,7 +67,7 @@ public class SensorLine {
 
 		for(int xValue = startX; xValue != endX; xValue += xIncrement) {
 			for (int yValue = startY; yValue != endY; yValue += yIncrement) {
-				Tile tile = levelManager.getLevel().getTileAt((short) xValue, (short) yValue);
+				SolidTile tile = levelManager.getSolidTileAt(layer, (short) xValue, (short) yValue);
 				if(tile != null) {
 					if(direction == SensorDirection.DOWN) {
 						byte tileHeight = tile.getHeightAt((byte) (xValue % 16));
