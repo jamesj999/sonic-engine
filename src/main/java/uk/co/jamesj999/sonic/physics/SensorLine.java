@@ -4,13 +4,14 @@ import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Level;
-import uk.co.jamesj999.sonic.level.OldLevel;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import com.jogamp.opengl.GL2;
+import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,149 +26,70 @@ public class SensorLine {
 
 	private byte x;
 	private byte y;
-	private byte length;
-	private boolean horizontal;
+	private byte x2;
+	private byte y2;
+	private SensorDirection direction;
 
 	/**
 	 * X and Y are in relation to sprite's centre.
 	 */
-	public SensorLine(Sprite sprite, int x, int y, int length,
-			boolean horizontal) {
+	public SensorLine(Sprite sprite, byte x, byte y, byte x2, byte y2, SensorDirection direction) {
 		this.sprite = sprite;
-		this.x = (byte) x;
-		this.y = (byte) y;
-		this.length = (byte) length;
-		this.horizontal = horizontal;
+		updateParameters(x, y, x2, y2, direction);
 	}
 
-	public void updateParameters(int x, int y, int length, boolean horizontal) {
-		this.x = (byte) x;
-		this.y = (byte) y;
-		this.length = (byte) length;
-		this.horizontal = horizontal;
+	public void updateParameters(byte x, byte y, byte x2, byte y2, SensorDirection direction) {
+		//TODO Add validation of direction vs x/y coords.
+		this.x = x;
+		this.y = y;
+		this.x2 = x2;
+		this.y2 = y2;
+		this.direction = direction;
 	}
 
-	public short getHeight() {
-		short spriteX = sprite.getCentreX();
-		short spriteY = sprite.getCentreY();
+	public SensorResult scan() {
+		short spriteCentreX = sprite.getCentreX();
+		short spriteCentreY = sprite.getCentreY();
 
-		Level level = levelManager.getCurrentLevel();
+		int startX = x + spriteCentreX;
+		int endX = x2 + spriteCentreX;
 
-		int startX = spriteX + x;
-		int startY = spriteY + y;
-		int endX;
-		int endY;
-		if (horizontal) {
-			endX = startX + length;
-			endY = startY;
-		} else {
-			endX = startX;
-			endY = startY + length;
-		}
+		int startY = y + spriteCentreY;
+		int endY = y2 + spriteCentreY;
 
-		short highestRealY = -1;
-		byte angle = 0x00;
+		int xIncrement = (startX < endX || startX == endX) ? 1 : -1;
+		int yIncrement = (startY < endY || startY == endY) ? 1 : -1;
 
-		for (int checkX = startX; checkX <= endX; checkX++) {
-			byte offset = (byte) (checkX % 16);
-			// short tileX = (short) Math.floor((double) checkX / 16);
-			for (int checkY = startY; checkY <= endY; checkY++) {
-				SolidTile toUse;
-				short tileY = (short) ((checkY / 16) * 16);
-				SolidTile solidTile = levelManager.getSolidTileAt(levelManager.getCurrentLayer(), (short) checkX, (short) checkY);
-				if (solidTile != null) {
-					byte heightOfTile = solidTile.getHeightAt(offset);
-					toUse = solidTile;
-					if (((startY == endY) && (checkX == endX))
-							|| ((startX == endX) && (checkY == endY))) {
-						SolidTile solidTileAbove = levelManager.getSolidTileAt(levelManager.getCurrentLayer(), (short) checkX,
-								(short) (checkY + 16));
-						if (solidTileAbove != null) {
-							byte heightOfTileAbove = solidTileAbove
-									.getHeightAt(offset);
-							if (heightOfTileAbove > 0) {
-								toUse = solidTileAbove;
-								heightOfTile = (byte) (heightOfTileAbove + 16);
-								tileY++;
-							}
+		// Increment end by 1 so we catch it in our weird loop below
+		endY++;
+		endX++;
+
+		for(int xValue = startX; xValue != endX; xValue += xIncrement) {
+			for (int yValue = startY; yValue != endY; yValue += yIncrement) {
+				Tile tile = levelManager.getLevel().getTileAt((short) xValue, (short) yValue);
+				if(tile != null) {
+					if(direction == SensorDirection.DOWN) {
+						byte tileHeight = tile.getHeightAt((byte) (xValue % 16));
+
+//						if(tileHeight == 16) {
+//							// we have to go up one tile to check we're not stuck somewhere
+//							int upYValue = (yValue % 16) - 16;
+//							Tile upTile = levelManager.getLevel().getTileAt((short) xValue, (short) upYValue);
+//
+//						}
+						if (yValue <= tileHeight + (yValue - (yValue % 16))) {
+							// we found it
+							byte distance = (byte) ((yValue % 16) + tileHeight);
+							return new SensorResult(tile.getAngle(), distance, -1); // TODO Add Tile ID
 						}
-					}
-					short thisHeight = (short) (heightOfTile + tileY);
-					if (thisHeight > highestRealY) {
-						solidTileToHighlight = toUse;
-						highestRealY = thisHeight;
-						angle = solidTile.getAngle();
-					}
-				}
-			}
-		}
-		if (sprite instanceof AbstractPlayableSprite) {
-			((AbstractPlayableSprite) sprite).setAngle(angle);
-		}
-		return highestRealY;
-	}
-
-	public short getX() {
-		short spriteX = sprite.getCentreX();
-		short spriteY = sprite.getCentreY();
-
-		Level level = levelManager.getCurrentLevel();
-
-		// Starting positions will always be the same
-		int startX = spriteX + x;
-		int startY = spriteY + y;
-		int endX;
-		int endY;
-		// If we are horizontal, we go along the x axis, otherwise we go along
-		// the y axis.
-		if (horizontal) {
-			endX = startX + length;
-			endY = startY;
-		} else {
-			endX = startX;
-			endY = startY + length;
-		}
-
-		// Returning -1 means we did not find a collision:
-		short highestRealX = -1;
-		short lowestRealX = -1;
-
-		// Iterate through our line checking the tile at each point:
-		for (int checkX = startX; checkX <= endX; checkX++) {
-			// short tileX = (short) Math.floor((double) checkX / 16);
-			for (int checkY = startY; checkY <= endY; checkY++) {
-				SolidTile solidTile = levelManager.getSolidTileAt(levelManager.getCurrentLayer(), (short) checkX, (short) checkY);
-				if (solidTile != null
-						&& (!horizontal)) { // TODO Update: || (horizontal && !solidTile.getJumpThrough()))) {
-					if (checkX > highestRealX) {
-						highestRealX = (short) checkX;
-						if (checkX < lowestRealX || lowestRealX == -1) {
-							lowestRealX = (short) checkX;
-						}
+					} else {
+						//TODO handle other directions
 					}
 				}
 			}
 		}
 
-		if (((AbstractPlayableSprite) sprite).getGSpeed() > 0) {
-			if (lowestRealX > -1) {
-				graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
-						-1, 1, 0, 0, lowestRealX - 5, spriteY + y - 5,
-						lowestRealX + 5, spriteY + y + 5));
-			}
-			return lowestRealX;
-			// This has been removed because it breaks wall collisions whilst in
-			// the air... (Gspeed can be 0 in this case)
-			// } else if (((AbstractPlayableSprite) sprite).getGSpeed() == 0) {
-			// return -1;
-		} else {
-			if (highestRealX > -1) {
-				graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
-						-1, 1, 0, 0, highestRealX - 5, spriteY + y - 5,
-						highestRealX + 5, spriteY + y + 5));
-			}
-			return highestRealX;
-		}
+		return null;
 	}
 
 	public void draw() {
@@ -175,15 +97,9 @@ public class SensorLine {
 		short spriteY = sprite.getCentreY();
 		int startX = spriteX + x;
 		int startY = spriteY + y;
-		int endX;
-		int endY;
-		if (horizontal) {
-			endX = startX + length;
-			endY = startY;
-		} else {
-			endX = startX;
-			endY = startY + length;
-		}
+		int endX = spriteX + x2;
+		int endY = spriteY + y2;
+
 		List<GLCommand> commands = new ArrayList<GLCommand>();
 		commands.add(new GLCommand(GLCommand.Type.VERTEX2I, -1, 1, 0, 0,
 				startX, startY, 0, 0));
@@ -191,5 +107,9 @@ public class SensorLine {
 				endY, 0, 0));
 		graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES,
 				commands));
+	}
+
+	public SensorDirection getDirection() {
+		return direction;
 	}
 }

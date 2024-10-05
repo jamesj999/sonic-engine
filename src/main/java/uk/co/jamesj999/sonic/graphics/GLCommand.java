@@ -1,8 +1,11 @@
 package uk.co.jamesj999.sonic.graphics;
 
 import com.jogamp.opengl.GL2;
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
 public class GLCommand implements GLCommandable {
+	private final int screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT);
 	public enum Type {
 		RECTI, VERTEX2I;
 	}
@@ -38,9 +41,9 @@ public class GLCommand implements GLCommandable {
 		this.colour2 = colour2;
 		this.colour3 = colour3;
 		this.x1 = x1;
-		this.y1 = y1;
+		this.y1 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y1;
 		this.x2 = x2;
-		this.y2 = y2;
+		this.y2 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y2;
 	}
 
 	public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth,
@@ -62,9 +65,9 @@ public class GLCommand implements GLCommandable {
 		}
 		gl.glColor3f(colour1, colour2, colour3);
 		if (Type.RECTI.equals(type)) {
-			gl.glRecti(x1 - cameraX, y1 - cameraY, x2 - cameraX, y2 - cameraY);
+			gl.glRecti(x1 - cameraX, y2 + cameraY, x2 - cameraX, y1 + cameraY);
 		} else if (Type.VERTEX2I.equals(type)) {
-			gl.glVertex2i(x1 - cameraX, y1 - cameraY);
+			gl.glVertex2i(x1 - cameraX, y1 + cameraY);
 		}
 		if (single) {
 			gl.glEnd();

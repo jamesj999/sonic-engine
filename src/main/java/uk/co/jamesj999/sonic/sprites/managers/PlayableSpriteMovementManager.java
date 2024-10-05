@@ -157,13 +157,14 @@ public class PlayableSpriteMovementManager extends
         }
 
         // Temporary 'death' detection - just resets X/Y of sprite.
-        if (sprite.getY() <= 0) {
+		// TODO - This no longer works. y <= 0 would put sonic above the viewport. Needs to work based on level height once merged.
+        /*if (sprite.getY() <= 0) {
             sprite.setX((short) 50);
             sprite.setY((short) 50);
             sprite.setXSpeed((short) 0);
             sprite.setYSpeed((short) 0);
             sprite.setGSpeed((short) 0);
-        }
+        }*/
     }
 
     private void doWallCollision (AbstractPlayableSprite sprite) {
@@ -197,7 +198,7 @@ public class PlayableSpriteMovementManager extends
             sprite.setAir(true);
         } else if(terrainHeight > -1) {
             // This means that sonic is on the ground
-            if (sprite.getAir() && sprite.getYSpeed() < 0 && (sprite.getCentreY() - (sprite.getHeight() / 2)) < terrainHeight) {
+            if (sprite.getAir() && sprite.getYSpeed() > 0 && (sprite.getCentreY() + (sprite.getHeight() / 2)) > terrainHeight) {
                 // This sprite currently in the air, moving to the ground so we need to reset its X/Y speeds:
                 calculateLanding(sprite);
             }
@@ -205,7 +206,7 @@ public class PlayableSpriteMovementManager extends
             // Check again if we're in the air - we may have just landed.
             if(!sprite.getAir()) {
                 // TODO: Figure out why the 20 is here...
-				sprite.setY((short) (terrainHeight + 20 + (sprite.getHeight() / 2)));
+				sprite.setY((short) (terrainHeight - (sprite.getHeight() / 2)));
 			}
         }
     }
@@ -333,7 +334,7 @@ public class PlayableSpriteMovementManager extends
 		jumpPressed = true;
 		sprite.setXSpeed((short) (sprite.getXSpeed() - sprite.getJump()
 				* Math.sin(Math.toRadians(angle))));
-		sprite.setYSpeed((short) (sprite.getYSpeed() + sprite.getJump()
+		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
 				* Math.cos(Math.toRadians(angle))));
 	}
 
@@ -368,13 +369,16 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 		// xSpeed = gSpeed;
-		if (ySpeed > 0 && ySpeed < 1024) {
+		if (ySpeed < 0 && ySpeed > -1024) {
 			if (Math.abs(xSpeed) >= 32) {
 				xSpeed *= 0.96875;
 			}
 		}
-		ySpeed -= sprite.getGravity();
+		ySpeed += sprite.getGravity();
 
+		if(ySpeed > 4096) {
+			ySpeed = 4096;
+		}
 		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
 	}
@@ -395,7 +399,7 @@ public class PlayableSpriteMovementManager extends
 		short xSpeed = sprite.getXSpeed();
 		short gSpeed = sprite.getGSpeed();
 		int angle = calculateAngle(sprite);
-		if (ySpeed < 0) {
+		if (ySpeed > 0) {
 			byte originalAngle = sprite.getAngle();
 			if ((originalAngle >= (byte) 0xF0 && originalAngle <= (byte) 0xFF)
 					|| (originalAngle >= (byte) 0x00 && originalAngle <= (byte) 0x0F)) {
@@ -469,15 +473,15 @@ public class PlayableSpriteMovementManager extends
 		sprite.setXSpeed((short) Math.round(gSpeed
 				* Math.cos(Math.toRadians(angle))));
 
-		sprite.setYSpeed((short) -Math.round(gSpeed
+		sprite.setYSpeed((short) Math.round(gSpeed
 				* Math.sin(Math.toRadians(angle))));
 	}
 
 	private void jumpHandler(boolean jump) {
 		short ySpeedConstant = (4 * 256);
-		if (sprite.getYSpeed() > ySpeedConstant) {
+		if (sprite.getYSpeed() < -ySpeedConstant) {
 			if (!jump) {
-				sprite.setYSpeed(ySpeedConstant);
+				sprite.setYSpeed((short) (-ySpeedConstant));
 			}
 		}
 		if (!sprite.getAir() && !jump) {

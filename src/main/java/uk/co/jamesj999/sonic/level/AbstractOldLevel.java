@@ -10,7 +10,7 @@ import com.jogamp.opengl.GL2;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class AbstractOldLevel implements OldLevel {
+public abstract class AbstractLevel implements Level {
 	protected GraphicsManager graphicsManager = GraphicsManager.getInstance();
 	protected SpriteManager spriteManager = SpriteManager.getInstance();
 	private short xTiles = 256;
@@ -18,7 +18,7 @@ public abstract class AbstractOldLevel implements OldLevel {
 
 	protected SolidTile[][] solidTiles = new SolidTile[xTiles][yTiles];
 
-	public AbstractOldLevel() {
+	public AbstractLevel() {
 		setupTiles();
 		registerSprites();
 	}
@@ -52,21 +52,24 @@ public abstract class AbstractOldLevel implements OldLevel {
 		int cameraHeight = camera.getHeight();
 		int xLeftBound = cameraX / 16;
 		int xRightBound = (cameraX + cameraWidth) / 16;
-		int yBottomBound = cameraY / 16;
-		int yTopBound = (cameraY + cameraHeight) / 16;
+		int yBottomBound = ((cameraY + cameraHeight) < 0) ? 0 : (cameraY + cameraHeight) / 16;
+		int yTopBound = cameraY / 16;
 		List<GLCommand> commands = new ArrayList<GLCommand>();
 		for (int x = xLeftBound; x <= xRightBound; x++) {
 			SolidTile[] solidTileLine = solidTiles[x];
 			int realX = x * 16;
 			if (solidTileLine != null) {
-				for (int y = yBottomBound; y <= yTopBound; y++) {
+				for (int y = yTopBound; y <= yBottomBound; y++){
+					if(y >= solidTileLine.length) {
+						continue;
+					}
 					int realY = y * 16;
 					SolidTile solidTile = solidTileLine[y];
 					if (solidTile != null) {
 						for (int heightX = 0; heightX < SolidTile.TILE_SIZE_IN_ROM; heightX++) {
 							int height = solidTile.getHeightAt((byte)heightX);
 							if (height > 0) {
-								for (int i = height + realY; i >= realY; i--) {
+								for (int i = realY - height; i <= realY; i++) {
 									commands.add(new GLCommand(
 											GLCommand.Type.VERTEX2I, -1, 1, 1,
 											1, realX + heightX, i, -1, -1));
