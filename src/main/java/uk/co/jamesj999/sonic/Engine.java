@@ -164,7 +164,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 				final JFrame frame = new JFrame(); // Swing's JFrame or AWT's
 													// Frame
 				frame.getContentPane().add(canvas);
-				((Engine) canvas).setInputHandler(new InputHandler(frame));
+				((Engine) canvas).setInputHandler(new InputHandler(canvas));
 				frame.addWindowListener(new WindowAdapter() {
 					@Override
 					public void windowClosing(WindowEvent e) {
@@ -181,11 +181,21 @@ public class Engine extends GLCanvas implements GLEventListener {
 						}.start();
 					}
 				});
+
+				frame.addWindowFocusListener(new WindowAdapter() {
+					@Override
+					public void windowGainedFocus(WindowEvent e) {
+						canvas.requestFocusInWindow();
+						// request focus back to the canvas
+					}
+				});
+
 				frame.setTitle("Java Sonic Engine by Jamesj999 and Raiscan "
 						+ version);
 				frame.pack();
 				frame.setVisible(true);
 				animator.start(); // start the animation loop
+
 			}
 		});
 	}
