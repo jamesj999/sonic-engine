@@ -53,7 +53,7 @@ public class LevelManager {
         int xLeftBound = Math.min(0,drawX);
         int xRightBound = cameraX + cameraWidth; //TODO limit= next screen lock? end of lvl?
         int yTopBound = Math.min(0,drawY); //TODO limit = next screen lock? end of lvl?
-        int yBottomBound = (Math.max(level.getMap().getHeight(),cameraY + cameraHeight));
+        int yBottomBound = (Math.min(level.getMap().getHeight(),cameraY + cameraHeight));
         List<GLCommand> commands = new ArrayList<GLCommand>();
 
         for (int y = yTopBound; y <= yBottomBound; y += 16) {
