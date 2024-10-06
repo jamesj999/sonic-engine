@@ -16,6 +16,7 @@ public class Chunk {
     public static final int CHUNK_SIZE_IN_ROM = PATTERNS_PER_CHUNK * BYTES_PER_PATTERN;
 
     private final PatternDesc[] patternDescs;
+    private int solidTileIndex;
 
     // Default constructor
     public Chunk() {
@@ -24,7 +25,7 @@ public class Chunk {
     }
 
     // Load chunk from Sega format (big-endian 16-bit values)
-    public void fromSegaFormat(byte[] buffer) {
+    public void fromSegaFormat(byte[] buffer, int solidTileIndex) {
         if (buffer.length != CHUNK_SIZE_IN_ROM) {
             throw new IllegalArgumentException("Buffer size does not match chunk size in ROM");
         }
@@ -36,6 +37,7 @@ public class Chunk {
             }
 
         }
+        this.solidTileIndex = solidTileIndex;
     }
 
     // Retrieves a pattern descriptor based on x and y coordinates (0-1 range)
@@ -44,5 +46,13 @@ public class Chunk {
             throw new IllegalArgumentException("Invalid pattern index");
         }
         return patternDescs[y * 2 + x];
+    }
+
+    public int getSolidTileIndex() {
+        return solidTileIndex;
+    }
+
+    public void setSolidTileIndex(int solidTileIndex) {
+        this.solidTileIndex = solidTileIndex;
     }
 }

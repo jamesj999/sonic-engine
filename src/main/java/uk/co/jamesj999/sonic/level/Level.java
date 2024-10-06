@@ -31,6 +31,8 @@ public interface Level {
     // Abstract method to get a specific block by index
     public Block getBlock(int index);
 
+    SolidTile getSolidTile(int index);
+
     // Abstract method to get the map associated with the level
     public Map getMap();
 

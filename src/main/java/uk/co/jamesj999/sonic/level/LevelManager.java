@@ -53,7 +53,7 @@ public class LevelManager {
         int xLeftBound = Math.min(0,drawX);
         int xRightBound = cameraX + cameraWidth; //TODO limit= next screen lock? end of lvl?
         int yTopBound = Math.min(0,drawY); //TODO limit = next screen lock? end of lvl?
-        int yBottomBound = cameraY + cameraHeight;
+        int yBottomBound = (Math.max(level.getMap().getHeight(),cameraY + cameraHeight));
         List<GLCommand> commands = new ArrayList<GLCommand>();
 
         for (int y = yTopBound; y <= yBottomBound; y += 16) {
@@ -64,21 +64,27 @@ public class LevelManager {
                     int yBlockBit = y % 128 / 16;
 
                     ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit,yBlockBit);
-
+                    Chunk chunk = level.getChunk(chunkDesc.getChunkIndex());
                     //TODO render patterns held in chunk
 
-                    SolidTile solidTile = chunkDesc.getSolidTile();
+                    int solidTileIndex = chunk.getSolidTileIndex();
+                    if (solidTileIndex!=0) {
+                        //Here!
+                        int banana = 5+2;
+                    }
+                    SolidTile solidTile = level.getSolidTile(solidTileIndex);
 
                     for (int i=0; i<16; i++) {
                         int height = solidTile.getHeightAt((byte) i);
                         if (height > 0) {
-                            int drawStartX = drawX + i;
+                            int drawStartX = x + i;
                             int drawEndX = drawStartX+1;
-                            int drawStartY = drawY;
-                            int drawEndY = drawY+ height;
+                            int drawStartY = y;
+                            int drawEndY = y + height;
+
                             commands.add(new GLCommand(
                                     GLCommand.Type.RECTI, GL2.GL_2D, 1, 1,
-                                    1, drawStartX, drawStartY, drawEndX, drawEndY));
+                                    1, drawStartX, drawEndY, drawEndX, drawStartY));
                         }
                     }
                 }

@@ -42,8 +42,8 @@ public class Sonic2Level implements Level {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTilesAddr, solidTilesAngleAddr);
-        loadChunks(rom, chunksAddr);
-        loadBlocks(rom, blocksAddr, collisionsAddr);
+        loadChunks(rom, chunksAddr,collisionsAddr);
+        loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
 
     }
@@ -101,6 +101,14 @@ public class Sonic2Level implements Level {
     }
 
     @Override
+    public SolidTile getSolidTile(int index) {
+        if (index >= solidTileCount) {
+            throw new IllegalArgumentException("Invalid block index");
+        }
+        return solidTiles[index];
+    }
+
+    @Override
     public Map getMap() {
         return map;
     }
@@ -151,14 +159,19 @@ public class Sonic2Level implements Level {
         LOG.info("Pattern count: " + patternCount + " (" + result.byteCount() + " bytes)");
     }
 
-    private void loadChunks(Rom rom, int chunksAddr) throws IOException {
+    //TODO both collision addresses
+    private void loadChunks(Rom rom, int chunksAddr, int collisionAddr) throws IOException {
         final int CHUNK_BUFFER_SIZE = 0xFFFF; // 64KB
-        byte[] buffer = new byte[CHUNK_BUFFER_SIZE];
+        final int SOLID_TILE_REF_BUFFER_LENGTH = 0x300;
+
+        byte[] chunkBuffer = new byte[CHUNK_BUFFER_SIZE];
+        byte[] solidTileRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
+
         FileChannel channel = rom.getFileChannel();
         channel.position(chunksAddr);
 
         KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, buffer, CHUNK_BUFFER_SIZE);
+        var result = reader.decompress(channel, chunkBuffer, CHUNK_BUFFER_SIZE);
         if (!result.success()) {
             throw new IOException("Chunk decompression error");
         }
@@ -168,12 +181,21 @@ public class Sonic2Level implements Level {
             throw new IOException("Inconsistent chunk data");
         }
 
+        channel.position(collisionAddr);
+
+        result = reader.decompress(channel, solidTileRefBuffer, SOLID_TILE_REF_BUFFER_LENGTH);
+
+        if (!result.success()) {
+            throw new IOException("Collision decompression error");
+        }
+
         chunks = new Chunk[chunkCount];
         for (int i = 0; i < chunkCount; i++) {
             chunks[i] = new Chunk();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Chunk.CHUNK_SIZE_IN_ROM, (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
-            chunks[i].fromSegaFormat(subArray);
+            byte[] subArray = Arrays.copyOfRange(chunkBuffer, i * Chunk.CHUNK_SIZE_IN_ROM, (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
+            int solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
+            chunks[i].fromSegaFormat(subArray, solidTileIndex);
         }
 
         LOG.info("Chunk count: " + chunkCount + " (" + result.byteCount() + " bytes)");
@@ -212,13 +234,12 @@ public class Sonic2Level implements Level {
 
     }
 
-    private void loadBlocks(Rom rom, int blocksAddr, int collisionAddr) throws IOException {
+    private void loadBlocks(Rom rom, int blocksAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        final int COLLISION_BUFFER_LENGTH = 0x300;
         
         byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
-        byte[] collisionBuffer = new byte[COLLISION_BUFFER_LENGTH];
-        int[] solidTileIdxArray = new int[COLLISION_BUFFER_LENGTH];
+
+
 
         FileChannel channel = rom.getFileChannel();
         KosinskiReader reader = new KosinskiReader();
@@ -235,31 +256,14 @@ public class Sonic2Level implements Level {
             throw new IOException("Inconsistent block data");
         }
 
-        channel.position(collisionAddr);
-
-        result = reader.decompress(channel, collisionBuffer, COLLISION_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
-        }
-
-        for (int i=0; i< collisionBuffer.length; i++) {
-            solidTileIdxArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
-        }
-
         blocks = new Block[blockCount];
         for (int i = 0; i < blockCount; i++) {
             blocks[i] = new Block();
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(blockBuffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
 
-            int solidTileIdx = 0;
-            if (i < solidTiles.length) {
-                solidTileIdx = i;
-            }
-            SolidTile tileRef = solidTiles[solidTileIdxArray[solidTileIdx]];
+            blocks[i].fromSegaFormat(subArray);
 
-            blocks[i].fromSegaFormat(subArray, tileRef);
         }
 
         LOG.info("Block count: " + blockCount + " (" + result.byteCount() + " bytes)");

@@ -22,11 +22,12 @@ public final class ChunkDesc {
     private int index;  // 16-bit stored as an int to handle bitmask operations
 
     private int chunkIndex;  // Cached chunk index
+
+    Chunk chunk;
     private boolean xFlip;  // Cached X flip
     private boolean yFlip;  // Cached Y flip
     private CollisionMode primaryCollisionMode;  // Cached primary collision mode
     private CollisionMode secondaryCollisionMode;  // Cached secondary collision mode
-    private SolidTile solidTile;
 
     //A Chunk Descriptor that is empty (the default state)
     public static ChunkDesc EMPTY = new ChunkDesc();
@@ -35,9 +36,8 @@ public final class ChunkDesc {
         this.index = 0;
     }
 
-    public ChunkDesc(int index, SolidTile solidTile) {
-        this.index = index;
-        this.solidTile = solidTile;
+    public ChunkDesc(int chunkIndex) {
+        this.chunkIndex = chunkIndex;
         updateFields();
     }
 
@@ -76,6 +76,7 @@ public final class ChunkDesc {
 
         int secondaryBits = (index >> 14) & 0x3;  // Extract secondary collision layer mode (15th-16th bits)
         this.secondaryCollisionMode = CollisionMode.fromVal(secondaryBits);
+
     }
 
     // Set the index and update cached fields
@@ -88,11 +89,4 @@ public final class ChunkDesc {
         return Short.BYTES;  // Java equivalent of C++ sizeof(uint16_t)
     }
 
-    public SolidTile getSolidTile() {
-        return solidTile;
-    }
-
-    public void setSolidTile(SolidTile solidTile) {
-        this.solidTile = solidTile;
-    }
 }
