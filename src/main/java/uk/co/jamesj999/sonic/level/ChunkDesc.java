@@ -36,8 +36,8 @@ public final class ChunkDesc {
         this.index = 0;
     }
 
-    public ChunkDesc(int chunkIndex) {
-        this.chunkIndex = chunkIndex;
+    public ChunkDesc(int index) {
+        this.index = index;
         updateFields();
     }
 

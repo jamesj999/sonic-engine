@@ -82,7 +82,7 @@ public class Sonic2Level implements Level {
     @Override
     public Chunk getChunk(int index) {
         if (index >= chunkCount) {
-            throw new IllegalArgumentException("Invalid chunk index");
+            throw new IllegalArgumentException("Invalid chunk index: " + index);
         }
         return chunks[index];
     }
@@ -95,7 +95,7 @@ public class Sonic2Level implements Level {
     @Override
     public Block getBlock(int index) {
         if (index >= blockCount) {
-            throw new IllegalArgumentException("Invalid block index");
+            throw new IllegalArgumentException("Invalid block index: " + index);
         }
         return blocks[index];
     }
