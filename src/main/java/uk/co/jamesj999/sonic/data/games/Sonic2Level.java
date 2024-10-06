@@ -205,7 +205,7 @@ public class Sonic2Level implements Level {
             byte tileAngle = rom.readByte(anglesAddr+i);
             byte[] totallyLegitimateByteArraySir = Arrays.copyOfRange(solidTileBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
 
-            solidTiles[i] = new SolidTile(totallyLegitimateByteArraySir, tileAngle);
+            solidTiles[i] = new SolidTile(i, totallyLegitimateByteArraySir, tileAngle);
         }
 
         LOG.info("SolidTiles loaded");

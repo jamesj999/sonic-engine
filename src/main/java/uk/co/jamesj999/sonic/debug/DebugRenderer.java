@@ -29,7 +29,7 @@ public class DebugRenderer {
 	public void renderDebugInfo() {
 		if (renderer == null) {
 			renderer = new TextRenderer(new Font(
-					"SansSerif", Font.BOLD, 8));
+					"SansSerif", Font.PLAIN, 5));
 		}
 
 		renderer.beginRendering(width, height);
@@ -37,32 +37,32 @@ public class DebugRenderer {
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {
-				renderer.draw("Spindash constant: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, 129);
-				renderer.draw("Direction: " + ((AbstractPlayableSprite) sprite).getDirection(), 2, 116);
+				renderer.draw("SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, 100);
+				renderer.draw("Dir: " + ((AbstractPlayableSprite) sprite).getDirection(), 2, 90);
 				renderer.draw(
 						"Mode: "
 								+ ((AbstractPlayableSprite) sprite)
-								.getRunningMode(), 2, 103);
+								.getRunningMode(), 2, 80);
 				if (((AbstractPlayableSprite) sprite).getAir()) {
-					renderer.draw("Air", 2, 90);
+					renderer.draw("Air", 24, 70);
 				}
 				if (((AbstractPlayableSprite) sprite).getRolling()) {
-					renderer.draw("Rolling", 24, 90);
+					renderer.draw("Roll", 24, 70);
 				}
 				if (((AbstractPlayableSprite) sprite).getSpindash()) {
-					renderer.draw("Spindash", 2, 90);
+					renderer.draw("Spdash", 24, 70);
 				}
 				renderer.draw(
-						"gSpeed:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
-						2, 77);
+						"gS:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
+						2, 60);
 				renderer.draw(
-						"xSpeed:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
-						2, 64);
+						"xS:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
+						2, 50);
 				renderer.draw(
-						"ySpeed:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
-						2, 51);
+						"yS:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
+						2, 40);
 				// DECIMAL VERSION:
-				renderer.draw("Angle:" + (((AbstractPlayableSprite) sprite).getAngle()), 2, 38);
+				renderer.draw("Deg:" + (((AbstractPlayableSprite) sprite).getAngle()), 2, 30);
 			}
             // HEX VERSION:
 //			renderer.draw(
@@ -79,8 +79,8 @@ public class DebugRenderer {
 			while (yString.length() < 6) {
 				yString.insert(0, "0");
 			}
-			renderer.draw(xString, 2, 25);
-			renderer.draw(yString, 2, 12);
+			renderer.draw("pX: " + xString, 2, 15);
+			renderer.draw("pY: " + yString, 2, 5);
 		}
 		renderer.endRendering();
 	}

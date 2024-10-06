@@ -65,9 +65,9 @@ public class SensorLine {
 		endY++;
 		endX++;
 
-		for(int xValue = startX; xValue != endX; xValue += xIncrement) {
+		/*for(int xValue = startX; xValue != endX; xValue += xIncrement) {
 			for (int yValue = startY; yValue != endY; yValue += yIncrement) {
-				SolidTile tile = levelManager.getSolidTileAt((short) xValue, (short) yValue);
+				SolidTile tile = levelManager.getSolidTileAt(layer, (short) xValue, (short) yValue);
 				if(tile != null) {
 					if(direction == SensorDirection.DOWN) {
 						byte tileHeight = tile.getHeightAt((byte) (xValue % 16));
@@ -88,7 +88,7 @@ public class SensorLine {
 					}
 				}
 			}
-		}
+		}*/
 
 		return null;
 	}

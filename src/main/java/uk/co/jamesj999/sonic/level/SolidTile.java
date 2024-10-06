@@ -10,12 +10,13 @@ public class SolidTile {
 	private final byte angle;
 	private boolean jumpThrough;
 	private CollisionMode collisionMode;
+	private int index = 0;
 
-	public SolidTile(byte[] heights, byte angle) {
-		this(heights, angle, false, false);
+	public SolidTile(int index, byte[] heights, byte angle) {
+		this(index, heights, angle, false, false);
 	}
 
-	private SolidTile(byte[] heights, byte angle, boolean flipX, boolean flipY) {
+	private SolidTile(int index, byte[] heights, byte angle, boolean flipX, boolean flipY) {
 		if (heights.length != TILE_SIZE_IN_ROM) {
 			throw new IllegalArgumentException("SolidTile size does not match tile size in ROM");
 		}
@@ -30,6 +31,7 @@ public class SolidTile {
 
 		// TODO add angle recalculations
 		this.angle = angle;
+		this.index = index;
 	}
 
 	/**
@@ -67,9 +69,6 @@ public class SolidTile {
 		return angle;
 	}
 
-	public SolidTile copy(boolean flipX, boolean flipY) {
-		return new SolidTile(heights, angle, flipX, flipY);
-	}
 
 	private void reverseY() {
 		for(int i = 0; i < heights.length; i++) {
@@ -80,4 +79,12 @@ public class SolidTile {
 	public boolean getJumpThrough() {
 		return jumpThrough;
 	}
+
+    public int getIndex() {
+        return index;
+    }
+
+    public void setIndex(int index) {
+        this.index = index;
+    }
 }

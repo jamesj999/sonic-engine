@@ -9,16 +9,16 @@ public class DebugSpriteMovementManager extends AbstractSpriteMovementManager {
 
     public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean space, boolean testKey) {
         if(left) {
-            sprite.setX((short) (sprite.getX() - 1));
+            sprite.setX((short) (sprite.getX() - 2));
         }
         if(right) {
-            sprite.setX((short) (sprite.getX() + 1));
+            sprite.setX((short) (sprite.getX() + 2));
         }
         if(up) {
-            sprite.setY((short) (sprite.getY() + 1));
+            sprite.setY((short) (sprite.getY() - 2));
         }
         if(down) {
-            sprite.setY((short) (sprite.getY() - 1));
+            sprite.setY((short) (sprite.getY() + 2));
         }
     }
 }

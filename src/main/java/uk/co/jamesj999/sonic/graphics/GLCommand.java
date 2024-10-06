@@ -65,7 +65,7 @@ public class GLCommand implements GLCommandable {
 		}
 		gl.glColor3f(colour1, colour2, colour3);
 		if (Type.RECTI.equals(type)) {
-			gl.glRecti(x1 - cameraX, y2 + cameraY, x2 - cameraX, y1 + cameraY);
+			gl.glRecti(x1 - cameraX, y1 + cameraY, x2 - cameraX, y2 + cameraY);
 		} else if (Type.VERTEX2I.equals(type)) {
 			gl.glVertex2i(x1 - cameraX, y1 + cameraY);
 		}
