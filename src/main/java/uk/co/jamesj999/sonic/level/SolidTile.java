@@ -13,20 +13,11 @@ public class SolidTile {
 	private int index = 0;
 
 	public SolidTile(int index, byte[] heights, byte angle) {
-		this(index, heights, angle, false, false);
-	}
-
-	private SolidTile(int index, byte[] heights, byte angle, boolean flipX, boolean flipY) {
 		if (heights.length != TILE_SIZE_IN_ROM) {
 			throw new IllegalArgumentException("SolidTile size does not match tile size in ROM");
 		}
 		this.heights = heights;
-		if (flipX) {
-			ArrayUtils.reverse(heights);
-		}
-		if(flipY) {
-			reverseY();
-		}
+
 		// TODO set widths properly if required
 
 		// TODO add angle recalculations
@@ -69,12 +60,6 @@ public class SolidTile {
 		return angle;
 	}
 
-
-	private void reverseY() {
-		for(int i = 0; i < heights.length; i++) {
-			heights[i] = (byte) (16 - heights[i]);
-		}
-	}
 
 	public boolean getJumpThrough() {
 		return jumpThrough;

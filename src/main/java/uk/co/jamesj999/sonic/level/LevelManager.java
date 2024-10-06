@@ -49,11 +49,14 @@ public class LevelManager {
         //floor values to draw tiles partially offscreen on the left/top.
         int drawX = cameraX - (cameraX % 16);
         int drawY = cameraY - (cameraY % 16);
+        int levelWidth = level.getMap().getWidth()*64;
+        int levelHeight = level.getMap().getHeight()*64;
 
-        int xLeftBound = Math.min(0,drawX);
-        int xRightBound = cameraX + cameraWidth; //TODO limit= next screen lock? end of lvl?
-        int yTopBound = Math.min(0,drawY); //TODO limit = next screen lock? end of lvl?
-        int yBottomBound = (Math.min(level.getMap().getHeight(),cameraY + cameraHeight));
+
+        int xLeftBound = Math.max(drawX, 0);
+        int xRightBound = Math.min(cameraX + cameraWidth, levelWidth);
+        int yTopBound = Math.max(drawY, 0);
+        int yBottomBound = Math.min(cameraY + cameraHeight, levelHeight);
         List<GLCommand> commands = new ArrayList<GLCommand>();
 
         for (int y = yTopBound; y <= yBottomBound; y += 16) {
@@ -64,29 +67,53 @@ public class LevelManager {
                     int yBlockBit = y % 128 / 16;
 
                     ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit,yBlockBit);
-                    Chunk chunk = level.getChunk(chunkDesc.getChunkIndex());
-                    //TODO render patterns held in chunk
-
-                    int solidTileIndex = chunk.getSolidTileIndex();
-                    if (solidTileIndex!=0) {
-                        //Here!
-                        int banana = 5+2;
+                    int chunkIndex = chunkDesc.getChunkIndex();
+                    if (chunkIndex > level.getChunkCount()) {
+                        System.err.println("Chunk index out of bounds; Zeroing!");
+                        chunkIndex = 0;
                     }
-                    SolidTile solidTile = level.getSolidTile(solidTileIndex);
 
-                    for (int i=0; i<16; i++) {
-                        int height = solidTile.getHeightAt((byte) i);
-                        if (height > 0) {
-                            int drawStartX = x + i;
-                            int drawEndX = drawStartX+1;
-                            int drawStartY = y;
-                            int drawEndY = y + height;
 
-                            commands.add(new GLCommand(
-                                    GLCommand.Type.RECTI, GL2.GL_2D, 1, 1,
-                                    1, drawStartX, drawEndY, drawEndX, drawStartY));
+                    Chunk chunk = level.getChunk(chunkIndex);
+                    //TODO render patterns held in chunk
+                    if (chunkDesc.getPrimaryCollisionMode() != CollisionMode.NO_COLLISION) {
+                        int solidTileIndex = chunk.getSolidTileIndex();
+                        SolidTile solidTile = level.getSolidTile(solidTileIndex);
+
+                        if (chunkDesc.getHFlip()) {
+                            int flipper = 15;
+                            for (int i = 0; i < 16; i++) {
+
+                                int height = solidTile.getHeightAt((byte) flipper);
+                                flipper--;
+                                if (height > 0) {
+                                    int drawStartX = x + i;
+                                    int drawEndX = drawStartX + 1;
+                                    int drawStartY = y;
+                                    int drawEndY = y - height;
+
+                                    commands.add(new GLCommand(
+                                            GLCommand.Type.RECTI, GL2.GL_2D, 1, 1,
+                                            1, drawStartX, drawEndY, drawEndX, drawStartY));
+                                }
+                            }
+                        } else {
+                            for (int i = 0; i < 16; i++) {
+                                int height = solidTile.getHeightAt((byte) i);
+                                if (height > 0) {
+                                    int drawStartX = x + i;
+                                    int drawEndX = drawStartX + 1;
+                                    int drawStartY = y;
+                                    int drawEndY = y - height;
+
+                                    commands.add(new GLCommand(
+                                            GLCommand.Type.RECTI, GL2.GL_2D, 1, 1,
+                                            1, drawStartX, drawEndY, drawEndX, drawStartY));
+                                }
+                            }
                         }
                     }
+
                 }
 
             }
