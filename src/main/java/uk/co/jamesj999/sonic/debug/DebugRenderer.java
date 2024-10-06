@@ -37,32 +37,32 @@ public class DebugRenderer {
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			if (sprite instanceof AbstractPlayableSprite) {
-				renderer.draw("SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, 100);
-				renderer.draw("Dir: " + ((AbstractPlayableSprite) sprite).getDirection(), 2, 90);
+				renderer.draw("SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, height-10);
+				renderer.draw("Dir: " + ((AbstractPlayableSprite) sprite).getDirection(), 2, height-20);
 				renderer.draw(
 						"Mode: "
 								+ ((AbstractPlayableSprite) sprite)
-								.getRunningMode(), 2, 80);
+								.getRunningMode(), 2, height-30);
 				if (((AbstractPlayableSprite) sprite).getAir()) {
-					renderer.draw("Air", 24, 70);
+					renderer.draw("Air", 24, height-40);
 				}
 				if (((AbstractPlayableSprite) sprite).getRolling()) {
-					renderer.draw("Roll", 24, 70);
+					renderer.draw("Roll", 24, height-40);
 				}
 				if (((AbstractPlayableSprite) sprite).getSpindash()) {
-					renderer.draw("Spdash", 24, 70);
+					renderer.draw("Spdash", 24, height-40);
 				}
 				renderer.draw(
 						"gS:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
-						2, 60);
+						2, height-50);
 				renderer.draw(
 						"xS:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
-						2, 50);
+						2, height-60);
 				renderer.draw(
 						"yS:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
-						2, 40);
+						2, height-70);
 				// DECIMAL VERSION:
-				renderer.draw("Deg:" + (((AbstractPlayableSprite) sprite).getAngle()), 2, 30);
+				renderer.draw("Deg:" + (((AbstractPlayableSprite) sprite).getAngle()), 2, height-80);
 			}
             // HEX VERSION:
 //			renderer.draw(
@@ -79,8 +79,8 @@ public class DebugRenderer {
 			while (yString.length() < 6) {
 				yString.insert(0, "0");
 			}
-			renderer.draw("pX: " + xString, 2, 15);
-			renderer.draw("pY: " + yString, 2, 5);
+			renderer.draw("pX: " + xString, 2, height-95);
+			renderer.draw("pY: " + yString, 2, height-105);
 		}
 		renderer.endRendering();
 	}
