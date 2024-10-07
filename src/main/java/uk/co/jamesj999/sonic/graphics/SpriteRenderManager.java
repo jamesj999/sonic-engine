@@ -23,10 +23,7 @@ public class SpriteRenderManager {
             if (sprite instanceof AbstractPlayableSprite) {
                 // TODO temp debug stuff, remove
                 for (SensorLine sensorLine : ((AbstractSprite) sprite)
-                        .getTerrainSensorLines()) {
-                    sensorLine.draw();
-                }
-                for (SensorLine sensorLine : ((AbstractSprite) sprite).getWallSensorLines()) {
+                        .getSensorLines()) {
                     sensorLine.draw();
                 }
             }

@@ -8,9 +8,9 @@ public class TerrainCollisionManager {
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
 	public short calculateTerrainHeight(AbstractPlayableSprite sprite) {
 		short output = -1;
-		SensorDirection direction = null;
+		Direction direction = null;
 
-		for (SensorLine line : sprite.getTerrainSensorLines()) {
+		for (SensorLine line : sprite.getSensorLinesForDirection(Direction.DOWN)) {
 			SensorResult result = line.scan();
 			if (result != null && result.distance() > output) {
 				output = result.distance();
@@ -41,9 +41,9 @@ public class TerrainCollisionManager {
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
 	public short calculateWallPosition(AbstractPlayableSprite sprite) {
 		short output = -1;
-		SensorDirection direction = null;
+		Direction direction = null;
 
-		for (SensorLine line : sprite.getWallSensorLines()) {
+		for (SensorLine line : sprite.getSensorLinesForDirection(Direction.LEFT, Direction.RIGHT)) {
 			SensorResult result = line.scan();
 			if (result != null && result.distance() > output) {
 				output = result.distance();

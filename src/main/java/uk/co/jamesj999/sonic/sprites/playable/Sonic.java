@@ -1,7 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
-import uk.co.jamesj999.sonic.physics.SensorDirection;
+import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorLine;
 
 import com.jogamp.opengl.GL2;
@@ -44,42 +44,28 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
+		// Ceiling Sensors
+		registerSensorLine(new SensorLine(this, true, (byte) 9, (byte) 0, (byte) 9, (byte) -20, Direction.UP));
+		registerSensorLine(new SensorLine(this, true, (byte) -9, (byte) 0, (byte) -9, (byte) -20, Direction.UP));
+
         // Terrain Sensors
-		terrainSensorLines.add(new SensorLine(this, (byte) 9, (byte) 0, (byte) 9, (byte) 20, SensorDirection.DOWN));
-		terrainSensorLines.add(new SensorLine(this, (byte) -9, (byte) 0, (byte) -9, (byte) 20, SensorDirection.DOWN));
+		registerSensorLine(new SensorLine(this, true, (byte) 9, (byte) 0, (byte) 9, (byte) 20, Direction.DOWN));
+		registerSensorLine(new SensorLine(this, true, (byte) -9, (byte) 0, (byte) -9, (byte) 20, Direction.DOWN));
 
 		// Wall Sensors
-		wallSensorLines.add(new SensorLine(this, (byte) -10, (byte) 0, (byte) 0, (byte) 0, SensorDirection.LEFT));
-		wallSensorLines.add(new SensorLine(this, (byte) 0, (byte) 0, (byte) 10, (byte) 0, SensorDirection.RIGHT));
+		registerSensorLine(new SensorLine(this, true, (byte) -10, (byte) 0, (byte) 0, (byte) 0, Direction.LEFT));
+		registerSensorLine(new SensorLine(this, true, (byte) 0, (byte) 0, (byte) 10, (byte) 0, Direction.RIGHT));
 	}
 
 	@Override
-	protected void updateSensorLinesForRunningMode(SpriteRunningMode runningMode) {
-		// Sad to hard-code this, but meh.
-		if(terrainSensorLines.size() != 2 && wallSensorLines.size() != 2) {
-			throw new IllegalStateException("Sonic must have 2 terrain sensor lines and 2 wall sensor lines.");
-		}
-		SensorLine terrain1 = terrainSensorLines.get(0);
-		SensorLine terrain2 = terrainSensorLines.get(1);
-		SensorLine wall1 = wallSensorLines.get(0);
-		SensorLine wall2 = wallSensorLines.get(1);
+	protected void updateSensorLines() {
+		// Ground sensor lines need to be at y-8 if sonic is standing on the ground and angle == 0
 
-		switch (getRunningMode()) {
-			case GROUND:
-				terrain1.updateParameters((byte) 9, (byte) 0, (byte) 9, (byte) 20, SensorDirection.DOWN);
-				terrain2.updateParameters((byte) -9, (byte) 0, (byte) -9, (byte) 20, SensorDirection.DOWN);
-				wall1.updateParameters((byte) -10, (byte) 0, (byte) 0, (byte) 0, SensorDirection.LEFT);
-				wall2.updateParameters((byte) 0, (byte) 0, (byte) 10, (byte) 0, SensorDirection.RIGHT);
-				break;
-			case LEFTWALL:
-				//TODO
-				break;
-			case RIGHTWALL:
-				//TODO
-				break;
-			case CEILING:
-				//TODO
-				break;
-		}
+		// If sonic is rolling, sensor lines need to update to:
+		//
+
+		// If sonic is not on flat ground or is in the air but not rolling:
+		// If angle is in 270-0 or 0-90 range:
+		// Ground sensors are at
 	}
 }
