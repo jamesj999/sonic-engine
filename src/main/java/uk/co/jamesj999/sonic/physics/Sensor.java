@@ -7,14 +7,31 @@ public abstract class Sensor {
     protected Direction direction;
     protected byte x;
     protected byte y;
-    protected byte range;
+    protected boolean active;
 
-    public abstract SensorResult scan();
+    protected SensorResult currentResult;
 
-    public Sensor(AbstractPlayableSprite sprite, Direction direction, byte x, byte y, byte range) {
+    protected abstract SensorResult doScan();
+
+    public SensorResult scan() {
+        currentResult = doScan();
+        return currentResult;
+    }
+
+    public Sensor(AbstractPlayableSprite sprite, Direction direction, byte x, byte y, boolean active) {
+        this.sprite = sprite;
         this.direction = direction;
         this.x = x;
         this.y = y;
-        this.range = range;
+        this.active = active;
     }
+
+    public Direction getDirection() {
+        return direction;
+    }
+
+    public SensorResult getCurrentResult() {
+        return currentResult;
+    }
+
 }

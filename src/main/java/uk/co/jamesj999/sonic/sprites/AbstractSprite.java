@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorLine;
 
 import java.awt.image.BufferedImage;
@@ -33,7 +34,9 @@ public abstract class AbstractSprite implements Sprite {
 	protected int width;
 	protected int height;
 
-	protected final List<SensorLine> sensorLines = new ArrayList<>();
+	protected Sensor[] pushSensors;
+	protected Sensor[] groundSensors;
+	protected Sensor[] ceilingSensors;
 
 	protected byte gravity = 56;
 
@@ -125,9 +128,6 @@ public abstract class AbstractSprite implements Sprite {
 
 	public void setDirection(Direction direction) {
 		this.direction = direction;
-		for(SensorLine sensorLine : getSensorLinesForDirection(Direction.LEFT, Direction.RIGHT)) {
-			sensorLine.setEnabled(sensorLine.getDirection().equals(direction));
-		}
 	}
 
 	public final void setY(short y) {
@@ -203,24 +203,28 @@ public abstract class AbstractSprite implements Sprite {
 		return ySubpixel;
 	}
 
-	public List<SensorLine> getSensorLinesForDirection(Direction... directions) {
-		List<SensorLine> output = new ArrayList<>();
-		for(SensorLine sensorLine : sensorLines) {
-			for(Direction direction : directions) {
-				if (direction.equals(sensorLine.getDirection())) {
-					output.add(sensorLine);
-				}
-			}
-		}
-		return output;
+	public Sensor[] getPushSensors() {
+		return pushSensors;
 	}
 
-	public void registerSensorLine(SensorLine sensorLine) {
-		sensorLines.add(sensorLine);
+	public void setPushSensors(Sensor[] pushSensors) {
+		this.pushSensors = pushSensors;
 	}
 
-	public List<SensorLine> getSensorLines() {
-		return sensorLines;
+	public Sensor[] getGroundSensors() {
+		return groundSensors;
+	}
+
+	public void setGroundSensors(Sensor[] groundSensors) {
+		this.groundSensors = groundSensors;
+	}
+
+	public Sensor[] getCeilingSensors() {
+		return ceilingSensors;
+	}
+
+	public void setCeilingSensors(Sensor[] ceilingSensors) {
+		this.ceilingSensors = ceilingSensors;
 	}
 
 	protected abstract void createSensorLines();

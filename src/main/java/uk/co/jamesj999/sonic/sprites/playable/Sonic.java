@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.GroundSensor;
+import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorLine;
 
 import com.jogamp.opengl.GL2;
@@ -44,28 +46,19 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
+		// Ground Sensors
+		groundSensors = new Sensor[2];
+		groundSensors[0] = new GroundSensor(this, Direction.DOWN, (byte) -9, (byte) 20, true);
+		groundSensors[1] = new GroundSensor(this, Direction.DOWN, (byte) 9, (byte) 20, true);
+
 		// Ceiling Sensors
-		registerSensorLine(new SensorLine(this, true, (byte) 9, (byte) 0, (byte) 9, (byte) -20, Direction.UP));
-		registerSensorLine(new SensorLine(this, true, (byte) -9, (byte) 0, (byte) -9, (byte) -20, Direction.UP));
+		ceilingSensors = new Sensor[2];
+		ceilingSensors[0] = new GroundSensor(this, Direction.UP, (byte) -9, (byte) -20, false);
+		ceilingSensors[1] = new GroundSensor(this, Direction.UP, (byte) 9, (byte) -20, false);
 
-        // Terrain Sensors
-		registerSensorLine(new SensorLine(this, true, (byte) 9, (byte) 0, (byte) 9, (byte) 20, Direction.DOWN));
-		registerSensorLine(new SensorLine(this, true, (byte) -9, (byte) 0, (byte) -9, (byte) 20, Direction.DOWN));
-
-		// Wall Sensors
-		registerSensorLine(new SensorLine(this, true, (byte) -10, (byte) 0, (byte) 0, (byte) 0, Direction.LEFT));
-		registerSensorLine(new SensorLine(this, true, (byte) 0, (byte) 0, (byte) 10, (byte) 0, Direction.RIGHT));
-	}
-
-	@Override
-	protected void updateSensorLines() {
-		// Ground sensor lines need to be at y-8 if sonic is standing on the ground and angle == 0
-
-		// If sonic is rolling, sensor lines need to update to:
-		//
-
-		// If sonic is not on flat ground or is in the air but not rolling:
-		// If angle is in 270-0 or 0-90 range:
-		// Ground sensors are at
+		// Push Sensors
+		pushSensors = new Sensor[2];
+		pushSensors[0] = new GroundSensor(this, Direction.LEFT, (byte) -10, (byte) 0, false);
+		pushSensors[1] = new GroundSensor(this, Direction.RIGHT, (byte) 10, (byte) 0, false);
 	}
 }

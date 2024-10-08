@@ -42,7 +42,7 @@ public class DebugRenderer {
 				renderer.draw(
 						"Mode: "
 								+ ((AbstractPlayableSprite) sprite)
-								.getRunningMode(), 2, 103);
+								.getGroundMode(), 2, 103);
 				if (((AbstractPlayableSprite) sprite).getAir()) {
 					renderer.draw("Air", 2, 90);
 				}

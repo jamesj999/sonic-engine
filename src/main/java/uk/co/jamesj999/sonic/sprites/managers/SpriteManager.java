@@ -1,7 +1,10 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -20,6 +23,8 @@ public class SpriteManager {
 	private static SpriteManager spriteManager;
 
 	private Map<String, Sprite> sprites;
+
+	private static final SensorConfiguration[][] MOVEMENT_MAPPING_ARRAY = createMovementMappingArray();
 
 	private SpriteManager() {
 		sprites = new HashMap<String, Sprite>();
@@ -57,6 +62,40 @@ public class SpriteManager {
 
 	private boolean removeSprite(Sprite sprite) {
 		return (sprites.remove(sprite) != null);
+	}
+
+	public static SensorConfiguration[][] createMovementMappingArray() {
+		SensorConfiguration[][] output = new SensorConfiguration[GroundMode.values().length][Direction.values().length];
+		// Initialize the array with all possible GroundMode and Direction combinations
+		// Ground Mode
+		output[GroundMode.GROUND.ordinal()][Direction.UP.ordinal()] = new SensorConfiguration((byte) 0, (byte) -16, true, Direction.UP);
+		output[GroundMode.GROUND.ordinal()][Direction.DOWN.ordinal()] = new SensorConfiguration((byte) 0, (byte) 16, true, Direction.DOWN);
+		output[GroundMode.GROUND.ordinal()][Direction.LEFT.ordinal()] = new SensorConfiguration((byte) -16, (byte) 0, false, Direction.RIGHT);
+		output[GroundMode.GROUND.ordinal()][Direction.RIGHT.ordinal()] = new SensorConfiguration((byte) 16, (byte) 0, false, Direction.LEFT);
+
+		// Right Wall
+		output[GroundMode.RIGHTWALL.ordinal()][Direction.UP.ordinal()] = new SensorConfiguration((byte) -16, (byte) 0, false, Direction.LEFT);
+		output[GroundMode.RIGHTWALL.ordinal()][Direction.DOWN.ordinal()] = new SensorConfiguration((byte) 16, (byte) 0, false, Direction.RIGHT);
+		output[GroundMode.RIGHTWALL.ordinal()][Direction.LEFT.ordinal()] = new SensorConfiguration((byte) 0, (byte) 16, true, Direction.DOWN);
+		output[GroundMode.RIGHTWALL.ordinal()][Direction.RIGHT.ordinal()] = new SensorConfiguration((byte) 0, (byte) -16, true, Direction.UP);
+
+		// Ceiling
+		output[GroundMode.CEILING.ordinal()][Direction.UP.ordinal()] = new SensorConfiguration((byte) 0, (byte) 16, true, Direction.DOWN);
+		output[GroundMode.CEILING.ordinal()][Direction.DOWN.ordinal()] = new SensorConfiguration((byte) 0, (byte) -16, true, Direction.UP);
+		output[GroundMode.CEILING.ordinal()][Direction.LEFT.ordinal()] = new SensorConfiguration((byte) 16, (byte) 0, false, Direction.RIGHT);
+		output[GroundMode.CEILING.ordinal()][Direction.RIGHT.ordinal()] = new SensorConfiguration((byte) -16, (byte) 0, false, Direction.LEFT);
+
+		// Left Wall
+		output[GroundMode.LEFTWALL.ordinal()][Direction.UP.ordinal()] = new SensorConfiguration((byte) 16, (byte) 0, false, Direction.RIGHT);
+		output[GroundMode.LEFTWALL.ordinal()][Direction.DOWN.ordinal()] = new SensorConfiguration((byte) -16, (byte) 0, false, Direction.LEFT);
+		output[GroundMode.LEFTWALL.ordinal()][Direction.LEFT.ordinal()] = new SensorConfiguration((byte) 0, (byte) -16, true, Direction.UP);
+		output[GroundMode.LEFTWALL.ordinal()][Direction.RIGHT.ordinal()] = new SensorConfiguration((byte) 0, (byte) 16, true, Direction.DOWN);
+
+		return output;
+	}
+
+	public static SensorConfiguration getSensorConfigurationForGroundModeAndDirection(GroundMode groundMode, Direction direction) {
+		return MOVEMENT_MAPPING_ARRAY[groundMode.ordinal()][direction.ordinal()];
 	}
 
 	public synchronized static SpriteManager getInstance() {

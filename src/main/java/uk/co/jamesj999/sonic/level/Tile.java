@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.level;
 
 import org.apache.commons.lang3.ArrayUtils;
+import uk.co.jamesj999.sonic.physics.Direction;
 
 public class Tile {
 	public byte[] heights;
@@ -70,6 +71,19 @@ public class Tile {
 		for(int i = 0; i < heights.length; i++) {
 			heights[i] = (byte) (16 - heights[i]);
 		}
+	}
+
+	public byte calculateWidthAt(byte position) {
+		if (position < 0 || position > heights.length) {
+			throw new IllegalArgumentException("Tile height array ranges from 0 to " + heights.length + ". Please ensure requested value is in this range.");
+		}
+		byte output = 0;
+		for(byte i = 0; i < heights.length; i++) {
+			if (getHeightAt(i) >= position) {
+				output = i;
+			}
+		}
+		return output;
 	}
 	
 	public boolean getJumpThrough() {

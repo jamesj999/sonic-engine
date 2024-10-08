@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
-public enum SpriteRunningMode {
+public enum GroundMode {
 	GROUND,
 	RIGHTWALL,
 	CEILING,

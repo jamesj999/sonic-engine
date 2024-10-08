@@ -12,7 +12,7 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final PlayableSpriteMovementManager movementManager;
 
-	protected SpriteRunningMode runningMode = SpriteRunningMode.GROUND;
+	protected GroundMode runningMode = GroundMode.GROUND;
 
 	/**
 	 * gSpeed is the speed this sprite is moving across the 'ground'.
@@ -236,7 +236,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setRolling(boolean rolling) {
-        if(SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) {
+        if(GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
             if (rolling) {
                 setHeight(rollHeight);
             } else {
@@ -283,25 +283,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		move(xSpeed, ySpeed);
 	}
 
-	public SpriteRunningMode getRunningMode() {
+	public GroundMode getGroundMode() {
 		return runningMode;
 	}
 
-	public void setRunningMode(SpriteRunningMode runningMode) {
-        SpriteRunningMode oldRunningMode = this.runningMode;
-		this.runningMode = runningMode;
-		updateSensorLinesForRunningMode(runningMode);
-        updateSpriteShapeForRunningMode(runningMode, oldRunningMode);
+	public void setGroundMode(GroundMode groundMode) {
+		this.runningMode = groundMode;
 	}
-	
-	protected abstract void updateSensorLinesForRunningMode(SpriteRunningMode runningMode);
 
-	protected void updateSpriteShapeForRunningMode(SpriteRunningMode newRunningMode, SpriteRunningMode oldRunningMode) {
+	protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {
 		// Best if statement ever...
-		if(((SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) &&
-				(SpriteRunningMode.LEFTWALL.equals(oldRunningMode) || SpriteRunningMode.RIGHTWALL.equals(oldRunningMode))) ||
-				((SpriteRunningMode.RIGHTWALL.equals(runningMode) || SpriteRunningMode.LEFTWALL.equals(runningMode)) &&
-						((SpriteRunningMode.CEILING.equals(oldRunningMode) || SpriteRunningMode.GROUND.equals(oldRunningMode))))) {
+		if(((GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) &&
+				(GroundMode.LEFTWALL.equals(oldRunningMode) || GroundMode.RIGHTWALL.equals(oldRunningMode))) ||
+				((GroundMode.RIGHTWALL.equals(runningMode) || GroundMode.LEFTWALL.equals(runningMode)) &&
+						((GroundMode.CEILING.equals(oldRunningMode) || GroundMode.GROUND.equals(oldRunningMode))))) {
 			int oldHeight = getHeight();
 			setHeight(width);
 			setWidth(oldHeight);

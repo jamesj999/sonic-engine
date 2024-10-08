@@ -4,7 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
-import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
+import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
@@ -47,14 +47,14 @@ public class PlayableSpriteMovementManager extends
 		// A simple way to test our running modes...
         if (testKey && !testKeyPressed) {
 			testKeyPressed = true;
-            if ((SpriteRunningMode.GROUND.equals(sprite.getRunningMode()))) {
-                sprite.setRunningMode(SpriteRunningMode.RIGHTWALL);
-            } else if(SpriteRunningMode.RIGHTWALL.equals(sprite.getRunningMode())) {
-				sprite.setRunningMode(SpriteRunningMode.CEILING);
-			} else if(SpriteRunningMode.CEILING.equals(sprite.getRunningMode())) {
-				sprite.setRunningMode(SpriteRunningMode.LEFTWALL);
+            if ((GroundMode.GROUND.equals(sprite.getGroundMode()))) {
+                sprite.setGroundMode(GroundMode.RIGHTWALL);
+            } else if(GroundMode.RIGHTWALL.equals(sprite.getGroundMode())) {
+				sprite.setGroundMode(GroundMode.CEILING);
+			} else if(GroundMode.CEILING.equals(sprite.getGroundMode())) {
+				sprite.setGroundMode(GroundMode.LEFTWALL);
 			} else {
-				sprite.setRunningMode(SpriteRunningMode.GROUND);
+				sprite.setGroundMode(GroundMode.GROUND);
 			}
         }
 
@@ -135,18 +135,18 @@ public class PlayableSpriteMovementManager extends
 
         // Check if there are any terrain collisions:
         short terrainHeight = terrainCollisionManager.calculateTerrainHeight(sprite);
-        doTerrainCollision(sprite, terrainHeight);
+        //doTerrainCollision(sprite, terrainHeight);
 
         // Check if there are any wall collisions:
-        short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
-        doWallCollision(sprite, wallCollisionXPos);
+        //short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
+        //doWallCollision(sprite, wallCollisionXPos);
 
         // If there is a terrain AND wall collision, 'undo' the terrain collision, since we've probably just hit a wall.
-        if(terrainHeight > -1 && wallCollisionXPos > -1) {
-            sprite.setAir(inAir);
-            sprite.setRolling(isRoll);
-            sprite.setY(yBeforeTerrainCollision);
-        }
+//        if(terrainHeight > -1 && wallCollisionXPos > -1) {
+//            sprite.setAir(inAir);
+//            sprite.setRolling(isRoll);
+//            sprite.setY(yBeforeTerrainCollision);
+//        }
 
         // This won't work when graphics are involved...
         if(sprite.getX() > originalX) {

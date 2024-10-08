@@ -7,35 +7,41 @@ public class TerrainCollisionManager {
 
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
 	public short calculateTerrainHeight(AbstractPlayableSprite sprite) {
-		short output = -1;
-		Direction direction = null;
-
-		for (SensorLine line : sprite.getSensorLinesForDirection(Direction.DOWN)) {
-			SensorResult result = line.scan();
-			if (result != null && result.distance() > output) {
-				output = result.distance();
-				direction = line.getDirection();
-				sprite.setAngle(result.angle());
+		// I know, I thought it was closest to 0 too, but apparently not
+		Byte lowestDistance = null;
+		for (Sensor sensor : sprite.getGroundSensors()) {
+			SensorResult result = sensor.scan();
+			byte distance = result.distance();
+			if (lowestDistance == null || distance < lowestDistance) {
+				lowestDistance = distance;
 			}
 		}
+		if(lowestDistance == null) {
+			lowestDistance = 0;
+		}
 
-		if (output > -1 && direction != null) {
-			switch (direction) {
-				case UP -> {
-					output += (sprite.getCentreY() + (sprite.getHeight() / 2));
+		if(lowestDistance < 14) {
+			short newX = sprite.getX();
+			short newY = sprite.getY();
+
+			switch (sprite.getGroundMode()) {
+				case GROUND -> {
+					newY += lowestDistance;
 				}
-				case DOWN -> {
-					output += (sprite.getCentreY() - (sprite.getHeight() / 2));
+				case RIGHTWALL -> {
+					newX += lowestDistance;
 				}
-				case LEFT -> {
-					//TODO
+				case CEILING -> {
+					newY -= lowestDistance;
 				}
-				case RIGHT -> {
-					//TODO
+				case LEFTWALL -> {
+					newX -= lowestDistance;
 				}
 			}
+			sprite.setX(newX);
+			sprite.setY(newY);
 		}
-		return output;
+		return 0;
 	}
 
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
@@ -43,13 +49,13 @@ public class TerrainCollisionManager {
 		short output = -1;
 		Direction direction = null;
 
-		for (SensorLine line : sprite.getSensorLinesForDirection(Direction.LEFT, Direction.RIGHT)) {
-			SensorResult result = line.scan();
-			if (result != null && result.distance() > output) {
-				output = result.distance();
-				direction = line.getDirection();
-			}
-		}
+//		for (SensorLine line : sprite.getSensorLinesForDirection(Direction.LEFT, Direction.RIGHT)) {
+//			SensorResult result = line.scan();
+//			if (result != null && result.distance() > output) {
+//				output = result.distance();
+//				direction = line.getDirection();
+//			}
+//		}
 
 		if (output > -1 && direction != null) {
 			switch (direction) {
