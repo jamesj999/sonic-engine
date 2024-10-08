@@ -7,8 +7,6 @@ import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
-import java.util.logging.Logger;
-
 public class GroundSensor extends Sensor {
     public GroundSensor(AbstractPlayableSprite sprite, Direction direction, byte x, byte y, boolean active) {
         super(sprite, direction, x, y, active);
@@ -124,4 +122,5 @@ public class GroundSensor extends Sensor {
         }
         return 0;
     }
+
 }

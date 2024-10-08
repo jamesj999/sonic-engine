@@ -1,8 +1,11 @@
 package uk.co.jamesj999.sonic.debug;
 
 import com.jogamp.opengl.util.awt.TextRenderer;
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.physics.Sensor;
+import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -81,8 +84,28 @@ public class DebugRenderer {
 			}
 			renderer.draw(xString, 2, 25);
 			renderer.draw(yString, 2, 12);
+
+			renderer.endRendering();
+
+			TextRenderer sensorRenderer = new TextRenderer(new Font(
+					"SansSerif", Font.PLAIN, 4));
+			sensorRenderer.setColor(Color.RED);
+			sensorRenderer.beginRendering(width, height);
+
+			for(Sensor sensor : ((AbstractPlayableSprite) sprite).getGroundSensors()) {
+				SensorResult result = sensor.getCurrentResult();
+				if (result != null) {
+					Camera camera = Camera.getInstance();
+
+					short xAdjusted = (short) (sprite.getCentreX() - camera.getX());
+					short yAdjusted = (short) (sprite.getCentreY() - camera.getY());
+					xAdjusted += sensor.getX();
+					yAdjusted += sensor.getY();
+					sensorRenderer.draw(String.valueOf(result.distance()), xAdjusted, height - yAdjusted);
+				}
+			}
+			sensorRenderer.endRendering();
 		}
-		renderer.endRendering();
 	}
 
 	public static synchronized DebugRenderer getInstance() {

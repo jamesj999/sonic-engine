@@ -34,4 +34,12 @@ public abstract class Sensor {
         return currentResult;
     }
 
+    public byte getX() {
+        return x;
+    }
+
+    public byte getY() {
+        return y;
+    }
+
 }
