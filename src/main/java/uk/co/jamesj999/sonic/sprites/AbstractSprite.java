@@ -40,6 +40,8 @@ public abstract class AbstractSprite implements Sprite {
 
 	protected Direction direction;
 
+	protected int layer = 0;
+
 	protected AbstractSprite(String code, short xPixel, short yPixel) {
 		this.code = code;
 		this.xPixel = xPixel;
@@ -210,4 +212,12 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	protected abstract void createSensorLines();
+
+	public void setLayer(int layer) {
+		this.layer = layer;
+	}
+
+	public int getLayer() {
+		return layer;
+	}
 }

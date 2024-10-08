@@ -10,6 +10,7 @@ import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 
 import java.io.IOException;
@@ -23,7 +24,6 @@ public class LevelManager {
     private GraphicsManager graphicsManager = GraphicsManager.getInstance();
     protected SpriteManager spriteManager = SpriteManager.getInstance();
 
-    private int currentLayer = 0;
     private static final int TILE_SIZE = 16;
 
     public void loadLevel(int levelIndex) throws IOException {
@@ -45,6 +45,9 @@ public class LevelManager {
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
+
+        Sprite sprite = spriteManager.getSprite(SonicConfigurationService.getInstance().getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+        int currentLayer = sprite.getLayer();
 
         //floor values to draw tiles partially offscreen on the left/top.
         int drawX = cameraX - (cameraX % 16);

@@ -81,6 +81,7 @@ public class DebugRenderer {
 			}
 			renderer.draw("pX: " + xString, 2, height-95);
 			renderer.draw("pY: " + yString, 2, height-105);
+			renderer.draw("Layer: " + sprite.getLayer(), 2, height-115);
 		}
 		renderer.endRendering();
 	}
