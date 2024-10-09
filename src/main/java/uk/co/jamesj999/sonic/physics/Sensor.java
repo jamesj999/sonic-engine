@@ -42,4 +42,12 @@ public abstract class Sensor {
         return y;
     }
 
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
 }

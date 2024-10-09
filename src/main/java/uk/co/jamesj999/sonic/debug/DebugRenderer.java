@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.debug;
 
 import com.jogamp.opengl.util.awt.TextRenderer;
+import org.apache.commons.lang3.ArrayUtils;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
@@ -11,6 +12,7 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.awt.*;
+import java.util.Arrays;
 
 public class DebugRenderer {
 	private static DebugRenderer debugRenderer;
@@ -92,9 +94,11 @@ public class DebugRenderer {
 			sensorRenderer.setColor(Color.RED);
 			sensorRenderer.beginRendering(width, height);
 
-			for(Sensor sensor : ((AbstractPlayableSprite) sprite).getGroundSensors()) {
+			AbstractPlayableSprite abstractPlayableSprite = (AbstractPlayableSprite) sprite;
+
+			for(Sensor sensor : abstractPlayableSprite.getAllSensors()) {
 				SensorResult result = sensor.getCurrentResult();
-				if (result != null) {
+				if (sensor.isActive() && result != null) {
 					Camera camera = Camera.getInstance();
 
 					short xAdjusted = (short) (sprite.getCentreX() - camera.getX());

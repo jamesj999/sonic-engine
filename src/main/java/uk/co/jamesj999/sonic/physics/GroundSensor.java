@@ -27,8 +27,8 @@ public class GroundSensor extends Sensor {
         Level level = LevelManager.getInstance().getLevel();
 
         // First, find if there is a tile underneath the sensor
-        short originalX = (short) (sprite.getX() + x);
-        short originalY = (short) (sprite.getY() + y);
+        short originalX = (short) (sprite.getCentreX() + x);
+        short originalY = (short) (sprite.getCentreY() + y);
 
         short currentX = originalX;
         short currentY = originalY;
@@ -88,7 +88,7 @@ public class GroundSensor extends Sensor {
                 distance = (byte) ((Direction.LEFT.equals(globalDirection) || Direction.UP.equals(globalDirection)) ? distance - 32 : distance + 32);
                 return new SensorResult((byte ) 0, distance,0);
             } else {
-                return new SensorResult((byte) 0, calculateDistance(nextTile, originalX, originalY, currentX, currentY, direction), 0);
+                return new SensorResult(nextTile.getAngle(), calculateDistance(nextTile, originalX, originalY, currentX, currentY, direction), 0);
             }
         }
     }

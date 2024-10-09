@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
+import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 
@@ -309,6 +311,84 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	public final short getCentreY(int framesBehind) {
 		return (short) (xHistory[historyPos - framesBehind] - (height / 2));
+	}
+
+	public void updateSensors(short originalX, short originalY) {
+		Sensor[] sensorsToActivate;
+		Sensor[] sensorsToDeactivate;
+
+		Sensor groundA = groundSensors[0];
+		Sensor groundB = groundSensors[1];
+
+		Sensor ceilingC = ceilingSensors[0];
+		Sensor ceilingD = ceilingSensors[1];
+
+		Sensor pushE = pushSensors[0];
+		Sensor pushF = pushSensors[1];
+
+		if (getAir()) {
+			short xSpeedPositive = (short) Math.abs(xSpeed);
+			short ySpeedPositive = (short) Math.abs(ySpeed);
+
+			if(xSpeedPositive > ySpeedPositive) {
+				if (xSpeed > 0) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
+					sensorsToDeactivate = new Sensor[] { pushE };
+				} else {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
+					sensorsToDeactivate = new Sensor[] { pushF };
+				}
+			} else {
+				if(ySpeed > 0) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, pushE, pushF };
+					sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD };
+				} else {
+					sensorsToActivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
+					sensorsToDeactivate = new Sensor[] { groundA, groundB };
+				}
+			}
+		}  else {
+			sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE, pushF};
+			sensorsToDeactivate = new Sensor[0];
+		}
+
+		setSensorActive(sensorsToActivate, true);
+		setSensorActive(sensorsToDeactivate, false);
+	}
+
+	private void setSensorActive(Sensor[] sensors, boolean active) {
+		for(Sensor sensor : sensors) {
+			sensor.setActive(active);
+		}
+	}
+
+	public Sensor[] getAllSensors() {
+		Sensor[] sensors = new Sensor[6];
+		sensors[0] = groundSensors[0];
+		sensors[1] = groundSensors[1];
+		sensors[2] = ceilingSensors[0];
+		sensors[3] = ceilingSensors[1];
+		sensors[4] = pushSensors[0];
+		sensors[5] = pushSensors[1];
+
+		return sensors;
+	}
+
+	public void moveForGroundMode(byte distance) {
+		switch (getGroundMode()) {
+			case GROUND -> {
+				yPixel = (short) (yPixel + distance);
+			}
+			case RIGHTWALL -> {
+				xPixel = (short) (xPixel + distance);
+			}
+			case CEILING -> {
+				yPixel = (short) (yPixel - distance);
+			}
+			case LEFTWALL -> {
+				xPixel = (short) (xPixel - distance);
+			}
+		}
 	}
 
 	/**

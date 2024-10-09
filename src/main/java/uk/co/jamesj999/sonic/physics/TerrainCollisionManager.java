@@ -6,43 +6,61 @@ public class TerrainCollisionManager {
 	private static TerrainCollisionManager terrainCollisionManager;
 
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
-	public short calculateTerrainHeight(AbstractPlayableSprite sprite) {
-		// I know, I thought it was closest to 0 too, but apparently not
-		Byte lowestDistance = null;
-		for (Sensor sensor : sprite.getGroundSensors()) {
-			SensorResult result = sensor.scan();
-			byte distance = result.distance();
-			if (lowestDistance == null || distance < lowestDistance) {
-				lowestDistance = distance;
-			}
-		}
-		if(lowestDistance == null) {
-			lowestDistance = 0;
+	public SensorResult[] calculateTerrainHeight(AbstractPlayableSprite sprite) {
+		Sensor[] groundSensors = sprite.getGroundSensors();
+		SensorResult[] results = new SensorResult[groundSensors.length];
+
+		for (int i = 0; i < groundSensors.length; i++) {
+			results[i] = groundSensors[i].scan();
 		}
 
-		if(lowestDistance < 14) {
-			short newX = sprite.getX();
-			short newY = sprite.getY();
-
-			switch (sprite.getGroundMode()) {
-				case GROUND -> {
-					newY += lowestDistance;
-				}
-				case RIGHTWALL -> {
-					newX += lowestDistance;
-				}
-				case CEILING -> {
-					newY -= lowestDistance;
-				}
-				case LEFTWALL -> {
-					newX -= lowestDistance;
-				}
-			}
-			sprite.setX(newX);
-			sprite.setY(newY);
-		}
-		return 0;
+		return results;
 	}
+		// I know, I thought it was closest to 0 too, but apparently not
+//		SensorResult lowestResult = null;
+//		for (Sensor sensor : sprite.getGroundSensors()) {
+//			SensorResult result = sensor.scan();
+//			if (result != null) {
+//				byte distance = result.distance();
+//				if (lowestResult == null || distance < lowestResult.distance()) {
+//					lowestResult = result;
+//				}
+//			}
+//		}
+//		return lowestResult;
+		//}
+//		if(lowestResult != null && lowestResult.distance() < 16) {
+//			short newX = sprite.getX();
+//			short newY = sprite.getY();
+//
+//			switch (sprite.getGroundMode()) {
+//				case GROUND -> {
+//					newY += lowestResult.distance();
+//				}
+//				case RIGHTWALL -> {
+//					newX += lowestResult.distance();
+//				}
+//				case CEILING -> {
+//					newY -= lowestResult.distance();
+//				}
+//				case LEFTWALL -> {
+//					newX -= lowestResult.distance();
+//				}
+//			}
+//			if (sprite.getAir()) {
+//				sprite.setAir(false);
+//			}
+//			sprite.setX(newX);
+//			sprite.setY(newY);
+//			sprite.setAngle(lowestResult.angle());
+//
+//
+//		} else {
+//			if(!sprite.getAir()) {
+//				sprite.setAir(true);
+//			}
+//		}
+//	}
 
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
 	public short calculateWallPosition(AbstractPlayableSprite sprite) {

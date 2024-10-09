@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.sprites.managers;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
@@ -133,9 +134,9 @@ public class PlayableSpriteMovementManager extends
         boolean inAir = sprite.getAir();
         boolean isRoll = sprite.getRolling();
 
-        // Check if there are any terrain collisions:
-        short terrainHeight = terrainCollisionManager.calculateTerrainHeight(sprite);
-        //doTerrainCollision(sprite, terrainHeight);
+        // Perform terrain checks - results are updated directly into the sprite
+        SensorResult[] result = terrainCollisionManager.calculateTerrainHeight(sprite);
+        doTerrainCollision(sprite, result);
 
         // Check if there are any wall collisions:
         //short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
@@ -164,6 +165,10 @@ public class PlayableSpriteMovementManager extends
             sprite.setYSpeed((short) 0);
             sprite.setGSpeed((short) 0);
         }*/
+		// Update sprite ground mode for next tick:
+
+		// Update active sensors
+		sprite.updateSensors(originalX, originalY);
     }
 
     private void doWallCollision (AbstractPlayableSprite sprite) {
@@ -187,27 +192,113 @@ public class PlayableSpriteMovementManager extends
         }
     }
 
-    private void doTerrainCollision (AbstractPlayableSprite sprite) {
-        doTerrainCollision(sprite, terrainCollisionManager.calculateTerrainHeight(sprite));
-    }
-
-    private void doTerrainCollision(AbstractPlayableSprite sprite, short terrainHeight) {
-        if(terrainHeight == -1) {
-            // This means Sonic is now in the air...
-            sprite.setAir(true);
-        } else if(terrainHeight > -1) {
-            // This means that sonic is on the ground
-            if (sprite.getAir() && sprite.getYSpeed() > 0 && (sprite.getCentreY() + (sprite.getHeight() / 2)) > terrainHeight) {
-                // This sprite currently in the air, moving to the ground so we need to reset its X/Y speeds:
-                calculateLanding(sprite);
-            }
-
-            // Check again if we're in the air - we may have just landed.
-            if(!sprite.getAir()) {
-                // TODO: Figure out why the 20 is here...
-				sprite.setY((short) (terrainHeight - (sprite.getHeight() / 2)));
+    private void doTerrainCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
+		SensorResult lowestResult = null;
+		for (SensorResult result : results) {
+			if(lowestResult == null || result.distance() < lowestResult.distance()) {
+				lowestResult = result;
 			}
-        }
+		}
+
+		if(sprite.getAir()) {
+			// We are in the air and haven't landed unless we have a distance < 0 as our lowest result.
+			if (lowestResult == null || lowestResult.distance() >= 0) {
+				// We haven't landed, no more to do here since no terrain collision has occurred.
+				return;
+			} else {
+				// Work out the ySpeed required to make us collide.
+				short requiredSpeed;
+				short positiveXSpeed = (short) Math.abs(sprite.getXSpeed());
+				if(positiveXSpeed < sprite.getYSpeed()) {
+					// sonic is *mostly* moving down (convert ySpeed from subpixels)
+					requiredSpeed = (short) (-((sprite.getYSpeed() / 256)+ 8));
+				} else {
+					// sonic is *mostly* moving left or right
+					requiredSpeed = 0;
+				}
+				// Check whether
+				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
+					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
+					// We need to calculate the groundMode
+					sprite.moveForGroundMode(lowestResult.distance());
+					// And set sonic's new angle based on the tile found:
+					sprite.setAngle(lowestResult.angle());
+
+					// And maybe run our landing code
+					calculateLanding(sprite);
+				}
+			}
+		} else {
+			// Check if we are still on the ground:
+			// Work out the speeds required to consider us still on the ground
+			short requiredSpeed = (short) Math.min(Math.abs(sprite.getXSpeed()) + 4, 14);
+			if(lowestResult.distance() < requiredSpeed) {
+				sprite.moveForGroundMode(lowestResult.distance());
+				sprite.setAngle(lowestResult.angle());
+			} else {
+				sprite.setAir(true);
+			}
+		}
+//
+//
+//
+//		if (result != null) {
+//			if (sprite.getAir()) {
+//				if (result.distance() >= 0) {
+//					return;
+//				}
+//
+//			}
+//		}
+//
+//
+//		if (result == null || result.distance() >= 16) {
+//			// No terrain found. We should now consider sonic to be in the air if he's not already:
+//			sprite.setAir(true);
+//		} else {
+//			// Tile found within range, check if we need to land:
+//			if(!sprite.getAir()) {
+//				// We are already on the ground. Set Y based on returned distance and update angle:
+//				switch (sprite.getGroundMode()) {
+//                    case GROUND -> {
+//						sprite.setY((short) (sprite.getY() + result.distance()));
+//                    }
+//                    case RIGHTWALL -> {
+//						sprite.setX((short) (sprite.getX() + result.distance()));
+//                    }
+//                    case CEILING -> {
+//						sprite.setY((short) (sprite.getY() - result.distance()));
+//                    }
+//                    case LEFTWALL -> {
+//						sprite.setX((short) (sprite.getX() - result.distance()));
+//                    }
+//                }
+//				sprite.setAngle(result.angle());
+//			}
+//			else if (sprite.getYSpeed() > 0) {
+//				// We are in the air, moving towards the terrain and have a collision
+//				//sprite.setY((short) (sprite.getY() + result.distance()));
+//				sprite.setAngle(result.angle());
+//				calculateLanding(sprite);
+//			}
+//		}
+		// Old code - to remove, but may be useful in the meantime
+//        if(terrainHeight == -1) {
+//            // This means Sonic is now in the air...
+//            sprite.setAir(true);
+//        } else if(terrainHeight > -1) {
+//            // This means that sonic is on the ground
+//            if (sprite.getAir() && sprite.getYSpeed() > 0 && (sprite.getCentreY() + (sprite.getHeight() / 2)) > terrainHeight) {
+//                // This sprite currently in the air, moving to the ground so we need to reset its X/Y speeds:
+//                calculateLanding(sprite);
+//            }
+//
+//            // Check again if we're in the air - we may have just landed.
+//            if(!sprite.getAir()) {
+//                // TODO: Figure out why the 20 is here...
+//				sprite.setY((short) (terrainHeight - (sprite.getHeight() / 2)));
+//			}
+//        }
     }
 
     private void handleSpindash(AbstractPlayableSprite sprite) {
