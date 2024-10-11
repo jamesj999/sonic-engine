@@ -263,6 +263,10 @@ public class LevelManager {
         return block;
     }
 
+    public SolidTile getSolidTileAt(int x, int y) {
+        return null;
+    }
+
     /**
      * Returns the current level.
      *

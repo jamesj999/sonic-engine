@@ -8,6 +8,8 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 public class GroundSensor extends Sensor {
+    private static final LevelManager levelManager = LevelManager.getInstance();
+
     public GroundSensor(AbstractPlayableSprite sprite, Direction direction, byte x, byte y, boolean active) {
         super(sprite, direction, x, y, active);
     }
@@ -32,7 +34,7 @@ public class GroundSensor extends Sensor {
         short currentY = originalY;
 
         // Check for a tile under the sensor.
-        SolidTile initialTile = //TODO how I get tile
+        SolidTile initialTile = levelManager.getSolidTileAt(originalX, originalY);//TODO how I get tile
         byte initialHeight;
         if (initialTile != null) {
             // There is a tile under the sensor, let's remember its height (or width, depending on direction the sensor is facing)
@@ -51,7 +53,7 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection.opposite(), currentX);
             }
             // Look for a 'previous' tile using the new coordinates
-            SolidTile prevTile = //TODO HOW I TILE
+            SolidTile prevTile = levelManager.getSolidTileAt(originalX, originalY);
             if (prevTile != null) {
                 // Extract height or width value as appropriate from the 'previous' tile.
                 byte prevTileHeight = (vertical) ? prevTile.getHeightAt((byte) (currentX % 16)) : prevTile.getWidthAt((byte) (currentY % 16));
@@ -76,7 +78,7 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection, currentX);
             }
             // Retrieve 'next' tile based on new currentX and currentY.
-            SolidTile nextTile = // TODO - How I get tile? level.getTileAt(currentX, currentY);
+            SolidTile nextTile = levelManager.getSolidTileAt(currentX, currentY);
             byte lastDistance;
             if (nextTile == null) {
                 // No tile here either so send the maximum possible distance it could be.

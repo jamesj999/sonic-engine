@@ -52,8 +52,12 @@ public class SolidTile {
 		this.jumpThrough = jumpThrough;
 	}
 
-	public byte getHeightAt(byte y) {
-		return heights[y];
+	public byte getHeightAt(byte x) {
+		return heights[x];
+	}
+
+	public byte getWidthAt(byte y) {
+		return 0;
 	}
 
 	public byte getAngle() {
