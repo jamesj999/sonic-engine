@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.sprites;
 
+import uk.co.jamesj999.sonic.physics.Direction;
+
 /**
  * All Sprites on the screen will implement this interface.
  * 

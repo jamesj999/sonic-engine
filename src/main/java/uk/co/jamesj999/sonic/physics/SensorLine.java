@@ -3,14 +3,11 @@ package uk.co.jamesj999.sonic.physics;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.Sprite;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import com.jogamp.opengl.GL2;
-import uk.co.jamesj999.sonic.sprites.playable.SpriteRunningMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,24 +19,25 @@ public class SensorLine {
 
 	SolidTile solidTileToHighlight;
 
-	private Sprite sprite;
+	private final Sprite sprite;
+	private boolean enabled;
 
 	private byte x;
 	private byte y;
 	private byte x2;
 	private byte y2;
-	private int layer = 0;
 	private SensorDirection direction;
 
 	/**
 	 * X and Y are in relation to sprite's centre.
 	 */
-	public SensorLine(Sprite sprite, byte x, byte y, byte x2, byte y2, SensorDirection direction) {
+	public SensorLine(Sprite sprite, boolean enabled, byte x, byte y, byte x2, byte y2, Direction direction) {
 		this.sprite = sprite;
+		this.enabled = enabled;
 		updateParameters(x, y, x2, y2, direction);
 	}
 
-	public void updateParameters(byte x, byte y, byte x2, byte y2, SensorDirection direction) {
+	public void updateParameters(byte x, byte y, byte x2, byte y2, Direction direction) {
 		//TODO Add validation of direction vs x/y coords.
 		this.x = x;
 		this.y = y;
@@ -49,6 +47,9 @@ public class SensorLine {
 	}
 
 	public SensorResult scan() {
+		if(!enabled) {
+			return null;
+		}
 		short spriteCentreX = sprite.getCentreX();
 		short spriteCentreY = sprite.getCentreY();
 
@@ -69,7 +70,7 @@ public class SensorLine {
 			for (int yValue = startY; yValue != endY; yValue += yIncrement) {
 				SolidTile tile = levelManager.getSolidTileAt(layer, (short) xValue, (short) yValue);
 				if(tile != null) {
-					if(direction == SensorDirection.DOWN) {
+					if(direction == Direction.DOWN) {
 						byte tileHeight = tile.getHeightAt((byte) (xValue % 16));
 
 //						if(tileHeight == 16) {
@@ -81,7 +82,7 @@ public class SensorLine {
 						if (yValue <= tileHeight + (yValue - (yValue % 16))) {
 							// we found it
 							byte distance = (byte) ((yValue % 16) + tileHeight);
-							return new SensorResult(tile.getAngle(), distance, -1); // TODO Add Tile ID
+							return new SensorResult(tile.getAngle(), distance, -1, null); // TODO Add Tile ID
 						}
 					} else {
 						//TODO handle other directions
@@ -94,6 +95,9 @@ public class SensorLine {
 	}
 
 	public void draw() {
+		if (!enabled) {
+			return;
+		}
 		short spriteX = sprite.getCentreX();
 		short spriteY = sprite.getCentreY();
 		int startX = spriteX + x;
@@ -110,7 +114,11 @@ public class SensorLine {
 				commands));
 	}
 
-	public SensorDirection getDirection() {
+	public Direction getDirection() {
 		return direction;
+	}
+
+	public void setEnabled(boolean enabled) {
+		this.enabled = enabled;
 	}
 }

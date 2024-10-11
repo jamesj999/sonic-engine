@@ -1,7 +1,9 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
-import uk.co.jamesj999.sonic.physics.SensorDirection;
+import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.GroundSensor;
+import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorLine;
 
 import com.jogamp.opengl.GL2;
@@ -44,42 +46,19 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
-        // Terrain Sensors
-		terrainSensorLines.add(new SensorLine(this, (byte) 9, (byte) 0, (byte) 9, (byte) 20, SensorDirection.DOWN));
-		terrainSensorLines.add(new SensorLine(this, (byte) -9, (byte) 0, (byte) -9, (byte) 20, SensorDirection.DOWN));
+		// Ground Sensors
+		groundSensors = new Sensor[2];
+		groundSensors[0] = new GroundSensor(this, Direction.DOWN, (byte) -9, (byte) 20, true);
+		groundSensors[1] = new GroundSensor(this, Direction.DOWN, (byte) 9, (byte) 20, true);
 
-		// Wall Sensors
-		wallSensorLines.add(new SensorLine(this, (byte) -10, (byte) 0, (byte) 0, (byte) 0, SensorDirection.LEFT));
-		wallSensorLines.add(new SensorLine(this, (byte) 0, (byte) 0, (byte) 10, (byte) 0, SensorDirection.RIGHT));
-	}
+		// Ceiling Sensors
+		ceilingSensors = new Sensor[2];
+		ceilingSensors[0] = new GroundSensor(this, Direction.UP, (byte) -9, (byte) -20, false);
+		ceilingSensors[1] = new GroundSensor(this, Direction.UP, (byte) 9, (byte) -20, false);
 
-	@Override
-	protected void updateSensorLinesForRunningMode(SpriteRunningMode runningMode) {
-		// Sad to hard-code this, but meh.
-		if(terrainSensorLines.size() != 2 && wallSensorLines.size() != 2) {
-			throw new IllegalStateException("Sonic must have 2 terrain sensor lines and 2 wall sensor lines.");
-		}
-		SensorLine terrain1 = terrainSensorLines.get(0);
-		SensorLine terrain2 = terrainSensorLines.get(1);
-		SensorLine wall1 = wallSensorLines.get(0);
-		SensorLine wall2 = wallSensorLines.get(1);
-
-		switch (getRunningMode()) {
-			case GROUND:
-				terrain1.updateParameters((byte) 9, (byte) 0, (byte) 9, (byte) 20, SensorDirection.DOWN);
-				terrain2.updateParameters((byte) -9, (byte) 0, (byte) -9, (byte) 20, SensorDirection.DOWN);
-				wall1.updateParameters((byte) -10, (byte) 0, (byte) 0, (byte) 0, SensorDirection.LEFT);
-				wall2.updateParameters((byte) 0, (byte) 0, (byte) 10, (byte) 0, SensorDirection.RIGHT);
-				break;
-			case LEFTWALL:
-				//TODO
-				break;
-			case RIGHTWALL:
-				//TODO
-				break;
-			case CEILING:
-				//TODO
-				break;
-		}
+		// Push Sensors
+		pushSensors = new Sensor[2];
+		pushSensors[0] = new GroundSensor(this, Direction.LEFT, (byte) -10, (byte) 0, false);
+		pushSensors[1] = new GroundSensor(this, Direction.RIGHT, (byte) 10, (byte) 0, false);
 	}
 }

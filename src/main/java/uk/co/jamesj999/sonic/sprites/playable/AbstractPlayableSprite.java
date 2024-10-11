@@ -1,9 +1,13 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
+import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.managers.DebugSpriteMovementManager;
+import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteMovementManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 
 /**
  * Movement speeds are in subpixels (256 subpixels per pixel...).
@@ -14,7 +18,7 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteMovementManager;
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final SpriteMovementManager movementManager;
 
-	protected SpriteRunningMode runningMode = SpriteRunningMode.GROUND;
+	protected GroundMode runningMode = GroundMode.GROUND;
 
 	/**
 	 * gSpeed is the speed this sprite is moving across the 'ground'.
@@ -242,7 +246,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setRolling(boolean rolling) {
-        if(SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) {
+        if(GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
             if (rolling) {
                 setHeight(rollHeight);
             } else {
@@ -289,25 +293,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		move(xSpeed, ySpeed);
 	}
 
-	public SpriteRunningMode getRunningMode() {
+	public GroundMode getGroundMode() {
 		return runningMode;
 	}
 
-	public void setRunningMode(SpriteRunningMode runningMode) {
-        SpriteRunningMode oldRunningMode = this.runningMode;
-		this.runningMode = runningMode;
-		updateSensorLinesForRunningMode(runningMode);
-        updateSpriteShapeForRunningMode(runningMode, oldRunningMode);
+	public void setGroundMode(GroundMode groundMode) {
+		this.runningMode = groundMode;
 	}
-	
-	protected abstract void updateSensorLinesForRunningMode(SpriteRunningMode runningMode);
 
-	protected void updateSpriteShapeForRunningMode(SpriteRunningMode newRunningMode, SpriteRunningMode oldRunningMode) {
+	protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {
 		// Best if statement ever...
-		if(((SpriteRunningMode.CEILING.equals(runningMode) || SpriteRunningMode.GROUND.equals(runningMode)) &&
-				(SpriteRunningMode.LEFTWALL.equals(oldRunningMode) || SpriteRunningMode.RIGHTWALL.equals(oldRunningMode))) ||
-				((SpriteRunningMode.RIGHTWALL.equals(runningMode) || SpriteRunningMode.LEFTWALL.equals(runningMode)) &&
-						((SpriteRunningMode.CEILING.equals(oldRunningMode) || SpriteRunningMode.GROUND.equals(oldRunningMode))))) {
+		if(((GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) &&
+				(GroundMode.LEFTWALL.equals(oldRunningMode) || GroundMode.RIGHTWALL.equals(oldRunningMode))) ||
+				((GroundMode.RIGHTWALL.equals(runningMode) || GroundMode.LEFTWALL.equals(runningMode)) &&
+						((GroundMode.CEILING.equals(oldRunningMode) || GroundMode.GROUND.equals(oldRunningMode))))) {
 			int oldHeight = getHeight();
 			setHeight(width);
 			setWidth(oldHeight);
@@ -320,6 +319,93 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	public final short getCentreY(int framesBehind) {
 		return (short) (xHistory[historyPos - framesBehind] - (height / 2));
+	}
+
+	public void updateSensors(short originalX, short originalY) {
+		Sensor[] sensorsToActivate;
+		Sensor[] sensorsToDeactivate;
+
+		Sensor groundA = groundSensors[0];
+		Sensor groundB = groundSensors[1];
+
+		Sensor ceilingC = ceilingSensors[0];
+		Sensor ceilingD = ceilingSensors[1];
+
+		Sensor pushE = pushSensors[0];
+		Sensor pushF = pushSensors[1];
+
+		if (getAir()) {
+			short xSpeedPositive = (short) Math.abs(xSpeed);
+			short ySpeedPositive = (short) Math.abs(ySpeed);
+
+			if(xSpeedPositive > ySpeedPositive) {
+				if (xSpeed > 0) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
+					sensorsToDeactivate = new Sensor[] { pushE };
+				} else {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
+					sensorsToDeactivate = new Sensor[] { pushF };
+				}
+			} else {
+				if(ySpeed > 0) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, pushE, pushF };
+					sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD };
+				} else {
+					sensorsToActivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
+					sensorsToDeactivate = new Sensor[] { groundA, groundB };
+				}
+			}
+		}  else {
+			if (xSpeed > 0) {
+				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF};
+				sensorsToDeactivate = new Sensor[] { pushE };
+			} else if (xSpeed < 0) {
+				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE};
+				sensorsToDeactivate = new Sensor[] { pushF };
+			} else {
+				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD};
+				sensorsToDeactivate = new Sensor[] { pushE, pushF };
+			}
+		}
+
+		setSensorActive(sensorsToActivate, true);
+		setSensorActive(sensorsToDeactivate, false);
+	}
+
+	private void setSensorActive(Sensor[] sensors, boolean active) {
+		for(Sensor sensor : sensors) {
+			sensor.setActive(active);
+		}
+	}
+
+	public Sensor[] getAllSensors() {
+		Sensor[] sensors = new Sensor[6];
+		sensors[0] = groundSensors[0];
+		sensors[1] = groundSensors[1];
+		sensors[2] = ceilingSensors[0];
+		sensors[3] = ceilingSensors[1];
+		sensors[4] = pushSensors[0];
+		sensors[5] = pushSensors[1];
+
+		return sensors;
+	}
+
+	public void moveForGroundModeAndDirection(byte distance, Direction direction) {
+		SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(getGroundMode(), direction);
+		switch (sensorConfiguration.direction()) {
+			case DOWN -> {
+				yPixel = (short) (yPixel + distance);
+			}
+			case RIGHT -> {
+				xPixel = (short) (xPixel + distance);
+			}
+			case UP -> {
+				yPixel = (short) (yPixel - distance);
+			}
+			case LEFT -> {
+				xPixel = (short) (xPixel - distance);
+			}
+		}
 	}
 
 	/**
