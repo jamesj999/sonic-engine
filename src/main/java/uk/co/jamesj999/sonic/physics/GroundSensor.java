@@ -59,15 +59,15 @@ public class GroundSensor extends Sensor {
                 byte prevTileHeight = (vertical) ? prevTile.getHeightAt((byte) (currentX % 16)) : prevTile.calculateWidthAt((byte) (currentY % 16));
                 if (prevTileHeight > 0) {
                     // 'Previous' tile has a height value > 0 so this is our tile to calculate distance for.
-                    return new SensorResult(prevTile.getAngle(), calculateDistance(prevTile, originalX, originalY, currentX, currentY, direction), 0);
+                    return new SensorResult(prevTile.getAngle(), calculateDistance(prevTile, originalX, originalY, currentX, currentY, direction), 0, globalDirection);
                 }
             }
             // 'Previous' tile not found or has a height of 0, so return distance to initial tile.
-            return new SensorResult(initialTile.getAngle(), calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction), 0);
+            return new SensorResult(initialTile.getAngle(), calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction), 0, globalDirection);
 
         } else if (initialHeight > 0) {
             // First tile has a height value > 0 and < 16 so return the distance to the edge of this tile.
-            return new SensorResult(initialTile.getAngle(), calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction), 0);
+            return new SensorResult(initialTile.getAngle(), calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction), 0, globalDirection);
         } else {
             // No tiles found so far (after initial spot and 'previous' if applicable)
             // Need to expand our search to the 'next' block.
@@ -86,9 +86,9 @@ public class GroundSensor extends Sensor {
                 // Or just be lazy and use the calculateDistance method for the first tile (or lack thereof) then add (or subtract?) 16...
                 byte distance = calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction);
                 distance = (byte) ((Direction.LEFT.equals(globalDirection) || Direction.UP.equals(globalDirection)) ? distance - 32 : distance + 32);
-                return new SensorResult((byte ) 0, distance,0);
+                return new SensorResult((byte ) 0, distance,0, direction);
             } else {
-                return new SensorResult(nextTile.getAngle(), calculateDistance(nextTile, originalX, originalY, currentX, currentY, direction), 0);
+                return new SensorResult(nextTile.getAngle(), calculateDistance(nextTile, originalX, originalY, currentX, currentY, direction), 0, globalDirection);
             }
         }
     }
@@ -111,6 +111,13 @@ public class GroundSensor extends Sensor {
         return 0;
     }
 
+    /**
+     * Calculates the adjustment to the X or Y axis (as appropriate) to use to move 'one tile ahead' in the given direction.
+     * // TODO: Currently this assumes a tile height/width of 16. This could be updated to a static value somewhere else at least.
+     * @param direction The literal direction you want to look in.
+     * @param xOrY The X or Y value (according to verticality) - Vertical would be the y value and horizontal would be the x value.
+     * @return The new x or y value to use to find the next tile.
+     */
     private short calculateNextTile(Direction direction, short xOrY) {
         switch (direction) {
             case UP, LEFT -> {
@@ -123,4 +130,26 @@ public class GroundSensor extends Sensor {
         return 0;
     }
 
+// I'm trying again again - will he be able to make it recursive? Who knows...
+    /*
+    private SensorResult calculateTileDistance(short x, short y, Direction globalDirection, boolean vertical, boolean checkPrevious, boolean isLast) {
+        // Find Tile
+        LevelManager levelManager = LevelManager.getInstance();
+        final Tile tile = levelManager.getLevel().getTileAt(x, y);
+        if (tile != null) {
+            byte tileHeight = (vertical) ? tile.getHeightAt((byte) (x % 16)) : tile.calculateWidthAt((byte) (y % 16));
+            if(checkPrevious && tileHeight == 16) {
+                short previousX = (vertical) ? calculateNextTile(globalDirection.opposite(), x) : x;
+                short previousY = (vertical) ? y : calculateNextTile(globalDirection.opposite(), y);
+                SensorResult previousResult = calculateTileDistance(previousX, previousY, globalDirection, vertical, false, true);
+                if(previousResult.distance() > 0) {
+  //                  return new SensorResult(, calculateTileDistance()
+                }
+            }
+            if(tileHeight > 0) {
+                return new SensorResult(tile.getAngle(), calculateDistance(tile, (short) (sprite.getCentreX() + this.x), (short) (sprite.getCentreX() + this.y), x, y, globalDirection, 0, globalDirection));
+            }
+
+        }
+    }**/
 }

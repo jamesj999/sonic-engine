@@ -82,7 +82,7 @@ public class SensorLine {
 						if (yValue <= tileHeight + (yValue - (yValue % 16))) {
 							// we found it
 							byte distance = (byte) ((yValue % 16) + tileHeight);
-							return new SensorResult(tile.getAngle(), distance, -1); // TODO Add Tile ID
+							return new SensorResult(tile.getAngle(), distance, -1, null); // TODO Add Tile ID
 						}
 					} else {
 						//TODO handle other directions

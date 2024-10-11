@@ -135,19 +135,12 @@ public class PlayableSpriteMovementManager extends
         boolean isRoll = sprite.getRolling();
 
         // Perform terrain checks - results are updated directly into the sprite
-        SensorResult[] result = terrainCollisionManager.calculateTerrainHeight(sprite);
-        doTerrainCollision(sprite, result);
+        SensorResult[] groundResult = terrainCollisionManager.getSensorResult(sprite.getGroundSensors());
+		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
+		SensorResult[] pushResult = terrainCollisionManager.getSensorResult(sprite.getPushSensors());
 
-        // Check if there are any wall collisions:
-        //short wallCollisionXPos = terrainCollisionManager.calculateWallPosition(sprite);
-        //doWallCollision(sprite, wallCollisionXPos);
-
-        // If there is a terrain AND wall collision, 'undo' the terrain collision, since we've probably just hit a wall.
-//        if(terrainHeight > -1 && wallCollisionXPos > -1) {
-//            sprite.setAir(inAir);
-//            sprite.setRolling(isRoll);
-//            sprite.setY(yBeforeTerrainCollision);
-//        }
+        doTerrainCollision(sprite, groundResult);
+		//doWallCollision(sprite, pushResult);
 
         // This won't work when graphics are involved...
         if(sprite.getX() > originalX) {
@@ -171,34 +164,21 @@ public class PlayableSpriteMovementManager extends
 		sprite.updateSensors(originalX, originalY);
     }
 
-    private void doWallCollision (AbstractPlayableSprite sprite) {
-        doWallCollision(sprite, terrainCollisionManager.calculateWallPosition(sprite));
-    }
-
-    private void doWallCollision(AbstractPlayableSprite sprite, short wallCollisionXPos) {
-        if(wallCollisionXPos > -1) {
-            System.out.println("Collision position: " + wallCollisionXPos);
-            // Sprite has collided with a wall, we need to pop it out and stop it moving before rendering.
-            // TODO: Change this logic once we store the direction sonic is facing...
-            if(Direction.RIGHT.equals(sprite.getDirection())) {
-                // Moving right
-                sprite.setX((short) (wallCollisionXPos - (sprite.getWidth()) -1));
-            } else if(Direction.LEFT.equals(sprite.getDirection())) {
-                // Moving left
-                sprite.setX((short) (wallCollisionXPos + 1));
-            }
-            sprite.setXSpeed((short) 0);
-            sprite.setGSpeed((short) 0);
-        }
+    private void doWallCollision(AbstractPlayableSprite sprite, SensorResult[] pushResult) {
+		SensorResult lowestResult = findLowestSensorResult(pushResult);
+		if(lowestResult != null) {
+			Direction direction = lowestResult.direction();
+			byte distance = lowestResult.distance();
+			if (distance < 0) {
+				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
+				sprite.setXSpeed((short) 0);
+				sprite.setGSpeed((short) 0);
+			}
+		}
     }
 
     private void doTerrainCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
-		SensorResult lowestResult = null;
-		for (SensorResult result : results) {
-			if(lowestResult == null || result.distance() < lowestResult.distance()) {
-				lowestResult = result;
-			}
-		}
+		SensorResult lowestResult = findLowestSensorResult(results);
 
 		if(sprite.getAir()) {
 			// We are in the air and haven't landed unless we have a distance < 0 as our lowest result.
@@ -207,6 +187,7 @@ public class PlayableSpriteMovementManager extends
 				return;
 			} else {
 				// Work out the ySpeed required to make us collide.
+				// TODO - this is as per the SPG but seems to make sonic fall through surfaces if he's moving faster on X than Y and is in the air...
 				short requiredSpeed;
 				short positiveXSpeed = (short) Math.abs(sprite.getXSpeed());
 				if(positiveXSpeed < sprite.getYSpeed()) {
@@ -219,8 +200,7 @@ public class PlayableSpriteMovementManager extends
 				// Check whether
 				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
 					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
-					// We need to calculate the groundMode
-					sprite.moveForGroundMode(lowestResult.distance());
+					sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
 					// And set sonic's new angle based on the tile found:
 					sprite.setAngle(lowestResult.angle());
 
@@ -233,7 +213,7 @@ public class PlayableSpriteMovementManager extends
 			// Work out the speeds required to consider us still on the ground
 			short requiredSpeed = (short) Math.min(Math.abs(sprite.getXSpeed()) + 4, 14);
 			if(lowestResult.distance() < requiredSpeed) {
-				sprite.moveForGroundMode(lowestResult.distance());
+				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
 				sprite.setAngle(lowestResult.angle());
 			} else {
 				sprite.setAir(true);
@@ -577,5 +557,17 @@ public class PlayableSpriteMovementManager extends
 		if (!sprite.getAir() && !jump) {
 			jumpPressed = false;
 		}
+	}
+
+	private SensorResult findLowestSensorResult(SensorResult[] results) {
+		SensorResult lowestResult = null;
+		for (SensorResult result : results) {
+			if(result != null) {
+				if (lowestResult == null || result.distance() < lowestResult.distance()) {
+					lowestResult = result;
+				}
+			}
+		}
+		return lowestResult;
 	}
 }

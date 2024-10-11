@@ -6,12 +6,11 @@ public class TerrainCollisionManager {
 	private static TerrainCollisionManager terrainCollisionManager;
 
 	// In the future, we may need to expand this method to work with AbstractSprite too for NPCs.
-	public SensorResult[] calculateTerrainHeight(AbstractPlayableSprite sprite) {
-		Sensor[] groundSensors = sprite.getGroundSensors();
-		SensorResult[] results = new SensorResult[groundSensors.length];
+	public SensorResult[] getSensorResult(Sensor[] sensors) {
+		SensorResult[] results = new SensorResult[sensors.length];
 
-		for (int i = 0; i < groundSensors.length; i++) {
-			results[i] = groundSensors[i].scan();
+		for (int i = 0; i < sensors.length; i++) {
+			results[i] = sensors[i].scan();
 		}
 
 		return results;

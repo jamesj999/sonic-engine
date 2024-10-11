@@ -3,7 +3,9 @@ package uk.co.jamesj999.sonic.sprites.playable;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
+import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 
 /**
  * Movement speeds are in subpixels (256 subpixels per pixel...).
@@ -348,8 +350,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 				}
 			}
 		}  else {
-			sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE, pushF};
-			sensorsToDeactivate = new Sensor[0];
+			if (xSpeed > 0) {
+				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF};
+				sensorsToDeactivate = new Sensor[] { pushE };
+			} else if (xSpeed < 0) {
+				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE};
+				sensorsToDeactivate = new Sensor[] { pushF };
+			} else {
+				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD};
+				sensorsToDeactivate = new Sensor[] { pushE, pushF };
+			}
 		}
 
 		setSensorActive(sensorsToActivate, true);
@@ -374,18 +384,19 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return sensors;
 	}
 
-	public void moveForGroundMode(byte distance) {
-		switch (getGroundMode()) {
-			case GROUND -> {
+	public void moveForGroundModeAndDirection(byte distance, Direction direction) {
+		SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(getGroundMode(), direction);
+		switch (sensorConfiguration.direction()) {
+			case DOWN -> {
 				yPixel = (short) (yPixel + distance);
 			}
-			case RIGHTWALL -> {
+			case RIGHT -> {
 				xPixel = (short) (xPixel + distance);
 			}
-			case CEILING -> {
+			case UP -> {
 				yPixel = (short) (yPixel - distance);
 			}
-			case LEFTWALL -> {
+			case LEFT -> {
 				xPixel = (short) (xPixel - distance);
 			}
 		}
