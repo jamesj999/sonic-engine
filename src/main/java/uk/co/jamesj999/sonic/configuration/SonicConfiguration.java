@@ -83,7 +83,7 @@ public enum SonicConfiguration {
 	/**
 	 * Whether to enable Debug Movement Mode
 	 */
-	DEBUG_MODE(true);
+	DEBUG_MODE(false);
 
 	private Object value;
 

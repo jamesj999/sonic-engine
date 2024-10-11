@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.physics;
 
+import uk.co.jamesj999.sonic.level.ChunkDesc;
 import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
@@ -20,6 +21,8 @@ public class GroundSensor extends Sensor {
             return null;
         }
 
+        byte layer = sprite.getLayer();
+
         SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), direction);
         byte xIncrement = sensorConfiguration.xIncrement();
         byte yIncrement = sensorConfiguration.yIncrement();
@@ -34,7 +37,8 @@ public class GroundSensor extends Sensor {
         short currentY = originalY;
 
         // Check for a tile under the sensor.
-        SolidTile initialTile = levelManager.getSolidTileAt(originalX, originalY);//TODO how I get tile
+        ChunkDesc initialChunkDesc = levelManager.getChunkDescAt(layer, originalX, originalY);
+        SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc);
         byte initialHeight;
         if (initialTile != null) {
             // There is a tile under the sensor, let's remember its height (or width, depending on direction the sensor is facing)
@@ -53,7 +57,8 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection.opposite(), currentX);
             }
             // Look for a 'previous' tile using the new coordinates
-            SolidTile prevTile = levelManager.getSolidTileAt(originalX, originalY);
+            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
+            SolidTile prevTile = levelManager.getSolidTileForChunkDesc(prevChunkDesc);
             if (prevTile != null) {
                 // Extract height or width value as appropriate from the 'previous' tile.
                 byte prevTileHeight = (vertical) ? prevTile.getHeightAt((byte) (currentX % 16)) : prevTile.getWidthAt((byte) (currentY % 16));
@@ -78,7 +83,8 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection, currentX);
             }
             // Retrieve 'next' tile based on new currentX and currentY.
-            SolidTile nextTile = levelManager.getSolidTileAt(currentX, currentY);
+            ChunkDesc nextChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
+            SolidTile nextTile = levelManager.getSolidTileForChunkDesc(nextChunkDesc);
             byte lastDistance;
             if (nextTile == null) {
                 // No tile here either so send the maximum possible distance it could be.

@@ -17,7 +17,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
-import static java.util.logging.Level.*;
+
+import static java.util.logging.Level.SEVERE;
 
 /**
  * Manages the loading and rendering of game levels.
@@ -26,7 +27,7 @@ public class LevelManager {
     private static final Logger LOGGER = Logger.getLogger(LevelManager.class.getName());
     private static LevelManager levelManager;
     private Level level;
-    private GraphicsManager graphicsManager = GraphicsManager.getInstance();
+    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
 
     // Constants representing the size of tiles and chunks in pixels
@@ -84,7 +85,7 @@ public class LevelManager {
             LOGGER.warning("Main character sprite not found.");
             return;
         }
-        int currentLayer = sprite.getLayer();
+        byte currentLayer = sprite.getLayer();
 
         // Calculate drawing bounds, adjusted to include partially visible tiles
         int drawX = cameraX - (cameraX % TILE_SIZE);
@@ -238,7 +239,7 @@ public class LevelManager {
      * @param y     the y-coordinate in pixels
      * @return the Block at the specified position, or null if not found
      */
-    private Block getBlockAtPosition(int layer, int x, int y) {
+    private Block getBlockAtPosition(byte layer, int x, int y) {
         if (level == null || level.getMap() == null) {
             LOGGER.warning("Level or Map is not initialized.");
             return null;
@@ -263,8 +264,28 @@ public class LevelManager {
         return block;
     }
 
-    public SolidTile getSolidTileAt(int x, int y) {
-        return null;
+    public ChunkDesc getChunkDescAt(byte layer, int x, int y) {
+        Block block = getBlockAtPosition(layer, x ,y);
+        if(block == null) {
+            return null;
+        }
+        ChunkDesc chunkDesc = block.getChunkDesc((x % CHUNK_SIZE) / TILE_SIZE,(y % CHUNK_SIZE) / TILE_SIZE);
+        return chunkDesc;
+    }
+
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+        try {
+            if (chunkDesc == null) {
+                return null;
+            }
+            Chunk chunk = level.getChunk(chunkDesc.getChunkIndex());
+            if (chunk == null) {
+                return null;
+            }
+            return level.getSolidTile(chunk.getSolidTileIndex());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /**

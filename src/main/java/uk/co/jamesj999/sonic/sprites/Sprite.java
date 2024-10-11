@@ -54,7 +54,7 @@ public interface Sprite {
 
 	public void setDirection(Direction direction);
 
-	public void setLayer(int layer);
+	public void setLayer(byte layer);
 
-	public int getLayer();
+	public byte getLayer();
 }

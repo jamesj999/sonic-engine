@@ -32,7 +32,7 @@ public class DebugRenderer {
 	public void renderDebugInfo() {
 		if (renderer == null) {
 			renderer = new TextRenderer(new Font(
-					"SansSerif", Font.PLAIN, 5));
+					"SansSerif", Font.PLAIN, 6));
 		}
 
 		renderer.beginRendering(width, height);

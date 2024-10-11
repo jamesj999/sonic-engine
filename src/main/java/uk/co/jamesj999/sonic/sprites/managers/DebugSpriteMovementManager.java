@@ -25,9 +25,9 @@ public class DebugSpriteMovementManager extends AbstractSpriteMovementManager {
         if(testKey && !testKeyPressed) {
             testKeyPressed = true;
             if(sprite.getLayer() == 1) {
-                sprite.setLayer(0);
+                sprite.setLayer((byte) 0);
             } else {
-                sprite.setLayer(sprite.getLayer() + 1);
+                sprite.setLayer((byte) (sprite.getLayer() + 1));
             }
         }
 
