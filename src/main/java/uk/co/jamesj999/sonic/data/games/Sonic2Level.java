@@ -38,11 +38,12 @@ public class Sonic2Level implements Level {
                        int mapAddr,
                        int collisionsAddr,
                        int altCollisionsAddr,
-                       int solidTilesAddr,
+                       int solidTileHeightsAddr,
+                       int solidTileWidthsAddr,
                        int solidTilesAngleAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
-        loadSolidTiles(rom, solidTilesAddr, solidTilesAngleAddr);
+        loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
@@ -215,30 +216,29 @@ public class Sonic2Level implements Level {
     /**
      *
      * @param rom
-     * @param tilesAddr
+     * @param tileHeightsAddr
      * @param anglesAddr
      * @throws IOException
      */
-    private void loadSolidTiles(Rom rom, int tilesAddr, int anglesAddr) throws IOException {
+    private void loadSolidTiles(Rom rom, int tileHeightsAddr, int tileWidthsAddr, int anglesAddr) throws IOException {
 
         solidTileCount = (Sonic2.SOLID_TILE_MAP_SIZE+1) / SolidTile.TILE_SIZE_IN_ROM;
         LOG.info("how many solid tiles fit?:" + solidTileCount);
 
-        FileChannel channel = rom.getFileChannel();
-        channel.position(tilesAddr);
+        byte[] solidTileHeightsBuffer = rom.readBytes(tileHeightsAddr, Sonic2.SOLID_TILE_MAP_SIZE);
+        byte[] solidTileWidthsBuffer = rom.readBytes(tileWidthsAddr, Sonic2.SOLID_TILE_MAP_SIZE);
 
-        byte[] solidTileBuffer = rom.readBytes(tilesAddr, Sonic2.SOLID_TILE_MAP_SIZE);
-
-        if (solidTileBuffer.length % Sonic2.SOLID_TILE_MAP_SIZE != 0) {
+        if (solidTileHeightsBuffer.length % Sonic2.SOLID_TILE_MAP_SIZE != 0) {
             throw new IOException("Inconsistent SolidTile data");
         }
 
         solidTiles = new SolidTile[solidTileCount];
         for(int i = 0; i < solidTileCount; i++) {
             byte tileAngle = rom.readByte(anglesAddr+i);
-            byte[] totallyLegitimateByteArraySir = Arrays.copyOfRange(solidTileBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
+            byte[] totallyLegitimateHeightArraySir = Arrays.copyOfRange(solidTileHeightsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
+            byte[] totallyLegitimateWidthArraySir = Arrays.copyOfRange(solidTileWidthsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
 
-            solidTiles[i] = new SolidTile(i, totallyLegitimateByteArraySir, tileAngle);
+            solidTiles[i] = new SolidTile(i, totallyLegitimateHeightArraySir, totallyLegitimateWidthArraySir, tileAngle);
         }
 
         LOG.info("SolidTiles loaded");

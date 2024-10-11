@@ -19,8 +19,9 @@ public class Sonic2 extends Game {
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
     private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
     private static final int ALT_COLLISION_LAYOUT_DIR_ADDR = 0x4A2C;
-    private static final int SOLID_TILE_MAP_ADDR = 0x42E50;
-    public static final int SOLID_TILE_MAP_SIZE = 0xFFF; //TODO are we sure?
+    private static final int SOLID_TILE_VERTICAL_MAP_ADDR = 0x42E50;
+    private static final int SOLID_TILE_HORIZONTAL_MAP_ADDR = 0x43E50;
+    public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
@@ -71,7 +72,8 @@ public class Sonic2 extends Game {
         int mapAddr = getTilesAddr(levelIdx);
         int collisionAddr = getCollisionMapAddr(levelIdx);
         int altCollisionAddr = getAltCollisionMapAddr(levelIdx);
-        int solidTileAddr = getSolidTileAddr();
+        int solidTileHeightsAddr = getSolidTileHeightsAddr();
+        int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
@@ -82,15 +84,19 @@ public class Sonic2 extends Game {
         System.out.printf("Map/Tiles addr: 0x%08X%n", mapAddr);
         System.out.printf("Collision addr: 0x%08X%n", collisionAddr);
         System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
-        System.out.printf("Solid Tile addr: 0x%08X%n", solidTileAddr);
+        System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
 
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileAddr, solidTileAngleAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr);
     }
 
-    private int getSolidTileAddr() {
-        return SOLID_TILE_MAP_ADDR;
+    private int getSolidTileHeightsAddr() {
+        return SOLID_TILE_VERTICAL_MAP_ADDR;
+    }
+
+    private int getSolidTileWidthsAddr() {
+        return SOLID_TILE_HORIZONTAL_MAP_ADDR;
     }
 
     private int getSolidTileAngleAddr() {
