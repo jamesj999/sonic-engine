@@ -17,10 +17,10 @@ public class DebugSpriteMovementManager extends AbstractSpriteMovementManager {
             sprite.setX((short) (sprite.getX() + MOVE_SPEED));
         }
         if(up) {
-            sprite.setY((short) (sprite.getY() + MOVE_SPEED));
+            sprite.setY((short) (sprite.getY() - MOVE_SPEED));
         }
         if(down) {
-            sprite.setY((short) (sprite.getY() - MOVE_SPEED));
+            sprite.setY((short) (sprite.getY() + MOVE_SPEED));
         }
         if(testKey && !testKeyPressed) {
             testKeyPressed = true;

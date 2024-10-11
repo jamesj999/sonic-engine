@@ -37,12 +37,13 @@ public class Sonic2Level implements Level {
                        int blocksAddr,
                        int mapAddr,
                        int collisionsAddr,
+                       int altCollisionsAddr,
                        int solidTilesAddr,
                        int solidTilesAngleAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTilesAddr, solidTilesAngleAddr);
-        loadChunks(rom, chunksAddr,collisionsAddr);
+        loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
 
@@ -160,12 +161,13 @@ public class Sonic2Level implements Level {
     }
 
     //TODO both collision addresses
-    private void loadChunks(Rom rom, int chunksAddr, int collisionAddr) throws IOException {
+    private void loadChunks(Rom rom, int chunksAddr, int collisionAddr, int altCollisionAddr) throws IOException {
         final int CHUNK_BUFFER_SIZE = 0xFFFF; // 64KB
         final int SOLID_TILE_REF_BUFFER_LENGTH = 0x300;
 
         byte[] chunkBuffer = new byte[CHUNK_BUFFER_SIZE];
         byte[] solidTileRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
+        byte[] solidTileAltRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
 
         FileChannel channel = rom.getFileChannel();
         channel.position(chunksAddr);
@@ -189,13 +191,22 @@ public class Sonic2Level implements Level {
             throw new IOException("Collision decompression error");
         }
 
+        channel.position(altCollisionAddr);
+
+        result = reader.decompress(channel, solidTileAltRefBuffer, SOLID_TILE_REF_BUFFER_LENGTH);
+
+        if (!result.success()) {
+            throw new IOException("Alt Collision decompression error");
+        }
+
         chunks = new Chunk[chunkCount];
         for (int i = 0; i < chunkCount; i++) {
             chunks[i] = new Chunk();
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(chunkBuffer, i * Chunk.CHUNK_SIZE_IN_ROM, (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
             int solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
-            chunks[i].fromSegaFormat(subArray, solidTileIndex);
+            int altSolidTileIndex = Byte.toUnsignedInt(solidTileAltRefBuffer[i]);
+            chunks[i].fromSegaFormat(subArray, solidTileIndex, altSolidTileIndex);
         }
 
         LOG.info("Chunk count: " + chunkCount + " (" + result.byteCount() + " bytes)");

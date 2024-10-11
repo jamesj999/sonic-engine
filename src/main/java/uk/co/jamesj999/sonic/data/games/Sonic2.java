@@ -18,6 +18,7 @@ public class Sonic2 extends Game {
     private static final int LEVEL_PALETTE_DIR = 0x2782;
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
     private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
+    private static final int ALT_COLLISION_LAYOUT_DIR_ADDR = 0x4A2C;
     private static final int SOLID_TILE_MAP_ADDR = 0x42E50;
     public static final int SOLID_TILE_MAP_SIZE = 0xFFF; //TODO are we sure?
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
@@ -69,6 +70,7 @@ public class Sonic2 extends Game {
         int blocksAddr = getBlocksAddr(levelIdx);
         int mapAddr = getTilesAddr(levelIdx);
         int collisionAddr = getCollisionMapAddr(levelIdx);
+        int altCollisionAddr = getAltCollisionMapAddr(levelIdx);
         int solidTileAddr = getSolidTileAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
 
@@ -79,11 +81,12 @@ public class Sonic2 extends Game {
         System.out.printf("Blocks addr: 0x%08X%n", blocksAddr);
         System.out.printf("Map/Tiles addr: 0x%08X%n", mapAddr);
         System.out.printf("Collision addr: 0x%08X%n", collisionAddr);
+        System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
 
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, solidTileAddr, solidTileAngleAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileAddr, solidTileAngleAddr);
     }
 
     private int getSolidTileAddr() {
@@ -163,5 +166,13 @@ public class Sonic2 extends Game {
         int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
 
         return collisionAddr;
+    }
+
+    private int getAltCollisionMapAddr(int levelIdx) throws IOException {
+        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx;
+
+        int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
+
+        return altCollisionAddr;
     }
 }

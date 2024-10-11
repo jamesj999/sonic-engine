@@ -12,9 +12,9 @@ public class GLCommand implements GLCommandable {
 
 	private Type type;
 	private int drawMethod;
-	private int colour1;
-	private int colour2;
-	private int colour3;
+	private float colour1;
+	private float colour2;
+	private float colour3;
 	private int x1;
 	private int y1;
 	private int x2;
@@ -33,8 +33,8 @@ public class GLCommand implements GLCommandable {
 	 * @param x2
 	 * @param y2
 	 */
-	public GLCommand(Type type, int drawMethod, int colour1, int colour2,
-			int colour3, int x1, int y1, int x2, int y2) {
+	public GLCommand(Type type, int drawMethod, float colour1, float colour2,
+			float colour3, int x1, int y1, int x2, int y2) {
 		this.type = type;
 		this.drawMethod = drawMethod;
 		this.colour1 = colour1;
