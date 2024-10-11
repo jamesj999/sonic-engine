@@ -6,11 +6,8 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
-import uk.co.jamesj999.sonic.physics.SensorLine;
 
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
-import java.util.List;
 
 public abstract class AbstractSprite implements Sprite {
 	protected final SonicConfigurationService configService = SonicConfigurationService

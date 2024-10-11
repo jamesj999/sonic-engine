@@ -2,7 +2,7 @@ package uk.co.jamesj999.sonic.physics;
 
 import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.level.Tile;
+import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -24,8 +24,6 @@ public class GroundSensor extends Sensor {
         boolean vertical = sensorConfiguration.vertical();
         Direction globalDirection = sensorConfiguration.direction();
 
-        Level level = LevelManager.getInstance().getLevel();
-
         // First, find if there is a tile underneath the sensor
         short originalX = (short) (sprite.getCentreX() + x);
         short originalY = (short) (sprite.getCentreY() + y);
@@ -34,11 +32,11 @@ public class GroundSensor extends Sensor {
         short currentY = originalY;
 
         // Check for a tile under the sensor.
-        Tile initialTile = level.getTileAt(currentX, currentY);
+        SolidTile initialTile = //TODO how I get tile
         byte initialHeight;
         if (initialTile != null) {
             // There is a tile under the sensor, let's remember its height (or width, depending on direction the sensor is facing)
-            initialHeight = (vertical) ? initialTile.getHeightAt((byte) (currentX % 16)) : initialTile.calculateWidthAt((byte) (currentY % 16));
+            initialHeight = (vertical) ? initialTile.getHeightAt((byte) (currentX % 16)) : initialTile.getWidthAt((byte) (currentY % 16));
         } else {
             // No tile so a height of 0.
             initialHeight = 0;
@@ -53,10 +51,10 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection.opposite(), currentX);
             }
             // Look for a 'previous' tile using the new coordinates
-            Tile prevTile = level.getTileAt(currentX, currentY);
+            SolidTile prevTile = //TODO HOW I TILE
             if (prevTile != null) {
                 // Extract height or width value as appropriate from the 'previous' tile.
-                byte prevTileHeight = (vertical) ? prevTile.getHeightAt((byte) (currentX % 16)) : prevTile.calculateWidthAt((byte) (currentY % 16));
+                byte prevTileHeight = (vertical) ? prevTile.getHeightAt((byte) (currentX % 16)) : prevTile.getWidthAt((byte) (currentY % 16));
                 if (prevTileHeight > 0) {
                     // 'Previous' tile has a height value > 0 so this is our tile to calculate distance for.
                     return new SensorResult(prevTile.getAngle(), calculateDistance(prevTile, originalX, originalY, currentX, currentY, direction), 0, globalDirection);
@@ -78,7 +76,7 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection, currentX);
             }
             // Retrieve 'next' tile based on new currentX and currentY.
-            Tile nextTile = level.getTileAt(currentX, currentY);
+            SolidTile nextTile = // TODO - How I get tile? level.getTileAt(currentX, currentY);
             byte lastDistance;
             if (nextTile == null) {
                 // No tile here either so send the maximum possible distance it could be.
@@ -93,7 +91,7 @@ public class GroundSensor extends Sensor {
         }
     }
 
-    private byte calculateDistance(Tile tile, short originalX, short originalY, short checkX, short checkY, Direction direction) {
+    private byte calculateDistance(SolidTile tile, short originalX, short originalY, short checkX, short checkY, Direction direction) {
         short tileX = (short) (checkX - (checkX % 16));
         short tileY = (short) (checkY - (checkY % 16));
         switch (direction) {
@@ -104,7 +102,7 @@ public class GroundSensor extends Sensor {
                 return (byte) (tileY - height - originalY);
             }
             case LEFT, RIGHT -> {
-                byte width = (tile == null) ? 0 : tile.calculateWidthAt((byte) (checkY % 16));
+                byte width = (tile == null) ? 0 : tile.getWidthAt((byte) (checkY % 16));
                 return (byte) (tileX + width - originalX);
             }
         }

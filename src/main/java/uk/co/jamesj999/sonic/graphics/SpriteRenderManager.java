@@ -1,7 +1,5 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import uk.co.jamesj999.sonic.physics.SensorLine;
-import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -20,13 +18,6 @@ public class SpriteRenderManager {
         Collection<Sprite> sprites = spriteManager.getAllSprites();
         for (Sprite sprite : sprites) {
             sprite.draw();
-            if (sprite instanceof AbstractPlayableSprite) {
-                // TODO temp debug stuff, remove
-//                for (SensorLine sensorLine : ((AbstractSprite) sprite)
-//                        .getSensorLines()) {
-//                    sensorLine.draw();
-//                }
-            }
         }
     }
 

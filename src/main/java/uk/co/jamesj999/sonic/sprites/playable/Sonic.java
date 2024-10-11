@@ -4,7 +4,6 @@ import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.GroundSensor;
 import uk.co.jamesj999.sonic.physics.Sensor;
-import uk.co.jamesj999.sonic.physics.SensorLine;
 
 import com.jogamp.opengl.GL2;
 
