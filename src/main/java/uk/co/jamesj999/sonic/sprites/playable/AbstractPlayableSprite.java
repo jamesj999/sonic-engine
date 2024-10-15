@@ -314,11 +314,19 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public final short getCentreX(int framesBehind) {
-		return (short) (xHistory[historyPos - framesBehind] + (width / 2));
+		int desired = historyPos - framesBehind;
+		if (desired < 0) {
+			desired += xHistory.length;
+		}
+		return (short) (xHistory[desired] + (width / 2));
 	}
 
 	public final short getCentreY(int framesBehind) {
-		return (short) (xHistory[historyPos - framesBehind] - (height / 2));
+		int desired = historyPos - framesBehind;
+		if (desired < 0) {
+			desired += yHistory.length;
+		}
+		return (short) (yHistory[desired] - (height / 2));
 	}
 
 	public void updateSensors(short originalX, short originalY) {
