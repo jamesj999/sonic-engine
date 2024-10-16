@@ -41,13 +41,13 @@ import static com.jogamp.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
  */
 @SuppressWarnings("serial")
 public class Engine extends GLCanvas implements GLEventListener {
+	public static final String RESOURCES_SHADERS_PIXEL_SHADER_GLSL = "shaders/shader_the_hedgehog.glsl";
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
 	private final SpriteRenderManager spriteRenderManager = SpriteRenderManager.getInstance();
 	private final SpriteCollisionManager spriteCollisionManager = SpriteCollisionManager.getInstance();
-	private final GraphicsManager graphicsManager = GraphicsManager
-			.getInstance();
+	private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
 
 	private final Camera camera = Camera.getInstance();
 	private final DebugRenderer debugRenderer = DebugRenderer.getInstance();
@@ -85,6 +85,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set background (clear) color
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smooths out
 									// lighting
+        try {
+            graphicsManager.init(gl, RESOURCES_SHADERS_PIXEL_SHADER_GLSL);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        graphicsManager.setGraphics(gl);
 
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
@@ -223,5 +229,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 	 * as buffers.
 	 */
 	public void dispose(GLAutoDrawable drawable) {
+		graphicsManager.cleanup();
 	}
 }

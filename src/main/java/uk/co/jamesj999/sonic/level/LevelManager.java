@@ -30,9 +30,6 @@ public class LevelManager {
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
 
-    // Constants representing the size of tiles and chunks in pixels
-    private static final int TILE_SIZE = 16;    // Width/height of a single tile in pixels
-    private static final int CHUNK_SIZE = 128;  // Width/height of a single chunk in pixels
 
     /**
      * Private constructor for Singleton pattern.
@@ -88,25 +85,25 @@ public class LevelManager {
         byte currentLayer = sprite.getLayer();
 
         // Calculate drawing bounds, adjusted to include partially visible tiles
-        int drawX = cameraX - (cameraX % TILE_SIZE);
-        int drawY = cameraY - (cameraY % TILE_SIZE);
-        int levelWidth = level.getMap().getWidth() * CHUNK_SIZE;
-        int levelHeight = level.getMap().getHeight() * CHUNK_SIZE;
+        int drawX = cameraX - (cameraX % LevelConstants.CHUNK_WIDTH);
+        int drawY = cameraY - (cameraY % LevelConstants.CHUNK_HEIGHT);
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
         int xLeftBound = Math.max(drawX, 0);
         int xRightBound = Math.min(cameraX + cameraWidth, levelWidth);
         int yTopBound = Math.max(drawY, 0);
-        int yBottomBound = Math.min(cameraY + cameraHeight + TILE_SIZE, levelHeight);
+        int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
 
         List<GLCommand> commands = new ArrayList<>();
 
         // Iterate over the visible area of the level
-        for (int y = yTopBound; y <= yBottomBound; y += TILE_SIZE) {
-            for (int x = xLeftBound; x <= xRightBound; x += TILE_SIZE) {
+        for (int y = yTopBound; y <= yBottomBound; y += LevelConstants.CHUNK_HEIGHT) {
+            for (int x = xLeftBound; x <= xRightBound; x += LevelConstants.CHUNK_WIDTH) {
                 Block block = getBlockAtPosition(currentLayer, x, y);
                 if (block != null) {
-                    int xBlockBit = (x % CHUNK_SIZE) / TILE_SIZE;
-                    int yBlockBit = (y % CHUNK_SIZE) / TILE_SIZE;
+                    int xBlockBit = (x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
+                    int yBlockBit = (y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
 
                     ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
                     drawChunk(commands, chunkDesc, x, y);
@@ -137,6 +134,13 @@ public class LevelManager {
         if (chunk == null) {
             LOGGER.warning("Chunk at index " + chunkIndex + " is null.");
             return;
+        }
+
+        for (int cY = 0; cY < 2; cY++) {
+            for (int cX = 0; cX < 2; cX++) {
+                PatternDesc patternDesc = chunk.getPatternDesc(cX, cY);
+                graphicsManager.renderPattern(patternDesc, x + (cX * Pattern.PATTERN_WIDTH), y + (cY * Pattern.PATTERN_HEIGHT));
+            }
         }
 
         // Handle primary and secondary collisions
@@ -194,8 +198,8 @@ public class LevelManager {
         boolean yFlip = chunkDesc.getVFlip(); // Using VFlip as per your current code
 
         // Iterate over each pixel column in the tile
-        for (int i = 0; i < TILE_SIZE; i++) {
-            int tileIndex = hFlip ? (TILE_SIZE - 1 - i) : i;
+        for (int i = 0; i < LevelConstants.CHUNK_WIDTH; i++) {
+            int tileIndex = hFlip ? (LevelConstants.CHUNK_HEIGHT - 1 - i) : i;
             int height = solidTile.getHeightAt((byte) tileIndex);
 
             if (height > 0) {
@@ -208,7 +212,7 @@ public class LevelManager {
                 // Adjust drawing coordinates based on vertical flip
                 if (yFlip) {
                     // When yFlip is true, y coordinates increase downwards in the rendering context
-                    drawStartY = y - TILE_SIZE;
+                    drawStartY = y - LevelConstants.CHUNK_HEIGHT;
                     drawEndY = drawStartY + height;
                 } else {
                     // Normal rendering, y decreases upwards
@@ -216,8 +220,8 @@ public class LevelManager {
                     drawEndY = y - height;
                 }
 
-                commands.add(new GLCommand(
-                        GLCommand.Type.RECTI,
+                /*commands.add(new GLCommand(
+                        GLCommand.CommandType.RECTI,
                         GL2.GL_2D,
                         r,
                         g,
@@ -226,7 +230,7 @@ public class LevelManager {
                         drawEndY,
                         drawEndX,
                         drawStartY
-                ));
+                ));*/
             }
         }
     }
@@ -246,8 +250,8 @@ public class LevelManager {
         }
 
         Map map = level.getMap();
-        int mapX = x / CHUNK_SIZE;
-        int mapY = y / CHUNK_SIZE;
+        int mapX = x / LevelConstants.BLOCK_WIDTH;
+        int mapY = y / LevelConstants.BLOCK_HEIGHT;
 
         byte value = map.getValue(layer, mapX, mapY);
         if (value < 0) {
@@ -269,7 +273,7 @@ public class LevelManager {
         if(block == null) {
             return null;
         }
-        ChunkDesc chunkDesc = block.getChunkDesc((x % CHUNK_SIZE) / TILE_SIZE,(y % CHUNK_SIZE) / TILE_SIZE);
+        ChunkDesc chunkDesc = block.getChunkDesc((x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
         return chunkDesc;
     }
 

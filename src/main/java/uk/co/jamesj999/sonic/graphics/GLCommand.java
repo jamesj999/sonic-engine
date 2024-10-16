@@ -6,12 +6,19 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
 public class GLCommand implements GLCommandable {
 	private final int screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT);
-	public enum Type {
+	public enum CommandType {
 		RECTI, VERTEX2I;
 	}
 
-	private Type type;
+	public enum BlendType {
+		SOLID, ONE_MINUS_SRC_ALPHA
+	}
+
+	private final BlendType defaultBlendMode = BlendType.SOLID;
+
+	private CommandType glCmdCommandType;
 	private int drawMethod;
+	private BlendType blendMode;
 	private float colour1;
 	private float colour2;
 	private float colour3;
@@ -20,10 +27,12 @@ public class GLCommand implements GLCommandable {
 	private int x2;
 	private int y2;
 
+
+
 	/**
 	 * A new GLCommand to add to the GraphicsManager's draw queue.
 	 * 
-	 * @param type
+	 * @param glCmdCommandType
 	 * @param drawMethod
 	 * @param colour1
 	 * @param colour2
@@ -33,9 +42,9 @@ public class GLCommand implements GLCommandable {
 	 * @param x2
 	 * @param y2
 	 */
-	public GLCommand(Type type, int drawMethod, float colour1, float colour2,
-			float colour3, int x1, int y1, int x2, int y2) {
-		this.type = type;
+	public GLCommand(CommandType glCmdCommandType, int drawMethod, float colour1, float colour2,
+					 float colour3, int x1, int y1, int x2, int y2) {
+		this.glCmdCommandType = glCmdCommandType;
 		this.drawMethod = drawMethod;
 		this.colour1 = colour1;
 		this.colour2 = colour2;
@@ -44,6 +53,21 @@ public class GLCommand implements GLCommandable {
 		this.y1 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y1;
 		this.x2 = x2;
 		this.y2 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y2;
+		this.blendMode = defaultBlendMode;
+	}
+
+	public GLCommand(CommandType glCmdCommandType, int drawMethod, BlendType blendType, float colour1, float colour2,
+					 float colour3, int x1, int y1, int x2, int y2) {
+		this.glCmdCommandType = glCmdCommandType;
+		this.drawMethod = drawMethod;
+		this.colour1 = colour1;
+		this.colour2 = colour2;
+		this.colour3 = colour3;
+		this.x1 = x1;
+		this.y1 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y1;
+		this.x2 = x2;
+		this.y2 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y2;
+		this.blendMode = blendType;
 	}
 
 	public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth,
@@ -63,10 +87,18 @@ public class GLCommand implements GLCommandable {
 		if (single) {
 			gl.glBegin(drawMethod);
 		}
+
+		if (blendMode == BlendType.SOLID) {
+			gl.glDisable(GL2.GL_BLEND);
+		}
+		if (blendMode == BlendType.ONE_MINUS_SRC_ALPHA) {
+			gl.glEnable(GL2.GL_BLEND);
+			gl.glBlendFunc(GL2.GL_SRC_ALPHA,GL2.GL_ONE_MINUS_SRC_ALPHA);
+		}
 		gl.glColor3f(colour1, colour2, colour3);
-		if (Type.RECTI.equals(type)) {
+		if (CommandType.RECTI.equals(glCmdCommandType)) {
 			gl.glRecti(x1 - cameraX, y1 + cameraY, x2 - cameraX, y2 + cameraY);
-		} else if (Type.VERTEX2I.equals(type)) {
+		} else if (CommandType.VERTEX2I.equals(glCmdCommandType)) {
 			gl.glVertex2i(x1 - cameraX, y1 + cameraY);
 		}
 		if (single) {

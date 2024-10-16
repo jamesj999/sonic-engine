@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.data.games;
 
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.*;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
@@ -117,6 +118,7 @@ public class Sonic2Level implements Level {
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
+        GraphicsManager graphicsMan = GraphicsManager.getInstance();
 
         // Load character palette
         byte[] buffer = rom.readBytes(characterPaletteAddr, Palette.PALETTE_SIZE_IN_ROM);
@@ -125,16 +127,24 @@ public class Sonic2Level implements Level {
 
         // Load level palettes
         buffer = rom.readBytes(levelPalettesAddr, Palette.PALETTE_SIZE_IN_ROM * 3);
-        for (int i = 0; i < 3; i++) {
+
+        //FIXME: 4 = max palettes in Mega Drive
+        for (int i = 0; i < PALETTE_COUNT-1; i++) {
             palettes[i + 1] = new Palette();
             // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
             byte[] subArray = Arrays.copyOfRange(buffer, i * Palette.PALETTE_SIZE_IN_ROM, (i + 1) * Palette.PALETTE_SIZE_IN_ROM);
             palettes[i + 1].fromSegaFormat(subArray);
         }
+
+        for (int i = 0; i<palettes.length; i++) {
+            graphicsMan.cachePaletteTexture(palettes[i], i);
+        }
+
     }
 
     private void loadPatterns(Rom rom, int patternsAddr) throws IOException {
         final int PATTERN_BUFFER_SIZE = 0xFFFF; // 64KB
+        GraphicsManager graphicsMan = GraphicsManager.getInstance();
         byte[] buffer = new byte[PATTERN_BUFFER_SIZE];
         FileChannel channel = rom.getFileChannel();
         channel.position(patternsAddr);
@@ -156,6 +166,8 @@ public class Sonic2Level implements Level {
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(buffer, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
+
+            graphicsMan.cachePatternTexture(patterns[i], i);
         }
 
         LOG.info("Pattern count: " + patternCount + " (" + result.byteCount() + " bytes)");
@@ -262,8 +274,8 @@ public class Sonic2Level implements Level {
             throw new IOException("Block decompression error");
         }
 
-        blockCount = result.byteCount() / Block.BLOCK_SIZE_IN_ROM;
-        if (result.byteCount() % Block.BLOCK_SIZE_IN_ROM != 0) {
+        blockCount = result.byteCount() / LevelConstants.BLOCK_SIZE_IN_ROM;
+        if (result.byteCount() % LevelConstants.BLOCK_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent block data");
         }
 
@@ -271,7 +283,7 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < blockCount; i++) {
             blocks[i] = new Block();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * LevelConstants.BLOCK_SIZE_IN_ROM, (i + 1) * LevelConstants.BLOCK_SIZE_IN_ROM);
 
             blocks[i].fromSegaFormat(subArray);
 
