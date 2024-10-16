@@ -326,7 +326,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		if (desired < 0) {
 			desired += yHistory.length;
 		}
-		return (short) (yHistory[desired] - (height / 2));
+		return (short) (yHistory[desired] + (height / 2));
 	}
 
 	public void updateSensors(short originalX, short originalY) {
