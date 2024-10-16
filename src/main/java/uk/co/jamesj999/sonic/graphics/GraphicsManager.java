@@ -179,4 +179,8 @@ public class GraphicsManager {
 	public ShaderProgram getShaderProgram() {
 		return shaderProgram;
 	}
+
+	public GL2 getGraphics() {
+		return graphics;
+	}
 }

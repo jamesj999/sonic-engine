@@ -136,8 +136,10 @@ public class Sonic2Level implements Level {
             palettes[i + 1].fromSegaFormat(subArray);
         }
 
-        for (int i = 0; i<palettes.length; i++) {
-            graphicsMan.cachePaletteTexture(palettes[i], i);
+        if (graphicsMan.getGraphics() != null) {
+            for (int i = 0; i<palettes.length; i++) {
+                graphicsMan.cachePaletteTexture(palettes[i], i);
+            }
         }
 
     }
@@ -167,7 +169,10 @@ public class Sonic2Level implements Level {
             byte[] subArray = Arrays.copyOfRange(buffer, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
 
-            graphicsMan.cachePatternTexture(patterns[i], i);
+            if (graphicsMan.getGraphics() != null) {
+                graphicsMan.cachePatternTexture(patterns[i], i);
+            }
+
         }
 
         LOG.info("Pattern count: " + patternCount + " (" + result.byteCount() + " bytes)");
