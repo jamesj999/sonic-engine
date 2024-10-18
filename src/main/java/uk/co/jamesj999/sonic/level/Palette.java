@@ -29,7 +29,7 @@ public class Palette {
         }
     }
 
-    private final Color[] colors;
+    public final Color[] colors;
 
     // Default constructor
     public Palette() {

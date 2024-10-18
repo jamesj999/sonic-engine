@@ -1,11 +1,12 @@
+#version 110
+
 uniform sampler2D Palette;
 uniform sampler2D IndexedColorTexture;
-varying vec2 TexCoord0;
 
 void main()
 {
     // Get the color index from the indexed texture
-    float index = texture2D(IndexedColorTexture, TexCoord0).r * 255.0;
+    float index = texture2D(IndexedColorTexture, gl_TexCoord[0].st).r * 255.0;
 
     // Map the index to palette coordinates (assuming 16 colors)
     float paletteX = index / 15.0;

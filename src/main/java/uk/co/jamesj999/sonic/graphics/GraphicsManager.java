@@ -36,16 +36,16 @@ public class GraphicsManager {
 	/**
 	 * Initialize the GraphicsManager with shader loading.
 	 */
-	public void init(GL2 gl, String vertexShaderPath) throws IOException {
+	public void init(GL2 gl, String pixelShaderPath) throws IOException {
 		this.graphics = gl;
-		this.shaderProgram = new ShaderProgram(gl, vertexShaderPath);  // Load shaders
+		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath);  // Load shaders
 	}
 
 	/**
 	 * Set the current GL2 context (in case it needs resetting).
 	 */
-	public void setGraphics(GL2 graphicsgl) {
-		graphics = graphicsgl;
+	public void setGraphics(GL2 gl) {
+		graphics = gl;
 	}
 
 	/**
@@ -73,8 +73,8 @@ public class GraphicsManager {
 		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
 
 		// Fill the buffer with the pattern's color indices
-		for (int row = 0; row < Pattern.PATTERN_HEIGHT; row++) {
-			for (int col = 0; col < Pattern.PATTERN_WIDTH; col++) {
+		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
+			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
 				byte colorIndex = pattern.getPixel(row, col); // Get color index (0-15)
 				patternBuffer.put(colorIndex);
 			}
@@ -135,6 +135,20 @@ public class GraphicsManager {
 		}
 
 		// Register a PatternRenderCommand instead of directly rendering
+		PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
+		registerCommand(command);
+	}
+
+	/**
+	 * Render a pre-cached pattern at the given coordinates using the specified palette.
+	 */
+	public void renderPattern(int patternIndex, int paletteIndex, int patternTextureId, int paletteTextureId, int x, int y) {
+		// Register a PatternRenderCommand instead of directly rendering
+
+		PatternDesc desc = new PatternDesc();
+		desc.setPatternIndex(patternIndex);
+		desc.setPaletteIndex(paletteIndex);
+
 		PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
 		registerCommand(command);
 	}
