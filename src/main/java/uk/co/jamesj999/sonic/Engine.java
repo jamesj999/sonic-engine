@@ -140,8 +140,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void draw() {
-		spriteRenderManager.draw();
 		levelManager.draw();
+		spriteRenderManager.draw();
 	}
 
 	public static void main(String[] args) {
