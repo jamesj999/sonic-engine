@@ -79,7 +79,7 @@ public class TestKosinskiDecompressor {
 
         LOG.info("Old Reader");
         long start = System.currentTimeMillis();
-        byte[] buffer = KosinskiReader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),true;
+        byte[] buffer = KosinskiReader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),true);
         long end = System.currentTimeMillis();
         LOG.info("(" + (end-start) + ") Our Output: " + bytesToHexString(buffer));
 
