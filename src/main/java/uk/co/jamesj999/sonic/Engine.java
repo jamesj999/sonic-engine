@@ -152,7 +152,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
 				case CHUNKS_VIEW -> levelManager.drawAllChunks();
 				case BLOCKS_VIEW -> levelManager.draw();
-				case null, default -> levelManager.draw();
+				case null, default -> { levelManager.draw(); spriteRenderManager.draw(); }
 			}
 
 			debugRenderer.renderDebugInfo();
