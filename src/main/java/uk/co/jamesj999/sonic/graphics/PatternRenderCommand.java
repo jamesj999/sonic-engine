@@ -33,12 +33,10 @@ public class PatternRenderCommand implements GLCommandable {
 
         // Apply horizontal and vertical flips
         if (desc.getHFlip()) {
-            System.out.println(desc.hashCode() + " was HFlipped");
             gl.glScalef(-1, 1, 1);  // Horizontal flip
             gl.glTranslatef(-8, 0, 0);  // Adjust for flipping
         }
         if (!desc.getVFlip()) {
-            System.out.println(desc.hashCode() + " was VFlipped");
             gl.glScalef(1, -1, 1);  // Vertical flip
             gl.glTranslatef(0, -8, 0);  // Adjust for flipping
         }

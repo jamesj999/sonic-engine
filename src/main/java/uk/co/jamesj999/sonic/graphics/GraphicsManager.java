@@ -140,20 +140,6 @@ public class GraphicsManager {
 	}
 
 	/**
-	 * Render a pre-cached pattern at the given coordinates using the specified palette.
-	 */
-	public void renderPattern(int patternIndex, int paletteIndex, int patternTextureId, int paletteTextureId, int x, int y) {
-		// Register a PatternRenderCommand instead of directly rendering
-
-		PatternDesc desc = new PatternDesc();
-		desc.setPatternIndex(patternIndex);
-		desc.setPaletteIndex(paletteIndex);
-
-		PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
-		registerCommand(command);
-	}
-
-	/**
 	 * Cleanup method to delete textures and release resources.
 	 */
 	public void cleanup() {

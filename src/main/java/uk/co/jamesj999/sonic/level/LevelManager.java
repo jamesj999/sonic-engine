@@ -1,12 +1,14 @@
 package uk.co.jamesj999.sonic.level;
 
 import com.jogamp.opengl.GL2;
+import uk.co.jamesj999.sonic.Engine;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.games.Sonic2;
+import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
@@ -57,6 +59,107 @@ public class LevelManager {
             LOGGER.log(SEVERE, "Unexpected error while loading level " + levelIndex, e);
             throw new IOException("Failed to load level due to unexpected error.", e);
         }
+    }
+
+    /**
+     * Debug Functionality to print each pattern to the screen.
+     */
+    public void drawAllPatterns() {
+        if (level == null) {
+            LOGGER.warning("No level loaded to draw.");
+            return;
+        }
+
+        Camera camera = Camera.getInstance();
+        int cameraX = camera.getX();
+        int cameraY = camera.getY();
+        int cameraWidth = camera.getWidth();
+        int cameraHeight = camera.getHeight();
+
+        // Calculate drawing bounds, adjusted to include partially visible tiles
+        int drawX = cameraX;
+        int drawY = cameraY;
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+
+        int xLeftBound = Math.max(drawX, 0);
+        int xRightBound = Math.min(cameraX + cameraWidth, levelWidth);
+        int yTopBound = Math.max(drawY, 0);
+        int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
+
+        List<GLCommand> commands = new ArrayList<>();
+
+        // Iterate over the visible area of the level
+        int count = 0;
+        int maxCount = level.getPatternCount();
+
+        if (Engine.debugOption.ordinal() > LevelConstants.MAX_PALETTES) {
+            Engine.debugOption = DebugOption.A;
+        }
+
+        for (int y = yTopBound; y <= yBottomBound; y += Pattern.PATTERN_HEIGHT) {
+            for (int x = xLeftBound; x <= xRightBound; x += Pattern.PATTERN_WIDTH) {
+                if (count < maxCount) {
+                    PatternDesc pDesc = new PatternDesc();
+                    pDesc.setPaletteIndex(Engine.debugOption.ordinal());
+                    pDesc.setPatternIndex(count);
+                    graphicsManager.renderPattern(pDesc, x, y);
+                    count++;
+                }
+            }
+        }
+
+        // Register all collected drawing commands with the graphics manager
+        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+
+    }
+
+    /**
+     * Debug Functionality to print each ChunkDesc to the screen.
+     */
+    public void drawAllChunks() {
+        if (level == null) {
+            LOGGER.warning("No level loaded to draw.");
+            return;
+        }
+
+        Camera camera = Camera.getInstance();
+        int cameraX = camera.getX();
+        int cameraY = camera.getY();
+        int cameraWidth = camera.getWidth();
+        int cameraHeight = camera.getHeight();
+
+        // Calculate drawing bounds, adjusted to include partially visible tiles
+        int drawX = cameraX;
+        int drawY = cameraY + Pattern.PATTERN_HEIGHT;
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+
+        int xLeftBound = Math.max(drawX, 0);
+        int xRightBound = Math.min(cameraX + cameraWidth, levelWidth);
+        int yTopBound = Math.max(drawY, 0);
+        int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
+
+        List<GLCommand> commands = new ArrayList<>();
+
+        // Iterate over the visible area of the level
+        int count = 0;
+        int maxCount = level.getChunkCount();
+
+        for (int y = yTopBound; y <= yBottomBound; y += Chunk.CHUNK_HEIGHT) {
+            for (int x = xLeftBound; x <= xRightBound; x += Chunk.CHUNK_WIDTH) {
+                if (count < maxCount) {
+                    ChunkDesc chunkDesc = new ChunkDesc();
+                    chunkDesc.setChunkIndex(count);
+                    drawChunk(commands, chunkDesc, x, y);
+                    count++;
+                }
+            }
+        }
+
+        // Register all collected drawing commands with the graphics manager
+        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+
     }
 
     /**

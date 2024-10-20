@@ -18,17 +18,12 @@ public class TestCollisionLogic {
         System.out.println(path.toAbsolutePath().toString());
         FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE);
 
-        KosinskiReader reader = new KosinskiReader();
-        byte[] collisionBuffer = new byte[0x300];
         int[] collisionArray = new int[0x300];
 
-        var result = reader.decompress(fileChannel, collisionBuffer, collisionBuffer.length);
+        byte[] collisionBuffer = KosinskiReader.decompress(fileChannel, true);
 
         for (int i=0; i< collisionBuffer.length; i++) {
             collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
-        }
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
         }
 
     }

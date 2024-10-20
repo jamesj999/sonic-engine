@@ -27,6 +27,7 @@ public class Sonic2Level implements Level {
     private int chunkCount;
     private int blockCount;
     private int solidTileCount;
+    private static final boolean KOS_DEBUG_LOG = true;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
@@ -147,18 +148,13 @@ public class Sonic2Level implements Level {
     private void loadPatterns(Rom rom, int patternsAddr) throws IOException {
         final int PATTERN_BUFFER_SIZE = 0xFFFF; // 64KB
         GraphicsManager graphicsMan = GraphicsManager.getInstance();
-        byte[] buffer = new byte[PATTERN_BUFFER_SIZE];
         FileChannel channel = rom.getFileChannel();
         channel.position(patternsAddr);
 
-        KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, buffer, PATTERN_BUFFER_SIZE);
-        if (!result.success()) {
-            throw new IOException("Pattern decompression failed");
-        }
+        var result = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        patternCount = result.byteCount() / Pattern.PATTERN_SIZE_IN_ROM;
-        if (result.byteCount() % Pattern.PATTERN_SIZE_IN_ROM != 0) {
+        patternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
+        if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent pattern data");
         }
 
@@ -166,7 +162,7 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < patternCount; i++) {
             patterns[i] = new Pattern();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
 
             if (graphicsMan.getGraphics() != null) {
@@ -175,7 +171,7 @@ public class Sonic2Level implements Level {
 
         }
 
-        LOG.info("Pattern count: " + patternCount + " (" + result.byteCount() + " bytes)");
+        LOG.info("Pattern count: " + patternCount + " (" + result.length + " bytes)");
     }
 
     //TODO both collision addresses
@@ -183,39 +179,23 @@ public class Sonic2Level implements Level {
         final int CHUNK_BUFFER_SIZE = 0xFFFF; // 64KB
         final int SOLID_TILE_REF_BUFFER_LENGTH = 0x300;
 
-        byte[] chunkBuffer = new byte[CHUNK_BUFFER_SIZE];
-        byte[] solidTileRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
-        byte[] solidTileAltRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
-
         FileChannel channel = rom.getFileChannel();
         channel.position(chunksAddr);
 
-        KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, chunkBuffer, CHUNK_BUFFER_SIZE);
-        if (!result.success()) {
-            throw new IOException("Chunk decompression error");
-        }
+        byte[] chunkBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        chunkCount = result.byteCount() / Chunk.CHUNK_SIZE_IN_ROM;
-        if (result.byteCount() % Chunk.CHUNK_SIZE_IN_ROM != 0) {
+        chunkCount = chunkBuffer.length / Chunk.CHUNK_SIZE_IN_ROM;
+        if (chunkBuffer.length % Chunk.CHUNK_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent chunk data");
         }
 
         channel.position(collisionAddr);
 
-        result = reader.decompress(channel, solidTileRefBuffer, SOLID_TILE_REF_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
-        }
+        byte[] solidTileRefBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
         channel.position(altCollisionAddr);
 
-        result = reader.decompress(channel, solidTileAltRefBuffer, SOLID_TILE_REF_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Alt Collision decompression error");
-        }
+        byte[] solidTileAltRefBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
         chunks = new Chunk[chunkCount];
         for (int i = 0; i < chunkCount; i++) {
@@ -227,7 +207,7 @@ public class Sonic2Level implements Level {
             chunks[i].fromSegaFormat(subArray, solidTileIndex, altSolidTileIndex);
         }
 
-        LOG.info("Chunk count: " + chunkCount + " (" + result.byteCount() + " bytes)");
+        LOG.info("Chunk count: " + chunkCount + " (" + chunkBuffer.length + " bytes)");
     }
 
     /**
@@ -264,23 +244,16 @@ public class Sonic2Level implements Level {
 
     private void loadBlocks(Rom rom, int blocksAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        
-        byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
-
-
 
         FileChannel channel = rom.getFileChannel();
         KosinskiReader reader = new KosinskiReader();
 
         channel.position(blocksAddr);
-        var result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
+        byte[] blockBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        if (!result.success()) {
-            throw new IOException("Block decompression error");
-        }
 
-        blockCount = result.byteCount() / LevelConstants.BLOCK_SIZE_IN_ROM;
-        if (result.byteCount() % LevelConstants.BLOCK_SIZE_IN_ROM != 0) {
+        blockCount = blockBuffer.length / LevelConstants.BLOCK_SIZE_IN_ROM;
+        if (blockBuffer.length % LevelConstants.BLOCK_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent block data");
         }
 
@@ -294,28 +267,24 @@ public class Sonic2Level implements Level {
 
         }
 
-        LOG.info("Block count: " + blockCount + " (" + result.byteCount() + " bytes)");
+        LOG.info("Block count: " + blockCount + " (" + blockBuffer.length + " bytes)");
 
     }
 
     private void loadMap(Rom rom, int mapAddr) throws IOException {
         final int MAP_BUFFER_SIZE = 0xFFFF; // 64KB
-        byte[] buffer = new byte[MAP_BUFFER_SIZE];
+
         FileChannel channel = rom.getFileChannel();
         channel.position(mapAddr);
 
-        KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, buffer, MAP_BUFFER_SIZE);
-        if (!result.success()) {
-            throw new IOException("Map decompression error");
-        }
+        byte[] buffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        if (result.byteCount() != MAP_LAYERS * MAP_HEIGHT * MAP_WIDTH) {
+        if (buffer.length != MAP_LAYERS * MAP_HEIGHT * MAP_WIDTH) {
             throw new IOException("Inconsistent map data");
         }
 
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
-        System.out.println("Map loaded successfully. Byte count: " + result.success());
+        System.out.println("Map loaded successfully. Byte count: " + buffer.length);
     }
 }

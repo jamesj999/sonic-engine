@@ -21,6 +21,10 @@ package uk.co.jamesj999.sonic.level;
 public final class ChunkDesc {
     private int index;  // 16-bit stored as an int to handle bitmask operations
 
+    public void setChunkIndex(int chunkIndex) {
+        this.chunkIndex = chunkIndex;
+    }
+
     private int chunkIndex;  // Cached chunk index
 
     Chunk chunk;
@@ -32,7 +36,7 @@ public final class ChunkDesc {
     //A Chunk Descriptor that is empty (the default state)
     public static ChunkDesc EMPTY = new ChunkDesc();
 
-    private ChunkDesc() {
+    public ChunkDesc() {
         this.index = 0;
     }
 

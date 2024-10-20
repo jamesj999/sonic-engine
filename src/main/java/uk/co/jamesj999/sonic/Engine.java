@@ -6,7 +6,9 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
+import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
+import uk.co.jamesj999.sonic.debug.DebugState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 
@@ -54,6 +56,8 @@ public class Engine extends GLCanvas implements GLEventListener {
     private final TimerManager timerManager = TimerManager.getInstance();
 
 	private InputHandler inputHandler;
+	public static DebugState debugState = DebugState.NONE;
+	public static DebugOption debugOption = DebugOption.A;
 
 	private double realWidth = configService
 			.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
@@ -140,8 +144,19 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void draw() {
-		levelManager.draw();
-		spriteRenderManager.draw();
+		if (!debugViewEnabled) {
+			levelManager.draw();
+			spriteRenderManager.draw();
+		} else {
+			switch (debugState) {
+				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
+				case CHUNKS_VIEW -> levelManager.drawAllChunks();
+				case BLOCKS_VIEW -> levelManager.draw();
+				case null, default -> levelManager.draw();
+			}
+
+			debugRenderer.renderDebugInfo();
+		}
 	}
 
 	public static void main(String[] args) {
@@ -219,9 +234,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
-        if(debugViewEnabled) {
-            debugRenderer.renderDebugInfo();
-        }
 	}
 
 	/**
@@ -230,5 +242,14 @@ public class Engine extends GLCanvas implements GLEventListener {
 	 */
 	public void dispose(GLAutoDrawable drawable) {
 		graphicsManager.cleanup();
+	}
+
+	public static void nextDebugState() {
+		debugState = debugState.next();
+		debugOption = DebugOption.A;
+	}
+
+	public static void nextDebugOption() {
+		debugOption = debugOption.next();
 	}
 }

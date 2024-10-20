@@ -66,6 +66,12 @@ public enum SonicConfiguration {
 	 * Key to jump etc.
 	 */
 	JUMP(KeyEvent.VK_SPACE),
+
+	/**
+	 * Test button only used in debug
+	 */
+	TEST(KeyEvent.VK_Z),
+
 	/**
 	 * Code of the sprite of the main playable character.
 	 */

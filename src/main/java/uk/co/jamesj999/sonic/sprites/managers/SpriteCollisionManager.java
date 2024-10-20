@@ -10,7 +10,8 @@ import java.awt.event.KeyEvent;
 import java.util.Collection;
 
 /**
- * Created by Jamesjohnstone on 09/04/15.
+ * Created by Jamesjohnstone on 09/04/15. 9 Years later he re-enters the file; curious but weary, in hope of answers
+ * to a bygone era of his life
  */
 public class SpriteCollisionManager {
     private static SpriteCollisionManager spriteCollisionManager;
@@ -32,14 +33,17 @@ public class SpriteCollisionManager {
                 .getInt(SonicConfiguration.LEFT));
         boolean right = handler.isKeyDown(configService
                 .getInt(SonicConfiguration.RIGHT));
-        boolean space = handler.isKeyDown(KeyEvent.VK_SPACE);
-        boolean z = handler.isKeyDown(KeyEvent.VK_Z);
+        boolean space = handler.isKeyDown(configService
+                .getInt(SonicConfiguration.JUMP));
+        boolean testButton = handler.isKeyDown(configService
+                .getInt(SonicConfiguration.TEST));
+
         // Iterate our Sprites:
         for (Sprite sprite : sprites) {
             // Check we're dealing with a playable sprite:
             if (sprite instanceof AbstractPlayableSprite) {
                 ((AbstractPlayableSprite) sprite).getMovementManager()
-                        .handleMovement(up, down, left, right, space, z);
+                        .handleMovement(up, down, left, right, space, testButton);
 				/*
 				 * Idea: We can put object collision handling here - although
 				 * the X and Y have been set for the sprite, we still have the
