@@ -7,7 +7,7 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import java.util.Collection;
 
 /**
- * Created by Jamesjohnstone on 09/04/15.
+ * Created by Jamesjohnstone on 09/04/15. Can you believe it?
  */
 public class SpriteRenderManager {
     private static SpriteRenderManager spriteRenderManager;

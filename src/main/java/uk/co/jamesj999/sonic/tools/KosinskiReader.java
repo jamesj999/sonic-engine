@@ -6,7 +6,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 
 /**
- * A thread-safe, statically callable Java implementation of the Kosinski decompression algorithm.
+ * A thread-safe, statically callable implementation of the Kosinski decompression algorithm.
+ *
+ * <p>Based on: <a href="https://github.com/Clownacy/accurate-kosinski">Clownacy's Accurate Kosinski</a></p>
  */
 public class KosinskiReader {
 

@@ -1,23 +1,20 @@
 package uk.co.jamesj999.sonic.configuration;
 
-import java.awt.event.KeyEvent;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * All configurable properties are put here. Eventually, these will be loaded
- * from a file. Use {@link SonicConfigurationSerivce} to retrieve the values for
+ * from a file. Use {@link SonicConfigurationService} to retrieve the values for
  * these properties. This way, the service can eventually populate the options
  * from the file.
- * 
- * 
- * 
+ *
  * @author james
- * 
  */
 public enum SonicConfiguration {
 	/**
 	 * Current Version number.
 	 */
-	VERSION("Alpha With ROM Loading Logic - V0.06"),
+	VERSION("Alpha With ROM Loading Logic - V0.1"),
 	/**
 	 * Actual width of the screen (number of available x-coordinates).
 	 */
@@ -49,37 +46,37 @@ public enum SonicConfiguration {
 	/**
 	 * Key to look up.
 	 */
-	UP(KeyEvent.VK_UP),
+	UP(GLFW.GLFW_KEY_UP),
 	/**
 	 * Key to crouch/roll.
 	 */
-	DOWN(KeyEvent.VK_DOWN),
+	DOWN(GLFW.GLFW_KEY_DOWN),
 	/**
 	 * Key to move Sonic left.
 	 */
-	LEFT(KeyEvent.VK_LEFT),
+	LEFT(GLFW.GLFW_KEY_LEFT),
 	/**
 	 * Key to move Sonic right.
 	 */
-	RIGHT(KeyEvent.VK_RIGHT),
+	RIGHT(GLFW.GLFW_KEY_RIGHT),
 	/**
 	 * Key to jump etc.
 	 */
-	JUMP(KeyEvent.VK_SPACE),
+	JUMP(GLFW.GLFW_KEY_SPACE),
 
 	/**
 	 * Test button only used in debug
 	 */
-	TEST(KeyEvent.VK_Z),
+	TEST(GLFW.GLFW_KEY_Z),
 
 	/**
 	 * Code of the sprite of the main playable character.
 	 */
 	MAIN_CHARACTER_CODE("sonic"),
-    /**
-     * Whether to display debugging information on screen.
-     */
-    DEBUG_VIEW_ENABLED(true),
+	/**
+	 * Whether to display debugging information on screen.
+	 */
+	DEBUG_VIEW_ENABLED(true),
 
 	/**
 	 * Filename of ROM to use (temporary)
@@ -91,7 +88,7 @@ public enum SonicConfiguration {
 	 */
 	DEBUG_MODE(true);
 
-	private Object value;
+	private final Object value;
 
 	private SonicConfiguration(final Object value) {
 		this.value = value;
@@ -101,4 +98,15 @@ public enum SonicConfiguration {
 		return value;
 	}
 
+	public int getInt() {
+		return (Integer) value;
+	}
+
+	public String getString() {
+		return (String) value;
+	}
+
+	public boolean getBoolean() {
+		return (Boolean) value;
+	}
 }

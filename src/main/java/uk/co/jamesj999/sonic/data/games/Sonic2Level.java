@@ -27,7 +27,7 @@ public class Sonic2Level implements Level {
     private int chunkCount;
     private int blockCount;
     private int solidTileCount;
-    private static final boolean KOS_DEBUG_LOG = true;
+    private static final boolean KOS_DEBUG_LOG = false;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
@@ -137,10 +137,8 @@ public class Sonic2Level implements Level {
             palettes[i + 1].fromSegaFormat(subArray);
         }
 
-        if (graphicsMan.getGraphics() != null) {
-            for (int i = 0; i<palettes.length; i++) {
-                graphicsMan.cachePaletteTexture(palettes[i], i);
-            }
+        for (int i = 0; i<palettes.length; i++) {
+            graphicsMan.cachePaletteTexture(palettes[i], i);
         }
 
     }
@@ -165,9 +163,8 @@ public class Sonic2Level implements Level {
             byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
 
-            if (graphicsMan.getGraphics() != null) {
-                graphicsMan.cachePatternTexture(patterns[i], i);
-            }
+            graphicsMan.cachePatternTexture(patterns[i], i);
+
 
         }
 
@@ -243,7 +240,6 @@ public class Sonic2Level implements Level {
     }
 
     private void loadBlocks(Rom rom, int blocksAddr) throws IOException {
-        final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
 
         FileChannel channel = rom.getFileChannel();
         KosinskiReader reader = new KosinskiReader();

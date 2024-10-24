@@ -5,16 +5,28 @@ import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelConstants;
 import uk.co.jamesj999.sonic.level.LevelManager;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 public class LevelDataFactory {
     public static ChunkDesc[] chunksFromSegaByteArray(byte[] blockBuffer) {
 
-        ChunkDesc[] chunkDescs = new ChunkDesc[LevelConstants.CHUNKS_PER_BLOCK];
+        int chunkIndexSize = ChunkDesc.getIndexSize(); // Assuming this method exists
+        int chunksPerBlock = LevelConstants.CHUNKS_PER_BLOCK;
+        int expectedBlockSize = chunksPerBlock * chunkIndexSize;
 
-        if (blockBuffer.length != LevelConstants.BLOCK_SIZE_IN_ROM) {
-            throw new IllegalArgumentException("Buffer size does not match block size in ROM");
+        ChunkDesc[] chunkDescs = new ChunkDesc[chunksPerBlock];
+
+        if (blockBuffer.length != expectedBlockSize) {
+            throw new IllegalArgumentException("Buffer size does not match expected block size");
         }
-        for (int i = 0; i < LevelConstants.CHUNKS_PER_BLOCK; i++) {
-            int index = ((blockBuffer[i * 2] & 0xFF) << 8) | (blockBuffer[i * 2 + 1] & 0xFF); // Big-endian
+
+        ByteBuffer bb = ByteBuffer.wrap(blockBuffer);
+        bb.order(ByteOrder.BIG_ENDIAN);
+
+        for (int i = 0; i < chunksPerBlock; i++) {
+            // Read as unsigned 16-bit integer
+            int index = bb.getShort() & 0xFFFF; // Convert to unsigned by masking with 0xFFFF
             chunkDescs[i] = new ChunkDesc(index);
         }
 

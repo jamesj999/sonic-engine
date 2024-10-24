@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.level;
 
-import com.jogamp.opengl.GL2;
+import org.lwjgl.opengl.GL11;
 import uk.co.jamesj999.sonic.Engine;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
@@ -31,7 +31,6 @@ public class LevelManager {
     private Level level;
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
-
 
     /**
      * Private constructor for Singleton pattern.
@@ -76,7 +75,6 @@ public class LevelManager {
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
 
-        // Calculate drawing bounds, adjusted to include partially visible tiles
         int drawX = cameraX;
         int drawY = cameraY;
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
@@ -89,7 +87,6 @@ public class LevelManager {
 
         List<GLCommand> commands = new ArrayList<>();
 
-        // Iterate over the visible area of the level
         int count = 0;
         int maxCount = level.getPatternCount();
 
@@ -110,8 +107,7 @@ public class LevelManager {
         }
 
         // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
-
+        graphicsManager.registerCommand(new GLCommandGroup(GL11.GL_POINTS, commands));
     }
 
     /**
@@ -129,7 +125,6 @@ public class LevelManager {
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
 
-        // Calculate drawing bounds, adjusted to include partially visible tiles
         int drawX = cameraX;
         int drawY = cameraY + Pattern.PATTERN_HEIGHT;
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
@@ -142,7 +137,6 @@ public class LevelManager {
 
         List<GLCommand> commands = new ArrayList<>();
 
-        // Iterate over the visible area of the level
         int count = 0;
         int maxCount = level.getChunkCount();
 
@@ -158,13 +152,11 @@ public class LevelManager {
         }
 
         // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
-
+        graphicsManager.registerCommand(new GLCommandGroup(GL11.GL_POINTS, commands));
     }
 
     /**
      * Renders the current level by processing and displaying collision data.
-     * This is currently for debugging purposes to visualize collision areas.
      */
     public void draw() {
         if (level == null) {
@@ -185,9 +177,7 @@ public class LevelManager {
             LOGGER.warning("Main character sprite not found.");
             return;
         }
-        byte currentLayer = sprite.getLayer();
 
-        // Calculate drawing bounds, adjusted to include partially visible tiles
         int drawX = cameraX - (cameraX % LevelConstants.CHUNK_WIDTH);
         int drawY = cameraY - (cameraY % LevelConstants.CHUNK_HEIGHT);
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
@@ -200,31 +190,26 @@ public class LevelManager {
 
         List<GLCommand> commands = new ArrayList<>();
 
-        // Iterate over the visible area of the level
         for (int y = yTopBound; y <= yBottomBound; y += LevelConstants.CHUNK_HEIGHT) {
             for (int x = xLeftBound; x <= xRightBound; x += LevelConstants.CHUNK_WIDTH) {
-                Block block = getBlockAtPosition(currentLayer, x, y);
-                if (block != null) {
-                    int xBlockBit = (x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
-                    int yBlockBit = (y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
+                for (int l = 0; l < level.getMap().getLayerCount(); l++) {
+                    Block block = getBlockAtPosition((byte)l, x, y);
+                    if (block != null) {
+                        int xBlockBit = (x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
+                        int yBlockBit = (y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
 
-                    ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
-                    drawChunk(commands, chunkDesc, x, y);
+                        ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
+                        drawChunk(commands, chunkDesc, x, y);
+                    }
                 }
             }
         }
 
-        // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        //graphicsManager.registerCommand(new GLCommandGroup(GL11.GL_POINTS, commands));
     }
 
     /**
      * Draws a chunk of the level based on the provided chunk description.
-     *
-     * @param commands  the list of GLCommands to add to
-     * @param chunkDesc the description of the chunk to draw
-     * @param x         the x-coordinate to draw the chunk at
-     * @param y         the y-coordinate to draw the chunk at
      */
     private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y) {
         int chunkIndex = chunkDesc.getChunkIndex();
@@ -246,29 +231,11 @@ public class LevelManager {
             }
         }
 
-        // Handle primary and secondary collisions
         processCollisionMode(commands, chunkDesc, chunk, true, x, y);
         processCollisionMode(commands, chunkDesc, chunk, false, x, y);
     }
 
-    /**
-     * Processes and renders collision modes for a chunk.
-     *
-     * @param commands  the list of GLCommands to add to
-     * @param chunkDesc the description of the chunk
-     * @param chunk     the chunk data
-     * @param isPrimary whether to process the primary collision mode
-     * @param x         the x-coordinate
-     * @param y         the y-coordinate
-     */
-    private void processCollisionMode(
-            List<GLCommand> commands,
-            ChunkDesc chunkDesc,
-            Chunk chunk,
-            boolean isPrimary,
-            int x,
-            int y
-    ) {
+    private void processCollisionMode(List<GLCommand> commands, ChunkDesc chunkDesc, Chunk chunk, boolean isPrimary, int x, int y) {
         CollisionMode collisionMode = isPrimary
                 ? chunkDesc.getPrimaryCollisionMode()
                 : chunkDesc.getSecondaryCollisionMode();
@@ -285,22 +252,20 @@ public class LevelManager {
             return;
         }
 
-        // Determine color based on collision mode
         float r, g, b;
         if (isPrimary) {
-            r = 1.0f; // White color for primary collision
+            r = 1.0f;
             g = 1.0f;
             b = 1.0f;
         } else {
-            r = 0.5f; // Gray color for secondary collision
+            r = 0.5f;
             g = 0.5f;
             b = 0.5f;
         }
 
         boolean hFlip = chunkDesc.getHFlip();
-        boolean yFlip = chunkDesc.getVFlip(); // Using VFlip as per your current code
+        boolean yFlip = chunkDesc.getVFlip();
 
-        // Iterate over each pixel column in the tile
         for (int i = 0; i < LevelConstants.CHUNK_WIDTH; i++) {
             int tileIndex = hFlip ? (LevelConstants.CHUNK_HEIGHT - 1 - i) : i;
             int height = solidTile.getHeightAt((byte) tileIndex);
@@ -312,40 +277,25 @@ public class LevelManager {
                 int drawStartY;
                 int drawEndY;
 
-                // Adjust drawing coordinates based on vertical flip
                 if (yFlip) {
-                    // When yFlip is true, y coordinates increase downwards in the rendering context
                     drawStartY = y - LevelConstants.CHUNK_HEIGHT;
                     drawEndY = drawStartY + height;
                 } else {
-                    // Normal rendering, y decreases upwards
                     drawStartY = y;
                     drawEndY = y - height;
                 }
 
-                /*commands.add(new GLCommand(
+                // Rendering collision area
+                commands.add(new GLCommand(
                         GLCommand.CommandType.RECTI,
-                        GL2.GL_2D,
-                        r,
-                        g,
-                        b,
-                        drawStartX,
-                        drawEndY,
-                        drawEndX,
-                        drawStartY
-                ));*/
+                        GL11.GL_POINTS,
+                        r, g, b,
+                        drawStartX, drawEndY, drawEndX, drawStartY
+                ));
             }
         }
     }
 
-    /**
-     * Retrieves the block at a given position.
-     *
-     * @param layer the layer to retrieve the block from
-     * @param x     the x-coordinate in pixels
-     * @param y     the y-coordinate in pixels
-     * @return the Block at the specified position, or null if not found
-     */
     private Block getBlockAtPosition(byte layer, int x, int y) {
         if (level == null || level.getMap() == null) {
             LOGGER.warning("Level or Map is not initialized.");
@@ -361,7 +311,6 @@ public class LevelManager {
             return null;
         }
 
-        // Mask the value to treat the byte as unsigned
         int blockIndex = value & 0xFF;
         Block block = level.getBlock(blockIndex);
         if (block == null) {
@@ -372,12 +321,12 @@ public class LevelManager {
     }
 
     public ChunkDesc getChunkDescAt(byte layer, int x, int y) {
-        Block block = getBlockAtPosition(layer, x ,y);
-        if(block == null) {
+        Block block = getBlockAtPosition(layer, x, y);
+        if (block == null) {
             return null;
         }
-        ChunkDesc chunkDesc = block.getChunkDesc((x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
-        return chunkDesc;
+        return block.getChunkDesc((x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,
+                (y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
     }
 
     public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
@@ -395,20 +344,10 @@ public class LevelManager {
         }
     }
 
-    /**
-     * Returns the current level.
-     *
-     * @return the current Level object
-     */
     public Level getCurrentLevel() {
         return level;
     }
 
-    /**
-     * Returns the singleton instance of LevelManager.
-     *
-     * @return the singleton LevelManager instance
-     */
     public static synchronized LevelManager getInstance() {
         if (levelManager == null) {
             levelManager = new LevelManager();

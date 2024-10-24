@@ -1,10 +1,14 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import com.jogamp.opengl.GL2;
-import com.jogamp.opengl.util.GLBuffers;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL20;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.PatternDesc;
+
+import java.nio.FloatBuffer;
 
 public class PatternRenderCommand implements GLCommandable {
 
@@ -23,42 +27,44 @@ public class PatternRenderCommand implements GLCommandable {
     }
 
     @Override
-    public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
-        gl.glPushMatrix();
-        gl.glEnable(GL2.GL_BLEND);
-        gl.glBlendFunc(GL2.GL_SRC_ALPHA,GL2.GL_ONE_MINUS_SRC_ALPHA);
+    public void execute(int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
+        GL11.glPushMatrix();
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
+        int translateX = x - cameraX;
+        int translateY = y + cameraY;
         // Translate the pattern relative to the camera position
-        gl.glTranslatef(x - cameraX, y + cameraY, 0);
+        GL11.glTranslatef(x - cameraX, y + cameraY, 0);
 
         // Apply horizontal and vertical flips
         if (desc.getHFlip()) {
-            gl.glScalef(-1, 1, 1);  // Horizontal flip
-            gl.glTranslatef(-8, 0, 0);  // Adjust for flipping
+            GL11.glScalef(-1, 1, 1);  // Horizontal flip
+            GL11.glTranslatef(-8, 0, 0);  // Adjust for flipping
         }
         if (!desc.getVFlip()) {
-            gl.glScalef(1, -1, 1);  // Vertical flip
-            gl.glTranslatef(0, -8, 0);  // Adjust for flipping
+            GL11.glScalef(1, -1, 1);  // Vertical flip
+            GL11.glTranslatef(0, -8, 0);  // Adjust for flipping
         }
 
         // Bind the shader program
-        ShaderProgram shaderProgram = GraphicsManager.getInstance().getShaderProgram();
-        shaderProgram.use(gl);
+        ShaderProgram shaderProgram = GraphicsManager.getInstance().getShader(GraphicsManager.ShaderPrograms.TILE_RENDERER);
+        shaderProgram.use();
 
         // Bind the palette texture (actual colours)
-        gl.glActiveTexture(GL2.GL_TEXTURE0);
-        gl.glBindTexture(GL2.GL_TEXTURE_2D, paletteTextureId);
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, paletteTextureId);
 
         // Bind the pattern texture (colour indexes)
-        gl.glActiveTexture(GL2.GL_TEXTURE1);
-        gl.glBindTexture(GL2.GL_TEXTURE_2D, patternTextureId);
+        GL13.glActiveTexture(GL13.GL_TEXTURE1);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, patternTextureId);
 
         // Set sampler uniforms to the correct texture units
-        int paletteLocation = gl.glGetUniformLocation(shaderProgram.getProgramId(), "Palette");
-        gl.glUniform1i(paletteLocation, 0); // Texture unit 0
+        int paletteLocation = GL20.glGetUniformLocation(shaderProgram.getProgramId(), "Palette");
+        GL20.glUniform1i(paletteLocation, 0); // Texture unit 0
 
-        int indexedColorTextureLocation = gl.glGetUniformLocation(shaderProgram.getProgramId(), "IndexedColorTexture");
-        gl.glUniform1i(indexedColorTextureLocation, 1); // Texture unit 1
+        int indexedColorTextureLocation = GL20.glGetUniformLocation(shaderProgram.getProgramId(), "IndexedColorTexture");
+        GL20.glUniform1i(indexedColorTextureLocation, 1); // Texture unit 1
 
         // Define the vertices for a quad (2 triangles)
         float[] vertices = {
@@ -76,25 +82,31 @@ public class PatternRenderCommand implements GLCommandable {
                 0.0f, 1.0f   // Top-left
         };
 
-        // Bind the vertex data
-        gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
-        gl.glVertexPointer(2, GL2.GL_FLOAT, 0, GLBuffers.newDirectFloatBuffer(vertices));
+        // Create and upload the vertex data to a buffer
+        FloatBuffer vertexBuffer = BufferUtils.createFloatBuffer(vertices.length);
+        vertexBuffer.put(vertices).flip();
+        FloatBuffer texCoordBuffer = BufferUtils.createFloatBuffer(texCoords.length);
+        texCoordBuffer.put(texCoords).flip();
 
-        // Bind the texture coordinate data
-        gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
-        gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, GLBuffers.newDirectFloatBuffer(texCoords));
+        // Enable vertex array and texture coordinate array
+        GL11.glEnableClientState(GL11.GL_VERTEX_ARRAY);
+        GL11.glEnableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
+
+        // Bind vertex data
+        GL11.glVertexPointer(2, GL11.GL_FLOAT, 0, vertexBuffer);
+        GL11.glTexCoordPointer(2, GL11.GL_FLOAT, 0, texCoordBuffer);
 
         // Draw the quad as two triangles forming a rectangle
-        gl.glDrawArrays(GL2.GL_QUADS, 0, 4);
+        GL11.glDrawArrays(GL11.GL_QUADS, 0, 4);
 
-        // Disable the client states
-        gl.glDisableClientState(GL2.GL_VERTEX_ARRAY);
-        gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+        // Disable vertex and texture coordinate arrays
+        GL11.glDisableClientState(GL11.GL_VERTEX_ARRAY);
+        GL11.glDisableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
 
         // Stop the shader program
-        shaderProgram.stop(gl);
+        shaderProgram.stop();
 
-        gl.glPopMatrix();
-        gl.glDisable(GL2.GL_BLEND);
+        GL11.glPopMatrix();
+        GL11.glDisable(GL11.GL_BLEND);
     }
 }

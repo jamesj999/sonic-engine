@@ -1,11 +1,10 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
+import org.lwjgl.opengl.GL11;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.GroundSensor;
 import uk.co.jamesj999.sonic.physics.Sensor;
-
-import com.jogamp.opengl.GL2;
 
 public class Sonic extends AbstractPlayableSprite {
 
@@ -18,7 +17,7 @@ public class Sonic extends AbstractPlayableSprite {
 
 	public void draw() {
 		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.RECTI,
-				GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
+				GL11.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
 						+ height));
 		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.VERTEX2I,
 				-1, 1, 0, 0, getCentreX(), getCentreY(), 0, 0));

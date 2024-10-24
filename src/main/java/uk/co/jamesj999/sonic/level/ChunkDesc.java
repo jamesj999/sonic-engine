@@ -28,6 +28,7 @@ public final class ChunkDesc {
     private int chunkIndex;  // Cached chunk index
 
     Chunk chunk;
+    private int priority;
     private boolean xFlip;  // Cached X flip
     private boolean yFlip;  // Cached Y flip
     private CollisionMode primaryCollisionMode;  // Cached primary collision mode
@@ -75,7 +76,9 @@ public final class ChunkDesc {
         this.chunkIndex = index & 0x3FF;  // Extract chunk index (lower 10 bits)
         if (chunkIndex >= 500) {
             System.out.println("index Out of bounds:" + index);
+            chunkIndex %= 256;
         }
+        this.priority = (index & 0x6000) >> 13;
         this.xFlip = (index & 0x0400) != 0;  // Extract X flip (11th bit)
         this.yFlip = (index & 0x0800) != 0;  // Extract Y flip (12th bit)
 

@@ -1,79 +1,90 @@
 package uk.co.jamesj999.sonic.graphics;
 
-import com.jogamp.opengl.GL2;
+import org.lwjgl.opengl.GL20;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 public class ShaderProgram {
-    public int getProgramId() {
-        return programId;
-    }
-
-    public void setProgramId(int programId) {
-        this.programId = programId;
-    }
 
     private int programId;
 
     /**
-     * Initializes a shader program with only a fragment shader.
-     *
-     * @param gl                  the OpenGL context
-     * @param fragmentShaderPath   the path to the fragment shader file
-     * @throws IOException if the shader file cannot be loaded
+     * Initializes a shader program with both vertex and fragment shaders.
      */
-    public ShaderProgram(GL2 gl, String fragmentShaderPath) throws IOException {
-        // Load and compile the fragment shader
-        int fragmentShaderId = ShaderLoader.loadShader(gl, fragmentShaderPath, GL2.GL_FRAGMENT_SHADER);
+    public ShaderProgram(Shader... shaders) throws IOException {
 
-        // Create a new shader program
-        programId = gl.glCreateProgram();
+        programId = GL20.glCreateProgram();
 
-        // Attach the fragment shader to the program
-        gl.glAttachShader(programId, fragmentShaderId);
+        for (Shader shader : shaders) {
+            int shaderType = shader.getType().gl20;
+            int shaderId = loadShader(shader.getPath(), shaderType);
+            GL20.glAttachShader(programId, shaderId);
+        }
 
-        // Link the program
-        gl.glLinkProgram(programId);
+        GL20.glLinkProgram(programId);
 
-        // Check for linking errors
-        int[] linked = new int[1];
-        gl.glGetProgramiv(programId, GL2.GL_LINK_STATUS, linked, 0);
-        if (linked[0] == 0) {
-            // Linking failed, retrieve and print the log
-            int[] logLength = new int[1];
-            gl.glGetProgramiv(programId, GL2.GL_INFO_LOG_LENGTH, logLength, 0);
-            byte[] log = new byte[logLength[0]];
-            gl.glGetProgramInfoLog(programId, log.length, null, 0, log, 0);
-            System.err.println("Shader linking failed:\n" + new String(log));
+        if (GL20.glGetProgrami(programId, GL20.GL_LINK_STATUS) == 0) {
+            throw new IllegalStateException("Shader program linking failed: " + GL20.glGetProgramInfoLog(programId));
         }
     }
 
     /**
-     * Binds the shader program for use.
-     *
-     * @param gl the OpenGL context
+     * Activates the shader program stored by its key.
      */
-    public void use(GL2 gl) {
-        gl.glUseProgram(programId);
+    public void use() {
+        GL20.glUseProgram(programId);
     }
 
     /**
-     * Unbinds the shader program.
-     *
-     * @param gl the OpenGL context
+     * Stops the current shader program.
      */
-    public void stop(GL2 gl) {
-        gl.glUseProgram(0);
+    public void stop() {
+        GL20.glUseProgram(0);
     }
 
     /**
-     * Cleans up and deletes the shader program.
-     *
-     * @param gl the OpenGL context
+     * Cleans up all shader programs.
      */
-    public void cleanup(GL2 gl) {
-        if (programId != 0) {
-            gl.glDeleteProgram(programId);
-            programId = 0;
+    public void cleanup() {
+        GL20.glDeleteProgram(programId);
+        programId = 0;
+    }
+
+    public int getProgramId() {
+        return programId;
+    }
+
+    public static int loadShader(String filePath, int shaderType) throws IOException {
+        // Load the shader source code from the file
+        String truePath = Objects.requireNonNull(ShaderProgram.class.getClassLoader().getResource(filePath)).getPath();
+        if (truePath.contains(":")) {
+            truePath = truePath.split("/", 2)[1];
         }
+        String shaderSource = new String(Files.readAllBytes(Paths.get(truePath)));
+
+        // Create a new shader object
+        int shaderId = GL20.glCreateShader(shaderType);
+
+        // Pass the shader source to OpenGL
+        GL20.glShaderSource(shaderId, shaderSource);
+
+        // Compile the shader
+        GL20.glCompileShader(shaderId);
+
+        // Check for compile errors
+        int compiled = GL20.glGetShaderi(shaderId, GL20.GL_COMPILE_STATUS);
+        if (compiled == 0) {
+            // Compilation failed, retrieve and print the log
+            String log = GL20.glGetShaderInfoLog(shaderId);
+            System.err.println("Shader compilation failed:\n" + log);
+        }
+
+        return shaderId;
     }
+
+
 }

@@ -1,63 +1,60 @@
 package uk.co.jamesj999.sonic.Control;
 
-import java.awt.*;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
+import org.lwjgl.glfw.GLFW;
+import java.util.HashMap;
+import java.util.Map;
 
-public class InputHandler implements KeyListener {
-	boolean[] keys = new boolean[256];
+public class InputHandler {
+
+	private long window;  // Store the GLFW window handle
+	private Map<Integer, Boolean> keyStates = new HashMap<>();  // Track key states
+
 	/**
-	 * Assigns the newly created InputHandler to a Component
-	 * 
-	 * @param c
-	 *            Component to get input from
+	 * Assigns the InputHandler to a GLFW window
+	 *
+	 * @param window The GLFW window handle
 	 */
-	public InputHandler(Component c) {
-		c.addKeyListener(this);
+	public InputHandler(long window) {
+		this.window = window;
 	}
 
 	/**
 	 * Checks whether a specific key is down
-	 * 
-	 * @param keyCode
-	 *            The key to check
+	 *
+	 * @param keyCode The GLFW key code to check (e.g., GLFW.GLFW_KEY_* constants)
 	 * @return Whether the key is pressed or not
 	 */
 	public boolean isKeyDown(int keyCode) {
-		if (keyCode > 0 && keyCode < 256) {
-			return keys[keyCode];
-		}
-
-		return false;
+		return GLFW.glfwGetKey(window, keyCode) == GLFW.GLFW_PRESS;
 	}
 
 	/**
-	 * Called when a key is pressed while the component is focused
-	 * 
-	 * @param e
-	 *            KeyEvent sent by the component
+	 * Checks whether a key was just pressed (i.e., transition from up to down)
+	 *
+	 * @param keyCode The GLFW key code to check
+	 * @return Whether the key was just pressed
 	 */
-	public void keyPressed(KeyEvent e) {
-		if (e.getKeyCode() > 0 && e.getKeyCode() < 256) {
-			keys[e.getKeyCode()] = true;
-		}
+	public boolean isKeyPressed(int keyCode) {
+		boolean currentState = isKeyDown(keyCode);
+		boolean previousState = keyStates.getOrDefault(keyCode, false);
+		keyStates.put(keyCode, currentState);  // Update the state
+
+		// Key is pressed if it was released and now it's down
+		return !previousState && currentState;
 	}
 
 	/**
-	 * Called when a key is released while the component is focused
-	 * 
-	 * @param e
-	 *            KeyEvent sent by the component
+	 * Checks whether a key was just released (i.e., transition from down to up)
+	 *
+	 * @param keyCode The GLFW key code to check
+	 * @return Whether the key was just released
 	 */
-	public void keyReleased(KeyEvent e) {
-		if (e.getKeyCode() > 0 && e.getKeyCode() < 256) {
-			keys[e.getKeyCode()] = false;
-		}
-	}
+	public boolean isKeyReleased(int keyCode) {
+		boolean currentState = isKeyDown(keyCode);
+		boolean previousState = keyStates.getOrDefault(keyCode, false);
+		keyStates.put(keyCode, currentState);  // Update the state
 
-	/**
-	 * Not used
-	 */
-	public void keyTyped(KeyEvent e) {
+		// Key is released if it was down and now it's up
+		return previousState && !currentState;
 	}
 }
