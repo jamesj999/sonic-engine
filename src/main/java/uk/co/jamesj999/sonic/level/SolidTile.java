@@ -30,7 +30,7 @@ public class SolidTile {
 	}
 
 	public byte getWidthAt(byte y) {
-		return 0;
+		return widths[y];
 	}
 
 	public byte getAngle() {
