@@ -76,10 +76,10 @@ public abstract class AbstractSprite implements Sprite {
 		this.xSubpixel = (short) 0;
 	}
 
-	public void setCentreY(short y) {
-		this.yPixel = (short) (y + (width / 2));
-		this.ySubpixel = (short) 0;
-	}
+       public void setCentreY(short y) {
+               this.yPixel = (short) (y - (height / 2));
+               this.ySubpixel = (short) 0;
+       }
 
 	public final short getX() {
 		// TODO Not sure if this is needed, round to nearest subpixel?
