@@ -2,7 +2,6 @@ package uk.co.jamesj999.sonic.tests;
 
 
 import org.junit.Test;
-import uk.co.jamesj999.sonic.tools.AccurateKosinskiDecompressor;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.ByteArrayInputStream;
