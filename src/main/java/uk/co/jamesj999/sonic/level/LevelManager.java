@@ -151,7 +151,7 @@ public class LevelManager {
                 if (count < maxCount) {
                     ChunkDesc chunkDesc = new ChunkDesc();
                     chunkDesc.setChunkIndex(count);
-                    drawChunk(commands, chunkDesc, x, y);
+                    drawChunk(commands, chunkDesc, x, y, true);
                     count++;
                 }
             }
@@ -173,49 +173,69 @@ public class LevelManager {
         }
 
         Camera camera = Camera.getInstance();
+        List<GLCommand> commands = new ArrayList<>();
+
+        // Draw Background (Layer 1)
+        drawLayer(commands, 1, camera, 0.5f, 0.1f);
+
+        // Draw Foreground (Layer 0)
+        drawLayer(commands, 0, camera, 1.0f, 1.0f);
+
+        // Register all collected drawing commands with the graphics manager
+        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+    }
+
+    private void drawLayer(List<GLCommand> commands, int layerIndex, Camera camera, float parallaxX, float parallaxY) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
 
-        Sprite sprite = spriteManager.getSprite(
-                SonicConfigurationService.getInstance().getString(SonicConfiguration.MAIN_CHARACTER_CODE)
-        );
-        if (sprite == null) {
-            LOGGER.warning("Main character sprite not found.");
-            return;
-        }
-        byte currentLayer = sprite.getLayer();
+        int bgCameraX = (int) (cameraX * parallaxX);
+        int bgCameraY = (int) (cameraY * parallaxY);
 
-        // Calculate drawing bounds, adjusted to include partially visible tiles
-        int drawX = cameraX - (cameraX % LevelConstants.CHUNK_WIDTH);
-        int drawY = cameraY - (cameraY % LevelConstants.CHUNK_HEIGHT);
+        int drawX = bgCameraX - (bgCameraX % LevelConstants.CHUNK_WIDTH);
+        int drawY = bgCameraY - (bgCameraY % LevelConstants.CHUNK_HEIGHT);
+
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
         int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-        int xLeftBound = Math.max(drawX, 0);
-        int xRightBound = Math.min(cameraX + cameraWidth, levelWidth);
-        int yTopBound = Math.max(drawY, 0);
-        int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
+        int xStart = drawX;
+        int xEnd = bgCameraX + cameraWidth;
+        int yStart = drawY;
+        int yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
 
-        List<GLCommand> commands = new ArrayList<>();
+        for (int y = yStart; y <= yEnd; y += LevelConstants.CHUNK_HEIGHT) {
+            for (int x = xStart; x <= xEnd; x += LevelConstants.CHUNK_WIDTH) {
+                // Handle wrapping for X
+                int wrappedX = x;
+                while (wrappedX < 0) wrappedX += levelWidth;
+                wrappedX %= levelWidth;
 
-        // Iterate over the visible area of the level
-        for (int y = yTopBound; y <= yBottomBound; y += LevelConstants.CHUNK_HEIGHT) {
-            for (int x = xLeftBound; x <= xRightBound; x += LevelConstants.CHUNK_WIDTH) {
-                Block block = getBlockAtPosition(currentLayer, x, y);
+                // Clamp Y (assuming vertical wrapping is less common or handled by clamping)
+                int wrappedY = y;
+                if (wrappedY < 0 || wrappedY >= levelHeight) continue;
+
+                Block block = getBlockAtPosition((byte) layerIndex, wrappedX, wrappedY);
                 if (block != null) {
-                    int xBlockBit = (x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
-                    int yBlockBit = (y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
+                    int xBlockBit = (wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
+                    int yBlockBit = (wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
 
                     ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
-                    drawChunk(commands, chunkDesc, x, y);
+
+                    // Calculate screen coordinates
+                    int screenX = x - bgCameraX;
+                    int screenY = y - bgCameraY;
+
+                    // Convert to absolute coordinates expected by renderPattern (which subtracts cameraX/Y)
+                    int renderX = screenX + cameraX;
+                    int renderY = screenY + cameraY;
+
+                    // Draw collision only for foreground (Layer 0)
+                    drawChunk(commands, chunkDesc, renderX, renderY, layerIndex == 0);
                 }
             }
         }
-
-        // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
     }
 
     /**
@@ -225,8 +245,9 @@ public class LevelManager {
      * @param chunkDesc the description of the chunk to draw
      * @param x         the x-coordinate to draw the chunk at
      * @param y         the y-coordinate to draw the chunk at
+     * @param drawCollision whether to draw collision debug info
      */
-    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y) {
+    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
         int chunkIndex = chunkDesc.getChunkIndex();
         if (chunkIndex >= level.getChunkCount()) {
             LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
@@ -263,8 +284,10 @@ public class LevelManager {
         }
 
         // Handle primary and secondary collisions
-        processCollisionMode(commands, chunkDesc, chunk, true, x, y);
-        processCollisionMode(commands, chunkDesc, chunk, false, x, y);
+        if (drawCollision) {
+            processCollisionMode(commands, chunkDesc, chunk, true, x, y);
+            processCollisionMode(commands, chunkDesc, chunk, false, x, y);
+        }
     }
 
     /**
