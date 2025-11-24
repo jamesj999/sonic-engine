@@ -239,10 +239,26 @@ public class LevelManager {
             return;
         }
 
+        boolean chunkHFlip = chunkDesc.getHFlip();
+        boolean chunkVFlip = chunkDesc.getVFlip();
+
         for (int cY = 0; cY < 2; cY++) {
             for (int cX = 0; cX < 2; cX++) {
-                PatternDesc patternDesc = chunk.getPatternDesc(cX, cY);
-                graphicsManager.renderPattern(patternDesc, x + (cX * Pattern.PATTERN_WIDTH), y + (cY * Pattern.PATTERN_HEIGHT));
+                int logicalX = chunkHFlip ? 1 - cX : cX;
+                int logicalY = chunkVFlip ? 1 - cY : cY;
+
+                PatternDesc patternDesc = chunk.getPatternDesc(logicalX, logicalY);
+
+                int newIndex = patternDesc.get();
+                if (chunkHFlip) {
+                    newIndex ^= 0x800;
+                }
+                if (chunkVFlip) {
+                    newIndex ^= 0x1000;
+                }
+                PatternDesc newPatternDesc = new PatternDesc(newIndex);
+
+                graphicsManager.renderPattern(newPatternDesc, x + (cX * Pattern.PATTERN_WIDTH), y + (cY * Pattern.PATTERN_HEIGHT));
             }
         }
 
