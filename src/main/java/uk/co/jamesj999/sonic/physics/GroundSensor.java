@@ -84,7 +84,10 @@ public class GroundSensor extends Sensor {
 
                 if (prevTileHeight > 0) {
                     // 'Previous' tile has a height value > 0 so this is our tile to calculate distance for.
-                    return new SensorResult(prevTile.getAngle(prevChunkDesc.getHFlip(), prevChunkDesc.getVFlip()), calculateDistance(prevChunkDesc, prevTile, originalX, originalY, currentX, currentY, direction), prevTile.getIndex(), globalDirection);
+                    byte distance = calculateDistance(prevChunkDesc, prevTile, originalX, originalY, currentX, currentY, direction);
+                    if (distance >= -24) {
+                        return new SensorResult(prevTile.getAngle(prevChunkDesc.getHFlip(), prevChunkDesc.getVFlip()), distance, prevTile.getIndex(), globalDirection);
+                    }
                 }
             }
             // 'Previous' tile not found or has a height of 0, so return distance to initial tile.
