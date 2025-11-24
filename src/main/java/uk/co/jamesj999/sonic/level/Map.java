@@ -52,7 +52,7 @@ public class Map {
         if (x >= width || y >= height) {
             throw new IllegalArgumentException("Invalid map tile index");
         }
-        return data[y * width * layers + layer * width + x];
+        return data[(layer * width * height) + (y * width) + x];
     }
 
     // Set value in specific layer, x, and y coordinates
@@ -63,7 +63,7 @@ public class Map {
         if (x >= width || y >= height) {
             throw new IllegalArgumentException("Invalid map tile index");
         }
-        data[y * width * layers + layer * width + x] = value;
+        data[(layer * width * height) + (y * width) + x] = value;
     }
 
     // Return the underlying data array
