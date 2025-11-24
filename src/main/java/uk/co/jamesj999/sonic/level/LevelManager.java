@@ -373,12 +373,14 @@ public class LevelManager {
         int mapY = y / LevelConstants.BLOCK_HEIGHT;
 
         byte value = map.getValue(layer, mapX, mapY);
-        if (value < 0) {
-            return null;
-        }
 
         // Mask the value to treat the byte as unsigned
         int blockIndex = value & 0xFF;
+
+        if (blockIndex >= level.getBlockCount()) {
+            return null;
+        }
+
         Block block = level.getBlock(blockIndex);
         if (block == null) {
             LOGGER.warning("Block at index " + blockIndex + " is null.");
