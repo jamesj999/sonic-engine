@@ -36,8 +36,9 @@ public class GroundSensor extends Sensor {
         short currentY = originalY;
 
         // Check for a tile under the sensor.
-        ChunkDesc initialChunkDesc = levelManager.getChunkDescAt(layer, originalX, originalY);
-        SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc);
+        // Always read from Map Layer 0 (Foreground) for collision layout.
+        ChunkDesc initialChunkDesc = levelManager.getChunkDescAt((byte) 0, originalX, originalY);
+        SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc, layer);
         byte initialHeight;
         if (initialTile != null) {
             boolean hFlip = initialChunkDesc.getHFlip();
@@ -66,8 +67,8 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection.opposite(), currentX);
             }
             // Look for a 'previous' tile using the new coordinates
-            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
-            SolidTile prevTile = levelManager.getSolidTileForChunkDesc(prevChunkDesc);
+            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt((byte) 0, currentX, currentY);
+            SolidTile prevTile = levelManager.getSolidTileForChunkDesc(prevChunkDesc, layer);
             if (prevTile != null) {
                 boolean hFlip = prevChunkDesc.getHFlip();
                 boolean vFlip = prevChunkDesc.getVFlip();
@@ -106,8 +107,8 @@ public class GroundSensor extends Sensor {
                 currentX = calculateNextTile(globalDirection, currentX);
             }
             // Retrieve 'next' tile based on new currentX and currentY.
-            ChunkDesc nextChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
-            SolidTile nextTile = levelManager.getSolidTileForChunkDesc(nextChunkDesc);
+            ChunkDesc nextChunkDesc = levelManager.getChunkDescAt((byte) 0, currentX, currentY);
+            SolidTile nextTile = levelManager.getSolidTileForChunkDesc(nextChunkDesc, layer);
             byte lastDistance;
             if (nextTile == null) {
                 // No tile here either so send the maximum possible distance it could be.

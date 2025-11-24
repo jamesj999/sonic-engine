@@ -398,19 +398,38 @@ public class LevelManager {
         return chunkDesc;
     }
 
-    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
         try {
             if (chunkDesc == null) {
                 return null;
             }
+            CollisionMode collisionMode;
+            if (layer == 0) {
+                collisionMode = chunkDesc.getPrimaryCollisionMode();
+            } else {
+                collisionMode = chunkDesc.getSecondaryCollisionMode();
+            }
+
+            if (CollisionMode.NO_COLLISION.equals(collisionMode)) {
+                return null;
+            }
+
             Chunk chunk = level.getChunk(chunkDesc.getChunkIndex());
             if (chunk == null) {
                 return null;
             }
-            return level.getSolidTile(chunk.getSolidTileIndex());
+            if (layer == 0) {
+                return level.getSolidTile(chunk.getSolidTileIndex());
+            } else {
+                return level.getSolidTile(chunk.getSolidTileAltIndex());
+            }
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+        return getSolidTileForChunkDesc(chunkDesc, (byte) 0);
     }
 
     /**
