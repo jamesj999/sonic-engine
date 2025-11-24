@@ -98,20 +98,25 @@ public class GraphicsManager {
 	public void cachePaletteTexture(Palette palette, int paletteId) {
 		int textureId = glGenTexture();
 
-		// Create a buffer to store the palette (16 colors, each RGB component as an unsigned byte)
-		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 3); // 16 colors, each RGB (3 bytes)
+		// Create a buffer to store the palette (16 colors, each RGBA component as an unsigned byte)
+		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4); // 16 colors, each RGBA (4 bytes)
 
 		for (int i = 0; i < COLORS_PER_PALETTE; i++) {
 			Palette.Color color = palette.getColor(i);
 			paletteBuffer.put((byte) Byte.toUnsignedInt(color.r));
 			paletteBuffer.put((byte) Byte.toUnsignedInt(color.g));
 			paletteBuffer.put((byte) Byte.toUnsignedInt(color.b));
+			if (i == 0) {
+				paletteBuffer.put((byte) 0);
+			} else {
+				paletteBuffer.put((byte) 255);
+			}
 		}
 		paletteBuffer.flip();
 
 		// Upload the palette to the GPU as a 1x16 texture using GL_UNSIGNED_BYTE
 		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGB, 16, 1, 0, GL2.GL_RGB, GL2.GL_UNSIGNED_BYTE, paletteBuffer);
+		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 1, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, paletteBuffer);
 
 		// Set texture parameters
 		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
