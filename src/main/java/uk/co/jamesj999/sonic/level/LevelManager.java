@@ -398,19 +398,46 @@ public class LevelManager {
         return chunkDesc;
     }
 
-    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
         try {
             if (chunkDesc == null) {
                 return null;
             }
+            CollisionMode collisionMode;
+            if (layer == 0) {
+                collisionMode = chunkDesc.getPrimaryCollisionMode();
+            } else {
+                collisionMode = chunkDesc.getSecondaryCollisionMode();
+            }
+
+            if (CollisionMode.NO_COLLISION.equals(collisionMode)) {
+                return null;
+            }
+
             Chunk chunk = level.getChunk(chunkDesc.getChunkIndex());
             if (chunk == null) {
                 return null;
             }
-            return level.getSolidTile(chunk.getSolidTileIndex());
+            if (layer == 0) {
+                return level.getSolidTile(chunk.getSolidTileIndex());
+            } else {
+                return level.getSolidTile(chunk.getSolidTileAltIndex());
+            }
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    // Deprecated or convenience method for backward compatibility if needed,
+    // but better to remove or update callers.
+    // For now, let's overload it to default to Layer 0 (Primary) if not specified,
+    // or we can force update. GroundSensor is the main one.
+    // I'll leave a deprecated one just in case, or remove it.
+    // GroundSensor calls it. I should update GroundSensor.
+    // But I can't leave this here without updating GroundSensor first or it won't compile?
+    // Wait, I can overload.
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+        return getSolidTileForChunkDesc(chunkDesc, (byte) 0);
     }
 
     /**
