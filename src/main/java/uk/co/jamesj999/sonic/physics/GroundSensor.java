@@ -84,15 +84,15 @@ public class GroundSensor extends Sensor {
 
                 if (prevTileHeight > 0) {
                     // 'Previous' tile has a height value > 0 so this is our tile to calculate distance for.
-                    return new SensorResult(prevTile.getAngle(), calculateDistance(prevChunkDesc, prevTile, originalX, originalY, currentX, currentY, direction), prevTile.getIndex(), globalDirection);
+                    return new SensorResult(prevTile.getAngle(prevChunkDesc.getHFlip(), prevChunkDesc.getVFlip()), calculateDistance(prevChunkDesc, prevTile, originalX, originalY, currentX, currentY, direction), prevTile.getIndex(), globalDirection);
                 }
             }
             // 'Previous' tile not found or has a height of 0, so return distance to initial tile.
-            return new SensorResult(initialTile.getAngle(), calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
+            return new SensorResult(initialTile.getAngle(initialChunkDesc.getHFlip(), initialChunkDesc.getVFlip()), calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
 
         } else if (initialHeight > 0) {
             // First tile has a height value > 0 and < 16 so return the distance to the edge of this tile.
-            return new SensorResult(initialTile.getAngle(), calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
+            return new SensorResult(initialTile.getAngle(initialChunkDesc.getHFlip(), initialChunkDesc.getVFlip()), calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
         } else {
             // No tiles found so far (after initial spot and 'previous' if applicable)
             // Need to expand our search to the 'next' block.
@@ -114,7 +114,7 @@ public class GroundSensor extends Sensor {
                 distance = (byte) ((Direction.LEFT.equals(globalDirection) || Direction.UP.equals(globalDirection)) ? distance - 32 : distance + 32);
                 return new SensorResult((byte ) 0, distance,0, direction);
             } else {
-                return new SensorResult(nextTile.getAngle(), calculateDistance(nextChunkDesc, nextTile, originalX, originalY, currentX, currentY, direction), nextTile.getIndex(), globalDirection);
+                return new SensorResult(nextTile.getAngle(nextChunkDesc.getHFlip(), nextChunkDesc.getVFlip()), calculateDistance(nextChunkDesc, nextTile, originalX, originalY, currentX, currentY, direction), nextTile.getIndex(), globalDirection);
             }
         }
     }
