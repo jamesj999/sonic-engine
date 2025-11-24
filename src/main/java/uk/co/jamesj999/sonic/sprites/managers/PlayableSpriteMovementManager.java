@@ -11,6 +11,25 @@ import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
+	private static final double[] SIN_TABLE = new double[256];
+	private static final double[] COS_TABLE = new double[256];
+
+	static {
+		for (int i = 0; i < 256; i++) {
+			int angle = (int) ((256 - i) * 1.40625);
+			// Small hack to make sure the angle is between -360 and 360.
+			while (angle >= 360) {
+				angle -= 360;
+			}
+			while (angle <= -360) {
+				angle += 360;
+			}
+			double radians = Math.toRadians(angle);
+			SIN_TABLE[i] = Math.sin(radians);
+			COS_TABLE[i] = Math.cos(radians);
+		}
+	}
+
 	private final TerrainCollisionManager terrainCollisionManager = TerrainCollisionManager
 			.getInstance();
 
@@ -293,7 +312,7 @@ public class PlayableSpriteMovementManager extends
 
     private void releaseSpindash(AbstractPlayableSprite sprite) {
         sprite.setSpindash(false);
-        short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
+        short spindashGSpeed = (short) ((8 + (((int)sprite.getSpindashConstant() / 2))) * 256);
         if(Direction.LEFT.equals(sprite.getDirection())) {
             sprite.setGSpeed((short) (0 - spindashGSpeed));
         } else if(Direction.RIGHT.equals(sprite.getDirection())) {
@@ -307,7 +326,7 @@ public class PlayableSpriteMovementManager extends
 
     private void spindashCooldown(AbstractPlayableSprite sprite) {
         float spindashConstant = sprite.getSpindashConstant();
-        spindashConstant -= ((spindashConstant / 0.125) / 256);
+        spindashConstant -= (spindashConstant * 0.03125f);
         if(spindashConstant < 0.01) {
             spindashConstant = 0f;
         }
@@ -329,7 +348,7 @@ public class PlayableSpriteMovementManager extends
 	private void calculateGSpeed(AbstractPlayableSprite sprite, boolean left,
 			boolean right) {
 		short gSpeed = sprite.getGSpeed();
-		int angle = calculateAngle(sprite);
+		int angleIndex = sprite.getAngle() & 0xFF;
 
 		short friction;
 		short slopeRunningVariant;
@@ -345,7 +364,8 @@ public class PlayableSpriteMovementManager extends
 		} else {
 			friction = (short) (sprite.getFriction() / 2);
 			double gSpeedSign = Math.signum(gSpeed);
-			double angleSign = Math.signum(Math.sin(Math.toRadians(angle)));
+			double angleSin = SIN_TABLE[angleIndex];
+			double angleSign = Math.signum(angleSin);
 			if (gSpeedSign == angleSign) {
 				slopeRunningVariant = 80;
 			} else {
@@ -356,7 +376,7 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed -= slopeRunningVariant * Math.sin(Math.toRadians(angle));
+		gSpeed -= slopeRunningVariant * SIN_TABLE[angleIndex];
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
@@ -401,12 +421,12 @@ public class PlayableSpriteMovementManager extends
 	private void jump(AbstractPlayableSprite sprite) {
 		sprite.setAir(true);
 		sprite.setRolling(true);
-		int angle = calculateAngle(sprite);
+		int angleIndex = sprite.getAngle() & 0xFF;
 		jumpPressed = true;
 		sprite.setXSpeed((short) (sprite.getXSpeed() - sprite.getJump()
-				* Math.sin(Math.toRadians(angle))));
+				* SIN_TABLE[angleIndex]));
 		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
-				* Math.cos(Math.toRadians(angle))));
+				* COS_TABLE[angleIndex]));
 	}
 
 	/**
@@ -469,27 +489,23 @@ public class PlayableSpriteMovementManager extends
 		short ySpeed = sprite.getYSpeed();
 		short xSpeed = sprite.getXSpeed();
 		short gSpeed = sprite.getGSpeed();
-		int angle = calculateAngle(sprite);
+		int angleIndex = sprite.getAngle() & 0xFF;
 		if (ySpeed > 0) {
-			byte originalAngle = sprite.getAngle();
-			if ((originalAngle >= (byte) 0xF0 && originalAngle <= (byte) 0xFF)
-					|| (originalAngle >= (byte) 0x00 && originalAngle <= (byte) 0x0F)) {
+			if (angleIndex >= 0xF0 || angleIndex <= 0x0F) {
 				gSpeed = xSpeed;
-			} else if ((originalAngle >= (byte) 0xE0 && originalAngle <= (byte) 0xEF)
-					|| (originalAngle >= (byte) 0x10 && originalAngle <= (byte) 0x1F)) {
+			} else if ((angleIndex >= 0xE0 && angleIndex <= 0xEF)
+					|| (angleIndex >= 0x10 && angleIndex <= 0x1F)) {
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
-							.cos(Math.toRadians(angle)))));
+					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(COS_TABLE[angleIndex])));
 				}
-			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
-					|| (originalAngle >= (byte) 0x20 && originalAngle <= (byte) 0x3F)) {
+			} else if ((angleIndex >= 0xC0 && angleIndex <= 0xDF)
+					|| (angleIndex >= 0x20 && angleIndex <= 0x3F)) {
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * -(Math.signum(Math.cos(Math
-							.toRadians(angle)))));
+					gSpeed = (short) (ySpeed * -(Math.signum(COS_TABLE[angleIndex])));
 				}
 			}
 		}
@@ -518,34 +534,14 @@ public class PlayableSpriteMovementManager extends
 		}
 	}
 
-	/**
-	 *
-	 * @param sprite
-	 *            The sprite in question
-	 * @return The correct angle, based on 360 degree rotation. Convert this to
-	 *         radians before using Math.sin etc.
-	 */
-	private int calculateAngle(AbstractPlayableSprite sprite) {
-		int angle = (int) ((256 - sprite.getAngle()) * 1.40625);
-
-		// Small hack to make sure the angle is between -360 and 360.
-		while (angle >= 360) {
-			angle -= 360;
-		}
-		while (angle <= -360) {
-			angle += 360;
-		}
-		return angle;
-	}
-
 	private void calculateXYFromGSpeed(AbstractPlayableSprite sprite) {
 		short gSpeed = sprite.getGSpeed();
-		int angle = calculateAngle(sprite);
+		int angleIndex = sprite.getAngle() & 0xFF;
 		sprite.setXSpeed((short) Math.round(gSpeed
-				* Math.cos(Math.toRadians(angle))));
+				* COS_TABLE[angleIndex]));
 
 		sprite.setYSpeed((short) Math.round(gSpeed
-				* Math.sin(Math.toRadians(angle))));
+				* SIN_TABLE[angleIndex]));
 	}
 
 	private void jumpHandler(boolean jump) {
