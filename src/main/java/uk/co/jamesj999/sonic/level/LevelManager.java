@@ -398,19 +398,32 @@ public class LevelManager {
         return chunkDesc;
     }
 
-    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
         try {
             if (chunkDesc == null) {
                 return null;
             }
+            CollisionMode collisionMode;
+            // Removed check for CollisionMode.NO_COLLISION because some levels
+            // rely on SolidTile data even if the Collision Mode bits are 0.
+            // We still check layer to determine which tile index to use.
+
             Chunk chunk = level.getChunk(chunkDesc.getChunkIndex());
             if (chunk == null) {
                 return null;
             }
-            return level.getSolidTile(chunk.getSolidTileIndex());
+            if (layer == 0) {
+                return level.getSolidTile(chunk.getSolidTileIndex());
+            } else {
+                return level.getSolidTile(chunk.getSolidTileAltIndex());
+            }
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+        return getSolidTileForChunkDesc(chunkDesc, (byte) 0);
     }
 
     /**
