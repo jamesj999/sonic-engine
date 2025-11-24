@@ -229,7 +229,7 @@ public class LevelManager {
     private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y) {
         int chunkIndex = chunkDesc.getChunkIndex();
         if (chunkIndex >= level.getChunkCount()) {
-            LOGGER.warning("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
+            LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
             chunkIndex = 0;
         }
 

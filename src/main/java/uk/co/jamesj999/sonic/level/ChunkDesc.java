@@ -73,9 +73,6 @@ public final class ChunkDesc {
     private void updateFields() {
 
         this.chunkIndex = index & 0x3FF;  // Extract chunk index (lower 10 bits)
-        if (chunkIndex >= 500) {
-            System.out.println("index Out of bounds:" + index);
-        }
         this.xFlip = (index & 0x0400) != 0;  // Extract X flip (11th bit)
         this.yFlip = (index & 0x0800) != 0;  // Extract Y flip (12th bit)
 
