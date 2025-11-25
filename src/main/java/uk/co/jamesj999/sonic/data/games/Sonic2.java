@@ -205,18 +205,32 @@ public class Sonic2 extends Game {
     }
 
     private int getCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
-
-        int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
-
-        return collisionAddr;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x44E50;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0x453C0;
+            default:
+		        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
+		        int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
+		        return collisionAddr;
+        }
     }
 
     private int getAltCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
-
-        int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
-
-        return altCollisionAddr;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x44F40;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0x454E0;
+            default:
+		        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
+		        int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
+		        return altCollisionAddr;
+        }
     }
 }
