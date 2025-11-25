@@ -233,6 +233,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 		draw();
 		graphicsManager.flush();
 		if (debugViewEnabled) {
+			// Reset OpenGL state for JOGL's TextRenderer
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
 			gl.glUseProgram(0);
 			// Reset matrices for 2D rendering
 			gl.glMatrixMode(GL_PROJECTION);
