@@ -124,7 +124,7 @@ public class Sonic2 extends Game {
     }
 
     private int getDataAddress(int levelIdx, int entryOffset) throws IOException {
-        int levelDataIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2);
+        int levelDataIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         return rom.read32BitAddr(LEVEL_DATA_DIR + levelDataIdx * LEVEL_DATA_DIR_ENTRY_SIZE + entryOffset);
     }
 
@@ -155,10 +155,10 @@ public class Sonic2 extends Game {
      */
     private int getTilesAddr(int levelIdx) throws IOException {
         int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
-        int zoneIdx = rom.readByte(zoneIdxLoc);
+        int zoneIdx = rom.readByte(zoneIdxLoc) & 0xFF;
 
         int actIdxLoc = zoneIdxLoc + 1;
-        int actIdx = rom.readByte(actIdxLoc);
+        int actIdx = rom.readByte(actIdxLoc) & 0xFF;
 
         int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
 
