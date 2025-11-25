@@ -234,6 +234,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.flush();
 		if (debugViewEnabled) {
 			gl.glUseProgram(0);
+			// Reset matrices for 2D rendering
+			gl.glMatrixMode(GL_PROJECTION);
+			gl.glLoadIdentity();
+			glu.gluOrtho2D(0, realWidth, 0, realHeight);
+			gl.glMatrixMode(GL_MODELVIEW);
+			gl.glLoadIdentity();
 			debugRenderer.renderDebugInfo();
 		}
 	}
