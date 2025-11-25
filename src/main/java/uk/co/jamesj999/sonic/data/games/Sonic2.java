@@ -161,9 +161,9 @@ public class Sonic2 extends Game {
         int actIdx = rom.readByte(actIdxLoc) & 0xFF;
 
         int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
-
-        int levelOffset = rom.read16BitAddr(levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2);
-        return levelLayoutDirAddr + levelOffset;
+		int levelOffsetAddr = levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2;
+        int levelOffset = rom.read16BitAddr(levelOffsetAddr);
+        return levelOffsetAddr + levelOffset;
     }
 
     private int getCollisionMapAddr(int levelIdx) throws IOException {
