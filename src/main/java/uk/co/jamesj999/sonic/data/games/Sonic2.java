@@ -167,7 +167,7 @@ public class Sonic2 extends Game {
     }
 
     private int getCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx;
+        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
 
         int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
 
@@ -175,7 +175,7 @@ public class Sonic2 extends Game {
     }
 
     private int getAltCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx;
+        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
 
         int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
 
