@@ -22,6 +22,7 @@ public class Sonic2Level implements Level {
     private Block[] blocks;
     private SolidTile[] solidTiles;
     private Map map;
+    private ParallaxScrollingManager parallaxScrollingManager;
 
     private int patternCount;
     private int chunkCount;
@@ -42,14 +43,15 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
+                       int solidTilesAngleAddr,
+                       int parallaxScrollingAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
-
+        loadParallaxScrolling(rom, parallaxScrollingAddr);
     }
 
     @Override
@@ -115,6 +117,11 @@ public class Sonic2Level implements Level {
     @Override
     public Map getMap() {
         return map;
+    }
+
+    @Override
+    public ParallaxScrollingManager getParallaxScrollingManager() {
+        return parallaxScrollingManager;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
@@ -286,5 +293,17 @@ public class Sonic2Level implements Level {
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void loadParallaxScrolling(Rom rom, int parallaxScrollingAddr) throws IOException {
+        parallaxScrollingManager = new ParallaxScrollingManager();
+        FileChannel channel = rom.getFileChannel();
+        channel.position(parallaxScrollingAddr);
+        byte[] parallaxScrollingBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
+        for (int i = 0; i < parallaxScrollingBuffer.length; i += 6) {
+            short relativeScroll = (short) (((parallaxScrollingBuffer[i] & 0xFF) << 8) | (parallaxScrollingBuffer[i + 1] & 0xFF));
+            byte line = parallaxScrollingBuffer[i + 5];
+            parallaxScrollingManager.add(new ParallaxScrolling(relativeScroll, line));
+        }
     }
 }

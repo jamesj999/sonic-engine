@@ -24,6 +24,7 @@ public class Sonic2 extends Game {
     public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
+    private static final int PARALLAX_SCROLL_DIR_ADDR = 0x45E6E;
 
     private final Rom rom;
 
@@ -75,6 +76,7 @@ public class Sonic2 extends Game {
         int solidTileHeightsAddr = getSolidTileHeightsAddr();
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
+        int parallaxScrollingAddr = getParallaxScrollingAddr(levelIdx);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -88,7 +90,7 @@ public class Sonic2 extends Game {
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
 
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, parallaxScrollingAddr);
     }
 
     private int getSolidTileHeightsAddr() {
@@ -180,5 +182,18 @@ public class Sonic2 extends Game {
         int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
 
         return altCollisionAddr;
+    }
+
+    private int getParallaxScrollingAddr(int levelIdx) throws IOException {
+        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
+        int zoneIdx = rom.readByte(zoneIdxLoc);
+
+        int actIdxLoc = zoneIdxLoc + 1;
+        int actIdx = rom.readByte(actIdxLoc);
+
+        int parallaxScrollDirAddr = rom.read32BitAddr(PARALLAX_SCROLL_DIR_ADDR);
+
+        int parallaxScrollingAddr = rom.read16BitAddr(parallaxScrollDirAddr + zoneIdx * 4 + actIdx * 2);
+        return parallaxScrollDirAddr + parallaxScrollingAddr;
     }
 }

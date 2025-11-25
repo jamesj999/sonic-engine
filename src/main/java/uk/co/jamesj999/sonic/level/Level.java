@@ -36,5 +36,7 @@ public interface Level {
     // Abstract method to get the map associated with the level
     public Map getMap();
 
+    public ParallaxScrollingManager getParallaxScrollingManager();
+
 
 }

@@ -68,5 +68,6 @@ public class TestLevelManager {
 
         @Override public SolidTile getSolidTile(int index) { return null; }
         @Override public Map getMap() { return map; }
+        @Override public ParallaxScrollingManager getParallaxScrollingManager() { return null; }
     }
 }
