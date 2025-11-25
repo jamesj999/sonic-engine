@@ -209,12 +209,17 @@ public class LevelManager {
             for (int x = xStart; x <= xEnd; x += LevelConstants.CHUNK_WIDTH) {
                 // Handle wrapping for X
                 int wrappedX = x;
-                while (wrappedX < 0) wrappedX += levelWidth;
-                wrappedX %= levelWidth;
+                wrappedX = ((wrappedX % levelWidth) + levelWidth) % levelWidth;
 
-                // Clamp Y (assuming vertical wrapping is less common or handled by clamping)
+                // Handle wrapping for Y
                 int wrappedY = y;
-                if (wrappedY < 0 || wrappedY >= levelHeight) continue;
+                if (layerIndex == 1) {
+                    // Background loops vertically
+                    wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
+                } else {
+                    // Foreground Clamps
+                    if (wrappedY < 0 || wrappedY >= levelHeight) continue;
+                }
 
                 Block block = getBlockAtPosition((byte) layerIndex, wrappedX, wrappedY);
                 if (block != null) {
