@@ -154,8 +154,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 				case BLOCKS_VIEW -> levelManager.draw();
 				case null, default -> { levelManager.draw(); spriteRenderManager.draw(); }
 			}
-
-			debugRenderer.renderDebugInfo();
 		}
 	}
 
@@ -234,6 +232,23 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
+		if (debugViewEnabled) {
+			// Reset OpenGL state for JOGL's TextRenderer
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+			gl.glUseProgram(0);
+			// Reset matrices for 2D rendering
+			gl.glMatrixMode(GL_PROJECTION);
+			gl.glLoadIdentity();
+			glu.gluOrtho2D(0, realWidth, 0, realHeight);
+			gl.glMatrixMode(GL_MODELVIEW);
+			gl.glLoadIdentity();
+
+			// Re-enable blending for the TextRenderer
+			gl.glEnable(GL2.GL_BLEND);
+			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+
+			debugRenderer.renderDebugInfo();
+		}
 	}
 
 	/**
