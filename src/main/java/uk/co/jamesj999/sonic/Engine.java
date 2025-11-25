@@ -154,8 +154,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 				case BLOCKS_VIEW -> levelManager.draw();
 				case null, default -> { levelManager.draw(); spriteRenderManager.draw(); }
 			}
-
-			debugRenderer.renderDebugInfo();
 		}
 	}
 
@@ -234,6 +232,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
+		if (debugViewEnabled) {
+			debugRenderer.renderDebugInfo();
+		}
 	}
 
 	/**
