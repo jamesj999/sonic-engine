@@ -240,6 +240,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 			glu.gluOrtho2D(0, realWidth, 0, realHeight);
 			gl.glMatrixMode(GL_MODELVIEW);
 			gl.glLoadIdentity();
+
+			// Re-enable blending for the TextRenderer
+			gl.glEnable(GL2.GL_BLEND);
+			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+
 			debugRenderer.renderDebugInfo();
 		}
 	}
