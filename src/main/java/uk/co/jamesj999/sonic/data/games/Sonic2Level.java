@@ -15,6 +15,7 @@ public class Sonic2Level implements Level {
     private static final int MAP_LAYERS = 2;
     private static final int MAP_HEIGHT = 16;
     private static final int MAP_WIDTH = 128;
+    private static final int PARALLAX_ENTRY_SIZE = 6;
 
     private Palette[] palettes;
     private Pattern[] patterns;
@@ -300,7 +301,7 @@ public class Sonic2Level implements Level {
         FileChannel channel = rom.getFileChannel();
         channel.position(parallaxScrollingAddr);
         byte[] parallaxScrollingBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
-        for (int i = 0; i < parallaxScrollingBuffer.length; i += 6) {
+        for (int i = 0; i < parallaxScrollingBuffer.length; i += PARALLAX_ENTRY_SIZE) {
             short relativeScroll = (short) (((parallaxScrollingBuffer[i] & 0xFF) << 8) | (parallaxScrollingBuffer[i + 1] & 0xFF));
             byte line = parallaxScrollingBuffer[i + 5];
             parallaxScrollingManager.add(new ParallaxScrolling(relativeScroll, line));

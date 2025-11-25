@@ -24,7 +24,7 @@ public class Sonic2 extends Game {
     public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
-    private static final int PARALLAX_SCROLL_DIR_ADDR = 0x45E6E;
+    private static final int PARALLAX_SCROLL_DIR_ADDR = 0x2782;
 
     private final Rom rom;
 
@@ -191,9 +191,8 @@ public class Sonic2 extends Game {
         int actIdxLoc = zoneIdxLoc + 1;
         int actIdx = rom.readByte(actIdxLoc);
 
-        int parallaxScrollDirAddr = rom.read32BitAddr(PARALLAX_SCROLL_DIR_ADDR);
-
-        int parallaxScrollingAddr = rom.read16BitAddr(parallaxScrollDirAddr + zoneIdx * 4 + actIdx * 2);
-        return parallaxScrollDirAddr + parallaxScrollingAddr;
+        int zoneScrollTableAddr = rom.read16BitAddr(PARALLAX_SCROLL_DIR_ADDR + zoneIdx * 4 + actIdx * 2);
+        int parallaxScrollingAddr = rom.read16BitAddr(zoneScrollTableAddr);
+        return zoneScrollTableAddr + parallaxScrollingAddr;
     }
 }
