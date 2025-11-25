@@ -233,6 +233,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		draw();
 		graphicsManager.flush();
 		if (debugViewEnabled) {
+			gl.glUseProgram(0);
 			debugRenderer.renderDebugInfo();
 		}
 	}
