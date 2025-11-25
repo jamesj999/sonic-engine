@@ -139,31 +139,69 @@ public class Sonic2 extends Game {
     }
 
     private int getBlocksAddr(int levelIdx) throws IOException {
-        return getDataAddress(levelIdx, 8) & 0xFFFFFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x99D34;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0xB90F4;
+            default:
+                return getDataAddress(levelIdx, 8) & 0xFFFFFF;
+        }
     }
 
     private int getChunksAddr(int levelIdx) throws IOException {
-        return getDataAddress(levelIdx, 4) & 0xFFFFFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x94E74;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0xB5234;
+            default:
+                return getDataAddress(levelIdx, 4) & 0xFFFFFF;
+        }
     }
 
     private int getPatternsAddr(int levelIdx) throws IOException {
-        return getDataAddress(levelIdx, 0) & 0xFFFFFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x95C24;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0xB6174;
+            default:
+                return getDataAddress(levelIdx, 0) & 0xFFFFFF;
+        }
     }
 
     /*
         FIXME: Level Layout, not 'tiles'
      */
     private int getTilesAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
-        int zoneIdx = rom.readByte(zoneIdxLoc) & 0xFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+                return 0x45AC4;
+            case 0x01: // Emerald Hill 2
+                return 0x45C84;
+            case 0x02: // Chemical Plant 1
+                return 0x48774;
+            case 0x03: // Chemical Plant 2
+                return 0x48A84;
+            default:
+		        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
+		        int zoneIdx = rom.readByte(zoneIdxLoc) & 0xFF;
 
-        int actIdxLoc = zoneIdxLoc + 1;
-        int actIdx = rom.readByte(actIdxLoc) & 0xFF;
+		        int actIdxLoc = zoneIdxLoc + 1;
+		        int actIdx = rom.readByte(actIdxLoc) & 0xFF;
 
-        int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
-		int levelOffsetAddr = levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2;
-        int levelOffset = rom.read16BitAddr(levelOffsetAddr);
-        return levelOffsetAddr + levelOffset;
+		        int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
+				int levelOffsetAddr = levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2;
+		        int levelOffset = rom.read16BitAddr(levelOffsetAddr);
+		        return levelOffsetAddr + levelOffset;
+        }
     }
 
     private int getCollisionMapAddr(int levelIdx) throws IOException {
