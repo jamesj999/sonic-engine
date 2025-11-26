@@ -5,13 +5,12 @@ import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
-
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
-
+import uk.co.jamesj999.sonic.level.LevelData;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
@@ -25,9 +24,13 @@ import com.jogamp.opengl.awt.GLCanvas;
 import com.jogamp.opengl.glu.GLU;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import static com.jogamp.opengl.GL.GL_COLOR_BUFFER_BIT;
 import static com.jogamp.opengl.GL.GL_DEPTH_BUFFER_BIT;
@@ -70,6 +73,10 @@ public class Engine extends GLCanvas implements GLEventListener {
 	// TODO move this into a manager
 	private final LevelManager levelManager = LevelManager.getInstance();
 
+	private int currentZone = 0;
+	private int currentAct = 0;
+	private final List<List<LevelData>> levels = new ArrayList<>();
+
 	private GLU glu;
 
 	// TODO Add Log4J Support, or some other logging that allows proper
@@ -106,13 +113,19 @@ public class Engine extends GLCanvas implements GLEventListener {
 		camera.setFocusedSprite(sonic);
 		camera.updatePosition(true);
 
-		// Load our ROM and Level
-		try {
-			levelManager.loadLevel(0);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-        //levelManager.setLevel(new TestOldLevel());
+		//levelManager.setLevel(new TestOldLevel());
+		levels.add(List.of(LevelData.EMERALD_HILL_1, LevelData.EMERALD_HILL_2));
+		levels.add(List.of(LevelData.CHEMICAL_PLANT_1, LevelData.CHEMICAL_PLANT_2));
+		levels.add(List.of(LevelData.AQUATIC_RUIN_1, LevelData.AQUATIC_RUIN_2));
+		levels.add(List.of(LevelData.CASINO_NIGHT_1, LevelData.CASINO_NIGHT_2));
+		levels.add(List.of(LevelData.HILL_TOP_1, LevelData.HILL_TOP_2));
+		levels.add(List.of(LevelData.MYSTIC_CAVE_1, LevelData.MYSTIC_CAVE_2));
+		levels.add(List.of(LevelData.OIL_OCEAN_1, LevelData.OIL_OCEAN_2));
+		levels.add(List.of(LevelData.METROPOLIS_1, LevelData.METROPOLIS_2, LevelData.METROPOLIS_3));
+		levels.add(List.of(LevelData.SKY_CHASE));
+		levels.add(List.of(LevelData.WING_FORTRESS));
+		levels.add(List.of(LevelData.DEATH_EGG));
+		loadLevel();
 	}
 
 	/**
@@ -138,9 +151,36 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void update() {
-        timerManager.update();
+		timerManager.update();
 		spriteCollisionManager.update(inputHandler);
 		camera.updatePosition();
+
+		if (inputHandler.isKeyPressed(KeyEvent.VK_Z)) {
+			currentAct++;
+			if (currentAct >= levels.get(currentZone).size()) {
+				currentAct = 0;
+			}
+			loadLevel();
+		}
+
+		if (inputHandler.isKeyPressed(KeyEvent.VK_X)) {
+			currentZone++;
+			if (currentZone >= levels.size()) {
+				currentZone = 0;
+			}
+			currentAct = 0;
+			loadLevel();
+		}
+
+		inputHandler.update();
+	}
+
+	private void loadLevel() {
+		try {
+			levelManager.loadLevel(levels.get(currentZone).get(currentAct).getLevelIndex());
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	public void draw() {
