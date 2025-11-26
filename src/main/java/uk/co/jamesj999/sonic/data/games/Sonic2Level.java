@@ -301,6 +301,10 @@ public class Sonic2Level implements Level {
         FileChannel channel = rom.getFileChannel();
         channel.position(parallaxScrollingAddr);
         byte[] parallaxScrollingBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
+        // The parallax data is a series of 6-byte entries.
+        // Bytes 0-1: A 16-bit signed integer representing the relative scroll speed.
+        // Bytes 2-4: Unused padding.
+        // Byte 5: The starting scanline for this parallax rule.
         for (int i = 0; i < parallaxScrollingBuffer.length; i += PARALLAX_ENTRY_SIZE) {
             short relativeScroll = (short) (((parallaxScrollingBuffer[i] & 0xFF) << 8) | (parallaxScrollingBuffer[i + 1] & 0xFF));
             byte line = parallaxScrollingBuffer[i + 5];

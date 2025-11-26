@@ -67,31 +67,29 @@ public class LevelManager {
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
 
-        int bgCameraX = cameraX;
-        int bgCameraY = (int) (cameraY * 0.5f);
-
         ParallaxScrollingManager parallaxScrollingManager = level.getParallaxScrollingManager();
         if (parallaxScrollingManager == null) {
             return;
         }
 
-        int drawX = bgCameraX - (bgCameraX % LevelConstants.CHUNK_WIDTH);
-        int drawY = bgCameraY - (bgCameraY % LevelConstants.CHUNK_HEIGHT);
-
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
         int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-        int xStart = drawX;
-        int xEnd = bgCameraX + cameraWidth;
-        int yStart = drawY;
-        int yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
-
-        for (int y = yStart; y <= yEnd; y += LevelConstants.CHUNK_HEIGHT) {
-            int screenY = y - bgCameraY;
-            ParallaxScrolling parallaxScrolling = parallaxScrollingManager.get((byte) (screenY % 224));
-            if (parallaxScrolling != null) {
-                bgCameraX = (int) (cameraX * (parallaxScrolling.getRelativeScroll() / 256.0f));
+        for (int screenY = 0; screenY < cameraHeight; screenY++) {
+            ParallaxScrolling parallaxScrolling = parallaxScrollingManager.get((byte) screenY);
+            if (parallaxScrolling == null) {
+                continue;
             }
+
+            int bgCameraX = (int) (cameraX * (parallaxScrolling.getRelativeScroll() / 256.0f));
+            int bgCameraY = (int) (cameraY * 0.5f);
+
+            int y = bgCameraY + screenY;
+
+            int drawX = bgCameraX - (bgCameraX % LevelConstants.CHUNK_WIDTH);
+            int xStart = drawX;
+            int xEnd = bgCameraX + cameraWidth;
+
             for (int x = xStart; x <= xEnd; x += LevelConstants.CHUNK_WIDTH) {
                 // Handle wrapping for X
                 int wrappedX = x;
@@ -111,10 +109,11 @@ public class LevelManager {
 
                     // Calculate screen coordinates
                     int screenX = x - bgCameraX;
+                    int chunkScreenY = y - bgCameraY;
 
                     // Convert to absolute coordinates expected by renderPattern (which subtracts cameraX/Y)
                     int renderX = screenX + cameraX;
-                    int renderY = screenY + cameraY;
+                    int renderY = chunkScreenY + cameraY;
 
                     // Draw collision only for foreground (Layer 0)
                     drawChunk(commands, chunkDesc, renderX, renderY, false);
@@ -237,10 +236,7 @@ public class LevelManager {
         Camera camera = Camera.getInstance();
         List<GLCommand> commands = new ArrayList<>();
 
-        // Draw Background (Layer 1)
         drawBackground(commands, camera);
-
-        // Draw Foreground (Layer 0)
         drawForeground(commands, camera);
 
         // Register all collected drawing commands with the graphics manager

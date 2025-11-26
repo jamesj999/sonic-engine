@@ -24,7 +24,7 @@ public class Sonic2 extends Game {
     public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
-    private static final int PARALLAX_SCROLL_DIR_ADDR_LOC = 0x1A46E;
+    private static final int PARALLAX_SCROLL_DIR_ADDR_LOC = 0xE472;
 
     private final Rom rom;
 
@@ -88,7 +88,6 @@ public class Sonic2 extends Game {
         System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
-
 
         return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, parallaxScrollingAddr);
     }
@@ -191,8 +190,12 @@ public class Sonic2 extends Game {
         int actIdxLoc = zoneIdxLoc + 1;
         int actIdx = rom.readByte(actIdxLoc);
 
+        // The address of the parallax scrolling data is determined by a two-level pointer system.
+        // First, we read a 32-bit pointer to the start of the parallax data directory for all zones.
         int parallaxScrollDirAddr = rom.read32BitAddr(PARALLAX_SCROLL_DIR_ADDR_LOC);
+        // Then, we read a 16-bit offset from that directory to find the start of the data for the specific zone and act.
         int parallaxScrollingOffset = rom.read16BitAddr(parallaxScrollDirAddr + zoneIdx * 4 + actIdx * 2);
+        // The final address is the sum of the directory address and the offset.
         return parallaxScrollDirAddr + parallaxScrollingOffset;
     }
 }
