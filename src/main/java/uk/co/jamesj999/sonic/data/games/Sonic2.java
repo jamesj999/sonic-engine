@@ -25,6 +25,34 @@ public class Sonic2 extends Game {
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
+    private static final int[][] START_POSITIONS = {
+            {0x0060, 0x0400}, // 0 Emerald Hill 1
+            {0x0060, 0x0400}, // 1 Emerald Hill 2
+            {0x0060, 0x0400}, // 2 Unused
+            {0x0060, 0x0400}, // 3 Unused
+            {0x0060, 0x0400}, // 4 Chemical Plant 1
+            {0x0060, 0x0400}, // 5 Chemical Plant 2
+            {0x0060, 0x0400}, // 6 Aquatic Ruin 1
+            {0x0060, 0x0400}, // 7 Aquatic Ruin 2
+            {0x0060, 0x0400}, // 8 Casino Night 1
+            {0x0060, 0x0400}, // 9 Casino Night 2
+            {0x0060, 0x0400}, // 10 Hill Top 1
+            {0x0060, 0x0400}, // 11 Hill Top 2
+            {0x0060, 0x0400}, // 12 Mystic Cave 1
+            {0x0060, 0x0400}, // 13 Mystic Cave 2
+            {0x0060, 0x0400}, // 14 Oil Ocean 1
+            {0x0060, 0x0400}, // 15 Oil Ocean 2
+            {0x0060, 0x0400}, // 16 Metropolis 1
+            {0x0060, 0x0400}, // 17 Metropolis 2
+            {0x0060, 0x0400}, // 18 Metropolis 3
+            {0x0060, 0x0400}, // 19 Unused
+            {0x0000, 0x0000}, // 20 Sky Chase 1
+            {0x0000, 0x0000}, // 21 Unused
+            {0x0000, 0x0000}, // 22 Wing Fortress 1
+            {0x0000, 0x0000}, // 23 Unused
+            {0x0060, 0x0400}, // 24 Death Egg 1
+    };
+
     private final Rom rom;
 
     public Sonic2(Rom rom) {
@@ -87,8 +115,11 @@ public class Sonic2 extends Game {
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
 
+        int[] startCoordinates = getStartCoordinates(levelIdx);
+        short startX = (short) startCoordinates[0];
+        short startY = (short) startCoordinates[1];
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, startX, startY);
     }
 
     private int getSolidTileHeightsAddr() {
@@ -121,6 +152,20 @@ public class Sonic2 extends Game {
     @Override
     public boolean save(int levelIdx, Level level) {
         return false;
+    }
+
+    public int[] getStartCoordinates(int levelIdx) {
+        int zoneIdx = 0;
+        int actIdx = 0;
+        try {
+            zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+            actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
+        } catch (IOException e) {
+            // Should never happen
+            e.printStackTrace();
+        }
+        int tableIndex = (zoneIdx * 2) + actIdx;
+        return START_POSITIONS[tableIndex];
     }
 
     private int getDataAddress(int zoneIdx, int entryOffset) throws IOException {

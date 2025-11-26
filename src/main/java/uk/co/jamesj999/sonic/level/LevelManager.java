@@ -477,6 +477,14 @@ public class LevelManager {
         return level;
     }
 
+    public short getStartX() {
+        return level.getStartX();
+    }
+
+    public short getStartY() {
+        return level.getStartY();
+    }
+
     /**
      * Returns the singleton instance of LevelManager.
      *
