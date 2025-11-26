@@ -70,7 +70,7 @@ public enum SonicConfiguration {
 	/**
 	 * Test button only used in debug
 	 */
-	TEST(KeyEvent.VK_Z),
+	TEST(KeyEvent.VK_Q),
 
 	/**
 	 * Code of the sprite of the main playable character.
