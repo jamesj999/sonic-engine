@@ -23,6 +23,9 @@ public class Sonic2Level implements Level {
     private SolidTile[] solidTiles;
     private Map map;
 
+    private short startX;
+    private short startY;
+
     private int patternCount;
     private int chunkCount;
     private int blockCount;
@@ -42,14 +45,17 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
+                       int solidTilesAngleAddr,
+                       short startX,
+                       short startY) throws IOException {
+        this.startX = startX;
+        this.startY = startY;
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
-
     }
 
     @Override
@@ -115,6 +121,16 @@ public class Sonic2Level implements Level {
     @Override
     public Map getMap() {
         return map;
+    }
+
+    @Override
+    public short getStartX() {
+        return startX;
+    }
+
+    @Override
+    public short getStartY() {
+        return startY;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {

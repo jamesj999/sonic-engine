@@ -151,6 +151,10 @@ public class Camera {
 		y = sprite.getY();
 	}
 
+	public AbstractPlayableSprite getFocusedSprite() {
+		return focusedSprite;
+	}
+
 	public short getX() {
 		return x;
 	}
