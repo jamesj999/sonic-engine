@@ -52,7 +52,7 @@ public class Sonic2 extends Game {
             {0x0000, 0x0000}, // 23 Unused
             {0x0060, 0x012D}, // 24 Death Egg 1     (DEZ_1.bin)
             {0x0000, 0x0000}, // 25 Unused
-            {0x0000, 0x0000}, // 26 Special Stage   (see note below)
+            {0x0000, 0x0000}, // 26 Special Stage
     };
 
     private final Rom rom;
@@ -117,11 +117,7 @@ public class Sonic2 extends Game {
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
 
-        int[] startCoordinates = getStartCoordinates(levelIdx);
-        short startX = (short) startCoordinates[0];
-        short startY = (short) startCoordinates[1];
-
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, startX, startY);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr);
     }
 
     private int getSolidTileHeightsAddr() {
@@ -154,20 +150,6 @@ public class Sonic2 extends Game {
     @Override
     public boolean save(int levelIdx, Level level) {
         return false;
-    }
-
-    public int[] getStartCoordinates(int levelIdx) {
-        int zoneIdx = 0;
-        int actIdx = 0;
-        try {
-            zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-            actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
-        } catch (IOException e) {
-            // Should never happen
-            e.printStackTrace();
-        }
-        int tableIndex = (zoneIdx * 2) + actIdx;
-        return START_POSITIONS[tableIndex];
     }
 
     private int getDataAddress(int zoneIdx, int entryOffset) throws IOException {

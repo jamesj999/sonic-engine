@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 
 /**
  * All configurable properties are put here. Eventually, these will be loaded
- * from a file. Use {@link SonicConfigurationSerivce} to retrieve the values for
+ * from a file. Use SonicConfigurationSerivce to retrieve the values for
  * these properties. This way, the service can eventually populate the options
  * from the file.
  * 
@@ -71,6 +71,16 @@ public enum SonicConfiguration {
 	 * Test button only used in debug
 	 */
 	TEST(KeyEvent.VK_Q),
+
+	/**
+	 * Test button for next act
+	 */
+	NEXT_ACT(KeyEvent.VK_Z),
+
+	/**
+	 * Test button for next zone
+	 */
+	NEXT_ZONE(KeyEvent.VK_X),
 
 	/**
 	 * Code of the sprite of the main playable character.

@@ -14,6 +14,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -31,13 +32,26 @@ public class LevelManager {
     private Level level;
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
-
+    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final List<List<LevelData>> levels = new ArrayList<>();
+    private int currentAct = 0;
+    private int currentZone = 0;
 
     /**
      * Private constructor for Singleton pattern.
      */
     private LevelManager() {
-        // No-op
+        levels.add(List.of(LevelData.EMERALD_HILL_1, LevelData.EMERALD_HILL_2));
+        levels.add(List.of(LevelData.CHEMICAL_PLANT_1, LevelData.CHEMICAL_PLANT_2));
+        levels.add(List.of(LevelData.AQUATIC_RUIN_1, LevelData.AQUATIC_RUIN_2));
+        levels.add(List.of(LevelData.CASINO_NIGHT_1, LevelData.CASINO_NIGHT_2));
+        levels.add(List.of(LevelData.HILL_TOP_1, LevelData.HILL_TOP_2));
+        levels.add(List.of(LevelData.MYSTIC_CAVE_1, LevelData.MYSTIC_CAVE_2));
+        levels.add(List.of(LevelData.OIL_OCEAN_1, LevelData.OIL_OCEAN_2));
+        levels.add(List.of(LevelData.METROPOLIS_1, LevelData.METROPOLIS_2, LevelData.METROPOLIS_3));
+        levels.add(List.of(LevelData.SKY_CHASE));
+        levels.add(List.of(LevelData.WING_FORTRESS));
+        levels.add(List.of(LevelData.DEATH_EGG));
     }
 
     /**
@@ -477,12 +491,45 @@ public class LevelManager {
         return level;
     }
 
-    public short getStartX() {
-        return level.getStartX();
+    public void loadCurrentLevel() {
+        try {
+            LevelData level = levels.get(currentZone).get(currentAct);
+            loadLevel(level.getLevelIndex());
+            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            player.setX((short) level.getStartXPos());
+            player.setY((short) level.getStartYPos());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public short getStartY() {
-        return level.getStartY();
+    public void nextAct() throws IOException  {
+        currentAct++;
+        if (currentAct >= levels.get(currentZone).size()) {
+            currentAct = 0;
+        }
+        loadCurrentLevel();
+    }
+
+    public void loadZoneAndAct(int zone, int act) throws IOException {
+        currentAct = act;
+        currentZone = zone;
+        loadCurrentLevel();
+    }
+
+    public void nextZone() throws IOException  {
+        currentZone++;
+        if (currentZone >= levels.size()) {
+            currentZone = 0;
+        }
+        currentAct = 0;
+        loadCurrentLevel();
+    }
+
+    public void loadZone(int zone) throws IOException {
+        currentZone = zone;
+        currentAct = 0;
+        loadCurrentLevel();
     }
 
     /**
