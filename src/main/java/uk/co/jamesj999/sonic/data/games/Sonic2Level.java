@@ -202,8 +202,14 @@ public class Sonic2Level implements Level {
             chunks[i] = new Chunk();
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(chunkBuffer, i * Chunk.CHUNK_SIZE_IN_ROM, (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
-            int solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
-            int altSolidTileIndex = Byte.toUnsignedInt(solidTileAltRefBuffer[i]);
+            int solidTileIndex = 0;
+            if (i < solidTileRefBuffer.length) {
+                solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
+            }
+            int altSolidTileIndex = 0;
+            if (i < solidTileAltRefBuffer.length) {
+                altSolidTileIndex = Byte.toUnsignedInt(solidTileAltRefBuffer[i]);
+            }
             chunks[i].fromSegaFormat(subArray, solidTileIndex, altSolidTileIndex);
         }
 

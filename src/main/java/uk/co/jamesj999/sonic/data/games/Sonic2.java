@@ -124,7 +124,7 @@ public class Sonic2 extends Game {
     }
 
     private int getDataAddress(int levelIdx, int entryOffset) throws IOException {
-        int levelDataIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2);
+        int levelDataIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         return rom.read32BitAddr(LEVEL_DATA_DIR + levelDataIdx * LEVEL_DATA_DIR_ENTRY_SIZE + entryOffset);
     }
 
@@ -139,46 +139,164 @@ public class Sonic2 extends Game {
     }
 
     private int getBlocksAddr(int levelIdx) throws IOException {
-        return getDataAddress(levelIdx, 8) & 0xFFFFFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x99D34;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0xB90F4;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0xC1434;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0xB2CF4;
+			case 0x0C: // Oil Ocean 1
+			case 0x0D: // Oil Ocean 2
+				return 0xA6384;
+			case 0x11: // Sky Chase
+				return 0xC85E4;
+            default:
+                return getDataAddress(levelIdx, 8) & 0xFFFFFF;
+        }
     }
 
     private int getChunksAddr(int levelIdx) throws IOException {
-        return getDataAddress(levelIdx, 4) & 0xFFFFFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x94E74;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0xB5234;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0xBB944;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0xAFFC4;
+			case 0x0C: // Oil Ocean 1
+			case 0x0D: // Oil Ocean 2
+				return 0xA3364;
+			case 0x11: // Sky Chase
+				return 0xC4074;
+            default:
+                return getDataAddress(levelIdx, 4) & 0xFFFFFF;
+        }
     }
 
     private int getPatternsAddr(int levelIdx) throws IOException {
-        return getDataAddress(levelIdx, 0) & 0xFFFFFF;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x95C24;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0xB6174;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0xBCC24;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0xB0894;
+            case 0x0C: // Oil Ocean 1
+            case 0x0D: // Oil Ocean 2
+                return 0xA4204;
+            case 0x11: // Sky Chase
+                return 0xC5004;
+            default:
+                return getDataAddress(levelIdx, 0) & 0xFFFFFF;
+        }
     }
 
     /*
         FIXME: Level Layout, not 'tiles'
      */
     private int getTilesAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
-        int zoneIdx = rom.readByte(zoneIdxLoc);
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+                return 0x45AC4;
+            case 0x01: // Emerald Hill 2
+                return 0x45C84;
+            case 0x02: // Chemical Plant 1
+                return 0x48774;
+            case 0x03: // Chemical Plant 2
+                return 0x48A84;
+            case 0x04: // Aquatic Ruin 1
+                return 0x48E94;
+            case 0x05: // Aquatic Ruin 2
+                return 0x49264;
+            case 0x06: // Casino Night 1
+                return 0x47FF4;
+            case 0x07: // Casino Night 2
+                return 0x483C4;
+			case 0x0C: // Oil Ocean 1
+				return 0x47404;
+			case 0x0D: // Oil Ocean 2
+				return 0x47784;
+			case 0x11: // Sky Chase
+				return 0x49634;
+            default:
+		        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
+		        int zoneIdx = rom.readByte(zoneIdxLoc) & 0xFF;
 
-        int actIdxLoc = zoneIdxLoc + 1;
-        int actIdx = rom.readByte(actIdxLoc);
+		        int actIdxLoc = zoneIdxLoc + 1;
+		        int actIdx = rom.readByte(actIdxLoc) & 0xFF;
 
-        int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
-
-        int levelOffset = rom.read16BitAddr(levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2);
-        return levelLayoutDirAddr + levelOffset;
+		        int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
+				int levelOffsetAddr = levelLayoutDirAddr + zoneIdx * 4 + actIdx * 2;
+		        int levelOffset = rom.read16BitAddr(levelOffsetAddr);
+		        return levelOffsetAddr + levelOffset;
+        }
     }
 
     private int getCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx;
-
-        int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
-
-        return collisionAddr;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x44E50;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0x453C0;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0x45610;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0x452A0;
+			case 0x0C: // Oil Ocean 1
+			case 0x0D: // Oil Ocean 2
+				return 0x45100;
+			case 0x11: // Sky Chase
+				return 0x458C0;
+            default:
+		        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
+		        int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
+		        return collisionAddr;
+        }
     }
 
     private int getAltCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx;
-
-        int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
-
-        return altCollisionAddr;
+        switch (levelIdx) {
+            case 0x00: // Emerald Hill 1
+            case 0x01: // Emerald Hill 2
+                return 0x44F40;
+            case 0x02: // Chemical Plant 1
+            case 0x03: // Chemical Plant 2
+                return 0x454E0;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0x45760;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0x45330;
+			case 0x11: // Sky Chase
+				return 0x459A0;
+            default:
+		        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
+		        int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
+		        return altCollisionAddr;
+        }
     }
 }
