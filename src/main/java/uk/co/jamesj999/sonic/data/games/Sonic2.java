@@ -190,6 +190,16 @@ public class Sonic2 extends Game {
                 return 0x48774;
             case 0x03: // Chemical Plant 2
                 return 0x48A84;
+            case 0x04: // Aquatic Ruin 1
+                return 0x48E94;
+            case 0x05: // Aquatic Ruin 2
+                return 0x49264;
+            case 0x06: // Oil Ocean 1
+                return 0x47404;
+            case 0x07: // Oil Ocean 2
+                return 0x47784;
+            case 0x08: // Sky Chase
+                return 0x49634;
             default:
 		        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
 		        int zoneIdx = rom.readByte(zoneIdxLoc) & 0xFF;
