@@ -146,6 +146,17 @@ public class Sonic2 extends Game {
             case 0x02: // Chemical Plant 1
             case 0x03: // Chemical Plant 2
                 return 0xB90F4;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0xC1434;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0xB2CF4;
+			case 0x0C: // Oil Ocean 1
+			case 0x0D: // Oil Ocean 2
+				return 0xA6384;
+			case 0x11: // Sky Chase
+				return 0xC85E4;
             default:
                 return getDataAddress(levelIdx, 8) & 0xFFFFFF;
         }
@@ -159,6 +170,17 @@ public class Sonic2 extends Game {
             case 0x02: // Chemical Plant 1
             case 0x03: // Chemical Plant 2
                 return 0xB5234;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0xBB944;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0xAFFC4;
+			case 0x0C: // Oil Ocean 1
+			case 0x0D: // Oil Ocean 2
+				return 0xA3364;
+			case 0x11: // Sky Chase
+				return 0xC4074;
             default:
                 return getDataAddress(levelIdx, 4) & 0xFFFFFF;
         }
@@ -172,6 +194,17 @@ public class Sonic2 extends Game {
             case 0x02: // Chemical Plant 1
             case 0x03: // Chemical Plant 2
                 return 0xB6174;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0xBCC24;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0xB0894;
+            case 0x0C: // Oil Ocean 1
+            case 0x0D: // Oil Ocean 2
+                return 0xA4204;
+            case 0x11: // Sky Chase
+                return 0xC5004;
             default:
                 return getDataAddress(levelIdx, 0) & 0xFFFFFF;
         }
@@ -190,16 +223,6 @@ public class Sonic2 extends Game {
                 return 0x48774;
             case 0x03: // Chemical Plant 2
                 return 0x48A84;
-            case 0x04: // Aquatic Ruin 1
-                return 0x48E94;
-            case 0x05: // Aquatic Ruin 2
-                return 0x49264;
-            case 0x06: // Oil Ocean 1
-                return 0x47404;
-            case 0x07: // Oil Ocean 2
-                return 0x47784;
-            case 0x08: // Sky Chase
-                return 0x49634;
             default:
 		        int zoneIdxLoc = LEVEL_SELECT_ADDR + levelIdx * 2;
 		        int zoneIdx = rom.readByte(zoneIdxLoc) & 0xFF;
@@ -222,6 +245,17 @@ public class Sonic2 extends Game {
             case 0x02: // Chemical Plant 1
             case 0x03: // Chemical Plant 2
                 return 0x453C0;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0x45610;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0x452A0;
+			case 0x0C: // Oil Ocean 1
+			case 0x0D: // Oil Ocean 2
+				return 0x45100;
+			case 0x11: // Sky Chase
+				return 0x458C0;
             default:
 		        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
 		        int collisionAddr = rom.read32BitAddr(zoneIdxLoc);
@@ -237,6 +271,14 @@ public class Sonic2 extends Game {
             case 0x02: // Chemical Plant 1
             case 0x03: // Chemical Plant 2
                 return 0x454E0;
+            case 0x04: // Aquatic Ruin 1
+            case 0x05: // Aquatic Ruin 2
+                return 0x45760;
+            case 0x06: // Casino Night 1
+            case 0x07: // Casino Night 2
+                return 0x45330;
+			case 0x11: // Sky Chase
+				return 0x459A0;
             default:
 		        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + levelIdx * 4;
 		        int altCollisionAddr = rom.read32BitAddr(zoneIdxLoc);
