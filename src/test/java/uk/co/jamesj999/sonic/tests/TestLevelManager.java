@@ -68,5 +68,7 @@ public class TestLevelManager {
 
         @Override public SolidTile getSolidTile(int index) { return null; }
         @Override public Map getMap() { return map; }
+        @Override public short getStartX() { return 0; }
+        @Override public short getStartY() { return 0; }
     }
 }

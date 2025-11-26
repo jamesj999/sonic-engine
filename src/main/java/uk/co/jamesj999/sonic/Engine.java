@@ -178,6 +178,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private void loadLevel() {
 		try {
 			levelManager.loadLevel(levels.get(currentZone).get(currentAct).getLevelIndex());
+			Sonic sonic = (Sonic) camera.getFocusedSprite();
+			sonic.setX(levelManager.getStartX());
+			sonic.setY(levelManager.getStartY());
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
