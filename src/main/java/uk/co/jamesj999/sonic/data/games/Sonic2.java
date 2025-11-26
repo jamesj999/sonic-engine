@@ -51,6 +51,8 @@ public class Sonic2 extends Game {
             {0x0000, 0x0000}, // 22 Wing Fortress 1
             {0x0000, 0x0000}, // 23 Unused
             {0x0060, 0x0400}, // 24 Death Egg 1
+            {0x0060, 0x0400}, // 25 Unused
+            {0x0060, 0x0400}, // 26 Special Stage
     };
 
     private final Rom rom;
