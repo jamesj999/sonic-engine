@@ -26,40 +26,33 @@ public class Sonic2 extends Game {
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
     private static final int[][] START_POSITIONS = {
-            {0x0064, 0x0270}, // 0 Emerald Hill 1
-            {0x0060, 0x0580}, // 1 Emerald Hill 2
-            {0x0000, 0x0000}, // 2 Unused
+            {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
+            {0x0060, 0x02AF}, // 1 Emerald Hill 2   (EHZ_2.bin)
+            {0x0000, 0x0000}, // 2 Unused           (e.g. HPZ / WZ / etc. – not wired in final game)
             {0x0000, 0x0000}, // 3 Unused
-            {0x0060, 0x04B4}, // 4 Chemical Plant 1
-            {0x0060, 0x04B4}, // 5 Chemical Plant 2
-            {0x0060, 0x02F0}, // 6 Aquatic Ruin 1
-            {0x0060, 0x0480}, // 7 Aquatic Ruin 2
-            {0x0060, 0x0288}, // 8 Casino Night 1
-            {0x0060, 0x0288}, // 9 Casino Night 2
-            {0x0060, 0x0480}, // 10 Hill Top 1
-            {0x0060, 0x0480}, // 11 Hill Top 2
-            {0x0060, 0x0780}, // 12 Mystic Cave 1
-            {0x0060, 0x0780}, // 13 Mystic Cave 2
-            {0x0060, 0x0480}, // 14 Oil Ocean 1
-            {0x0060, 0x0480}, // 15 Oil Ocean 2
-            {0x0060, 0x0200}, // 16 Metropolis 1
-            {0x0060, 0x0200}, // 17 Metropolis 2
-            {0x0060, 0x0200}, // 18 Metropolis 3
+            {0x0060, 0x01EC}, // 4 Chemical Plant 1 (CPZ_1.bin)
+            {0x0000, 0x0000}, // 5 Chemical Plant 2 (CPZ_2.bin – not fetched)
+            {0x0000, 0x0000}, // 6 Aquatic Ruin 1   (ARZ_1.bin – not fetched)
+            {0x0000, 0x0000}, // 7 Aquatic Ruin 2   (ARZ_2.bin – not fetched)
+            {0x0000, 0x0000}, // 8 Casino Night 1   (CNZ_1.bin – not fetched)
+            {0x0000, 0x0000}, // 9 Casino Night 2   (CNZ_2.bin – not fetched)
+            {0x0060, 0x03EF}, // 10 Hill Top 1      (HTZ_1.bin)
+            {0x0000, 0x0000}, // 11 Hill Top 2      (HTZ_2.bin – not fetched)
+            {0x0060, 0x06AC}, // 12 Mystic Cave 1   (MCZ_1.bin)
+            {0x0000, 0x0000}, // 13 Mystic Cave 2   (MCZ_2.bin – not fetched)
+            {0x0060, 0x06AC}, // 14 Oil Ocean 1     (OOZ_1.bin)
+            {0x0000, 0x0000}, // 15 Oil Ocean 2     (OOZ_2.bin – not fetched)
+            {0x0060, 0x028C}, // 16 Metropolis 1    (MTZ_1.bin)
+            {0x0000, 0x0000}, // 17 Metropolis 2    (MTZ_2.bin – not fetched)
+            {0x0000, 0x0000}, // 18 Metropolis 3    (MTZ_3.bin – not fetched)
             {0x0000, 0x0000}, // 19 Unused
-            {0x00A0, 0x0100}, // 20 Sky Chase
+            {0x0120, 0x0070}, // 20 Sky Chase 1     (SCZ.bin)
             {0x0000, 0x0000}, // 21 Unused
-            {0x0060, 0x0100}, // 22 Wing Fortress
+            {0x0060, 0x04CC}, // 22 Wing Fortress 1 (WFZ_1.bin)
             {0x0000, 0x0000}, // 23 Unused
-            {0x00C0, 0x0284}, // 24 Death Egg
+            {0x0060, 0x012D}, // 24 Death Egg 1     (DEZ_1.bin)
             {0x0000, 0x0000}, // 25 Unused
-            {0x0200, 0x0200}, // 26 Special Stage 1
-            {0x0200, 0x0200}, // 27 Special Stage 2
-            {0x0200, 0x0200}, // 28 Special Stage 3
-            {0x0200, 0x0200}, // 29 Special Stage 4
-            {0x0200, 0x0200}, // 30 Special Stage 5
-            {0x0200, 0x0200}, // 31 Special Stage 6
-            {0x0200, 0x0200}, // 32 Special Stage 7
-            {0x0000, 0x0000}  // 33 Padding
+            {0x0000, 0x0000}, // 26 Special Stage   (see note below)
     };
 
     private final Rom rom;
