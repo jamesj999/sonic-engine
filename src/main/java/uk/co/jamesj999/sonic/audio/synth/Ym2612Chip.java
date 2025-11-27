@@ -40,9 +40,7 @@ public class Ym2612Chip {
         if (entry != null) {
             this.currentDacSampleId = entry.sampleId;
             this.dacPos = 0;
-            // Rough rate approximation
-            // Rate 0 is fast, Rate 20 is slow.
-            // Base step 0.5?
+            // Rate 0 is fast, Rate 20 is slow. Approximation based on observation.
             this.dacStep = 0.5 / (1.0 + entry.rate * 0.05);
         }
     }
@@ -90,11 +88,6 @@ public class Ym2612Chip {
                 channels[ch].tl = val;
             }
         }
-        // Envelope Regs (Simplified: Assign to Channel, ignoring Op specifics)
-        if (reg >= 0x50 && reg <= 0x5F) { // AR
-             // ...
-        }
-        // For brevity in this turn, using defaults or simple parsing if easy.
     }
 
     public void render(short[] buffer) {

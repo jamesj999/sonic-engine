@@ -13,7 +13,7 @@ public class SmpsSequencer implements AudioStream {
     private double samplesPerTick = 44100.0 / 60.0; // Approx 60Hz
     private double sampleCounter = 0;
 
-    // F-Num table for Octave 4?
+    // F-Num table for Octave 4
     private static final int[] FNUM_TABLE = {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
@@ -114,9 +114,7 @@ public class SmpsSequencer implements AudioStream {
                             t.duration = next;
                             t.pos++;
                         } else {
-                            // Reuse previous duration? Or default?
-                            // Doc says: "must always define a note before you can define a duration"
-                            // If duration omitted, use last?
+                            // Reuse previous duration if not specified.
                             if (t.duration == 0) t.duration = 1;
                         }
                     }
@@ -125,7 +123,7 @@ public class SmpsSequencer implements AudioStream {
                 } else {
                     // Duration only
                     t.duration = cmd;
-                    playNote(t); // Replay note?
+                    playNote(t);
                     break;
                 }
             }
@@ -133,7 +131,6 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void handleFlag(Track t, int cmd) {
-        // Handle basic flags
         if (cmd == 0xF2) { // Stop
             t.active = false;
             stopNote(t);
@@ -141,7 +138,6 @@ public class SmpsSequencer implements AudioStream {
             // Freq displacement (1 byte param)
             t.pos++;
         }
-        // ... ignore others for now
     }
 
     private void playNote(Track t) {
