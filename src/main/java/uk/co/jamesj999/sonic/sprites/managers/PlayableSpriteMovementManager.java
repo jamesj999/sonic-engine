@@ -634,11 +634,11 @@ public class PlayableSpriteMovementManager extends
 		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
 			newMode = GroundMode.GROUND;
 		} else if (angle >= 33 && angle <= 95) {
-			newMode = GroundMode.LEFTWALL;
+			newMode = GroundMode.RIGHTWALL;
 		} else if (angle >= 96 && angle <= 160) {
 			newMode = GroundMode.CEILING;
 		} else if (angle >= 161 && angle <= 223) {
-			newMode = GroundMode.RIGHTWALL;
+			newMode = GroundMode.LEFTWALL;
 		}
 
 		if (newMode != currentMode) {
