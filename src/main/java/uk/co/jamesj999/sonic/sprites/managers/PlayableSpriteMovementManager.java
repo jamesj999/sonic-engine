@@ -435,7 +435,7 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed -= slopeRunningVariant * Math.sin(Math.toRadians(angle));
+		gSpeed += slopeRunningVariant * Math.sin(Math.toRadians(angle));
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
@@ -482,7 +482,7 @@ public class PlayableSpriteMovementManager extends
 		sprite.setRolling(true);
 		int angle = calculateAngle(sprite);
 		jumpPressed = true;
-		sprite.setXSpeed((short) (sprite.getXSpeed() - sprite.getJump()
+		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()
 				* Math.sin(Math.toRadians(angle))));
 		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
 				* Math.cos(Math.toRadians(angle))));
@@ -559,7 +559,7 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
+					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(Math
 							.sin(Math.toRadians(angle)))));
 				}
 			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
@@ -567,7 +567,7 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * -(Math.signum(Math.sin(Math
+					gSpeed = (short) (ySpeed * (Math.signum(Math.sin(Math
 							.toRadians(angle)))));
 				}
 			}
@@ -605,7 +605,7 @@ public class PlayableSpriteMovementManager extends
 	 *         radians before using Math.sin etc.
 	 */
 	private int calculateAngle(AbstractPlayableSprite sprite) {
-		int angle = (int) ((256 - sprite.getAngle()) * 1.40625);
+		int angle = (int) ((sprite.getAngle() & 0xFF) * 1.40625);
 
 		// Small hack to make sure the angle is between -360 and 360.
 		while (angle >= 360) {
