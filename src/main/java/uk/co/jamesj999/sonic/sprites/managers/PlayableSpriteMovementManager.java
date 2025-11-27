@@ -171,7 +171,7 @@ public class PlayableSpriteMovementManager extends
 			Direction direction = lowestResult.direction();
 			byte distance = lowestResult.distance();
 			if (distance < 0) {
-				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
+				moveForSensorResult(sprite, lowestResult);
 				sprite.setXSpeed((short) 0);
 				sprite.setGSpeed((short) 0);
 			}
@@ -201,7 +201,7 @@ public class PlayableSpriteMovementManager extends
 				// Check whether
 				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
 					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
-					sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
+					moveForSensorResult(sprite, lowestResult);
 					// And set sonic's new angle based on the tile found:
 					sprite.setAngle(lowestResult.angle());
 
@@ -214,9 +214,14 @@ public class PlayableSpriteMovementManager extends
 		} else {
 			// Check if we are still on the ground:
 			// Work out the speeds required to consider us still on the ground
-			short requiredSpeed = (short) Math.min(Math.abs(sprite.getXSpeed()) + 4, 14);
+			short speed = (short) Math.abs(sprite.getXSpeed());
+			if (sprite.getGroundMode() == GroundMode.LEFTWALL || sprite.getGroundMode() == GroundMode.RIGHTWALL) {
+				speed = (short) Math.abs(sprite.getYSpeed());
+			}
+			short requiredSpeed = (short) Math.min(speed + 4, 14);
+
 			if(lowestResult.distance() < requiredSpeed) {
-				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
+				moveForSensorResult(sprite, lowestResult);
 				sprite.setAngle(lowestResult.angle());
 				updateGroundMode(sprite);
 			} else {
@@ -573,6 +578,16 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 		return lowestResult;
+	}
+
+	private void moveForSensorResult(AbstractPlayableSprite sprite, SensorResult result) {
+		byte distance = result.distance();
+		switch (result.direction()) {
+			case UP -> sprite.setY((short) (sprite.getY() - distance));
+			case DOWN -> sprite.setY((short) (sprite.getY() + distance));
+			case LEFT -> sprite.setX((short) (sprite.getX() - distance));
+			case RIGHT -> sprite.setX((short) (sprite.getX() + distance));
+		}
 	}
 
 	private void updateGroundMode(AbstractPlayableSprite sprite) {

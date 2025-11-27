@@ -69,6 +69,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public void setAir(boolean air) {
 		//TODO Update ground sensors here
 		this.air = air;
+		if (air) {
+			setGroundMode(GroundMode.GROUND);
+		}
 	}
 
 	public short getJump() {
