@@ -37,21 +37,11 @@ public class GroundSensor extends Sensor {
 
         // Check for a tile under the sensor.
         ChunkDesc initialChunkDesc = levelManager.getChunkDescAt(layer, originalX, originalY);
-        SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc, layer);
+        SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc);
         byte initialHeight;
         if (initialTile != null) {
-            boolean hFlip = initialChunkDesc.getHFlip();
-            boolean vFlip = initialChunkDesc.getVFlip();
             // There is a tile under the sensor, let's remember its height (or width, depending on direction the sensor is facing)
-            if (vertical) {
-                byte tileX = (byte) (currentX % 16);
-                if (hFlip) tileX = (byte) (15 - tileX);
-                initialHeight = initialTile.getHeightAt(tileX);
-            } else {
-                byte tileY = (byte) (currentY % 16);
-                if (vFlip) tileY = (byte) (15 - tileY);
-                initialHeight = initialTile.getWidthAt(tileY);
-            }
+            initialHeight = (vertical) ? initialTile.getHeightAt((byte) (currentX % 16)) : initialTile.getWidthAt((byte) (currentY % 16));
         } else {
             // No tile so a height of 0.
             initialHeight = 0;
@@ -67,35 +57,21 @@ public class GroundSensor extends Sensor {
             }
             // Look for a 'previous' tile using the new coordinates
             ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
-            SolidTile prevTile = levelManager.getSolidTileForChunkDesc(prevChunkDesc, layer);
+            SolidTile prevTile = levelManager.getSolidTileForChunkDesc(prevChunkDesc);
             if (prevTile != null) {
-                boolean hFlip = prevChunkDesc.getHFlip();
-                boolean vFlip = prevChunkDesc.getVFlip();
-                byte prevTileHeight;
-                if (vertical) {
-                    byte tileX = (byte) (currentX % 16);
-                    if (hFlip) tileX = (byte) (15 - tileX);
-                    prevTileHeight = prevTile.getHeightAt(tileX);
-                } else {
-                    byte tileY = (byte) (currentY % 16);
-                    if (vFlip) tileY = (byte) (15 - tileY);
-                    prevTileHeight = prevTile.getWidthAt(tileY);
-                }
-
+                // Extract height or width value as appropriate from the 'previous' tile.
+                byte prevTileHeight = (vertical) ? prevTile.getHeightAt((byte) (currentX % 16)) : prevTile.getWidthAt((byte) (currentY % 16));
                 if (prevTileHeight > 0) {
                     // 'Previous' tile has a height value > 0 so this is our tile to calculate distance for.
-                    byte distance = calculateDistance(prevChunkDesc, prevTile, originalX, originalY, currentX, currentY, direction);
-                    if (distance >= -24) {
-                        return new SensorResult(prevTile.getAngle(prevChunkDesc.getHFlip(), prevChunkDesc.getVFlip()), distance, prevTile.getIndex(), globalDirection);
-                    }
+                    return new SensorResult(prevTile.getAngle(), calculateDistance(prevTile, originalX, originalY, currentX, currentY, direction), prevTile.getIndex(), globalDirection);
                 }
             }
             // 'Previous' tile not found or has a height of 0, so return distance to initial tile.
-            return new SensorResult(initialTile.getAngle(initialChunkDesc.getHFlip(), initialChunkDesc.getVFlip()), calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
+            return new SensorResult(initialTile.getAngle(), calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
 
         } else if (initialHeight > 0) {
             // First tile has a height value > 0 and < 16 so return the distance to the edge of this tile.
-            return new SensorResult(initialTile.getAngle(initialChunkDesc.getHFlip(), initialChunkDesc.getVFlip()), calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
+            return new SensorResult(initialTile.getAngle(), calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction), initialTile.getIndex(), globalDirection);
         } else {
             // No tiles found so far (after initial spot and 'previous' if applicable)
             // Need to expand our search to the 'next' block.
@@ -107,41 +83,33 @@ public class GroundSensor extends Sensor {
             }
             // Retrieve 'next' tile based on new currentX and currentY.
             ChunkDesc nextChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
-            SolidTile nextTile = levelManager.getSolidTileForChunkDesc(nextChunkDesc, layer);
+            SolidTile nextTile = levelManager.getSolidTileForChunkDesc(nextChunkDesc);
             byte lastDistance;
             if (nextTile == null) {
                 // No tile here either so send the maximum possible distance it could be.
                 // needs to be 16 + distance of previous tile... work it out mathematically:
                 // Or just be lazy and use the calculateDistance method for the first tile (or lack thereof) then add (or subtract?) 16...
-                byte distance = calculateDistance(initialChunkDesc, initialTile, originalX, originalY, originalX, originalY, direction);
+                byte distance = calculateDistance(initialTile, originalX, originalY, originalX, originalY, direction);
                 distance = (byte) ((Direction.LEFT.equals(globalDirection) || Direction.UP.equals(globalDirection)) ? distance - 32 : distance + 32);
                 return new SensorResult((byte ) 0, distance,0, direction);
             } else {
-                return new SensorResult(nextTile.getAngle(nextChunkDesc.getHFlip(), nextChunkDesc.getVFlip()), calculateDistance(nextChunkDesc, nextTile, originalX, originalY, currentX, currentY, direction), nextTile.getIndex(), globalDirection);
+                return new SensorResult(nextTile.getAngle(), calculateDistance(nextTile, originalX, originalY, currentX, currentY, direction), nextTile.getIndex(), globalDirection);
             }
         }
     }
 
-    private byte calculateDistance(ChunkDesc chunkDesc, SolidTile tile, short originalX, short originalY, short checkX, short checkY, Direction direction) {
+    private byte calculateDistance(SolidTile tile, short originalX, short originalY, short checkX, short checkY, Direction direction) {
         short tileX = (short) (checkX - (checkX % 16));
         short tileY = (short) (checkY - (checkY % 16));
-
-        boolean hFlip = (chunkDesc != null) && chunkDesc.getHFlip();
-        boolean vFlip = (chunkDesc != null) && chunkDesc.getVFlip();
-
         switch (direction) {
             case DOWN, UP -> {
                 // needs splitting - direction is important to work out whether we subtract or add the height
                 // or it might be fine, I dunno
-                int index = checkX % 16;
-                if (hFlip) index = 15 - index;
-                byte height = (tile == null) ? 0 : tile.getHeightAt((byte) index);
+                byte height = (tile == null) ? 0 : tile.getHeightAt((byte) (checkX % 16));
                 return (byte) (tileY - height - originalY);
             }
             case LEFT, RIGHT -> {
-                int index = checkY % 16;
-                if (vFlip) index = 15 - index;
-                byte width = (tile == null) ? 0 : tile.getWidthAt((byte) index);
+                byte width = (tile == null) ? 0 : tile.getWidthAt((byte) (checkY % 16));
                 return (byte) (tileX + width - originalX);
             }
         }
