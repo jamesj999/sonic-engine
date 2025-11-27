@@ -180,4 +180,32 @@ public class TestGroundSensor {
         assertNotNull("Should find regressed tile", result);
         assertEquals(-8, result.distance());
     }
+
+    @Test
+    public void testRightWallSensorRotation() {
+        // Mode: RIGHTWALL.
+        // Sensor: (x=0, y=10) [Relative to Sprite in GROUND mode].
+        // Rotated for RIGHTWALL: (y, -x) -> (10, 0).
+        // Sprite Center: (100, 100).
+        // Sensor Scan Start: (110, 100).
+        // Direction: RIGHTWALL + DOWN -> RIGHT (from SpriteManager).
+        // Looking for wall to Right.
+        // Wall at (112, 100). Tile 1 (Full).
+        // Distance: (TileX + 16 - Width) - SensorX
+        // TileX = 112. Width = 16.
+        // (112 + 16 - 16) - 110 = 2.
+
+        setTileAt(112, 100, 1);
+
+        mockSprite.setGroundMode(GroundMode.RIGHTWALL);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+        // Note: mockSprite width/height are 0 in setup. getCentreX/Y = X/Y.
+
+        GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)10, true);
+        SensorResult result = sensor.scan();
+
+        assertNotNull(result);
+        assertEquals(2, result.distance());
+    }
 }
