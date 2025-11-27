@@ -141,7 +141,7 @@ public class PlayableSpriteMovementManager extends
 		SensorResult[] pushResult = terrainCollisionManager.getSensorResult(sprite.getPushSensors());
 
 		doTerrainCollision(sprite, groundResult);
-		//doWallCollision(sprite, pushResult);
+		doWallCollision(sprite, pushResult);
 
 		// This won't work when graphics are involved...
 		if(sprite.getX() > originalX) {

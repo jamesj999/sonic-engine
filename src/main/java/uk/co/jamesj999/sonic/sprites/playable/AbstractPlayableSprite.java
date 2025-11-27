@@ -370,12 +370,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 				}
 			}
 		}  else {
+			boolean pushActive = Math.abs(angle) <= 64;
 			if (xSpeed > 0) {
 				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF};
 				sensorsToDeactivate = new Sensor[] { pushE };
+				if(!pushActive) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+					sensorsToDeactivate = new Sensor[] { pushE, pushF };
+				}
 			} else if (xSpeed < 0) {
 				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE};
 				sensorsToDeactivate = new Sensor[] { pushF };
+				if(!pushActive) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+					sensorsToDeactivate = new Sensor[] { pushE, pushF };
+				}
 			} else {
 				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD};
 				sensorsToDeactivate = new Sensor[] { pushE, pushF };
