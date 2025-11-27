@@ -249,6 +249,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setRolling(boolean rolling) {
+		int oldHeight = getHeight();
+		int oldWidth = getWidth();
+
         if(GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
             if (rolling) {
                 setHeight(rollHeight);
@@ -263,6 +266,19 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
             }
         }
 		this.rolling = rolling;
+
+		int deltaHeight = getHeight() - oldHeight;
+		int deltaWidth = getWidth() - oldWidth;
+
+		if (GroundMode.GROUND.equals(runningMode)) {
+			// Feet at bottom (y + height). Adjust y to keep feet fixed.
+			setY((short) (getY() - deltaHeight));
+		} else if (GroundMode.RIGHTWALL.equals(runningMode)) {
+			// Feet at right (x + width). Adjust x to keep feet fixed.
+			setX((short) (getX() - deltaWidth));
+		}
+		// CEILING: Feet at top (y). y constant.
+		// LEFTWALL: Feet at left (x). x constant.
 	}
 
 	@Override

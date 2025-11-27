@@ -44,7 +44,11 @@ public class TestGroundSensor {
         GroundSensor.setLevelManager(mockLevelManager);
 
         mockSprite = new AbstractPlayableSprite("sonic", (short)0, (short)0, false) {
-            @Override protected void defineSpeeds() { }
+            @Override protected void defineSpeeds() {
+                this.rollHeight = 20;
+                this.runHeight = 30;
+                this.width = 20; // Assume constant width for this test
+            }
             @Override protected void createSensorLines() { }
             @Override public void draw() { }
         };
@@ -82,130 +86,93 @@ public class TestGroundSensor {
 
     @Test
     public void testDownSensorNormal() {
-        // Sensor at 100, 100.
-        // Tile at 100, 112 (Grid 6, 7).
-        // Tile is Full Solid (1).
-
         setTileAt(100, 112, 1);
-
         mockSprite.setX((short) 100);
         mockSprite.setY((short) 100);
-
         GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
         SensorResult result = sensor.scan();
-
         assertNotNull(result);
         assertEquals(12, result.distance());
     }
 
     @Test
     public void testDownSensorTouch() {
-        // Sensor at 100, 112.
-        // Tile at 100, 112 (Full Solid).
-        // Distance = 0.
-
         setTileAt(100, 112, 1);
-
         mockSprite.setX((short) 100);
         mockSprite.setY((short) 112);
-
         GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
         SensorResult result = sensor.scan();
-
         assertNotNull(result);
         assertEquals(0, result.distance());
     }
 
     @Test
     public void testDownSensorExtension() {
-        // Sensor at 100, 100.
-        // Tile at 100, 112 is Empty (0).
-        // Tile at 100, 128 is Full Solid (1).
-        // Extension should find tile at 128.
-        // Surface at 128.
-        // Distance = 128 - 100 = 28.
-
         setTileAt(100, 112, 0); // Empty
         setTileAt(100, 128, 1); // Full
-
         mockSprite.setX((short) 100);
         mockSprite.setY((short) 100);
-
         GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
         SensorResult result = sensor.scan();
-
         assertNotNull("Should find extended tile", result);
         assertEquals(28, result.distance());
     }
 
     @Test
     public void testDownSensorExtensionFound() {
-        // Sensor at 100, 100.
-        // Tile at 100, 112 is Full Solid (1). (Grid 7)
-        // Tile at 100, 96 (Grid 6) is Empty.
-        // Extension should find tile at 112.
-        // Surface at 112.
-        // Distance = 112 - 100 = 12.
-
         setTileAt(100, 96, 0); // Empty (Initial)
         setTileAt(100, 112, 1); // Full (Next)
-
         mockSprite.setX((short) 100);
         mockSprite.setY((short) 100);
-
         GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
         SensorResult result = sensor.scan();
-
         assertNotNull("Should find extended tile", result);
         assertEquals(12, result.distance());
     }
 
     @Test
     public void testDownSensorRegression() {
-        // Sensor at 100, 112.
-        // Tile at 100, 112 is Full Solid (1).
-        // Tile at 100, 96 is Half Solid (2) (Height 8).
-        // Surface at 96 + 16 - 8 = 104.
-        // Distance = 104 - 112 = -8.
-
         setTileAt(100, 112, 1);
         setTileAt(100, 96, 2);
-
         mockSprite.setX((short) 100);
         mockSprite.setY((short) 112);
-
         GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
         SensorResult result = sensor.scan();
-
         assertNotNull("Should find regressed tile", result);
         assertEquals(-8, result.distance());
     }
 
     @Test
     public void testRightWallSensorRotation() {
-        // Mode: RIGHTWALL.
-        // Sensor: (x=0, y=10) [Relative to Sprite in GROUND mode].
-        // Rotated for RIGHTWALL: (y, -x) -> (10, 0).
-        // Sprite Center: (100, 100).
-        // Sensor Scan Start: (110, 100).
-        // Direction: RIGHTWALL + DOWN -> RIGHT (from SpriteManager).
-        // Looking for wall to Right.
-        // Wall at (112, 100). Tile 1 (Full).
-        // Distance: (TileX + 16 - Width) - SensorX
-        // TileX = 112. Width = 16.
-        // (112 + 16 - 16) - 110 = 2.
-
         setTileAt(112, 100, 1);
-
         mockSprite.setGroundMode(GroundMode.RIGHTWALL);
         mockSprite.setX((short) 100);
         mockSprite.setY((short) 100);
-        // Note: mockSprite width/height are 0 in setup. getCentreX/Y = X/Y.
-
         GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)10, true);
         SensorResult result = sensor.scan();
-
         assertNotNull(result);
         assertEquals(2, result.distance());
+    }
+
+    @Test
+    public void testUnrollIntoGround() {
+        // Setup: Rolling on Ground.
+        mockSprite.setGroundMode(GroundMode.GROUND);
+        mockSprite.setRolling(true); // Should be 20 height
+        mockSprite.setY((short) 100);
+
+        // Bottom is Y + Height = 100 + 20 = 120.
+        // Floor is presumably at 120.
+
+        // Action: Unroll (Stand up).
+        mockSprite.setRolling(false); // Should become 30 height.
+
+        // Expectation:
+        // We want Bottom to remain at 120.
+        // So Y + 30 = 120. => Y should be 90.
+        // If Y stays 100, Bottom becomes 130 (Embedded 10px).
+
+        assertEquals("Height should be runHeight", 30, mockSprite.getHeight());
+        assertEquals("Y should be adjusted to keep feet planted", 90, mockSprite.getY());
     }
 }
