@@ -189,14 +189,27 @@ public class PlayableSpriteMovementManager extends
 				byte distance = lowestResult.distance();
 				if (distance < 0) {
 					Direction dir = lowestResult.direction();
-					short adjustment = (short)(distance * 256);
+					short lookaheadX = (short) (sprite.getXSpeed() / 256);
+					short lookaheadY = (short) (sprite.getYSpeed() / 256);
+					short subX = (short) (sprite.getXSubpixel() & 0xFF);
+					short subY = (short) (sprite.getYSubpixel() & 0xFF);
 
 					if (dir == Direction.LEFT || dir == Direction.RIGHT) {
-						if (dir == Direction.LEFT) adjustment = (short) -adjustment;
-						sprite.setXSpeed((short) (sprite.getXSpeed() + adjustment));
+						short move = lookaheadX;
+						if (dir == Direction.LEFT) {
+							move -= distance;
+						} else {
+							move += distance;
+						}
+						sprite.setXSpeed((short) ((move * 256) - subX));
 					} else {
-						if (dir == Direction.UP) adjustment = (short) -adjustment;
-						sprite.setYSpeed((short) (sprite.getYSpeed() + adjustment));
+						short move = lookaheadY;
+						if (dir == Direction.UP) {
+							move -= distance;
+						} else {
+							move += distance;
+						}
+						sprite.setYSpeed((short) ((move * 256) - subY));
 					}
 					sprite.setGSpeed((short) 0);
 				}
