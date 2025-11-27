@@ -44,6 +44,9 @@ public class SmpsSequencer implements AudioStream {
         this.synth = synth;
         this.synth.setDacData(dacData);
 
+        // Enable DAC (YM2612 Reg 2B = 0x80)
+        synth.writeFm(0, 0x2B, 0x80);
+
         if (data.length > 6) {
             int fmCount = data[2] & 0xFF;
             int psgCount = data[3] & 0xFF;
