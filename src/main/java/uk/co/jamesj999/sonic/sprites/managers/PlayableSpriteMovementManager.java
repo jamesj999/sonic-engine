@@ -187,8 +187,15 @@ public class PlayableSpriteMovementManager extends
 			SensorResult lowestResult = findLowestSensorResult(pushResult);
 			if(lowestResult != null) {
 				byte distance = lowestResult.distance();
-				if (distance < 0) {
-					Direction dir = lowestResult.direction();
+				Direction dir = lowestResult.direction();
+
+				boolean movingTowards = false;
+				if (dir == Direction.LEFT && sprite.getXSpeed() < 0) movingTowards = true;
+				else if (dir == Direction.RIGHT && sprite.getXSpeed() > 0) movingTowards = true;
+				else if (dir == Direction.UP && sprite.getYSpeed() < 0) movingTowards = true;
+				else if (dir == Direction.DOWN && sprite.getYSpeed() > 0) movingTowards = true;
+
+				if (distance < 0 || (distance == 0 && movingTowards)) {
 					short lookaheadX = (short) (sprite.getXSpeed() / 256);
 					short lookaheadY = (short) (sprite.getYSpeed() / 256);
 					short subX = (short) (sprite.getXSubpixel() & 0xFF);
