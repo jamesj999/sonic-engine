@@ -364,7 +364,7 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed -= slopeRunningVariant * Math.sin(Math.toRadians(angle));
+		gSpeed += slopeRunningVariant * Math.sin(Math.toRadians(angle));
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
@@ -488,7 +488,7 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
+					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(Math
 							.sin(Math.toRadians(angle)))));
 				}
 			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
@@ -496,7 +496,7 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * -(Math.signum(Math.sin(Math
+					gSpeed = (short) (ySpeed * (Math.signum(Math.sin(Math
 							.toRadians(angle)))));
 				}
 			}
@@ -598,11 +598,11 @@ public class PlayableSpriteMovementManager extends
 		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
 			newMode = GroundMode.GROUND;
 		} else if (angle >= 33 && angle <= 95) {
-			newMode = GroundMode.LEFTWALL;
+			newMode = GroundMode.RIGHTWALL;
 		} else if (angle >= 96 && angle <= 160) {
 			newMode = GroundMode.CEILING;
 		} else if (angle >= 161 && angle <= 223) {
-			newMode = GroundMode.RIGHTWALL;
+			newMode = GroundMode.LEFTWALL;
 		}
 
 		if (newMode != currentMode) {
