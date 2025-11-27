@@ -253,8 +253,9 @@ public class PlayableSpriteMovementManager extends
 		SensorResult lowestResult = findLowestSensorResult(results);
 
 		if(sprite.getAir()) {
-			// We are in the air and haven't landed unless we have a distance < 0 as our lowest result.
-			if (lowestResult == null || lowestResult.distance() >= 0) {
+			// We are in the air and haven't landed unless we have a distance <= 0 as our lowest result.
+			// Changed from >= 0 to > 0 to ensure we land if we are exactly on the surface (0).
+			if (lowestResult == null || lowestResult.distance() > 0) {
 				// We haven't landed, no more to do here since no terrain collision has occurred.
 				return;
 			} else {
@@ -267,7 +268,8 @@ public class PlayableSpriteMovementManager extends
 					requiredSpeed = (short) (-((sprite.getYSpeed() / 256)+ 8));
 				} else {
 					// sonic is *mostly* moving left or right
-					requiredSpeed = 0;
+					// Use a larger tolerance (-16) to ensure we land even if we penetrated the ground significantly (up to 1 block)
+					requiredSpeed = -16;
 				}
 				// Check whether
 				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
