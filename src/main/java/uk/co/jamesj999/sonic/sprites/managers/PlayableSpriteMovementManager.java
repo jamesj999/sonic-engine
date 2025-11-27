@@ -274,7 +274,11 @@ public class PlayableSpriteMovementManager extends
 					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
 					moveForSensorResult(sprite, lowestResult);
 					// And set sonic's new angle based on the tile found:
-					sprite.setAngle(lowestResult.angle());
+					if (lowestResult.angle() == (byte) 0xFF) {
+						sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
+					} else {
+						sprite.setAngle(lowestResult.angle());
+					}
 
 					// And maybe run our landing code
 					calculateLanding(sprite);
@@ -293,7 +297,11 @@ public class PlayableSpriteMovementManager extends
 
 			if(lowestResult.distance() < requiredSpeed) {
 				moveForSensorResult(sprite, lowestResult);
-				sprite.setAngle(lowestResult.angle());
+				if (lowestResult.angle() == (byte) 0xFF) {
+					sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
+				} else {
+					sprite.setAngle(lowestResult.angle());
+				}
 				updateGroundMode(sprite);
 			} else {
 				sprite.setAir(true);
