@@ -19,7 +19,7 @@ public class PatternRenderCommand implements GLCommandable {
         this.paletteTextureId = paletteTextureId;
         this.desc = desc;
         this.x = x;
-        this.y = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y;
+        this.y = y;
     }
 
     @Override
@@ -29,7 +29,7 @@ public class PatternRenderCommand implements GLCommandable {
         gl.glBlendFunc(GL2.GL_SRC_ALPHA,GL2.GL_ONE_MINUS_SRC_ALPHA);
 
         // Translate the pattern relative to the camera position
-        gl.glTranslatef(x - cameraX, y + cameraY, 0);
+        gl.glTranslatef(x - cameraX, y - cameraY, 0);
 
         // Apply horizontal and vertical flips
         if (desc.getHFlip()) {
