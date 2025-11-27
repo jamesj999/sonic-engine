@@ -24,16 +24,24 @@ public class TestSmpsSequencer {
     @Test
     public void testNoteParsing() {
         byte[] data = new byte[32];
-        data[2] = 1; // 1 FM
+        data[2] = 2; // 2 FM Channels. Track 0 is DAC. Track 1 is FM1.
         data[5] = 1; // Tempo
 
-        int trackDataPtr = 0x10;
-        data[6] = (byte)(trackDataPtr & 0xFF);
-        data[7] = (byte)((trackDataPtr >> 8) & 0xFF);
+        // Track 0 Header at 0x06 (Ignore)
 
-        data[0x10] = (byte)0x81; // Note C
-        data[0x11] = 0x01; // Duration
-        data[0x12] = (byte)0xF2; // Stop
+        // Track 1 Header at 0x0A (10)
+        // 4 bytes per FM track header.
+        // 6, 7, 8, 9 -> Track 0.
+        // 10, 11, 12, 13 -> Track 1.
+
+        int trackDataPtr = 0x14; // 20
+        data[10] = (byte)(trackDataPtr & 0xFF);
+        data[11] = (byte)((trackDataPtr >> 8) & 0xFF);
+
+        // Track Data at 20 (0x14)
+        data[0x14] = (byte)0x81; // Note C
+        data[0x15] = 0x01; // Duration
+        data[0x16] = (byte)0xF2; // Stop
 
         SmpsData smps = new SmpsData(data);
         MockSynth synth = new MockSynth();
@@ -51,6 +59,8 @@ public class TestSmpsSequencer {
         }
         // Check full log for frequency components
         String logStr = synth.log.toString();
+        // Note C (81) -> FNum 617 (0x269). Block 0.
+        // RA4 V02, RA0 V69.
         if (logStr.contains("RA4 V02") && logStr.contains("RA0 V69")) foundFreq = true;
 
         assertTrue("Should set Frequency. Log: " + logStr, foundFreq);
