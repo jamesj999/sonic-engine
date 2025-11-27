@@ -121,6 +121,8 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 
+		sprite.updateSensors(originalX, originalY);
+
 		boolean inAir = sprite.getAir();
 		if(!inAir) {
 			doWallCollision(sprite);
