@@ -7,6 +7,7 @@ import com.jogamp.openal.ALCcontext;
 import com.jogamp.openal.ALCdevice;
 import com.jogamp.common.nio.Buffers;
 
+import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 
@@ -101,12 +102,12 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     @Override
-    public void playSmps(SmpsData data) {
+    public void playSmps(SmpsData data, DacData dacData) {
         stopStream();
         // Stop music source if playing wav
         al.alSourceStop(musicSource);
 
-        currentStream = new SmpsSequencer(data);
+        currentStream = new SmpsSequencer(data, dacData);
         startStream();
     }
 

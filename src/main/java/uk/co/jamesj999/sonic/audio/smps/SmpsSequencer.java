@@ -35,9 +35,10 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
-    public SmpsSequencer(SmpsData smpsData) {
+    public SmpsSequencer(SmpsData smpsData, DacData dacData) {
         this.data = smpsData.getData();
         this.synth = new VirtualSynthesizer();
+        this.synth.setDacData(dacData);
 
         if (data.length > 6) {
             int fmCount = data[2] & 0xFF;
@@ -142,6 +143,12 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
+        // Check for DAC (Track 0)
+        if (t.type == TrackType.FM && t.channelId == 0) {
+            synth.playDac(t.note);
+            return;
+        }
+
         // Map note to freq
         // 81 = C.
         int n = t.note - 0x81;
@@ -152,6 +159,10 @@ public class SmpsSequencer implements AudioStream {
 
         if (t.type == TrackType.FM) {
             // YM2612
+            int hwCh = getHwChannel(t.channelId);
+            int port = (hwCh < 3) ? 0 : 1;
+            int ch = (hwCh % 3);
+
             // FNum = Table[noteIdx]
             // Block = octave
             int fnum = FNUM_TABLE[noteIdx];
@@ -161,15 +172,11 @@ public class SmpsSequencer implements AudioStream {
             int valA4 = (block << 3) | ((fnum >> 8) & 0x7);
             int valA0 = fnum & 0xFF;
 
-            int port = (t.channelId < 3) ? 0 : 1;
-            int ch = (t.channelId % 3);
-
             synth.writeFm(port, 0xA4 + ch, valA4);
             synth.writeFm(port, 0xA0 + ch, valA0);
 
             // Key On
-            // Reg 28. D2-D0 channel. D7-D4 ops.
-            int chVal = (t.channelId >= 3) ? (t.channelId + 1) : t.channelId;
+            int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
             synth.writeFm(0, 0x28, 0xF0 | chVal); // Key On all ops
 
         } else {
@@ -206,12 +213,26 @@ public class SmpsSequencer implements AudioStream {
 
     private void stopNote(Track t) {
         if (t.type == TrackType.FM) {
-            int chVal = (t.channelId >= 3) ? (t.channelId + 1) : t.channelId;
+            int hwCh = getHwChannel(t.channelId);
+            int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
             synth.writeFm(0, 0x28, 0x00 | chVal); // Key Off
         } else {
             if (t.channelId < 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
             }
+        }
+    }
+
+    private int getHwChannel(int trackId) {
+        // Sonic 2 Mapping: Track 0->FM6, 1->FM1, 2->FM2, 3->FM3, 4->FM4, 5->FM5
+        switch (trackId) {
+            case 0: return 5;
+            case 1: return 0;
+            case 2: return 1;
+            case 3: return 2;
+            case 4: return 3;
+            case 5: return 4;
+            default: return 0;
         }
     }
 }

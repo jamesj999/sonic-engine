@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.audio.smps;
 
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.tools.DcmDecoder;
 import uk.co.jamesj999.sonic.tools.SaxmanDecompressor;
 
 import java.util.HashMap;
@@ -11,6 +12,7 @@ public class SmpsLoader {
     private static final Logger LOGGER = Logger.getLogger(SmpsLoader.class.getName());
     private final Rom rom;
     private final SaxmanDecompressor decompressor = new SaxmanDecompressor();
+    private final DcmDecoder dcmDecoder = new DcmDecoder();
     private final Map<Integer, Integer> musicMap = new HashMap<>();
 
     public SmpsLoader(Rom rom) {
@@ -52,6 +54,57 @@ public class SmpsLoader {
             LOGGER.severe("Failed to load music " + Integer.toHexString(musicId));
             e.printStackTrace();
             return null;
+        }
+    }
+
+    public DacData loadDacData() {
+        Map<Integer, byte[]> samples = new HashMap<>();
+        Map<Integer, DacData.DacEntry> mapping = new HashMap<>();
+
+        try {
+            // Pointers at 0xECF7C
+            int ptrTable = 0xECF7C;
+            int bankStart = 0xE0000;
+
+            // Load Samples 81-91
+            for (int i = 0; i < 20; i++) {
+                int entryAddr = ptrTable + (i * 4);
+                // Little Endian
+                int p1 = rom.readByte(entryAddr) & 0xFF;
+                int p2 = rom.readByte(entryAddr + 1) & 0xFF;
+                int ptr = p1 | (p2 << 8);
+
+                int l1 = rom.readByte(entryAddr + 2) & 0xFF;
+                int l2 = rom.readByte(entryAddr + 3) & 0xFF;
+                int len = l1 | (l2 << 8);
+
+                if (ptr == 0 || len == 0) continue;
+
+                // Read compressed
+                int romAddr = bankStart + ptr;
+                byte[] compressed = rom.readBytes(romAddr, len);
+                byte[] pcm = dcmDecoder.decode(compressed);
+
+                samples.put(0x81 + i, pcm);
+            }
+
+            // Master List at 0xECF9C
+            int mapAddr = 0xECF9C;
+            for (int i = 0; i < 20; i++) {
+                int noteId = 0x81 + i;
+                int sampleId = rom.readByte(mapAddr + i * 2) & 0xFF;
+                int rate = rom.readByte(mapAddr + i * 2 + 1) & 0xFF;
+
+                if (sampleId == 0xFF) continue;
+
+                mapping.put(noteId, new DacData.DacEntry(sampleId, rate));
+            }
+
+            return new DacData(samples, mapping);
+        } catch (Exception e) {
+            LOGGER.severe("Failed to load DAC Data");
+            e.printStackTrace();
+            return new DacData(new HashMap<>(), new HashMap<>());
         }
     }
 }

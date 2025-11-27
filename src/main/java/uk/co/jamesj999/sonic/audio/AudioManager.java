@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.audio;
 
+import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -11,6 +12,7 @@ public class AudioManager {
     private static AudioManager instance;
     private AudioBackend backend;
     private SmpsLoader smpsLoader;
+    private DacData dacData;
 
     private AudioManager() {
         // Default to NullBackend
@@ -41,13 +43,14 @@ public class AudioManager {
 
     public void setRom(Rom rom) {
         this.smpsLoader = new SmpsLoader(rom);
+        this.dacData = smpsLoader.loadDacData();
     }
 
     public void playMusic(int musicId) {
         if (smpsLoader != null) {
             SmpsData data = smpsLoader.loadMusic(musicId);
             if (data != null) {
-                backend.playSmps(data);
+                backend.playSmps(data, dacData);
                 return;
             }
         }

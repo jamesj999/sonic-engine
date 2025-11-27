@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.audio;
 
+import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 
 public interface AudioBackend {
@@ -10,7 +11,7 @@ public interface AudioBackend {
      */
     void playMusic(int musicId);
 
-    void playSmps(SmpsData data);
+    void playSmps(SmpsData data, DacData dacData);
 
     /**
      * Plays a sound effect by name (mapped to a WAV file).
