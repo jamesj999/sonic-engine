@@ -225,7 +225,7 @@ public class Sonic2 extends Game {
 
     private void loadSonicSprite() throws IOException {
         // TODO: Get the real size of the sprite art
-        int sonicSpriteArtSize = 0x2000;
+        int sonicSpriteArtSize = 0x14320;
         SpriteArt sonicSpriteArt = new SpriteArt("sonic");
         sonicSpriteArt.load(rom, SONIC_SPRITE_ART_ADDR, sonicSpriteArtSize);
         SpriteArtManager.getInstance().addSpriteArt("sonic", sonicSpriteArt);

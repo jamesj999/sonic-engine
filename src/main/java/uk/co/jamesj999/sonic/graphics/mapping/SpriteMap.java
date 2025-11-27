@@ -21,11 +21,11 @@ public class SpriteMap {
             short y = rom.readByte(mappingOffset);
             byte height = (byte) (rom.readByte(mappingOffset + 1) >> 2);
             byte width = (byte) (rom.readByte(mappingOffset + 1) & 0x03);
-            short patternData = (short) rom.read16BitAddr(mappingOffset + 2);
+            int patternData = rom.read16BitAddr(mappingOffset + 2);
             short x = rom.readByte(mappingOffset + 4);
             boolean hFlip = (patternData & 0x800) > 0;
             boolean vFlip = (patternData & 0x1000) > 0;
-            byte palette = (byte) (patternData >> 13);
+            byte palette = (byte) ((patternData >> 13) & 0x03);
             short patternIndex = (short) (patternData & 0x7FF);
             mappings.add(new SpriteMapping(x, y, height, width, hFlip, vFlip, palette, patternIndex));
         }
