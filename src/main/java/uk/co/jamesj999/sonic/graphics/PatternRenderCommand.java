@@ -6,6 +6,8 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 
+import java.nio.FloatBuffer;
+
 public class PatternRenderCommand implements GLCommandable {
 
     private final int patternTextureId;
@@ -13,6 +15,31 @@ public class PatternRenderCommand implements GLCommandable {
     private final PatternDesc desc;
     private final int x;
     private final int y;
+
+    // Static buffers for reuse
+    private static final FloatBuffer VERTEX_BUFFER;
+    private static final FloatBuffer TEX_COORD_BUFFER;
+
+    static {
+        // Define the vertices for a quad (2 triangles)
+        float[] vertices = {
+                0.0f, 0.0f,  // Bottom-left
+                8.0f, 0.0f,  // Bottom-right
+                8.0f, 8.0f,  // Top-right
+                0.0f, 8.0f   // Top-left
+        };
+
+        // Define the texture coordinates for the quad
+        float[] texCoords = {
+                0.0f, 0.0f,  // Bottom-left
+                1.0f, 0.0f,  // Bottom-right
+                1.0f, 1.0f,  // Top-right
+                0.0f, 1.0f   // Top-left
+        };
+
+        VERTEX_BUFFER = GLBuffers.newDirectFloatBuffer(vertices);
+        TEX_COORD_BUFFER = GLBuffers.newDirectFloatBuffer(texCoords);
+    }
 
     public PatternRenderCommand(int patternTextureId, int paletteTextureId, PatternDesc desc, int x, int y) {
         this.patternTextureId = patternTextureId;
@@ -60,29 +87,13 @@ public class PatternRenderCommand implements GLCommandable {
         int indexedColorTextureLocation = gl.glGetUniformLocation(shaderProgram.getProgramId(), "IndexedColorTexture");
         gl.glUniform1i(indexedColorTextureLocation, 1); // Texture unit 1
 
-        // Define the vertices for a quad (2 triangles)
-        float[] vertices = {
-                0.0f, 0.0f,  // Bottom-left
-                8.0f, 0.0f,  // Bottom-right
-                8.0f, 8.0f,  // Top-right
-                0.0f, 8.0f   // Top-left
-        };
-
-        // Define the texture coordinates for the quad
-        float[] texCoords = {
-                0.0f, 0.0f,  // Bottom-left
-                1.0f, 0.0f,  // Bottom-right
-                1.0f, 1.0f,  // Top-right
-                0.0f, 1.0f   // Top-left
-        };
-
         // Bind the vertex data
         gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
-        gl.glVertexPointer(2, GL2.GL_FLOAT, 0, GLBuffers.newDirectFloatBuffer(vertices));
+        gl.glVertexPointer(2, GL2.GL_FLOAT, 0, VERTEX_BUFFER);
 
         // Bind the texture coordinate data
         gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
-        gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, GLBuffers.newDirectFloatBuffer(texCoords));
+        gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, TEX_COORD_BUFFER);
 
         // Draw the quad as two triangles forming a rectangle
         gl.glDrawArrays(GL2.GL_QUADS, 0, 4);
