@@ -182,7 +182,7 @@ public class PlayableSpriteMovementManager extends
 			// We scan for the wall at the position we will be at next frame.
 			// If we find a wall, we move to it and stop.
 			for(int i = 0; i < sprite.getPushSensors().length; i++) {
-				pushResult[i] = sprite.getPushSensors()[i].scan(sprite.getXSpeed(), sprite.getYSpeed());
+				pushResult[i] = sprite.getPushSensors()[i].scan((short) (sprite.getXSpeed() / 256), (short) (sprite.getYSpeed() / 256));
 			}
 			SensorResult lowestResult = findLowestSensorResult(pushResult);
 			if(lowestResult != null) {
@@ -191,7 +191,7 @@ public class PlayableSpriteMovementManager extends
 					// We are going to hit a wall.
 					// We add the distance (which is negative) to our xSpeed so we move exactly to the wall.
 					// Then we set gSpeed to 0.
-					sprite.setXSpeed((short) (sprite.getXSpeed() + distance));
+					sprite.setXSpeed((short) (sprite.getXSpeed() + (distance * 256)));
 					sprite.setGSpeed((short) 0);
 				}
 			}
