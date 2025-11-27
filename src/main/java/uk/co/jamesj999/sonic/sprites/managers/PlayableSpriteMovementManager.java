@@ -205,10 +205,10 @@ public class PlayableSpriteMovementManager extends
 					// And set sonic's new angle based on the tile found:
 					sprite.setAngle(lowestResult.angle());
 
-					updateGroundMode(sprite);
-
 					// And maybe run our landing code
 					calculateLanding(sprite);
+
+					updateGroundMode(sprite);
 				}
 			}
 		} else {
