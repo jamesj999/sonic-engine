@@ -11,7 +11,8 @@ public class SmpsSequencer implements AudioStream {
     private final byte[] data;
     private final VirtualSynthesizer synth;
     private final List<Track> tracks = new ArrayList<>();
-    private double samplesPerTick = 44100.0 / 60.0; // Approx 60Hz
+    private static final double DEFAULT_TEMPO = 60.0; // Approx 60Hz
+    private double samplesPerTick = 44100.0 / DEFAULT_TEMPO;
     private double sampleCounter = 0;
 
     // F-Num table for Octave 4
@@ -48,6 +49,11 @@ public class SmpsSequencer implements AudioStream {
 
         // Enable DAC (YM2612 Reg 2B = 0x80)
         synth.writeFm(0, 0x2B, 0x80);
+
+        int tempo = smpsData.getTempo();
+        if (tempo > 0) {
+            samplesPerTick = 44100.0 / tempo;
+        }
 
         if (data.length > 6) {
             int fmCount = data[2] & 0xFF;
