@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.graphics;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.graphics.art.SpriteArt;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.PatternDesc;
@@ -67,31 +68,7 @@ public class GraphicsManager {
 	 * Cache a pattern texture (contains color indices) in the GPU.
 	 */
 	public void cachePatternTexture(Pattern pattern, int patternId) {
-		int textureId = glGenTexture();
-
-		// Create a buffer to store the color indices (8x8 grid of 1-byte indices)
-		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
-
-		// Fill the buffer with the pattern's color indices
-		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
-			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
-				byte colorIndex = pattern.getPixel(row, col); // Get color index (0-15)
-				patternBuffer.put(colorIndex);
-			}
-		}
-		patternBuffer.flip();
-
-		// Upload the pattern buffer to the GPU as a 2D texture
-		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
-
-		// Set texture parameters (wrapping and filtering)
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
-
-		patternTextureMap.put("pattern_" + patternId, textureId);
+		cachePatternTexture(pattern, patternId, null);
 	}
 
 
@@ -127,15 +104,57 @@ public class GraphicsManager {
 	}
 
 
+	public void cacheSpriteArt(SpriteArt spriteArt) {
+		byte[] art = spriteArt.getArt();
+		int patternCount = art.length / Pattern.PATTERN_SIZE_IN_ROM;
+		for (int i = 0; i < patternCount; i++) {
+			byte[] patternBytes = new byte[Pattern.PATTERN_SIZE_IN_ROM];
+			System.arraycopy(art, i * Pattern.PATTERN_SIZE_IN_ROM, patternBytes, 0, Pattern.PATTERN_SIZE_IN_ROM);
+			Pattern pattern = new Pattern();
+			pattern.fromSegaFormat(patternBytes);
+			cachePatternTexture(pattern, i, spriteArt.getCode());
+		}
+	}
+
+	public void cachePatternTexture(Pattern pattern, int patternId, String spriteCode) {
+		int textureId = glGenTexture();
+
+		// Create a buffer to store the color indices (8x8 grid of 1-byte indices)
+		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
+
+		// Fill the buffer with the pattern's color indices
+		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
+			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
+				byte colorIndex = pattern.getPixel(row, col); // Get color index (0-15)
+				patternBuffer.put(colorIndex);
+			}
+		}
+		patternBuffer.flip();
+
+		// Upload the pattern buffer to the GPU as a 2D texture
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
+		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+
+		// Set texture parameters (wrapping and filtering)
+		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
+		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
+		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
+		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
+		String key = (spriteCode == null) ? "pattern_" + patternId : "sprite_" + spriteCode + "_" + patternId;
+		patternTextureMap.put(key, textureId);
+	}
+
+
 	/**
 	 * Render a pre-cached pattern at the given coordinates using the specified palette.
 	 */
-	public void renderPattern(PatternDesc desc, int x, int y) {
-		Integer patternTextureId = patternTextureMap.get("pattern_" + desc.getPatternIndex());
+	public void renderPattern(PatternDesc desc, int x, int y, String spriteCode) {
+		String key = (spriteCode == null) ? "pattern_" + desc.getPatternIndex() : "sprite_" + spriteCode + "_" + desc.getPatternIndex();
+		Integer patternTextureId = patternTextureMap.get(key);
 		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
 
 		if (patternTextureId == null || paletteTextureId == null) {
-			System.err.println("Pattern or Palette not cached.");
+			System.err.println("Pattern or Palette not cached for key " + key + ".");
 			return;
 		}
 

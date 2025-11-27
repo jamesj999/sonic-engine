@@ -49,6 +49,14 @@ public final class PatternDesc {
         updateFields();
     }
 
+    public PatternDesc(int patternIndex, int paletteIndex, boolean vFlip, boolean hFlip) {
+        this.patternIndex = patternIndex;
+        this.paletteIndex = paletteIndex;
+        this.vFlip = vFlip;
+        this.hFlip = hFlip;
+        this.index = (paletteIndex << 13) | (vFlip ? 0x1000 : 0) | (hFlip ? 0x800 : 0) | patternIndex;
+    }
+
     // Getter for the raw index value
     public int get() {
         return index;
