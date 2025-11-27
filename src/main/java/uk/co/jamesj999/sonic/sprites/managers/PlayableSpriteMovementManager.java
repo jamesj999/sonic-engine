@@ -481,14 +481,14 @@ public class PlayableSpriteMovementManager extends
 					gSpeed = xSpeed;
 				} else {
 					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
-							.cos(Math.toRadians(angle)))));
+							.sin(Math.toRadians(angle)))));
 				}
 			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
 					|| (originalAngle >= (byte) 0x20 && originalAngle <= (byte) 0x3F)) {
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * -(Math.signum(Math.cos(Math
+					gSpeed = (short) (ySpeed * -(Math.signum(Math.sin(Math
 							.toRadians(angle)))));
 				}
 			}
