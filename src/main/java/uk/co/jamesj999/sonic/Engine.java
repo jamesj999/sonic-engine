@@ -84,7 +84,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 	public void init(GLAutoDrawable drawable) {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL graphics context
 		glu = new GLU(); // get GL Utilities
-		gl.glClearColor(0.2f, 0.4f, 1.0f, 1.0f); // set background (clear) color
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smooths out
 									// lighting
         try {
@@ -242,6 +241,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	 */
 	public void display(GLAutoDrawable drawable) {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL 2 graphics context
+		levelManager.setClearColor(gl);
 		gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear color
 																// and depth
 																// buffers
