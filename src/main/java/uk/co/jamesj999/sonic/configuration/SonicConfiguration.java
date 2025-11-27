@@ -92,6 +92,11 @@ public enum SonicConfiguration {
     DEBUG_VIEW_ENABLED(true),
 
 	/**
+	 * Whether to display debugging collision information on screen.
+	 */
+	DEBUG_COLLISION_VIEW_ENABLED(true),
+
+	/**
 	 * Filename of ROM to use (temporary)
 	 */
 	ROM_FILENAME("Sonic The Hedgehog 2 (W) (REV01) [!].gen"),

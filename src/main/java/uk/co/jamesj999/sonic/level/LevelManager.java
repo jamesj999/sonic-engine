@@ -12,6 +12,7 @@ import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
@@ -327,6 +328,10 @@ public class LevelManager {
             int x,
             int y
     ) {
+        if (!configService.getBoolean(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED)) {
+            return;
+        }
+
         CollisionMode collisionMode = isPrimary
                 ? chunkDesc.getPrimaryCollisionMode()
                 : chunkDesc.getSecondaryCollisionMode();
@@ -358,6 +363,15 @@ public class LevelManager {
         boolean hFlip = chunkDesc.getHFlip();
         boolean yFlip = chunkDesc.getVFlip(); // Using VFlip as per your current code
 
+        // Disable texturing and shaders for drawing solid colors
+        ShaderProgram shaderProgram = graphicsManager.getShaderProgram();
+        int shaderProgramId = 0;
+        if (shaderProgram != null) {
+            shaderProgramId = shaderProgram.getProgramId();
+        }
+        commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+
         // Iterate over each pixel column in the tile
         for (int i = 0; i < LevelConstants.CHUNK_WIDTH; i++) {
             int tileIndex = hFlip ? (LevelConstants.CHUNK_HEIGHT - 1 - i) : i;
@@ -381,7 +395,7 @@ public class LevelManager {
                     drawEndY = y - height;
                 }
 
-                /*commands.add(new GLCommand(
+                commands.add(new GLCommand(
                         GLCommand.CommandType.RECTI,
                         GL2.GL_2D,
                         r,
@@ -391,8 +405,13 @@ public class LevelManager {
                         drawEndY,
                         drawEndX,
                         drawStartY
-                ));*/
+                ));
             }
+        }
+        // Re-enable texturing and shader for subsequent rendering
+        commands.add(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+        if (shaderProgramId != 0) {
+            commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, shaderProgramId));
         }
     }
 

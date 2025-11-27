@@ -7,7 +7,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 public class GLCommand implements GLCommandable {
 	private final int screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT);
 	public enum CommandType {
-		RECTI, VERTEX2I;
+		RECTI, VERTEX2I, USE_PROGRAM, ENABLE, DISABLE;
 	}
 
 	public enum BlendType {
@@ -26,7 +26,12 @@ public class GLCommand implements GLCommandable {
 	private int y1;
 	private int x2;
 	private int y2;
+	private int value;
 
+	public GLCommand(CommandType commandType, int value) {
+		this.glCmdCommandType = commandType;
+		this.value = value;
+	}
 
 
 	/**
@@ -72,17 +77,18 @@ public class GLCommand implements GLCommandable {
 
 	public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth,
 			int cameraHeight) {
-		// int xLeftBound = cameraX;
-		// int xRightBound = cameraX + cameraWidth;
-		// int yBottomBound = cameraY;
-		// int yTopBound = cameraY + cameraHeight;
-		//
-		// if ((x1 < xLeftBound && x2 < xLeftBound)
-		// || (x1 > xRightBound && x2 > xRightBound)
-		// || (y1 < yBottomBound && x2 < yBottomBound)
-		// || (y1 > yTopBound && y2 > yTopBound)) {
-		// return;
-		// }
+		switch (glCmdCommandType) {
+			case USE_PROGRAM:
+				gl.glUseProgram(value);
+				return;
+			case ENABLE:
+				gl.glEnable(value);
+				return;
+			case DISABLE:
+				gl.glDisable(value);
+				return;
+		}
+
 		boolean single = drawMethod != -1;
 		if (single) {
 			gl.glBegin(drawMethod);
