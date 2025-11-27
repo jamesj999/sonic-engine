@@ -67,6 +67,7 @@ public class LevelManager {
             Rom rom = new Rom();
             rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
             Game game = new Sonic2(rom);
+            AudioManager.getInstance().setRom(rom);
             AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
         } catch (IOException e) {
