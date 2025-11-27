@@ -1,12 +1,34 @@
 package uk.co.jamesj999.sonic.configuration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 public class SonicConfigurationService {
 	private static SonicConfigurationService sonicConfigurationService;
+	private Map<String, Object> config;
+
+	private SonicConfigurationService() {
+		ObjectMapper mapper = new ObjectMapper();
+		try (InputStream is = getClass().getResourceAsStream("/config.json")) {
+			if (is != null) {
+				config = mapper.readValue(is, Map.class);
+			} else {
+				System.err.println("Could not find config.json, using defaults.");
+				config = new HashMap<>();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			config = new HashMap<>();
+		}
+	}
 
 	public int getInt(SonicConfiguration sonicConfiguration) {
-		Object value = sonicConfiguration.getValue();
+		Object value = getConfigValue(sonicConfiguration);
 		if (value instanceof Integer) {
 			return ((Integer) value).intValue();
 		} else {
@@ -19,7 +41,7 @@ public class SonicConfigurationService {
 	}
 
 	public short getShort(SonicConfiguration sonicConfiguration) {
-		Object value = sonicConfiguration.getValue();
+		Object value = getConfigValue(sonicConfiguration);
 		if (value instanceof Short) {
 			return ((Short) value).shortValue();
 		} else if (value instanceof Integer) {
@@ -34,15 +56,16 @@ public class SonicConfigurationService {
 	}
 
 	public String getString(SonicConfiguration sonicConfiguration) {
-		if (sonicConfiguration.getValue() != null) {
-			return sonicConfiguration.getValue().toString();
+		Object value = getConfigValue(sonicConfiguration);
+		if (value != null) {
+			return value.toString();
 		} else {
 			return StringUtils.EMPTY;
 		}
 	}
 
 	public double getDouble(SonicConfiguration sonicConfiguration) {
-		Object value = sonicConfiguration.getValue();
+		Object value = getConfigValue(sonicConfiguration);
 		if (value instanceof Double) {
 			return ((Double) value).doubleValue();
 		} else {
@@ -55,7 +78,7 @@ public class SonicConfigurationService {
 	}
 
     public boolean getBoolean(SonicConfiguration sonicConfiguration) {
-        Object value = sonicConfiguration.getValue();
+        Object value = getConfigValue(sonicConfiguration);
         if(value instanceof Boolean) {
             return ((Boolean) value).booleanValue();
         } else {
@@ -68,5 +91,12 @@ public class SonicConfigurationService {
 			sonicConfigurationService = new SonicConfigurationService();
 		}
 		return sonicConfigurationService;
+	}
+
+	private Object getConfigValue(SonicConfiguration sonicConfiguration) {
+		if (config != null && config.containsKey(sonicConfiguration.name())) {
+			return config.get(sonicConfiguration.name());
+		}
+		return sonicConfiguration.getValue();
 	}
 }
