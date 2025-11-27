@@ -188,10 +188,16 @@ public class PlayableSpriteMovementManager extends
 			if(lowestResult != null) {
 				byte distance = lowestResult.distance();
 				if (distance < 0) {
-					// We are going to hit a wall.
-					// We add the distance (which is negative) to our xSpeed so we move exactly to the wall.
-					// Then we set gSpeed to 0.
-					sprite.setXSpeed((short) (sprite.getXSpeed() + (distance * 256)));
+					Direction dir = lowestResult.direction();
+					short adjustment = (short)(distance * 256);
+
+					if (dir == Direction.LEFT || dir == Direction.RIGHT) {
+						if (dir == Direction.LEFT) adjustment = (short) -adjustment;
+						sprite.setXSpeed((short) (sprite.getXSpeed() + adjustment));
+					} else {
+						if (dir == Direction.UP) adjustment = (short) -adjustment;
+						sprite.setYSpeed((short) (sprite.getYSpeed() + adjustment));
+					}
 					sprite.setGSpeed((short) 0);
 				}
 			}
@@ -634,11 +640,11 @@ public class PlayableSpriteMovementManager extends
 		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
 			newMode = GroundMode.GROUND;
 		} else if (angle >= 33 && angle <= 95) {
-			newMode = GroundMode.RIGHTWALL;
+			newMode = GroundMode.LEFTWALL;
 		} else if (angle >= 96 && angle <= 160) {
 			newMode = GroundMode.CEILING;
 		} else if (angle >= 161 && angle <= 223) {
-			newMode = GroundMode.LEFTWALL;
+			newMode = GroundMode.RIGHTWALL;
 		}
 
 		if (newMode != currentMode) {
