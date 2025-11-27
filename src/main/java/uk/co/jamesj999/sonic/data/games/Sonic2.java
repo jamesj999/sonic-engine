@@ -24,6 +24,7 @@ public class Sonic2 extends Game {
     public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
+    private static final int MUSIC_PLAYLIST_ADDR = 0x3EA0;
 
     private static final int[][] START_POSITIONS = {
             {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
@@ -90,6 +91,12 @@ public class Sonic2 extends Game {
                 "Sky Chase Zone - Act 1", "Wing Fortress Zone - Act 1",
                 "Death Egg Zone - Act 1"
         );
+    }
+
+    @Override
+    public int getMusicId(int levelIdx) throws IOException {
+        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+        return rom.readByte(MUSIC_PLAYLIST_ADDR + zoneIdx) & 0xFF;
     }
 
     @Override
