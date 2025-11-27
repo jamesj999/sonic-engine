@@ -1,21 +1,19 @@
 package uk.co.jamesj999.sonic.audio.synth;
 
 public class VirtualSynthesizer {
+    private final PsgChip psg = new PsgChip();
+    private final Ym2612Chip ym = new Ym2612Chip();
 
     public void render(short[] buffer) {
-        // Placeholder: Generate silence.
-        // In a real implementation, this would mix FM and PSG output.
-        // For demonstration, we could generate a sine wave if channels are active.
-        for (int i = 0; i < buffer.length; i++) {
-            buffer[i] = 0;
-        }
+        psg.render(buffer);
+        ym.render(buffer);
     }
 
     public void writeFm(int port, int reg, int val) {
-        // Simulate writing to YM2612
+        ym.write(port, reg, val);
     }
 
     public void writePsg(int val) {
-        // Simulate writing to SN76489
+        psg.write(val);
     }
 }
