@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic;
 
 import com.jogamp.opengl.util.FPSAnimator;
 import uk.co.jamesj999.sonic.Control.InputHandler;
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
@@ -93,6 +95,8 @@ public class Engine extends GLCanvas implements GLEventListener {
         }
         graphicsManager.setGraphics(gl);
 
+        AudioManager.getInstance().setBackend(new JOALAudioBackend());
+
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
 				(short) 100, (short) 624, debugModeEnabled);
@@ -135,6 +139,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	}
 
 	public void update() {
+		AudioManager.getInstance().update();
 		timerManager.update();
 		spriteCollisionManager.update(inputHandler);
 		camera.updatePosition();
@@ -275,6 +280,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	 */
 	public void dispose(GLAutoDrawable drawable) {
 		graphicsManager.cleanup();
+        AudioManager.getInstance().destroy();
 	}
 
 	public static void nextDebugState() {

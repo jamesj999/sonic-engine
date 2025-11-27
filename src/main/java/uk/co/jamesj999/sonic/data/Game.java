@@ -15,6 +15,8 @@ public abstract class Game {
 
     public abstract Level loadLevel(int levelIdx) throws IOException;
 
+    public abstract int getMusicId(int levelIdx) throws IOException;
+
     public abstract boolean canRelocateLevels();
 
     public abstract boolean canSave();
