@@ -11,7 +11,13 @@ public class SmpsSequencer implements AudioStream {
     private final byte[] data;
     private final VirtualSynthesizer synth;
     private final List<Track> tracks = new ArrayList<>();
-    private double samplesPerTick = 44100.0 / 60.0; // Approx 60Hz
+    private static final double DEFAULT_FRAME_RATE = 60.0; // Approx 60Hz VBlank
+    private static final int TEMPO_MOD_BASE = 256; // Sonic 2 main tempo duty cycle
+    private static final int DURATION_MAX = 0xFF;
+    private double samplesPerFrame = 44100.0 / DEFAULT_FRAME_RATE;
+    private int tempoWeight = TEMPO_MOD_BASE;
+    private int tempoAccumulator = 0;
+    private int dividingTiming = 1;
     private double sampleCounter = 0;
 
     // F-Num table for Octave 4
@@ -28,6 +34,8 @@ public class SmpsSequencer implements AudioStream {
         int duration;
         int note;
         boolean active = true;
+        int rawDuration;
+        int scaledDuration;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -48,6 +56,14 @@ public class SmpsSequencer implements AudioStream {
 
         // Enable DAC (YM2612 Reg 2B = 0x80)
         synth.writeFm(0, 0x2B, 0x80);
+
+        dividingTiming = smpsData.getDividingTiming();
+        int tempo = smpsData.getTempo();
+        if (tempo > 0) {
+            tempoWeight = tempo;
+        } else if (tempo == 0) {
+            tempoWeight = 0; // Spec: tempo 0 means the song does not run
+        }
 
         if (data.length > 6) {
             int fmCount = data[2] & 0xFF;
@@ -73,9 +89,9 @@ public class SmpsSequencer implements AudioStream {
     public int read(short[] buffer) {
         for (int i = 0; i < buffer.length; i++) {
             sampleCounter++;
-            if (sampleCounter >= samplesPerTick) {
-                sampleCounter -= samplesPerTick;
-                tick();
+            if (sampleCounter >= samplesPerFrame) {
+                sampleCounter -= samplesPerFrame;
+                processTempoFrame();
             }
             // Generate 1 sample
             short[] single = new short[1]; // Inefficient but simple for now
@@ -113,18 +129,18 @@ public class SmpsSequencer implements AudioStream {
                     if (t.pos < data.length) {
                         int next = data[t.pos] & 0xFF;
                         if (next < 0x80) {
-                            t.duration = next;
+                            setDuration(t, next);
                             t.pos++;
                         } else {
                             // Reuse previous duration if not specified.
-                            if (t.duration == 0) t.duration = 1;
+                            reuseDuration(t);
                         }
                     }
                     playNote(t);
                     break; // Consumed time
                 } else {
                     // Duration only
-                    t.duration = cmd;
+                    setDuration(t, cmd);
                     playNote(t);
                     break;
                 }
@@ -132,20 +148,92 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
-    private void handleFlag(Track t, int cmd) {
-        if (cmd == 0xF2) { // Stop
-            t.active = false;
-            stopNote(t);
-        } else if (cmd == 0xE1) {
-            // Freq displacement (1 byte param)
-            t.pos++;
-        } else if (cmd == 0xEF) {
-            // Set Voice (1 byte param)
-            if (t.pos < data.length) {
-                int voiceId = data[t.pos++] & 0xFF;
-                loadVoice(t, voiceId);
-            }
+    private void processTempoFrame() {
+        tempoAccumulator += tempoWeight;
+        while (tempoAccumulator >= TEMPO_MOD_BASE) {
+            tempoAccumulator -= TEMPO_MOD_BASE;
+            tick();
         }
+    }
+
+    private void handleFlag(Track t, int cmd) {
+        switch (cmd) {
+            case 0xF2: // Stop
+                t.active = false;
+                stopNote(t);
+                break;
+            case 0xE1:
+                // Freq displacement (1 byte param)
+                t.pos++;
+                break;
+            case 0xEF:
+                // Set Voice (1 byte param)
+                if (t.pos < data.length) {
+                    int voiceId = data[t.pos++] & 0xFF;
+                    loadVoice(t, voiceId);
+                }
+                break;
+            case 0xEA:
+                // Set main tempo (immediate effect)
+                if (t.pos < data.length) {
+                    int newTempo = data[t.pos++] & 0xFF;
+                    setTempoWeight(newTempo);
+                }
+                break;
+            case 0xEB:
+                // Set dividing timing
+                if (t.pos < data.length) {
+                    int newDividingTiming = data[t.pos++] & 0xFF;
+                    updateDividingTiming(newDividingTiming);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void setTempoWeight(int newTempo) {
+        tempoWeight = newTempo > 0 ? newTempo : 0;
+    }
+
+    private void updateDividingTiming(int newDividingTiming) {
+        dividingTiming = newDividingTiming;
+        for (Track track : tracks) {
+            if (!track.active || track.scaledDuration == 0) {
+                continue;
+            }
+            int elapsed = track.scaledDuration - track.duration;
+            int newScaledDuration = scaleDuration(track.rawDuration);
+            int newRemaining = newScaledDuration - elapsed;
+            if (newRemaining < 0) {
+                newRemaining = 0;
+            }
+            track.scaledDuration = newScaledDuration;
+            track.duration = newRemaining;
+        }
+    }
+
+    private void setDuration(Track track, int rawDuration) {
+        track.rawDuration = rawDuration;
+        track.scaledDuration = scaleDuration(rawDuration);
+        track.duration = track.scaledDuration;
+    }
+
+    private void reuseDuration(Track track) {
+        if (track.rawDuration == 0) {
+            track.rawDuration = 1;
+        }
+        setDuration(track, track.rawDuration);
+    }
+
+    private int scaleDuration(int rawDuration) {
+        int factor = dividingTiming == 0 ? 256 : dividingTiming;
+        int scaled = (rawDuration * factor) & DURATION_MAX;
+        if (scaled == 0) {
+            // 0 duration represents 256 frames in S3K when timing is 0
+            return 256;
+        }
+        return scaled;
     }
 
     private void loadVoice(Track t, int voiceId) {

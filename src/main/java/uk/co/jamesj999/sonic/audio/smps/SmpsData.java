@@ -5,6 +5,7 @@ public class SmpsData {
     private int voicePtr;
     private int channels;
     private int psgChannels;
+    private int dividingTiming = 1;
     private int tempo;
 
     public SmpsData(byte[] data) {
@@ -14,7 +15,8 @@ public class SmpsData {
             this.voicePtr = (data[0] & 0xFF) | ((data[1] & 0xFF) << 8);
             this.channels = data[2] & 0xFF; // FM + DAC
             this.psgChannels = data[3] & 0xFF;
-            // 04 is Timing
+            this.dividingTiming = data[4] & 0xFF;
+            // 05 is main tempo (Sonic 2 duty cycle)
             this.tempo = data[5] & 0xFF;
         }
     }
@@ -33,6 +35,10 @@ public class SmpsData {
 
     public int getPsgChannels() {
         return psgChannels;
+    }
+
+    public int getDividingTiming() {
+        return dividingTiming;
     }
 
     public int getTempo() {

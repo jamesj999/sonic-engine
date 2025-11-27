@@ -115,6 +115,13 @@ public class JOALAudioBackend implements AudioBackend {
     @Override
     public void playSfxSmps(SmpsData data, DacData dacData) {
         this.sfxStream = new SmpsSequencer(data, dacData);
+        int[] queued = new int[1];
+        al.alGetSourcei(musicSource, AL.AL_BUFFERS_QUEUED, queued, 0);
+        if (queued[0] == 0) {
+            al.alSourceStop(musicSource);
+            al.alSourcei(musicSource, AL.AL_BUFFER, 0);
+            startStream();
+        }
     }
 
     private void startStream() {
