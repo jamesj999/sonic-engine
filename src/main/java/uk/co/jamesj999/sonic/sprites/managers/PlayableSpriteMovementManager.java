@@ -142,15 +142,15 @@ public class PlayableSpriteMovementManager extends
 		inAir = sprite.getAir();
 		boolean isRoll = sprite.getRolling();
 
-		if(inAir) {
-			doWallCollision(sprite);
-		}
-
 		// Perform terrain checks - results are updated directly into the sprite
 		SensorResult[] groundResult = terrainCollisionManager.getSensorResult(sprite.getGroundSensors());
 		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
 
 		doTerrainCollision(sprite, groundResult);
+
+		if(sprite.getAir()) {
+			doWallCollision(sprite);
+		}
 
 		// This won't work when graphics are involved...
 		if(sprite.getX() > originalX) {
