@@ -36,8 +36,12 @@ public class SmpsSequencer implements AudioStream {
     }
 
     public SmpsSequencer(SmpsData smpsData, DacData dacData) {
+        this(smpsData, dacData, new VirtualSynthesizer());
+    }
+
+    public SmpsSequencer(SmpsData smpsData, DacData dacData, VirtualSynthesizer synth) {
         this.data = smpsData.getData();
-        this.synth = new VirtualSynthesizer();
+        this.synth = synth;
         this.synth.setDacData(dacData);
 
         if (data.length > 6) {
