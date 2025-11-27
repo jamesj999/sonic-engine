@@ -233,7 +233,14 @@ public class PlayableSpriteMovementManager extends
 			SensorResult lowestResult = findLowestSensorResult(pushResult);
 			if(lowestResult != null) {
 				byte distance = lowestResult.distance();
-				if (distance < 0) {
+				Direction dir = lowestResult.direction();
+				boolean collision = distance < 0;
+				if (!collision && distance == 0) {
+					if (dir == Direction.RIGHT && (sprite.getXSubpixel() & 0xFF) > 0) collision = true;
+					else if (dir == Direction.DOWN && (sprite.getYSubpixel() & 0xFF) > 0) collision = true;
+				}
+
+				if (collision) {
 					moveForSensorResult(sprite, lowestResult);
 					sprite.setXSpeed((short) 0);
 					sprite.setGSpeed((short) 0);
