@@ -62,6 +62,73 @@ public class GroundSensor extends Sensor {
         SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc);
         byte initialHeight = getMetric(initialTile, initialChunkDesc, currentX, currentY, vertical);
 
+        // --- FIX FOR TUNNELING ---
+        // If we are moving quickly downwards (DOWN sensor) or rightwards (RIGHT sensor) etc,
+        // and we find empty space, we might have skipped a block.
+        // We check "Upwards" (Regression) if we are falling fast.
+        // Only applicable if InitialHeight is 0 (Empty).
+
+        // Note: sprite.getYSpeed() is in subpixels. 1 pixel = 256 subpixels.
+        // 16 pixels = 4096.
+        if (initialHeight == 0) {
+            short speed = 0;
+            switch (globalDirection) {
+                case DOWN -> speed = sprite.getYSpeed();
+                case RIGHT -> speed = sprite.getXSpeed();
+                case UP -> speed = (short) -sprite.getYSpeed(); // Negative speed is "Forward" for UP? No.
+                // If moving UP (negative Y), we want to check downwards if we skipped ceiling?
+                // Usually gravity makes us fall DOWN through floors. Tunneling UP through ceiling is rarer (requires high jump).
+                // Let's focus on DOWN (falling) for now as reported by user ("snaps through solid floors").
+                // Also RIGHT/LEFT.
+                case LEFT -> speed = (short) -sprite.getXSpeed();
+            }
+
+            // Threshold: If speed > 16 pixels (4096 subpixels), or maybe safer > 8 pixels?
+            // Sonic 1/2 cap is 16px. But let's be safe.
+            // If we moved > 16 pixels, we definitely skipped a tile check if we only check +1/-1.
+            // If we are at 130. Previous was 110. Move +20.
+            // Tile 130 is Empty.
+            // We want to check tiles between 130 and 110.
+            // Specifically, we want to find the HIGHEST solid tile in that range.
+
+            if (speed > 4096 && globalDirection == Direction.DOWN) { // Only handling DOWN for now as per bug report "solid floors"
+                // We are falling fast.
+                // We need to check from the PREVIOUS position downwards to the CURRENT position.
+                // This ensures we hit the HIGHEST floor we passed through, not the lowest one we are currently closest to.
+
+                int pixelsMoved = speed / 256;
+                int checks = pixelsMoved / 16;
+                if (checks > 3) checks = 3; // Limit check range
+
+                // Start checking from just below the previous position
+                short startY = (short) (currentY - (checks * 16));
+
+                // Adjust startY to align with grid if needed, but simple iteration is fine for 16px blocks.
+                // We want to check tiles *between* Previous and Current.
+
+                for (int i = 0; i < checks; i++) {
+                    short checkY = (short) (startY + (i * 16));
+
+                    // Don't check if we are basically back at currentY (initial check covered it)
+                    // But we might need to check if checkY corresponds to a different tile than currentY.
+                    if (Math.abs(checkY - currentY) < 16 && (checkY & ~0x0F) == (currentY & ~0x0F)) {
+                        continue;
+                    }
+
+                    ChunkDesc checkDesc = levelManager.getChunkDescAt(layer, currentX, checkY);
+                    SolidTile checkTile = levelManager.getSolidTileForChunkDesc(checkDesc);
+                    byte checkHeight = getMetric(checkTile, checkDesc, currentX, checkY, vertical);
+
+                    if (checkHeight > 0) {
+                        // Found a solid block we passed through.
+                        // Since we iterate downwards, this is the first (highest) block we hit.
+                        return createResult(checkTile, checkDesc, originalX, originalY, currentX, checkY, globalDirection, vertical);
+                    }
+                }
+            }
+        }
+        // --- END FIX ---
+
         if (initialHeight == 16) {
             // Regression: Check 'previous' tile (against sensor direction)
             short prevX = currentX;
