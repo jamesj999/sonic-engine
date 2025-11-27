@@ -13,6 +13,8 @@ public interface AudioBackend {
 
     void playSmps(SmpsData data, DacData dacData);
 
+    void playSfxSmps(SmpsData data, DacData dacData);
+
     /**
      * Plays a sound effect by name (mapped to a WAV file).
      * @param sfxName The name of the SFX (e.g., "JUMP", "RING").

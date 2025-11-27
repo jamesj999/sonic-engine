@@ -260,4 +260,12 @@ public class SmpsSequencer implements AudioStream {
             default: return 0;
         }
     }
+
+    @Override
+    public boolean isComplete() {
+        for (Track t : tracks) {
+            if (t.active) return false;
+        }
+        return true;
+    }
 }

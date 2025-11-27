@@ -58,6 +58,13 @@ public class AudioManager {
     }
 
     public void playSfx(String sfxName) {
+        if (smpsLoader != null) {
+            SmpsData sfx = smpsLoader.loadSfx(sfxName);
+            if (sfx != null) {
+                backend.playSfxSmps(sfx, dacData);
+                return;
+            }
+        }
         backend.playSfx(sfxName);
     }
 

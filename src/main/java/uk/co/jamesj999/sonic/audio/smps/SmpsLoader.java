@@ -14,6 +14,7 @@ public class SmpsLoader {
     private final SaxmanDecompressor decompressor = new SaxmanDecompressor();
     private final DcmDecoder dcmDecoder = new DcmDecoder();
     private final Map<Integer, Integer> musicMap = new HashMap<>();
+    private final Map<String, Integer> sfxMap = new HashMap<>();
 
     public SmpsLoader(Rom rom) {
         this.rom = rom;
@@ -29,6 +30,12 @@ public class SmpsLoader {
         musicMap.put(0x8D, 0xFBA6F); // SCZ
         musicMap.put(0x8E, 0xFB3F7); // CPZ
         musicMap.put(0x8F, 0xFC146); // WFZ
+
+        // SFX Map (Populate with discovered offsets)
+        // Potential candidate for SFX: 0xFFEAD (FM=1)
+        // Without precise IDs, we leave this empty for now or add placeholders.
+        // Adding infrastructure so it can be enabled easily.
+        // sfxMap.put("RING", 0xFFEAD);
     }
 
     public SmpsData loadMusic(int musicId) {
@@ -37,8 +44,19 @@ public class SmpsLoader {
             LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map.");
             return null;
         }
+        return loadSmps(offset);
+    }
 
-        try {
+    public SmpsData loadSfx(String name) {
+        Integer offset = sfxMap.get(name);
+        if (offset != null) {
+            return loadSmps(offset);
+        }
+        return null;
+    }
+
+    public SmpsData loadSmps(int offset) {
+         try {
             // Read compressed size (Little Endian)
             int b1 = rom.readByte(offset) & 0xFF;
             int b2 = rom.readByte(offset + 1) & 0xFF;
@@ -48,10 +66,10 @@ public class SmpsLoader {
             byte[] compressed = rom.readBytes(offset, compressedSize + 2);
 
             byte[] decompressed = decompressor.decompress(compressed);
-            LOGGER.info("Decompressed music " + Integer.toHexString(musicId) + ". Size: " + decompressed.length);
+            LOGGER.info("Decompressed SMPS at " + Integer.toHexString(offset) + ". Size: " + decompressed.length);
             return new SmpsData(decompressed);
         } catch (Exception e) {
-            LOGGER.severe("Failed to load music " + Integer.toHexString(musicId));
+            LOGGER.severe("Failed to load SMPS at " + Integer.toHexString(offset));
             e.printStackTrace();
             return null;
         }

@@ -33,6 +33,7 @@ public class JOALAudioBackend implements AudioBackend {
     private int musicSource = -1;
 
     private AudioStream currentStream;
+    private AudioStream sfxStream;
     private int[] streamBuffers;
     private static final int STREAM_BUFFER_COUNT = 3;
     private static final int STREAM_BUFFER_SIZE = 4096;
@@ -111,6 +112,11 @@ public class JOALAudioBackend implements AudioBackend {
         startStream();
     }
 
+    @Override
+    public void playSfxSmps(SmpsData data, DacData dacData) {
+        this.sfxStream = new SmpsSequencer(data, dacData);
+    }
+
     private void startStream() {
         if (streamBuffers == null) {
             streamBuffers = new int[STREAM_BUFFER_COUNT];
@@ -140,7 +146,16 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void updateStream() {
-        if (currentStream != null) {
+        if (currentStream != null || sfxStream != null) {
+            // Only update if playing via SMPS. If playing WAV, musicSource handles it.
+            // But musicSource is used for streaming.
+            // If we are playing WAV, currentStream is null.
+            // If currentStream is null but sfxStream is NOT null, we should still stream?
+            // Yes.
+
+            int[] state = new int[1];
+            al.alGetSourcei(musicSource, AL.AL_SOURCE_STATE, state, 0);
+
             int[] processed = new int[1];
             al.alGetSourcei(musicSource, AL.AL_BUFFERS_PROCESSED, processed, 0);
 
@@ -152,7 +167,7 @@ public class JOALAudioBackend implements AudioBackend {
                 processed[0]--;
             }
 
-            int[] state = new int[1];
+            // Check state again?
             al.alGetSourcei(musicSource, AL.AL_SOURCE_STATE, state, 0);
             if (state[0] != AL.AL_PLAYING) {
                 al.alSourcePlay(musicSource);
@@ -162,9 +177,24 @@ public class JOALAudioBackend implements AudioBackend {
 
     private void fillBuffer(int bufferId) {
         short[] data = new short[STREAM_BUFFER_SIZE];
-        int read = currentStream.read(data);
-        // If read < size, fill rest with 0 or stop?
-        // OpenAL expects buffer size.
+        int read = (currentStream != null) ? currentStream.read(data) : 0;
+        // If music stream ended or not present, buffer is 0.
+
+        if (sfxStream != null) {
+            short[] sfxData = new short[STREAM_BUFFER_SIZE];
+            sfxStream.read(sfxData);
+
+            for(int i=0; i<data.length; i++) {
+                int mixed = data[i] + sfxData[i];
+                if (mixed > 32000) mixed = 32000;
+                if (mixed < -32000) mixed = -32000;
+                data[i] = (short) mixed;
+            }
+
+            if (sfxStream.isComplete()) {
+                sfxStream = null;
+            }
+        }
 
         ShortBuffer sBuffer = Buffers.newDirectShortBuffer(data);
         al.alBufferData(bufferId, AL.AL_FORMAT_MONO16, sBuffer, data.length * 2, 44100);

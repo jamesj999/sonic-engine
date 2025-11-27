@@ -7,4 +7,8 @@ public interface AudioStream {
      * @return The number of samples read (can be less than buffer length if stream ends).
      */
     int read(short[] buffer);
+
+    default boolean isComplete() {
+        return false;
+    }
 }

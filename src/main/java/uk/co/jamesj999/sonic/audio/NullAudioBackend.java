@@ -5,32 +5,23 @@ import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 
 public class NullAudioBackend implements AudioBackend {
     @Override
-    public void init() {
-        // No-op
-    }
+    public void init() {}
 
     @Override
-    public void playMusic(int musicId) {
-        // No-op
-    }
+    public void playMusic(int musicId) {}
 
     @Override
-    public void playSmps(SmpsData data, DacData dacData) {
-        // No-op
-    }
+    public void playSmps(SmpsData data, DacData dacData) {}
 
     @Override
-    public void playSfx(String sfxName) {
-        // No-op
-    }
+    public void playSfxSmps(SmpsData data, DacData dacData) {}
 
     @Override
-    public void update() {
-        // No-op
-    }
+    public void playSfx(String sfxName) {}
 
     @Override
-    public void destroy() {
-        // No-op
-    }
+    public void update() {}
+
+    @Override
+    public void destroy() {}
 }
