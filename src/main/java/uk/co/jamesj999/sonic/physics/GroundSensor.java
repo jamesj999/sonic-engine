@@ -62,6 +62,15 @@ public class GroundSensor extends Sensor {
         SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc);
         byte initialHeight = getMetric(initialTile, initialChunkDesc, currentX, currentY, vertical);
 
+        // When in Air, sensors are treated as points/lines and do not use Extension/Regression logic which is for surface tracking.
+        if (sprite.getAir()) {
+            if (initialHeight > 0) {
+                return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
+            } else {
+                return null;
+            }
+        }
+
         if (initialHeight == 16) {
             // Regression: Check 'previous' tile (against sensor direction)
             short prevX = currentX;

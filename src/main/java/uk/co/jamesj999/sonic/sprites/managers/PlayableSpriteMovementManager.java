@@ -197,13 +197,7 @@ public class PlayableSpriteMovementManager extends
 				else if (dir == Direction.UP && sprite.getYSpeed() < 0) movingTowards = true;
 				else if (dir == Direction.DOWN && sprite.getYSpeed() > 0) movingTowards = true;
 
-				// Sonic Physics: Wall collision should be ignored if the wall angle is a walkable slope (not vertical/ceiling/flat block).
-				// Range 0x40 (64) to 0xC0 (192) represents walls/ceilings. 0x00 and 0xFF are flat blocks/solid tiles.
-				// Slopes are 0x01-0x3F and 0xC1-0xFE.
-				int wallAngle = lowestResult.angle() & 0xFF;
-				boolean isWall = (lowestResult.angle() == (byte) 0xFF) || (wallAngle == 0) || (wallAngle >= 0x40 && wallAngle <= 0xC0);
-
-				if (isWall && (distance < 0 || (distance == 0 && movingTowards))) {
+				if (distance < 0 || (distance == 0 && movingTowards)) {
 					short lookaheadX = (short) (sprite.getXSpeed() / 256);
 					short lookaheadY = (short) (sprite.getYSpeed() / 256);
 					short subX = (short) (sprite.getXSubpixel() & 0xFF);
