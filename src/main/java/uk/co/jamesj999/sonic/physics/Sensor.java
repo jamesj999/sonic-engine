@@ -11,10 +11,14 @@ public abstract class Sensor {
 
     protected SensorResult currentResult;
 
-    protected abstract SensorResult doScan();
+    protected abstract SensorResult doScan(short dx, short dy);
 
     public SensorResult scan() {
-        currentResult = doScan();
+        return scan((short) 0, (short) 0);
+    }
+
+    public SensorResult scan(short dx, short dy) {
+        currentResult = doScan(dx, dy);
         return currentResult;
     }
 

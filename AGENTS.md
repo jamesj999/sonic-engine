@@ -3,7 +3,7 @@
 ## Project Mission
 This project is a faithful recreation of the **Sonic the Hedgehog** game engine in Java. It aims to:
 1.  Use the original ROM data to render levels.
-2.  Perfectly and precisely replicate the original physics.
+2.  Perfectly and precisely replicate the original physics. (This is IMPORTANT. The engine must recreate the original pixel-for-pixel)
 3.  Eventually support user-made characters and level editing tools.
 
 ## Current Status

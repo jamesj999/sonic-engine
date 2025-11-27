@@ -432,9 +432,25 @@ public class LevelManager {
             return null;
         }
 
+		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+		int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+
+		// Handle wrapping for X
+		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
+
+		// Handle wrapping for Y
+		int wrappedY = y;
+		if (layer == 1) {
+			// Background loops vertically
+			wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
+		} else {
+			// Foreground Clamps
+			if (wrappedY < 0 || wrappedY >= levelHeight) return null;
+		}
+
         Map map = level.getMap();
-        int mapX = x / LevelConstants.BLOCK_WIDTH;
-        int mapY = y / LevelConstants.BLOCK_HEIGHT;
+		int mapX = wrappedX / LevelConstants.BLOCK_WIDTH;
+		int mapY = wrappedY / LevelConstants.BLOCK_HEIGHT;
 
         byte value = map.getValue(layer, mapX, mapY);
 
@@ -458,7 +474,17 @@ public class LevelManager {
         if(block == null) {
             return null;
         }
-        ChunkDesc chunkDesc = block.getChunkDesc((x % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
+
+		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
+		int wrappedY = y;
+
+		if (layer == 1) {
+			int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+			wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
+		}
+
+        ChunkDesc chunkDesc = block.getChunkDesc((wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
         return chunkDesc;
     }
 
