@@ -309,13 +309,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {
 		// Best if statement ever...
-		if(((GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) &&
+		if(((GroundMode.CEILING.equals(newRunningMode) || GroundMode.GROUND.equals(newRunningMode)) &&
 				(GroundMode.LEFTWALL.equals(oldRunningMode) || GroundMode.RIGHTWALL.equals(oldRunningMode))) ||
-				((GroundMode.RIGHTWALL.equals(runningMode) || GroundMode.LEFTWALL.equals(runningMode)) &&
+				((GroundMode.RIGHTWALL.equals(newRunningMode) || GroundMode.LEFTWALL.equals(newRunningMode)) &&
 						((GroundMode.CEILING.equals(oldRunningMode) || GroundMode.GROUND.equals(oldRunningMode))))) {
 			int oldHeight = getHeight();
-			setHeight(width);
+			int oldWidth = getWidth();
+
+			short oldCentreX = getCentreX();
+			short oldCentreY = getCentreY();
+
+			setHeight(oldWidth);
 			setWidth(oldHeight);
+
+			setX((short) (oldCentreX - (getWidth() / 2)));
+			setY((short) (oldCentreY - (getHeight() / 2)));
 		}
 	}
 
