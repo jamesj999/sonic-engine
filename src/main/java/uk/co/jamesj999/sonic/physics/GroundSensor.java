@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 
 public class GroundSensor extends Sensor {
     private static LevelManager levelManager = LevelManager.getInstance();
@@ -29,8 +30,29 @@ public class GroundSensor extends Sensor {
         boolean vertical = sensorConfiguration.vertical();
         Direction globalDirection = sensorConfiguration.direction();
 
-        short originalX = (short) (sprite.getCentreX() + x);
-        short originalY = (short) (sprite.getCentreY() + y);
+        short xOffset = x;
+        short yOffset = y;
+
+        switch (sprite.getGroundMode()) {
+            case RIGHTWALL -> {
+                short temp = xOffset;
+                xOffset = yOffset;
+                yOffset = (short) -temp;
+            }
+            case CEILING -> {
+                xOffset = (short) -xOffset;
+                yOffset = (short) -yOffset;
+            }
+            case LEFTWALL -> {
+                short temp = xOffset;
+                xOffset = (short) -yOffset;
+                yOffset = temp;
+            }
+            default -> { }
+        }
+
+        short originalX = (short) (sprite.getCentreX() + xOffset);
+        short originalY = (short) (sprite.getCentreY() + yOffset);
 
         short currentX = originalX;
         short currentY = originalY;

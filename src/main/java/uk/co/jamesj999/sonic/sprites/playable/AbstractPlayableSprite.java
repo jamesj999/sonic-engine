@@ -298,7 +298,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setGroundMode(GroundMode groundMode) {
-		this.runningMode = groundMode;
+		if(this.runningMode != groundMode) {
+			updateSpriteShapeForRunningMode(groundMode, this.runningMode);
+			this.runningMode = groundMode;
+		}
 	}
 
 	protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {

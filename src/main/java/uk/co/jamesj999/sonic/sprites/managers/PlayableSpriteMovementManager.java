@@ -205,6 +205,8 @@ public class PlayableSpriteMovementManager extends
 					// And set sonic's new angle based on the tile found:
 					sprite.setAngle(lowestResult.angle());
 
+					updateGroundMode(sprite);
+
 					// And maybe run our landing code
 					calculateLanding(sprite);
 				}
@@ -216,6 +218,7 @@ public class PlayableSpriteMovementManager extends
 			if(lowestResult.distance() < requiredSpeed) {
 				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
 				sprite.setAngle(lowestResult.angle());
+				updateGroundMode(sprite);
 			} else {
 				sprite.setAir(true);
 			}
@@ -570,5 +573,25 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 		return lowestResult;
+	}
+
+	private void updateGroundMode(AbstractPlayableSprite sprite) {
+		int angle = sprite.getAngle() & 0xFF;
+		GroundMode currentMode = sprite.getGroundMode();
+		GroundMode newMode = currentMode;
+
+		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
+			newMode = GroundMode.GROUND;
+		} else if (angle >= 33 && angle <= 95) {
+			newMode = GroundMode.LEFTWALL;
+		} else if (angle >= 96 && angle <= 160) {
+			newMode = GroundMode.CEILING;
+		} else if (angle >= 161 && angle <= 223) {
+			newMode = GroundMode.RIGHTWALL;
+		}
+
+		if (newMode != currentMode) {
+			sprite.setGroundMode(newMode);
+		}
 	}
 }
