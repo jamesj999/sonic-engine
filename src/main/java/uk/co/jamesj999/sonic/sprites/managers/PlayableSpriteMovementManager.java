@@ -121,6 +121,11 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 
+		boolean inAir = sprite.getAir();
+		if(!inAir) {
+			doWallCollision(sprite);
+		}
+
 		// Now, move the sprite as per the air movement or GSpeed rules:
 		sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
 
@@ -132,16 +137,18 @@ public class PlayableSpriteMovementManager extends
 
 		// Store some attributes in case we need to 'reset' the terrain collision:
 		short yBeforeTerrainCollision = sprite.getY();
-		boolean inAir = sprite.getAir();
+		inAir = sprite.getAir();
 		boolean isRoll = sprite.getRolling();
+
+		if(inAir) {
+			doWallCollision(sprite);
+		}
 
 		// Perform terrain checks - results are updated directly into the sprite
 		SensorResult[] groundResult = terrainCollisionManager.getSensorResult(sprite.getGroundSensors());
 		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
-		SensorResult[] pushResult = terrainCollisionManager.getSensorResult(sprite.getPushSensors());
 
 		doTerrainCollision(sprite, groundResult);
-		doWallCollision(sprite, pushResult);
 
 		// This won't work when graphics are involved...
 		if(sprite.getX() > originalX) {
@@ -165,15 +172,44 @@ public class PlayableSpriteMovementManager extends
 		sprite.updateSensors(originalX, originalY);
 	}
 
-	private void doWallCollision(AbstractPlayableSprite sprite, SensorResult[] pushResult) {
-		SensorResult lowestResult = findLowestSensorResult(pushResult);
-		if(lowestResult != null) {
-			Direction direction = lowestResult.direction();
-			byte distance = lowestResult.distance();
-			if (distance < 0) {
-				moveForSensorResult(sprite, lowestResult);
-				sprite.setXSpeed((short) 0);
-				sprite.setGSpeed((short) 0);
+	private void doWallCollision(AbstractPlayableSprite sprite) {
+		SensorResult[] pushResult = new SensorResult[sprite.getPushSensors().length];
+		// If grounded, we need to check if we're going to hit a wall based on our xSpeed.
+		// If we are, we need to stop moving.
+		if(!sprite.getAir()) {
+			// Grounded collision
+			// TODO: This really should be xSpeed and ySpeed but we only care about xSpeed for now.
+			// We scan for the wall at the position we will be at next frame.
+			// If we find a wall, we move to it and stop.
+			for(int i = 0; i < sprite.getPushSensors().length; i++) {
+				pushResult[i] = sprite.getPushSensors()[i].scan(sprite.getXSpeed(), sprite.getYSpeed());
+			}
+			SensorResult lowestResult = findLowestSensorResult(pushResult);
+			if(lowestResult != null) {
+				byte distance = lowestResult.distance();
+				if (distance < 0) {
+					// We are going to hit a wall.
+					// We add the distance (which is negative) to our xSpeed so we move exactly to the wall.
+					// Then we set gSpeed to 0.
+					sprite.setXSpeed((short) (sprite.getXSpeed() + distance));
+					sprite.setGSpeed((short) 0);
+				}
+			}
+		} else {
+			// Airborne collision
+			// We scan at current position (because we already moved).
+			// If we are inside a wall, we move out.
+			for(int i = 0; i < sprite.getPushSensors().length; i++) {
+				pushResult[i] = sprite.getPushSensors()[i].scan((short) 0, (short) 0);
+			}
+			SensorResult lowestResult = findLowestSensorResult(pushResult);
+			if(lowestResult != null) {
+				byte distance = lowestResult.distance();
+				if (distance < 0) {
+					moveForSensorResult(sprite, lowestResult);
+					sprite.setXSpeed((short) 0);
+					sprite.setGSpeed((short) 0);
+				}
 			}
 		}
 	}
@@ -364,7 +400,7 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed += slopeRunningVariant * Math.sin(Math.toRadians(angle));
+		gSpeed -= slopeRunningVariant * Math.sin(Math.toRadians(angle));
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
@@ -488,7 +524,7 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(Math
+					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
 							.sin(Math.toRadians(angle)))));
 				}
 			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
@@ -496,7 +532,7 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * (Math.signum(Math.sin(Math
+					gSpeed = (short) (ySpeed * -(Math.signum(Math.sin(Math
 							.toRadians(angle)))));
 				}
 			}
@@ -598,11 +634,11 @@ public class PlayableSpriteMovementManager extends
 		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
 			newMode = GroundMode.GROUND;
 		} else if (angle >= 33 && angle <= 95) {
-			newMode = GroundMode.RIGHTWALL;
+			newMode = GroundMode.LEFTWALL;
 		} else if (angle >= 96 && angle <= 160) {
 			newMode = GroundMode.CEILING;
 		} else if (angle >= 161 && angle <= 223) {
-			newMode = GroundMode.LEFTWALL;
+			newMode = GroundMode.RIGHTWALL;
 		}
 
 		if (newMode != currentMode) {

@@ -20,7 +20,7 @@ public class GroundSensor extends Sensor {
     }
 
     @Override
-    protected SensorResult doScan() {
+    protected SensorResult doScan(short dx, short dy) {
         if (!active) {
             return null;
         }
@@ -51,8 +51,8 @@ public class GroundSensor extends Sensor {
             default -> { }
         }
 
-        short originalX = (short) (sprite.getCentreX() + xOffset);
-        short originalY = (short) (sprite.getCentreY() + yOffset);
+        short originalX = (short) (sprite.getCentreX() + xOffset + dx);
+        short originalY = (short) (sprite.getCentreY() + yOffset + dy);
 
         short currentX = originalX;
         short currentY = originalY;
