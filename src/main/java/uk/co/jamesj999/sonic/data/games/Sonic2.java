@@ -2,6 +2,11 @@ package uk.co.jamesj999.sonic.data.games;
 
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+import uk.co.jamesj999.sonic.graphics.art.SpriteArt;
+import uk.co.jamesj999.sonic.graphics.art.SpriteArtManager;
+import uk.co.jamesj999.sonic.graphics.mapping.SpriteMap;
+import uk.co.jamesj999.sonic.graphics.mapping.SpriteMapManager;
 import uk.co.jamesj999.sonic.level.Level;
 
 import java.io.IOException;
@@ -17,6 +22,7 @@ public class Sonic2 extends Game {
     private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 12;
     private static final int LEVEL_PALETTE_DIR = 0x2782;
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
+    public static final int SONIC_SPRITE_ART_ADDR = 0x50000;
     private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
     private static final int ALT_COLLISION_LAYOUT_DIR_ADDR = 0x4A2C;
     private static final int SOLID_TILE_VERTICAL_MAP_ADDR = 0x42E50;
@@ -94,6 +100,7 @@ public class Sonic2 extends Game {
 
     @Override
     public Level loadLevel(int levelIdx) throws IOException {
+        loadSonicSprite();
         int characterPaletteAddr = getCharacterPaletteAddr();
         int levelPalettesAddr = getLevelPalettesAddr(levelIdx);
         int patternsAddr = getPatternsAddr(levelIdx);
@@ -214,5 +221,20 @@ public class Sonic2 extends Game {
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + zoneIdx * 4;
         return rom.read32BitAddr(zoneIdxLoc);
+    }
+
+    private void loadSonicSprite() throws IOException {
+        // TODO: Get the real size of the sprite art
+        int sonicSpriteArtSize = 0x2000;
+        SpriteArt sonicSpriteArt = new SpriteArt("sonic");
+        sonicSpriteArt.load(rom, SONIC_SPRITE_ART_ADDR, sonicSpriteArtSize);
+        SpriteArtManager.getInstance().addSpriteArt("sonic", sonicSpriteArt);
+        GraphicsManager.getInstance().cacheSpriteArt(sonicSpriteArt);
+
+        // TODO: Get the real offset of the sprite map
+        int sonicSpriteMapOffset = 0x6FBE0;
+        SpriteMap sonicSpriteMap = new SpriteMap("default");
+        sonicSpriteMap.load(rom, sonicSpriteMapOffset);
+        SpriteMapManager.getInstance().addSpriteMap("default", sonicSpriteMap);
     }
 }

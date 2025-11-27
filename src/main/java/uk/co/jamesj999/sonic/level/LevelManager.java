@@ -118,7 +118,7 @@ public class LevelManager {
                     PatternDesc pDesc = new PatternDesc();
                     pDesc.setPaletteIndex(Engine.debugOption.ordinal());
                     pDesc.setPatternIndex(count);
-                    graphicsManager.renderPattern(pDesc, x, y);
+                    graphicsManager.renderPattern(pDesc, x, y, null);
                     count++;
                 }
             }
@@ -299,7 +299,7 @@ public class LevelManager {
                 }
                 PatternDesc newPatternDesc = new PatternDesc(newIndex);
 
-                graphicsManager.renderPattern(newPatternDesc, x + (cX * Pattern.PATTERN_WIDTH), y + (cY * Pattern.PATTERN_HEIGHT));
+                graphicsManager.renderPattern(newPatternDesc, x + (cX * Pattern.PATTERN_WIDTH), y + (cY * Pattern.PATTERN_HEIGHT), null);
             }
         }
 

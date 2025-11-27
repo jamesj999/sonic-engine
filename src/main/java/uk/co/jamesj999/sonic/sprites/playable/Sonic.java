@@ -1,6 +1,11 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.art.SpriteArt;
+import uk.co.jamesj999.sonic.graphics.art.SpriteArtManager;
+import uk.co.jamesj999.sonic.graphics.mapping.SpriteMap;
+import uk.co.jamesj999.sonic.graphics.mapping.SpriteMapManager;
+import uk.co.jamesj999.sonic.level.PatternDesc;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.GroundSensor;
 import uk.co.jamesj999.sonic.physics.Sensor;
@@ -8,6 +13,8 @@ import uk.co.jamesj999.sonic.physics.Sensor;
 import com.jogamp.opengl.GL2;
 
 public class Sonic extends AbstractPlayableSprite {
+	private final SpriteArtManager spriteArtManager = SpriteArtManager.getInstance();
+	private final SpriteMapManager spriteMapManager = SpriteMapManager.getInstance();
 
 	public Sonic(String code, short x, short y, boolean debug) {
 		super(code, x, y, debug);
@@ -17,11 +24,23 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	public void draw() {
-		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.RECTI,
-				GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
-						+ height));
-		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.VERTEX2I,
-				-1, 1, 0, 0, getCentreX(), getCentreY(), 0, 0));
+		SpriteArt spriteArt = spriteArtManager.getSpriteArt(code);
+		SpriteMap spriteMap = spriteMapManager.getSpriteMap("default");
+		if (spriteArt != null && spriteMap != null) {
+			spriteMap.getMappings().forEach(mapping -> {
+				byte palette = mapping.getPalette();
+				PatternDesc patternDesc = new PatternDesc(mapping.getPatternIndex(), palette, mapping.isVFlip(), mapping.isHFlip());
+				int drawX = xPixel + mapping.getX();
+				int drawY = yPixel + mapping.getY();
+				graphicsManager.renderPattern(patternDesc, drawX, drawY, code);
+			});
+		} else {
+			graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.RECTI,
+					GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
+					+ height));
+			graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.VERTEX2I,
+					-1, 1, 0, 0, getCentreX(), getCentreY(), 0, 0));
+		}
 	}
 
 	@Override
