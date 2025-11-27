@@ -631,8 +631,13 @@ public class PlayableSpriteMovementManager extends
 		sprite.setXSpeed((short) Math.round(gSpeed
 				* Math.cos(Math.toRadians(angle))));
 
-		sprite.setYSpeed((short) Math.round(gSpeed
-				* Math.sin(Math.toRadians(angle))));
+		short ySpeed = (short) Math.round(gSpeed
+				* Math.sin(Math.toRadians(angle)));
+		// Enforce terminal velocity if falling
+		if (ySpeed > 4096) {
+			ySpeed = 4096;
+		}
+		sprite.setYSpeed(ySpeed);
 	}
 
 	private void jumpHandler(boolean jump) {

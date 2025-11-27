@@ -100,4 +100,22 @@ public class TestPlayableSpriteMovementManager {
                     expectedSnappedAngle, mockSprite.getAngle());
         }
     }
+
+    @Test
+    public void testCalculateXYFromGSpeedEnforcesTerminalVelocity() throws Exception {
+        // gSpeed = 7000 (Very high).
+        // Angle = 0x40 (90 degrees, Down).
+        // Expected ySpeed = 4096 (Capped).
+        // Expected xSpeed = 0.
+
+        mockSprite.setGSpeed((short) 7000);
+        mockSprite.setAngle((byte) 0x40);
+
+        Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateXYFromGSpeed", AbstractPlayableSprite.class);
+        method.setAccessible(true);
+        method.invoke(manager, mockSprite);
+
+        assertEquals("YSpeed should be capped at 4096", 4096, mockSprite.getYSpeed());
+        assertEquals("XSpeed should be 0", 0, mockSprite.getXSpeed());
+    }
 }
