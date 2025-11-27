@@ -224,14 +224,14 @@ public class Sonic2 extends Game {
     }
 
     private void loadSonicSprite() throws IOException {
-        // TODO: Get the real size of the sprite art
+        // The size of the Sonic sprite art, derived from the gap between the Sonic and Tails art pointers in the ROM.
         int sonicSpriteArtSize = 0x14320;
         SpriteArt sonicSpriteArt = new SpriteArt("sonic");
         sonicSpriteArt.load(rom, SONIC_SPRITE_ART_ADDR, sonicSpriteArtSize);
         SpriteArtManager.getInstance().addSpriteArt("sonic", sonicSpriteArt);
         GraphicsManager.getInstance().cacheSpriteArt(sonicSpriteArt);
 
-        // TODO: Get the real offset of the sprite map
+        // The offset of the default Sonic sprite map.
         int sonicSpriteMapOffset = 0x6FBE0;
         SpriteMap sonicSpriteMap = new SpriteMap("default");
         sonicSpriteMap.load(rom, sonicSpriteMapOffset);
