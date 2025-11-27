@@ -272,7 +272,9 @@ public class PlayableSpriteMovementManager extends
 					requiredSpeed = -16;
 				}
 				// Check whether
-				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
+				boolean collisionA = results[0] != null && results[0].distance() >= requiredSpeed;
+				boolean collisionB = results[1] != null && results[1].distance() >= requiredSpeed;
+				if(collisionA || collisionB) {
 					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
 					moveForSensorResult(sprite, lowestResult);
 					// And set sonic's new angle based on the tile found:
