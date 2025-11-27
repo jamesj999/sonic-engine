@@ -41,7 +41,7 @@ public class LevelManager {
     /**
      * Private constructor for Singleton pattern.
      */
-    private LevelManager() {
+    protected LevelManager() {
         levels.add(List.of(LevelData.EMERALD_HILL_1, LevelData.EMERALD_HILL_2));
         levels.add(List.of(LevelData.CHEMICAL_PLANT_1, LevelData.CHEMICAL_PLANT_2));
         levels.add(List.of(LevelData.AQUATIC_RUIN_1, LevelData.AQUATIC_RUIN_2));
