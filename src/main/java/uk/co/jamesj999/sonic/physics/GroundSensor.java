@@ -77,26 +77,24 @@ public class GroundSensor extends Sensor {
             SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
             byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, prevY, vertical);
 
-            // Compare distances to determine the nearest surface.
-            // If Regression (Prev) finds a solid tile, it might be the nearest surface (e.g. stepping up a slope).
-            // But if Initial (Current) is also solid (because we are embedded), it might be the nearest (e.g. hitting a ceiling).
-            // We should pick the one with the smallest absolute distance to the sensor.
-            // See Sonic Physics Guide: "a Sensor can always locate the nearest open surface".
             if (prevHeight > 0) {
+                // Found a valid previous tile.
+                // We need to determine which surface is the "True" surface.
+                // Standard Sonic logic checks regression to smooth slopes.
+                // However, for vertical sensors (UP/DOWN), checking the opposite block (Floor vs Ceiling)
+                // can lead to snapping to the wrong surface if both are solid.
+                // We calculate the distance for both and pick the "Nearest Surface" (smallest absolute distance).
+
                 SensorResult initialResult = createResult(initialTile, initialChunkDesc, originalX, originalY, currentX, currentY, globalDirection, vertical);
                 SensorResult prevResult = createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, prevY, globalDirection, vertical);
 
-                // If Prev is "nearer" (smaller absolute distance), use it.
-                // Note: Distances can be negative (inside).
-                // Example: Initial (Ceiling) -6. Prev (Floor) -22. |-6| < |-22|. Use Initial.
-                // Example: Initial (Slope) -10. Prev (Slope) -5. |-5| < |-10|. Use Prev.
                 if (Math.abs(prevResult.distance()) < Math.abs(initialResult.distance())) {
                     return prevResult;
                 } else {
                     return initialResult;
                 }
             } else {
-                // Previous tile empty, revert to initial
+                // Previous tile empty or invalid, revert to initial
                 return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
             }
 
@@ -162,9 +160,8 @@ public class GroundSensor extends Sensor {
 
     private SensorResult createResult(SolidTile tile, ChunkDesc desc, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean vertical) {
         byte metric = getMetric(tile, desc, checkX, checkY, vertical);
-        // Note: Flips should be handled by index reversal in getMetric only.
-        // Distance formulas are generally flip-agnostic if the metric is retrieved correctly.
-        // Reverting VFlip/HFlip logic in distance calculation as it breaks mirroring.
+        // Note: Distance formulas use standard logic (ignoring VFlip for UP/DOWN) to support
+        // standard Sonic mirroring. Flips are handled by index reversal in getMetric.
         byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction);
 
         byte angle = 0;
