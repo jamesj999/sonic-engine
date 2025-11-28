@@ -86,11 +86,9 @@ public class PathSwapper extends AbstractSprite implements InteractiveSprite {
         // Similar to LevelManager.processCollisionMode
 
         // We need to disable textures and shaders for solid color drawing
-        // Also disable Depth Test to ensure it draws on top of the level
         List<GLCommand> commands = new ArrayList<>();
         commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
         commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
-        commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
 
         int x1, y1, x2, y2;
         int thickness = 4; // Increase thickness for better visibility
@@ -149,7 +147,6 @@ public class PathSwapper extends AbstractSprite implements InteractiveSprite {
 
         // Restore state
         commands.add(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
-        commands.add(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_DEPTH_TEST));
         // We don't easily know the previous program ID here without querying, but LevelManager restores it.
         // For safety, we can leave it 0 or try to restore if we knew it.
         // Standard practice here seems to be "enable texturing" and let next draw call set program?
