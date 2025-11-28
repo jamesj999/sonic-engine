@@ -267,6 +267,12 @@ public class PlayableSpriteMovementManager extends
 				}
 
 				if (collision) {
+					// Add a 1px buffer to prevent sticking to walls
+					if (dir == Direction.RIGHT) {
+						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1), lowestResult.tileId(), lowestResult.direction());
+					} else if (dir == Direction.LEFT) {
+						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1), lowestResult.tileId(), lowestResult.direction());
+					}
 					moveForSensorResult(sprite, lowestResult);
 					sprite.setXSpeed((short) 0);
 					sprite.setGSpeed((short) 0);
