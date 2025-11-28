@@ -1,6 +1,6 @@
 # Music Implementation Strategy
 
-This plan describes how to add sound effects and music playback to the Sonic engine while staying faithful to Sonic 2’s SMPS driver behavior. It highlights architecture, data flow, and which references in `docs/` to consult at each step.
+This plan describes how to add sound effects and music playback to the Sonic engine while staying faithful to Sonic 2’s SMPS driver behavior. It highlights architecture, data flow, and which references in `docs/` to consult at each step. Updated to reflect current status and remaining accuracy work (YM2612 EG/LFO/gain, SMPS flags).
 
 ## Goals and scope
 - Match Sonic 2 playback as closely as possible (YM2612 FM + SN76489 PSG + DAC drums).
@@ -43,12 +43,14 @@ This plan describes how to add sound effects and music playback to the Sonic eng
 ### Phase 0: Scaffolding and configuration
 - Add `audio` package skeleton (interfaces, manager stubs, config flags).
 - Provide a `NullAudioBackend` to keep headless/testing stable.
+- Ensure defaults in `SonicConfigurationService` cover headless/test runs (ROM filename, debug flags, screen sizes).
 
 ### Phase 1: Asset loading and parsing
 - Implement `SmpsLoader` to read headers/pointers and voice tables (use Pointer/Header and Voice/Note docs).
 - Map ROM music/SFX IDs per level using `SCHG_Nem s2`.
 - Extract DAC sample tables (addresses/format) using DAC Samples doc.
 - Allow fallback to external PCM/OGG directory when ROM data absent (keeps engine runnable without ROM).
+- Detect SMPS endian mode (68k big-endian vs Z80 little-endian) based on ROM; parse pointers accordingly.
 
 ### Phase 2: Minimal playback backend
 - Use JOAL to open device/context; allocate sources and streaming buffers.
@@ -60,6 +62,7 @@ This plan describes how to add sound effects and music playback to the Sonic eng
 - Improve YM2612 (envelopes, LFO, detune, stereo) per YM2612 doc; refine PSG volume curves/noise per SN76489 doc.
 - Implement coordination flags fully (tempo, jumps, retriggers) from DAC/Coordination doc.
 - Add porting compatibility layer for other SMPS variants using Tricks of the Trade doc.
+- Current focus: table-driven YM2612 EG/SSG-EG, LFO AMS/FMS scaling, gain/feedback/headroom alignment, FINC/KSR parity (incl. channel 3 special mode), coordination flags (pan/AMS/FMS/tie/sustain/vibrato/tremolo/key displacement). Add regression tests for AMS/FMS writes, SSG-EG progression, DAC playback, timer flags.
 
 ### Phase 4: Debugging and tooling
 - Debug overlay metrics (active channels, buffer lag, current pattern/measure).
@@ -75,6 +78,7 @@ This plan describes how to add sound effects and music playback to the Sonic eng
 ## Testing strategy
 - Unit tests: SMPS header/pointer parsing, voice table decoding, coordination flag handling (skip ROM-dependent tests when ROM missing).
 - Integration tests: render short PCM buffers from known sequences and assert non-silence/loop correctness.
+- Regression tests to cover YM2612 tone/AMS/FMS, SSG-EG behaviour, DAC latch/sample playback, timer flags, and SMPS flag-driven register writes.
 - Manual: run level load with ROM, verify correct track selection per `SCHG_Nem s2` playlist; check SFX timing.
 
 ## Future-proofing

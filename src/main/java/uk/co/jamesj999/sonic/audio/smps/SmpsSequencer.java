@@ -26,7 +26,7 @@ public class SmpsSequencer implements AudioStream {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
 
-    enum TrackType { FM, PSG }
+    enum TrackType { FM, PSG, DAC }
 
     private class Track {
         int pos;
@@ -63,31 +63,45 @@ public class SmpsSequencer implements AudioStream {
         tempoWeight = tempo & 0xFF;
         tempoAccumulator = 0;
 
-        if (data.length > 6) {
-            int fmCount = data[2] & 0xFF;
-            int psgCount = data[3] & 0xFF;
-            int offset = 6;
+        int[] fmPointers = smpsData.getFmPointers();
+        int[] psgPointers = smpsData.getPsgPointers();
 
-            for (int i = 0; i < fmCount; i++) {
-                if (offset + 1 >= data.length) break;
-                int ptr = (data[offset] & 0xFF) | ((data[offset + 1] & 0xFF) << 8);
-                tracks.add(new Track(ptr, TrackType.FM, i));
-                offset += 4;
+        // DAC track (channel 5) if present
+        int dacPtr = smpsData.getDacPointer();
+        if (dacPtr > 0 && dacPtr < data.length) {
+            tracks.add(new Track(dacPtr, TrackType.DAC, 5));
+        }
+
+        // FM tracks
+        for (int i = 0; i < fmPointers.length; i++) {
+            int ptr = fmPointers[i];
+            if (ptr <= 0 || ptr >= data.length) {
+                continue;
             }
-            for (int i = 0; i < psgCount; i++) {
-                if (offset + 1 >= data.length) break;
-                int ptr = (data[offset] & 0xFF) | ((data[offset + 1] & 0xFF) << 8);
-                tracks.add(new Track(ptr, TrackType.PSG, i));
-                offset += 6;
+            tracks.add(new Track(ptr, TrackType.FM, i));
+        }
+
+        for (int i = 0; i < psgPointers.length; i++) {
+            int ptr = psgPointers[i];
+            if (ptr <= 0 || ptr >= data.length) {
+                continue;
             }
+            tracks.add(new Track(ptr, TrackType.PSG, i));
         }
     }
 
     @Override
     public int read(short[] buffer) {
         if (!primed) {
-            tick();
+            if (tempoWeight != 0) {
+                tick();
+            }
             primed = true;
+        }
+
+        if (tempoWeight == 0) {
+            // Tempo zero stalls progression; render still runs synth mix (silence) without ticking.
+            return buffer.length;
         }
 
         for (int i = 0; i < buffer.length; i++) {
@@ -153,7 +167,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void processTempoFrame() {
         if (tempoWeight == 0) {
-            return;
+            return; // tempo zero halts progression
         }
         tempoAccumulator += tempoWeight;
         while (tempoAccumulator >= TEMPO_MOD_BASE) {
@@ -244,16 +258,15 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void loadVoice(Track t, int voiceId) {
-        if (t.type != TrackType.FM) return;
-
         int voicePtr = smpsData.getVoicePtr();
-        // Voice is 25 bytes.
-        int offset = voicePtr + (voiceId * 25);
-        if (offset >= 0 && offset + 25 <= data.length) {
-            byte[] voice = new byte[25];
-            System.arraycopy(data, offset, voice, 0, 25);
-            int hwCh = getHwChannel(t.channelId);
-            synth.setInstrument(hwCh, voice);
+        // Support both 19-byte (S2) and 25-byte (full TL) voices based on available data.
+        int offset = voicePtr + (voiceId * 19);
+        int maxLen = Math.min(25, data.length - offset);
+        int voiceLen = maxLen >= 25 ? 25 : Math.min(19, maxLen);
+        if (offset >= 0 && voiceLen > 0 && offset + voiceLen <= data.length) {
+            byte[] voice = new byte[voiceLen];
+            System.arraycopy(data, offset, voice, 0, voiceLen);
+            synth.setInstrument(t.channelId, voice);
         }
     }
 
@@ -263,8 +276,7 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        // Check for DAC (Track 0)
-        if (t.type == TrackType.FM && t.channelId == 0) {
+        if (t.type == TrackType.DAC) {
             synth.playDac(t.note);
             return;
         }
@@ -279,7 +291,7 @@ public class SmpsSequencer implements AudioStream {
 
         if (t.type == TrackType.FM) {
             // YM2612
-            int hwCh = getHwChannel(t.channelId);
+            int hwCh = t.channelId;
             int port = (hwCh < 3) ? 0 : 1;
             int ch = (hwCh % 3);
 
@@ -333,26 +345,13 @@ public class SmpsSequencer implements AudioStream {
 
     private void stopNote(Track t) {
         if (t.type == TrackType.FM) {
-            int hwCh = getHwChannel(t.channelId);
+            int hwCh = t.channelId;
             int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
             synth.writeFm(0, 0x28, 0x00 | chVal); // Key Off
         } else {
             if (t.channelId < 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
             }
-        }
-    }
-
-    private int getHwChannel(int trackId) {
-        // Sonic 2 Mapping: Track 0->FM6, 1->FM1, 2->FM2, 3->FM3, 4->FM4, 5->FM5
-        switch (trackId) {
-            case 0: return 5;
-            case 1: return 0;
-            case 2: return 1;
-            case 3: return 2;
-            case 4: return 3;
-            case 5: return 4;
-            default: return 0;
         }
     }
 

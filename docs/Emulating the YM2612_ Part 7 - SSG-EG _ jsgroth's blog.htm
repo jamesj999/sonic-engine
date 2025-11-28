@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+
+    <meta name="generator" content="Hugo 0.120.4"><meta name="theme-color" content="#fff" />
+    <meta name="color-scheme" content="light dark">
+
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    
+    <meta http-equiv="Cache-Control" content="no-transform" />
+    
+    <meta http-equiv="Cache-Control" content="no-siteapp" />
+
+    <title>Emulating the YM2612: Part 7 - SSG-EG | jsgroth&#39;s blog</title>
+
+    <link rel="stylesheet" href="/blog/css/meme.min.6501190a375dd9a0b56ed15d92eaafd1eadb748488a5f37fedbdb575f6c3843c.css"/>
+
+    
+    
+        
+            <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js" defer></script><script src="/blog/js/meme.min.b22f9589d1fff2cacbc5f90caead907eeb8083c35ebbdb63fae9c622a604c86f.js"></script>
+
+        
+    
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM&#43;Plex&#43;Serif:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Source&#43;Code&#43;Pro:ital,wght@0,400;0,700;1,400;1,700&amp;family=Comfortaa:wght@700&amp;display=swap" media="print" onload="this.media='all'" />
+        <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM&#43;Plex&#43;Serif:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Source&#43;Code&#43;Pro:ital,wght@0,400;0,700;1,400;1,700&amp;family=Comfortaa:wght@700&amp;display=swap" /></noscript>
+
+    <meta name="author" content="jsgroth" /><meta name="description" content="This is the seventh and final post in a series on emulating the main Sega Genesis sound chip, the YM2612.
+Part 1 - Interface Part 2 - Phase Part 3 - Envelopes Part 4 - Digital Output Part 5 - Analog Output Part 6 - LFO This post will cover the envelope generator’s SSG-EG mode." />
+
+    <link rel="shortcut icon" href="/blog/favicon.ico" type="image/x-icon" />
+    <link rel="mask-icon" href="/blog/icons/safari-pinned-tab.svg" color="#2a6df4" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/blog/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="jsgroth&#39;s blog" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="jsgroth&#39;s blog" />
+    <meta name="msapplication-starturl" content="../../../" />
+    <meta name="msapplication-TileColor" content="#fff" />
+    <meta name="msapplication-TileImage" content="../../../icons/mstile-150x150.png" />
+    <link rel="manifest" href="/blog/manifest.json" />
+
+    
+    
+
+    
+        <link rel="canonical" href="https://jsgroth.dev/blog/posts/emulating-ym2612-part-7/" />
+    
+
+<script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "datePublished": "2025-04-14T12:34:41-05:00",
+        "dateModified": "2025-04-14T14:04:27-05:00",
+        "url": "https://jsgroth.dev/blog/posts/emulating-ym2612-part-7/",
+        "headline": "Emulating the YM2612: Part 7 - SSG-EG",
+        "description": "This is the seventh and final post in a series on emulating the main Sega Genesis sound chip, the YM2612.\nPart 1 - Interface Part 2 - Phase Part 3 - Envelopes Part 4 - Digital Output Part 5 - Analog Output Part 6 - LFO This post will cover the envelope generator’s SSG-EG mode.",
+        "inLanguage" : "en",
+        "articleSection": "posts",
+        "wordCount":  3358 ,
+        "image": ["https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-baseline.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-hold.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-alternate.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-alternate-hold.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-attack.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-attack-hold.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-attack-alternate.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-all.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-output-inversion.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-alternate-low-attack.png","https://jsgroth.dev/blog/blog/images/ym2612/ssg-eg-alt-hold-with-attack.png"],
+        "author": {
+            "@type": "Person",
+            "image": "https://jsgroth.dev/icons/apple-touch-icon.png",
+            "url": "https://jsgroth.dev/",
+            "name": "jsgroth"
+        },
+        "license": "[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)",
+        "publisher": {
+            "@type": "Organization",
+            "name": "jsgroth's blog",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://jsgroth.dev/icons/apple-touch-icon.png"
+            },
+            "url": "https://jsgroth.dev/blog/"
+        },
+        "mainEntityOfPage": {
+            "@type": "WebSite",
+            "@id": "https://jsgroth.dev/blog/"
+        }
+    }
+</script>
+
+    
+    
+
+    
+    
+
+    
+</head>
+
+    <body>
+        <div class="container">
+            
+    <header class="header">
+        
+            <div class="header-wrapper">
+                <div class="header-inner single">
+                    
+    <div class="site-brand">
+        
+            <a href="/blog/" class="brand">jsgroth&#39;s blog</a>
+        
+    </div>
+
+                    <nav class="nav">
+    <ul class="menu" id="menu">
+        
+            
+        
+        
+        
+        
+            
+                <li class="menu-item active"><a href="/blog/posts/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon archive"><path d="M32 448c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32V160H32v288zm160-212c0-6.6 5.4-12 12-12h104c6.6 0 12 5.4 12 12v8c0 6.6-5.4 12-12 12H204c-6.6 0-12-5.4-12-12v-8zM480 32H32C14.3 32 0 46.3 0 64v48c0 8.8 7.2 16 16 16h480c8.8 0 16-7.2 16-16V64c0-17.7-14.3-32-32-32z"/></svg><span class="menu-item-name">Posts</span></a>
+                </li>
+            
+        
+            
+                <li class="menu-item"><a href="/blog/categories/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon th"><path d="M149.333 56v80c0 13.255-10.745 24-24 24H24c-13.255 0-24-10.745-24-24V56c0-13.255 10.745-24 24-24h101.333c13.255 0 24 10.745 24 24zm181.334 240v-80c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.256 0 24.001-10.745 24.001-24zm32-240v80c0 13.255 10.745 24 24 24H488c13.255 0 24-10.745 24-24V56c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24zm-32 80V56c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.256 0 24.001-10.745 24.001-24zm-205.334 56H24c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24zM0 376v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H24c-13.255 0-24 10.745-24 24zm386.667-56H488c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24zm0 160H488c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24zM181.333 376v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24z"/></svg><span class="menu-item-name">Categories</span></a>
+                </li>
+            
+        
+            
+                <li class="menu-item"><a href="/blog/tags/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" class="icon tags"><path d="M497.941 225.941L286.059 14.059A48 48 0 0 0 252.118 0H48C21.49 0 0 21.49 0 48v204.118a48 48 0 0 0 14.059 33.941l211.882 211.882c18.744 18.745 49.136 18.746 67.882 0l204.118-204.118c18.745-18.745 18.745-49.137 0-67.882zM112 160c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48zm513.941 133.823L421.823 497.941c-18.745 18.745-49.137 18.745-67.882 0l-.36-.36L527.64 323.522c16.999-16.999 26.36-39.6 26.36-63.64s-9.362-46.641-26.36-63.64L331.397 0h48.721a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882z"/></svg><span class="menu-item-name">Tags</span></a>
+                </li>
+            
+        
+            
+                
+                    
+                    
+                        <li class="menu-item">
+                            <a id="theme-switcher" href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon theme-icon-light"><path d="M193.2 104.5l48.8-97.5a18 18 0 0128 0l48.8 97.5 103.4 -34.5a18 18 0 0119.8 19.8l-34.5 103.4l97.5 48.8a18 18 0 010 28l-97.5 48.8 34.5 103.4a18 18 0 01-19.8 19.8l-103.4-34.5-48.8 97.5a18 18 0 01-28 0l-48.8-97.5l-103.4 34.5a18 18 0 01-19.8-19.8l34.5-103.4-97.5-48.8a18 18 0 010-28l97.5-48.8-34.5-103.4a18 18 0 0119.8-19.8zM256 128a128 128 0 10.01 0M256 160a96 96 0 10.01 0"/></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon theme-icon-dark"><path d="M27 412a256 256 0 10154-407a11.5 11.5 0 00-5 20a201.5 201.5 0 01-134 374a11.5 11.5 0 00-15 13"/></svg></a>
+                        </li>
+                    
+                
+            
+        
+            
+                
+            
+        
+            
+                <li class="menu-item search-item">
+                        <form id="search" class="search" role="search">
+    <label for="search-input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon search-icon"><path d="M505 442.7L405.3 343c-4.5-4.5-10.6-7-17-7H372c27.6-35.3 44-79.7 44-128C416 93.1 322.9 0 208 0S0 93.1 0 208s93.1 208 208 208c48.3 0 92.7-16.4 128-44v16.3c0 6.4 2.5 12.5 7 17l99.7 99.7c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.4-9.4 9.4-24.6.1-34zM208 336c-70.7 0-128-57.2-128-128 0-70.7 57.2-128 128-128 70.7 0 128 57.2 128 128 0 70.7-57.2 128-128 128z"/></svg></label>
+    <input type="search" id="search-input" class="search-input">
+</form>
+
+<template id="search-result" hidden>
+    <article class="content post">
+        <h2 class="post-title"><a class="summary-title-link"></a></h2>
+        <summary class="summary"></summary>
+        <div class="read-more-container">
+            <a class="read-more-link">Read More »</a>
+        </div>
+    </article>
+</template>
+
+                    </li>
+                
+            
+        
+    </ul>
+</nav>
+
+                    
+                </div>
+            </div>
+            
+    <input type="checkbox" id="nav-toggle" aria-hidden="true" />
+    <label for="nav-toggle" class="nav-toggle"></label>
+    <label for="nav-toggle" class="nav-curtain"></label>
+
+
+        
+    </header>
+
+
+
+
+            
+            
+    <main class="main single" id="main">
+    <div class="main-inner">
+
+        
+
+        <article class="content post h-entry" data-small-caps="true" data-align="default" data-type="posts">
+
+            <h1 class="post-title p-name">Emulating the YM2612: Part 7 - SSG-EG</h1>
+
+            
+
+            
+                
+            
+
+            
+                
+
+<div class="post-meta">
+    
+        
+        <time datetime="2025-04-14T12:34:41-05:00" class="post-meta-item published dt-published"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon post-meta-icon"><path d="M148 288h-40c-6.6 0-12-5.4-12-12v-40c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm108-12v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm96 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm-96 96v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm-96 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm96-260v352c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V112c0-26.5 21.5-48 48-48h48V12c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h128V12c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h48c26.5 0 48 21.5 48 48zm-48 346V160H48v298c0 3.3 2.7 6 6 6h340c3.3 0 6-2.7 6-6z"/></svg>&nbsp;2025.4.14</time>
+    
+    
+        
+        <time datetime="2025-04-14T14:04:27-05:00" class="post-meta-item modified dt-updated"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon post-meta-icon"><path d="M400 64h-48V12c0-6.627-5.373-12-12-12h-40c-6.627 0-12 5.373-12 12v52H160V12c0-6.627-5.373-12-12-12h-40c-6.627 0-12 5.373-12 12v52H48C21.49 64 0 85.49 0 112v352c0 26.51 21.49 48 48 48h352c26.51 0 48-21.49 48-48V112c0-26.51-21.49-48-48-48zm-6 400H54a6 6 0 0 1-6-6V160h352v298a6 6 0 0 1-6 6zm-52.849-200.65L198.842 404.519c-4.705 4.667-12.303 4.637-16.971-.068l-75.091-75.699c-4.667-4.705-4.637-12.303.068-16.971l22.719-22.536c4.705-4.667 12.303-4.637 16.97.069l44.104 44.461 111.072-110.181c4.705-4.667 12.303-4.637 16.971.068l22.536 22.718c4.667 4.705 4.636 12.303-.069 16.97z"/></svg>&nbsp;2025.4.14</time>
+    
+    
+    
+        
+        
+        
+            
+                <span class="post-meta-item category"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M464 128H272l-54.63-54.63c-6-6-14.14-9.37-22.63-9.37H48C21.49 64 0 85.49 0 112v288c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V176c0-26.51-21.49-48-48-48zm0 272H48V112h140.12l54.63 54.63c6 6 14.14 9.37 22.63 9.37H464v224z"/></svg>&nbsp;<a href="/blog/categories/emulation/" class="category-link p-category">Emulation</a></span>
+            
+        
+    
+    
+        
+        <span class="post-meta-item wordcount"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M497.9 142.1l-46.1 46.1c-4.7 4.7-12.3 4.7-17 0l-111-111c-4.7-4.7-4.7-12.3 0-17l46.1-46.1c18.7-18.7 49.1-18.7 67.9 0l60.1 60.1c18.8 18.7 18.8 49.1 0 67.9zM284.2 99.8L21.6 362.4.4 483.9c-2.9 16.4 11.4 30.6 27.8 27.8l121.5-21.3 262.6-262.6c4.7-4.7 4.7-12.3 0-17l-111-111c-4.8-4.7-12.4-4.7-17.1 0zM124.1 339.9c-5.5-5.5-5.5-14.3 0-19.8l154-154c5.5-5.5 14.3-5.5 19.8 0s5.5 14.3 0 19.8l-154 154c-5.5 5.5-14.3 5.5-19.8 0zM88 424h48v36.3l-64.5 11.3-31.1-31.1L51.7 376H88v48z"/></svg>&nbsp;3358</span>
+    
+    
+        
+        <span class="post-meta-item reading-time"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 448c-110.5 0-200-89.5-200-200S145.5 56 256 56s200 89.5 200 200-89.5 200-200 200zm61.8-104.4l-84.9-61.7c-3.1-2.3-4.9-5.9-4.9-9.7V116c0-6.6 5.4-12 12-12h32c6.6 0 12 5.4 12 12v141.7l66.8 48.6c5.4 3.9 6.5 11.4 2.6 16.8L334.6 349c-3.9 5.3-11.4 6.5-16.8 2.6z"/></svg>&nbsp;16&nbsp;mins</span>
+    
+    
+    
+</div>
+
+            
+
+            <nav class="contents">
+  <h2 id="contents" class="contents-title">Contents</h2><ol class="toc">
+    <li><a id="contents:overview" href="#overview">Overview</a></li>
+    <li><a id="contents:how-its-supposed-to-work" href="#how-its-supposed-to-work">How It&rsquo;s Supposed to Work</a>
+      <ol>
+        <li><a id="contents:baseline" href="#baseline">Baseline</a></li>
+        <li><a id="contents:hold" href="#hold">Hold</a></li>
+        <li><a id="contents:alternate-and-output-inversion" href="#alternate-and-output-inversion">Alternate and Output Inversion</a></li>
+        <li><a id="contents:attack" href="#attack">Attack</a></li>
+      </ol>
+    </li>
+    <li><a id="contents:how-it-works" href="#how-it-works">How It Works</a>
+      <ol>
+        <li><a id="contents:output-inversion" href="#output-inversion">Output Inversion</a></li>
+        <li><a id="contents:envelope-update-logic" href="#envelope-update-logic">Envelope Update Logic</a></li>
+        <li><a id="contents:ssg-eg-logic" href="#ssg-eg-logic">SSG-EG Logic</a></li>
+        <li><a id="contents:attack-phase-weirdness" href="#attack-phase-weirdness">Attack Phase Weirdness</a></li>
+      </ol>
+    </li>
+    <li><a id="contents:examples" href="#examples">Examples</a></li>
+    <li><a id="contents:the-end" href="#the-end">The End</a></li>
+  </ol>
+</nav><div class="post-body e-content">
+                <p>This is the seventh and final post in a series on emulating the main Sega Genesis sound chip, the YM2612.</p>
+<ul>
+<li><a href="/blog/posts/emulating-ym2612-part-1/">Part 1 - Interface</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-2/">Part 2 - Phase</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-3/">Part 3 - Envelopes</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-4/">Part 4 - Digital Output</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-5/">Part 5 - Analog Output</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-6/">Part 6 - LFO</a></li>
+</ul>
+<p>This post will cover the envelope generator&rsquo;s SSG-EG mode.</p>
+<h2 id="overview"><a href="#overview" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:overview" class="headings">Overview</a></h2>
+<p>The previous post on the envelope generators has <a href="/blog/posts/emulating-ym2612-part-3/#ssg-eg">a section that briefly explains what SSG-EG is</a>.</p>
+<p>As mentioned in that post, the YM2612 does not actually have a copy of the YM2149 SSG&rsquo;s envelope generator hardware. Instead, SSG-EG emulates the SSG&rsquo;s envelope shapes by modifying behavior of the FM synthesis envelope generators.</p>
+<p>The SSG-EG hardware was seemingly designed to support the OPN&rsquo;s SSG sound source, which was removed in the YM2612, but since SSG-EG is implemented using the FM envelope generators it can also be used with normal FM synthesis operation.</p>
+<p>While the YM2612&rsquo;s SSG-EG functionality was officially undocumented, a few games do use it, unlike CSM. SSG-EG is mentioned in Sega&rsquo;s official Genesis documentation, but there&rsquo;s no description of what it does - only a short blurb to the effect of &ldquo;don&rsquo;t write non-zero values to this register&rdquo;.</p>
+<p>SSG-EG is controlled entirely using four bits in registers $90-$9F:</p>
+<ul>
+<li>Bit 3: SSG-EG enabled</li>
+<li>Bit 2: Attack</li>
+<li>Bit 1: Alternate</li>
+<li>Bit 0: Hold</li>
+</ul>
+<p>The lowest three bits have no effect unless bit 3 is set. Bit 3 enables SSG-EG mode for the operator, and the lowest three bits together select 1 of 8 envelope shapes.</p>
+<p><img src="/blog/images/ym2612/ssg-eg.png" alt="SSG-EG Envelopes"><span class="caption">SSG-EG envelope shapes, from YM2608 manual</span></p>
+<p>Note that the Y-axis in the manual here is volume, not attenuation. Higher Y value = higher volume / lower attenuation.</p>
+<p>SSG-EG mode causes envelope attenuation to oscillate between 0 and 0x200 / 512 (roughly 48 dB), at least when used as intended. Attenuation does not go all the way up to 0x3FF / 1023 except in specific cases where the envelope is holding at max attenuation (envelope numbers 1 and 7 above).</p>
+<p>The YM2608 manual states that SSG-EG should only be used with attack rate set to 0x1F / 31 (max). This is because SSG-EG is designed around always skipping Attack phase at key on and only using the envelope generator&rsquo;s Decay/Sustain/Release phases. Of course, the chip still does <em>something</em> if SSG-EG is used with lower attack rates, and a handful of games actually depend on emulating this correctly.</p>
+<p>Very few commercial releases use SSG-EG, but there are some, including a few that exercise the quirkier parts of how it works.</p>
+<h2 id="how-its-supposed-to-work"><a href="#how-its-supposed-to-work" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:how-its-supposed-to-work" class="headings">How It&rsquo;s Supposed to Work</a></h2>
+<p>Before describing how the chip actually implements SSG-EG, I think it&rsquo;s helpful to describe how it works when it&rsquo;s used as intended: attack rate is set to 31 so that Attack phase is always skipped, and you don&rsquo;t modify any envelope generator parameters while the operator is keyed on.</p>
+<h3 id="baseline"><a href="#baseline" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:baseline" class="headings">Baseline</a></h3>
+<p>First, SSG-EG behavior when SSG-EG is enabled but the attack/alternate/hold bits are all clear:</p>
+<p><img src="/blog/images/ym2612/ssg-eg-baseline.png" alt="SSG-EG Baseline"><span class="caption">SSG-EG attack/alternate/hold all clear</span></p>
+<p>At key on, attenuation immediately drops to 0 because attack rate is 31, and thus (2R + Rks) is guaranteed to be 62 or 63. The envelope generator then immediately enters Decay phase and begins increasing attenuation, though at a faster rate than it would if SSG-EG was disabled. If attenuation crosses the sustain level then the envelope generator will automatically switch to Sustain phase, just as it would normally.</p>
+<p>When attenuation reaches 0x200 / 512, something unusual happens: attenuation immediately drops back down to 0 and the envelope enters Decay phase again. With this particular envelope shape, SSG-EG also resets the phase generator&rsquo;s 20-bit phase counter to 0 every time this happens, though it doesn&rsquo;t do this for every envelope shape - it only does it here because the alternate and hold bits are both clear.</p>
+<p>(What actually happens is that reaching attenuation 0x200 causes the chip to re-enter Attack phase, but since attack rate is 31, attenuation immediately drops to 0 and Attack phase gets skipped.)</p>
+<h3 id="hold"><a href="#hold" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:hold" class="headings">Hold</a></h3>
+<p>The hold bit causes SSG-EG to hold at max attenuation instead of repeatedly dropping back down to 0 every time it reaches 0x200.</p>
+<p>It does work a little differently than you might expect in that as soon as attenuation reaches 0x200, at the next sample it jumps up to max (0x3FF) and stays there.</p>
+<p><img src="/blog/images/ym2612/ssg-eg-hold.png" alt="SSG-EG Hold"><span class="caption">SSG-EG hold set, attack/alternate clear</span></p>
+<p>If the hold bit is set, SSG-EG does <em>not</em> reset the phase generator&rsquo;s internal counter once it reaches attenuation 0x200.</p>
+<h3 id="alternate-and-output-inversion"><a href="#alternate-and-output-inversion" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:alternate-and-output-inversion" class="headings">Alternate and Output Inversion</a></h3>
+<p>If the alternate bit is set, SSG-EG inverts its output every time it reaches attenuation 0x200. It accomplishes this using an internal output inversion flag that it toggles whenever internal attenuation is 0x200.</p>
+<p>&ldquo;Inverting its output&rdquo; means that instead of the envelope generator always outputting its current attenuation A directly, it outputs (0x200 - A) while the output inversion flag is set.</p>
+<p>When the hold bit is clear, this causes the envelope shape to be a triangle wave instead of a sawtooth wave.
+<img src="/blog/images/ym2612/ssg-eg-alternate.png" alt="SSG-EG Alternate"><span class="caption">SSG-EG alternate set, attack/hold clear</span></p>
+<p>Internally attenuation still repeatedly drops to 0 and then increases to 0x200, but output inversion causes the final envelope generator output to follow the above graph.</p>
+<p>When the hold bit is set alongside the alternate bit, the output inversion takes effect before the hold. This causes the envelope generator&rsquo;s output to hold at 0 instead of max attenuation.</p>
+<p>The internal attenuation does <em>not</em> jump from 0x200 to 0x3FF at the hold - the chip only does this when output is not inverted.
+<img src="/blog/images/ym2612/ssg-eg-alternate-hold.png" alt="SSG-EG Alternate and Hold"><span class="caption">SSG-EG alternate/hold set, attack clear</span></p>
+<p>Similar to the hold bit, setting the alternate bit causes SSG-EG to <em>not</em> reset the phase generator&rsquo;s counter to 0 at internal attenuation 0x200. It only does this when both the alternate and hold bits are clear.</p>
+<h3 id="attack"><a href="#attack" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:attack" class="headings">Attack</a></h3>
+<p>The attack bit simply applies an additional inversion to the output at all times when set. It&rsquo;s functionally an XOR on the internal output inversion flag.</p>
+<p>This causes the envelope generator&rsquo;s output to begin at 0x200 (inverted 0) and gradually decrease to 0 (inverted 0x200).</p>
+<p>If the attack bit is set and the alternate bit is clear, output is always inverted.
+<img src="/blog/images/ym2612/ssg-eg-attack.png" alt="SSG-EG Attack"><span class="caption">SSG-EG attack set, alternate/hold clear</span>
+<img src="/blog/images/ym2612/ssg-eg-attack-hold.png" alt="SSG-EG Attack and Hold"><span class="caption">SSG-EG attack/hold set, alternate clear</span></p>
+<p>Note that when attack and hold are both set, internal attenuation does not jump to 0x3FF after it reaches 0x200, because output is inverted.</p>
+<p>When the attack and alternate bits are both set, output inversion is always in the opposite state that it would be in if alternate was set and attack was clear.
+<img src="/blog/images/ym2612/ssg-eg-attack-alternate.png" alt="SSG-EG Attack and Alternate"><span class="caption">SSG-EG attack/alternate set, hold clear</span>
+<img src="/blog/images/ym2612/ssg-eg-all.png" alt="SSG-EG All Set"><span class="caption">SSG-EG attack/alternate/hold all set</span></p>
+<p>When attack, alternate, and hold are all set, attenuation does jump up to max when the hold begins because output is not inverted.</p>
+<p>Alright, now to describe how the chip actually implements SSG-EG to produce these 8 envelope shapes.</p>
+<h2 id="how-it-works"><a href="#how-it-works" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:how-it-works" class="headings">How It Works</a></h2>
+<h3 id="output-inversion"><a href="#output-inversion" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:output-inversion" class="headings">Output Inversion</a></h3>
+<p>First, suppose there are 5 new bool fields, 4 for the SSG-EG control bits and 1 for the current output inversion state:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">struct</span> <span class="nc">EnvelopeGenerator</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">ssg_enabled</span>: <span class="kt">bool</span><span class="p">,</span><span class="w">   </span><span class="c1">// $90-$9F bit 3
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">ssg_attack</span>: <span class="kt">bool</span><span class="p">,</span><span class="w">    </span><span class="c1">// $90-$9F bit 2
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">ssg_alternate</span>: <span class="kt">bool</span><span class="p">,</span><span class="w"> </span><span class="c1">// $90-$9F bit 1
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">ssg_hold</span>: <span class="kt">bool</span><span class="p">,</span><span class="w">      </span><span class="c1">// $90-$9F bit 0
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">ssg_invert</span>: <span class="kt">bool</span><span class="p">,</span><span class="w">    </span><span class="c1">// Current output inversion state
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="o">..</span><span class="p">.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>Output inversion is applied in two places: when the envelope generator&rsquo;s output is read, and at key off. In both cases, inversion is applied based on the XOR of the attack bit and the inversion state bit.</p>
+<p>When <code>(ssg_attack ^ ssg_invert)</code> is 1, inversion is applied like this:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-python" data-lang="python"><span class="line"><span class="cl"><span class="p">(</span><span class="mh">0x200</span> <span class="o">-</span> <span class="n">level</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mh">0x3FF</span>
+</span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>This doesn&rsquo;t work quite as intended if attenuation ever ends up higher than 0x200. This can happen when using attack rates lower than 31, or if software changes the decay/sustain rate after keying on but before attenuation reaches 0x200. However, performing the calculation this way is accurate to what actual hardware does.</p>
+<p><img src="/blog/images/ym2612/ssg-eg-output-inversion.png" alt="SSG-EG Output Inversion"></p>
+<p>When the envelope generator&rsquo;s output is read, SSG-EG applies output inversion whenever SSG-EG is enabled and the operator is not keyed off (i.e. the operator is not in Release phase):</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">impl</span><span class="w"> </span><span class="n">EnvelopeGenerator</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">fn</span> <span class="nf">current_level</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kt">u16</span> <span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Only apply output inversion if SSG-EG is enabled and the operator is not keyed off
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_enabled</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">phase</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">AdsrPhase</span>::<span class="n">Release</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_attack</span><span class="w"> </span><span class="o">^</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_invert</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// Invert output
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="mh">0x200_</span><span class="k">u16</span><span class="p">.</span><span class="n">wrapping_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x3FF</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// No inversion
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">};</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Then apply total level and tremolo
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>Keying off inverts the stored attenuation value in-place if output inversion is active, which is why output inversion on reads doesn&rsquo;t apply to keyed-off operators:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">impl</span><span class="w"> </span><span class="n">EnvelopeGenerator</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">fn</span> <span class="nf">set_key_on</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">key_on</span>: <span class="kt">bool</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">key_on</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="n">key_on</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// Key on/off state changed to off; check for SSG-EG output inversion
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_enabled</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_attack</span><span class="w"> </span><span class="o">^</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_invert</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="c1">// Invert stored attenuation in-place
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">                </span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x200_</span><span class="k">u16</span><span class="p">.</span><span class="n">wrapping_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x3FF</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Then other key on/off logic
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>Keying off also holds the internal output inversion flag at 0 for as long as the operator is keyed off. Since this flag does nothing while an operator is keyed off, you can emulate this by clearing the flag at key on:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">impl</span><span class="w"> </span><span class="n">EnvelopeGenerator</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">fn</span> <span class="nf">set_key_on</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">key_on</span>: <span class="kt">bool</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">key_on</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="n">key_on</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">..</span><span class="p">.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">key_on</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">key_on</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// Key on/off state changed to on; clear output inversion state
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_invert</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Then other key on/off logic
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>You could also emulate this by setting <code>ssg_invert</code> to false at key off and then only ever updating it while the operator is keyed on.</p>
+<h3 id="envelope-update-logic"><a href="#envelope-update-logic" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:envelope-update-logic" class="headings">Envelope Update Logic</a></h3>
+<p>The normal envelope update logic works <em>mostly</em> the same way in SSG-EG mode. There&rsquo;s only one big change: the way that envelope increment is applied in Decay, Sustain, and Release phases.</p>
+<p>The <a href="/blog/posts/emulating-ym2612-part-3/#change-logic-decaysustainrelease">normal logic</a> is this:</p>
+<pre tabindex="0"><code>A&#39; = min(A + I, 0x3FF)
+</code></pre><p>When SSG-EG is enabled, the logic changes to this:</p>
+<pre tabindex="0"><code>if A &lt; 0x200:
+    A&#39; = A + 4*I
+else:
+    A&#39; = A
+</code></pre><p>Attenuation increases at 4x the rate that it does normally, but only if it&rsquo;s currently less than SSG-EG&rsquo;s 0x200 magic number. If attenuation is at or above 0x200, it does not increase at all. This is important to ensure that the envelope generator&rsquo;s output holds at 0 when SSG-EG is holding with inverted output, which happens when the SSG-EG hold bit is set and either the alternate bit or attack bit is set (but not both).</p>
+<p>SSG-EG is meant to always skip Attack phase, but if it&rsquo;s not skipped, it works exactly the same way as when SSG-EG is off: exponentially decreasing attenuation until it reaches 0, which triggers the transition to Decay phase.</p>
+<p>There are many unintended behaviors possible when SSG-EG is combined with Attack phase, but these aren&rsquo;t caused by any changes to how Attack phase itself works - they&rsquo;re caused by how the additional SSG-EG logic interacts with Attack phase.</p>
+<h3 id="ssg-eg-logic"><a href="#ssg-eg-logic" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:ssg-eg-logic" class="headings">SSG-EG Logic</a></h3>
+<p>When SSG-EG is enabled, there is some additional logic that runs once per sample, 3x as frequently as the normal envelope update logic. This means that once attenuation hits 0x200, SSG-EG state changes take effect after only a single sample is generated with internal attenuation at 0x200. SSG-EG doesn&rsquo;t wait for the next envelope update cycle.</p>
+<p>On the sample cycles where SSG-EG logic and envelope updates both run, the SSG-EG logic runs before the normal envelope update logic, which is why a single sample is generated with attenuation 0x200 before SSG-EG state changes take effect.</p>
+<p>All of this logic only runs if the envelope generator&rsquo;s current internal attenuation is at or above 0x200.</p>
+<p>These are the main pieces to the logic:</p>
+<ol>
+<li>If the alternate bit is set, toggle output inversion state
+<ul>
+<li>If the hold bit is also set, output inversion state is always set to 1 instead of toggled</li>
+</ul>
+</li>
+<li>If the alternate and hold bits are both clear, reset the phase generator&rsquo;s internal counter to 0</li>
+<li>If the operator is keyed on and the hold bit is clear, trigger a virtual key on event</li>
+<li>If not in Attack phase and the hold bit is set and output is not inverted, increase attenuation to max (0x3FF)</li>
+<li>If the operator is keyed off, increase attenuation to max (0x3FF)</li>
+</ol>
+<p>It is important that the alternate bit logic (1) is applied before the hold max attenuation check (4), but otherwise the order of these does not matter.</p>
+<p>The &ldquo;virtual key on&rdquo; event (3) is what causes attenuation to immediately drop from 0x200 to 0 when attack rate is set to 31. This virtual key on performs the same transition to Attack phase that the envelope generator performs when the key on/off state changes from keyed off to keyed on. This includes immediately dropping attenuation to 0 if (2R + Rks) is 62 or 63, which it will always be if attack rate is 31.</p>
+<p>In terms of code, this function might look something like this:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span><span class="lnt">21
+</span><span class="lnt">22
+</span><span class="lnt">23
+</span><span class="lnt">24
+</span><span class="lnt">25
+</span><span class="lnt">26
+</span><span class="lnt">27
+</span><span class="lnt">28
+</span><span class="lnt">29
+</span><span class="lnt">30
+</span><span class="lnt">31
+</span><span class="lnt">32
+</span><span class="lnt">33
+</span><span class="lnt">34
+</span><span class="lnt">35
+</span><span class="lnt">36
+</span><span class="lnt">37
+</span><span class="lnt">38
+</span><span class="lnt">39
+</span><span class="lnt">40
+</span><span class="lnt">41
+</span><span class="lnt">42
+</span><span class="lnt">43
+</span><span class="lnt">44
+</span><span class="lnt">45
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">impl</span><span class="w"> </span><span class="n">EnvelopeGenerator</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">fn</span> <span class="nf">ssg_update</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">phase</span>: <span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">PhaseGenerator</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_enabled</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mh">0x200</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// Do nothing; none of this logic applies until attenuation reaches 0x200 while SSG-EG is on
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="k">return</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Apply alternate bit
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_alternate</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// If hold bit is clear, toggle output inversion state
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="c1">// If hold bit is set, always set output inversion state to 1
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_invert</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_invert</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_hold</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Reset phase generator counter if alternate and hold bits are both clear
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_alternate</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_hold</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="n">phase</span><span class="p">.</span><span class="n">counter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Generate a virtual key on if operator is keyed on and not holding
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_hold</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">phase</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">AdsrPhase</span>::<span class="n">Release</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="c1">// Exact same logic as when key state changes from keyed off to keyed on
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">phase</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">AdsrPhase</span>::<span class="n">Attack</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="kd">let</span><span class="w"> </span><span class="n">rks</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">phase</span><span class="p">.</span><span class="n">key_code</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">(</span><span class="mi">3</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">key_scale_level</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">attack_rate</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">rks</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">62</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">                </span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Check whether to increase attenuation to max
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="c1">// Case 1: Holding in a non-Attack phase and output is not inverted
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_hold</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">phase</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">AdsrPhase</span>::<span class="n">Attack</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_attack</span><span class="w"> </span><span class="o">^</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">ssg_invert</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x3FF</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="c1">// Case 2: Operator is keyed off
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">phase</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">AdsrPhase</span>::<span class="n">Release</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x3FF</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>And that is all you need for a complete SSG-EG implementation. There are a bunch of different ways you could structure this logic, but I think splitting everything out like this makes it more obvious what is happening.</p>
+<p>There are a <em>lot</em> of possible weird behaviors if SSG-EG flags are modified while an operator is keyed on, but this should handle those cases roughly accurately, and regardless games don&rsquo;t depend on handling these weird behaviors correctly as far as I know.</p>
+<p>However, there <em>are</em> games that depend on correctly handling SSG-EG with Attack phase.</p>
+<h3 id="attack-phase-weirdness"><a href="#attack-phase-weirdness" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:attack-phase-weirdness" class="headings">Attack Phase Weirdness</a></h3>
+<p>SSG-EG was designed around always skipping Attack phase, but what happens when it&rsquo;s not skipped?</p>
+<p>It turns out that not skipping Attack phase breaks a <em>lot</em> of assumptions made in SSG-EG&rsquo;s implementation. It&rsquo;s a wonder why the chip designers didn&rsquo;t special case SSG-EG to always drop attenuation to 0 at key on regardless of attack rate.</p>
+<p>The alternate bit implementation is the most egregious example. When alternate is set and the hold bit is clear, output inversion state toggles every sample while attenuation is at or above 0x200. If an operator is at max attenuation at key on and attack rate is somewhat low, this causes chaos during the initial Attack phase while internal attenuation is in the 0x200-0x3FF range:
+<img src="/blog/images/ym2612/ssg-eg-alternate-low-attack.png" alt="SSG-EG Alternate with Low Attack Rate"><span class="caption">SSG-EG alternate, initial Attack phase</span></p>
+<p>Even after the initial Attack, there is weirdness every time internal attenuation reaches 0x200. When attack rate is low, the envelope generator&rsquo;s internal attenuation could stay at 0x200 for a decent number of samples before Attack phase decreases it below 0x200, and during this time the envelope generator&rsquo;s output will repeatedly alternate between 0 and 0x200 due to output inversion.</p>
+<p>Setting both the alternate and hold bits also causes weird behavior, though not to the same degree. Since output is inverted the entire time, during the initial Attack, envelope generator output gradually climbs from 0x201 to 0x3FF before dropping to 0:
+<img src="/blog/images/ym2612/ssg-eg-alt-hold-with-attack.png" alt="SSG-EG Alternate + Hold with Attack Phase"><span class="caption">SSG-EG alternate/hold set with Attack phase</span></p>
+<p>There&rsquo;s another odd behavior when the alternate and hold bits are both clear, caused by SSG-EG holding the phase generator counter at 0 whenever internal attenuation is at least 0x200: The operator is effectively muted during the initial Attack phase until attenuation drops below 0x200. Additionally, every time attenuation increases to 0x200 as part of an SSG-EG repetition, the operator is muted until Attack phase drops attenuation below 0x200, which can take a while if attack rate is low.</p>
+<p>This is not a complete description of every weird behavior that can happen when SSG-EG is used with a non-max attack rate, but suffice it to say, this is not an intended usage of the chip.</p>
+<p>The fun part is that SSG-EG with Attack phase isn&rsquo;t just an edge case that nothing depends on - there are games that trigger this behavior!</p>
+<h2 id="examples"><a href="#examples" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:examples" class="headings">Examples</a></h2>
+<p>Alisia Dragoon is probably the most well-known game that uses SSG-EG, at least that I know of. However, as far as I can tell it only uses SSG-EG for specific percussion instruments, and I find the difference practically unnoticeable compared to not emulating SSG-EG at all.</p>
+<p>Here&rsquo;s a recording of part of the Stage 1 music that has only the channel that&rsquo;s using SSG-EG, with ladder effect emulation disabled so the sound is clearer:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/alisia-no-ssg.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">No SSG-EG emulation</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/alisia-with-ssg.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">With SSG-EG emulation</span></p>
+<p>Out of the games that I&rsquo;ve seen mentioned as using SSG-EG, Ghostbusters is one where SSG-EG emulation makes a huge difference. Not emulating SSG-EG makes some of its instruments sound completely wrong, for example:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/ghostbusters-no-ssg.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">No SSG-EG emulation</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/ghostbusters-with-ssg.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">With SSG-EG emulation</span></p>
+<p>In this song it has SSG-EG enabled for Channel 6&rsquo;s operators 1, 3, and 4 while using algorithm 2. Operator 1 has only the SSG-EG attack bit set (inverted sawtooth envelope), the other two have the attack/alternate/hold bits all clear (normal sawtooth envelope). All three of these operators have attack rate set to max, using SSG-EG as intended.</p>
+<p>Olympic Gold and Beavis &amp; Butthead have several sound effects that use SSG-EG with attack rates other than 31, so Attack phase does not get skipped like it&rsquo;s supposed to. Beavis &amp; Butthead only ever seems to use SSG-EG with attack/alternate/hold all clear, but Olympic Gold uses multiple SSG-EG envelope shapes, including the chaotic envelope created by setting only the SSG-EG alternate bit and using a very low attack rate.</p>
+<p>Here&rsquo;s an example sound effect from Olympic Gold&rsquo;s diving game which was apparently not emulated completely correctly in any Genesis emulator until the late 2000s or so, when <a href="https://gendev.spritesmind.net/forum/viewtopic.php?p=7967#p7967" target="_blank" rel="noopener">Nemesis reverse engineered how SSG-EG works in great detail</a>.</p>
+<p>First, with no SSG-EG emulation at all:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/olympic-splash-no-ssg.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">No SSG-EG emulation</span></p>
+<p>Next, with SSG-EG emulation, but ignoring the attack rate and always skipping Attack phase:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/olympic-splash-no-attack.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">With SSG-EG emulation, skipping Attack phase</span></p>
+<p>Finally, with proper SSG-EG emulation including Attack phase:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/olympic-splash-with-attack.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">With SSG-EG emulation, with Attack phase</span></p>
+<p>I don&rsquo;t believe that any of these is exactly what it sounded like in earlier emulators, but this does demonstrate that the diving board and splash sound effects both depend on correctly emulating SSG-EG with Attack phase.</p>
+<p>The splash sound effect is produced using a combination of channels 5 and 6.</p>
+<p>Channel 5 uses algorithm 2 with SSG-EG enabled for all four operators, with the following SSG-EG settings:</p>
+<ul>
+<li>Operator 1: Alternate set, attack/hold clear, attack rate 1 (chaos envelope)</li>
+<li>Operator 2: Hold set, attack/alternate clear, attack rate 14</li>
+<li>Operator 3: Hold set, attack/alternate clear, attack rate 21</li>
+<li>Operator 4: Attack/alternate/hold all set, attack rate 28</li>
+</ul>
+<p>Channel 6 uses algorithm 4, with SSG-EG enabled only for Operator 2. It has the SSG-EG attack/alternate/hold bits all set and attack rate set to 20.</p>
+<h2 id="the-end"><a href="#the-end" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:the-end" class="headings">The End</a></h2>
+<p>With that, I believe I&rsquo;ve covered all parts of the hardware except for the undocumented test registers, which nothing uses and are not well-supported in most emulators aside from Nuked-OPN2 (which of course emulates all of them).</p>
+<p>So, that&rsquo;s the end of this series!</p>
+
+            </div>
+
+            
+    
+    
+        <ul class="post-copyright">
+            <li class="copyright-item author"><span class="copyright-item-text">Author</span>: <a href="https://jsgroth.dev/" class="p-author h-card" target="_blank" rel="noopener">jsgroth</a></li>
+            
+                
+                
+                
+                
+                <li class="copyright-item link"><span class="copyright-item-text">Link</span>: <a href="/blog/posts/emulating-ym2612-part-7/" target="_blank" rel="noopener">https://jsgroth.dev/blog/posts/emulating-ym2612-part-7/</a></li>
+            
+            <li class="copyright-item license"><span class="copyright-item-text">License</span>: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a></li>
+            
+        </ul>
+    
+
+
+
+        </article>
+
+        
+
+        
+    <div class="updated-badge-container">
+        <span title="Updated @ 2025-04-14 14:04:27 CDT" style="cursor:help">
+
+<svg xmlns="http://www.w3.org/2000/svg" width="130" height="20" class="updated-badge"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="a"><rect width="130" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#a)"><path class="updated-badge-left" d="M0 0h55v20H0z"/><path class="updated-badge-right" d="M55 0h75v20H55z"/><path fill="url(#b)" d="M0 0h130v20H0z"/></g><g fill="#fff" text-anchor="middle" font-size="110"><text x="285" y="150" fill="#010101" fill-opacity=".3" textLength="450" transform="scale(.1)">updated</text><text x="285" y="140" textLength="450" transform="scale(.1)">updated</text><text x="915" y="150" fill="#010101" fill-opacity=".3" textLength="650" transform="scale(.1)">2025-04-14</text><text x="915" y="140" textLength="650" transform="scale(.1)">2025-04-14</text></g></svg>
+        </span></div>
+
+
+
+        
+
+
+        
+
+
+        
+    
+    
+        <div class="related-posts">
+            <h2 class="related-title">See Also:<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon related-icon"><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm144 276c0 6.6-5.4 12-12 12h-92v92c0 6.6-5.4 12-12 12h-56c-6.6 0-12-5.4-12-12v-92h-92c-6.6 0-12-5.4-12-12v-56c0-6.6 5.4-12 12-12h92v-92c0-6.6 5.4-12 12-12h56c6.6 0 12 5.4 12 12v92h92c6.6 0 12 5.4 12 12v56z"/></svg></h2>
+            <ul class="related-list">
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulator-bugs-sega-cd/" class="related-link">Emulator Bugs: Sega CD</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulator-bugs-fatal-rewind/" class="related-link">Emulator Bugs: Fatal Rewind</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-6/" class="related-link">Emulating the YM2612: Part 6 - LFO</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-5/" class="related-link">Emulating the YM2612: Part 5 - Analog Output</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-4/" class="related-link">Emulating the YM2612: Part 4 - Digital Output</a>
+                    </li>
+                
+            </ul>
+        </div>
+    
+
+
+
+        
+    
+        <div class="post-tags">
+            
+                
+                
+                
+                
+                    
+                    <a href="/blog/tags/genesis/" rel="tag" class="post-tags-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon tag-icon"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>Genesis</a>
+                
+            
+                
+                
+                
+                
+                    
+                    <a href="/blog/tags/mega-drive/" rel="tag" class="post-tags-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon tag-icon"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>Mega Drive</a>
+                
+            
+        </div>
+    
+
+
+
+        
+
+
+        
+
+
+        
+    
+        
+        
+    
+    
+    
+    
+        <ul class="post-nav">
+            
+                <li class="post-nav-prev">
+                    <a href="/blog/posts/dkc2-open-bus/" rel="prev">&lt; Donkey Kong Country 2 and Open Bus</a>
+                </li>
+            
+            
+                <li class="post-nav-next">
+                    <a href="/blog/posts/emulating-ym2612-part-6/" rel="next">Emulating the YM2612: Part 6 - LFO &gt;</a>
+                </li>
+            
+        </ul>
+    
+
+
+
+        
+
+
+    </div>
+</main>
+
+
+            
+    <div id="back-to-top" class="back-to-top">
+        <a href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon arrow-up"><path d="M34.9 289.5l-22.2-22.2c-9.4-9.4-9.4-24.6 0-33.9L207 39c9.4-9.4 24.6-9.4 33.9 0l194.3 194.3c9.4 9.4 9.4 24.6 0 33.9L413 289.4c-9.5 9.5-25 9.3-34.3-.4L264 168.6V456c0 13.3-10.7 24-24 24h-32c-13.3 0-24-10.7-24-24V168.6L69.2 289.1c-9.3 9.8-24.8 10-34.3.4z"/></svg></a>
+    </div>
+
+
+            
+    <footer id="footer" class="footer">
+        <div class="footer-inner">
+            <div class="site-info">©&nbsp;2025&nbsp;jsgroth</div><div class="powered-by">Powered by <a href="https://github.com/gohugoio/hugo" target="_blank" rel="noopener">Hugo</a> | Theme is <a href="https://github.com/reuixiy/hugo-theme-meme" target="_blank" rel="noopener">MemE</a></div><div class="site-copyright"><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a></div>
+
+            
+
+
+            
+        </div>
+    </footer>
+
+
+        </div>
+        
+
+        
+
+
+
+
+
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/medium-zoom@latest/dist/medium-zoom.min.js"></script>
+
+<script>
+    let imgNodes = document.querySelectorAll('div.post-body img');
+    imgNodes = Array.from(imgNodes).filter(node => node.parentNode.tagName !== "A");
+
+    mediumZoom(imgNodes, {
+        background: 'hsla(var(--color-bg-h), var(--color-bg-s), var(--color-bg-l), 0.95)'
+    })
+</script>
+
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/instant.page@5.1.0/instantpage.min.js" type="module" defer></script>
+
+
+
+
+
+
+    </body>
+</html>
