@@ -548,6 +548,8 @@ public class LevelManager {
                 ((AbstractPlayableSprite) player).setXSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setYSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setGSpeed((short) 0);
+                ((AbstractPlayableSprite) player).setAir(false);
+                ((AbstractPlayableSprite) player).setRolling(false);
             }
 
         } catch (IOException e) {
