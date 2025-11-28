@@ -49,6 +49,15 @@ public class PathSwapper extends AbstractSprite implements InteractiveSprite {
         this.rightBottomLayer = (subtype & 0x10) != 0;
 
         this.groundedOnly = (subtype & 0x80) != 0; // Bit 7
+
+        // Set dimensions for culling/debug drawing purposes
+        if (isHorizontal) {
+            this.setWidth(radius * 2);
+            this.setHeight(4); // Arbitrary small height for line
+        } else {
+            this.setWidth(4); // Arbitrary small width for line
+            this.setHeight(radius * 2);
+        }
     }
 
     @Override
