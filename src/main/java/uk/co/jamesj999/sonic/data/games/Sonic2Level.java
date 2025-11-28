@@ -3,11 +3,14 @@ package uk.co.jamesj999.sonic.data.games;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.*;
+import uk.co.jamesj999.sonic.sprites.interactive.objects.PathSwapper;
+import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 public class Sonic2Level implements Level {
@@ -42,13 +45,15 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
+                       int solidTilesAngleAddr,
+                       int objectsAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
+        loadObjects(rom, objectsAddr);
     }
 
     @Override
@@ -290,5 +295,53 @@ public class Sonic2Level implements Level {
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void loadObjects(Rom rom, int objectsAddr) throws IOException {
+        // Sonic 2 Object format (6 bytes):
+        // 0-1: X (word)
+        // 2-3: Y (word) - Top 4 bits are render flags
+        // 4: ID (byte)
+        // 5: Subtype (byte)
+
+        // List ends when X is a certain value or we read garbage?
+        // Usually ends when ID is 0 or X is -1?
+        // Sonic 2 object lists often have no explicit terminator other than parsing until end of meaningful data or a specific terminator object.
+        // Actually, often it's when X ($FFFF) is encountered?
+        // Let's assume standard object list iteration.
+
+        if (objectsAddr == 0) return;
+
+        // Arbitrary limit to prevent infinite loops if address is wrong
+        int maxObjects = 200;
+
+        SpriteManager spriteManager = SpriteManager.getInstance();
+
+        for (int i = 0; i < maxObjects; i++) {
+            int entryAddr = objectsAddr + (i * 6); // 6 bytes per object
+
+            // X position (Big Endian)
+            int x = rom.read16BitAddr(entryAddr);
+
+            // Check for terminator?
+            // In S2, sometimes it's linked list or array.
+            // If we assume array.
+
+            if (x == 0xFFFF) break; // Common terminator
+
+            int yAndFlags = rom.read16BitAddr(entryAddr + 2);
+            int y = yAndFlags & 0x0FFF; // Lower 12 bits
+            // Render flags = yAndFlags >> 12;
+
+            int id = rom.readByte(entryAddr + 4) & 0xFF;
+            int subtype = rom.readByte(entryAddr + 5);
+
+            if (id == 0x05) {
+                // Path Swapper
+                PathSwapper swapper = new PathSwapper("Obj05_" + i + "_" + UUID.randomUUID(), (short) x, (short) y, (byte) subtype);
+                spriteManager.addSprite(swapper);
+                LOG.info("Loaded PathSwapper at " + x + "," + y + " Subtype: " + String.format("0x%02X", subtype));
+            }
+        }
     }
 }

@@ -25,6 +25,8 @@ public class Sonic2 extends Game {
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
+    private static final int OBJECT_LAYOUT_DIR_ADDR = 0x44D34; // REV01
+
     private static final int[][] START_POSITIONS = {
             {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
             {0x0060, 0x02AF}, // 1 Emerald Hill 2   (EHZ_2.bin)
@@ -105,6 +107,7 @@ public class Sonic2 extends Game {
         int solidTileHeightsAddr = getSolidTileHeightsAddr();
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
+        int objectsAddr = getObjectsAddr(levelIdx);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -116,8 +119,9 @@ public class Sonic2 extends Game {
         System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
+        System.out.printf("Objects addr: 0x%08X%n", objectsAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr);
     }
 
     private int getSolidTileHeightsAddr() {
@@ -214,5 +218,12 @@ public class Sonic2 extends Game {
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + zoneIdx * 4;
         return rom.read32BitAddr(zoneIdxLoc);
+    }
+
+    private int getObjectsAddr(int levelIdx) throws IOException {
+        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+        int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
+        int offset = ((zoneIdx * 2) + actIdx) * 4;
+        return rom.read32BitAddr(OBJECT_LAYOUT_DIR_ADDR + offset);
     }
 }

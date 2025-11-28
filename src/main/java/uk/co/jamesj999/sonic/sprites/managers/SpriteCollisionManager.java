@@ -55,17 +55,22 @@ public class SpriteCollisionManager {
                         if (sprite instanceof AbstractPlayableSprite) {
                                 ((AbstractPlayableSprite) sprite).getMovementManager()
                                                 .handleMovement(up, down, left, right, space, testButton);
-                                /*
-                                 * Idea: We can put object collision handling here - although
-                                 * the X and Y have been set for the sprite, we still have the
-                                 * latest position in the history arrays so we can revert if
-                                 * collisions are found before moving to display part of the
-                                 * tick.
-                                 * Update: lol, we never did that.
-                                 */
+
+                                // Check interactions with other sprites
+                                checkInteractions((AbstractPlayableSprite) sprite, sprites);
+
                                 ((AbstractPlayableSprite) sprite).endOfTick();
                         }
                 }
+        }
+
+        private void checkInteractions(AbstractPlayableSprite player, Collection<Sprite> sprites) {
+            for (Sprite other : sprites) {
+                if (other == player) continue;
+                if (other instanceof uk.co.jamesj999.sonic.sprites.interactive.InteractiveSprite) {
+                    ((uk.co.jamesj999.sonic.sprites.interactive.InteractiveSprite) other).onCollide(player);
+                }
+            }
         }
 
         public synchronized static SpriteCollisionManager getInstance() {
