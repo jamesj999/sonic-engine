@@ -7,6 +7,7 @@ import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.timer.timers.ControlLockTimer;
 import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 public class PlayableSpriteMovementManager extends
@@ -64,6 +65,13 @@ public class PlayableSpriteMovementManager extends
 			testKeyPressed = false;
 		}
 
+		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null;
+
+		if (controlLocked) {
+			left = false;
+			right = false;
+		}
+
 		short originalX = sprite.getX();
 		short originalY = sprite.getY();
 
@@ -118,6 +126,24 @@ public class PlayableSpriteMovementManager extends
 				calculateGSpeed(sprite, left, right);
 				// Since this will update the gSpeed, we now need to update the X/Y from this.
 				calculateXYFromGSpeed(sprite);
+
+				if (!controlLocked) {
+					// Check for slip/fall condition
+					short absGSpeed = (short) Math.abs(sprite.getGSpeed());
+					int angle = sprite.getAngle() & 0xFF;
+
+					// If too slow (speed < 2.5 pixels) and on a steep slope (angle between 33 and 223)
+					if (absGSpeed < 640 && (angle >= 33 && angle <= 223)) {
+						// Detach
+						sprite.setAir(true);
+						// Lock controls
+						sprite.setGSpeed((short) 0);
+						sprite.setXSpeed((short) 0);
+						sprite.setYSpeed((short) 0);
+
+						TimerManager.getInstance().registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
+					}
+				}
 			}
 		}
 
