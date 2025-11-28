@@ -177,6 +177,7 @@ public class PlayableSpriteMovementManager extends
 		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
 
 		doTerrainCollision(sprite, groundResult);
+		doCeilingCollision(sprite, ceilingResult);
 
 		// This won't work when graphics are involved...
 		if(sprite.getX() > originalX) {
@@ -198,6 +199,28 @@ public class PlayableSpriteMovementManager extends
 
 		// Update active sensors
 		sprite.updateSensors(originalX, originalY);
+	}
+
+	private void doCeilingCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
+		// Only check ceiling collision if we are moving upwards (ySpeed < 0)
+		if (sprite.getYSpeed() < 0) {
+			SensorResult lowestResult = findLowestSensorResult(results);
+			if (lowestResult != null) {
+				// Distance is positive if we are below the ceiling, negative if we have penetrated it.
+				// If distance < 0, we have hit the ceiling.
+				// A small threshold might be needed, but < 0 is standard for penetration.
+				if (lowestResult.distance() < 0) {
+					// We hit the ceiling.
+					// 1. Correct position.
+					// distance is negative (e.g. -5). We need to move DOWN by 5.
+					// moveForSensorResult handles direction UP: y - distance => y - (-5) => y + 5. Correct.
+					moveForSensorResult(sprite, lowestResult);
+
+					// 2. Stop vertical movement
+					sprite.setYSpeed((short) 0);
+				}
+			}
+		}
 	}
 
 	private void doWallCollision(AbstractPlayableSprite sprite) {
