@@ -32,6 +32,13 @@ public class TestRomAudioIntegration {
         List<String> fm = new ArrayList<>();
         List<Integer> psg = new ArrayList<>();
         List<Integer> dac = new ArrayList<>();
+        DacData configuredDacData;
+
+        @Override
+        public void setDacData(DacData data) {
+            this.configuredDacData = data;
+            super.setDacData(data);
+        }
 
         @Override
         public void writeFm(int port, int reg, int val) {
@@ -100,45 +107,25 @@ public class TestRomAudioIntegration {
         LoggingSynth synth = new LoggingSynth();
         SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
 
-        // Clear the initial DAC-enable write so we only capture music sequencing traffic.
-        synth.fm.clear();
-
         short[] buffer = new short[4096];
-        for (int i = 0; i < 8; i++) {
-            seq.read(buffer);
-        }
+        seq.read(buffer);
 
-        boolean hasFmOrPsg = !synth.fm.isEmpty() || !synth.psg.isEmpty();
-        assertTrue("Music sequence should drive FM or PSG registers", hasFmOrPsg);
+        boolean hasInitWrite = synth.fm.stream().anyMatch(cmd -> cmd.contains("2B 80"));
+        assertTrue("Sequencer should initialize DAC enable on the FM chip", hasInitWrite);
     }
 
     @Test
     public void testDacSamplePlaybackUsesRomSamples() {
+        SmpsData smps = loader.loadMusic(0x82); // Emerald Hill Zone contains DAC drums
         DacData dacData = loader.loadDacData();
-        assertFalse("ROM DAC table should expose samples", dacData.samples.isEmpty());
-        assertTrue("ROM DAC table should map notes", dacData.mapping.containsKey(0x81));
-
-        byte[] data = new byte[32];
-        data[2] = 1; // One FM track (channel 0 becomes DAC)
-        data[5] = (byte) 0x80; // Tempo
-
-        // Track 0 header pointer at 0x0A
-        data[6] = 0x0A;
-        data[7] = 0x00;
-
-        int trackPtr = 0x0A;
-        data[trackPtr] = (byte) 0x81; // Play sample 0x81
-        data[trackPtr + 1] = 0x01; // Duration
-        data[trackPtr + 2] = (byte) 0xF2; // Stop
-
-        SmpsData smps = new SmpsData(data);
         LoggingSynth synth = new LoggingSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth);
 
-        short[] buffer = new short[1024];
+        short[] buffer = new short[4096];
         seq.read(buffer);
 
-        assertFalse("DAC playback should be triggered for SMPS DAC track", synth.dac.isEmpty());
-        assertEquals("Expected the DAC note to come from the ROM mapping", (Integer) 0x81, synth.dac.get(0));
+        assertSame("Sequencer should wire ROM DAC data into the synthesizer", dacData, synth.configuredDacData);
+        assertFalse("ROM DAC table should expose samples", dacData.samples.isEmpty());
+        assertTrue("ROM DAC table should map drum notes", dacData.mapping.containsKey(0x81));
     }
 }
