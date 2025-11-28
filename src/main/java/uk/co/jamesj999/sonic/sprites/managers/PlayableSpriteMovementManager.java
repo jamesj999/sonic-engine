@@ -275,7 +275,12 @@ public class PlayableSpriteMovementManager extends
 					moveForSensorResult(sprite, lowestResult);
 					// And set sonic's new angle based on the tile found:
 					if (lowestResult.angle() == (byte) 0xFF) {
-						sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
+						switch (sprite.getGroundMode()) {
+							case GROUND -> sprite.setAngle((byte) 0x00);
+							case RIGHTWALL -> sprite.setAngle((byte) 0xC0);
+							case CEILING -> sprite.setAngle((byte) 0x80);
+							case LEFTWALL -> sprite.setAngle((byte) 0x40);
+						}
 					} else {
 						sprite.setAngle(lowestResult.angle());
 					}
