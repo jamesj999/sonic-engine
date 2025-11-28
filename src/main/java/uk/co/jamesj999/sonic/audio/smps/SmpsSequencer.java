@@ -152,6 +152,9 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void processTempoFrame() {
+        if (tempoWeight == 0) {
+            return;
+        }
         tempoAccumulator += tempoWeight;
         while (tempoAccumulator >= TEMPO_MOD_BASE) {
             tempoAccumulator -= TEMPO_MOD_BASE;
@@ -197,6 +200,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void setTempoWeight(int newTempo) {
         tempoWeight = newTempo & 0xFF;
+        tempoAccumulator = 0;
     }
 
     private void updateDividingTiming(int newDividingTiming) {

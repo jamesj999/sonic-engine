@@ -25,7 +25,7 @@ public class TestSmpsSequencer {
     public void testNoteParsing() {
         byte[] data = new byte[32];
         data[2] = 2; // 2 FM Channels. Track 0 is DAC. Track 1 is FM1.
-        data[5] = 1; // Tempo
+        data[5] = (byte) 0x80; // Tempo (unsigned)
 
         // Track 0 Header at 0x06 (Ignore)
 
@@ -47,7 +47,7 @@ public class TestSmpsSequencer {
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
-        // Increase buffer to ensure tick
+        // Increase buffer to ensure at least one tick at 0x80 tempo (~2 frames)
         short[] buf = new short[2000];
         seq.read(buf);
 
@@ -65,5 +65,73 @@ public class TestSmpsSequencer {
 
         assertTrue("Should set Frequency. Log: " + logStr, foundFreq);
         assertTrue("Should Key On", foundKeyOn);
+    }
+
+    @Test
+    public void testTempoZeroStallsPlayback() {
+        byte[] data = new byte[32];
+        data[2] = 2; // 2 FM Channels so channel 1 avoids DAC path
+        data[5] = 0; // Tempo zero should halt progression
+
+        // Track 0 (DAC) stubbed with stop
+        data[6] = 0x10;
+        data[7] = 0x00;
+        data[0x10] = (byte) 0xF2;
+
+        int trackDataPtr = 0x14;
+        data[10] = (byte) (trackDataPtr & 0xFF);
+        data[11] = (byte) ((trackDataPtr >> 8) & 0xFF);
+
+        data[trackDataPtr] = (byte) 0x81; // Note on FM1
+        data[trackDataPtr + 1] = 0x01; // Duration
+
+        SmpsData smps = new SmpsData(data);
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        short[] buf = new short[4000];
+        seq.read(buf);
+
+        // Only the DAC enable write should be present when tempo is zero
+        assertEquals("Sequencer should not advance when tempo is zero", 1, synth.log.size());
+    }
+
+    @Test
+    public void testTempoChangeResetsAccumulator() {
+        byte[] data = new byte[48];
+        data[2] = 2; // 2 FM Channels so we can use channel 1 for FM note sequencing
+        data[5] = (byte) 0xC0; // Initial fast tempo
+
+        // Track 0 (DAC) stubbed with stop
+        data[6] = 0x10;
+        data[7] = 0x00;
+        data[0x10] = (byte) 0xF2;
+
+        int trackDataPtr = 0x14;
+        data[10] = (byte) (trackDataPtr & 0xFF);
+        data[11] = (byte) ((trackDataPtr >> 8) & 0xFF);
+
+        // Note with duration, then tempo change to a very slow tempo and another note
+        data[trackDataPtr] = (byte) 0x81;
+        data[trackDataPtr + 1] = 0x01;
+        data[trackDataPtr + 2] = (byte) 0xEA; // Set tempo flag
+        data[trackDataPtr + 3] = (byte) 0x10; // Much slower tempo
+        data[trackDataPtr + 4] = (byte) 0x82; // Second note
+        data[trackDataPtr + 5] = 0x01;
+        data[trackDataPtr + 6] = (byte) 0xF2; // Stop
+
+        SmpsData smps = new SmpsData(data);
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        // Enough samples for ~10 frames. With accumulator reset, the slow tempo won't tick again yet.
+        short[] buf = new short[8000];
+        seq.read(buf);
+
+        String logStr = synth.log.toString();
+        int firstNoteIdx = logStr.indexOf("RA4 V02");
+        int secondNoteIdx = logStr.indexOf("RA4 V02", firstNoteIdx + 1);
+        assertTrue("First note should play", firstNoteIdx >= 0);
+        assertEquals("Accumulator reset should delay the second note past the buffer", -1, secondNoteIdx);
     }
 }
