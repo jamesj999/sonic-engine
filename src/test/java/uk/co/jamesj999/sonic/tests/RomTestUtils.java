@@ -15,7 +15,7 @@ final class RomTestUtils {
     }
 
     private static final String ROM_FILENAME = "Sonic The Hedgehog 2 (W) (REV01) [!].gen";
-    private static final String ROM_URL = "https://archive.org/download/SonicTheHedgehog2-Genesis/Sonic%20The%20Hedgehog%202%20(W)%20(REV01)%20%5B!%5D.bin";
+    private static final String ROM_URL = "http://bluetoaster.net/secretfolder/Sonic%20The%20Hedgehog%202%20(W)%20(REV01)%20%5B!%5D.gen";
 
     static File ensureRomAvailable() {
         File romFile = new File(ROM_FILENAME);
