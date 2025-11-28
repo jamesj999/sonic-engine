@@ -7,8 +7,11 @@ import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -28,6 +31,30 @@ public class TestRomAudioIntegration {
         boolean opened = rom.open(romPath);
         assertTrue("Failed to open ROM", opened);
         loader = new SmpsLoader(rom);
+    }
+
+    private static class LoggingSynth extends VirtualSynthesizer {
+        List<String> fm = new ArrayList<>();
+        List<Integer> psg = new ArrayList<>();
+        List<Integer> dac = new ArrayList<>();
+
+        @Override
+        public void writeFm(int port, int reg, int val) {
+            fm.add(String.format("P%d %02X %02X", port, reg, val));
+            super.writeFm(port, reg, val);
+        }
+
+        @Override
+        public void writePsg(int val) {
+            psg.add(val);
+            super.writePsg(val);
+        }
+
+        @Override
+        public void playDac(int note) {
+            dac.add(note);
+            super.playDac(note);
+        }
     }
 
     @Test
@@ -68,5 +95,52 @@ public class TestRomAudioIntegration {
         // Note: We do not assert non-silent audio here because full instrument parameter loading
         // (SMPS Flag EF) is not yet implemented, which may result in default (silent or low) output.
         // The test passes if the sequencer runs without exception.
+    }
+
+    @Test
+    public void testMusicEmitsChipCommandsFromRomData() {
+        SmpsData data = loader.loadMusic(0x82); // Emerald Hill Zone
+        DacData dac = loader.loadDacData();
+
+        LoggingSynth synth = new LoggingSynth();
+        SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
+
+        short[] buffer = new short[4096];
+        for (int i = 0; i < 8; i++) {
+            seq.read(buffer);
+        }
+
+        boolean hasFmOrPsg = !synth.fm.isEmpty() || !synth.psg.isEmpty();
+        assertTrue("Music sequence should drive FM or PSG registers", hasFmOrPsg);
+    }
+
+    @Test
+    public void testDacSamplePlaybackUsesRomSamples() {
+        DacData dacData = loader.loadDacData();
+        assertFalse("ROM DAC table should expose samples", dacData.samples.isEmpty());
+        assertTrue("ROM DAC table should map notes", dacData.mapping.containsKey(0x81));
+
+        byte[] data = new byte[32];
+        data[2] = 1; // One FM track (channel 0 becomes DAC)
+        data[5] = (byte) 0x80; // Tempo
+
+        // Track 0 header pointer at 0x0A
+        data[6] = 0x0A;
+        data[7] = 0x00;
+
+        int trackPtr = 0x0A;
+        data[trackPtr] = (byte) 0x81; // Play sample 0x81
+        data[trackPtr + 1] = 0x01; // Duration
+        data[trackPtr + 2] = (byte) 0xF2; // Stop
+
+        SmpsData smps = new SmpsData(data);
+        LoggingSynth synth = new LoggingSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth);
+
+        short[] buffer = new short[1024];
+        seq.read(buffer);
+
+        assertFalse("DAC playback should be triggered for SMPS DAC track", synth.dac.isEmpty());
+        assertEquals("Expected the DAC note to come from the ROM mapping", (Integer) 0x81, synth.dac.get(0));
     }
 }
