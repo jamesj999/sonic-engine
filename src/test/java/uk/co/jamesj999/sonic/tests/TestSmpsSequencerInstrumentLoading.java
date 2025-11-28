@@ -46,6 +46,7 @@ public class TestSmpsSequencerInstrumentLoading {
 
         data[2] = 1; // 1 FM Channel
         data[3] = 0;
+        data[5] = (byte) 0x80; // Main tempo
 
         // Track 1 Ptr at 10 (0x0A)
         data[6] = 0x0A;
