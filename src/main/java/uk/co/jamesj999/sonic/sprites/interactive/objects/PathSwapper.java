@@ -86,12 +86,14 @@ public class PathSwapper extends AbstractSprite implements InteractiveSprite {
         // Similar to LevelManager.processCollisionMode
 
         // We need to disable textures and shaders for solid color drawing
+        // Also disable Depth Test to ensure it draws on top of the level
         List<GLCommand> commands = new ArrayList<>();
         commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
         commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+        commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
 
         int x1, y1, x2, y2;
-        int thickness = 2; // Thickness of the visual line
+        int thickness = 4; // Increase thickness for better visibility
 
         if (isHorizontal) {
             // Horizontal Line (Axis 1)
@@ -142,11 +144,12 @@ public class PathSwapper extends AbstractSprite implements InteractiveSprite {
         // Offset X is just screenX?
         // gluOrtho2D 0 is left.
 
-        // Color: Orange (1.0, 0.5, 0.0)
-        commands.add(new GLCommand(GLCommand.CommandType.RECTI, GL2.GL_2D, 1.0f, 0.5f, 0.0f, x1, y2, x2, y1));
+        // Color: Magenta (1.0, 0.0, 1.0) for high visibility
+        commands.add(new GLCommand(GLCommand.CommandType.RECTI, GL2.GL_2D, 1.0f, 0.0f, 1.0f, x1, y2, x2, y1));
 
         // Restore state
         commands.add(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+        commands.add(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_DEPTH_TEST));
         // We don't easily know the previous program ID here without querying, but LevelManager restores it.
         // For safety, we can leave it 0 or try to restore if we knew it.
         // Standard practice here seems to be "enable texturing" and let next draw call set program?
