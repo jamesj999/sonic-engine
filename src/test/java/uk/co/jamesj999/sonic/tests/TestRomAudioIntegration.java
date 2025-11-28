@@ -21,14 +21,9 @@ public class TestRomAudioIntegration {
 
     @Before
     public void setUp() {
-        String romPath = "Sonic The Hedgehog 2 (W) (REV01) [!].gen";
-        File f = new File(romPath);
-        if (!f.exists()) {
-            // Skip tests if ROM not present
-            org.junit.Assume.assumeTrue("ROM file not found, skipping integration test", false);
-        }
+        File romFile = RomTestUtils.ensureRomAvailable();
         rom = new Rom();
-        boolean opened = rom.open(romPath);
+        boolean opened = rom.open(romFile.getAbsolutePath());
         assertTrue("Failed to open ROM", opened);
         loader = new SmpsLoader(rom);
     }
@@ -104,6 +99,9 @@ public class TestRomAudioIntegration {
 
         LoggingSynth synth = new LoggingSynth();
         SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
+
+        // Clear the initial DAC-enable write so we only capture music sequencing traffic.
+        synth.fm.clear();
 
         short[] buffer = new short[4096];
         for (int i = 0; i < 8; i++) {
