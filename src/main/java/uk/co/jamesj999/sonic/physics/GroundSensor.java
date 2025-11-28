@@ -65,26 +65,23 @@ public class GroundSensor extends Sensor {
 
         if (initialHeight == 16) {
             // Regression: Check 'previous' tile (against sensor direction)
-            short prevX = currentX;
-            short prevY = currentY;
-            if (vertical) {
-                prevY = calculateNextTile(globalDirection.opposite(), currentY);
-            } else {
-                prevX = calculateNextTile(globalDirection.opposite(), currentX);
+            // We only do this for horizontal sensors. Vertical regression (checking the tile above/below)
+            // causes issues where a ceiling sensor checks the floor (or vice versa) and ejects the sprite
+            // through the opposite surface.
+            if (!vertical) {
+                short prevX = calculateNextTile(globalDirection.opposite(), currentX);
+
+                ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, currentY);
+                SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
+                byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, currentY, vertical);
+
+                if (prevHeight > 0) {
+                    // Found a valid previous tile, use it
+                    return createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, currentY, globalDirection, vertical);
+                }
             }
-
-            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, prevY);
-            SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
-            byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, prevY, vertical);
-
-            if (prevHeight > 0) {
-                // Found a valid previous tile, use it
-                return createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, prevY, globalDirection, vertical);
-            } else {
-                // Previous tile empty or invalid, revert to initial
-                return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
-            }
-
+            // Previous tile empty or invalid (or vertical sensor), revert to initial
+            return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
         } else if (initialHeight == 0) {
             // Extension: Check 'next' tile (in sensor direction)
             short nextX = currentX;
