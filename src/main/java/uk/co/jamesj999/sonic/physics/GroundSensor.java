@@ -80,7 +80,7 @@ public class GroundSensor extends Sensor {
                     return createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, currentY, globalDirection, vertical);
                 }
             }
-            // Previous tile empty or invalid (or vertical sensor), revert to initial
+            // Previous tile empty or invalid, revert to initial
             return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
         } else if (initialHeight == 0) {
             // Extension: Check 'next' tile (in sensor direction)
@@ -149,9 +149,9 @@ public class GroundSensor extends Sensor {
         byte angle = 0;
         int index = 0;
         if (tile != null) {
+            // Get angle with flips
             boolean hFlip = (desc != null) && desc.getHFlip();
             boolean vFlip = (desc != null) && desc.getVFlip();
-            // Get angle with flips
             angle = tile.getAngle(hFlip, vFlip);
             index = tile.getIndex();
         }
