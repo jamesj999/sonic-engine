@@ -71,6 +71,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		this.air = air;
 		if (air) {
 			setGroundMode(GroundMode.GROUND);
+			setAngle((byte) 0);
 		}
 	}
 
