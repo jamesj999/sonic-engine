@@ -223,7 +223,10 @@ public class Sonic2 extends Game {
     private int getObjectsAddr(int levelIdx) throws IOException {
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
-        int offset = ((zoneIdx * 2) + actIdx) * 4;
-        return rom.read32BitAddr(OBJECT_LAYOUT_DIR_ADDR + offset);
+        // The Object Layout table is a list of 16-bit relative offsets, not 32-bit absolute pointers.
+        // Format: Zone * 2 entries (Act 1, Act 2) * 2 bytes per entry.
+        int offsetIndex = ((zoneIdx * 2) + actIdx) * 2;
+        int offset = rom.read16BitAddr(OBJECT_LAYOUT_DIR_ADDR + offsetIndex);
+        return OBJECT_LAYOUT_DIR_ADDR + offset;
     }
 }
