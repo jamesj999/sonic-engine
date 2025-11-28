@@ -25,7 +25,7 @@ public class Sonic2 extends Game {
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
 
-    private static final int OBJECT_LAYOUT_DIR_ADDR = 0x44D34; // REV01
+    private static final int OBJECT_LAYOUT_DIR_ADDR = 0x44000; // REV01
 
     private static final int[][] START_POSITIONS = {
             {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)

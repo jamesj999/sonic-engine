@@ -336,11 +336,11 @@ public class Sonic2Level implements Level {
             int id = rom.readByte(entryAddr + 4) & 0xFF;
             int subtype = rom.readByte(entryAddr + 5);
 
-            if (id == 0x05) {
+            if (id == 0x05 || id == 0x03) {
                 // Path Swapper
-                PathSwapper swapper = new PathSwapper("Obj05_" + i + "_" + UUID.randomUUID(), (short) x, (short) y, (byte) subtype);
+                PathSwapper swapper = new PathSwapper("Obj" + String.format("%02X", id) + "_" + i + "_" + UUID.randomUUID(), (short) x, (short) y, (byte) subtype);
                 spriteManager.addSprite(swapper);
-                LOG.info("Loaded PathSwapper at " + x + "," + y + " Subtype: " + String.format("0x%02X", subtype));
+                LOG.info("Loaded PathSwapper (ID " + id + ") at " + x + "," + y + " Subtype: " + String.format("0x%02X", subtype));
             }
         }
     }
