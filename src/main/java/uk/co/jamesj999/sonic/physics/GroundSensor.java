@@ -159,14 +159,14 @@ public class GroundSensor extends Sensor {
 
     private SensorResult createResult(SolidTile tile, ChunkDesc desc, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean vertical) {
         byte metric = getMetric(tile, desc, checkX, checkY, vertical);
-        byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction);
+        boolean hFlip = (desc != null) && desc.getHFlip();
+        boolean vFlip = (desc != null) && desc.getVFlip();
+        byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction, hFlip, vFlip);
 
         byte angle = 0;
         int index = 0;
         if (tile != null) {
             // Get angle with flips
-            boolean hFlip = (desc != null) && desc.getHFlip();
-            boolean vFlip = (desc != null) && desc.getVFlip();
             angle = tile.getAngle(hFlip, vFlip);
             index = tile.getIndex();
         }
@@ -175,6 +175,10 @@ public class GroundSensor extends Sensor {
     }
 
     private byte calculateDistance(byte metric, short originalX, short originalY, short checkX, short checkY, Direction direction) {
+        return calculateDistance(metric, originalX, originalY, checkX, checkY, direction, false, false);
+    }
+
+    private byte calculateDistance(byte metric, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean hFlip, boolean vFlip) {
         // Round down to block start
         short tileX = (short) (checkX & ~0x0F);
         short tileY = (short) (checkY & ~0x0F);
@@ -182,20 +186,51 @@ public class GroundSensor extends Sensor {
         switch (direction) {
             case DOWN:
                 // Looking for floor (Top of solid). Solid from Bottom.
+                if (vFlip) {
+                    // VFlip: Solid from Top.
+                    // Surface = TileY + Metric.
+                    // Distance = Surface - SensorY. (Wait. SensorY is above surface).
+                    // Wait. Floor means Sprite is ABOVE. SensorY < Surface.
+                    // Distance = Surface - SensorY.
+                    // Surface = TileY + metric.
+                    return (byte) ((tileY + metric) - originalY);
+                }
+                // Normal: Solid from Bottom.
                 // Surface = TileY + 16 - Height
                 // Distance = Surface - SensorY
                 return (byte) ((tileY + 16 - metric) - originalY);
             case UP:
                 // Looking for ceiling (Bottom of solid). Solid from Top.
+                if (vFlip) {
+                    // VFlip: Solid from Bottom.
+                    // Surface = TileY + 16 - Metric.
+                    // Distance = SensorY - Surface.
+                    return (byte) (originalY - (tileY + 16 - metric));
+                }
+                // Normal: Solid from Top.
                 // Surface = TileY + Height
                 // Distance = SensorY - Surface
                 return (byte) (originalY - (tileY + metric));
             case RIGHT:
                 // Looking for Wall (Left of solid). Solid from Right?
+                if (hFlip) {
+                    // HFlip: Solid from Left.
+                    // Surface = TileX + Metric.
+                    // Distance = Surface - SensorX.
+                    return (byte) ((tileX + metric) - originalX);
+                }
+                // Normal: Solid from Right.
                 // Logic: (TileX + 16 - Width) - SensorX
                 return (byte) ((tileX + 16 - metric) - originalX);
             case LEFT:
                 // Looking for Wall (Right of solid). Solid from Left?
+                if (hFlip) {
+                    // HFlip: Solid from Right.
+                    // Surface = TileX + 16 - Metric.
+                    // Distance = SensorX - Surface.
+                    return (byte) (originalX - (tileX + 16 - metric));
+                }
+                // Normal: Solid from Left.
                 // Logic: SensorX - (TileX + Width)
                 return (byte) (originalX - (tileX + metric));
         }
