@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.physics;
 import org.junit.Before;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.level.ChunkDesc;
+import uk.co.jamesj999.sonic.level.CollisionMode;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -35,9 +36,14 @@ public class TestGroundSensor {
             }
 
             @Override
-            public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+            public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
                 if (chunkDesc == null) return null;
                 return tiles[chunkDesc.getChunkIndex()];
+            }
+
+            @Override
+            public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
+                return getSolidTileForChunkDesc(chunkDesc, (byte) 0);
             }
         };
 
@@ -73,10 +79,19 @@ public class TestGroundSensor {
     }
 
     private void setTileAt(int x, int y, int tileIndex) {
+        setTileAt(x, y, tileIndex, CollisionMode.ALL_SOLID);
+    }
+
+    private void setTileAt(int x, int y, int tileIndex, CollisionMode mode) {
         int gridX = x / 16;
         int gridY = y / 16;
-        ChunkDesc desc = new ChunkDesc();
-        desc.setChunkIndex(tileIndex);
+        ChunkDesc desc = new ChunkDesc(tileIndex);
+        // We need to set collision mode bits in the index
+        // Mode is bits 12-13 (Primary) and 14-15 (Secondary)
+        // Shift mode value to 12
+        int modeBits = mode.getValue() << 12;
+        desc.set(tileIndex | modeBits);
+
         chunkMap[gridX][gridY] = desc;
     }
 
@@ -125,7 +140,7 @@ public class TestGroundSensor {
         // Surface at 128.
         // Distance = 128 - 100 = 28.
 
-        setTileAt(100, 112, 0); // Empty
+        setTileAt(100, 112, 0, CollisionMode.NO_COLLISION); // Empty
         setTileAt(100, 128, 1); // Full
 
         mockSprite.setX((short) 100);
@@ -147,7 +162,23 @@ public class TestGroundSensor {
         // Surface at 112.
         // Distance = 112 - 100 = 12.
 
-        setTileAt(100, 96, 0); // Empty (Initial)
+        // Initial check at 100, 100. Tile is at 100, 96?
+        // Wait. Sensor checks at (100, 100).
+        // Initial tile: Grid(6, 6) -> (96, 96).
+        // If (100, 96) is Empty.
+        // It extends to Next Tile.
+        // Next Tile for DOWN is (100, 112).
+        // Tile at (100, 112) is Full.
+        // Distance calculated.
+
+        // Wait, current logic:
+        // currentX = 100, currentY = 100.
+        // Initial Tile at (100, 100).
+        // The test setup sets tile at (100, 96).
+        // (100, 96) is Grid (6, 6).
+        // (100, 100) is Grid (6, 6).
+        // So yes, Initial Tile is 0 (Empty).
+        setTileAt(100, 96, 0, CollisionMode.NO_COLLISION); // Empty (Initial)
         setTileAt(100, 112, 1); // Full (Next)
 
         mockSprite.setX((short) 100);
@@ -207,5 +238,73 @@ public class TestGroundSensor {
 
         assertNotNull(result);
         assertEquals(2, result.distance());
+    }
+
+    @Test
+    public void testTopSolidBehavior() {
+        // TOP_SOLID: Solid only for DOWN sensor.
+        // Place a tile at 100, 112 with TOP_SOLID.
+
+        setTileAt(100, 112, 1, CollisionMode.TOP_SOLID);
+
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        // 1. Check with DOWN sensor (Ground). Should detect collision.
+        GroundSensor downSensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
+        SensorResult downResult = downSensor.scan();
+        assertNotNull("DOWN sensor should detect TOP_SOLID", downResult);
+        assertEquals(12, downResult.distance());
+
+        // 2. Check with UP sensor (Ceiling). Should NOT detect collision (treat as empty/extend).
+        // Tile is below sprite, so UP sensor normally wouldn't see it anyway.
+        // Let's place tile ABOVE sprite at 100, 80.
+        // Note: setTileAt helper sets collisions mode for the given tile index globally in mock setup.
+        // We need to be careful. setTileAt sets chunkMap and creates a desc.
+        setTileAt(100, 80, 1, CollisionMode.TOP_SOLID);
+
+        // UP Sensor looking up.
+        GroundSensor upSensor = new GroundSensor(mockSprite, Direction.UP, (byte)0, (byte)0, true);
+        // Scan UP.
+        // Tile at 100, 80.
+        // If solid: Distance = SensorY - (TileY + Height).
+        // 100 - (80 + 16) = 4.
+        // If not solid: Extends to next tile (100, 64). Empty.
+        // Returns larger distance.
+        // Or if handled as empty, returns extension distance (e.g. 100 - (64+16) ? No.
+        // UP: Next tile is 100, 64.
+        // If empty, calculates distance to 64.
+        // Distance = 100 - (64 + 0) = 36.
+        // If solid, distance = 4.
+
+        SensorResult upResult = upSensor.scan();
+        // Should be 20 (distance to empty tile at 80), not 4 (distance to solid tile at 80).
+        // 100 - (80 + 0) = 20.
+        assertNotNull(upResult);
+        assertEquals("UP sensor should ignore TOP_SOLID", 20, upResult.distance());
+    }
+
+    @Test
+    public void testLeftRightBottomSolidBehavior() {
+        // L_R_B_SOLID: Solid for UP/LEFT/RIGHT, but NOT DOWN.
+
+        // 1. Check DOWN sensor. Should ignore.
+        setTileAt(100, 112, 1, CollisionMode.LEFT_RIGHT_BOTTOM_SOLID);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        GroundSensor downSensor = new GroundSensor(mockSprite, Direction.DOWN, (byte)0, (byte)0, true);
+        // If solid: distance 12.
+        // If ignored: Sees tile at 112 as empty.
+        // Distance: (112 + 16 - 0) - 100 = 28.
+        SensorResult downResult = downSensor.scan();
+        assertEquals("DOWN sensor should ignore L_R_B_SOLID", 28, downResult.distance());
+
+        // 2. Check UP sensor. Should detect.
+        setTileAt(100, 80, 1, CollisionMode.LEFT_RIGHT_BOTTOM_SOLID);
+        GroundSensor upSensor = new GroundSensor(mockSprite, Direction.UP, (byte)0, (byte)0, true);
+        // If solid: 100 - (80 + 16) = 4.
+        SensorResult upResult = upSensor.scan();
+        assertEquals("UP sensor should detect L_R_B_SOLID", 4, upResult.distance());
     }
 }
