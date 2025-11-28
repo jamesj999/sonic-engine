@@ -65,23 +65,41 @@ public class GroundSensor extends Sensor {
 
         if (initialHeight == 16) {
             // Regression: Check 'previous' tile (against sensor direction)
-            // We only do this for horizontal sensors. Vertical regression (checking the tile above/below)
-            // causes issues where a ceiling sensor checks the floor (or vice versa) and ejects the sprite
-            // through the opposite surface.
-            if (!vertical) {
-                short prevX = calculateNextTile(globalDirection.opposite(), currentX);
-
-                ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, currentY);
-                SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
-                byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, currentY, vertical);
-
-                if (prevHeight > 0) {
-                    // Found a valid previous tile, use it
-                    return createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, currentY, globalDirection, vertical);
-                }
+            short prevX = currentX;
+            short prevY = currentY;
+            if (vertical) {
+                prevY = calculateNextTile(globalDirection.opposite(), currentY);
+            } else {
+                prevX = calculateNextTile(globalDirection.opposite(), currentX);
             }
-            // Previous tile empty or invalid (or vertical sensor), revert to initial
-            return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
+
+            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, prevY);
+            SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
+            byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, prevY, vertical);
+
+            // Compare distances to determine the nearest surface.
+            // If Regression (Prev) finds a solid tile, it might be the nearest surface (e.g. stepping up a slope).
+            // But if Initial (Current) is also solid (because we are embedded), it might be the nearest (e.g. hitting a ceiling).
+            // We should pick the one with the smallest absolute distance to the sensor.
+            // See Sonic Physics Guide: "a Sensor can always locate the nearest open surface".
+            if (prevHeight > 0) {
+                SensorResult initialResult = createResult(initialTile, initialChunkDesc, originalX, originalY, currentX, currentY, globalDirection, vertical);
+                SensorResult prevResult = createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, prevY, globalDirection, vertical);
+
+                // If Prev is "nearer" (smaller absolute distance), use it.
+                // Note: Distances can be negative (inside).
+                // Example: Initial (Ceiling) -6. Prev (Floor) -22. |-6| < |-22|. Use Initial.
+                // Example: Initial (Slope) -10. Prev (Slope) -5. |-5| < |-10|. Use Prev.
+                if (Math.abs(prevResult.distance()) < Math.abs(initialResult.distance())) {
+                    return prevResult;
+                } else {
+                    return initialResult;
+                }
+            } else {
+                // Previous tile empty, revert to initial
+                return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
+            }
+
         } else if (initialHeight == 0) {
             // Extension: Check 'next' tile (in sensor direction)
             short nextX = currentX;
@@ -101,18 +119,6 @@ public class GroundSensor extends Sensor {
                 return createResult(nextTile, nextChunkDesc, originalX, originalY, nextX, nextY, globalDirection, vertical);
             } else {
                 // Extension failed (no tile found). Return distance to end of second block.
-                // We use the 'next' coordinates to calculate the distance to its far edge.
-                // If nextTile is null, we can't get angle/index. Use defaults (0).
-                // But we need the distance.
-                // Distance = Distance to "End of Next Block".
-                // If DOWN: End is Top + 32?
-                // Logic: 16 (first block empty) + 16 (second block empty) = 32?
-                // Actually, let's use calculateDistance but pretend we found a full block at next position?
-                // Or just use the formula:
-                // DOWN: (nextY + 16 - 0) - originalY. (nextY is +16 from start).
-                // If originalY=100. nextY=112. (112+16-0) - 100 = 28.
-                // Matches my test expectation (28).
-                // So we can use calculateDistance with height=0 at nextX/nextY.
                 byte distance = calculateDistance((byte) 0, originalX, originalY, nextX, nextY, globalDirection);
                 return new SensorResult((byte) 0, distance, 0, globalDirection);
             }
@@ -186,10 +192,6 @@ public class GroundSensor extends Sensor {
                 if (vFlip) {
                     // VFlip: Solid from Top.
                     // Surface = TileY + Metric.
-                    // Distance = Surface - SensorY. (Wait. SensorY is above surface).
-                    // Wait. Floor means Sprite is ABOVE. SensorY < Surface.
-                    // Distance = Surface - SensorY.
-                    // Surface = TileY + metric.
                     return (byte) ((tileY + metric) - originalY);
                 }
                 // Normal: Solid from Bottom.
