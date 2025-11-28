@@ -150,7 +150,7 @@ public class Ym2612Chip {
             8, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 22, 22, 22
     };
     // Tremolo depths (approx dB) applied as attenuation
-    private static final double[] AMS_DEPTH = {0.0, 1.4, 2.9, 5.9};
+    private static final double[] AMS_DEPTH = {0.0, 1.4, 5.9, 11.8};
     // Detune tables (approximate semitone offsets as multipliers)
     private static final double[] DETUNE = {0.0, 0.004, 0.008, 0.012, -0.012, -0.008, -0.004, 0.0};
     private static final double OUTPUT_GAIN = 1600.0; // calibrated headroom to reduce clipping
@@ -953,10 +953,14 @@ public class Ym2612Chip {
         }
         // Apply total level attenuation using TL (~0.75dB steps)
         double tlDb = (o.tl & 0x7F) * 0.75;
-        // Reference AMS scaling: use AMS shift table on the LFO amplitude, then map to dB depth
-        int amsShift = LFO_AMS_TAB[Math.min(ams, LFO_AMS_TAB.length - 1)];
-        double amsVal = (amsShift >= 31) ? 0.0 : (lfoVal / (1 << amsShift));
-        double amsDb = (o.am != 0 && lfoEnabled) ? AMS_DEPTH[Math.min(ams, AMS_DEPTH.length - 1)] * amsVal : 0.0;
+
+        // AMS (Tremolo)
+        double amsDb = 0.0;
+        if (lfoEnabled && o.am != 0 && ams > 0) {
+            double lfoUnipolar = (lfoVal + 1.0) * 0.5;
+            amsDb = AMS_DEPTH[Math.min(ams, AMS_DEPTH.length - 1)] * lfoUnipolar;
+        }
+
         double linear = level * Math.pow(10.0, -(tlDb + amsDb) / 20.0);
         return linear;
     }
