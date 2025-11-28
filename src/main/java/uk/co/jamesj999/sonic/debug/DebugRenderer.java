@@ -84,6 +84,8 @@ public class DebugRenderer {
 			}
 			renderer.draw("pX: " + xString, 2, height-95);
 			renderer.draw("pY: " + yString, 2, height-105);
+
+			// Show actual Layer index (0 or 1)
 			renderer.draw("Layer: " + sprite.getLayer(), 2, height-115);
 
 			renderer.draw(xString, 2, 25);

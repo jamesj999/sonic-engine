@@ -1,8 +1,16 @@
 package uk.co.jamesj999.sonic.sprites.interactive.objects;
 
+import com.jogamp.opengl.GL2;
+import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
+import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.interactive.InteractiveSprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class PathSwapper extends AbstractSprite implements InteractiveSprite {
     private final byte subtype;
@@ -45,7 +53,97 @@ public class PathSwapper extends AbstractSprite implements InteractiveSprite {
 
     @Override
     public void draw() {
-        // Invisible object, do nothing.
+        if (!configService.getBoolean(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED)) {
+            return;
+        }
+
+        // Draw debug visualization
+        // Horizontal Switcher (Axis 1): Horizontal Line. Drawn width = 2*Radius.
+        // Vertical Switcher (Axis 0): Vertical Line. Drawn height = 2*Radius.
+        // We will draw a rectangle to be visible.
+
+        Camera camera = Camera.getInstance();
+        int camX = camera.getX();
+        int camY = camera.getY();
+
+        int myX = this.getX();
+        int myY = this.getY();
+
+        // Screen coordinates
+        int screenX = myX - camX;
+        int screenY = myY - camY;
+
+        // Use graphics manager to register commands
+        // Similar to LevelManager.processCollisionMode
+
+        // We need to disable textures and shaders for solid color drawing
+        List<GLCommand> commands = new ArrayList<>();
+        commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+
+        int x1, y1, x2, y2;
+        int thickness = 2; // Thickness of the visual line
+
+        if (isHorizontal) {
+            // Horizontal Line (Axis 1)
+            // Draws across X (width = radius * 2)
+            // Checks X range, Crosses Y.
+            // Wait, previous logic: "Horizontal Line: Check if Player X is within the width (radius)"
+            // So it spans horizontally.
+
+            x1 = screenX - radius;
+            x2 = screenX + radius;
+            y1 = screenY - thickness;
+            y2 = screenY + thickness;
+        } else {
+            // Vertical Line (Axis 0)
+            // Draws vertically.
+            x1 = screenX - thickness;
+            x2 = screenX + thickness;
+            y1 = screenY - radius;
+            y2 = screenY + radius;
+        }
+
+        // Add coordinate offset for GL rendering (Engine.display resets view, but sprites might need to account for it if they use screen coords)
+        // Actually, SpriteRenderManager usually handles translation?
+        // No, SpriteRenderManager iterates sprites and calls draw().
+        // LevelManager draws relative to camera.
+        // Let's assume we need to provide absolute screen coordinates (0 to Width, 0 to Height).
+        // My screenX/Y calculation is relative to top-left?
+        // JOGL setup in Engine.java: gluOrtho2D(0, realWidth, 0, realHeight);
+        // Y=0 is bottom.
+        // Sonic coordinates: Y increases DOWN.
+        // So Screen Y = (Height - (myY - camY)).
+        // Actually, let's look at DebugRenderer: "height - yAdjusted".
+
+        int screenHeight = configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+        int glY = screenHeight - screenY; // Invert Y for GL
+
+        // Recalculate rect for GL
+        if (isHorizontal) {
+            // Horizontal Line
+            y1 = glY - thickness;
+            y2 = glY + thickness;
+        } else {
+            // Vertical Line
+            y1 = glY - radius;
+            y2 = glY + radius;
+        }
+
+        // Offset X is just screenX?
+        // gluOrtho2D 0 is left.
+
+        // Color: Orange (1.0, 0.5, 0.0)
+        commands.add(new GLCommand(GLCommand.CommandType.RECTI, GL2.GL_2D, 1.0f, 0.5f, 0.0f, x1, y2, x2, y1));
+
+        // Restore state
+        commands.add(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+        // We don't easily know the previous program ID here without querying, but LevelManager restores it.
+        // For safety, we can leave it 0 or try to restore if we knew it.
+        // Standard practice here seems to be "enable texturing" and let next draw call set program?
+        // Or we can rely on GraphicsManager state.
+
+        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
     }
 
     @Override
