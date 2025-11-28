@@ -61,8 +61,10 @@ public class SmpsSequencer implements AudioStream {
         int tempo = smpsData.getTempo();
         if (tempo > 0) {
             tempoWeight = tempo;
-        } else if (tempo == 0) {
-            tempoWeight = 0; // Spec: tempo 0 means the song does not run
+        } else {
+            // Some headers use 0 here even though the Sonic 2 driver would stall.
+            // Clamp to the base duty cycle so we still make progress through the stream.
+            tempoWeight = TEMPO_MOD_BASE;
         }
         tempoAccumulator = TEMPO_MOD_BASE; // Start ticking immediately even for low tempos
 
@@ -194,7 +196,7 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void setTempoWeight(int newTempo) {
-        tempoWeight = newTempo > 0 ? newTempo : 0;
+        tempoWeight = newTempo > 0 ? newTempo : TEMPO_MOD_BASE;
         tempoAccumulator = TEMPO_MOD_BASE;
     }
 
