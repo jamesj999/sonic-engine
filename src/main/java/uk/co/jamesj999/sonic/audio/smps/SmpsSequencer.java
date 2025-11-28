@@ -16,7 +16,7 @@ public class SmpsSequencer implements AudioStream {
     private static final int DURATION_MAX = 0xFF;
     private double samplesPerFrame = 44100.0 / DEFAULT_FRAME_RATE;
     private int tempoWeight = TEMPO_MOD_BASE;
-    private int tempoAccumulator = 0;
+    private int tempoAccumulator = TEMPO_MOD_BASE;
     private int dividingTiming = 1;
     private double sampleCounter = 0;
 
@@ -64,6 +64,7 @@ public class SmpsSequencer implements AudioStream {
         } else if (tempo == 0) {
             tempoWeight = 0; // Spec: tempo 0 means the song does not run
         }
+        tempoAccumulator = TEMPO_MOD_BASE; // Start ticking immediately even for low tempos
 
         if (data.length > 6) {
             int fmCount = data[2] & 0xFF;
@@ -194,6 +195,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void setTempoWeight(int newTempo) {
         tempoWeight = newTempo > 0 ? newTempo : 0;
+        tempoAccumulator = TEMPO_MOD_BASE;
     }
 
     private void updateDividingTiming(int newDividingTiming) {
