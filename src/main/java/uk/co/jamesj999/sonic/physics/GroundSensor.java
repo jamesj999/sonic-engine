@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.physics;
 
 import uk.co.jamesj999.sonic.level.ChunkDesc;
+import uk.co.jamesj999.sonic.level.CollisionMode;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
@@ -59,7 +60,7 @@ public class GroundSensor extends Sensor {
 
         // 1. Check Initial Tile
         ChunkDesc initialChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
-        SolidTile initialTile = levelManager.getSolidTileForChunkDesc(initialChunkDesc);
+        SolidTile initialTile = getSolidTile(initialChunkDesc, layer, globalDirection);
         byte initialHeight = getMetric(initialTile, initialChunkDesc, currentX, currentY, vertical);
 
         if (initialHeight == 16) {
@@ -73,7 +74,7 @@ public class GroundSensor extends Sensor {
             }
 
             ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, prevY);
-            SolidTile prevTile = levelManager.getSolidTileForChunkDesc(prevChunkDesc);
+            SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
             byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, prevY, vertical);
 
             if (prevHeight > 0) {
@@ -95,7 +96,7 @@ public class GroundSensor extends Sensor {
             }
 
             ChunkDesc nextChunkDesc = levelManager.getChunkDescAt(layer, nextX, nextY);
-            SolidTile nextTile = levelManager.getSolidTileForChunkDesc(nextChunkDesc);
+            SolidTile nextTile = getSolidTile(nextChunkDesc, layer, globalDirection);
             byte nextHeight = getMetric(nextTile, nextChunkDesc, nextX, nextY, vertical);
 
             if (nextHeight > 0) {
@@ -122,6 +123,24 @@ public class GroundSensor extends Sensor {
             // Normal case (0 < height < 16)
             return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
         }
+    }
+
+    private SolidTile getSolidTile(ChunkDesc chunkDesc, byte layer, Direction direction) {
+        if (chunkDesc == null) {
+            return null;
+        }
+        CollisionMode mode;
+        if (layer == 0) {
+            mode = chunkDesc.getPrimaryCollisionMode();
+        } else {
+            mode = chunkDesc.getSecondaryCollisionMode();
+        }
+
+        if (mode == null || !mode.isSolid(direction)) {
+            return null;
+        }
+
+        return levelManager.getSolidTileForChunkDesc(chunkDesc, layer);
     }
 
     private byte getMetric(SolidTile tile, ChunkDesc desc, int x, int y, boolean vertical) {

@@ -8,6 +8,7 @@ import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.timer.timers.ControlLockTimer;
 import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 public class PlayableSpriteMovementManager extends
@@ -67,6 +68,13 @@ public class PlayableSpriteMovementManager extends
 			testKeyPressed = false;
 		}
 
+		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null;
+
+		if (controlLocked) {
+			left = false;
+			right = false;
+		}
+
 		short originalX = sprite.getX();
 		short originalY = sprite.getY();
 
@@ -121,6 +129,24 @@ public class PlayableSpriteMovementManager extends
 				calculateGSpeed(sprite, left, right);
 				// Since this will update the gSpeed, we now need to update the X/Y from this.
 				calculateXYFromGSpeed(sprite);
+
+				if (!controlLocked) {
+					// Check for slip/fall condition
+					short absGSpeed = (short) Math.abs(sprite.getGSpeed());
+					int angle = sprite.getAngle() & 0xFF;
+
+					// If too slow (speed < 2.5 pixels) and on a steep slope (angle between 33 and 223)
+					if (absGSpeed < 640 && (angle >= 33 && angle <= 223)) {
+						// Detach
+						sprite.setAir(true);
+						// Lock controls
+						sprite.setGSpeed((short) 0);
+						sprite.setXSpeed((short) 0);
+						sprite.setYSpeed((short) 0);
+
+						TimerManager.getInstance().registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
+					}
+				}
 			}
 		}
 
@@ -154,6 +180,7 @@ public class PlayableSpriteMovementManager extends
 		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
 
 		doTerrainCollision(sprite, groundResult);
+		doCeilingCollision(sprite, ceilingResult);
 
 		// This won't work when graphics are involved...
 		if(sprite.getX() > originalX) {
@@ -175,6 +202,28 @@ public class PlayableSpriteMovementManager extends
 
 		// Update active sensors
 		sprite.updateSensors(originalX, originalY);
+	}
+
+	private void doCeilingCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
+		// Only check ceiling collision if we are moving upwards (ySpeed < 0)
+		if (sprite.getYSpeed() < 0) {
+			SensorResult lowestResult = findLowestSensorResult(results);
+			if (lowestResult != null) {
+				// Distance is positive if we are below the ceiling, negative if we have penetrated it.
+				// If distance < 0, we have hit the ceiling.
+				// A small threshold might be needed, but < 0 is standard for penetration.
+				if (lowestResult.distance() < 0) {
+					// We hit the ceiling.
+					// 1. Correct position.
+					// distance is negative (e.g. -5). We need to move DOWN by 5.
+					// moveForSensorResult handles direction UP: y - distance => y - (-5) => y + 5. Correct.
+					moveForSensorResult(sprite, lowestResult);
+
+					// 2. Stop vertical movement
+					sprite.setYSpeed((short) 0);
+				}
+			}
+		}
 	}
 
 	private void doWallCollision(AbstractPlayableSprite sprite) {
@@ -244,6 +293,12 @@ public class PlayableSpriteMovementManager extends
 				}
 
 				if (collision) {
+					// Add a 1px buffer to prevent sticking to walls
+					if (dir == Direction.RIGHT) {
+						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1), lowestResult.tileId(), lowestResult.direction());
+					} else if (dir == Direction.LEFT) {
+						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1), lowestResult.tileId(), lowestResult.direction());
+					}
 					moveForSensorResult(sprite, lowestResult);
 					sprite.setXSpeed((short) 0);
 					sprite.setGSpeed((short) 0);
@@ -278,7 +333,12 @@ public class PlayableSpriteMovementManager extends
 					moveForSensorResult(sprite, lowestResult);
 					// And set sonic's new angle based on the tile found:
 					if (lowestResult.angle() == (byte) 0xFF) {
-						sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
+						switch (sprite.getGroundMode()) {
+							case GROUND -> sprite.setAngle((byte) 0x00);
+							case RIGHTWALL -> sprite.setAngle((byte) 0xC0);
+							case CEILING -> sprite.setAngle((byte) 0x80);
+							case LEFTWALL -> sprite.setAngle((byte) 0x40);
+						}
 					} else {
 						sprite.setAngle(lowestResult.angle());
 					}

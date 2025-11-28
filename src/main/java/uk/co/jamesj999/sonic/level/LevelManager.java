@@ -16,6 +16,7 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import java.io.IOException;
@@ -546,6 +547,14 @@ public class LevelManager {
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
             player.setX((short) level.getStartXPos());
             player.setY((short) level.getStartYPos());
+            if (player instanceof AbstractPlayableSprite) {
+                ((AbstractPlayableSprite) player).setXSpeed((short) 0);
+                ((AbstractPlayableSprite) player).setYSpeed((short) 0);
+                ((AbstractPlayableSprite) player).setGSpeed((short) 0);
+                ((AbstractPlayableSprite) player).setAir(false);
+                ((AbstractPlayableSprite) player).setRolling(false);
+            }
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
