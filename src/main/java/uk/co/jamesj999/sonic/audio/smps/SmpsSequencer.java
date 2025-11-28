@@ -19,6 +19,7 @@ public class SmpsSequencer implements AudioStream {
     private int tempoAccumulator = TEMPO_MOD_BASE;
     private int dividingTiming = 1;
     private double sampleCounter = 0;
+    private boolean primed;
 
     // F-Num table for Octave 4
     private static final int[] FNUM_TABLE = {
@@ -59,14 +60,8 @@ public class SmpsSequencer implements AudioStream {
 
         dividingTiming = smpsData.getDividingTiming();
         int tempo = smpsData.getTempo();
-        if (tempo > 0) {
-            tempoWeight = tempo;
-        } else {
-            // Some headers use 0 here even though the Sonic 2 driver would stall.
-            // Clamp to the base duty cycle so we still make progress through the stream.
-            tempoWeight = TEMPO_MOD_BASE;
-        }
-        tempoAccumulator = TEMPO_MOD_BASE; // Start ticking immediately even for low tempos
+        tempoWeight = tempo & 0xFF;
+        tempoAccumulator = 0;
 
         if (data.length > 6) {
             int fmCount = data[2] & 0xFF;
@@ -90,6 +85,11 @@ public class SmpsSequencer implements AudioStream {
 
     @Override
     public int read(short[] buffer) {
+        if (!primed) {
+            tick();
+            primed = true;
+        }
+
         for (int i = 0; i < buffer.length; i++) {
             sampleCounter++;
             if (sampleCounter >= samplesPerFrame) {
@@ -196,8 +196,7 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void setTempoWeight(int newTempo) {
-        tempoWeight = newTempo > 0 ? newTempo : TEMPO_MOD_BASE;
-        tempoAccumulator = TEMPO_MOD_BASE;
+        tempoWeight = newTempo & 0xFF;
     }
 
     private void updateDividingTiming(int newDividingTiming) {
