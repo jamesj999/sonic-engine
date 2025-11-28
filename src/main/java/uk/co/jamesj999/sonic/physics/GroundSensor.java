@@ -65,39 +65,23 @@ public class GroundSensor extends Sensor {
 
         if (initialHeight == 16) {
             // Regression: Check 'previous' tile (against sensor direction)
-            short prevX = currentX;
-            short prevY = currentY;
-            if (vertical) {
-                prevY = calculateNextTile(globalDirection.opposite(), currentY);
-            } else {
-                prevX = calculateNextTile(globalDirection.opposite(), currentX);
-            }
+            // We only do this for horizontal sensors. Vertical regression (checking the tile above/below)
+            // causes issues where a ceiling sensor checks the floor (or vice versa) and ejects the sprite
+            // through the opposite surface.
+            if (!vertical) {
+                short prevX = calculateNextTile(globalDirection.opposite(), currentX);
 
-            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, prevY);
-            SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
-            byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, prevY, vertical);
+                ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, currentY);
+                SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
+                byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, currentY, vertical);
 
-            if (prevHeight > 0) {
-                // Found a valid previous tile.
-                // We need to determine which surface is the "True" surface.
-                // Standard Sonic logic checks regression to smooth slopes.
-                // However, for vertical sensors (UP/DOWN), checking the opposite block (Floor vs Ceiling)
-                // can lead to snapping to the wrong surface if both are solid.
-                // We calculate the distance for both and pick the "Nearest Surface" (smallest absolute distance).
-
-                SensorResult initialResult = createResult(initialTile, initialChunkDesc, originalX, originalY, currentX, currentY, globalDirection, vertical);
-                SensorResult prevResult = createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, prevY, globalDirection, vertical);
-
-                if (Math.abs(prevResult.distance()) < Math.abs(initialResult.distance())) {
-                    return prevResult;
-                } else {
-                    return initialResult;
+                if (prevHeight > 0) {
+                    // Found a valid previous tile, use it
+                    return createResult(prevTile, prevChunkDesc, originalX, originalY, prevX, currentY, globalDirection, vertical);
                 }
-            } else {
-                // Previous tile empty or invalid, revert to initial
-                return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
             }
-
+            // Previous tile empty or invalid (or vertical sensor), revert to initial
+            return createResult(initialTile, initialChunkDesc, originalX, originalY, originalX, originalY, globalDirection, vertical);
         } else if (initialHeight == 0) {
             // Extension: Check 'next' tile (in sensor direction)
             short nextX = currentX;
@@ -160,8 +144,6 @@ public class GroundSensor extends Sensor {
 
     private SensorResult createResult(SolidTile tile, ChunkDesc desc, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean vertical) {
         byte metric = getMetric(tile, desc, checkX, checkY, vertical);
-        // Note: Distance formulas use standard logic (ignoring VFlip for UP/DOWN) to support
-        // standard Sonic mirroring. Flips are handled by index reversal in getMetric.
         byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction);
 
         byte angle = 0;
