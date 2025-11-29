@@ -133,9 +133,12 @@ public class TestSmpsSequencer {
         seq.read(buf);
 
         String logStr = synth.log.toString();
+        long keyOnCount = synth.log.stream().filter(entry -> entry.contains("R28 VF")).count();
         int firstNoteIdx = logStr.indexOf("RA4 V02");
         int secondNoteIdx = logStr.indexOf("RA4 V02", firstNoteIdx + 1);
         assertTrue("First note should play", firstNoteIdx >= 0);
+        assertTrue("Rest after tempo change should key off the channel", logStr.contains("R28 V00"));
+        assertEquals("Second note should not play within the buffer when the tempo accumulator resets", 1, keyOnCount);
         assertEquals("Accumulator reset should delay the second note past the buffer", -1, secondNoteIdx);
     }
 }

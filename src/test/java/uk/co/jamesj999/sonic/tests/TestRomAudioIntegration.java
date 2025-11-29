@@ -107,11 +107,20 @@ public class TestRomAudioIntegration {
         LoggingSynth synth = new LoggingSynth();
         SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
 
+        // Ignore the DAC-enable write emitted during construction so assertions only consider
+        // commands produced by sequencing the ROM data.
+        synth.fm.clear();
+        synth.psg.clear();
+
         short[] buffer = new short[4096];
         seq.read(buffer);
 
         boolean hasInitWrite = synth.fm.stream().anyMatch(cmd -> cmd.contains("2B 80"));
+        boolean hasSequencedCommands = synth.fm.stream().anyMatch(cmd -> !cmd.contains("2B 80"))
+                || !synth.psg.isEmpty();
+
         assertTrue("Sequencer should initialize DAC enable on the FM chip", hasInitWrite);
+        assertTrue("Sequencer should emit FM or PSG commands from the ROM stream", hasSequencedCommands);
     }
 
     @Test
