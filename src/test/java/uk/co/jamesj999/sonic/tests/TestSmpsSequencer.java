@@ -101,6 +101,7 @@ public class TestSmpsSequencer {
         byte[] data = new byte[48];
         data[2] = 2; // 2 FM Channels so we can use channel 1 for FM note sequencing
         data[5] = (byte) 0xC0; // Initial fast tempo
+        data[4] = 0x01; // Dividing timing
 
         // Track 0 (DAC) stubbed with stop
         data[6] = 0x10;
@@ -111,27 +112,33 @@ public class TestSmpsSequencer {
         data[10] = (byte) (trackDataPtr & 0xFF);
         data[11] = (byte) ((trackDataPtr >> 8) & 0xFF);
 
-        // Note with duration, then tempo change to a very slow tempo and another note
+        // Note with duration, then tempo change to a very slow tempo, a rest, and another note
         data[trackDataPtr] = (byte) 0x81;
         data[trackDataPtr + 1] = 0x01;
         data[trackDataPtr + 2] = (byte) 0xEA; // Set tempo flag
         data[trackDataPtr + 3] = (byte) 0x10; // Much slower tempo
-        data[trackDataPtr + 4] = (byte) 0x82; // Second note
-        data[trackDataPtr + 5] = 0x01;
-        data[trackDataPtr + 6] = (byte) 0xF2; // Stop
+        data[trackDataPtr + 4] = (byte) 0x80; // Rest
+        data[trackDataPtr + 5] = 0x01; // Rest duration
+        data[trackDataPtr + 6] = (byte) 0x82; // Second note
+        data[trackDataPtr + 7] = 0x01;
+        data[trackDataPtr + 8] = (byte) 0xF2; // Stop
 
         SmpsData smps = new SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
-        // Enough samples for ~10 frames. With accumulator reset, the slow tempo won't tick again yet.
-        short[] buf = new short[8000];
+        // Enough samples for ~27 frames. Without resetting the accumulator, the leftover fast-tempo ticks
+        // would advance to the second note, but with a reset the slow tempo keeps it out of range.
+        short[] buf = new short[20000];
         seq.read(buf);
 
         String logStr = synth.log.toString();
+        long keyOnCount = synth.log.stream().filter(entry -> entry.contains("R28 VF")).count();
         int firstNoteIdx = logStr.indexOf("RA4 V02");
         int secondNoteIdx = logStr.indexOf("RA4 V02", firstNoteIdx + 1);
         assertTrue("First note should play", firstNoteIdx >= 0);
+        assertTrue("Rest after tempo change should key off the channel", logStr.contains("R28 V00"));
+        assertEquals("Second note should not play within the buffer when the tempo accumulator resets", 1, keyOnCount);
         assertEquals("Accumulator reset should delay the second note past the buffer", -1, secondNoteIdx);
     }
 }

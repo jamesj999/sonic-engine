@@ -7,8 +7,11 @@ import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -18,16 +21,42 @@ public class TestRomAudioIntegration {
 
     @Before
     public void setUp() {
-        String romPath = "Sonic The Hedgehog 2 (W) (REV01) [!].gen";
-        File f = new File(romPath);
-        if (!f.exists()) {
-            // Skip tests if ROM not present
-            org.junit.Assume.assumeTrue("ROM file not found, skipping integration test", false);
-        }
+        File romFile = RomTestUtils.ensureRomAvailable();
         rom = new Rom();
-        boolean opened = rom.open(romPath);
+        boolean opened = rom.open(romFile.getAbsolutePath());
         assertTrue("Failed to open ROM", opened);
         loader = new SmpsLoader(rom);
+    }
+
+    private static class LoggingSynth extends VirtualSynthesizer {
+        List<String> fm = new ArrayList<>();
+        List<Integer> psg = new ArrayList<>();
+        List<Integer> dac = new ArrayList<>();
+        DacData configuredDacData;
+
+        @Override
+        public void setDacData(DacData data) {
+            this.configuredDacData = data;
+            super.setDacData(data);
+        }
+
+        @Override
+        public void writeFm(int port, int reg, int val) {
+            fm.add(String.format("P%d %02X %02X", port, reg, val));
+            super.writeFm(port, reg, val);
+        }
+
+        @Override
+        public void writePsg(int val) {
+            psg.add(val);
+            super.writePsg(val);
+        }
+
+        @Override
+        public void playDac(int note) {
+            dac.add(note);
+            super.playDac(note);
+        }
     }
 
     @Test
@@ -68,5 +97,44 @@ public class TestRomAudioIntegration {
         // Note: We do not assert non-silent audio here because full instrument parameter loading
         // (SMPS Flag EF) is not yet implemented, which may result in default (silent or low) output.
         // The test passes if the sequencer runs without exception.
+    }
+
+    @Test
+    public void testMusicEmitsChipCommandsFromRomData() {
+        SmpsData data = loader.loadMusic(0x82); // Emerald Hill Zone
+        DacData dac = loader.loadDacData();
+
+        LoggingSynth synth = new LoggingSynth();
+        SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
+
+        // Ignore the DAC-enable write emitted during construction so assertions only consider
+        // commands produced by sequencing the ROM data.
+        synth.fm.clear();
+        synth.psg.clear();
+
+        short[] buffer = new short[4096];
+        seq.read(buffer);
+
+        boolean hasInitWrite = synth.fm.stream().anyMatch(cmd -> cmd.contains("2B 80"));
+        boolean hasSequencedCommands = synth.fm.stream().anyMatch(cmd -> !cmd.contains("2B 80"))
+                || !synth.psg.isEmpty();
+
+        assertTrue("Sequencer should initialize DAC enable on the FM chip", hasInitWrite);
+        assertTrue("Sequencer should emit FM or PSG commands from the ROM stream", hasSequencedCommands);
+    }
+
+    @Test
+    public void testDacSamplePlaybackUsesRomSamples() {
+        SmpsData smps = loader.loadMusic(0x82); // Emerald Hill Zone contains DAC drums
+        DacData dacData = loader.loadDacData();
+        LoggingSynth synth = new LoggingSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth);
+
+        short[] buffer = new short[4096];
+        seq.read(buffer);
+
+        assertSame("Sequencer should wire ROM DAC data into the synthesizer", dacData, synth.configuredDacData);
+        assertFalse("ROM DAC table should expose samples", dacData.samples.isEmpty());
+        assertTrue("ROM DAC table should map drum notes", dacData.mapping.containsKey(0x81));
     }
 }
