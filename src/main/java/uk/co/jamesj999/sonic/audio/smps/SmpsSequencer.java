@@ -19,6 +19,7 @@ public class SmpsSequencer implements AudioStream {
     private int tempoAccumulator = TEMPO_MOD_BASE;
     private int dividingTiming = 1;
     private double sampleCounter = 0;
+    private boolean primed;
 
     // F-Num table for Octave 4
     private static final int[] FNUM_TABLE = {
@@ -84,6 +85,11 @@ public class SmpsSequencer implements AudioStream {
 
     @Override
     public int read(short[] buffer) {
+        if (!primed) {
+            tick();
+            primed = true;
+        }
+
         for (int i = 0; i < buffer.length; i++) {
             sampleCounter++;
             if (sampleCounter >= samplesPerFrame) {
