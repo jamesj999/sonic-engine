@@ -11,9 +11,15 @@ public class SmpsData {
     private final int[] fmPointers;
     private final int[] psgPointers;
     private final boolean littleEndian;
+    private int z80StartAddress = 0;
 
     public SmpsData(byte[] data) {
+        this(data, 0);
+    }
+
+    public SmpsData(byte[] data, int z80StartAddress) {
         this.data = data;
+        this.z80StartAddress = z80StartAddress;
         this.littleEndian = detectLittleEndian();
 
         if (data.length >= 8) {
@@ -95,6 +101,10 @@ public class SmpsData {
 
     public int[] getPsgPointers() {
         return psgPointers;
+    }
+
+    public int getZ80StartAddress() {
+        return z80StartAddress;
     }
 
     private int read16(byte[] bytes, int idx) {

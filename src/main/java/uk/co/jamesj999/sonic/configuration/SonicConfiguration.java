@@ -104,6 +104,11 @@ public enum SonicConfiguration {
 	/**
 	 * Whether to enable Debug Movement Mode
 	 */
-	DEBUG_MODE;
+	DEBUG_MODE,
+
+	/**
+	 * Whether to enable Audio (Music/SFX)
+	 */
+	AUDIO_ENABLED;
 
 }

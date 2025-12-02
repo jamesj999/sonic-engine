@@ -50,9 +50,7 @@ public class SmpsLoader {
 
         // SFX Map (Populate with discovered offsets)
         // Potential candidate for SFX: 0xFFEAD (FM=1)
-        // Without precise IDs, we leave this empty for now or add placeholders.
-        // Adding infrastructure so it can be enabled easily.
-        // sfxMap.put("RING", 0xFFEAD);
+        sfxMap.put("RING", 0xFFEAD);
     }
 
     public SmpsData loadMusic(int musicId) {
@@ -61,18 +59,25 @@ public class SmpsLoader {
             LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map.");
             return null;
         }
-        return loadSmps(offset);
+        // Sonic 2 Music is loaded at Z80 0x1380
+        return loadSmps(offset, 0x1380);
     }
 
     public SmpsData loadSfx(String name) {
         Integer offset = sfxMap.get(name);
         if (offset != null) {
-            return loadSmps(offset);
+            // Sonic 2 SFX usually loaded at Z80 0x1C00 (Guess)
+            return loadSmps(offset, 0x1C00);
         }
         return null;
     }
 
     public SmpsData loadSmps(int offset) {
+        // Default fallback: assume ROM mapping or unknown
+        return loadSmps(offset, 0x8000 | (offset & 0x7FFF));
+    }
+
+    public SmpsData loadSmps(int offset, int z80Addr) {
          try {
             // Read compressed size (Saxman stores little-endian size)
             int b1 = rom.readByte(offset) & 0xFF;
@@ -84,7 +89,7 @@ public class SmpsLoader {
 
             byte[] decompressed = decompressor.decompress(compressed);
             LOGGER.info("Decompressed SMPS at " + Integer.toHexString(offset) + ". Size: " + decompressed.length);
-            return new SmpsData(decompressed);
+            return new SmpsData(decompressed, z80Addr);
         } catch (Exception e) {
             LOGGER.severe("Failed to load SMPS at " + Integer.toHexString(offset));
             e.printStackTrace();
