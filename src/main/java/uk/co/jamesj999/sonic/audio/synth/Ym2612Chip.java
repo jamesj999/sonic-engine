@@ -100,28 +100,27 @@ public class Ym2612Chip {
     }
 
     /**
-     * Simplified SSG-EG peak handling: invert direction/phase when hitting envelope extremes and optionally hold.
+     * SSG-EG peak handling
      */
     private void handleSsgPeak(Operator o, boolean atTop) {
         if (!o.ssgEnabled) {
             return;
         }
-        // Alternate toggles inversion each peak
+
         if (o.ssgAlternate) {
             o.ssgInverted = !o.ssgInverted;
         }
-        // Flip direction for bouncing envelopes unless hold is requested
+
         if (o.ssgHoldMode) {
             o.ssgHold = true;
+            o.envCounter = ENV_END;
+            o.envState = EnvState.IDLE;
             return;
         }
-        o.ssgDir = -o.ssgDir;
-        // Keep envelope within bounds
-        if (atTop) {
-            o.envCounter = ENV_ATTACK;
-        } else {
-            o.envCounter = ENV_END;
-        }
+
+        // Loop: Reset to Attack
+        o.envCounter = ENV_ATTACK;
+        o.envState = EnvState.ATTACK;
     }
 
     // LFO frequency table (Hz) from YM2612 docs
@@ -151,7 +150,7 @@ public class Ym2612Chip {
             8, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 22, 22, 22
     };
     // Tremolo depths (approx dB) applied as attenuation
-    private static final double[] AMS_DEPTH = {0.0, 1.4, 2.9, 5.9};
+    private static final double[] AMS_DEPTH = {0.0, 1.4, 5.9, 11.8};
     // Detune tables (approximate semitone offsets as multipliers)
     private static final double[] DETUNE = {0.0, 0.004, 0.008, 0.012, -0.012, -0.008, -0.004, 0.0};
     private static final double OUTPUT_GAIN = 1600.0; // calibrated headroom to reduce clipping
@@ -184,6 +183,7 @@ public class Ym2612Chip {
     private boolean timerAEnabled;
     private boolean timerBEnabled;
     private double busyCycles;
+    private int mode; // Added
 
     // LFO state
     private double lfoPos;
@@ -213,7 +213,6 @@ public class Ym2612Chip {
         boolean ssgEnabled;
         boolean ssgAlternate;
         boolean ssgHoldMode;
-        int ssgDir; // +1 or -1
     }
 
     private static class Channel {
@@ -256,6 +255,7 @@ public class Ym2612Chip {
      */
     public void reset() {
         status = 0;
+        mode = 0; // Added
         busyCycles = 0;
         channel3SpecialMode = false;
         timerACount = timerBCount = 0;
@@ -302,7 +302,6 @@ public class Ym2612Chip {
                 o.ssgEnabled = false;
                 o.ssgAlternate = false;
                 o.ssgHoldMode = false;
-                o.ssgDir = 1;
             }
         }
     }
@@ -347,6 +346,37 @@ public class Ym2612Chip {
             // Approximate: higher rate byte reduces step size
             this.dacStep = Math.max(0.01, 1.0 / (1.0 + (entry.rate & 0xFF) / 32.0));
         }
+    }
+
+    // New Helper methods
+    private void keyOn(Channel ch, int opIdx) {
+        Operator o = ch.ops[opIdx];
+        if (o.envState == EnvState.RELEASE || o.envState == EnvState.IDLE) {
+            int atten = ENV_TAB[o.envCounter <= ENV_ATTACK ? ENV_ATTACK : Math.min(o.envCounter, ENV_END)];
+            if (atten >= ENV_LEN) atten = ENV_LEN - 1;
+            o.envCounter = DECAY_TO_ATTACK[atten];
+            o.envState = EnvState.ATTACK;
+            o.ssgHold = false;
+            o.ssgInverted = (o.ssgEg & 0x04) != 0;
+        }
+    }
+
+    private void keyOff(Channel ch, int opIdx) {
+        Operator o = ch.ops[opIdx];
+        if (o.envState != EnvState.RELEASE) {
+            if (o.envCounter < ENV_DECAY) {
+                int volume = ENV_TAB[o.envCounter];
+                o.envCounter = ENV_DECAY + volume;
+            }
+            o.envState = EnvState.RELEASE;
+        }
+    }
+
+    private void csmKeyControl() {
+        keyOn(channels[2], 0);
+        keyOn(channels[2], 1);
+        keyOn(channels[2], 2);
+        keyOn(channels[2], 3);
     }
 
     /**
@@ -413,7 +443,6 @@ public class Ym2612Chip {
             o.ssgEnabled = false;
             o.ssgAlternate = false;
             o.ssgHoldMode = false;
-            o.ssgDir = 1;
         }
     }
 
@@ -464,6 +493,7 @@ public class Ym2612Chip {
             return;
         }
         if (port == 0 && reg == 0x27) { // Timer control/reset
+            mode = val; // Store mode
             // Bit 6 controls channel 3 special mode (CT3)
             channel3SpecialMode = (val & 0x40) != 0;
             channels[2].specialMode = channel3SpecialMode;
@@ -487,16 +517,8 @@ public class Ym2612Chip {
             Channel ch = channels[chIdx];
             for (int i = 0; i < 4; i++) {
                 boolean on = ((opMask >> i) & 1) != 0;
-                Operator o = ch.ops[i];
-                if (on) {
-                    o.envState = EnvState.ATTACK;
-                    o.envCounter = ENV_END;
-                    o.ssgHold = false;
-                    o.ssgDir = (o.ssgEg & 0x04) != 0 ? -1 : 1; // attack inverted sets direction down
-                    o.ssgInverted = (o.ssgEg & 0x04) != 0;
-                } else {
-                    o.envState = EnvState.RELEASE;
-                }
+                if (on) keyOn(ch, i);
+                else keyOff(ch, i);
             }
             return;
         }
@@ -602,7 +624,6 @@ public class Ym2612Chip {
                     o.ssgEnabled = (val & 0x08) != 0;
                     o.ssgHoldMode = (val & 0x01) != 0;
                     o.ssgAlternate = (val & 0x02) != 0;
-                    o.ssgDir = (val & 0x04) != 0 ? -1 : 1;
                     break;
                 default:
                     break;
@@ -866,44 +887,44 @@ public class Ym2612Chip {
         switch (o.envState) {
             case ATTACK -> {
                 int step = egStep(o.ar, o.rs, block, fnum, true);
-                o.envCounter -= step;
-                if (o.envCounter <= ENV_ATTACK || o.ar == 31) {
-                    o.envCounter = ENV_ATTACK;
+                o.envCounter += step;
+                if (o.envCounter >= ENV_DECAY || o.ar == 31) {
+                    o.envCounter = ENV_DECAY;
                     o.envState = EnvState.DECAY1;
                     if (ssgEnabled) handleSsgPeak(o, true);
                 }
             }
             case DECAY1 -> {
                 int step = egStep(o.d1r, o.rs, block, fnum, false);
-                o.envCounter += step * o.ssgDir;
+                o.envCounter += step;
                 int sustain = SL_TAB[Math.min(15, o.d1l)];
                 if (!ssgEnabled && o.envCounter >= sustain) {
                     o.envCounter = sustain;
                     o.envState = EnvState.DECAY2;
-                } else if (ssgEnabled && (o.envCounter <= ENV_ATTACK || o.envCounter >= ENV_END)) {
-                    handleSsgPeak(o, o.envCounter <= ENV_ATTACK);
+                } else if (ssgEnabled && o.envCounter >= ENV_END) {
+                    handleSsgPeak(o, false);
                 }
             }
             case DECAY2 -> {
                 int step = egStep(o.d2r, o.rs, block, fnum, false);
-                o.envCounter += step * o.ssgDir;
-                if (o.envCounter >= ENV_END || o.envCounter <= ENV_ATTACK) {
-                    o.envCounter = Math.max(ENV_ATTACK, Math.min(ENV_END, o.envCounter));
+                o.envCounter += step;
+                if (o.envCounter >= ENV_END) {
                     if (ssgEnabled) {
-                        handleSsgPeak(o, o.envCounter <= ENV_ATTACK);
+                        handleSsgPeak(o, false);
                     } else {
+                        o.envCounter = ENV_END;
                         o.envState = EnvState.IDLE;
                     }
                 }
             }
             case RELEASE -> {
                 int step = egStep(Math.max(1, o.rr), o.rs, block, fnum, false);
-                o.envCounter += step * o.ssgDir;
-                if (o.envCounter >= ENV_END || o.envCounter <= ENV_ATTACK) {
-                    o.envCounter = Math.max(ENV_ATTACK, Math.min(ENV_END, o.envCounter));
+                o.envCounter += step;
+                if (o.envCounter >= ENV_END) {
                     if (ssgEnabled) {
-                        handleSsgPeak(o, o.envCounter <= ENV_ATTACK);
+                        handleSsgPeak(o, false);
                     } else {
+                        o.envCounter = ENV_END;
                         o.envState = EnvState.IDLE;
                     }
                 }
@@ -927,16 +948,20 @@ public class Ym2612Chip {
         int envVal = ENV_TAB[envIdx <= ENV_ATTACK ? ENV_ATTACK : Math.min(envIdx, ENV_END)];
         double level = 1.0 - (envVal * ENV_STEP_DB / 96.0);
         level = Math.max(0.0, Math.min(1.0, level));
+        if (o.ssgInverted) {
+            level = 1.0 - level;
+        }
         // Apply total level attenuation using TL (~0.75dB steps)
         double tlDb = (o.tl & 0x7F) * 0.75;
-        // Reference AMS scaling: use AMS shift table on the LFO amplitude, then map to dB depth
-        int amsShift = LFO_AMS_TAB[Math.min(ams, LFO_AMS_TAB.length - 1)];
-        double amsVal = (amsShift >= 31) ? 0.0 : (lfoVal / (1 << amsShift));
-        double amsDb = (o.am != 0 && lfoEnabled) ? AMS_DEPTH[Math.min(ams, AMS_DEPTH.length - 1)] * amsVal : 0.0;
-        double linear = level * Math.pow(10.0, -(tlDb + amsDb) / 20.0);
-        if (o.ssgInverted) {
-            linear = -linear;
+
+        // AMS (Tremolo)
+        double amsDb = 0.0;
+        if (lfoEnabled && o.am != 0 && ams > 0) {
+            double lfoUnipolar = (lfoVal + 1.0) * 0.5;
+            amsDb = AMS_DEPTH[Math.min(ams, AMS_DEPTH.length - 1)] * lfoUnipolar;
         }
+
+        double linear = level * Math.pow(10.0, -(tlDb + amsDb) / 20.0);
         return linear;
     }
 
@@ -948,6 +973,9 @@ public class Ym2612Chip {
             if (timerACount <= 0) {
                 status |= FM_STATUS_TIMERA_BIT_MASK;
                 timerACount += timerALoad;
+                if ((mode & 0x80) != 0) {
+                    csmKeyControl();
+                }
             }
         }
         if (timerBEnabled && ticks > 0) {
