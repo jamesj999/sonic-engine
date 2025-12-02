@@ -1,0 +1,22 @@
+{
+  "VERSION": "Alpha With ROM Loading Logic - V0.06",
+  "SCREEN_WIDTH_PIXELS": 320,
+  "SCREEN_HEIGHT_PIXELS": 224,
+  "SCREEN_WIDTH": 640,
+  "SCREEN_HEIGHT": 480,
+  "SCALE": 1,
+  "FPS": 60,
+  "UP": 38,
+  "DOWN": 40,
+  "LEFT": 37,
+  "RIGHT": 39,
+  "JUMP": 32,
+  "TEST": 81,
+  "NEXT_ACT": 90,
+  "NEXT_ZONE": 88,
+  "MAIN_CHARACTER_CODE": "sonic",
+  "DEBUG_VIEW_ENABLED": true,
+  "DEBUG_COLLISION_VIEW_ENABLED": true,
+  "ROM_FILENAME": "Sonic The Hedgehog 2 (W) (REV01) [!].gen",
+  "DEBUG_MODE": false
+}

@@ -5,6 +5,7 @@ import org.junit.Test;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 
 import java.lang.reflect.Method;
 
@@ -99,5 +100,36 @@ public class TestPlayableSpriteMovementManager {
             assertEquals("Angle " + String.format("0x%02X", currentAngle) + " should snap to " + String.format("0x%02X", expectedSnappedAngle),
                     expectedSnappedAngle, mockSprite.getAngle());
         }
+    }
+
+    @Test
+    public void testLandingFromAirWithStaleRightWallAngle() throws Exception {
+        // Setup:
+        // Sprite is in Air.
+        // GroundMode is GROUND (automatically set when Air=true).
+        // Angle is STALE (0xC0 = 192 = Right Wall).
+        // Landing on a flat tile (0xFF).
+
+        mockSprite.setAngle((byte) 0xC0); // Right Wall Angle
+        mockSprite.setAir(true);          // In Air
+        mockSprite.setGroundMode(GroundMode.GROUND); // Ensure ground mode is GROUND (setAir does this usually)
+
+        // Simulating falling down
+        mockSprite.setYSpeed((short) 1000);
+        mockSprite.setXSpeed((short) 0);
+
+        // Landing on 0xFF tile
+        SensorResult result = new SensorResult((byte) 0xFF, (byte) -1, 0, Direction.DOWN);
+        SensorResult[] results = {result, result};
+
+        Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("doTerrainCollision", AbstractPlayableSprite.class, SensorResult[].class);
+        method.setAccessible(true);
+        method.invoke(manager, mockSprite, results);
+
+        // Verification:
+        // The fix should ensure the angle snaps to 0x00 (Ground) based on the GroundMode, not the stale angle 0xC0.
+
+        assertEquals("Angle should be reset to 0x00 when landing from Air on flat ground, ignoring stale angle.",
+                (byte) 0x00, mockSprite.getAngle());
     }
 }

@@ -18,18 +18,35 @@ public class SmpsLoader {
 
     public SmpsLoader(Rom rom) {
         this.rom = rom;
-        // Map Music ID (from Playlist) to ROM Offset
-        musicMap.put(0x82, 0xF88C4); // EHZ
-        musicMap.put(0x8B, 0xF9664); // MCZ
-        musicMap.put(0x84, 0xFBD8C); // OOZ
-        musicMap.put(0x85, 0xF8DEE); // MTZ
-        musicMap.put(0x86, 0xFCE74); // HTZ
-        musicMap.put(0x87, 0xF9D69); // ARZ
-        musicMap.put(0x89, 0xF917B); // CNZ
-        musicMap.put(0x8A, 0xFA36B); // DEZ
-        musicMap.put(0x8D, 0xFBA6F); // SCZ
-        musicMap.put(0x8E, 0xFB3F7); // CPZ
-        musicMap.put(0x8F, 0xFC146); // WFZ
+        // Map Music ID (from playlist) to absolute ROM offsets (Sonic 2 final)
+        musicMap.put(0x81, 0x0F88C4); // EHZ
+        musicMap.put(0x82, 0x0F8DEE); // MTZ
+        musicMap.put(0x83, 0x0F917B); // CNZ
+        musicMap.put(0x84, 0x0F9664); // MCZ
+        musicMap.put(0x85, 0x0F9A3C); // MCZ 2P
+        musicMap.put(0x86, 0x0FCE74); // HTZ
+        musicMap.put(0x87, 0x0F9D69); // ARZ
+        musicMap.put(0x88, 0x0FA6ED); // Special Stage
+        musicMap.put(0x89, 0x0FAAC4); // Options
+        musicMap.put(0x8A, 0x0FAC3C); // Ending
+        musicMap.put(0x8B, 0x0FB124); // Final battle
+        musicMap.put(0x8C, 0x0FB3F7); // CPZ
+        musicMap.put(0x8D, 0x0FB81E); // Boss
+        musicMap.put(0x8E, 0x0FBA6F); // Sky Chase
+        musicMap.put(0x8F, 0x0FC146); // WFZ
+        musicMap.put(0x90, 0x0FC146); // WFZ alias
+        musicMap.put(0x91, 0x0FC480); // EHZ 2P
+        musicMap.put(0x93, 0x0FCBBC); // Super Sonic
+        musicMap.put(0x94, 0x0FCE74); // HTZ alias
+        musicMap.put(0x96, 0x0FD193); // Title
+        musicMap.put(0x97, 0x0FD35E); // Stage Clear
+        musicMap.put(0x99, 0x0F8359); // Invincibility
+        musicMap.put(0x9B, 0x0F803C); // Hidden Palace
+        musicMap.put(0xB5, 0x0FD48D); // 1-Up
+        musicMap.put(0xB8, 0x0FD57A); // Game Over
+        musicMap.put(0xBA, 0x0FD6C9); // Got an Emerald
+        musicMap.put(0xBD, 0x0FD797); // Credits
+        musicMap.put(0x00, 0x0F0002); // Continue
 
         // SFX Map (Populate with discovered offsets)
         // Potential candidate for SFX: 0xFFEAD (FM=1)
@@ -57,10 +74,10 @@ public class SmpsLoader {
 
     public SmpsData loadSmps(int offset) {
          try {
-            // Read compressed size (Little Endian)
+            // Read compressed size (Saxman stores little-endian size)
             int b1 = rom.readByte(offset) & 0xFF;
             int b2 = rom.readByte(offset + 1) & 0xFF;
-            int compressedSize = b1 | (b2 << 8);
+            int compressedSize = (b2 << 8) | b1;
 
             // Read compressed block
             byte[] compressed = rom.readBytes(offset, compressedSize + 2);
