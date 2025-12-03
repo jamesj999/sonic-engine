@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.*;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
+import uk.co.jamesj999.sonic.camera.Camera;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -42,13 +43,16 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
+                       int solidTilesAngleAddr,
+                       int levelWidth,
+                       int levelHeight) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
+        setupBoundaries(levelWidth, levelHeight);
     }
 
     @Override
@@ -290,5 +294,16 @@ public class Sonic2Level implements Level {
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void setupBoundaries(int width, int height) {
+        Camera camera = Camera.getInstance();
+        camera.setMinX((short) 0);
+        camera.setMinY((short) 0);
+        camera.setMaxX((short) (width * 128));
+        camera.setMaxY((short) (height * 128));
+
+        LOG.info("Level boundaries loaded: Width=" + width + ", Height=" + height +
+                " (MaxX=" + camera.getMaxX() + ", MaxY=" + camera.getMaxY() + ")");
     }
 }

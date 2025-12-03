@@ -14,7 +14,7 @@ public class Sonic2 extends Game {
     private static final int LEVEL_LAYOUT_DIR_SIZE = 68;
     private static final int LEVEL_SELECT_ADDR = 0x9454;
     private static final int LEVEL_DATA_DIR = 0x42594;
-    private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 12;
+    private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 16;
     private static final int LEVEL_PALETTE_DIR = 0x2782;
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
     private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
@@ -105,6 +105,8 @@ public class Sonic2 extends Game {
         int solidTileHeightsAddr = getSolidTileHeightsAddr();
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
+        int levelWidth = getLevelWidth(levelIdx);
+        int levelHeight = getLevelHeight(levelIdx);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -116,8 +118,19 @@ public class Sonic2 extends Game {
         System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
+        System.out.printf("Level Width: %d, Level Height: %d%n", levelWidth, levelHeight);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, levelWidth, levelHeight);
+    }
+
+    private int getLevelWidth(int levelIdx) throws IOException {
+        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+        return rom.read16BitAddr(getDataAddress(zoneIdx, 12));
+    }
+
+    private int getLevelHeight(int levelIdx) throws IOException {
+        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+        return rom.read16BitAddr(getDataAddress(zoneIdx, 14));
     }
 
     private int getSolidTileHeightsAddr() {
