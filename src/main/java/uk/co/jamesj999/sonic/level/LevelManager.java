@@ -550,6 +550,7 @@ public class LevelManager {
                 ((AbstractPlayableSprite) player).setGSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setAir(false);
                 ((AbstractPlayableSprite) player).setRolling(false);
+                Camera.getInstance().setFocusedSprite((AbstractPlayableSprite) player);
             }
 
         } catch (IOException e) {
