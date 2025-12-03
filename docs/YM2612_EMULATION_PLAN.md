@@ -37,20 +37,22 @@ Reference docs: `Emulating the YM2612_ Part 1-7 - jsgroth's blog.htm`, `YM2612 -
 
 ### 6) DAC Path
 - [x] DAC playback on channel 5 when enabled; respects pan.
-- [ ] Ladder/analog quirk modelling and more accurate DAC stepping.
+- [x] Ladder/analog quirk modelling (9-bit DAC quantization/ladder effect simulation) and more accurate DAC stepping.
 
 ### 7) Mixing & Output
 - [x] Per-channel pan to L/R, summed and clamped.
 - [x] Stereo render path added (legacy mono mix still available); pan applied to DAC as well.
 - [x] Headroom reduced (scaled output gain) to mitigate clipping.
 - [x] Optional simple low-pass smoothing added (placeholder for analog/ladder filter).
-- [ ] Optional low-pass/ladder filter from Part 5.
+- [x] Optional low-pass/ladder filter from Part 5 (LPF cutoff tuned to 22kHz).
 
 ### 8) Integration Steps
 - [x] Replace Ym2612Chip stub with feature-complete model while keeping API.
 - [x] Sequencer loads 19-byte voices and uses per-operator key-on bits.
-- [ ] Sequencer coordination flags and modulation behaviours (vibrato/tremolo, tie, sustain, pan/AMS/FMS commands) matching SMPS player.
-- [ ] Unit tests rendering known voices and asserting envelope progress.
+- [x] Sequencer coordination flags and modulation behaviours (vibrato/tremolo, tie, sustain, pan/AMS/FMS commands) matching SMPS player.
+- [x] Unit tests rendering known voices and asserting envelope progress.
 
 ### 9) Deferred/Accuracy Extras
-- [ ] Full SSG-EG behaviours, analog ladder/LPF, exact output clipping, timer IRQ side effects, and per-chip quirks (YM2612 DAC distortion).
+- [ ] Full SSG-EG behaviours, exact output clipping, timer IRQ side effects, and per-chip quirks.
+- [x] CT3 special mode parity (phase reset, per-slot freq check).
+- [x] Timers/Busy cycle accuracy (approximate data write penalty).
