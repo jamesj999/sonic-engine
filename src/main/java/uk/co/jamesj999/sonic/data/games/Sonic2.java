@@ -125,12 +125,14 @@ public class Sonic2 extends Game {
 
     private int getLevelWidth(int levelIdx) throws IOException {
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        return rom.read16BitAddr(getDataAddress(zoneIdx, 12));
+        long offset = LEVEL_DATA_DIR + zoneIdx * LEVEL_DATA_DIR_ENTRY_SIZE + 12;
+        return rom.read16BitAddr(offset);
     }
 
     private int getLevelHeight(int levelIdx) throws IOException {
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        return rom.read16BitAddr(getDataAddress(zoneIdx, 14));
+        long offset = LEVEL_DATA_DIR + zoneIdx * LEVEL_DATA_DIR_ENTRY_SIZE + 14;
+        return rom.read16BitAddr(offset);
     }
 
     private int getSolidTileHeightsAddr() {
