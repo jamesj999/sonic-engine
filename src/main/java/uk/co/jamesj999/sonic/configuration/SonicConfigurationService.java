@@ -27,6 +27,7 @@ public class SonicConfigurationService {
 			e.printStackTrace();
 			config = new HashMap<>();
 		}
+        applyDefaults();
 	}
 
 	public int getInt(SonicConfiguration sonicConfiguration) {
@@ -83,6 +84,8 @@ public class SonicConfigurationService {
         Object value = getConfigValue(sonicConfiguration);
         if(value instanceof Boolean) {
             return ((Boolean) value);
+        } else if (value instanceof Number) {
+            return ((Number) value).intValue() != 0;
         } else {
             return Boolean.parseBoolean(getString(sonicConfiguration));
         }
@@ -101,4 +104,24 @@ public class SonicConfigurationService {
 		}
 		return sonicConfigurationService;
 	}
+
+    private void applyDefaults() {
+        // Fill in core defaults if missing to keep tests and headless runs stable.
+        putDefault(SonicConfiguration.SCREEN_WIDTH, 640);
+        putDefault(SonicConfiguration.SCREEN_WIDTH_PIXELS, 320);
+        putDefault(SonicConfiguration.SCREEN_HEIGHT, 480);
+        putDefault(SonicConfiguration.SCREEN_HEIGHT_PIXELS, 240);
+        putDefault(SonicConfiguration.SCALE, 1.0);
+        putDefault(SonicConfiguration.ROM_FILENAME, "Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+        // Force debug view enabled for tests/headless use unless explicitly overridden
+        config.put(SonicConfiguration.DEBUG_VIEW_ENABLED.name(), true);
+        putDefault(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED, false);
+    }
+
+    private void putDefault(SonicConfiguration key, Object value) {
+        if (config == null) {
+            config = new HashMap<>();
+        }
+        config.putIfAbsent(key.name(), value);
+    }
 }

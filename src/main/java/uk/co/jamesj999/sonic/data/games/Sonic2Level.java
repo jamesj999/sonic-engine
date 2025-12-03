@@ -27,7 +27,7 @@ public class Sonic2Level implements Level {
     private int chunkCount;
     private int blockCount;
     private int solidTileCount;
-    private static final boolean KOS_DEBUG_LOG = true;
+    private static final boolean KOS_DEBUG_LOG = false;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 

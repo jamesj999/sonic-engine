@@ -225,6 +225,7 @@ public class Ym2612Chip {
         int feedback, algo;
         int ams, fms;
         int pan; // bits: L/R
+        double attackRamp;
 
         double feedbackHist1;
         double feedbackHist2;
@@ -280,6 +281,7 @@ public class Ym2612Chip {
             ch.ams = 0;
             ch.fms = 0;
             ch.pan = 0x3; // default both speakers
+            ch.attackRamp = 1.0;
             ch.feedbackHist1 = 0;
             ch.feedbackHist2 = 0;
             ch.specialMode = false;
@@ -351,6 +353,12 @@ public class Ym2612Chip {
     // New Helper methods
     private void keyOn(Channel ch, int opIdx) {
         Operator o = ch.ops[opIdx];
+        if (o.ar == 0) {
+            o.envState = EnvState.IDLE;
+            o.envCounter = ENV_END;
+            return;
+        }
+        ch.attackRamp = 0.0;
         if (o.envState == EnvState.RELEASE || o.envState == EnvState.IDLE) {
             int atten = ENV_TAB[o.envCounter <= ENV_ATTACK ? ENV_ATTACK : Math.min(o.envCounter, ENV_END)];
             if (atten >= ENV_LEN) atten = ENV_LEN - 1;
@@ -772,6 +780,20 @@ public class Ym2612Chip {
     private double renderChannel(int chIdx, double lfoVal) {
         Channel ch = channels[chIdx];
 
+        boolean hasActiveOperator = false;
+        for (Operator op : ch.ops) {
+            if (op.envState != EnvState.IDLE) {
+                hasActiveOperator = true;
+                break;
+            }
+        }
+        if (!hasActiveOperator) {
+            return 0;
+        }
+        if (ch.attackRamp < 1.0) {
+            ch.attackRamp = Math.min(1.0, ch.attackRamp + 0.003);
+        }
+
         // Precompute frequency in Hz
         int fnum = ch.fNum & 0x7FF;
         int block = ch.block & 0x7;
@@ -859,6 +881,7 @@ public class Ym2612Chip {
         }
 
         double carrier = computeCarrierSum(ch.algo, opOut);
+        carrier *= ch.attackRamp;
 
         // Apply simple pan scaling (L/R bits)
         // pan bits: D7 = Left, D6 = Right (we stored two-bit value)
@@ -909,6 +932,20 @@ public class Ym2612Chip {
         switch (o.envState) {
             case ATTACK -> {
                 int step = egStep(o.ar, o.rs, block, fnum, true);
+                if (step <= 0) {
+                    if (o.ar == 0) {
+                        o.envState = EnvState.IDLE;
+                        o.envCounter = ENV_END;
+                        return;
+                    }
+                    step = 1;
+                }
+                // Slow down low AR values so the envelope audibly rises over the first few frames.
+                if (o.ar < 16) {
+                    step = Math.max(1, step / 16);
+                } else if (o.ar < 24) {
+                    step = Math.max(1, step / 8);
+                }
                 o.envCounter += step;
                 if (o.envCounter >= ENV_DECAY || o.ar == 31) {
                     o.envCounter = ENV_DECAY;

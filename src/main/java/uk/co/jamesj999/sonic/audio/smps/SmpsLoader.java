@@ -18,7 +18,7 @@ public class SmpsLoader {
 
     public SmpsLoader(Rom rom) {
         this.rom = rom;
-        // Map Music ID (from playlist) to absolute ROM offsets (Sonic 2 final)
+        // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
         musicMap.put(0x81, 0x0F88C4); // EHZ
         musicMap.put(0x82, 0x0F8DEE); // MTZ
         musicMap.put(0x83, 0x0F917B); // CNZ
@@ -47,19 +47,19 @@ public class SmpsLoader {
         musicMap.put(0xBA, 0x0FD6C9); // Got an Emerald
         musicMap.put(0xBD, 0x0FD797); // Credits
         musicMap.put(0x00, 0x0F0002); // Continue
-
         // SFX Map (Populate with discovered offsets)
         // Potential candidate for SFX: 0xFFEAD (FM=1)
         sfxMap.put("RING", 0xFFEAD);
     }
 
     public SmpsData loadMusic(int musicId) {
-        Integer offset = musicMap.get(musicId);
-        if (offset == null) {
-            LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map.");
+        Integer mapped = musicMap.get(musicId);
+        int offset = mapped != null ? mapped : resolveMusicOffset(musicId);
+        if (offset == -1) {
+            LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map/flags.");
             return null;
         }
-        // Sonic 2 Music is loaded at Z80 0x1380
+        // Sonic 2 music loaded at Z80 0x1380
         return loadSmps(offset, 0x1380);
     }
 
@@ -72,6 +72,46 @@ public class SmpsLoader {
         return null;
     }
 
+    /**
+     * Sonic 2 final: music flags list at 0xECF36, pointer banks at 0xF0000/0xF8000.
+     * Flag bits: 0-4 = pointer index, bit5 = uncompressed (1=uncompressed), bit7 = bank (0=0xF0000,1=0xF8000).
+     */
+    private int resolveMusicOffset(int musicId) {
+        // Legacy map is more reliable; only use flags if map entry missing.
+        Integer mapped = musicMap.get(musicId);
+        if (mapped != null) return mapped;
+        // Known music IDs start at 0x81; map ID to flag index by subtracting 0x81.
+        int flagIndex = musicId - 0x81;
+        int flagsAddr = 0x0ECF36 + flagIndex;
+        try {
+            int flags = rom.readByte(flagsAddr) & 0xFF;
+            int ptrId = flags & 0x1F;
+            boolean uncompressed = (flags & 0x20) != 0;
+            int bankBase = ((flags & 0x80) != 0) ? 0x0F8000 : 0x0F0000;
+            // Pointer-to-pointer table at 0x0EC810 (driver relocates this in RAM); treat as ROM address here.
+            int ptrToPtrLo = rom.readByte(0x0EC810) & 0xFF;
+            int ptrToPtrHi = rom.readByte(0x0EC810 + 1) & 0xFF;
+            int ptrTableBase = (ptrToPtrLo << 8) | ptrToPtrHi;
+            if (ptrTableBase == 0) return -1;
+            int ptrTableEntry = ptrTableBase + (ptrId * 2);
+            int lo = rom.readByte(ptrTableEntry) & 0xFF;
+            int hi = rom.readByte(ptrTableEntry + 1) & 0xFF;
+            int ptr = (lo << 8) | hi;
+            int offset = bankBase + ptr;
+            if (ptr == 0) return -1;
+            if (uncompressed) {
+                // We assume compressed; fallback to hard map if needed
+                LOGGER.fine("Music " + Integer.toHexString(musicId) + " flagged uncompressed; using raw offset " + Integer.toHexString(offset));
+            }
+            return offset;
+        } catch (Exception e) {
+            // Fallback to legacy map if available
+            Integer mapOffset = musicMap.get(musicId);
+            if (mapOffset != null) return mapOffset;
+            return -1;
+        }
+    }
+
     public SmpsData loadSmps(int offset) {
         // Default fallback: assume ROM mapping or unknown
         return loadSmps(offset, 0x8000 | (offset & 0x7FFF));
@@ -79,12 +119,12 @@ public class SmpsLoader {
 
     public SmpsData loadSmps(int offset, int z80Addr) {
          try {
-            // Read compressed size (Saxman stores little-endian size)
+            // Read Saxman header: first two bytes are compressed size, big-endian per spec
             int b1 = rom.readByte(offset) & 0xFF;
             int b2 = rom.readByte(offset + 1) & 0xFF;
-            int compressedSize = (b2 << 8) | b1;
+            int compressedSize = (b1 << 8) | b2;
 
-            // Read compressed block
+            // Read compressed block (header + payload)
             byte[] compressed = rom.readBytes(offset, compressedSize + 2);
 
             byte[] decompressed = decompressor.decompress(compressed);

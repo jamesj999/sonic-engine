@@ -10,8 +10,13 @@ import java.util.Arrays;
 public class SaxmanDecompressor {
 
     public byte[] decompress(byte[] compressed) {
-        // First 2 bytes are size of compressed data (Big Endian, per Saxman spec)
-        int compressedSize = ((compressed[0] & 0xFF) << 8) | (compressed[1] & 0xFF);
+        // First 2 bytes are size of compressed data. Sonic docs show little-endian in many drivers.
+        // Accept both: try little-endian first; if it underflows, fall back to big-endian.
+        int sizeLe = (compressed[0] & 0xFF) | ((compressed[1] & 0xFF) << 8);
+        int sizeBe = ((compressed[0] & 0xFF) << 8) | (compressed[1] & 0xFF);
+        int compressedSize = sizeLe > 0 ? sizeLe : sizeBe;
+        // Clamp to available data
+        compressedSize = Math.min(compressedSize, compressed.length - 2);
 
         // Input pointer starts after header
         int inPos = 2;
