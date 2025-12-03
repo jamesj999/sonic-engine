@@ -95,7 +95,9 @@ public class Engine extends GLCanvas implements GLEventListener {
         }
         graphicsManager.setGraphics(gl);
 
-        AudioManager.getInstance().setBackend(new JOALAudioBackend());
+		if (configService.getBoolean(SonicConfiguration.AUDIO_ENABLED)) {
+			AudioManager.getInstance().setBackend(new JOALAudioBackend());
+		}
 
 		Sonic sonic = new Sonic(
 				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),

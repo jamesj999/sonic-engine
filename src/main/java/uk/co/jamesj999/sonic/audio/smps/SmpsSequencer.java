@@ -72,22 +72,41 @@ public class SmpsSequencer implements AudioStream {
             tracks.add(new Track(dacPtr, TrackType.DAC, 5));
         }
 
+        int z80Start = smpsData.getZ80StartAddress();
+
         // FM tracks
         for (int i = 0; i < fmPointers.length; i++) {
-            int ptr = fmPointers[i];
-            if (ptr <= 0 || ptr >= data.length) {
+            int ptr = relocate(fmPointers[i], z80Start);
+            if (ptr < 0 || ptr >= data.length) {
                 continue;
             }
             tracks.add(new Track(ptr, TrackType.FM, i));
         }
 
         for (int i = 0; i < psgPointers.length; i++) {
-            int ptr = psgPointers[i];
-            if (ptr <= 0 || ptr >= data.length) {
+            int ptr = relocate(psgPointers[i], z80Start);
+            if (ptr < 0 || ptr >= data.length) {
                 continue;
             }
             tracks.add(new Track(ptr, TrackType.PSG, i));
         }
+    }
+
+    private int relocate(int ptr, int z80Start) {
+        if (ptr == 0) return -1;
+        // If z80Start is 0 (e.g. manually loaded), do nothing?
+        if (z80Start == 0) return ptr;
+
+        // Calculate offset
+        int offset = ptr - z80Start;
+        if (offset >= 0 && offset < data.length) {
+            return offset;
+        }
+        // e.g. z80Start = 0x88C4. ptr = 0x8000. offset = -0x8C4.
+        // This would point BEFORE the track data we loaded.
+        // Since we only have the track data (decompressed), we can't access it.
+        // So valid range is [0, data.length).
+        return -1;
     }
 
     @Override
@@ -182,8 +201,34 @@ public class SmpsSequencer implements AudioStream {
                 t.active = false;
                 stopNote(t);
                 break;
-            case 0xE1:
-                // Freq displacement (1 byte param)
+            case 0xF6: // Jump (2 byte param)
+                handleJump(t);
+                break;
+            case 0xF7: // Loop (3 byte param)
+                // TODO: Implement loops
+                t.pos += 3;
+                break;
+            case 0xF8: // Call (2 byte param)
+                // TODO: Implement call stack
+                t.pos += 2;
+                break;
+            case 0xF0: // Modulation (4 byte param)
+                t.pos += 4;
+                break;
+            case 0xE0: // Pan
+            case 0xE1: // Detune/Displacement
+            case 0xE2: // Comm
+            case 0xE5: // Fade Out?
+            case 0xE6:
+            case 0xE8:
+            case 0xE9:
+            case 0xEC:
+            case 0xED:
+            case 0xEE:
+            case 0xF3: // PSG Noise
+            case 0xF5: // PSG Vol
+            case 0xF9:
+                // 1 byte param
                 t.pos++;
                 break;
             case 0xEF:
@@ -208,7 +253,23 @@ public class SmpsSequencer implements AudioStream {
                 }
                 break;
             default:
+                // Unknown flag, assume 0 params?
                 break;
+        }
+    }
+
+    private void handleJump(Track t) {
+        if (t.pos + 2 <= data.length) {
+            int p1 = data[t.pos++] & 0xFF;
+            int p2 = data[t.pos++] & 0xFF;
+            int ptr = p1 | (p2 << 8); // Little Endian
+            int newPos = relocate(ptr, smpsData.getZ80StartAddress());
+            if (newPos != -1) {
+                t.pos = newPos;
+            } else {
+                // Invalid jump, stop track
+                t.active = false;
+            }
         }
     }
 

@@ -18,5 +18,6 @@
   "DEBUG_VIEW_ENABLED": true,
   "DEBUG_COLLISION_VIEW_ENABLED": true,
   "ROM_FILENAME": "Sonic The Hedgehog 2 (W) (REV01) [!].gen",
-  "DEBUG_MODE": false
+  "DEBUG_MODE": false,
+  "AUDIO_ENABLED": true
 }
