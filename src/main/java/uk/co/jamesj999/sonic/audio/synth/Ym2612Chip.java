@@ -279,7 +279,7 @@ public class Ym2612Chip {
             ch.algo = 0;
             ch.ams = 0;
             ch.fms = 0;
-            ch.pan = 0;
+            ch.pan = 0x3; // both speakers
             ch.feedbackHist1 = 0;
             ch.feedbackHist2 = 0;
             ch.specialMode = false;
@@ -549,33 +549,55 @@ public class Ym2612Chip {
         }
         // Channel 3 special mode per-slot frequency (port 0 only, channel index 2)
         if (port == 0 && reg >= 0xA8 && reg <= 0xAB) {
-            int slot = reg - 0xA8;
-            if (slot < 4) {
+            int rawSlot = reg - 0xA8;
+            int opIdx = switch (rawSlot) {
+                case 0 -> 0;
+                case 1 -> 2;
+                case 2 -> 1;
+                case 3 -> 3;
+                default -> -1;
+            };
+            if (opIdx >= 0) {
                 Channel ch = channels[2];
-                ch.slotFnum[slot] = ((ch.slotFnum[slot] & 0x700) | (val & 0xFF)) & 0x7FF;
+                ch.slotFnum[opIdx] = ((ch.slotFnum[opIdx] & 0x700) | (val & 0xFF)) & 0x7FF;
             }
             return;
         }
         if (port == 0 && reg >= 0xAC && reg <= 0xAF) {
-            int slot = reg - 0xAC;
-            if (slot < 4) {
+            int rawSlot = reg - 0xAC;
+            int opIdx = switch (rawSlot) {
+                case 0 -> 0;
+                case 1 -> 2;
+                case 2 -> 1;
+                case 3 -> 3;
+                default -> -1;
+            };
+            if (opIdx >= 0) {
                 Channel ch = channels[2];
-                ch.slotFnum[slot] = ((ch.slotFnum[slot] & 0xFF) | ((val & 0x07) << 8)) & 0x7FF;
-                ch.slotBlock[slot] = (val >> 3) & 0x7;
+                ch.slotFnum[opIdx] = ((ch.slotFnum[opIdx] & 0xFF) | ((val & 0x07) << 8)) & 0x7FF;
+                ch.slotBlock[opIdx] = (val >> 3) & 0x7;
             }
             return;
         }
 
-        // Channel control (panning/AMS/FMS/FB/ALG)
+        // Channel feedback/algo
         if (reg >= 0xB0 && reg <= 0xB6) {
             int ch = (port * 3) + (reg - 0xB0);
-            if (ch < 6 && (ch % 3) != 2) {
+            if (ch < 6) {
+                Channel c = channels[ch];
+                c.feedback = (val >> 3) & 0x7;
+                c.algo = val & 0x7;
+            }
+            return;
+        }
+        // Channel pan/AMS/FMS
+        if (reg >= 0xB4 && reg <= 0xB6) {
+            int ch = (port * 3) + (reg - 0xB4);
+            if (ch < 6) {
                 Channel c = channels[ch];
                 c.pan = (val >> 6) & 0x3;
                 c.ams = (val >> 4) & 0x3;
-                c.fms = (val >> 2) & 0x3;
-                c.feedback = (val >> 3) & 0x7;
-                c.algo = val & 0x7;
+                c.fms = val & 0x7;
             }
             return;
         }
