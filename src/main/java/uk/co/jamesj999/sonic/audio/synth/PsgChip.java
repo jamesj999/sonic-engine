@@ -1,9 +1,30 @@
 package uk.co.jamesj999.sonic.audio.synth;
 
 public class PsgChip {
+    private static final double CLOCK = 3579545.0; // NTSC master clock
+    private static final double SAMPLE_RATE = 44100.0;
+    private static final double PSG_TICKS_PER_SAMPLE = (CLOCK / 16.0) / SAMPLE_RATE;
+    // Approximate SN76489 volume curve (2dB steps, 15 = mute)
+    private static final double[] VOLUME_TABLE = new double[16];
+    // Gentle analog low-pass / DC-blocking
+    private static final double HPF_ALPHA = 0.995;
+    private static final double LPF_CUTOFF_HZ = 9000.0;
+    private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
+
+    static {
+        for (int i = 0; i < 15; i++) {
+            VOLUME_TABLE[i] = Math.pow(10.0, -(i * 2.0) / 20.0);
+        }
+        VOLUME_TABLE[15] = 0.0;
+    }
+
     private final int[] registers = new int[8];
     private final double[] counters = new double[4];
     private final boolean[] outputs = new boolean[4];
+    private final double[] hpfState = new double[2];
+    private final double[] lpfState = new double[2];
+    private double lastInputL;
+    private double lastInputR;
     private int latch = 0;
     private int lfsr = 0x8000;
 
@@ -43,39 +64,62 @@ public class PsgChip {
     }
 
     public void render(short[] buffer) {
-        // Clock ~3.58MHz / 16 = ~223721 Hz.
-        double step = 223721.0 / 44100.0;
-
+        double[] left = new double[buffer.length];
+        double[] right = new double[buffer.length];
+        renderInternal(left, right);
         for (int i = 0; i < buffer.length; i++) {
-            int sample = 0;
+            double mono = (left[i] + right[i]) * 0.5;
+            int sample = (int) Math.max(-32768, Math.min(32767, buffer[i] + mono));
+            buffer[i] = (short) sample;
+        }
+    }
+
+    public void renderStereo(short[] left, short[] right) {
+        int len = Math.min(left.length, right.length);
+        double[] mixL = new double[len];
+        double[] mixR = new double[len];
+        renderInternal(mixL, mixR);
+        for (int i = 0; i < len; i++) {
+            int l = (int) Math.max(-32768, Math.min(32767, left[i] + mixL[i]));
+            int r = (int) Math.max(-32768, Math.min(32767, right[i] + mixR[i]));
+            left[i] = (short) l;
+            right[i] = (short) r;
+        }
+    }
+
+    private void renderInternal(double[] left, double[] right) {
+        int len = Math.min(left.length, right.length);
+        for (int i = 0; i < len; i++) {
+            double sample = 0.0;
             // Tone Channels
             for (int ch = 0; ch < 3; ch++) {
-                int vol = registers[ch * 2 + 1];
-                if (vol == 15) continue;
+                int vol = registers[ch * 2 + 1] & 0x0F;
+                if (vol == 0x0F) continue;
 
-                int tone = registers[ch * 2];
-                counters[ch] -= step;
+                int tone = registers[ch * 2] & 0x3FF;
+                counters[ch] -= PSG_TICKS_PER_SAMPLE;
                 if (counters[ch] <= 0) {
-                    counters[ch] += (tone == 0 ? 1 : tone);
+                    double reload = Math.max(1.0, (tone == 0 ? 1.0 : tone) * 2.0);
+                    counters[ch] += reload;
                     outputs[ch] = !outputs[ch];
                 }
 
-                int amp = (15 - vol) * 200;
+                double amp = VOLUME_TABLE[vol];
                 sample += outputs[ch] ? amp : -amp;
             }
 
             // Noise Channel
-            int noiseVol = registers[7];
-            if (noiseVol != 15) {
+            int noiseVol = registers[7] & 0x0F;
+            if (noiseVol != 0x0F) {
                 int noiseReg = registers[6];
-                int rateVal = switch (noiseReg & 3) {
+                double rateVal = switch (noiseReg & 0x3) {
                     case 0 -> 0x10;
                     case 1 -> 0x20;
                     case 2 -> 0x40;
-                    default -> registers[4];
+                    default -> Math.max(1, registers[4] & 0x3FF);
                 };
 
-                counters[3] -= step;
+                counters[3] -= PSG_TICKS_PER_SAMPLE;
                 if (counters[3] <= 0) {
                     counters[3] += rateVal;
                     boolean bit0 = (lfsr & 1) != 0;
@@ -85,13 +129,25 @@ public class PsgChip {
                     if (feedback) lfsr |= 0x8000;
                     outputs[3] = (lfsr & 1) != 0;
                 }
-                int amp = (15 - noiseVol) * 200;
+                double amp = VOLUME_TABLE[noiseVol];
                 sample += outputs[3] ? amp : -amp;
             }
 
-            if (sample > 32000) sample = 32000;
-            if (sample < -32000) sample = -32000;
-            buffer[i] = (short)sample;
+            // Apply a simple DC blocking filter then a light LPF to smooth the edges
+            double hpOutL = HPF_ALPHA * (hpfState[0] + sample - lastInputL);
+            lastInputL = sample;
+            hpfState[0] = hpOutL;
+            double lpOutL = lpfState[0] + (hpOutL - lpfState[0]) * LPF_ALPHA;
+            lpfState[0] = lpOutL;
+
+            double hpOutR = HPF_ALPHA * (hpfState[1] + sample - lastInputR);
+            lastInputR = sample;
+            hpfState[1] = hpOutR;
+            double lpOutR = lpfState[1] + (hpOutR - lpfState[1]) * LPF_ALPHA;
+            lpfState[1] = lpOutR;
+
+            left[i] += lpOutL * 14000.0;
+            right[i] += lpOutR * 14000.0;
         }
     }
 }

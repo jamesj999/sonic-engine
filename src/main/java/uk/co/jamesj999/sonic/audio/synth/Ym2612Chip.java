@@ -566,16 +566,25 @@ public class Ym2612Chip {
             return;
         }
 
-        // Channel control (panning/AMS/FMS/FB/ALG)
-        if (reg >= 0xB0 && reg <= 0xB6) {
+        // Channel feedback/algo (B0-B2 mirrors OPN)
+        if ((reg >= 0xB0 && reg <= 0xB2) || (reg >= 0xB3 && reg <= 0xB5)) {
             int ch = (port * 3) + (reg - 0xB0);
-            if (ch < 6 && (ch % 3) != 2) {
+            if (ch < 6) {
                 Channel c = channels[ch];
-                c.pan = (val >> 6) & 0x3;
-                c.ams = (val >> 4) & 0x3;
-                c.fms = (val >> 2) & 0x3;
                 c.feedback = (val >> 3) & 0x7;
                 c.algo = val & 0x7;
+            }
+            return;
+        }
+
+        // Channel panning + AMS/FMS (B4-B6)
+        if (reg >= 0xB4 && reg <= 0xB6) {
+            int ch = (port * 3) + (reg - 0xB4);
+            if (ch < 6) {
+                Channel c = channels[ch];
+                c.pan = (val >> 6) & 0x3; // D7=L, D6=R
+                c.ams = (val >> 4) & 0x3;
+                c.fms = val & 0x7; // 3-bit vibrato depth
             }
             return;
         }
@@ -937,10 +946,16 @@ public class Ym2612Chip {
         if (rate <= 0) return 0;
         int keyCode = ((block & 0x7) << 2) | (FKEY_TAB[(fnum >> 7) & 0x0F]);
         int ks = rs == 0 ? 0 : keyCode >> (3 - rs);
-        int effective = Math.min(63, (rate << 1) + ks); // Rate = 2*R + ks per docs
-        if (effective <= 0) return 0;
-        double step = attack ? ATTACK_RATE[effective] : DECAY_RATE[effective];
-        return (int) Math.max(1, Math.round(step * ENV_LEN));
+        // Hardware uses 5-bit rate value (0-31) expanded with key scaling
+        int effectiveRate = Math.min(63, (rate << 1) + ks);
+        if (effectiveRate <= 0) return 0;
+        double step = attack ? ATTACK_RATE[effectiveRate] : DECAY_RATE[effectiveRate];
+        int envStep = (int) Math.max(1, Math.round(step * ENV_LEN));
+        if (attack && rate < 31) {
+            // Attack curves accelerate as they approach peak; approximate by mapping decay curve back to attack domain
+            envStep = Math.max(1, DECAY_TO_ATTACK[Math.min(envStep, DECAY_TO_ATTACK.length - 1)]);
+        }
+        return envStep;
     }
 
     private double envelopeToLinear(Operator o, int ams, double lfoVal, int opIndex) {
