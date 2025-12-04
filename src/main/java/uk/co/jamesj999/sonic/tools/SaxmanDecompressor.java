@@ -77,4 +77,16 @@ public class SaxmanDecompressor {
 
         return Arrays.copyOf(output, outPos);
     }
+
+    /**
+     * Convenience for streams that are missing the 2-byte size header (e.g. Z80 driver dump).
+     * The payload is treated as-is and a synthetic header is prefixed for decoding.
+     */
+    public byte[] decompressRaw(byte[] payload, int compressedSize) {
+        byte[] withHeader = new byte[payload.length + 2];
+        withHeader[0] = (byte) (compressedSize & 0xFF);
+        withHeader[1] = (byte) ((compressedSize >> 8) & 0xFF);
+        System.arraycopy(payload, 0, withHeader, 2, payload.length);
+        return decompress(withHeader);
+    }
 }
