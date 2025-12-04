@@ -484,6 +484,30 @@ public class Ym2612Chip {
             o.ssgAlternate = false;
             o.ssgHoldMode = false;
         }
+
+        // Push voice parameters into YM registers immediately so the next key-on uses them.
+        int port = (chIdx < 3) ? 0 : 1;
+        int hwCh = chIdx % 3;
+        // opIdx -> slot code used by the YM register map (0,1,2,3 correspond to op1, op3, op2, op4)
+        int[] slotCode = {0, 2, 1, 3};
+        for (int opIdx = 0; opIdx < 4; opIdx++) {
+            int slot = slotCode[opIdx];
+            Operator o = ch.ops[opIdx];
+            // DT/MUL
+            write(port, 0x30 + slot * 4 + hwCh, ((o.dt1 & 7) << 4) | (o.mul & 0x0F));
+            // TL
+            write(port, 0x40 + slot * 4 + hwCh, o.tl & 0x7F);
+            // RS/AR
+            write(port, 0x50 + slot * 4 + hwCh, ((o.rs & 3) << 6) | (o.ar & 0x1F));
+            // AM/D1R
+            write(port, 0x60 + slot * 4 + hwCh, ((o.am & 1) << 7) | (o.d1r & 0x1F));
+            // D2R
+            write(port, 0x70 + slot * 4 + hwCh, o.d2r & 0x1F);
+            // D1L/RR
+            write(port, 0x80 + slot * 4 + hwCh, ((o.d1l & 0x0F) << 4) | (o.rr & 0x0F));
+            // SSG-EG
+            write(port, 0x90 + slot * 4 + hwCh, o.ssgEg & 0x0F);
+        }
     }
 
     public void write(int port, int reg, int val) {
