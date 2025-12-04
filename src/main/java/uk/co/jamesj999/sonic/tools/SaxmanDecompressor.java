@@ -10,13 +10,32 @@ import java.util.Arrays;
 public class SaxmanDecompressor {
 
     public byte[] decompress(byte[] compressed) {
-        // First 2 bytes are size of compressed data. Sonic docs show little-endian in many drivers.
-        // Accept both: try little-endian first; if it underflows, fall back to big-endian.
+        // Default: prefer little-endian size (SMPS Z80 uses LE headers).
+        return decompress(compressed, true);
+    }
+
+    /**
+     * Decompress Saxman data with explicit endian preference for the 2-byte size header.
+     * @param compressed the stream starting at Saxman header
+     * @param littleEndianPreferred true to treat size as LE (Z80 SMPS), false for BE
+     */
+    public byte[] decompress(byte[] compressed, boolean littleEndianPreferred) {
         int sizeLe = (compressed[0] & 0xFF) | ((compressed[1] & 0xFF) << 8);
         int sizeBe = ((compressed[0] & 0xFF) << 8) | (compressed[1] & 0xFF);
-        int compressedSize = sizeLe > 0 ? sizeLe : sizeBe;
-        // Clamp to available data
-        compressedSize = Math.min(compressedSize, compressed.length - 2);
+        final int MAX_SAXMAN_BLOCK = 0x8000;
+
+        int primary = littleEndianPreferred ? sizeLe : sizeBe;
+        int alternate = littleEndianPreferred ? sizeBe : sizeLe;
+
+        int compressedSize = isValidSize(primary, MAX_SAXMAN_BLOCK) ? primary :
+                (isValidSize(alternate, MAX_SAXMAN_BLOCK) ? alternate : 0);
+
+        if (compressedSize == 0) {
+            // Fallback: clamp to available data minus header
+            compressedSize = Math.min(MAX_SAXMAN_BLOCK, compressed.length - 2);
+        } else {
+            compressedSize = Math.min(compressedSize, compressed.length - 2);
+        }
 
         // Input pointer starts after header
         int inPos = 2;
@@ -87,6 +106,10 @@ public class SaxmanDecompressor {
         withHeader[0] = (byte) (compressedSize & 0xFF);
         withHeader[1] = (byte) ((compressedSize >> 8) & 0xFF);
         System.arraycopy(payload, 0, withHeader, 2, payload.length);
-        return decompress(withHeader);
+        return decompress(withHeader, true);
+    }
+
+    private boolean isValidSize(int size, int max) {
+        return size > 0 && size <= max;
     }
 }

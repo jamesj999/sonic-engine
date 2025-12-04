@@ -53,6 +53,7 @@ public class SmpsSequencer implements AudioStream {
         int loopTarget = -1;
         final int[] returnStack = new int[4];
         int returnSp = 0;
+        int dividingTiming = 1;
         // Simple modulation (F0) approximation
         int modDelay;
         int modStep;
@@ -96,7 +97,9 @@ public class SmpsSequencer implements AudioStream {
         // DAC track (channel 5) if present
         int dacPtr = relocate(smpsData.getDacPointer(), z80Start);
         if (dacPtr >= 0 && dacPtr < data.length) {
-            tracks.add(new Track(dacPtr, TrackType.DAC, 5));
+            Track t = new Track(dacPtr, TrackType.DAC, 5);
+            t.dividingTiming = dividingTiming;
+            tracks.add(t);
         }
 
         // FM tracks
@@ -114,6 +117,7 @@ public class SmpsSequencer implements AudioStream {
             if (i < fmVols.length) {
                 t.volumeOffset = fmVols[i];
             }
+            t.dividingTiming = dividingTiming;
             loadVoice(t, 0); // default instrument to avoid silence before EF
             tracks.add(t);
         }
@@ -132,6 +136,7 @@ public class SmpsSequencer implements AudioStream {
             if (i < psgVols.length) {
                 t.volumeOffset = psgVols[i];
             }
+            t.dividingTiming = dividingTiming;
             tracks.add(t);
         }
 
@@ -274,6 +279,9 @@ public class SmpsSequencer implements AudioStream {
                 t.active = false;
                 stopNote(t);
                 break;
+            case 0xE3: // Return (alt opcode)
+                handleReturn(t);
+                break;
             case 0xF6: // Jump (2 byte param)
                 handleJump(t);
                 break;
@@ -283,14 +291,25 @@ public class SmpsSequencer implements AudioStream {
             case 0xF8: // Call (2 byte param)
                 handleCall(t);
                 break;
-            case 0xF9: // Return
-                handleReturn(t);
+            case 0xF9: // Sound off / track end
+                t.active = false;
+                stopNote(t);
                 break;
             case 0xF0: // Modulation (4 byte param)
                 handleModulation(t);
                 break;
+            case 0xF1: // Modulation on (resume)
+                t.modEnabled = true;
+                break;
             case 0xE0: // Pan
                 setPanAmsFms(t);
+                break;
+            case 0xE1: // Detune (unused placeholder)
+            case 0xE2: // Detune variant / comms
+                if (t.pos < data.length) t.pos++;
+                break;
+            case 0xE5: // Tick multiplier (track-local)
+                setTrackDividingTiming(t);
                 break;
             case 0xE6: // Channel volume attenuation
                 setVolumeOffset(t);
@@ -304,14 +323,19 @@ public class SmpsSequencer implements AudioStream {
             case 0xE9: // Key displacement
                 setKeyOffset(t);
                 break;
-            case 0xEC: // Clear modulation
-                clearModulation(t);
+            case 0xEC: // PSG volume override (S2 uses EC)
+                setPsgVolume(t);
                 break;
             case 0xF3: // PSG Noise
                 setPsgNoise(t);
                 break;
-            case 0xF5: // PSG Vol
-                setPsgVolume(t);
+            case 0xF4: // Modulation off
+                clearModulation(t);
+                break;
+            case 0xF5: // PSG instrument (not emulated) - consume param
+                if (t.pos < data.length) {
+                    t.pos++;
+                }
                 break;
             case 0xEF:
                 // Set Voice (1 byte param)
@@ -335,9 +359,57 @@ public class SmpsSequencer implements AudioStream {
                 }
                 break;
             default:
-                // Unknown flag, assume 0 params?
+                // Unknown flag: consume known parameter length to keep parser in sync
+                int params = flagParamLength(cmd);
+                int advance = Math.min(params, data.length - t.pos);
+                t.pos += advance;
                 break;
         }
+    }
+
+    /**
+     * Parameter lengths for SMPS (Sonic 2 Z80) coordination flags.
+     * Counts bytes after the flag byte. Unknowns return 0.
+     */
+    private int flagParamLength(int cmd) {
+        return switch (cmd) {
+            // 1-byte params
+            case 0xE0, // Pan/AMS/FMS
+                 0xE1, // Detune
+                 0xE2, // Set comm / detune variant
+                 0xE5, // Tick multiplier (current track)
+                 0xE6, // Channel volume offset
+                 0xE8, // Note fill
+                 0xE9, // Key displacement
+                 0xEA, // Tempo weight
+                 0xEB, // Dividing timing (all tracks)
+                 0xEC, // PSG volume
+                 0xED, // Ignore (consume param)
+                 0xF3, // PSG noise
+                 0xF5, // PSG instrument placeholder
+                 0xEF  // Set voice
+                    -> 1;
+            // 2-byte params
+            case 0xF6, // Jump
+                 0xF8  // Call
+                    -> 2;
+            // 3-byte params
+            case 0xF7 // Loop (count + ptr)
+                    -> 3;
+            // 4-byte params
+            case 0xF0 // Modulation setup
+                    -> 4;
+            // 0-byte params
+            case 0xE3, // Return
+                 0xE4, // Fade in
+                 0xE7, // Hold
+                 0xF1, // Mod on
+                 0xF2, // Stop
+                 0xF4, // Mod off
+                 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF // End / no-op
+                    -> 0;
+            default -> 0;
+        };
     }
 
     private void handleJump(Track t) {
@@ -469,14 +541,29 @@ public class SmpsSequencer implements AudioStream {
         tempoAccumulator = 0;
     }
 
+    private void setTrackDividingTiming(Track t) {
+        if (t.pos < data.length) {
+            int newDiv = data[t.pos++] & 0xFF;
+            if (newDiv == 0) newDiv = 256; // Treat 0 as 256 ticks (driver behaviour)
+            int elapsed = t.scaledDuration - t.duration;
+            t.dividingTiming = newDiv;
+            int newScaled = scaleDuration(t, t.rawDuration);
+            int newRemaining = newScaled - elapsed;
+            if (newRemaining < 0) newRemaining = 0;
+            t.scaledDuration = newScaled;
+            t.duration = newRemaining;
+        }
+    }
+
     private void updateDividingTiming(int newDividingTiming) {
         dividingTiming = newDividingTiming;
         for (Track track : tracks) {
             if (!track.active || track.scaledDuration == 0) {
                 continue;
             }
+            track.dividingTiming = newDividingTiming;
             int elapsed = track.scaledDuration - track.duration;
-            int newScaledDuration = scaleDuration(track.rawDuration);
+            int newScaledDuration = scaleDuration(track, track.rawDuration);
             int newRemaining = newScaledDuration - elapsed;
             if (newRemaining < 0) {
                 newRemaining = 0;
@@ -488,7 +575,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void setDuration(Track track, int rawDuration) {
         track.rawDuration = rawDuration;
-        int scaled = scaleDuration(rawDuration);
+        int scaled = scaleDuration(track, rawDuration);
         if (track.fill > 0) {
             scaled = Math.max(1, scaled - track.fill);
         }
@@ -503,8 +590,8 @@ public class SmpsSequencer implements AudioStream {
         setDuration(track, track.rawDuration);
     }
 
-    private int scaleDuration(int rawDuration) {
-        int factor = dividingTiming == 0 ? 256 : dividingTiming;
+    private int scaleDuration(Track track, int rawDuration) {
+        int factor = track.dividingTiming == 0 ? 256 : track.dividingTiming;
         int scaled = (rawDuration * factor) & DURATION_MAX;
         if (scaled == 0) {
             // 0 duration represents 256 frames in S3K when timing is 0

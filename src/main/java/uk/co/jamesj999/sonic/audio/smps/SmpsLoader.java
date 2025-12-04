@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.tools.DcmDecoder;
 import uk.co.jamesj999.sonic.tools.SaxmanDecompressor;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -129,24 +130,42 @@ public class SmpsLoader {
     }
 
     public SmpsData loadSmps(int offset, int z80Addr) {
-         try {
-            // Read Saxman header. Sonic 2 stores the size little-endian (e.g. Aquatic Ruin starts with 00 06,
-            // meaning 0x0600 bytes, not 0x0006). Use both byte orders and pick the larger to avoid truncation.
+        try {
+            // SMPS Z80 data uses little-endian Saxman size headers.
             int b1 = rom.readByte(offset) & 0xFF;
             int b2 = rom.readByte(offset + 1) & 0xFF;
             int sizeLe = (b1) | (b2 << 8);
-            int sizeBe = (b1 << 8) | b2;
-            int compressedSize = Math.max(sizeLe, sizeBe);
+            int sizeBe = (b1 << 8) | b2; // fallback only if LE is zero/invalid
+            int maxAvail = (int) Math.max(0L, rom.getSize() - offset - 2L);
 
-            // Read compressed block (header + payload)
-            byte[] compressed = rom.readBytes(offset, compressedSize + 2);
+            int compressedSize = (sizeLe > 0 && sizeLe <= maxAvail)
+                    ? sizeLe
+                    : (sizeBe > 0 && sizeBe <= maxAvail ? sizeBe : maxAvail);
 
-            byte[] decompressed = decompressor.decompress(compressed);
+            byte[] compressed = readCompressed(offset, compressedSize, maxAvail);
+            if (compressed == null) {
+                LOGGER.severe("Failed to read SMPS at " + Integer.toHexString(offset));
+                return null;
+            }
+
+            byte[] decompressed = decompressor.decompress(compressed, true);
             LOGGER.info("Decompressed SMPS at " + Integer.toHexString(offset) + ". Size: " + decompressed.length);
             return new SmpsData(decompressed, z80Addr);
         } catch (Exception e) {
             LOGGER.severe("Failed to load SMPS at " + Integer.toHexString(offset));
             e.printStackTrace();
+            return null;
+        }
+    }
+
+    private byte[] readCompressed(int offset, int sizeHeader, int maxAvail) {
+        if (sizeHeader <= 0) return null;
+        int size = Math.min(sizeHeader, maxAvail);
+        if (size <= 0) return null;
+        try {
+            return rom.readBytes(offset, size + 2);
+        } catch (IOException e) {
+            LOGGER.severe("Failed to read ROM bytes at " + Integer.toHexString(offset));
             return null;
         }
     }

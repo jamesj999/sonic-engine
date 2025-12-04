@@ -157,7 +157,7 @@ public class Ym2612Chip {
     // Output gain reduced to improve headroom; log domain summation allows high peaks.
     // Hardware dynamic range is ~53dB (9 bits DAC + shifts).
     // We target a safe range.
-    private static final double OUTPUT_GAIN = 480.0;
+    private static final double OUTPUT_GAIN = 1200.0;
 
     // Optional one-pole low-pass to approximate analog output smoothing; can be tuned/disabled
     private static final double LPF_CUTOFF_HZ = 22000.0; // Bumped up slightly to retain brightness
@@ -441,33 +441,36 @@ public class Ym2612Chip {
         ch.feedback = (val00 >> 3) & 7;
         ch.algo = val00 & 7;
 
-        for (int op = 0; op < 4; op++) {
+        // SMPS voice bytes are ordered by operators 1,3,2,4 (op indexes 0,2,1,3 respectively).
+        int[] opOrder = {0, 2, 1, 3};
+        int tlIdxBase = 5;
+        int rsArBase = hasTl ? 9 : 5;
+        int amD1rBase = rsArBase + 4;
+        int d2rBase = amD1rBase + 4;
+        int d1lRrBase = d2rBase + 4;
+
+        for (int orderIdx = 0; orderIdx < 4; orderIdx++) {
+            int op = opOrder[orderIdx];
             Operator o = ch.ops[op];
-            int dtmul = get.applyAsInt(1 + op);
+            int dtmul = get.applyAsInt(1 + orderIdx);
             o.dt1 = (dtmul >> 4) & 7;
             o.mul = dtmul & 0xF;
 
-            int tlIdxBase = 5;
-            int rsArBase = hasTl ? 9 : 5;
-            int amD1rBase = rsArBase + 4;
-            int d2rBase = amD1rBase + 4;
-            int d1lRrBase = d2rBase + 4;
-
-            int tlVal = hasTl ? get.applyAsInt(tlIdxBase + op) : 0;
+            int tlVal = hasTl ? get.applyAsInt(tlIdxBase + orderIdx) : 0;
             o.tl = tlVal & 0x7F;
 
-            int rsar = get.applyAsInt(rsArBase + op);
+            int rsar = get.applyAsInt(rsArBase + orderIdx);
             o.rs = (rsar >> 6) & 3;
             o.ar = rsar & 0x1F;
 
-            int amd1r = get.applyAsInt(amD1rBase + op);
+            int amd1r = get.applyAsInt(amD1rBase + orderIdx);
             o.am = (amd1r >> 7) & 1;
             o.d1r = amd1r & 0x1F;
 
-            int d2r = get.applyAsInt(d2rBase + op);
+            int d2r = get.applyAsInt(d2rBase + orderIdx);
             o.d2r = d2r & 0x1F;
 
-            int d1lrr = get.applyAsInt(d1lRrBase + op);
+            int d1lrr = get.applyAsInt(d1lRrBase + orderIdx);
             o.d1l = (d1lrr >> 4) & 0xF;
             o.rr = d1lrr & 0xF;
 
@@ -1041,14 +1044,14 @@ public class Ym2612Chip {
                 if (!ssgEnabled && o.envCounter >= sustain) {
                     o.envCounter = sustain;
                     o.envState = EnvState.DECAY2;
-                } else if (ssgEnabled && o.envCounter >= ENV_END) {
+                } else if (ssgEnabled && o.envCounter >= ENV_DECAY) {
                     handleSsgPeak(o, false);
                 }
             }
             case DECAY2 -> {
                 int step = egStep(o.d2r, o.rs, block, fnum, false);
                 o.envCounter += step;
-                if (o.envCounter >= ENV_END) {
+                if (o.envCounter >= (ssgEnabled ? ENV_DECAY : ENV_END)) {
                     if (ssgEnabled) {
                         handleSsgPeak(o, false);
                     } else {
@@ -1060,7 +1063,7 @@ public class Ym2612Chip {
             case RELEASE -> {
                 int step = egStep(Math.max(1, o.rr), o.rs, block, fnum, false);
                 o.envCounter += step;
-                if (o.envCounter >= ENV_END) {
+                if (o.envCounter >= (ssgEnabled ? ENV_DECAY : ENV_END)) {
                     if (ssgEnabled) {
                         handleSsgPeak(o, false);
                     } else {
@@ -1096,6 +1099,10 @@ public class Ym2612Chip {
         level = Math.max(0.0, Math.min(1.0, level));
         if (o.ssgInverted) {
             level = 1.0 - level;
+        }
+        if (o.ssgEnabled) {
+            // Keep repeat/alternate shapes audible; simple clamp approximates YM's gated waveforms.
+            level = Math.max(level, 0.5);
         }
         // Apply total level attenuation using TL (~0.75dB steps)
         double tlDb = (o.tl & 0x7F) * 0.75;
