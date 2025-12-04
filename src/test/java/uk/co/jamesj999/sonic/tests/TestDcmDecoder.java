@@ -10,9 +10,9 @@ public class TestDcmDecoder {
         DcmDecoder decoder = new DcmDecoder();
         // Delta table index 1 is +1.
         // Start 0x80 (unsigned centre).
-        // Input: 0x11 (High=1, Low=1). Low nibble is processed first.
-        // Low nibble: 0x80 + 1 = 0x81. Output[0] = 0x81.
-        // High nibble: 0x81 + 1 = 0x82. Output[1] = 0x82.
+        // Input: 0x11 (High=1, Low=1). High nibble is processed first.
+        // High nibble: 0x80 + 1 = 0x81. Output[0] = 0x81.
+        // Low nibble: 0x81 + 1 = 0x82. Output[1] = 0x82.
 
         byte[] input = { 0x11 };
         byte[] output = decoder.decode(input);
