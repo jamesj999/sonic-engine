@@ -509,8 +509,8 @@ public class Ym2612Chip {
             if (timerBEnabled) timerBCount = timerBLoad;
             return;
         }
-        if (port == 0 && reg == 0x2A) { // DAC data port (signed 8-bit)
-            dacLatchedValue = (byte) val;
+        if (port == 0 && reg == 0x2A) { // DAC data port (unsigned PCM -> convert to signed)
+            dacLatchedValue = (val & 0xFF) - 128;
             dacHasLatched = true;
             currentDacSampleId = -1; // streamed sample overrides note-based DAC
             return;
@@ -800,7 +800,7 @@ public class Ym2612Chip {
         if (currentDacSampleId != -1 && dacData != null) {
             byte[] data = dacData.samples.get(currentDacSampleId);
             if (data != null && dacPos < data.length) {
-                sample = data[(int) dacPos];
+                sample = data[(int) dacPos]; // signed PCM
                 dacPos += dacStep;
             }
         } else if (dacHasLatched) {

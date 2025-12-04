@@ -9,7 +9,7 @@ public class DcmDecoder {
     public byte[] decode(byte[] compressed) {
         byte[] output = new byte[compressed.length * 2];
         int outPos = 0;
-        int accumulator = 0; // YM2612 DAC expects signed 8-bit data (two's complement)
+        int accumulator = 0; // Signed center
 
         for (byte b : compressed) {
             // High nibble first?
