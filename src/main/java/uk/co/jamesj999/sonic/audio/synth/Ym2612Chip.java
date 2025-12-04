@@ -354,8 +354,9 @@ public class Ym2612Chip {
         if (entry != null) {
             this.currentDacSampleId = entry.sampleId;
             this.dacPos = 0;
-            // Approximate: higher rate byte reduces step size
-            this.dacStep = Math.max(0.01, 1.0 / (1.0 + (entry.rate & 0xFF) / 32.0));
+            int rateByte = entry.rate & 0xFF;
+            double rateHz = DAC_BASE_RATE / (DAC_RATE_DIV * Math.max(1, rateByte));
+            this.dacStep = Math.max(0.0001, rateHz / SAMPLE_RATE);
         }
     }
 
