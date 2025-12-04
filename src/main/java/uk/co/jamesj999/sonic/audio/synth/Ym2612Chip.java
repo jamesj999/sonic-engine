@@ -170,6 +170,11 @@ public class Ym2612Chip {
             AR_TAB[i + 4] = (int) (x / AR_RATE);
             DR_TAB[i + 4] = (int) (x / DR_RATE);
         }
+        // Populate low rates to prevent stalling
+        for (int i = 0; i < 4; i++) {
+            AR_TAB[i] = AR_TAB[4];
+            DR_TAB[i] = DR_TAB[4];
+        }
         for (int i = 64; i < 96; i++) {
             AR_TAB[i] = AR_TAB[63];
             DR_TAB[i] = DR_TAB[63];
