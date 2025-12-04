@@ -9,9 +9,7 @@ public class DcmDecoder {
     public byte[] decode(byte[] compressed) {
         byte[] output = new byte[compressed.length * 2];
         int outPos = 0;
-        int accumulator = 0x80; // Start at center? Or 0?
-        // "inherent loss of precision compared to the 8-bit unsigned LPCM"
-        // Usually DPCM starts at 0x80 for unsigned 8-bit output.
+        int accumulator = 0; // YM2612 DAC expects signed 8-bit data (two's complement)
 
         for (byte b : compressed) {
             // High nibble first?
@@ -21,14 +19,14 @@ public class DcmDecoder {
             int low = b & 0xF;
 
             accumulator += DELTA_TABLE[high];
-            if (accumulator < 0) accumulator = 0;
-            if (accumulator > 255) accumulator = 255;
-            output[outPos++] = (byte)accumulator;
+            if (accumulator < -128) accumulator = -128;
+            if (accumulator > 127) accumulator = 127;
+            output[outPos++] = (byte) accumulator;
 
             accumulator += DELTA_TABLE[low];
-            if (accumulator < 0) accumulator = 0;
-            if (accumulator > 255) accumulator = 255;
-            output[outPos++] = (byte)accumulator;
+            if (accumulator < -128) accumulator = -128;
+            if (accumulator > 127) accumulator = 127;
+            output[outPos++] = (byte) accumulator;
         }
         return output;
     }

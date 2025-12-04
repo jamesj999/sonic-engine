@@ -9,16 +9,16 @@ public class TestDcmDecoder {
     public void testDecode() {
         DcmDecoder decoder = new DcmDecoder();
         // Delta table index 1 is +1.
-        // Start 128.
+        // Start 0 (signed centre).
         // Input: 0x11 (High=1, Low=1).
-        // High nibble processed first: 128 + 1 = 129. Output[0] = 129.
-        // Low nibble processed next: 129 + 1 = 130. Output[1] = 130.
+        // High nibble processed first: 0 + 1 = 1. Output[0] = 1.
+        // Low nibble processed next: 1 + 1 = 2. Output[1] = 2.
 
         byte[] input = { 0x11 };
         byte[] output = decoder.decode(input);
 
         assertEquals(2, output.length);
-        assertEquals((byte)129, output[0]);
-        assertEquals((byte)130, output[1]);
+        assertEquals((byte)1, output[0]);
+        assertEquals((byte)2, output[1]);
     }
 }
