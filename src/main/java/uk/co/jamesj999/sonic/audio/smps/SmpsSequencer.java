@@ -199,6 +199,7 @@ public class SmpsSequencer implements AudioStream {
     private void tick() {
         for (Track t : tracks) {
             if (!t.active) continue;
+            boolean wasActive = t.active;
 
             if (t.duration > 0) {
                 t.duration--;
@@ -246,6 +247,12 @@ public class SmpsSequencer implements AudioStream {
                     playNote(t);
                     break;
                 }
+            }
+
+            // If the track became inactive during this tick (e.g., ran off the end without an explicit stop),
+            // make sure we silence the channel. Otherwise the last PSG tone can linger.
+            if (!t.active && wasActive) {
+                stopNote(t);
             }
         }
     }

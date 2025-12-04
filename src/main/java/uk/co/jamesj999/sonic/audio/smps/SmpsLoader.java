@@ -130,10 +130,13 @@ public class SmpsLoader {
 
     public SmpsData loadSmps(int offset, int z80Addr) {
          try {
-            // Read Saxman header: first two bytes are compressed size, big-endian per spec
+            // Read Saxman header. Sonic 2 stores the size little-endian (e.g. Aquatic Ruin starts with 00 06,
+            // meaning 0x0600 bytes, not 0x0006). Use both byte orders and pick the larger to avoid truncation.
             int b1 = rom.readByte(offset) & 0xFF;
             int b2 = rom.readByte(offset + 1) & 0xFF;
-            int compressedSize = (b1 << 8) | b2;
+            int sizeLe = (b1) | (b2 << 8);
+            int sizeBe = (b1 << 8) | b2;
+            int compressedSize = Math.max(sizeLe, sizeBe);
 
             // Read compressed block (header + payload)
             byte[] compressed = rom.readBytes(offset, compressedSize + 2);
