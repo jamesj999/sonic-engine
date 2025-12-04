@@ -166,6 +166,8 @@ public class Ym2612Chip {
     private static final double TIMER_BASE = (CLOCK / SAMPLE_RATE) * (4096.0 / 144.0);
     // YM internal cycles per output sample (Clock / 6) / sampleRate
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / SAMPLE_RATE;
+    private static final double DAC_BASE_RATE = 275350.0;
+    private static final double DAC_RATE_DIV = 10.08;
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
