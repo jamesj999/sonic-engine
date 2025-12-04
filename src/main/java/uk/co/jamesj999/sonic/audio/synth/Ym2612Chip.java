@@ -14,22 +14,15 @@ public class Ym2612Chip {
     private static final double[] SINE_TABLE = new double[SINE_STEPS];
     private static final int[] LOG_SINE = new int[LOG_SINE_LEN]; // attenuation indices (0..8191)
     private static final double[] EXP_OUT = new double[8192]; // attenuation index -> linear
-    // Hardware-like EG increment tables (fixed-point steps per sample) for AR/DR including null entries.
-    private static final int NULL_RATE_SIZE = 32;
-    private static final int AR_NULL_RATE = 128;
-    private static final int DR_NULL_RATE = 96;
-    private static final int[] AR_TAB = new int[AR_NULL_RATE + NULL_RATE_SIZE];
-    private static final int[] DR_TAB = new int[DR_NULL_RATE + NULL_RATE_SIZE];
-    private static final int ENV_HBITS = 12;
-    private static final int ENV_LBITS = 16; // fixed-point fractional bits for EG counter
-    private static final int ENV_LEN = 1 << ENV_HBITS; // 4096 steps (96 dB)
+    private static final double[] ATTACK_RATE = new double[64];
+    private static final double[] DECAY_RATE = new double[64];
+    private static final int ENV_LEN = 1 << 12; // 12-bit envelope counter resolution
     private static final int ENV_MSK = ENV_LEN - 1;
     private static final double ENV_STEP_DB = 96.0 / ENV_LEN; // 96 dB range over 4096 steps
-    private static final int ENV_ATTACK = (ENV_LEN * 0) << ENV_LBITS;
-    private static final int ENV_DECAY = (ENV_LEN * 1) << ENV_LBITS;
-    private static final int ENV_END = (ENV_LEN * 2) << ENV_LBITS;
-    private static final int ENV_TAB_LEN = ENV_LEN * 2;
-    private static final int[] ENV_TAB = new int[ENV_TAB_LEN + 2]; // envelope curve indices (unshifted)
+    private static final int ENV_ATTACK = 0;
+    private static final int ENV_DECAY = ENV_LEN;
+    private static final int ENV_END = ENV_LEN * 2;
+    private static final int[] ENV_TAB = new int[ENV_END + 2]; // envelope curve indices
     private static final int[] DECAY_TO_ATTACK = new int[ENV_LEN];
     private static final int[] SL_TAB = new int[16];
     private static final double AR_RATE = 399128.0;
@@ -68,37 +61,27 @@ public class Ym2612Chip {
             double d = Math.pow(((double) i / ENV_LEN), 1.0);
             ENV_TAB[ENV_LEN + i] = (int) Math.round(d * ENV_LEN);
         }
-        ENV_TAB[ENV_TAB_LEN] = ENV_LEN - 1;
+        ENV_TAB[ENV_END] = ENV_LEN - 1;
         for (int i = 0, j = ENV_LEN - 1; i < ENV_LEN; i++) {
             while (j > 0 && ENV_TAB[j] < i) j--;
-            DECAY_TO_ATTACK[i] = j << ENV_LBITS;
+            DECAY_TO_ATTACK[i] = j;
         }
         for (int i = 0; i < 15; i++) {
             double db = i * 3.0;
-            int steps = (int) (db / ENV_STEP_DB);
-            int val = (steps << ENV_LBITS) + ENV_DECAY;
+            int val = (int) ((db / ENV_STEP_DB) + ENV_DECAY);
             SL_TAB[i] = val;
         }
-        SL_TAB[15] = ((ENV_LEN - 1) << ENV_LBITS) + ENV_DECAY;
-        // Build AR/DR tables similar to the reference core: rate bits form a multiplier/shift
-        for (int i = 0; i < 4; i++) {
-            AR_TAB[i] = 0;
-            DR_TAB[i] = 0;
-        }
-        for (int i = 0; i < 60; i++) {
-            double rateMul = 1.0 + ((i & 3) * 0.25); // bits 0-1
-            rateMul *= (1 << (i >> 2)); // bits 2-5 shift
-            double stepsPerSec = EG_CLOCK_HZ * rateMul;
-            int envIncA = (int) Math.max(1, Math.round((stepsPerSec * (ENV_LEN << ENV_LBITS)) / AR_RATE));
-            int envIncD = (int) Math.max(1, Math.round((stepsPerSec * (ENV_LEN << ENV_LBITS)) / DR_RATE));
-            AR_TAB[i + 4] = envIncA;
-            DR_TAB[i + 4] = envIncD;
-        }
-        for (int i = 64; i < 96; i++) {
-            AR_TAB[i] = AR_TAB[63];
-            DR_TAB[i] = DR_TAB[63];
-            AR_TAB[i - 64 + AR_NULL_RATE] = 0;
-            DR_TAB[i - 64 + DR_NULL_RATE] = 0;
+        SL_TAB[15] = (ENV_LEN - 1) + ENV_DECAY;
+        // Precompute EG step rates per effective rate code (0..63) using the example's rate math
+        final double envStepCount = 1024.0; // envelope resolution used by the example core
+        for (int r = 0; r < 64; r++) {
+            double rateMul = 1.0 + ((r & 3) * 0.25); // bits 0-1
+            rateMul *= (1 << (r >> 2)); // bits 2-5 shift
+            double stepsPerSec = (EG_CLOCK_HZ * rateMul);
+            double stepPerSample = (stepsPerSec / AR_RATE);
+            ATTACK_RATE[r] = stepPerSample / envStepCount;
+            stepPerSample = (stepsPerSec / DR_RATE);
+            DECAY_RATE[r] = stepPerSample / envStepCount;
         }
         // Convert vibrato depths (cents) to frequency multipliers
         double[] fmsCents = {0, 3.4, 6.7, 10.0, 14.0, 20.0, 40.0, 80.0};
@@ -111,11 +94,8 @@ public class Ym2612Chip {
         for (int i = 0; i < LFO_FMS_STEPS.length; i++) {
             LFO_FMS_SCALE[i] = (LFO_FMS_STEPS[i] * lfoFmsBase) / lfoFmsDiv;
         }
-        // YM2612 LFO is a triangle wave (256 steps) ranging -1..1
         for (int i = 0; i < LFO_TABLE_LEN; i++) {
-            double phase = (double) i / LFO_TABLE_LEN; // 0..1
-            double tri = phase < 0.5 ? phase * 2.0 : (2.0 - (phase * 2.0));
-            LFO_TABLE[i] = (tri * 2.0) - 1.0;
+            LFO_TABLE[i] = Math.sin((TWO_PI * i) / LFO_TABLE_LEN);
         }
     }
 
@@ -131,18 +111,17 @@ public class Ym2612Chip {
             o.ssgInverted = !o.ssgInverted;
         }
 
-            if (o.ssgHoldMode) {
-                o.ssgHold = true;
-                o.envCounter = ENV_END;
-                o.envState = EnvState.IDLE;
-                return;
-            }
-
-            // Loop: Reset direction and envelope edge
-            o.ssgDirectionDown = !o.ssgDirectionDown;
-            o.envCounter = o.ssgDirectionDown ? ENV_DECAY : ENV_ATTACK;
-            o.envState = EnvState.ATTACK;
+        if (o.ssgHoldMode) {
+            o.ssgHold = true;
+            o.envCounter = ENV_END;
+            o.envState = EnvState.IDLE;
+            return;
         }
+
+        // Loop: Reset to Attack
+        o.envCounter = ENV_ATTACK;
+        o.envState = EnvState.ATTACK;
+    }
 
     // LFO frequency table (Hz) from YM2612 docs
     private static final double[] LFO_FREQ = {3.98, 5.56, 6.02, 6.37, 6.88, 9.63, 48.1, 72.2};
@@ -174,17 +153,27 @@ public class Ym2612Chip {
     private static final double[] AMS_DEPTH = {0.0, 1.4, 5.9, 11.8};
     // Detune tables (approximate semitone offsets as multipliers)
     private static final double[] DETUNE = {0.0, 0.004, 0.008, 0.012, -0.012, -0.008, -0.004, 0.0};
-    private static final double OUTPUT_GAIN = 1600.0; // calibrated headroom to reduce clipping
+
+    // Output gain reduced to improve headroom; log domain summation allows high peaks.
+    // Hardware dynamic range is ~53dB (9 bits DAC + shifts).
+    // We target a safe range.
+    private static final double OUTPUT_GAIN = 480.0;
+
     // Optional one-pole low-pass to approximate analog output smoothing; can be tuned/disabled
-    private static final double LPF_CUTOFF_HZ = 12000.0;
+    private static final double LPF_CUTOFF_HZ = 22000.0; // Bumped up slightly to retain brightness
     private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
-    // Timer base increments at clock / 72; count units are timer ticks (TA: 1024-TA, TB: (256-TB)*16)
+    // Timer clock: (Clock / Rate) / 144 * 4096 like reference; keep as double for fractional accumulation
+    private static final double TIMER_BASE = (CLOCK / SAMPLE_RATE) * (4096.0 / 144.0);
+    // YM internal cycles per output sample (Clock / 6) / sampleRate
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / SAMPLE_RATE;
-    private static final double TIMER_CYCLES_PER_SAMPLE = CLOCK / SAMPLE_RATE;
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
-    private static final int BUSY_CYCLES = 512; // closer to real write latency window
+
+    // Busy cycle durations (approximate based on YM2612 manual/hardware tests)
+    // Most address writes take ~32 cycles, data writes take more.
+    private static final int BUSY_CYCLES_ADDR = 32;
+    private static final int BUSY_CYCLES_DATA = 47;
 
     private DacData dacData;
     private int currentDacSampleId = -1;
@@ -198,11 +187,8 @@ public class Ym2612Chip {
     private double timerBCount;
     private int timerAPeriod;
     private int timerBPeriod;
-    private double timerALoad;
-    private double timerBLoad;
-    private double timerAAccum;
-    private double timerBAccum;
-    private double timerCycleAccum;
+    private int timerALoad;
+    private int timerBLoad;
     private boolean timerAEnabled;
     private boolean timerBEnabled;
     private double busyCycles;
@@ -215,10 +201,6 @@ public class Ym2612Chip {
     private int lfoFreqIdx;
     private double lpfStateL;
     private double lpfStateR;
-    private static final int EG_FP_SHIFT = 16;
-    private static final long EG_INC_FP = (long) Math.round(((CLOCK / 144.0) / 6.0) * (1 << EG_FP_SHIFT));
-    private static final long EG_SAMPLE_FP = (long) Math.round(SAMPLE_RATE * (1 << EG_FP_SHIFT));
-    private long egTimerAccumFp;
 
     private enum EnvState { ATTACK, DECAY1, DECAY2, RELEASE, IDLE }
 
@@ -240,7 +222,6 @@ public class Ym2612Chip {
         boolean ssgEnabled;
         boolean ssgAlternate;
         boolean ssgHoldMode;
-        boolean ssgDirectionDown;
     }
 
     private static class Channel {
@@ -291,8 +272,6 @@ public class Ym2612Chip {
         timerAPeriod = timerBPeriod = 0;
         timerALoad = timerBLoad = 0;
         timerAEnabled = timerBEnabled = false;
-        timerAAccum = timerBAccum = 0;
-        timerCycleAccum = 0;
         dacEnabled = false;
         dacHasLatched = false;
         dacLatchedValue = 0;
@@ -303,7 +282,6 @@ public class Ym2612Chip {
         lfoEnabled = false;
         lfoFreqIdx = 0;
         lpfStateL = lpfStateR = 0;
-        egTimerAccumFp = 0;
         for (Channel ch : channels) {
             ch.fNum = 0;
             ch.block = 0;
@@ -335,7 +313,6 @@ public class Ym2612Chip {
                 o.ssgEnabled = false;
                 o.ssgAlternate = false;
                 o.ssgHoldMode = false;
-                o.ssgDirectionDown = true;
             }
         }
     }
@@ -371,15 +348,6 @@ public class Ym2612Chip {
         return LFO_TABLE[idx];
     }
 
-    private int consumeEgTicks() {
-        egTimerAccumFp += EG_INC_FP;
-        int ticks = (int) (egTimerAccumFp / EG_SAMPLE_FP);
-        if (ticks > 0) {
-            egTimerAccumFp -= ((long) ticks * EG_SAMPLE_FP);
-        }
-        return ticks;
-    }
-
     public void playDac(int note) {
         if (dacData == null) return;
         DacData.DacEntry entry = dacData.mapping.get(note);
@@ -399,12 +367,14 @@ public class Ym2612Chip {
             o.envCounter = ENV_END;
             return;
         }
+        ch.attackRamp = 0.0;
         if (o.envState == EnvState.RELEASE || o.envState == EnvState.IDLE) {
-            o.envCounter = ENV_ATTACK;
+            int atten = ENV_TAB[o.envCounter <= ENV_ATTACK ? ENV_ATTACK : Math.min(o.envCounter, ENV_END)];
+            if (atten >= ENV_LEN) atten = ENV_LEN - 1;
+            o.envCounter = DECAY_TO_ATTACK[atten];
             o.envState = EnvState.ATTACK;
             o.ssgHold = false;
             o.ssgInverted = (o.ssgEg & 0x04) != 0;
-            o.ssgDirectionDown = (o.ssgEg & 0x04) == 0; // start descending unless inverted waveform
         }
     }
 
@@ -412,8 +382,8 @@ public class Ym2612Chip {
         Operator o = ch.ops[opIdx];
         if (o.envState != EnvState.RELEASE) {
             if (o.envCounter < ENV_DECAY) {
-                int volume = ENV_TAB[o.envCounter >> ENV_LBITS];
-                o.envCounter = ENV_DECAY + (volume << ENV_LBITS);
+                int volume = ENV_TAB[o.envCounter];
+                o.envCounter = ENV_DECAY + volume;
             }
             o.envState = EnvState.RELEASE;
         }
@@ -494,7 +464,13 @@ public class Ym2612Chip {
     }
 
     public void write(int port, int reg, int val) {
-        busyCycles = BUSY_CYCLES;
+        // Address writes are fast, Data writes are slow.
+        // The 'write' method here is abstracting the two-step process (address write, then data write).
+        // But in reality, typical emulation interfaces just call 'write(port, reg, val)' to write 'val' to 'reg'.
+        // So this is a Data write.
+        // We should add the data write penalty.
+        busyCycles = BUSY_CYCLES_DATA;
+
         // DAC enable
         if (port == 0 && reg == 0x2B) {
             dacEnabled = (val & 0x80) != 0;
@@ -517,19 +493,19 @@ public class Ym2612Chip {
         // Timer A/B and mode/status control
         if (port == 0 && reg == 0x24) { // Timer A high
             timerAPeriod = (timerAPeriod & 0x03) | (val << 2);
-            timerALoad = Math.max(1, 1024 - timerAPeriod);
+            timerALoad = (1024 - timerAPeriod) << 12;
             if (timerAEnabled) timerACount = timerALoad;
             return;
         }
         if (port == 0 && reg == 0x25) { // Timer A low
             timerAPeriod = (timerAPeriod & 0x3FC) | (val & 0x03);
-            timerALoad = Math.max(1, 1024 - timerAPeriod);
+            timerALoad = (1024 - timerAPeriod) << 12;
             if (timerAEnabled) timerACount = timerALoad;
             return;
         }
         if (port == 0 && reg == 0x26) { // Timer B
             timerBPeriod = val & 0xFF;
-            timerBLoad = Math.max(1, (256 - timerBPeriod) * 16);
+            timerBLoad = (256 - timerBPeriod) << (4 + 12);
             if (timerBEnabled) timerBCount = timerBLoad;
             return;
         }
@@ -540,41 +516,48 @@ public class Ym2612Chip {
             return;
         }
         if (port == 0 && reg == 0x27) { // Timer control/reset
-            mode = val; // Store mode
-            // Bit 6 controls channel 3 special mode (CT3)
-            boolean newSpecial = (val & 0x40) != 0;
-            if (channel3SpecialMode != newSpecial) {
-                channel3SpecialMode = newSpecial;
-                channels[2].specialMode = channel3SpecialMode;
-                if (!channel3SpecialMode) {
-                    // leaving special mode: resync slots to shared fnum/block
-                    Channel ch3 = channels[2];
-                    for (int s = 0; s < 4; s++) {
-                        ch3.slotFnum[s] = ch3.fNum;
-                        ch3.slotBlock[s] = ch3.block;
-                    }
+            if (((mode ^ val) & 0x40) != 0) {
+                // Phase reset logic when CT3 mode toggles (fix for SoR2 punch sound)
+                // The reference clears Finc to force recalculation.
+                // Since we calculate phase increment on the fly, we should ensure
+                // that any accumulated phase or state dependent on the old mode is reset or handled.
+                // However, the reference "Finc = -1" suggests it just wants to pick up the new freq immediately.
+                // Our renderChannel does that every sample.
+                // But some docs suggest a phase reset or specific behavior on transition.
+                // Let's explicitly reset the phase of Channel 2 operators to be safe and match "reset" intent.
+                for (Operator op : channels[2].ops) {
+                    op.phase = 0;
                 }
             }
+            mode = val; // Store mode
+            // Bit 6 controls channel 3 special mode (CT3)
+            channel3SpecialMode = (val & 0x40) != 0;
+            channels[2].specialMode = channel3SpecialMode;
             timerAEnabled = (val & 0x01) != 0;
             timerBEnabled = (val & 0x02) != 0;
+            if (timerAEnabled) timerACount = timerALoad;
+            if (timerBEnabled) timerBCount = timerBLoad;
             if ((val & 0x10) != 0) status &= ~FM_STATUS_TIMERA_BIT_MASK; // reset A flag
             if ((val & 0x20) != 0) status &= ~FM_STATUS_TIMERB_BIT_MASK; // reset B flag
-            // Load timers on enable edges
-            if (timerAEnabled && timerALoad > 0) timerACount = timerALoad;
-            if (timerBEnabled && timerBLoad > 0) timerBCount = timerBLoad;
             return;
         }
 
         // Key on/off
         if (port == 0 && reg == 0x28) {
             int chIdx = val & 0x07;
-        if (chIdx == 3) return; // invalid channel index
-        if (chIdx >= 4) chIdx -= 1; // skip shadow channel 3
-        if (chIdx < 0 || chIdx > 5) return;
+            if (chIdx == 3) return; // invalid channel index
+            if (chIdx >= 4) chIdx -= 1; // skip shadow channel 3
+
+            // Allow channel 2 (index 2) to be processed normally.
+            // If in CT3 mode, the slots are controlled individually but the register write is same format.
+            // But wait, key on/off for CT3 might be different?
+            // "Channel 3 special mode uses per-slot FNUM/BLOCK; individual slots handled below."
+            // But Key On is still via 0x28.
+
+            if (chIdx < 0 || chIdx > 5) return;
 
             int opMask = (val >> 4) & 0x0F; // bits 4-7
             Channel ch = channels[chIdx];
-            // Channel 3 special mode uses independent slots; key-on bits still map to ops 1/2/3/4.
             for (int i = 0; i < 4; i++) {
                 boolean on = ((opMask >> i) & 1) != 0;
                 if (on) keyOn(ch, i);
@@ -706,9 +689,6 @@ public class Ym2612Chip {
                     o.ssgEnabled = (val & 0x08) != 0;
                     o.ssgHoldMode = (val & 0x01) != 0;
                     o.ssgAlternate = (val & 0x02) != 0;
-                    o.ssgInverted = (val & 0x04) != 0;
-                    o.ssgHold = false;
-                    o.ssgDirectionDown = true;
                     break;
                 default:
                     break;
@@ -720,7 +700,6 @@ public class Ym2612Chip {
         // Legacy mono render; averages stereo mix down
         for (int i = 0; i < buffer.length; i++) {
             double lfoVal = stepLfo();
-            int egTicks = consumeEgTicks();
 
             double mixL = 0;
             double mixR = 0;
@@ -734,10 +713,10 @@ public class Ym2612Chip {
 
             // FM
             for (int ch = 0; ch < 6; ch++) {
-        if (ch == 5 && dacEnabled) {
-            continue; // DAC occupies channel 5 when enabled
-        }
-        double out = renderChannel(ch, lfoVal, egTicks);
+                if (ch == 5 && dacEnabled) {
+                    continue; // DAC occupies channel 5 when enabled
+                }
+                double out = renderChannel(ch, lfoVal);
                 boolean left = (channels[ch].pan & 0x2) != 0;
                 boolean right = (channels[ch].pan & 0x1) != 0;
                 if (left) mixL += out;
@@ -773,7 +752,6 @@ public class Ym2612Chip {
         int len = Math.min(leftBuf.length, rightBuf.length);
         for (int i = 0; i < len; i++) {
             double lfoVal = stepLfo();
-            int egTicks = consumeEgTicks();
 
             double mixL = 0;
             double mixR = 0;
@@ -787,7 +765,7 @@ public class Ym2612Chip {
 
             for (int ch = 0; ch < 6; ch++) {
                 if (ch == 5 && dacEnabled) continue;
-                double out = renderChannel(ch, lfoVal, egTicks);
+                double out = renderChannel(ch, lfoVal);
                 boolean left = (channels[ch].pan & 0x2) != 0;
                 boolean right = (channels[ch].pan & 0x1) != 0;
                 if (left) mixL += out;
@@ -830,11 +808,35 @@ public class Ym2612Chip {
         } else {
             return 0;
         }
-        // DAC outputs i14 scale on hardware; mirror that here
-        return sample << 6;
+        // YM2612 DAC has a characteristic "ladder effect" distortion due to 9-bit resolution
+        // stretching over the output.
+        // We simulate the 9-bit truncation/quantization.
+        // Original 8-bit sample is mapped to 9-bit DAC value.
+        // It's basically an 8-bit value (0-255) from register, but internal DAC is 9-bit.
+        // The effective output step is larger.
+
+        // Simulating the 9-bit quantization:
+        // sample is -128 to 127.
+        // Scale to 9-bit range (-256 to 254 roughly).
+
+        // The "Ladder Effect" describes the non-linearity of the YM2612 DAC.
+        // It's not just a linear quantization.
+        // Without a full measurements table, we model the uneven steps by
+        // introducing a small deviation based on the sample value.
+
+        int dac9 = (sample << 1);
+
+        // Introduce non-linearity: odd 8-bit samples produce a slightly compressed step
+        // when mapped to 9-bit, simulating the ladder effect.
+        if ((sample & 0x1) != 0) {
+            dac9 -= 1; // Flatten the step for odd source samples
+        }
+
+        // Scale to output (i14 equivalent)
+        return dac9 << 5;
     }
 
-    private double renderChannel(int chIdx, double lfoVal, int egTicks) {
+    private double renderChannel(int chIdx, double lfoVal) {
         Channel ch = channels[chIdx];
 
         boolean hasActiveOperator = false;
@@ -847,16 +849,22 @@ public class Ym2612Chip {
         if (!hasActiveOperator) {
             return 0;
         }
-        ch.attackRamp = 1.0; // remove synthetic fade-in; follow hardware key-on behaviour
+        if (ch.attackRamp < 1.0) {
+            ch.attackRamp = Math.min(1.0, ch.attackRamp + 0.003);
+        }
 
         // Precompute frequency in Hz
         int fnum = ch.fNum & 0x7FF;
         int block = ch.block & 0x7;
         double baseFreq = (fnum * CLOCK) / (144.0 * (1 << (20 - block)));
         // Channel 3 special mode uses per-slot FNUM/BLOCK; individual slots handled below.
+        // Apply vibrato using reference FMS scale, fall back to cents table if missing
         double fms = LFO_FMS_SCALE[Math.min(ch.fms, LFO_FMS_SCALE.length - 1)];
         if (fms == 0) {
             fms = FMS_MULT[Math.min(ch.fms, FMS_MULT.length - 1)];
+        }
+        if (lfoEnabled) {
+            baseFreq *= (1.0 + (fms * lfoVal));
         }
         if (baseFreq <= 0) return 0;
 
@@ -894,11 +902,9 @@ public class Ym2612Chip {
             fnumUse &= 0x7FF;
             blockUse &= 0x7;
             double opBaseHz = (fnumUse * CLOCK) / (144.0 * (1 << (20 - blockUse)));
+            opBaseHz *= (1.0 + (fms * lfoVal));
             double freq = opBaseHz * ((o.mul == 0) ? 0.5 : o.mul);
             double inc = (freq * TWO_PI) / SAMPLE_RATE;
-            if (lfoEnabled && fms != 0) {
-                inc += inc * (fms * lfoVal); // apply phase modulation depth
-            }
 
             // Apply detune as an additive increment scaled similarly to the reference DT table
             int kc = Math.min(31, (blockUse << 2) + FKEY_TAB[(fnumUse >> 7) & 0x0F]);
@@ -915,7 +921,7 @@ public class Ym2612Chip {
             if (o.phase > TWO_PI) o.phase -= TWO_PI;
             if (o.phase < 0) o.phase += TWO_PI;
 
-            stepEnvelope(o, ch, idx, blockUse, fnumUse, egTicks);
+            stepEnvelope(o, ch, idx, blockUse, fnumUse);
 
             double env = envelopeToLinear(o, ch.ams, lfoVal, idx);
             // Convert phase to quarter-sine index and use log/exp approximation
@@ -934,12 +940,13 @@ public class Ym2612Chip {
         }
 
         double carrier = computeCarrierSum(ch.algo, opOut);
+        carrier *= ch.attackRamp;
 
         // Apply simple pan scaling (L/R bits)
         // pan bits: D7 = Left, D6 = Right (we stored two-bit value)
         boolean left = (ch.pan & 0x2) != 0;
         boolean right = (ch.pan & 0x1) != 0;
-        double panGain = 1.0;
+        double panGain = (left && right) ? 1.0 : 0.7; // crude stereo spread
         return carrier * OUTPUT_GAIN * panGain;
     }
 
@@ -976,88 +983,71 @@ public class Ym2612Chip {
         };
     }
 
-    private void stepEnvelope(Operator o, Channel ch, int opIndex, int block, int fnum, int ticks) {
+    private void stepEnvelope(Operator o, Channel ch, int opIndex, int block, int fnum) {
         boolean ssgEnabled = o.ssgEnabled;
-        if (ticks <= 0 || o.ssgHold) {
+        if (o.ssgHold) {
             return;
         }
-        for (int t = 0; t < ticks; t++) {
-            switch (o.envState) {
-                case ATTACK -> {
-                    int step = egStep(o.ar, o.rs, block, fnum, true);
-                    if (step <= 0) {
-                        if (o.ar == 0) {
-                            o.envState = EnvState.IDLE;
-                            o.envCounter = ENV_END;
-                            continue;
-                        }
-                        step = 1;
-                    }
-                    o.envCounter += (ssgEnabled && !o.ssgDirectionDown) ? -step : step;
-                    if (o.envCounter >= ENV_DECAY || o.ar == 31) {
-                        o.envCounter = ENV_DECAY;
-                        o.envState = EnvState.DECAY1;
-                        if (ssgEnabled) handleSsgPeak(o, true);
-                    }
-                }
-                case DECAY1 -> {
-                    int step = egStep(o.d1r, o.rs, block, fnum, false);
-                    o.envCounter += (ssgEnabled && !o.ssgDirectionDown) ? -step : step;
-                    int sustain = SL_TAB[Math.min(15, o.d1l)];
-                    if (!ssgEnabled && o.envCounter >= sustain) {
-                        o.envCounter = sustain;
-                        o.envState = EnvState.DECAY2;
-                    } else if (ssgEnabled && o.envCounter >= ENV_END) {
-                        handleSsgPeak(o, false);
-                    }
-                }
-                case DECAY2 -> {
-                    int step = egStep(o.d2r, o.rs, block, fnum, false);
-                    o.envCounter += (ssgEnabled && !o.ssgDirectionDown) ? -step : step;
-                    if (o.envCounter >= ENV_END) {
-                        if (ssgEnabled) {
-                            handleSsgPeak(o, false);
-                        } else {
-                            o.envCounter = ENV_END;
-                            o.envState = EnvState.IDLE;
-                        }
-                    }
-                }
-                case RELEASE -> {
-                    int step = egStep(Math.max(1, o.rr), o.rs, block, fnum, false);
-                    o.envCounter += (ssgEnabled && !o.ssgDirectionDown) ? -step : step;
-                    if (o.envCounter >= ENV_END) {
-                        if (ssgEnabled) {
-                            handleSsgPeak(o, false);
-                        } else {
-                            o.envCounter = ENV_END;
-                            o.envState = EnvState.IDLE;
-                        }
-                    }
-                }
-                case IDLE -> o.envCounter = ENV_END;
-            }
-            if (ssgEnabled && !o.ssgHold) {
-                if (o.ssgDirectionDown && o.envCounter >= ENV_END) {
-                    if (o.ssgHoldMode) {
-                        o.ssgHold = true;
+        switch (o.envState) {
+            case ATTACK -> {
+                int step = egStep(o.ar, o.rs, block, fnum, true);
+                if (step <= 0) {
+                    if (o.ar == 0) {
                         o.envState = EnvState.IDLE;
-                    } else {
-                        if (o.ssgAlternate) o.ssgInverted = !o.ssgInverted;
-                        o.ssgDirectionDown = false;
                         o.envCounter = ENV_END;
+                        return;
                     }
-                } else if (!o.ssgDirectionDown && o.envCounter <= ENV_ATTACK) {
-                    if (o.ssgHoldMode) {
-                        o.ssgHold = true;
-                        o.envState = EnvState.IDLE;
+                    step = 1;
+                }
+                // Slow down low AR values so the envelope audibly rises over the first few frames.
+                if (o.ar < 16) {
+                    step = Math.max(1, step / 16);
+                } else if (o.ar < 24) {
+                    step = Math.max(1, step / 8);
+                }
+                o.envCounter += step;
+                if (o.envCounter >= ENV_DECAY || o.ar == 31) {
+                    o.envCounter = ENV_DECAY;
+                    o.envState = EnvState.DECAY1;
+                    if (ssgEnabled) handleSsgPeak(o, true);
+                }
+            }
+            case DECAY1 -> {
+                int step = egStep(o.d1r, o.rs, block, fnum, false);
+                o.envCounter += step;
+                int sustain = SL_TAB[Math.min(15, o.d1l)];
+                if (!ssgEnabled && o.envCounter >= sustain) {
+                    o.envCounter = sustain;
+                    o.envState = EnvState.DECAY2;
+                } else if (ssgEnabled && o.envCounter >= ENV_END) {
+                    handleSsgPeak(o, false);
+                }
+            }
+            case DECAY2 -> {
+                int step = egStep(o.d2r, o.rs, block, fnum, false);
+                o.envCounter += step;
+                if (o.envCounter >= ENV_END) {
+                    if (ssgEnabled) {
+                        handleSsgPeak(o, false);
                     } else {
-                        if (o.ssgAlternate) o.ssgInverted = !o.ssgInverted;
-                        o.ssgDirectionDown = true;
-                        o.envCounter = ENV_ATTACK;
+                        o.envCounter = ENV_END;
+                        o.envState = EnvState.IDLE;
                     }
                 }
             }
+            case RELEASE -> {
+                int step = egStep(Math.max(1, o.rr), o.rs, block, fnum, false);
+                o.envCounter += step;
+                if (o.envCounter >= ENV_END) {
+                    if (ssgEnabled) {
+                        handleSsgPeak(o, false);
+                    } else {
+                        o.envCounter = ENV_END;
+                        o.envState = EnvState.IDLE;
+                    }
+                }
+            }
+            case IDLE -> o.envCounter = ENV_END;
         }
     }
 
@@ -1068,23 +1058,18 @@ public class Ym2612Chip {
         // Hardware uses 5-bit rate value (0-31) expanded with key scaling
         int effectiveRate = Math.min(63, (rate << 1) + ks);
         if (effectiveRate <= 0) return 0;
-        int idx = effectiveRate;
-        if (attack) {
-            idx = Math.min(idx, AR_TAB.length - 1);
-            return Math.max(0, AR_TAB[idx]);
-        } else {
-            idx = Math.min(idx, DR_TAB.length - 1);
-            return Math.max(0, DR_TAB[idx]);
+        double step = attack ? ATTACK_RATE[effectiveRate] : DECAY_RATE[effectiveRate];
+        int envStep = (int) Math.max(1, Math.round(step * ENV_LEN));
+        if (attack && rate < 31) {
+            // Attack curves accelerate as they approach peak; approximate using decay->attack remap
+            envStep = Math.max(1, DECAY_TO_ATTACK[Math.min(envStep, DECAY_TO_ATTACK.length - 1)]);
         }
+        return envStep;
     }
 
     private double envelopeToLinear(Operator o, int ams, double lfoVal, int opIndex) {
-        int envIdx = o.envCounter >> ENV_LBITS;
-        envIdx = Math.max(0, Math.min(ENV_TAB_LEN, envIdx));
-        int envVal = ENV_TAB[envIdx <= (ENV_ATTACK >> ENV_LBITS) ? (ENV_ATTACK >> ENV_LBITS) : Math.min(envIdx, ENV_TAB.length - 1)];
-        if (o.ssgEnabled && (o.ssgEg & 0x04) != 0) {
-            envVal = ENV_MSK - envVal;
-        }
+        int envIdx = Math.max(0, Math.min(ENV_END, o.envCounter));
+        int envVal = ENV_TAB[envIdx <= ENV_ATTACK ? ENV_ATTACK : Math.min(envIdx, ENV_END)];
         double level = 1.0 - (envVal * ENV_STEP_DB / 96.0);
         level = Math.max(0.0, Math.min(1.0, level));
         if (o.ssgInverted) {
@@ -1106,30 +1091,22 @@ public class Ym2612Chip {
 
     private void tickTimers(int samples) {
         if (samples <= 0) return;
-        timerCycleAccum += TIMER_CYCLES_PER_SAMPLE * samples;
-        int timerTicks = (int) (timerCycleAccum / 72.0);
-        if (timerTicks > 0) {
-            timerCycleAccum -= timerTicks * 72.0;
-            if (timerAEnabled) {
-                for (int i = 0; i < timerTicks; i++) {
-                    timerACount -= 1.0;
-                    if (timerACount <= 0) {
-                        status |= FM_STATUS_TIMERA_BIT_MASK;
-                        timerACount += timerALoad;
-                        if ((mode & 0x80) != 0) {
-                            csmKeyControl();
-                        }
-                    }
+        double ticks = TIMER_BASE * samples;
+        if (timerAEnabled && ticks > 0) {
+            timerACount -= ticks;
+            if (timerACount <= 0) {
+                status |= FM_STATUS_TIMERA_BIT_MASK;
+                timerACount += timerALoad;
+                if ((mode & 0x80) != 0) {
+                    csmKeyControl();
                 }
             }
-            if (timerBEnabled) {
-                for (int i = 0; i < timerTicks; i++) {
-                    timerBCount -= 1.0;
-                    if (timerBCount <= 0) {
-                        status |= FM_STATUS_TIMERB_BIT_MASK;
-                        timerBCount += timerBLoad;
-                    }
-                }
+        }
+        if (timerBEnabled && ticks > 0) {
+            timerBCount -= ticks;
+            if (timerBCount <= 0) {
+                status |= FM_STATUS_TIMERB_BIT_MASK;
+                timerBCount += timerBLoad;
             }
         }
         if (busyCycles > 0) {
