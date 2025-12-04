@@ -487,6 +487,12 @@ public class Ym2612Chip {
         // DAC enable
         if (port == 0 && reg == 0x2B) {
             dacEnabled = (val & 0x80) != 0;
+            if (!dacEnabled) {
+                // Clear any lingering DAC state to avoid noise after disable
+                currentDacSampleId = -1;
+                dacHasLatched = false;
+                dacPos = 0;
+            }
             return;
         }
 
@@ -833,6 +839,11 @@ public class Ym2612Chip {
                     sample = s1;
                 }
                 dacPos += dacStep;
+                if (dacPos >= data.length) {
+                    // Sample finished
+                    currentDacSampleId = -1;
+                    dacPos = 0;
+                }
             }
         } else if (dacHasLatched) {
             sample = dacLatchedValue;
