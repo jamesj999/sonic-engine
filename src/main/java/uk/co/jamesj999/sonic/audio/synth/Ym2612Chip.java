@@ -169,7 +169,7 @@ public class Ym2612Chip {
     private static final double DAC_BASE_RATE = 275350.0;
     private static final double DAC_RATE_DIV = 10.08;
     private static final boolean DAC_INTERPOLATE = true;
-    private static final double DAC_GAIN = 256.0;
+    private static final double DAC_GAIN = 128.0; // reduced to avoid clipping; adjust if DAC too quiet
     // Z80 driver timing (from DAC.ini)
     private static final double Z80_CLOCK = 3579545.0;
     private static final double DAC_BASE_CYCLES = 288.0;
