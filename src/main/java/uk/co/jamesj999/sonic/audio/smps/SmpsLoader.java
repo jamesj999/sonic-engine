@@ -176,7 +176,8 @@ public class SmpsLoader {
                 byte[] compressed = rom.readBytes(romAddr, len);
                 byte[] pcm = dcmDecoder.decode(compressed);
 
-                samples.put(ptr, pcm); // key by sampleId (ptr) so mapping can reference correctly
+                // Sample IDs correspond to notes 0x81 + i
+                samples.put(0x81 + i, pcm);
             }
 
             // Master List at 0xECF9C
