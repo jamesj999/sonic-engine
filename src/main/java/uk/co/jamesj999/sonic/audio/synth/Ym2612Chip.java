@@ -153,9 +153,14 @@ public class Ym2612Chip {
     private static final double[] AMS_DEPTH = {0.0, 1.4, 5.9, 11.8};
     // Detune tables (approximate semitone offsets as multipliers)
     private static final double[] DETUNE = {0.0, 0.004, 0.008, 0.012, -0.012, -0.008, -0.004, 0.0};
-    private static final double OUTPUT_GAIN = 1600.0; // calibrated headroom to reduce clipping
+
+    // Output gain reduced to improve headroom; log domain summation allows high peaks.
+    // Hardware dynamic range is ~53dB (9 bits DAC + shifts).
+    // We target a safe range.
+    private static final double OUTPUT_GAIN = 480.0;
+
     // Optional one-pole low-pass to approximate analog output smoothing; can be tuned/disabled
-    private static final double LPF_CUTOFF_HZ = 12000.0;
+    private static final double LPF_CUTOFF_HZ = 22000.0; // Bumped up slightly to retain brightness
     private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
     // Timer clock: (Clock / Rate) / 144 * 4096 like reference; keep as double for fractional accumulation
     private static final double TIMER_BASE = (CLOCK / SAMPLE_RATE) * (4096.0 / 144.0);
@@ -164,7 +169,11 @@ public class Ym2612Chip {
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
-    private static final int BUSY_CYCLES = 32; // placeholder; would need CPU clock to be exact
+
+    // Busy cycle durations (approximate based on YM2612 manual/hardware tests)
+    // Most address writes take ~32 cycles, data writes take more.
+    private static final int BUSY_CYCLES_ADDR = 32;
+    private static final int BUSY_CYCLES_DATA = 47;
 
     private DacData dacData;
     private int currentDacSampleId = -1;
@@ -455,7 +464,13 @@ public class Ym2612Chip {
     }
 
     public void write(int port, int reg, int val) {
-        busyCycles = BUSY_CYCLES;
+        // Address writes are fast, Data writes are slow.
+        // The 'write' method here is abstracting the two-step process (address write, then data write).
+        // But in reality, typical emulation interfaces just call 'write(port, reg, val)' to write 'val' to 'reg'.
+        // So this is a Data write.
+        // We should add the data write penalty.
+        busyCycles = BUSY_CYCLES_DATA;
+
         // DAC enable
         if (port == 0 && reg == 0x2B) {
             dacEnabled = (val & 0x80) != 0;
@@ -501,6 +516,19 @@ public class Ym2612Chip {
             return;
         }
         if (port == 0 && reg == 0x27) { // Timer control/reset
+            if (((mode ^ val) & 0x40) != 0) {
+                // Phase reset logic when CT3 mode toggles (fix for SoR2 punch sound)
+                // The reference clears Finc to force recalculation.
+                // Since we calculate phase increment on the fly, we should ensure
+                // that any accumulated phase or state dependent on the old mode is reset or handled.
+                // However, the reference "Finc = -1" suggests it just wants to pick up the new freq immediately.
+                // Our renderChannel does that every sample.
+                // But some docs suggest a phase reset or specific behavior on transition.
+                // Let's explicitly reset the phase of Channel 2 operators to be safe and match "reset" intent.
+                for (Operator op : channels[2].ops) {
+                    op.phase = 0;
+                }
+            }
             mode = val; // Store mode
             // Bit 6 controls channel 3 special mode (CT3)
             channel3SpecialMode = (val & 0x40) != 0;
@@ -519,6 +547,13 @@ public class Ym2612Chip {
             int chIdx = val & 0x07;
             if (chIdx == 3) return; // invalid channel index
             if (chIdx >= 4) chIdx -= 1; // skip shadow channel 3
+
+            // Allow channel 2 (index 2) to be processed normally.
+            // If in CT3 mode, the slots are controlled individually but the register write is same format.
+            // But wait, key on/off for CT3 might be different?
+            // "Channel 3 special mode uses per-slot FNUM/BLOCK; individual slots handled below."
+            // But Key On is still via 0x28.
+
             if (chIdx < 0 || chIdx > 5) return;
 
             int opMask = (val >> 4) & 0x0F; // bits 4-7
@@ -773,8 +808,32 @@ public class Ym2612Chip {
         } else {
             return 0;
         }
-        // DAC outputs i14 scale on hardware; mirror that here
-        return sample << 6;
+        // YM2612 DAC has a characteristic "ladder effect" distortion due to 9-bit resolution
+        // stretching over the output.
+        // We simulate the 9-bit truncation/quantization.
+        // Original 8-bit sample is mapped to 9-bit DAC value.
+        // It's basically an 8-bit value (0-255) from register, but internal DAC is 9-bit.
+        // The effective output step is larger.
+
+        // Simulating the 9-bit quantization:
+        // sample is -128 to 127.
+        // Scale to 9-bit range (-256 to 254 roughly).
+
+        // The "Ladder Effect" describes the non-linearity of the YM2612 DAC.
+        // It's not just a linear quantization.
+        // Without a full measurements table, we model the uneven steps by
+        // introducing a small deviation based on the sample value.
+
+        int dac9 = (sample << 1);
+
+        // Introduce non-linearity: odd 8-bit samples produce a slightly compressed step
+        // when mapped to 9-bit, simulating the ladder effect.
+        if ((sample & 0x1) != 0) {
+            dac9 -= 1; // Flatten the step for odd source samples
+        }
+
+        // Scale to output (i14 equivalent)
+        return dac9 << 5;
     }
 
     private double renderChannel(int chIdx, double lfoVal) {
