@@ -9,23 +9,20 @@ public class DcmDecoder {
     public byte[] decode(byte[] compressed) {
         byte[] output = new byte[compressed.length * 2];
         int outPos = 0;
-        int accumulator = 0; // Signed center
+        int accumulator = 0x80; // Unsigned 8-bit centre
 
         for (byte b : compressed) {
-            // High nibble first?
-            // "4-bit indices ... 50% reduction"
-            // Usually high nibble is first sample.
-            int high = (b >> 4) & 0xF;
-            int low = b & 0xF;
-
-            accumulator += DELTA_TABLE[high];
-            if (accumulator < -128) accumulator = -128;
-            if (accumulator > 127) accumulator = 127;
-            output[outPos++] = (byte) accumulator;
+            int low = b & 0x0F;       // Process low nibble first (matches many SMPS drivers)
+            int high = (b >> 4) & 0xF; // Then high nibble
 
             accumulator += DELTA_TABLE[low];
-            if (accumulator < -128) accumulator = -128;
-            if (accumulator > 127) accumulator = 127;
+            if (accumulator < 0) accumulator = 0;
+            if (accumulator > 255) accumulator = 255;
+            output[outPos++] = (byte) accumulator;
+
+            accumulator += DELTA_TABLE[high];
+            if (accumulator < 0) accumulator = 0;
+            if (accumulator > 255) accumulator = 255;
             output[outPos++] = (byte) accumulator;
         }
         return output;

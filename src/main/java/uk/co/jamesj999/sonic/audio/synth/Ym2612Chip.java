@@ -803,7 +803,12 @@ public class Ym2612Chip {
         if (currentDacSampleId != -1 && dacData != null) {
             byte[] data = dacData.samples.get(currentDacSampleId);
             if (data != null && dacPos < data.length) {
-                sample = data[(int) dacPos]; // signed PCM
+                int idx = (int) dacPos;
+                double frac = dacPos - idx;
+                int s1 = data[idx] & 0xFF;
+                int s2 = (idx + 1 < data.length) ? (data[idx + 1] & 0xFF) : s1;
+                double lerp = s1 * (1.0 - frac) + s2 * frac;
+                sample = ((int) Math.round(lerp)) - 128; // convert to signed
                 dacPos += dacStep;
             }
         } else if (dacHasLatched) {
