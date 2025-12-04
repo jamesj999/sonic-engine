@@ -8,7 +8,8 @@ public class DcmDecoder {
 
     /**
      * Decodes SMPS 4-bit DPCM (shared delta table). The accumulator starts at 0x80 (unsigned),
-     * nibbles are applied high-first, and output is 8-bit unsigned PCM (0..255) ready for YM2612 DAC.
+     * nibbles are applied high-first, arithmetic wraps in the unsigned 8-bit domain (no clamping),
+     * and output is 8-bit unsigned PCM (0..255) ready for YM2612 DAC.
      */
     public byte[] decode(byte[] compressed) {
         byte[] output = new byte[compressed.length * 2];
@@ -19,14 +20,11 @@ public class DcmDecoder {
             int high = (b >> 4) & 0x0F; // high nibble first
             int low = b & 0x0F;         // then low nibble
 
-            accumulator += DELTA_TABLE[high];
-            if (accumulator < 0) accumulator = 0;
-            if (accumulator > 255) accumulator = 255;
+            accumulator = (accumulator + DELTA_TABLE[high]) & 0xFF; // wrap
+
             output[outPos++] = (byte) accumulator;
 
-            accumulator += DELTA_TABLE[low];
-            if (accumulator < 0) accumulator = 0;
-            if (accumulator > 255) accumulator = 255;
+            accumulator = (accumulator + DELTA_TABLE[low]) & 0xFF; // wrap
             output[outPos++] = (byte) accumulator;
         }
         return output;
