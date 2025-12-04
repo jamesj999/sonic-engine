@@ -927,8 +927,12 @@ public class Ym2612Chip {
                 int step = egStep(o.ar, o.rs, block, fnum, true);
                 o.envCounter += step;
                 if (o.envCounter >= FP_ENV_DECAY || o.ar == 31) {
-                    o.envCounter = FP_ENV_DECAY;
-                    o.envState = EnvState.DECAY1;
+                    if (o.ssgEnabled) {
+                        handleSsgEnd(o);
+                    } else {
+                        o.envCounter = FP_ENV_DECAY;
+                        o.envState = EnvState.DECAY1;
+                    }
                 }
             }
             case DECAY1 -> {
