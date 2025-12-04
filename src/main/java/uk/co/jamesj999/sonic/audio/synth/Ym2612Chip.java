@@ -372,6 +372,12 @@ public class Ym2612Chip {
         }
     }
 
+    public void stopDac() {
+        currentDacSampleId = -1;
+        dacHasLatched = false;
+        dacPos = 0;
+    }
+
     // New Helper methods
     private void keyOn(Channel ch, int opIdx) {
         Operator o = ch.ops[opIdx];
@@ -488,10 +494,7 @@ public class Ym2612Chip {
         if (port == 0 && reg == 0x2B) {
             dacEnabled = (val & 0x80) != 0;
             if (!dacEnabled) {
-                // Clear any lingering DAC state to avoid noise after disable
-                currentDacSampleId = -1;
-                dacHasLatched = false;
-                dacPos = 0;
+                stopDac();
             }
             return;
         }

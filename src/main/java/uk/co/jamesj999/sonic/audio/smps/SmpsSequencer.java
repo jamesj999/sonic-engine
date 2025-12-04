@@ -609,6 +609,8 @@ public class SmpsSequencer implements AudioStream {
             int hwCh = t.channelId;
             int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
             synth.writeFm(0, 0x28, 0x00 | chVal); // Key Off
+        } else if (t.type == TrackType.DAC) {
+            synth.stopDac();
         } else {
             if (t.channelId < 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence

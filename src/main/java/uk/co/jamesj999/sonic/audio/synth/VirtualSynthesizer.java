@@ -14,6 +14,10 @@ public class VirtualSynthesizer {
         ym.playDac(note);
     }
 
+    public void stopDac() {
+        ym.stopDac();
+    }
+
     public void render(short[] buffer) {
         psg.render(buffer);
         ym.render(buffer);
