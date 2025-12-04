@@ -365,8 +365,9 @@ public class Ym2612Chip {
             this.dacPos = 0;
             int rateByte = entry.rate & 0xFF;
             // Sonic 2 Z80 DAC driver timing:
-            // cycles per sample = BaseCycles + LoopCycles * rate
-            double cyclesPerSample = DAC_BASE_CYCLES + (DAC_LOOP_CYCLES * rateByte);
+            // cycles for LoopSamples (2) = BaseCycles + LoopCycles * rate
+            double cyclesPerBlock = DAC_BASE_CYCLES + (DAC_LOOP_CYCLES * rateByte);
+            double cyclesPerSample = cyclesPerBlock / DAC_LOOP_SAMPLES;
             double rateHz = Z80_CLOCK / cyclesPerSample;
             this.dacStep = Math.max(0.0001, rateHz / SAMPLE_RATE);
         }
