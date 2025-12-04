@@ -14,7 +14,7 @@ public class Sonic2 extends Game {
     private static final int LEVEL_LAYOUT_DIR_SIZE = 68;
     private static final int LEVEL_SELECT_ADDR = 0x9454;
     private static final int LEVEL_DATA_DIR = 0x42594;
-    private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 16;
+    private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 12;
     private static final int LEVEL_PALETTE_DIR = 0x2782;
     private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
     private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
@@ -124,15 +124,16 @@ public class Sonic2 extends Game {
     }
 
     private int getLevelWidth(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        long offset = LEVEL_DATA_DIR + zoneIdx * LEVEL_DATA_DIR_ENTRY_SIZE + 12;
-        return rom.read16BitAddr(offset);
+        // FIXME: The provided reference image describes a 16-byte header with dimensions at offset 12.
+        // However, the provided ROM (Vanilla Sonic 2) uses 12-byte entries (pointers only).
+        // Attempting to read offset 12 reads into the next entry.
+        // Returning 0 until the correct Level Size Array address for Vanilla S2 is located.
+        return 0;
     }
 
     private int getLevelHeight(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        long offset = LEVEL_DATA_DIR + zoneIdx * LEVEL_DATA_DIR_ENTRY_SIZE + 14;
-        return rom.read16BitAddr(offset);
+        // FIXME: See getLevelWidth. Returning 0 to prevent reading garbage data.
+        return 0;
     }
 
     private int getSolidTileHeightsAddr() {
