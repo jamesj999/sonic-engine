@@ -46,6 +46,7 @@ public class SmpsSequencer implements AudioStream {
         int ams = 0;
         int fms = 0;
         byte[] voiceData; // last loaded voice
+        int voiceId;
         int baseFnum;
         int baseBlock;
         int loopCounter;
@@ -519,6 +520,7 @@ public class SmpsSequencer implements AudioStream {
             byte[] voice = new byte[voiceLen];
             System.arraycopy(data, offset, voice, 0, voiceLen);
             t.voiceData = voice;
+            t.voiceId = voiceId;
             refreshInstrument(t);
         }
     }
@@ -679,5 +681,62 @@ public class SmpsSequencer implements AudioStream {
         int port = (hwCh < 3) ? 0 : 1;
         int ch = (hwCh % 3);
         writeFmFreq(port, ch, fnum, t.baseBlock);
+    }
+
+    /**
+     * Debug snapshot of current sequencer state for overlays/diagnostics.
+     */
+    public synchronized DebugState debugState() {
+        DebugState state = new DebugState();
+        state.tempoWeight = tempoWeight;
+        state.dividingTiming = dividingTiming;
+        for (Track t : tracks) {
+            DebugTrack dt = new DebugTrack();
+            dt.type = t.type;
+            dt.channelId = t.channelId;
+            dt.active = t.active;
+            dt.duration = t.duration;
+            dt.rawDuration = t.rawDuration;
+            dt.note = t.note;
+            dt.voiceId = t.voiceId;
+            dt.volumeOffset = t.volumeOffset;
+            dt.keyOffset = t.keyOffset;
+            dt.pan = t.pan;
+            dt.ams = t.ams;
+            dt.fms = t.fms;
+            dt.tieNext = t.tieNext;
+            dt.modEnabled = t.modEnabled;
+            dt.modDepth = t.modDepth;
+            dt.loopCounter = t.loopCounter;
+            dt.position = t.pos;
+            state.tracks.add(dt);
+        }
+        return state;
+    }
+
+    public static class DebugState {
+        public int tempoWeight;
+        public int dividingTiming;
+        public final List<DebugTrack> tracks = new ArrayList<>();
+    }
+
+    public static class DebugTrack {
+        public TrackType type;
+        public int channelId;
+        public boolean active;
+        public int duration;
+        public int rawDuration;
+        public int note;
+        public int voiceId;
+        public int volumeOffset;
+        public int keyOffset;
+        public int pan;
+        public int ams;
+        public int fms;
+        public boolean tieNext;
+        public boolean modEnabled;
+        public int modDepth;
+        public int loopCounter;
+        public int position;
     }
 }

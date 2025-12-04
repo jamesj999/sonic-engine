@@ -37,6 +37,7 @@ public class JOALAudioBackend implements AudioBackend {
     private int[] streamBuffers;
     private static final int STREAM_BUFFER_COUNT = 3;
     private static final int STREAM_BUFFER_SIZE = 4096;
+    private SmpsSequencer currentSmps;
 
     // Fallback mappings
     private final Map<Integer, String> musicFallback = new HashMap<>();
@@ -108,7 +109,8 @@ public class JOALAudioBackend implements AudioBackend {
         // Stop music source if playing wav
         al.alSourceStop(musicSource);
 
-        currentStream = new SmpsSequencer(data, dacData);
+        currentSmps = new SmpsSequencer(data, dacData);
+        currentStream = currentSmps;
         startStream();
     }
 
@@ -149,6 +151,7 @@ public class JOALAudioBackend implements AudioBackend {
                 processed[0]--;
             }
             currentStream = null;
+            currentSmps = null;
         }
     }
 
@@ -207,6 +210,13 @@ public class JOALAudioBackend implements AudioBackend {
         al.alBufferData(bufferId, AL.AL_FORMAT_MONO16, sBuffer, data.length * 2, 44100);
     }
 
+    /**
+     * Returns a debug snapshot of the current SMPS sequencer if one is playing.
+     */
+    public SmpsSequencer.DebugState getDebugState() {
+        return currentSmps != null ? currentSmps.debugState() : null;
+    }
+
     @Override
     public void playSfx(String sfxName) {
         String filename = sfxFallback.get(sfxName);
@@ -219,6 +229,15 @@ public class JOALAudioBackend implements AudioBackend {
         } else {
             LOGGER.fine("SFX not found in fallback map: " + sfxName);
         }
+    }
+
+    @Override
+    public void stopPlayback() {
+        stopStream();
+        al.alSourceStop(musicSource);
+        al.alSourcei(musicSource, AL.AL_BUFFER, 0);
+        currentStream = null;
+        currentSmps = null;
     }
 
     private int getAvailableSource() {

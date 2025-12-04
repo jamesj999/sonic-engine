@@ -21,6 +21,11 @@ public interface AudioBackend {
      */
     void playSfx(String sfxName);
 
+    /**
+     * Stops any active music/streaming playback.
+     */
+    void stopPlayback();
+
     void update();
     void destroy();
 }

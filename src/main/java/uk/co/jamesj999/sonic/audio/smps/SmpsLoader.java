@@ -19,25 +19,28 @@ public class SmpsLoader {
     public SmpsLoader(Rom rom) {
         this.rom = rom;
         // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
-        musicMap.put(0x81, 0x0F88C4); // EHZ
-        musicMap.put(0x82, 0x0F8DEE); // MTZ
-        musicMap.put(0x83, 0x0F917B); // CNZ
-        musicMap.put(0x84, 0x0F9664); // MCZ
-        musicMap.put(0x85, 0x0F9A3C); // MCZ 2P
-        musicMap.put(0x86, 0x0FCE74); // HTZ
-        musicMap.put(0x87, 0x0F9D69); // ARZ
+        musicMap.put(0x00, 0x0F0002); // Continue
+        musicMap.put(0x80, 0x0F84F6); // Casino Night 2P
+        musicMap.put(0x81, 0x0F88C4); // Emerald Hill
+        musicMap.put(0x82, 0x0F8DEE); // Metropolis
+        musicMap.put(0x83, 0x0F917B); // Casino Night
+        musicMap.put(0x84, 0x0F9664); // Mystic Cave
+        musicMap.put(0x85, 0x0F9A3C); // Mystic Cave 2P
+        musicMap.put(0x86, 0x0F9D69); // Aquatic Ruin
+        musicMap.put(0x87, 0x0FA36B); // Death Egg
         musicMap.put(0x88, 0x0FA6ED); // Special Stage
         musicMap.put(0x89, 0x0FAAC4); // Options
         musicMap.put(0x8A, 0x0FAC3C); // Ending
         musicMap.put(0x8B, 0x0FB124); // Final battle
-        musicMap.put(0x8C, 0x0FB3F7); // CPZ
+        musicMap.put(0x8C, 0x0FB3F7); // Chemical Plant
         musicMap.put(0x8D, 0x0FB81E); // Boss
         musicMap.put(0x8E, 0x0FBA6F); // Sky Chase
-        musicMap.put(0x8F, 0x0FC146); // WFZ
-        musicMap.put(0x90, 0x0FC146); // WFZ alias
-        musicMap.put(0x91, 0x0FC480); // EHZ 2P
+        musicMap.put(0x8F, 0x0FBD8C); // Oil Ocean
+        musicMap.put(0x90, 0x0FC146); // Wing Fortress
+        musicMap.put(0x91, 0x0FC480); // Emerald Hill 2P
+        musicMap.put(0x92, 0x0FC824); // 2P Results
         musicMap.put(0x93, 0x0FCBBC); // Super Sonic
-        musicMap.put(0x94, 0x0FCE74); // HTZ alias
+        musicMap.put(0x94, 0x0FCE74); // Hill Top
         musicMap.put(0x96, 0x0FD193); // Title
         musicMap.put(0x97, 0x0FD35E); // Stage Clear
         musicMap.put(0x99, 0x0F8359); // Invincibility
@@ -46,21 +49,29 @@ public class SmpsLoader {
         musicMap.put(0xB8, 0x0FD57A); // Game Over
         musicMap.put(0xBA, 0x0FD6C9); // Got an Emerald
         musicMap.put(0xBD, 0x0FD797); // Credits
-        musicMap.put(0x00, 0x0F0002); // Continue
+        musicMap.put(0xDC, 0x0F823B); // Underwater Timing
         // SFX Map (Populate with discovered offsets)
         // Potential candidate for SFX: 0xFFEAD (FM=1)
         sfxMap.put("RING", 0xFFEAD);
     }
 
     public SmpsData loadMusic(int musicId) {
-        Integer mapped = musicMap.get(musicId);
-        int offset = mapped != null ? mapped : resolveMusicOffset(musicId);
+        int offset = findMusicOffset(musicId);
         if (offset == -1) {
             LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map/flags.");
             return null;
         }
         // Sonic 2 music loaded at Z80 0x1380
         return loadSmps(offset, 0x1380);
+    }
+
+    /**
+     * Returns the ROM offset for a given music ID using the hard map first, then the flag table.
+     * Exposed for debug tools (sound test).
+     */
+    public int findMusicOffset(int musicId) {
+        Integer mapped = musicMap.get(musicId);
+        return mapped != null ? mapped : resolveMusicOffset(musicId);
     }
 
     public SmpsData loadSfx(String name) {

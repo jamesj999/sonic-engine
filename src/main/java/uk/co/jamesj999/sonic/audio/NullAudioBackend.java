@@ -20,6 +20,9 @@ public class NullAudioBackend implements AudioBackend {
     public void playSfx(String sfxName) {}
 
     @Override
+    public void stopPlayback() {}
+
+    @Override
     public void update() {}
 
     @Override
