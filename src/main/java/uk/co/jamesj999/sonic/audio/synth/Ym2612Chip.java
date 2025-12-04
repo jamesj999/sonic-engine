@@ -170,6 +170,11 @@ public class Ym2612Chip {
     private static final double DAC_RATE_DIV = 10.08;
     private static final boolean DAC_INTERPOLATE = true;
     private static final double DAC_GAIN = 256.0;
+    // Z80 driver timing (from DAC.ini)
+    private static final double Z80_CLOCK = 3579545.0;
+    private static final double DAC_BASE_CYCLES = 288.0;
+    private static final double DAC_LOOP_CYCLES = 26.0;
+    private static final double DAC_LOOP_SAMPLES = 2.0;
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
@@ -359,7 +364,10 @@ public class Ym2612Chip {
             this.currentDacSampleId = entry.sampleId;
             this.dacPos = 0;
             int rateByte = entry.rate & 0xFF;
-            double rateHz = DAC_BASE_RATE / (DAC_RATE_DIV * Math.max(1, rateByte));
+            // Sonic 2 Z80 DAC driver timing: cycles for two samples = base + loop*rateByte
+            double cyclesPerTwo = DAC_BASE_CYCLES + (DAC_LOOP_CYCLES * rateByte);
+            double cyclesPerSample = cyclesPerTwo / DAC_LOOP_SAMPLES;
+            double rateHz = Z80_CLOCK / cyclesPerSample;
             this.dacStep = Math.max(0.0001, rateHz / SAMPLE_RATE);
         }
     }
