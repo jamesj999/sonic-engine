@@ -169,7 +169,7 @@ public class Ym2612Chip {
     private static final double DAC_BASE_RATE = 275350.0;
     private static final double DAC_RATE_DIV = 10.08;
     private static final boolean DAC_INTERPOLATE = true;
-    private static final double DAC_GAIN = 128.0; // reduced to avoid clipping; adjust if DAC too quiet
+    private static final double DAC_GAIN = 64.0; // pull DAC down further to avoid clipping
     // Z80 driver timing (from DAC.ini)
     private static final double Z80_CLOCK = 3579545.0;
     private static final double DAC_BASE_CYCLES = 288.0;
@@ -750,8 +750,8 @@ public class Ym2612Chip {
 
             // mono buffer: average L/R
             double mono = (mixL + mixR) * 0.5;
-
-            int s = (int) Math.max(-32768, Math.min(32767, mono));
+            double soft = softClip(mono);
+            int s = (int) Math.max(-32768, Math.min(32767, soft));
             buffer[i] = (short) (buffer[i] + s);
             tickTimers(1);
         }
@@ -796,12 +796,21 @@ public class Ym2612Chip {
                 mixR = lpfStateR;
             }
 
-            int outL = (int) Math.max(-32768, Math.min(32767, mixL));
-            int outR = (int) Math.max(-32768, Math.min(32767, mixR));
+            double softL = softClip(mixL);
+            double softR = softClip(mixR);
+            int outL = (int) Math.max(-32768, Math.min(32767, softL));
+            int outR = (int) Math.max(-32768, Math.min(32767, softR));
             leftBuf[i] = (short) (leftBuf[i] + outL);
             rightBuf[i] = (short) (rightBuf[i] + outR);
             tickTimers(1);
         }
+    }
+
+    // Simple soft clipper to reduce harsh distortion when mix exceeds headroom.
+    private double softClip(double x) {
+        double norm = x / 32768.0;
+        double clipped = Math.tanh(norm);
+        return clipped * 32767.0;
     }
 
     private double renderDac() {
