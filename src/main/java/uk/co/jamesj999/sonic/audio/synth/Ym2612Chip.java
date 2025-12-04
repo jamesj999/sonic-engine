@@ -168,6 +168,8 @@ public class Ym2612Chip {
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / SAMPLE_RATE;
     private static final double DAC_BASE_RATE = 275350.0;
     private static final double DAC_RATE_DIV = 10.08;
+    private static final boolean DAC_INTERPOLATE = true;
+    private static final double DAC_GAIN = 256.0;
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
@@ -806,9 +808,13 @@ public class Ym2612Chip {
                 int idx = (int) dacPos;
                 double frac = dacPos - idx;
                 int s1 = (data[idx] & 0xFF) - 128;
-                int s2 = (idx + 1 < data.length) ? ((data[idx + 1] & 0xFF) - 128) : s1;
-                double lerp = s1 * (1.0 - frac) + s2 * frac;
-                sample = (int) Math.round(lerp); // already signed
+                if (DAC_INTERPOLATE) {
+                    int s2 = (idx + 1 < data.length) ? ((data[idx + 1] & 0xFF) - 128) : s1;
+                    double lerp = s1 * (1.0 - frac) + s2 * frac;
+                    sample = (int) Math.round(lerp);
+                } else {
+                    sample = s1;
+                }
                 dacPos += dacStep;
             }
         } else if (dacHasLatched) {
@@ -817,7 +823,7 @@ public class Ym2612Chip {
             return 0;
         }
         // Output linear signed sample (skip ladder-effect quantization for now to reduce distortion).
-        return sample * 256.0;
+        return sample * DAC_GAIN;
     }
 
     private double renderChannel(int chIdx, double lfoVal) {
