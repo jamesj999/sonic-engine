@@ -816,32 +816,8 @@ public class Ym2612Chip {
         } else {
             return 0;
         }
-        // YM2612 DAC has a characteristic "ladder effect" distortion due to 9-bit resolution
-        // stretching over the output.
-        // We simulate the 9-bit truncation/quantization.
-        // Original 8-bit sample is mapped to 9-bit DAC value.
-        // It's basically an 8-bit value (0-255) from register, but internal DAC is 9-bit.
-        // The effective output step is larger.
-
-        // Simulating the 9-bit quantization:
-        // sample is -128 to 127.
-        // Scale to 9-bit range (-256 to 254 roughly).
-
-        // The "Ladder Effect" describes the non-linearity of the YM2612 DAC.
-        // It's not just a linear quantization.
-        // Without a full measurements table, we model the uneven steps by
-        // introducing a small deviation based on the sample value.
-
-        int dac9 = (sample << 1);
-
-        // Introduce non-linearity: odd 8-bit samples produce a slightly compressed step
-        // when mapped to 9-bit, simulating the ladder effect.
-        if ((sample & 0x1) != 0) {
-            dac9 -= 1; // Flatten the step for odd source samples
-        }
-
-        // Scale to output (i14 equivalent)
-        return dac9 << 5;
+        // Output linear signed sample (skip ladder-effect quantization for now to reduce distortion).
+        return sample * 256.0;
     }
 
     private double renderChannel(int chIdx, double lfoVal) {
