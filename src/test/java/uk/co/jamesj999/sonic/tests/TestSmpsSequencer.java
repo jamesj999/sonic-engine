@@ -141,4 +141,43 @@ public class TestSmpsSequencer {
         assertEquals("Second note should not play within the buffer when the tempo accumulator resets", 1, keyOnCount);
         assertEquals("Accumulator reset should delay the second note past the buffer", -1, secondNoteIdx);
     }
+
+    @Test
+    public void testCallAndReturnWithF9() {
+        byte[] data = new byte[48];
+        data[2] = 2;            // 1 FM channel (slot after DAC)
+        data[4] = 0x01;         // Dividing timing
+        data[5] = (byte) 0x80;  // Tempo
+
+        // FM track pointer -> 0x14
+        data[0x0A] = 0x14;
+        data[0x0B] = 0x00;
+
+        // Main track script at 0x14:
+        int ptrTarget = 0x1E;
+        data[0x14] = (byte) 0xF8;           // Call
+        data[0x15] = (byte) (ptrTarget & 0xFF);
+        data[0x16] = (byte) ((ptrTarget >> 8) & 0xFF);
+        data[0x17] = (byte) 0x82;           // Note after return
+        data[0x18] = (byte) 0x01;           // Duration after return
+        data[0x19] = (byte) 0xF2;           // Stop after main note
+
+        // Call target at 0x1E
+        data[0x1E] = (byte) 0x81;           // Note inside subroutine
+        data[0x1F] = 0x01;                  // Duration
+        data[0x20] = (byte) 0xF9;           // Return
+
+        SmpsData smps = new SmpsData(data);
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        short[] buf = new short[12000];
+        seq.read(buf); // should execute both notes
+
+        String logStr = String.join(" | ", synth.log);
+        long keyOnCount = synth.log.stream()
+                .filter(s -> s.startsWith("FM") && s.contains("R28") && s.contains("VF"))
+                .count();
+        assertEquals("Call/return should allow both notes to play. Log: " + logStr, 2, keyOnCount);
+    }
 }

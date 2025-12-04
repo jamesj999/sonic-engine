@@ -291,9 +291,8 @@ public class SmpsSequencer implements AudioStream {
             case 0xF8: // Call (2 byte param)
                 handleCall(t);
                 break;
-            case 0xF9: // Sound off / track end
-                t.active = false;
-                stopNote(t);
+            case 0xF9: // Return from subroutine (S2: paired with F8 call)
+                handleReturn(t);
                 break;
             case 0xF0: // Modulation (4 byte param)
                 handleModulation(t);
