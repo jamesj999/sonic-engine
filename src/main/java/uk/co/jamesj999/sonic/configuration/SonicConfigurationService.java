@@ -16,16 +16,28 @@ public class SonicConfigurationService {
 	private SonicConfigurationService() {
 		ObjectMapper mapper = new ObjectMapper();
 		TypeReference<Map<String, Object>> type = new TypeReference<>(){};
-		try (InputStream is = getClass().getResourceAsStream("/config.json")) {
-			if (is != null) {
-				config = mapper.readValue(is, type);
-			} else {
-				System.err.println("Could not find config.json, using defaults.");
+
+		java.io.File file = new java.io.File("config.json");
+		if (file.exists()) {
+			try {
+				config = mapper.readValue(file, type);
+			} catch (IOException e) {
+				System.err.println("Failed to load config.json from working directory: " + e.getMessage());
+			}
+		}
+
+		if (config == null) {
+			try (InputStream is = getClass().getResourceAsStream("/config.json")) {
+				if (is != null) {
+					config = mapper.readValue(is, type);
+				} else {
+					System.err.println("Could not find config.json, using defaults.");
+					config = new HashMap<>();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
 				config = new HashMap<>();
 			}
-		} catch (IOException e) {
-			e.printStackTrace();
-			config = new HashMap<>();
 		}
 	}
 
@@ -88,11 +100,27 @@ public class SonicConfigurationService {
         }
     }
 
-	private Object getConfigValue(SonicConfiguration sonicConfiguration) {
+	public Object getConfigValue(SonicConfiguration sonicConfiguration) {
 		if (config != null && config.containsKey(sonicConfiguration.name())) {
 			return config.get(sonicConfiguration.name());
 		}
 		return null;
+	}
+
+	public void setConfigValue(SonicConfiguration key, Object value) {
+		if (config == null) {
+			config = new HashMap<>();
+		}
+		config.put(key.name(), value);
+	}
+
+	public void saveConfig() {
+		ObjectMapper mapper = new ObjectMapper();
+		try {
+			mapper.writerWithDefaultPrettyPrinter().writeValue(new java.io.File("config.json"), config);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public synchronized static SonicConfigurationService getInstance() {
