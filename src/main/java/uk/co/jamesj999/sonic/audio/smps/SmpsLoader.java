@@ -175,21 +175,30 @@ public class SmpsLoader {
         Map<Integer, DacData.DacEntry> mapping = new HashMap<>();
 
         try {
-            // Pointers at 0xECF7C
-            int ptrTable = 0xECF7C;
             int bankStart = 0xE0000;
 
-            // Load Samples 81-91
-            for (int i = 0; i < 20; i++) {
-                int entryAddr = ptrTable + (i * 4);
-                // Little Endian
-                int p1 = rom.readByte(entryAddr) & 0xFF;
-                int p2 = rom.readByte(entryAddr + 1) & 0xFF;
+            // 1. Load Samples from Pointer Table (81-87)
+            // Pointers at 0xECF7C. Format: 4 bytes (Ptr LE, Len LE). If next byte is FF, skip it.
+            int ptrTable = 0xECF7C;
+            int offset = ptrTable;
+
+            for (int i = 0; i < 7; i++) {
+                // Read 4 bytes: Ptr(2), Len(2)
+                int p1 = rom.readByte(offset) & 0xFF;
+                int p2 = rom.readByte(offset + 1) & 0xFF;
                 int ptr = p1 | (p2 << 8);
 
-                int l1 = rom.readByte(entryAddr + 2) & 0xFF;
-                int l2 = rom.readByte(entryAddr + 3) & 0xFF;
+                int l1 = rom.readByte(offset + 2) & 0xFF;
+                int l2 = rom.readByte(offset + 3) & 0xFF;
                 int len = l1 | (l2 << 8);
+
+                offset += 4;
+
+                // Check for skip byte
+                int nextByte = rom.readByte(offset) & 0xFF;
+                if (nextByte == 0xFF) {
+                    offset++;
+                }
 
                 if (ptr == 0 || len == 0) continue;
 
@@ -198,19 +207,31 @@ public class SmpsLoader {
                 byte[] compressed = rom.readBytes(romAddr, len);
                 byte[] pcm = dcmDecoder.decode(compressed);
 
-                // Sample IDs correspond to notes 0x81 + i
+                // Sample IDs correspond to 0x81 + i
                 samples.put(0x81 + i, pcm);
             }
 
-            // Master List at 0xECF9C
+            // 2. Load Mapping from Master List (81-91)
+            // Starts at 0xECF9C. Format: 2 bytes (SampleID, Rate). If next byte is FF, skip it.
             int mapAddr = 0xECF9C;
-            for (int i = 0; i < 20; i++) {
-                int noteId = 0x81 + i;
-                int sampleId = rom.readByte(mapAddr + i * 2) & 0xFF;
-                int rate = rom.readByte(mapAddr + i * 2 + 1) & 0xFF;
+            offset = mapAddr;
+
+            // Sonic 2 Master List covers 81-91 (17 entries)
+            for (int i = 0; i < 17; i++) {
+                int sampleId = rom.readByte(offset) & 0xFF;
+                int rate = rom.readByte(offset + 1) & 0xFF;
+
+                offset += 2;
+
+                // Check for skip byte
+                int nextByte = rom.readByte(offset) & 0xFF;
+                if (nextByte == 0xFF) {
+                    offset++;
+                }
 
                 if (sampleId == 0xFF) continue;
 
+                int noteId = 0x81 + i;
                 mapping.put(noteId, new DacData.DacEntry(sampleId, rate));
             }
 
