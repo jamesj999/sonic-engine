@@ -42,9 +42,9 @@ public class SmpsData {
             this.tempo = data[5] & 0xFF;
             this.dacPointer = read16(data, 6);
 
-            // SMPS header layout (Sonic 2 final): DAC ptr @ 6, then FM entries (ptr + key + vol) starting at 0x0A,
+            // SMPS header layout (Sonic 2 final): DAC ptr @ 6, then FM entries (ptr + key + vol) starting at 0x08,
             // followed by PSG entries (ptr + key + vol).
-            int fmStart = 0x0A;
+            int fmStart = 0x08;
             int[] fmPtrs = new int[channels];
             int[] fmKeys = new int[channels];
             int[] fmVols = new int[channels];
