@@ -711,8 +711,11 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(0x80 | (ch << 5) | (type << 4) | data);
                 // Data: 00DDDDDD
                 synth.writePsg((reg >> 4) & 0x3F);
+            }
 
-                // Volume (respect override/atten)
+            // Volume (respect override/atten) for all PSG channels (including noise)
+            if (t.channelId <= 3) {
+                int ch = t.channelId;
                 int vol = t.psgVolumeOverride >= 0 ? t.psgVolumeOverride : 0;
                 vol = Math.min(0x0F, Math.max(0, vol + t.volumeOffset));
                 synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
@@ -728,7 +731,7 @@ public class SmpsSequencer implements AudioStream {
         } else if (t.type == TrackType.DAC) {
             synth.stopDac();
         } else {
-            if (t.channelId < 3) {
+            if (t.channelId <= 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
             }
         }
