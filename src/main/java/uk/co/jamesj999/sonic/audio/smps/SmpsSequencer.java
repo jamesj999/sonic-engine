@@ -554,20 +554,14 @@ public class SmpsSequencer implements AudioStream {
         if (t.pos < data.length) {
             int newDiv = data[t.pos++] & 0xFF;
             if (newDiv == 0) newDiv = 256; // Treat 0 as 256 ticks (driver behaviour)
-            int elapsed = t.scaledDuration - t.duration;
             t.dividingTiming = newDiv;
-            int newScaled = scaleDuration(t, t.rawDuration);
-            int newRemaining = newScaled - elapsed;
-            if (newRemaining < 0) newRemaining = 0;
-            t.scaledDuration = newScaled;
-            t.duration = newRemaining;
         }
     }
 
     private void updateDividingTiming(int newDividingTiming) {
         dividingTiming = newDividingTiming;
         for (Track track : tracks) {
-            if (!track.active || track.scaledDuration == 0) {
+            if (!track.active || track.duration == 0) {
                 continue;
             }
             track.dividingTiming = newDividingTiming;
