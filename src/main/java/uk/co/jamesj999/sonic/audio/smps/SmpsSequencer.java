@@ -607,31 +607,25 @@ public class SmpsSequencer implements AudioStream {
         }
 
         // Determine voice stride and length based on SMPS format (S1 vs S2)
+        // Both now return 25 as standard stride.
         int voiceLen = smpsData.getFmVoiceLength();
-        int offset;
-
-        if (smpsData.isLittleEndian()) {
-            // Sonic 2: pointer table (2 bytes per entry)
-            int ptrOffset = voicePtr + (voiceId * 2);
-            if (ptrOffset < 0 || ptrOffset + 1 >= data.length) {
-                return;
-            }
-            int p1 = data[ptrOffset] & 0xFF;
-            int p2 = data[ptrOffset + 1] & 0xFF;
-            int ptr = p1 | (p2 << 8);
-            offset = relocate(ptr, z80Base);
-            // In pointer mode, the voice length is the actual data size.
-            // S2 voices are typically ~21-25 bytes but might not be contiguous.
-            // We use 25 as a safe read size.
-            voiceLen = 25;
-        } else {
-            // Sonic 1: contiguous array
-            offset = voicePtr + (voiceId * voiceLen);
-        }
+        int offset = voicePtr + (voiceId * voiceLen);
 
         if (offset >= 0 && offset + voiceLen <= data.length) {
             byte[] voice = new byte[voiceLen];
             System.arraycopy(data, offset, voice, 0, voiceLen);
+
+            // For Sonic 2 (Little Endian), the voice data is typically 21 bytes (Header + Regs)
+            // but stored with 25-byte stride (padding at end).
+            // However, it DOES NOT contain Total Level (TL) bytes at index 5.
+            // Ym2612Chip.setInstrument() detects TL presence by checking if length >= 25.
+            // Since we read 25 bytes, we must truncate it to 21 bytes for S2 to force the "No TL" mapping.
+            if (smpsData.isLittleEndian()) {
+                byte[] s2Voice = new byte[21];
+                System.arraycopy(voice, 0, s2Voice, 0, 21);
+                voice = s2Voice;
+            }
+
             t.voiceData = voice;
             t.voiceId = voiceId;
             refreshInstrument(t);
