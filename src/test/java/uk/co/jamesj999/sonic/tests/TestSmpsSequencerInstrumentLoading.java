@@ -41,8 +41,9 @@ public class TestSmpsSequencerInstrumentLoading {
         byte[] data = new byte[100];
 
         // Voice Ptr at 40 (0x28)
-        data[0] = 0x28;
-        data[1] = 0x00;
+        // Big Endian: 00 28
+        data[0] = 0x00;
+        data[1] = 0x28;
 
         data[2] = 1; // 1 FM Channel
         data[3] = 0;
@@ -85,8 +86,8 @@ public class TestSmpsSequencerInstrumentLoading {
         seq.read(buf); // Should trigger tick and process commands
 
         assertTrue("setInstrument should be called", synth.setInstrumentCalled);
-        // Track 0 maps to HW Channel 5 (see getHwChannel: case 0 -> 5)
-        assertEquals("Channel ID should be 5", 5, synth.lastChannelId);
+        // Track 0 maps to HW Channel 0
+        assertEquals("Channel ID should be 0", 0, synth.lastChannelId);
         assertArrayEquals("Voice data should match", expectedVoice, synth.lastVoice);
     }
 }
