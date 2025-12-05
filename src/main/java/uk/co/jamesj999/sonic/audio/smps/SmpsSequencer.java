@@ -318,8 +318,9 @@ public class SmpsSequencer implements AudioStream {
             case 0xE6: // Channel volume attenuation
                 setVolumeOffset(t);
                 break;
-            case 0xE7: // Tie next note (prevent attack)
+            case 0xE7: // Tie next note (prevent attack) - consumes 1 param (usually 00 or duration-like)
                 t.tieNext = true;
+                if (t.pos < data.length) t.pos++;
                 break;
             case 0xE8: // Note fill (release early)
                 setFill(t);
@@ -383,6 +384,7 @@ public class SmpsSequencer implements AudioStream {
             case 0xE2: // Set comm / detune variant
             case 0xE5: // Tick multiplier (current track)
             case 0xE6: // Channel volume offset
+            case 0xE7: // Hold (Tie)
             case 0xE8: // Note fill
             case 0xE9: // Key displacement
             case 0xEA: // Tempo weight
@@ -406,7 +408,6 @@ public class SmpsSequencer implements AudioStream {
             // 0-byte params
             case 0xE3: // Return
             case 0xE4: // Fade in
-            case 0xE7: // Hold
             case 0xF1: // Mod on
             case 0xF2: // Stop
             case 0xF4: // Mod off
