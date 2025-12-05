@@ -180,4 +180,67 @@ public class TestSmpsSequencer {
                 .count();
         assertEquals("Call/return should allow both notes to play. Log: " + logStr, 2, keyOnCount);
     }
+
+    @Test
+    public void testLoopCommandS2() {
+        byte[] data = new byte[256];
+        data[2] = 1; // Channels = 1 (FM)
+        data[4] = 1; // Div = 1
+        data[5] = 100; // Tempo
+
+        // FM1 Entry at 0xA
+        // Ptr = 0x0020
+        data[0xA] = 0x20;
+        data[0xB] = 0x00;
+
+        int pos = 0x20;
+
+        // 1. Note C4 (0x81).
+        data[pos++] = (byte) 0x81;
+        data[pos++] = 0x10; // Duration 16
+
+        // 2. Note D4 (0x83).
+        data[pos++] = (byte) 0x83;
+        data[pos++] = 0x10; // Duration 16
+
+        // 3. Loop (F7) back to 0x20 (C4).
+        // Format: F7 [Index] [Count] [PtrLSB] [PtrMSB]
+        // Count 3 (for 2 jumps, 3 plays). Index 0.
+        data[pos++] = (byte) 0xF7;
+        data[pos++] = 0x00; // Index
+        data[pos++] = 0x03; // Count
+        data[pos++] = 0x20; // Ptr LSB
+        data[pos++] = 0x00; // Ptr MSB
+
+        // 4. Stop
+        data[pos++] = (byte) 0xF2;
+
+        SmpsData smps = new SmpsData(data, 0, true); // Force Little Endian
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        short[] buf = new short[735]; // ~1 frame
+
+        int c4Count = 0;
+        int d4Count = 0;
+        int lastNote = -1;
+
+        for (int i = 0; i < 300; i++) {
+            seq.read(buf);
+            SmpsSequencer.DebugState state = seq.debugState();
+            if (!state.tracks.isEmpty()) {
+                SmpsSequencer.DebugTrack t = state.tracks.get(0);
+                if (t.active) {
+                    if (t.note != lastNote) {
+                        if (t.note == 0x81) c4Count++;
+                        if (t.note == 0x83) d4Count++;
+                        lastNote = t.note;
+                    }
+                }
+            }
+        }
+
+        assertEquals("Should play C4 3 times", 3, c4Count);
+        assertEquals("Should play D4 3 times", 3, d4Count);
+    }
 }
