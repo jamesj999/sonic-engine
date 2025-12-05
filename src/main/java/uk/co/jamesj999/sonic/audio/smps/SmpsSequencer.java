@@ -613,13 +613,27 @@ public class SmpsSequencer implements AudioStream {
         if (voicePtr < 0 || voicePtr >= data.length) {
             return;
         }
+
         // Determine voice stride and length based on SMPS format (S1 vs S2)
+        // Both now return 25 as standard stride.
         int voiceLen = smpsData.getFmVoiceLength();
         int offset = voicePtr + (voiceId * voiceLen);
 
         if (offset >= 0 && offset + voiceLen <= data.length) {
             byte[] voice = new byte[voiceLen];
             System.arraycopy(data, offset, voice, 0, voiceLen);
+
+            // For Sonic 2 (Little Endian), the voice data is typically 21 bytes (Header + Regs)
+            // but stored with 25-byte stride (padding at end).
+            // However, it DOES NOT contain Total Level (TL) bytes at index 5.
+            // Ym2612Chip.setInstrument() detects TL presence by checking if length >= 25.
+            // Since we read 25 bytes, we must truncate it to 21 bytes for S2 to force the "No TL" mapping.
+            if (smpsData.isLittleEndian()) {
+                byte[] s2Voice = new byte[21];
+                System.arraycopy(voice, 0, s2Voice, 0, 21);
+                voice = s2Voice;
+            }
+
             t.voiceData = voice;
             t.voiceId = voiceId;
             refreshInstrument(t);

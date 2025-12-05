@@ -155,13 +155,17 @@ public class SmpsData {
         return z80StartAddress;
     }
 
+    public boolean isLittleEndian() {
+        return littleEndian;
+    }
+
     /**
      * Returns the length (and stride) of FM voices.
      * Sonic 1 (Big Endian) uses 25 bytes.
-     * Sonic 2 (Little Endian) uses 19 bytes.
+     * Sonic 2 (Little Endian) also uses 25 bytes (21 used + 4 padding), despite memory suggesting 19.
      */
     public int getFmVoiceLength() {
-        return littleEndian ? 19 : 25;
+        return 25;
     }
 
     private int read16(byte[] bytes, int idx) {
@@ -177,6 +181,12 @@ public class SmpsData {
      */
     private boolean detectLittleEndian() {
         try {
+            // Check for system property override (for tests/tools without full config service)
+            String sysProp = System.getProperty("sonic.rom.filename");
+            if (sysProp != null) {
+                if (sysProp.toLowerCase().contains("sonic 1")) return false;
+            }
+
             String romName = uk.co.jamesj999.sonic.configuration.SonicConfigurationService
                     .getInstance()
                     .getString(uk.co.jamesj999.sonic.configuration.SonicConfiguration.ROM_FILENAME)
@@ -184,7 +194,7 @@ public class SmpsData {
             if (romName.contains("sonic the hedgehog 1") || romName.contains("sonic 1")) {
                 return false;
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
             // Default below
         }
         return true;

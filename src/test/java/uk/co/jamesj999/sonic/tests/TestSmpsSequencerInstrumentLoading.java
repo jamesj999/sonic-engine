@@ -48,12 +48,19 @@ public class TestSmpsSequencerInstrumentLoading {
         data[3] = 0;
         data[5] = (byte) 0x80; // Main tempo
 
-        // Track 1 Ptr at 10 (0x0A)
-        data[6] = 0x0A;
+        // DAC Pointer at 6-7 (should be 0 for this test or pointing somewhere else)
+        data[6] = 0x00;
         data[7] = 0x00;
 
-        // Track 1 Data at 10
-        int t = 10;
+        // FM Track Ptr at 0x0A (10).
+        // Since forceLittleEndian is false (Big Endian), 16-bit read is (b1 << 8) | b2.
+        // We want pointer to be 16 (0x0010).
+        data[10] = 0x00;
+        data[11] = 0x10;
+
+        // Track 1 Data at 16 (0x10)
+        int t = 16;
+
         data[t++] = (byte) 0xEF; // Flag Set Voice
         data[t++] = 0x00;        // Voice ID 0
         data[t++] = (byte) 0x81; // Note C (to advance time)

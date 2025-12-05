@@ -433,7 +433,9 @@ public class Ym2612Chip {
         Channel ch = channels[chIdx];
 
         boolean hasTl = voice.length >= 25;
-        int expectedLen = hasTl ? 25 : 19;
+        // Sonic 2 voices might be 21 bytes (1 header + 20 regs) but lack TL.
+        // We ensure we read up to index 20, so we need at least 21 bytes.
+        int expectedLen = hasTl ? 25 : 21;
         if (voice.length < expectedLen) {
             byte[] padded = new byte[expectedLen];
             System.arraycopy(voice, 0, padded, 0, voice.length);
