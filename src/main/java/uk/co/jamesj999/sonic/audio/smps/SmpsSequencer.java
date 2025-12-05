@@ -561,18 +561,7 @@ public class SmpsSequencer implements AudioStream {
     private void updateDividingTiming(int newDividingTiming) {
         dividingTiming = newDividingTiming;
         for (Track track : tracks) {
-            if (!track.active || track.duration == 0) {
-                continue;
-            }
             track.dividingTiming = newDividingTiming;
-            int elapsed = track.scaledDuration - track.duration;
-            int newScaledDuration = scaleDuration(track, track.rawDuration);
-            int newRemaining = newScaledDuration - elapsed;
-            if (newRemaining < 0) {
-                newRemaining = 0;
-            }
-            track.scaledDuration = newScaledDuration;
-            track.duration = newRemaining;
         }
     }
 
