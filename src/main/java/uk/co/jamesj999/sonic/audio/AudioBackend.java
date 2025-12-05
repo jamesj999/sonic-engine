@@ -28,4 +28,9 @@ public interface AudioBackend {
 
     void update();
     void destroy();
+
+    default void toggleMute(ChannelType type, int channelId) {}
+    default void toggleSolo(ChannelType type, int channelId) {}
+    default boolean isMuted(ChannelType type, int channelId) { return false; }
+    default boolean isSoloed(ChannelType type, int channelId) { return false; }
 }

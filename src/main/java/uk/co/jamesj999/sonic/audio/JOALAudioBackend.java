@@ -43,6 +43,10 @@ public class JOALAudioBackend implements AudioBackend {
     private final Map<Integer, String> musicFallback = new HashMap<>();
     private final Map<String, String> sfxFallback = new HashMap<>();
 
+    // Mute/Solo state
+    private final Set<String> userMutes = new HashSet<>();
+    private final Set<String> solos = new HashSet<>();
+
     public JOALAudioBackend() {
         // Initialize fallback mappings
         // SFX
@@ -111,12 +115,15 @@ public class JOALAudioBackend implements AudioBackend {
 
         currentSmps = new SmpsSequencer(data, dacData);
         currentStream = currentSmps;
+        updateSynthMutes(); // Apply current mutes to new sequencer
         startStream();
     }
 
     @Override
     public void playSfxSmps(SmpsData data, DacData dacData) {
         this.sfxStream = new SmpsSequencer(data, dacData);
+        // SFX stream doesn't support muting logic yet, or maybe it should?
+        // For now, only applying to main music sequencer.
         int[] queued = new int[1];
         al.alGetSourcei(musicSource, AL.AL_BUFFERS_QUEUED, queued, 0);
         if (queued[0] == 0) {
@@ -124,6 +131,74 @@ public class JOALAudioBackend implements AudioBackend {
             al.alSourcei(musicSource, AL.AL_BUFFER, 0);
             startStream();
         }
+    }
+
+    @Override
+    public void toggleMute(ChannelType type, int channelId) {
+        String key = type.name() + "-" + channelId;
+        if (userMutes.contains(key)) {
+            userMutes.remove(key);
+        } else {
+            userMutes.add(key);
+        }
+        updateSynthMutes();
+    }
+
+    @Override
+    public void toggleSolo(ChannelType type, int channelId) {
+        String key = type.name() + "-" + channelId;
+        if (solos.contains(key)) {
+            solos.remove(key);
+        } else {
+            solos.add(key);
+        }
+        updateSynthMutes();
+    }
+
+    @Override
+    public boolean isMuted(ChannelType type, int channelId) {
+        String key = type.name() + "-" + channelId;
+        return userMutes.contains(key);
+    }
+
+    @Override
+    public boolean isSoloed(ChannelType type, int channelId) {
+        String key = type.name() + "-" + channelId;
+        return solos.contains(key);
+    }
+
+    private void updateSynthMutes() {
+        if (currentSmps == null) return;
+        var synth = currentSmps.getSynthesizer();
+        if (synth == null) return;
+
+        boolean globalSolo = !solos.isEmpty();
+
+        // Iterate all potential channels
+        // FM 0-5
+        for (int i = 0; i < 6; i++) {
+            boolean audible = isAudible(ChannelType.FM, i, globalSolo);
+            synth.setMute(ChannelType.FM, i, !audible);
+        }
+        // PSG 0-3
+        for (int i = 0; i < 4; i++) {
+            boolean audible = isAudible(ChannelType.PSG, i, globalSolo);
+            synth.setMute(ChannelType.PSG, i, !audible);
+        }
+        // DAC 0 (assuming DAC is ID 0 or treated as such)
+        boolean dacAudible = isAudible(ChannelType.DAC, 0, globalSolo);
+        synth.setMute(ChannelType.DAC, 0, !dacAudible);
+    }
+
+    private boolean isAudible(ChannelType type, int id, boolean globalSolo) {
+        String key = type.name() + "-" + id;
+        boolean explicitlyMuted = userMutes.contains(key);
+        if (explicitlyMuted) return false;
+
+        if (globalSolo) {
+            return solos.contains(key);
+        }
+        return true;
     }
 
     private void startStream() {

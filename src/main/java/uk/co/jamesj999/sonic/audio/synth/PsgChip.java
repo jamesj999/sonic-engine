@@ -22,6 +22,7 @@ public class PsgChip {
     private double prevInR;
     private int latch = 0;
     private int lfsr = 0x8000; // 16-bit noise register
+    private final boolean[] muted = new boolean[4];
 
     static {
         // Approximate SN76489 2 dB steps (15 -> silence)
@@ -36,6 +37,12 @@ public class PsgChip {
             registers[i] = 0xF; // Silence
         }
         tonePeriod[0] = tonePeriod[1] = tonePeriod[2] = 1;
+    }
+
+    public void setChannelMute(int channelId, boolean mute) {
+        if (channelId >= 0 && channelId < 4) {
+            muted[channelId] = mute;
+        }
     }
 
     public void write(int val) {
@@ -93,7 +100,7 @@ public class PsgChip {
             // Tone Channels
             for (int ch = 0; ch < 3; ch++) {
                 int vol = registers[ch * 2 + 1] & 0x0F;
-                if (vol == 0x0F) continue;
+                if (vol == 0x0F) continue; // Hardware silence check
 
                 double period = Math.max(1, tonePeriod[ch]) * 2.0;
                 counters[ch] -= STEP;
@@ -101,6 +108,9 @@ public class PsgChip {
                     counters[ch] += period;
                     outputs[ch] = !outputs[ch];
                 }
+
+                // If muted by user/solo, we still tick counters but zero the output
+                if (muted[ch]) continue;
 
                 double amp = VOLUME_TABLE[vol];
                 double voice = outputs[ch] ? amp : -amp;
@@ -127,10 +137,14 @@ public class PsgChip {
                     lfsr = (lfsr >> 1) | (tap << 15);
                     outputs[3] = (lfsr & 1) == 1;
                 }
-                double amp = VOLUME_TABLE[noiseVol];
-                double voice = outputs[3] ? amp : -amp;
-                sampleL += voice;
-                sampleR += voice;
+
+                // Check mute after ticking
+                if (!muted[3]) {
+                    double amp = VOLUME_TABLE[noiseVol];
+                    double voice = outputs[3] ? amp : -amp;
+                    sampleL += voice;
+                    sampleR += voice;
+                }
             }
 
             // Apply high-pass to remove DC then optional LPF for smoothing

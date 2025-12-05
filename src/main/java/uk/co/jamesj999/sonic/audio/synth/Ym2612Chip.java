@@ -212,6 +212,7 @@ public class Ym2612Chip {
     private double dacStep = 1.0;
     private boolean dacEnabled;
     private boolean dacHasLatched;
+    private boolean dacMuted;
     private int status;
     private double timerACount;
     private double timerBCount;
@@ -257,6 +258,7 @@ public class Ym2612Chip {
         int fNum;
         int block;
         boolean specialMode;
+        boolean muted;
         final int[] slotFnum = new int[4];
         final int[] slotBlock = new int[4];
 
@@ -287,6 +289,16 @@ public class Ym2612Chip {
             channels[i] = new Channel();
         }
         reset();
+    }
+
+    public void setChannelMute(int channelId, boolean mute) {
+        if (channelId >= 0 && channelId < 6) {
+            channels[channelId].muted = mute;
+        }
+    }
+
+    public void setDacMute(boolean mute) {
+        this.dacMuted = mute;
     }
 
     public void reset() {
@@ -320,6 +332,11 @@ public class Ym2612Chip {
             ch.feedbackHist1 = 0;
             ch.feedbackHist2 = 0;
             ch.specialMode = false;
+            // Note: Mute state is preserved or should it be reset?
+            // The requirement says "persist between songs". Reset here usually happens on init.
+            // But if VirtualSynthesizer is recreated, we lose state unless passed.
+            // If we reuse VirtualSynthesizer, reset() might be called.
+            // Let's assume reset() does NOT clear mutes because they are user preferences.
             for (int i = 0; i < 4; i++) {
                 ch.slotFnum[i] = 0;
                 ch.slotBlock[i] = 0;
@@ -369,6 +386,7 @@ public class Ym2612Chip {
     }
 
     public void playDac(int note) {
+        if (dacMuted) return; // Prevent playback start if muted
         if (dacData == null) return;
         DacData.DacEntry entry = dacData.mapping.get(note);
         if (entry != null) {
@@ -725,12 +743,16 @@ public class Ym2612Chip {
             Channel dacCh = channels[5];
             boolean dacLeft = (dacCh.pan & 0x2) != 0;
             boolean dacRight = (dacCh.pan & 0x1) != 0;
-            if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
-            if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            if (!dacMuted) {
+                if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
+                if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            }
 
             for (int ch = 0; ch < 6; ch++) {
                 if (ch == 5 && dacEnabled) continue;
                 double out = renderChannel(ch, lfoVal);
+                if (channels[ch].muted) continue; // Skip muted channels
+
                 boolean left = (channels[ch].pan & 0x2) != 0;
                 boolean right = (channels[ch].pan & 0x1) != 0;
                 if (left) mixL += out;
@@ -764,12 +786,16 @@ public class Ym2612Chip {
             Channel dacCh = channels[5];
             boolean dacLeft = (dacCh.pan & 0x2) != 0;
             boolean dacRight = (dacCh.pan & 0x1) != 0;
-            if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
-            if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            if (!dacMuted) {
+                if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
+                if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            }
 
             for (int ch = 0; ch < 6; ch++) {
                 if (ch == 5 && dacEnabled) continue;
                 double out = renderChannel(ch, lfoVal);
+                if (channels[ch].muted) continue;
+
                 boolean left = (channels[ch].pan & 0x2) != 0;
                 boolean right = (channels[ch].pan & 0x1) != 0;
                 if (left) mixL += out;

@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.audio.debug;
 
 import uk.co.jamesj999.sonic.audio.AudioBackend;
+import uk.co.jamesj999.sonic.audio.ChannelType;
 import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.audio.NullAudioBackend;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
@@ -15,6 +16,7 @@ import javax.swing.JLabel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Font;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -243,6 +245,7 @@ public final class SoundTestApp {
             frame.addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyPressed(KeyEvent e) {
+                    boolean shift = e.isShiftDown();
                     switch (e.getKeyCode()) {
                         case KeyEvent.VK_UP:
                             songId = getNextValidSong(songId);
@@ -266,6 +269,18 @@ public final class SoundTestApp {
                         case KeyEvent.VK_ESCAPE:
                             close();
                             break;
+                        // Channel muting/soloing
+                        case KeyEvent.VK_F1: handleChannelKey(ChannelType.FM, 0, shift); break;
+                        case KeyEvent.VK_F2: handleChannelKey(ChannelType.FM, 1, shift); break;
+                        case KeyEvent.VK_F3: handleChannelKey(ChannelType.FM, 2, shift); break;
+                        case KeyEvent.VK_F4: handleChannelKey(ChannelType.FM, 3, shift); break;
+                        case KeyEvent.VK_F5: handleChannelKey(ChannelType.FM, 4, shift); break;
+                        case KeyEvent.VK_F6: handleChannelKey(ChannelType.FM, 5, shift); break;
+                        case KeyEvent.VK_1: handleChannelKey(ChannelType.PSG, 0, shift); break;
+                        case KeyEvent.VK_2: handleChannelKey(ChannelType.PSG, 1, shift); break;
+                        case KeyEvent.VK_3: handleChannelKey(ChannelType.PSG, 2, shift); break;
+                        case KeyEvent.VK_4: handleChannelKey(ChannelType.PSG, 3, shift); break;
+                        case KeyEvent.VK_D: handleChannelKey(ChannelType.DAC, 0, shift); break;
                         default:
                             break;
                     }
@@ -282,13 +297,22 @@ public final class SoundTestApp {
                     close();
                 }
             });
-            frame.setSize(800, 250);
+            frame.setSize(800, 350); // Increased height to accommodate more channels
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
             updateLabel();
             playCurrent();
             refreshTimer = new Timer(200, e -> updateDetails());
             refreshTimer.start();
+        }
+
+        private void handleChannelKey(ChannelType type, int channelId, boolean shift) {
+            if (shift) {
+                backend.toggleSolo(type, channelId);
+            } else {
+                backend.toggleMute(type, channelId);
+            }
+            updateDetails();
         }
 
         void awaitClose() throws InterruptedException {
@@ -338,42 +362,100 @@ public final class SoundTestApp {
             if (backend instanceof uk.co.jamesj999.sonic.audio.JOALAudioBackend joal) {
                 var dbg = joal.getDebugState();
                 Set<String> touched = new HashSet<>();
+
+                // Keep track of which channels we expect to see
+                // FM 0-5, PSG 0-3, DAC 0
+                // We will iterate over known channels to display even if not in SMPS (so we can show mute status)
+                // But SMPS debug only shows active tracks.
+                // We should union the SMPS tracks with our knowledge of channels.
+
+                heading.setText(dbg != null ? String.format("Channels (Tempo %d Div %d)", dbg.tempoWeight, dbg.dividingTiming) : "Channels");
+
+                // Map of SMPS tracks for quick lookup
+                Map<String, uk.co.jamesj999.sonic.audio.smps.SmpsSequencer.DebugTrack> smpsTracks = new HashMap<>();
                 if (dbg != null) {
-                    heading.setText(String.format("Channels (Tempo %d Div %d)", dbg.tempoWeight, dbg.dividingTiming));
                     for (var t : dbg.tracks) {
                         String key = t.type + "-" + t.channelId;
-                        touched.add(key);
-                        JLabel l = trackLabels.computeIfAbsent(key, k -> {
-                            JLabel nl = new JLabel();
-                            nl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-                            nl.setAlignmentX(JLabel.LEFT_ALIGNMENT);
-                            tracksPanel.add(nl);
-                            tracksPanel.revalidate();
-                            return nl;
-                        });
-                        String txt = String.format("%-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
-                                t.type, t.channelId,
-                                t.active ? "ON " : "off",
-                                t.note == 0 ? "--" : toHex(t.note),
-                                t.voiceId,
-                                t.duration,
-                                t.volumeOffset,
-                                t.keyOffset,
-                                t.pan,
-                                t.modEnabled ? "Y" : "N");
-                        l.setText(txt);
+                        smpsTracks.put(key, t);
                     }
-                } else {
-                    heading.setText("Channels (no SMPS debug)");
                 }
-                // Mark untouched labels as idle
+
+                // Iterate all standard channels
+                // FM
+                for (int i=0; i<6; i++) updateChannelRow(ChannelType.FM, i, smpsTracks, touched);
+                // PSG
+                for (int i=0; i<4; i++) updateChannelRow(ChannelType.PSG, i, smpsTracks, touched);
+                // DAC
+                updateChannelRow(ChannelType.DAC, 0, smpsTracks, touched);
+
+                // Mark untouched labels as idle (if we missed any dynamic ones, though we shouldn't)
                 for (Map.Entry<String, JLabel> e : trackLabels.entrySet()) {
                     if (!touched.contains(e.getKey())) {
-                        e.getValue().setText(e.getKey() + " idle");
+                        e.getValue().setVisible(false);
                     }
                 }
             } else {
                 heading.setText("Channels (debug unavailable)");
+            }
+        }
+
+        private void updateChannelRow(ChannelType type, int id,
+                                      Map<String, uk.co.jamesj999.sonic.audio.smps.SmpsSequencer.DebugTrack> smpsTracks,
+                                      Set<String> touched) {
+            String key = type + "-" + id;
+            touched.add(key);
+
+            JLabel l = trackLabels.computeIfAbsent(key, k -> {
+                JLabel nl = new JLabel();
+                nl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+                nl.setAlignmentX(JLabel.LEFT_ALIGNMENT);
+                nl.setOpaque(true); // Needed for background color
+                tracksPanel.add(nl);
+                tracksPanel.revalidate();
+                return nl;
+            });
+            l.setVisible(true);
+
+            boolean muted = backend.isMuted(type, id);
+            boolean soloed = backend.isSoloed(type, id);
+
+            // Determine style
+            if (soloed) {
+                l.setForeground(Color.BLUE);
+                l.setBackground(Color.YELLOW);
+            } else if (muted) {
+                l.setForeground(Color.LIGHT_GRAY);
+                l.setBackground(frame.getBackground());
+            } else {
+                l.setForeground(Color.BLACK);
+                l.setBackground(frame.getBackground());
+            }
+
+            // Get SMPS data if available
+            // Note: SMPS TrackType enum name matches ChannelType enum name mostly
+            // But we need to match carefully.
+            // SmpsSequencer.TrackType values: FM, PSG, DAC.
+            // ChannelType values: FM, PSG, DAC.
+            // So direct string matching works.
+
+            var t = smpsTracks.get(key);
+
+            String labelPrefix = String.format("%-3s%1d %s", type, id, muted ? "[M]" : (soloed ? "[S]" : "   "));
+
+            if (t != null) {
+                String txt = String.format("%s %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
+                        labelPrefix,
+                        t.active ? "ON " : "off",
+                        t.note == 0 ? "--" : toHex(t.note),
+                        t.voiceId,
+                        t.duration,
+                        t.volumeOffset,
+                        t.keyOffset,
+                        t.pan,
+                        t.modEnabled ? "Y" : "N");
+                l.setText(txt);
+            } else {
+                l.setText(labelPrefix + " (idle)");
             }
         }
 

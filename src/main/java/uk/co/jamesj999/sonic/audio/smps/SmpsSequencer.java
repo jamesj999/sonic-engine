@@ -158,6 +158,10 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
+    public VirtualSynthesizer getSynthesizer() {
+        return synth;
+    }
+
     private int relocate(int ptr, int z80Start) {
         if (ptr == 0) return -1;
         // Many Sonic 2 SMPS blobs use file-relative offsets already.
