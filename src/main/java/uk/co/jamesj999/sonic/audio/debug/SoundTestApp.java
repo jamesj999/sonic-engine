@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashMap;
+import java.util.TreeSet;
 
 /**
  * Lightweight console-driven sound test runner for SMPS tracks.
@@ -119,11 +120,11 @@ public final class SoundTestApp {
                         playSong(loader, dacData, backend, currentSong);
                         break;
                     case "n":
-                        currentSong++;
+                        currentSong = getNextValidSong(currentSong);
                         playSong(loader, dacData, backend, currentSong);
                         break;
                     case "p":
-                        currentSong = Math.max(0, currentSong - 1);
+                        currentSong = getPreviousValidSong(currentSong);
                         playSong(loader, dacData, backend, currentSong);
                         break;
                     default:
@@ -244,11 +245,11 @@ public final class SoundTestApp {
                 public void keyPressed(KeyEvent e) {
                     switch (e.getKeyCode()) {
                         case KeyEvent.VK_UP:
-                            songId++;
+                            songId = getNextValidSong(songId);
                             updateLabel();
                             break;
                         case KeyEvent.VK_DOWN:
-                            songId = Math.max(0, songId - 1);
+                            songId = getPreviousValidSong(songId);
                             updateLabel();
                             break;
                         case KeyEvent.VK_ENTER:
@@ -483,6 +484,7 @@ public final class SoundTestApp {
     }
 
     private static final Map<Integer, String> TITLE_MAP = buildTitleMap();
+    private static final TreeSet<Integer> VALID_SONGS = new TreeSet<>(TITLE_MAP.keySet());
 
     private static Map<Integer, String> buildTitleMap() {
         Map<Integer, String> m = new LinkedHashMap<>();
@@ -522,5 +524,21 @@ public final class SoundTestApp {
 
     private static String lookupTitle(int songId) {
         return TITLE_MAP.get(songId);
+    }
+
+    private static int getNextValidSong(int current) {
+        Integer next = VALID_SONGS.higher(current);
+        if (next != null) {
+            return next;
+        }
+        return VALID_SONGS.first();
+    }
+
+    private static int getPreviousValidSong(int current) {
+        Integer prev = VALID_SONGS.lower(current);
+        if (prev != null) {
+            return prev;
+        }
+        return VALID_SONGS.last();
     }
 }

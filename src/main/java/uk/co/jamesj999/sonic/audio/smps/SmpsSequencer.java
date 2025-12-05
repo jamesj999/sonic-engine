@@ -371,68 +371,74 @@ public class SmpsSequencer implements AudioStream {
      * Counts bytes after the flag byte. Unknowns return 0.
      */
     private int flagParamLength(int cmd) {
-        return switch (cmd) {
+        switch (cmd) {
             // 1-byte params
-            case 0xE0, // Pan/AMS/FMS
-                 0xE1, // Detune
-                 0xE2, // Set comm / detune variant
-                 0xE5, // Tick multiplier (current track)
-                 0xE6, // Channel volume offset
-                 0xE8, // Note fill
-                 0xE9, // Key displacement
-                 0xEA, // Tempo weight
-                 0xEB, // Dividing timing (all tracks)
-                 0xEC, // PSG volume
-                 0xED, // Ignore (consume param)
-                 0xF3, // PSG noise
-                 0xF5, // PSG instrument placeholder
-                 0xEF  // Set voice
-                    -> 1;
+            case 0xE0: // Pan/AMS/FMS
+            case 0xE1: // Detune
+            case 0xE2: // Set comm / detune variant
+            case 0xE5: // Tick multiplier (current track)
+            case 0xE6: // Channel volume offset
+            case 0xE8: // Note fill
+            case 0xE9: // Key displacement
+            case 0xEA: // Tempo weight
+            case 0xEB: // Dividing timing (all tracks)
+            case 0xEC: // PSG volume
+            case 0xED: // Ignore (consume param)
+            case 0xF3: // PSG noise
+            case 0xF5: // PSG instrument placeholder
+            case 0xEF:  // Set voice
+                return 1;
             // 2-byte params
-            case 0xF6, // Jump
-                 0xF8  // Call
-                    -> 2;
+            case 0xF6: // Jump
+            case 0xF8:  // Call
+                return 2;
             // 3-byte params
 
             // 4-byte params
-            case 0xF0, // Modulation setup
-                 0xF7  // Loop (index + count + ptr)
-                    -> 4;
+            case 0xF0: // Modulation setup
+            case 0xF7:  // Loop (index + count + ptr)
+                return 4;
             // 0-byte params
-            case 0xE3, // Return
-                 0xE4, // Fade in
-                 0xE7, // Hold
-                 0xF1, // Mod on
-                 0xF2, // Stop
-                 0xF4, // Mod off
-                 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF // End / no-op
-                    -> 0;
-            default -> 0;
-        };
+            case 0xE3: // Return
+            case 0xE4: // Fade in
+            case 0xE7: // Hold
+            case 0xF1: // Mod on
+            case 0xF2: // Stop
+            case 0xF4: // Mod off
+            case 0xF9: case 0xFA: case 0xFB: case 0xFC: case 0xFD: case 0xFE: case 0xFF: // End / no-op
+                return 0;
+            default:
+                return 0;
+        }
+    }
+
+    private int readPointer(Track t) {
+        if (t.pos + 2 > data.length) return 0;
+        int p1 = data[t.pos++] & 0xFF;
+        int p2 = data[t.pos++] & 0xFF;
+        if (smpsData.isLittleEndian()) {
+            return p1 | (p2 << 8);
+        } else {
+            return (p1 << 8) | p2;
+        }
     }
 
     private void handleJump(Track t) {
-        if (t.pos + 2 <= data.length) {
-            int p1 = data[t.pos++] & 0xFF;
-            int p2 = data[t.pos++] & 0xFF;
-            int ptr = p1 | (p2 << 8); // Little Endian
-            int newPos = relocate(ptr, smpsData.getZ80StartAddress());
-            if (newPos != -1) {
-                t.pos = newPos;
-            } else {
-                // Invalid jump, stop track
-                t.active = false;
-            }
+        int ptr = readPointer(t);
+        int newPos = relocate(ptr, smpsData.getZ80StartAddress());
+        if (newPos != -1) {
+            t.pos = newPos;
+        } else {
+            // Invalid jump, stop track
+            t.active = false;
         }
     }
 
     private void handleLoop(Track t) {
-        if (t.pos + 4 <= data.length) {
+        if (t.pos + 2 <= data.length) {
             int index = data[t.pos++] & 0xFF;
             int count = data[t.pos++] & 0xFF;
-            int p1 = data[t.pos++] & 0xFF;
-            int p2 = data[t.pos++] & 0xFF;
-            int ptr = p1 | (p2 << 8);
+            int ptr = readPointer(t);
             int newPos = relocate(ptr, smpsData.getZ80StartAddress());
             if (newPos == -1) {
                 t.active = false;
@@ -450,7 +456,7 @@ public class SmpsSequencer implements AudioStream {
             }
 
             if (t.loopCounters[index] == 0) {
-                t.loopCounters[index] = count;
+                t.loopCounters[index] = count + 1;
             }
             if (t.loopCounters[index] > 0) {
                 t.loopCounters[index]--;
@@ -462,18 +468,14 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void handleCall(Track t) {
-        if (t.pos + 2 <= data.length) {
-            int p1 = data[t.pos++] & 0xFF;
-            int p2 = data[t.pos++] & 0xFF;
-            int ptr = p1 | (p2 << 8);
-            int newPos = relocate(ptr, smpsData.getZ80StartAddress());
-            if (newPos == -1 || t.returnSp >= t.returnStack.length) {
-                t.active = false;
-                return;
-            }
-            t.returnStack[t.returnSp++] = t.pos;
-            t.pos = newPos;
+        int ptr = readPointer(t);
+        int newPos = relocate(ptr, smpsData.getZ80StartAddress());
+        if (newPos == -1 || t.returnSp >= t.returnStack.length) {
+            t.active = false;
+            return;
         }
+        t.returnStack[t.returnSp++] = t.pos;
+        t.pos = newPos;
     }
 
     private void handleReturn(Track t) {
@@ -552,31 +554,14 @@ public class SmpsSequencer implements AudioStream {
         if (t.pos < data.length) {
             int newDiv = data[t.pos++] & 0xFF;
             if (newDiv == 0) newDiv = 256; // Treat 0 as 256 ticks (driver behaviour)
-            int elapsed = t.scaledDuration - t.duration;
             t.dividingTiming = newDiv;
-            int newScaled = scaleDuration(t, t.rawDuration);
-            int newRemaining = newScaled - elapsed;
-            if (newRemaining < 0) newRemaining = 0;
-            t.scaledDuration = newScaled;
-            t.duration = newRemaining;
         }
     }
 
     private void updateDividingTiming(int newDividingTiming) {
         dividingTiming = newDividingTiming;
         for (Track track : tracks) {
-            if (!track.active || track.scaledDuration == 0) {
-                continue;
-            }
             track.dividingTiming = newDividingTiming;
-            int elapsed = track.scaledDuration - track.duration;
-            int newScaledDuration = scaleDuration(track, track.rawDuration);
-            int newRemaining = newScaledDuration - elapsed;
-            if (newRemaining < 0) {
-                newRemaining = 0;
-            }
-            track.scaledDuration = newScaledDuration;
-            track.duration = newRemaining;
         }
     }
 
@@ -599,7 +584,7 @@ public class SmpsSequencer implements AudioStream {
 
     private int scaleDuration(Track track, int rawDuration) {
         int factor = track.dividingTiming == 0 ? 256 : track.dividingTiming;
-        int scaled = (rawDuration * factor) & DURATION_MAX;
+        int scaled = rawDuration * factor;
         if (scaled == 0) {
             // 0 duration represents 256 frames in S3K when timing is 0
             return 256;
