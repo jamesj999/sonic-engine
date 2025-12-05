@@ -68,6 +68,19 @@ public class SmpsData {
             int[] psgPtrs = new int[psgChannels];
             int[] psgKeys = new int[psgChannels];
             int[] psgVols = new int[psgChannels];
+
+            // Check for potential header corruption (e.g. Mystic Cave Zone PSG section shifted by 2 bytes)
+            if (psgChannels > 0 && offset + 4 < data.length) {
+                int p1 = read16(data, offset);
+                // Only attempt correction if the pointer is non-zero (channel active) but invalid
+                if (p1 != 0 && !isValidPointer(p1, z80StartAddress)) {
+                    int p2 = read16(data, offset + 2);
+                    if (isValidPointer(p2, z80StartAddress)) {
+                        offset += 2; // Shift read position
+                    }
+                }
+            }
+
             for (int i = 0; i < psgChannels; i++) {
                 if (offset + 1 < data.length) {
                     psgPtrs[i] = read16(data, offset);
@@ -166,6 +179,18 @@ public class SmpsData {
      */
     public int getFmVoiceLength() {
         return 25;
+    }
+
+    private boolean isValidPointer(int ptr, int z80Start) {
+        if (ptr == 0) return false;
+        if (ptr >= 0 && ptr < data.length) {
+            return true;
+        }
+        if (z80Start > 0) {
+            int offset = ptr - z80Start;
+            return offset >= 0 && offset < data.length;
+        }
+        return false;
     }
 
     private int read16(byte[] bytes, int idx) {
