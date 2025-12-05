@@ -21,6 +21,8 @@ import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.awt.GLCanvas;
 import com.jogamp.opengl.glu.GLU;
+import uk.co.jamesj999.sonic.configuration.OptionsMenu;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
@@ -200,6 +202,17 @@ public class Engine extends GLCanvas implements GLEventListener {
 				final JFrame frame = new JFrame(); // Swing's JFrame or AWT's
 													// Frame
 				frame.getContentPane().add(canvas);
+
+				JMenuBar menuBar = new JMenuBar();
+				JMenu fileMenu = new JMenu("File");
+				JMenuItem optionsItem = new JMenuItem("Options");
+				optionsItem.addActionListener(e -> {
+					new OptionsMenu(frame).setVisible(true);
+				});
+				fileMenu.add(optionsItem);
+				menuBar.add(fileMenu);
+				frame.setJMenuBar(menuBar);
+
 				((Engine) canvas).setInputHandler(new InputHandler(canvas));
 				frame.addWindowListener(new WindowAdapter() {
 					@Override
