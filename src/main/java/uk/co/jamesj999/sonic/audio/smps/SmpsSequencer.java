@@ -49,7 +49,7 @@ public class SmpsSequencer implements AudioStream {
         int voiceId;
         int baseFnum;
         int baseBlock;
-        int loopCounter;
+        int[] loopCounters = new int[4];
         int loopTarget = -1;
         final int[] returnStack = new int[4];
         int returnSp = 0;
@@ -285,7 +285,7 @@ public class SmpsSequencer implements AudioStream {
             case 0xF6: // Jump (2 byte param)
                 handleJump(t);
                 break;
-            case 0xF7: // Loop (3 byte param)
+            case 0xF7: // Loop (4 byte param)
                 handleLoop(t);
                 break;
             case 0xF8: // Call (2 byte param)
@@ -393,10 +393,10 @@ public class SmpsSequencer implements AudioStream {
                  0xF8  // Call
                     -> 2;
             // 3-byte params
-            case 0xF7 // Loop (count + ptr)
-                    -> 3;
+
             // 4-byte params
-            case 0xF0 // Modulation setup
+            case 0xF0, // Modulation setup
+                 0xF7  // Loop (index + count + ptr)
                     -> 4;
             // 0-byte params
             case 0xE3, // Return
@@ -427,7 +427,8 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void handleLoop(Track t) {
-        if (t.pos + 3 <= data.length) {
+        if (t.pos + 4 <= data.length) {
+            int index = data[t.pos++] & 0xFF;
             int count = data[t.pos++] & 0xFF;
             int p1 = data[t.pos++] & 0xFF;
             int p2 = data[t.pos++] & 0xFF;
@@ -441,12 +442,19 @@ public class SmpsSequencer implements AudioStream {
                 t.pos = newPos; // infinite loop
                 return;
             }
-            if (t.loopCounter == 0) {
-                t.loopCounter = count;
+            // Ensure capacity
+            if (index >= t.loopCounters.length) {
+                int[] newCounters = new int[Math.max(t.loopCounters.length * 2, index + 1)];
+                System.arraycopy(t.loopCounters, 0, newCounters, 0, t.loopCounters.length);
+                t.loopCounters = newCounters;
             }
-            if (t.loopCounter > 0) {
-                t.loopCounter--;
-                if (t.loopCounter > 0) {
+
+            if (t.loopCounters[index] == 0) {
+                t.loopCounters[index] = count;
+            }
+            if (t.loopCounters[index] > 0) {
+                t.loopCounters[index]--;
+                if (t.loopCounters[index] > 0) {
                     t.pos = newPos;
                 }
             }
@@ -802,7 +810,7 @@ public class SmpsSequencer implements AudioStream {
             dt.tieNext = t.tieNext;
             dt.modEnabled = t.modEnabled;
             dt.modDepth = t.modDepth;
-            dt.loopCounter = t.loopCounter;
+            dt.loopCounter = (t.loopCounters != null && t.loopCounters.length > 0) ? t.loopCounters[0] : 0;
             dt.position = t.pos;
             state.tracks.add(dt);
         }
