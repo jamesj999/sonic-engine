@@ -180,8 +180,9 @@ public class SmpsLoader {
             int bankStart = 0xE0000;
 
             // Load Samples 81-91
+            // Use 5-byte stride to properly align with Sonic 2 DAC table format (Ptr, Len, Unused/Bank)
             for (int i = 0; i < 20; i++) {
-                int entryAddr = ptrTable + (i * 4);
+                int entryAddr = ptrTable + (i * 5);
                 // Little Endian
                 int p1 = rom.readByte(entryAddr) & 0xFF;
                 int p2 = rom.readByte(entryAddr + 1) & 0xFF;
