@@ -668,7 +668,21 @@ public class SmpsSequencer implements AudioStream {
             // FNum = Table[noteIdx]
             // Block = octave
             int fnum = FNUM_TABLE[noteIdx];
-            int block = octave & 7;
+            int block = octave;
+
+            // Handle high octaves by using Block 7 and higher F-Num (if possible)
+            if (block > 7) {
+                int shift = block - 7;
+                block = 7;
+                fnum <<= shift;
+                // Clamp F-Num to max 11-bit value to prevent wrapping
+                if (fnum > 0x7FF) {
+                    fnum = 0x7FF;
+                }
+            } else {
+                block &= 7;
+            }
+
             t.baseFnum = fnum;
             t.baseBlock = block;
 
