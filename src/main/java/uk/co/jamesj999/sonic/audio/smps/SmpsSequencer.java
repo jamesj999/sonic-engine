@@ -605,11 +605,11 @@ public class SmpsSequencer implements AudioStream {
         if (voicePtr < 0 || voicePtr >= data.length) {
             return;
         }
-        // Support both 19-byte (S2) and 25-byte (full TL) voices based on available data.
-        int offset = voicePtr + (voiceId * 19);
-        int maxLen = Math.min(25, data.length - offset);
-        int voiceLen = maxLen >= 25 ? 25 : Math.min(19, maxLen);
-        if (offset >= 0 && voiceLen > 0 && offset + voiceLen <= data.length) {
+        // Determine voice stride and length based on SMPS format (S1 vs S2)
+        int voiceLen = smpsData.getFmVoiceLength();
+        int offset = voicePtr + (voiceId * voiceLen);
+
+        if (offset >= 0 && offset + voiceLen <= data.length) {
             byte[] voice = new byte[voiceLen];
             System.arraycopy(data, offset, voice, 0, voiceLen);
             t.voiceData = voice;

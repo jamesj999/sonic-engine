@@ -67,7 +67,8 @@ public class TestSmpsSequencerInstrumentLoading {
             expectedVoice[i] = (byte) (i + 10);
         }
 
-        SmpsData smps = new SmpsData(data);
+        // Explicitly set to Big Endian (S1) to verify 25-byte voice loading
+        SmpsData smps = new SmpsData(data, 0, false);
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(new HashMap<>(), new HashMap<>()); // Empty
 
