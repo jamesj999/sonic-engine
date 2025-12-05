@@ -155,6 +155,10 @@ public class SmpsData {
         return z80StartAddress;
     }
 
+    public boolean isLittleEndian() {
+        return littleEndian;
+    }
+
     /**
      * Returns the length (and stride) of FM voices.
      * Sonic 1 (Big Endian) uses 25 bytes.

@@ -605,9 +605,29 @@ public class SmpsSequencer implements AudioStream {
         if (voicePtr < 0 || voicePtr >= data.length) {
             return;
         }
+
         // Determine voice stride and length based on SMPS format (S1 vs S2)
         int voiceLen = smpsData.getFmVoiceLength();
-        int offset = voicePtr + (voiceId * voiceLen);
+        int offset;
+
+        if (smpsData.isLittleEndian()) {
+            // Sonic 2: pointer table (2 bytes per entry)
+            int ptrOffset = voicePtr + (voiceId * 2);
+            if (ptrOffset < 0 || ptrOffset + 1 >= data.length) {
+                return;
+            }
+            int p1 = data[ptrOffset] & 0xFF;
+            int p2 = data[ptrOffset + 1] & 0xFF;
+            int ptr = p1 | (p2 << 8);
+            offset = relocate(ptr, z80Base);
+            // In pointer mode, the voice length is the actual data size.
+            // S2 voices are typically ~21-25 bytes but might not be contiguous.
+            // We use 25 as a safe read size.
+            voiceLen = 25;
+        } else {
+            // Sonic 1: contiguous array
+            offset = voicePtr + (voiceId * voiceLen);
+        }
 
         if (offset >= 0 && offset + voiceLen <= data.length) {
             byte[] voice = new byte[voiceLen];
