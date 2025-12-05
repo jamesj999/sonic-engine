@@ -208,14 +208,19 @@ public class SmpsSequencer implements AudioStream {
 
             if (t.duration > 0) {
                 t.duration--;
-                if (t.duration == 0 && !t.tieNext) {
+
+                // Handle Fill (Gate Time)
+                if (t.fill > 0 && t.duration <= t.fill && !t.tieNext) {
                     stopNote(t);
                 }
-                // Apply modulation during sustain for FM channels
-                if (t.type == TrackType.FM && t.modEnabled) {
-                    applyModulation(t);
+
+                if (t.duration > 0) {
+                    // Apply modulation during sustain for FM channels
+                    if (t.type == TrackType.FM && t.modEnabled) {
+                        applyModulation(t);
+                    }
+                    continue;
                 }
-                continue;
             }
 
             // Read next command
@@ -456,7 +461,7 @@ public class SmpsSequencer implements AudioStream {
             }
 
             if (t.loopCounters[index] == 0) {
-                t.loopCounters[index] = count + 1;
+                t.loopCounters[index] = count;
             }
             if (t.loopCounters[index] > 0) {
                 t.loopCounters[index]--;
@@ -568,9 +573,6 @@ public class SmpsSequencer implements AudioStream {
     private void setDuration(Track track, int rawDuration) {
         track.rawDuration = rawDuration;
         int scaled = scaleDuration(track, rawDuration);
-        if (track.fill > 0) {
-            scaled = Math.max(1, scaled - track.fill);
-        }
         track.scaledDuration = scaled;
         track.duration = scaled;
     }
