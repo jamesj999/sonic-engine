@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.audio.debug;
 
 import uk.co.jamesj999.sonic.audio.AudioBackend;
+import uk.co.jamesj999.sonic.audio.ChannelType;
 import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.audio.NullAudioBackend;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
@@ -243,7 +244,26 @@ public final class SoundTestApp {
             frame.addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyPressed(KeyEvent e) {
-                    switch (e.getKeyCode()) {
+                    boolean shift = e.isShiftDown();
+                    int code = e.getKeyCode();
+
+                    // F1-F5: FM0 - FM4
+                    if (code >= KeyEvent.VK_F1 && code <= KeyEvent.VK_F5) {
+                        int ch = code - KeyEvent.VK_F1;
+                        if (shift) backend.toggleSolo(ChannelType.FM, ch);
+                        else backend.toggleMute(ChannelType.FM, ch);
+                        return;
+                    }
+
+                    // 1-4: PSG0 - PSG3
+                    if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_4) {
+                        int ch = code - KeyEvent.VK_1;
+                        if (shift) backend.toggleSolo(ChannelType.PSG, ch);
+                        else backend.toggleMute(ChannelType.PSG, ch);
+                        return;
+                    }
+
+                    switch (code) {
                         case KeyEvent.VK_UP:
                             songId = getNextValidSong(songId);
                             updateLabel();
@@ -265,6 +285,11 @@ public final class SoundTestApp {
                             break;
                         case KeyEvent.VK_ESCAPE:
                             close();
+                            break;
+                        case KeyEvent.VK_D:
+                            // DAC (FM5 / Channel 5)
+                            if (shift) backend.toggleSolo(ChannelType.DAC, 5);
+                            else backend.toggleMute(ChannelType.DAC, 5);
                             break;
                         default:
                             break;
@@ -351,7 +376,27 @@ public final class SoundTestApp {
                             tracksPanel.revalidate();
                             return nl;
                         });
-                        String txt = String.format("%-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
+
+                        ChannelType ct = switch (t.type) {
+                            case FM -> ChannelType.FM;
+                            case PSG -> ChannelType.PSG;
+                            case DAC -> ChannelType.DAC;
+                        };
+                        boolean muted = backend.isMuted(ct, t.channelId);
+                        boolean soloed = backend.isSoloed(ct, t.channelId);
+
+                        // If type is DAC, channelId is 5, but logic handles it.
+                        // However, if SMPS says type=FM ch=5, we treat it as FM in UI label, but backend uses index 5.
+                        // Wait, if t.type is FM, but channelId is 5, it is technically DAC slot.
+                        // Backend isMuted(FM, 5) works because FM case handles 0-6.
+
+                        String statusMarker = "";
+                        if (muted) statusMarker += "[M]";
+                        if (soloed) statusMarker += "[S]";
+
+                        String txt = String.format("%-4s%s %-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
+                                statusMarker,
+                                "", // spacer
                                 t.type, t.channelId,
                                 t.active ? "ON " : "off",
                                 t.note == 0 ? "--" : toHex(t.note),

@@ -34,4 +34,12 @@ public class VirtualSynthesizer {
     public void setInstrument(int channelId, byte[] voice) {
         ym.setInstrument(channelId, voice);
     }
+
+    public void setFmMute(int channel, boolean mute) {
+        ym.setMute(channel, mute);
+    }
+
+    public void setPsgMute(int channel, boolean mute) {
+        psg.setMute(channel, mute);
+    }
 }

@@ -23,6 +23,18 @@ public class NullAudioBackend implements AudioBackend {
     public void stopPlayback() {}
 
     @Override
+    public void toggleMute(ChannelType type, int channel) {}
+
+    @Override
+    public void toggleSolo(ChannelType type, int channel) {}
+
+    @Override
+    public boolean isMuted(ChannelType type, int channel) { return false; }
+
+    @Override
+    public boolean isSoloed(ChannelType type, int channel) { return false; }
+
+    @Override
     public void update() {}
 
     @Override
