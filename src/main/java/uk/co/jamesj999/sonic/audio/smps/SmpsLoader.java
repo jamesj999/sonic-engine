@@ -190,7 +190,25 @@ public class SmpsLoader {
 
                 int l1 = rom.readByte(entryAddr + 2) & 0xFF;
                 int l2 = rom.readByte(entryAddr + 3) & 0xFF;
-                int len = l1 | (l2 << 8);
+
+                // Handle varying length formats in Sonic 2 DAC driver
+                int len;
+                if (l1 == 0xFF) {
+                    // Heuristic: Low byte FF -> High * 16 (Block count?)
+                    len = l2 * 16;
+                } else if (l2 == 0xFF) {
+                    // Heuristic: High byte FF -> Low * 256 (Page count?)
+                    len = l1 * 256;
+                } else {
+                    int lenLe = l1 | (l2 << 8);
+                    int lenBe = l2 | (l1 << 8);
+                    // Heuristic: If LE is suspiciously large (>32KB) and BE is small, use BE
+                    if (lenLe > 0x8000 && lenBe < 0x8000) {
+                        len = lenBe;
+                    } else {
+                        len = lenLe;
+                    }
+                }
 
                 if (ptr == 0 || len == 0) continue;
 
