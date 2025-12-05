@@ -22,9 +22,17 @@ public class SmpsData {
     }
 
     public SmpsData(byte[] data, int z80StartAddress) {
+        this(data, z80StartAddress, null);
+    }
+
+    public SmpsData(byte[] data, int z80StartAddress, Boolean forceLittleEndian) {
         this.data = data;
         this.z80StartAddress = z80StartAddress;
-        this.littleEndian = detectLittleEndian();
+        if (forceLittleEndian != null) {
+            this.littleEndian = forceLittleEndian;
+        } else {
+            this.littleEndian = detectLittleEndian();
+        }
 
         if (data.length >= 8) {
             this.voicePtr = read16(data, 0);
@@ -145,6 +153,15 @@ public class SmpsData {
 
     public int getZ80StartAddress() {
         return z80StartAddress;
+    }
+
+    /**
+     * Returns the length (and stride) of FM voices.
+     * Sonic 1 (Big Endian) uses 25 bytes.
+     * Sonic 2 (Little Endian) uses 19 bytes.
+     */
+    public int getFmVoiceLength() {
+        return littleEndian ? 19 : 25;
     }
 
     private int read16(byte[] bytes, int idx) {
