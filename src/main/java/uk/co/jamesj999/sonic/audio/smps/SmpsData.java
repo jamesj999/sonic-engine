@@ -69,23 +69,27 @@ public class SmpsData {
             int[] psgKeys = new int[psgChannels];
             int[] psgVols = new int[psgChannels];
 
-            // Check for potential header corruption (e.g. Mystic Cave Zone PSG section shifted by 2 bytes)
-            if (psgChannels > 0 && offset + 4 < data.length) {
-                int p1 = read16(data, offset);
-                // Only attempt correction if the pointer is non-zero (channel active) but invalid
-                if (p1 != 0 && !isValidPointer(p1, z80StartAddress)) {
-                    int p2 = read16(data, offset + 2);
-                    if (isValidPointer(p2, z80StartAddress)) {
-                        offset += 2; // Shift read position
-                    }
-                }
-            }
-
             for (int i = 0; i < psgChannels; i++) {
-                if (offset + 1 < data.length) {
-                    psgPtrs[i] = read16(data, offset);
-                    psgKeys[i] = (byte) data[offset + 2];
-                    psgVols[i] = (byte) data[offset + 3];
+                if (offset + 3 < data.length) {
+                    int p1 = read16(data, offset);
+                    if (p1 != 0 && !isValidPointer(p1, z80StartAddress)) {
+                        // Potential corruption: Pointer invalid. Check if Key/Vol bytes form a valid pointer.
+                        // (Fix for Mystic Cave Zone PSG1 where pointer is garbage but valid pointer is in Key/Vol slot)
+                        int p2 = read16(data, offset + 2);
+                        if (isValidPointer(p2, z80StartAddress)) {
+                            psgPtrs[i] = p2;
+                            psgKeys[i] = 0;
+                            psgVols[i] = 0;
+                        } else {
+                            psgPtrs[i] = p1;
+                            psgKeys[i] = (byte) data[offset + 2];
+                            psgVols[i] = (byte) data[offset + 3];
+                        }
+                    } else {
+                        psgPtrs[i] = p1;
+                        psgKeys[i] = (byte) data[offset + 2];
+                        psgVols[i] = (byte) data[offset + 3];
+                    }
                 } else {
                     psgPtrs[i] = 0;
                     psgKeys[i] = 0;
