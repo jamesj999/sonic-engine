@@ -461,7 +461,7 @@ public class SmpsSequencer implements AudioStream {
             }
 
             if (t.loopCounters[index] == 0) {
-                t.loopCounters[index] = count;
+                t.loopCounters[index] = count + 1;
             }
             if (t.loopCounters[index] > 0) {
                 t.loopCounters[index]--;
