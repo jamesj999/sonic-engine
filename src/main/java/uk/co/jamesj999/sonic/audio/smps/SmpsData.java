@@ -69,10 +69,26 @@ public class SmpsData {
             int[] psgKeys = new int[psgChannels];
             int[] psgVols = new int[psgChannels];
             for (int i = 0; i < psgChannels; i++) {
-                if (offset + 1 < data.length) {
-                    psgPtrs[i] = read16(data, offset);
-                    psgKeys[i] = (byte) data[offset + 2];
-                    psgVols[i] = (byte) data[offset + 3];
+                if (offset + 3 < data.length) {
+                    int p1 = read16(data, offset);
+                    if (isValidPointer(p1, z80StartAddress)) {
+                        psgPtrs[i] = p1;
+                        psgKeys[i] = (byte) data[offset + 2];
+                        psgVols[i] = (byte) data[offset + 3];
+                    } else {
+                        // If the primary pointer is invalid, try using the key/vol bytes as a pointer
+                        // (Fix for Mystic Cave Zone PSG1)
+                        int p2 = read16(data, offset + 2);
+                        if (isValidPointer(p2, z80StartAddress)) {
+                            psgPtrs[i] = p2;
+                            psgKeys[i] = 0;
+                            psgVols[i] = 0;
+                        } else {
+                            psgPtrs[i] = p1;
+                            psgKeys[i] = (byte) data[offset + 2];
+                            psgVols[i] = (byte) data[offset + 3];
+                        }
+                    }
                 } else {
                     psgPtrs[i] = 0;
                     psgKeys[i] = 0;
@@ -166,6 +182,18 @@ public class SmpsData {
      */
     public int getFmVoiceLength() {
         return 25;
+    }
+
+    private boolean isValidPointer(int ptr, int z80Start) {
+        if (ptr == 0) return false;
+        if (ptr >= 0 && ptr < data.length) {
+            return true;
+        }
+        if (z80Start > 0) {
+            int offset = ptr - z80Start;
+            return offset >= 0 && offset < data.length;
+        }
+        return false;
     }
 
     private int read16(byte[] bytes, int idx) {
