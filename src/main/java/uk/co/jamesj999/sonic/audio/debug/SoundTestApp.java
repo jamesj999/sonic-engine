@@ -352,7 +352,7 @@ public final class SoundTestApp {
                             return nl;
                         });
                         String txt = String.format("%-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
-                                t.type, t.channelId,
+                                t.type, t.channelId + 1,
                                 t.active ? "ON " : "off",
                                 t.note == 0 ? "--" : toHex(t.note),
                                 t.voiceId,

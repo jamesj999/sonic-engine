@@ -96,14 +96,21 @@ public class SmpsSequencer implements AudioStream {
 
         // DAC track (channel 5) if present
         int dacPtr = relocate(smpsData.getDacPointer(), z80Start);
+        boolean hasDac = false;
         if (dacPtr >= 0 && dacPtr < data.length) {
             Track t = new Track(dacPtr, TrackType.DAC, 5);
             t.dividingTiming = dividingTiming;
             tracks.add(t);
+            hasDac = true;
         }
 
         // FM tracks
         for (int i = 0; i < fmPointers.length; i++) {
+            // If we have a DAC track, FM channel 6 (index 5) is unavailable
+            if (hasDac && i == 5) {
+                continue;
+            }
+
             int ptr = relocate(fmPointers[i], z80Start);
             if (ptr < 0 || ptr >= data.length) {
                 continue;
