@@ -26,6 +26,11 @@ public interface AudioBackend {
      */
     void stopPlayback();
 
+    void toggleMute(ChannelType type, int channel);
+    void toggleSolo(ChannelType type, int channel);
+    boolean isMuted(ChannelType type, int channel);
+    boolean isSoloed(ChannelType type, int channel);
+
     void update();
     void destroy();
 }

@@ -43,6 +43,12 @@ public class JOALAudioBackend implements AudioBackend {
     private final Map<Integer, String> musicFallback = new HashMap<>();
     private final Map<String, String> sfxFallback = new HashMap<>();
 
+    // Mute/Solo State
+    private final boolean[] fmUserMutes = new boolean[6];
+    private final boolean[] fmUserSolos = new boolean[6];
+    private final boolean[] psgUserMutes = new boolean[4];
+    private final boolean[] psgUserSolos = new boolean[4];
+
     public JOALAudioBackend() {
         // Initialize fallback mappings
         // SFX
@@ -110,6 +116,7 @@ public class JOALAudioBackend implements AudioBackend {
         al.alSourceStop(musicSource);
 
         currentSmps = new SmpsSequencer(data, dacData);
+        updateSynthesizerConfig();
         currentStream = currentSmps;
         startStream();
     }
@@ -117,6 +124,8 @@ public class JOALAudioBackend implements AudioBackend {
     @Override
     public void playSfxSmps(SmpsData data, DacData dacData) {
         this.sfxStream = new SmpsSequencer(data, dacData);
+        // We probably don't want to mute SFX channels based on music muting preferences,
+        // but if we did, we'd apply it here. For now, we leave SFX unmuted.
         int[] queued = new int[1];
         al.alGetSourcei(musicSource, AL.AL_BUFFERS_QUEUED, queued, 0);
         if (queued[0] == 0) {
@@ -238,6 +247,91 @@ public class JOALAudioBackend implements AudioBackend {
         al.alSourcei(musicSource, AL.AL_BUFFER, 0);
         currentStream = null;
         currentSmps = null;
+    }
+
+    @Override
+    public void toggleMute(ChannelType type, int channel) {
+        switch (type) {
+            case FM:
+            case DAC:
+                if (channel >= 0 && channel < 6) {
+                    fmUserMutes[channel] = !fmUserMutes[channel];
+                }
+                break;
+            case PSG:
+                if (channel >= 0 && channel < 4) {
+                    psgUserMutes[channel] = !psgUserMutes[channel];
+                }
+                break;
+        }
+        updateSynthesizerConfig();
+    }
+
+    @Override
+    public void toggleSolo(ChannelType type, int channel) {
+        switch (type) {
+            case FM:
+            case DAC:
+                if (channel >= 0 && channel < 6) {
+                    fmUserSolos[channel] = !fmUserSolos[channel];
+                }
+                break;
+            case PSG:
+                if (channel >= 0 && channel < 4) {
+                    psgUserSolos[channel] = !psgUserSolos[channel];
+                }
+                break;
+        }
+        updateSynthesizerConfig();
+    }
+
+    @Override
+    public boolean isMuted(ChannelType type, int channel) {
+        return switch (type) {
+            case FM, DAC -> (channel >= 0 && channel < 6) && fmUserMutes[channel];
+            case PSG -> (channel >= 0 && channel < 4) && psgUserMutes[channel];
+        };
+    }
+
+    @Override
+    public boolean isSoloed(ChannelType type, int channel) {
+        return switch (type) {
+            case FM, DAC -> (channel >= 0 && channel < 6) && fmUserSolos[channel];
+            case PSG -> (channel >= 0 && channel < 4) && psgUserSolos[channel];
+        };
+    }
+
+    private void updateSynthesizerConfig() {
+        if (currentSmps == null || currentSmps.getSynthesizer() == null) return;
+        var synth = currentSmps.getSynthesizer();
+
+        boolean anyFmSolo = false;
+        for (boolean s : fmUserSolos) if (s) anyFmSolo = true;
+
+        boolean anyPsgSolo = false;
+        for (boolean s : psgUserSolos) if (s) anyPsgSolo = true;
+
+        boolean anySolo = anyFmSolo || anyPsgSolo;
+
+        for (int i = 0; i < 6; i++) {
+            boolean muted = fmUserMutes[i];
+            if (!muted && anySolo) {
+                if (!fmUserSolos[i]) {
+                    muted = true;
+                }
+            }
+            synth.setFmMute(i, muted);
+        }
+
+        for (int i = 0; i < 4; i++) {
+            boolean muted = psgUserMutes[i];
+            if (!muted && anySolo) {
+                if (!psgUserSolos[i]) {
+                    muted = true;
+                }
+            }
+            synth.setPsgMute(i, muted);
+        }
     }
 
     private int getAvailableSource() {

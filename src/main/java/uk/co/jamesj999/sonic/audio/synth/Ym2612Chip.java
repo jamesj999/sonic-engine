@@ -280,6 +280,7 @@ public class Ym2612Chip {
     }
 
     private final Channel[] channels = new Channel[6];
+    private final boolean[] mutes = new boolean[6];
     private boolean channel3SpecialMode;
 
     public Ym2612Chip() {
@@ -287,6 +288,12 @@ public class Ym2612Chip {
             channels[i] = new Channel();
         }
         reset();
+    }
+
+    public void setMute(int ch, boolean mute) {
+        if (ch >= 0 && ch < 6) {
+            mutes[ch] = mute;
+        }
     }
 
     public void reset() {
@@ -725,10 +732,13 @@ public class Ym2612Chip {
             Channel dacCh = channels[5];
             boolean dacLeft = (dacCh.pan & 0x2) != 0;
             boolean dacRight = (dacCh.pan & 0x1) != 0;
-            if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
-            if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            if (!mutes[5]) {
+                if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
+                if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            }
 
             for (int ch = 0; ch < 6; ch++) {
+                if (mutes[ch]) continue;
                 if (ch == 5 && dacEnabled) continue;
                 double out = renderChannel(ch, lfoVal);
                 boolean left = (channels[ch].pan & 0x2) != 0;
@@ -764,10 +774,13 @@ public class Ym2612Chip {
             Channel dacCh = channels[5];
             boolean dacLeft = (dacCh.pan & 0x2) != 0;
             boolean dacRight = (dacCh.pan & 0x1) != 0;
-            if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
-            if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            if (!mutes[5]) {
+                if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
+                if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+            }
 
             for (int ch = 0; ch < 6; ch++) {
+                if (mutes[ch]) continue;
                 if (ch == 5 && dacEnabled) continue;
                 double out = renderChannel(ch, lfoVal);
                 boolean left = (channels[ch].pan & 0x2) != 0;

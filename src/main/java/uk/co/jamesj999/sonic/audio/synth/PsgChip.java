@@ -23,6 +23,8 @@ public class PsgChip {
     private int latch = 0;
     private int lfsr = 0x8000; // 16-bit noise register
 
+    private final boolean[] mutes = new boolean[4];
+
     static {
         // Approximate SN76489 2 dB steps (15 -> silence)
         for (int i = 0; i < 15; i++) {
@@ -36,6 +38,12 @@ public class PsgChip {
             registers[i] = 0xF; // Silence
         }
         tonePeriod[0] = tonePeriod[1] = tonePeriod[2] = 1;
+    }
+
+    public void setMute(int ch, boolean mute) {
+        if (ch >= 0 && ch < 4) {
+            mutes[ch] = mute;
+        }
     }
 
     public void write(int val) {
@@ -104,8 +112,10 @@ public class PsgChip {
 
                 double amp = VOLUME_TABLE[vol];
                 double voice = outputs[ch] ? amp : -amp;
-                sampleL += voice;
-                sampleR += voice;
+                if (!mutes[ch]) {
+                    sampleL += voice;
+                    sampleR += voice;
+                }
             }
 
             // Noise Channel
@@ -129,8 +139,10 @@ public class PsgChip {
                 }
                 double amp = VOLUME_TABLE[noiseVol];
                 double voice = outputs[3] ? amp : -amp;
-                sampleL += voice;
-                sampleR += voice;
+                if (!mutes[3]) {
+                    sampleL += voice;
+                    sampleR += voice;
+                }
             }
 
             // Apply high-pass to remove DC then optional LPF for smoothing

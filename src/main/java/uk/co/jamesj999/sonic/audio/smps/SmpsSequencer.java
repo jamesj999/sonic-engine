@@ -27,7 +27,7 @@ public class SmpsSequencer implements AudioStream {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
 
-    enum TrackType { FM, PSG, DAC }
+    public enum TrackType { FM, PSG, DAC }
 
     private class Track {
         int pos;
@@ -811,6 +811,10 @@ public class SmpsSequencer implements AudioStream {
     /**
      * Debug snapshot of current sequencer state for overlays/diagnostics.
      */
+    public VirtualSynthesizer getSynthesizer() {
+        return synth;
+    }
+
     public synchronized DebugState debugState() {
         DebugState state = new DebugState();
         state.tempoWeight = tempoWeight;
