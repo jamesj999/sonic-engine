@@ -314,22 +314,18 @@ public class JOALAudioBackend implements AudioBackend {
         boolean anySolo = anyFmSolo || anyPsgSolo;
 
         for (int i = 0; i < 6; i++) {
+            boolean soloed = fmUserSolos[i];
             boolean muted = fmUserMutes[i];
-            if (!muted && anySolo) {
-                if (!fmUserSolos[i]) {
-                    muted = true;
-                }
-            }
+            if (soloed) muted = false;
+            else if (anySolo) muted = true;
             synth.setFmMute(i, muted);
         }
 
         for (int i = 0; i < 4; i++) {
+            boolean soloed = psgUserSolos[i];
             boolean muted = psgUserMutes[i];
-            if (!muted && anySolo) {
-                if (!psgUserSolos[i]) {
-                    muted = true;
-                }
-            }
+            if (soloed) muted = false;
+            else if (anySolo) muted = true;
             synth.setPsgMute(i, muted);
         }
     }
