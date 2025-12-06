@@ -695,22 +695,19 @@ public class SmpsSequencer implements AudioStream {
 
         } else {
             // PSG
-            // Freq in Hz
-            // Table values are F-Num. Need Hz.
-            // Hz = (FNum * Clock) / (72 * 2^(20-Block))
-            // Clock 7670453.
-            // For PSG, Block shifts.
-            // Let's approximate.
-            double freq = (FNUM_TABLE[noteIdx] * 7670453.0) / (72.0 * (1 << (20 - octave)));
-
-            // PSG Register = 3579545 / (32 * freq)
-            int reg = (int) (3579545.0 / (32.0 * freq));
-            if (reg > 1023) reg = 1023;
-            if (reg < 1) reg = 1;
-
-            // Write Tone
-            // Channel 0,1,2.
+            // Channels 0-2 are Tone, Channel 3 is Noise.
             if (t.channelId < 3) {
+                // Freq in Hz
+                // Hz = (FNum * Clock) / (72 * 2^(20-Block))
+                // Clock 7670453.
+                // For PSG, Block shifts.
+                double freq = (FNUM_TABLE[noteIdx] * 7670453.0) / (72.0 * (1 << (20 - octave)));
+
+                // PSG Register = 3579545 / (32 * freq)
+                int reg = (int) (3579545.0 / (32.0 * freq));
+                if (reg > 1023) reg = 1023;
+                if (reg < 1) reg = 1;
+
                 // Latch Tone: 1cc0dddd
                 int data = reg & 0xF;
                 int type = 0;
@@ -718,11 +715,14 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(0x80 | (ch << 5) | (type << 4) | data);
                 // Data: 00DDDDDD
                 synth.writePsg((reg >> 4) & 0x3F);
+            }
 
-                // Volume (respect override/atten)
+            // Volume (respect override/atten) - Applies to all PSG channels including Noise
+            if (t.channelId <= 3) {
                 int vol = t.psgVolumeOverride >= 0 ? t.psgVolumeOverride : 0;
                 vol = Math.min(0x0F, Math.max(0, vol + t.volumeOffset));
-                synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
+                // Latch Volume: 1cc1dddd (type=1)
+                synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | vol);
             }
         }
     }
@@ -735,7 +735,8 @@ public class SmpsSequencer implements AudioStream {
         } else if (t.type == TrackType.DAC) {
             synth.stopDac();
         } else {
-            if (t.channelId < 3) {
+            // Silence PSG (Tone or Noise)
+            if (t.channelId <= 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
             }
         }
@@ -753,20 +754,62 @@ public class SmpsSequencer implements AudioStream {
         if (t.type != TrackType.FM || t.voiceData == null) {
             return;
         }
-        byte[] voice = new byte[t.voiceData.length];
-        System.arraycopy(t.voiceData, 0, voice, 0, voice.length);
-        // Apply volume offset to TL bytes if present (19-byte voices omit TL -> use 0)
-        boolean hasTl = voice.length >= 25;
-        int tlBase = hasTl ? 5 : -1;
-        if (tlBase >= 0) {
-            for (int op = 0; op < 4; op++) {
-                int idx = tlBase + op;
-                int tl = (voice[idx] & 0x7F) + t.volumeOffset;
+
+        byte[] voice;
+        // Sonic 2 voices are typically 21 bytes (no TL).
+        boolean isS2Voice = t.voiceData.length == 21;
+
+        if (isS2Voice) {
+            voice = new byte[25];
+            System.arraycopy(t.voiceData, 0, voice, 0, 21);
+            int algo = voice[0] & 0x07;
+            // Map Op Index 0..3 to Op ID 0(1), 2(3), 1(2), 3(4)
+            // TL slots at 5..8 correspond to this order.
+            for (int i = 0; i < 4; i++) {
+                int opId = (i == 0) ? 0 : (i == 1) ? 2 : (i == 2) ? 1 : 3;
+                int tl = 0; // Default TL for S2 (Max Volume)
+                if (isCarrier(algo, opId)) {
+                    tl += t.volumeOffset;
+                }
                 if (tl > 0x7F) tl = 0x7F;
-                voice[idx] = (byte) tl;
+                if (tl < 0) tl = 0;
+                voice[5 + i] = (byte) tl;
+            }
+        } else {
+            voice = new byte[t.voiceData.length];
+            System.arraycopy(t.voiceData, 0, voice, 0, voice.length);
+            // Standard SMPS: Apply volume offset to TL bytes if present
+            boolean hasTl = voice.length >= 25;
+            if (hasTl) {
+                int algo = voice[0] & 0x07;
+                for (int i = 0; i < 4; i++) {
+                    int idx = 5 + i;
+                    int opId = (i == 0) ? 0 : (i == 1) ? 2 : (i == 2) ? 1 : 3;
+                    int tl = (voice[idx] & 0x7F);
+                    if (isCarrier(algo, opId)) {
+                        tl += t.volumeOffset;
+                    }
+                    if (tl > 0x7F) tl = 0x7F;
+                    if (tl < 0) tl = 0;
+                    voice[idx] = (byte) tl;
+                }
             }
         }
         synth.setInstrument(t.channelId, voice);
+    }
+
+    private boolean isCarrier(int algo, int op) {
+        switch (algo) {
+            case 0: return op == 3;
+            case 1: return op == 3;
+            case 2: return op == 3;
+            case 3: return op == 3;
+            case 4: return op == 1 || op == 3;
+            case 5: return op == 1 || op == 2 || op == 3;
+            case 6: return op == 1 || op == 2 || op == 3;
+            case 7: return true;
+            default: return false;
+        }
     }
 
     private void applyFmPanAmsFms(Track t) {
