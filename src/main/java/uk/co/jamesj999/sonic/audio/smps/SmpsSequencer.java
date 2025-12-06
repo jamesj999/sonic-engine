@@ -617,15 +617,18 @@ public class SmpsSequencer implements AudioStream {
             byte[] voice = new byte[voiceLen];
             System.arraycopy(data, offset, voice, 0, voiceLen);
 
-            // For Sonic 2 (Little Endian), the voice data is typically 21 bytes (Header + Regs)
-            // but stored with 25-byte stride (padding at end).
-            // However, it DOES NOT contain Total Level (TL) bytes at index 5.
-            // Ym2612Chip.setInstrument() detects TL presence by checking if length >= 25.
-            // Since we read 25 bytes, we must truncate it to 21 bytes for S2 to force the "No TL" mapping.
+            // For Sonic 2 (Little Endian), the voice data does not contain Total Level (TL).
+            // It corresponds to the S1 format but with bytes 5-8 (TL) removed.
+            // To support volume attenuation (E6), we must convert it to the 25-byte format (with TL).
             if (smpsData.isLittleEndian()) {
-                byte[] s2Voice = new byte[21];
-                System.arraycopy(voice, 0, s2Voice, 0, 21);
-                voice = s2Voice;
+                byte[] s1Voice = new byte[25];
+                // Copy Header + DT/MUL (0-4)
+                System.arraycopy(voice, 0, s1Voice, 0, 5);
+                // TL is 0 (Indices 5-8 already 0)
+                // Copy remaining regs (S2 index 5 -> S1 index 9)
+                // S2 effective length is 21. 21 - 5 = 16 bytes.
+                System.arraycopy(voice, 5, s1Voice, 9, 16);
+                voice = s1Voice;
             }
 
             t.voiceData = voice;
@@ -723,6 +726,12 @@ public class SmpsSequencer implements AudioStream {
                 int vol = t.psgVolumeOverride >= 0 ? t.psgVolumeOverride : 0;
                 vol = Math.min(0x0F, Math.max(0, vol + t.volumeOffset));
                 synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
+            } else if (t.channelId == 3) {
+                // Noise Channel (3)
+                // Pitch/Mode is set by 0xF3 flag, note command only triggers envelope/volume.
+                int vol = t.psgVolumeOverride >= 0 ? t.psgVolumeOverride : 0;
+                vol = Math.min(0x0F, Math.max(0, vol + t.volumeOffset));
+                synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
     }
@@ -737,6 +746,8 @@ public class SmpsSequencer implements AudioStream {
         } else {
             if (t.channelId < 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
+            } else if (t.channelId == 3) {
+                synth.writePsg(0x80 | (3 << 5) | (1 << 4) | 0x0F); // Noise Silence
             }
         }
     }

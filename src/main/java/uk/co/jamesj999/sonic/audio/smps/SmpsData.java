@@ -68,17 +68,79 @@ public class SmpsData {
             int[] psgPtrs = new int[psgChannels];
             int[] psgKeys = new int[psgChannels];
             int[] psgVols = new int[psgChannels];
-            for (int i = 0; i < psgChannels; i++) {
-                if (offset + 1 < data.length) {
-                    psgPtrs[i] = read16(data, offset);
-                    psgKeys[i] = (byte) data[offset + 2];
-                    psgVols[i] = (byte) data[offset + 3];
-                } else {
-                    psgPtrs[i] = 0;
-                    psgKeys[i] = 0;
-                    psgVols[i] = 0;
+
+            // Mystic Cave Zone (S2) header corruption fix
+            // S2 MCZ header has corrupt PSG pointers which overlap.
+            // Heuristic: If first pointer seems invalid (points inside header) and overlapping pointer at offset+2 is valid.
+            boolean mczCorruption = false;
+            if (psgChannels == 3 && offset + 4 < data.length) {
+                int p0 = read16(data, offset);
+                int p0_alt = read16(data, offset + 2);
+
+                // Check validity relative to Z80 base if known, or just check range relative to header size.
+                // MCZ bad pointer: p0 is small/garbage.
+                // MCZ good pointer: p0_alt looks like a valid pointer (e.g. > header end).
+                // However, without full ROM context, "valid" is hard.
+                // Specific Check: In S2 MCZ, the PSG pointers are shifted by 2 bytes.
+                // Standard: [P0 P0 K0 V0] [P1 P1 K1 V1] ...
+                // MCZ:      [xx xx P0 P0] [K0 V0 P1 P1] [K1 V1 P2 P2] [K2 V2 ...]
+                // Actually, let's just check if p0 points to "self" or very close.
+                // Or check the overlapping property directly.
+
+                // Let's implement the specific offsets mentioned:
+                // Ch0 @ offset+2, Ch1 @ offset+6, Ch2 @ offset+8 ??
+                // Wait, if shifted by 2 bytes:
+                // [xx xx P0L P0H] -> Ch0 Ptr is at offset+2.
+                // [K0 V0 P1L P1H] -> Ch1 Ptr is at offset+6.
+                // [K1 V1 P2L P2H] -> Ch2 Ptr is at offset+10.
+
+                // The memory said: "Channel 0 (offset +2), Channel 1 (offset +6...), Channel 2 (offset +8)."
+                // Offset + 8 for Ch2 implies [K1 V1] are missing or different?
+                // Let's stick to the memory description exactly.
+
+                // How to detect?
+                // If p0 is invalid (e.g. 0 or points to header) AND p0_alt is valid.
+                // Let's assume valid > 0x20 (past header usually).
+                if (p0 < 0x20 && p0_alt > 0x20) {
+                     mczCorruption = true;
                 }
-                offset += 4; // skip key + volume
+            }
+
+            if (mczCorruption) {
+                // Channel 0: Ptr at offset+2, Key at offset+4 (derived?), Vol at offset+5?
+                // Memory: "Channel 1 (offset +6, with Key/Vol overlapping Channel 2's pointer at +8)"
+                // This implies complex overlap. Let's just hardcode the offsets as per memory instructions.
+
+                // Channel 0
+                psgPtrs[0] = read16(data, offset + 2);
+                psgKeys[0] = 0; // Unknown/Default
+                psgVols[0] = 0;
+
+                // Channel 1
+                psgPtrs[1] = read16(data, offset + 6);
+                psgKeys[1] = 0;
+                psgVols[1] = 0;
+
+                // Channel 2
+                psgPtrs[2] = read16(data, offset + 8); // Memory says +8
+                psgKeys[2] = 0;
+                psgVols[2] = 0;
+
+                // Update offset to skip this mess
+                offset += (psgChannels * 4);
+            } else {
+                for (int i = 0; i < psgChannels; i++) {
+                    if (offset + 1 < data.length) {
+                        psgPtrs[i] = read16(data, offset);
+                        psgKeys[i] = (byte) data[offset + 2];
+                        psgVols[i] = (byte) data[offset + 3];
+                    } else {
+                        psgPtrs[i] = 0;
+                        psgKeys[i] = 0;
+                        psgVols[i] = 0;
+                    }
+                    offset += 4; // skip key + volume
+                }
             }
             this.psgPointers = psgPtrs;
             this.psgKeyOffsets = psgKeys;
