@@ -336,8 +336,8 @@ public class SmpsSequencer implements AudioStream {
             case 0xF8: // Call
                 handleCall(t);
                 break;
-            case 0xF9: // Return
-                handleReturn(t);
+            case 0xF9: // SND_OFF (was Return in some versions, but Sonic 2 is SND_OFF)
+                handleSndOff(t);
                 break;
             case 0xF0: // Modulation
                 handleModulation(t);
@@ -500,6 +500,18 @@ public class SmpsSequencer implements AudioStream {
         } else {
             t.active = false;
         }
+    }
+
+    private void handleSndOff(Track t) {
+        if (t.type != TrackType.FM) return;
+        int hwCh = t.channelId;
+        int port = (hwCh < 3) ? 0 : 1;
+        int ch = (hwCh % 3);
+        // Write 0x0F to RR of Ops 3 (Slot 1) and 4 (Slot 3)
+        // 0x88 + ch = Op 3
+        // 0x8C + ch = Op 4
+        synth.writeFm(port, 0x88 + ch, 0x0F);
+        synth.writeFm(port, 0x8C + ch, 0x0F);
     }
 
     private void handleModulation(Track t) {
@@ -671,8 +683,12 @@ public class SmpsSequencer implements AudioStream {
             t.baseFnum = fnum;
             t.baseBlock = block;
 
+            // Pitch Slide / Wrapping logic
             int packed = (block << 11) | fnum;
             packed += t.detune;
+
+            packed = getPitchSlideFreq(packed);
+
             block = (packed >> 11) & 7;
             fnum = packed & 0x7FF;
 
@@ -722,6 +738,24 @@ public class SmpsSequencer implements AudioStream {
 
         t.decayOffset = 0;
         t.decayTimer = 0;
+    }
+
+    private int getPitchSlideFreq(int freq) {
+        // Based on SMPSPlay DoPitchSlide logic
+        // Base FNum for low Octave is approx 0x269 (617)
+        int baseFreq = 0x269;
+        int lowFreq = baseFreq;
+        int highFreq = baseFreq * 2;
+        int freqFixDown = 0x7FF - baseFreq;
+        int freqFixUp = 0x800 - baseFreq;
+
+        int octFreq = freq & 0x7FF;
+        if (octFreq < lowFreq) {
+             freq -= freqFixDown;
+        } else if (octFreq > highFreq) {
+             freq += freqFixUp;
+        }
+        return freq;
     }
 
     private void stopNote(Track t) {
@@ -781,8 +815,9 @@ public class SmpsSequencer implements AudioStream {
             for (int op = 0; op < 4; op++) {
                 if ((mask & (1 << op)) != 0) {
                     int idx = tlBase + op;
+                    // Correct wrapping for TL volume (adding volume offset = more attenuation)
                     int tl = (voice[idx] & 0x7F) + t.volumeOffset;
-                    if (tl > 0x7F) tl = 0x7F;
+                    tl &= 0x7F; // Wrap around 7-bit as per SMPS Z80 behavior
                     voice[idx] = (byte) tl;
                 }
             }
@@ -820,15 +855,20 @@ public class SmpsSequencer implements AudioStream {
         t.modTimer = t.modStep;
         t.modPos = (t.modPos + 1) & 0xFF;
         int signedDepth = (t.modPos & 0x80) != 0 ? -t.modDepth : t.modDepth;
-        int fnum = t.baseFnum + signedDepth;
-        fnum += t.detune;
 
-        if (fnum < 0) fnum = 0;
-        if (fnum > 0x7FF) fnum = 0x7FF;
+        // Calculate packed frequency (Block|FNum) to support octave wrapping
+        int packed = (t.baseBlock << 11) | t.baseFnum;
+        packed += signedDepth + t.detune;
+
+        packed = getPitchSlideFreq(packed);
+
+        int block = (packed >> 11) & 7;
+        int fnum = packed & 0x7FF;
+
         int hwCh = t.channelId;
         int port = (hwCh < 3) ? 0 : 1;
         int ch = (hwCh % 3);
-        writeFmFreq(port, ch, fnum, t.baseBlock);
+        writeFmFreq(port, ch, fnum, block);
     }
 
     private void setDetune(Track t) {
