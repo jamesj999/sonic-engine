@@ -94,9 +94,9 @@ public class Ym2612Chip {
     };
     private static final double[] AMS_DEPTH = {0.0, 1.4, 5.9, 11.8};
 
-    private static final double OUTPUT_GAIN = 1200.0;
+    private static final double OUTPUT_GAIN = 3000.0;
     private static final double LPF_CUTOFF_HZ = 22000.0;
-    private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
+    private static final double LPF_ALPHA = 1.0;
     private static final double TIMER_BASE = (CLOCK / SAMPLE_RATE) * (4096.0 / 144.0);
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / SAMPLE_RATE;
     private static final double DAC_GAIN = 64.0;
