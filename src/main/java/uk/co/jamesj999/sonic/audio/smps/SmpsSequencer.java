@@ -62,6 +62,8 @@ public class SmpsSequencer implements AudioStream {
         int modPos;
         boolean modEnabled;
         int detune;
+        int modEnvId;
+        int instrumentId;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -136,11 +138,19 @@ public class SmpsSequencer implements AudioStream {
             Track t = new Track(ptr, TrackType.PSG, i);
             int[] psgKeys = smpsData.getPsgKeyOffsets();
             int[] psgVols = smpsData.getPsgVolumeOffsets();
+            int[] psgMods = smpsData.getPsgModEnvs();
+            int[] psgInsts = smpsData.getPsgInstruments();
             if (i < psgKeys.length) {
                 t.keyOffset = (byte) psgKeys[i];
             }
             if (i < psgVols.length) {
                 t.volumeOffset = psgVols[i];
+            }
+            if (i < psgMods.length) {
+                t.modEnvId = psgMods[i];
+            }
+            if (i < psgInsts.length) {
+                t.instrumentId = psgInsts[i];
             }
             t.dividingTiming = dividingTiming;
             tracks.add(t);
@@ -715,8 +725,10 @@ public class SmpsSequencer implements AudioStream {
             // Hz = (FNum * Clock) / (72 * 2^(20-Block))
             // Clock 7670453.
             // For PSG, Block shifts.
-            // Let's approximate.
-            double freq = (FNUM_TABLE[noteIdx] * 7670453.0) / (72.0 * (1 << (20 - octave)));
+            // SMPS PSG frequency table index 0 is 131Hz (Low C).
+            // Java FNUM_TABLE[0] (617) at block 0 is 62Hz (Low C one octave lower).
+            // So we need to shift up by 1 octave.
+            double freq = (FNUM_TABLE[noteIdx] * 7670453.0) / (72.0 * (1 << (20 - (octave + 1))));
 
             // PSG Register = 3579545 / (32 * freq)
             int reg = (int) (3579545.0 / (32.0 * freq));
@@ -742,6 +754,11 @@ public class SmpsSequencer implements AudioStream {
                 // Volume (attenuation)
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
+            } else if (t.channelId == 3) {
+                // Noise Channel (Channel 3)
+                // Just update Volume (attenuation). Frequency/Type controlled by F3 command (setPsgNoise).
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
     }
@@ -754,7 +771,7 @@ public class SmpsSequencer implements AudioStream {
         } else if (t.type == TrackType.DAC) {
             synth.stopDac();
         } else {
-            if (t.channelId < 3) {
+            if (t.channelId <= 3) {
                 synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
             }
         }
@@ -771,7 +788,7 @@ public class SmpsSequencer implements AudioStream {
     private void refreshVolume(Track t) {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
-        } else if (t.type == TrackType.PSG && t.channelId < 3) {
+        } else if (t.type == TrackType.PSG && t.channelId <= 3) {
             int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
             synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | vol);
         }
