@@ -61,8 +61,7 @@ public class SmpsSequencer implements AudioStream {
         int modTimer;
         int modPos;
         boolean modEnabled;
-        // PSG overrides
-        int psgVolumeOverride = -1;
+        int detune;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -315,9 +314,14 @@ public class SmpsSequencer implements AudioStream {
             case 0xE0: // Pan
                 setPanAmsFms(t);
                 break;
-            case 0xE1: // Detune (unused placeholder)
+            case 0xE1: // Detune
+                setDetune(t);
+                break;
             case 0xE2: // Detune variant / comms
                 if (t.pos < data.length) t.pos++;
+                break;
+            case 0xE4: // Fade in (stop track placeholder)
+                handleFadeIn(t);
                 break;
             case 0xE5: // Tick multiplier (track-local)
                 setTrackDividingTiming(t);
@@ -528,7 +532,7 @@ public class SmpsSequencer implements AudioStream {
     private void setVolumeOffset(Track t) {
         if (t.pos < data.length) {
             t.volumeOffset += (byte) data[t.pos++];
-            refreshInstrument(t);
+            refreshVolume(t);
         }
     }
 
@@ -553,7 +557,9 @@ public class SmpsSequencer implements AudioStream {
 
     private void setPsgVolume(Track t) {
         if (t.pos < data.length) {
-            t.psgVolumeOverride = data[t.pos++] & 0x0F;
+            // S2 uses EC to ADD to volume attenuation (signed byte)
+            t.volumeOffset += (byte) data[t.pos++];
+            refreshVolume(t);
         }
     }
 
@@ -680,6 +686,15 @@ public class SmpsSequencer implements AudioStream {
             t.baseFnum = fnum;
             t.baseBlock = block;
 
+            // Apply Detune (Frequency Displacement)
+            // Detune adds to the final frequency. For FM, this means adding to F-Num (mostly).
+            // Proper way: (block << 11) | fnum -> add detune -> unpack.
+            int packed = (block << 11) | fnum;
+            packed += t.detune;
+            // Unpack
+            block = (packed >> 11) & 7;
+            fnum = packed & 0x7FF;
+
             // Write A4 (Block/FNumMSB) and A0 (FNumLSB)
             writeFmFreq(port, ch, fnum, block);
 
@@ -708,6 +723,11 @@ public class SmpsSequencer implements AudioStream {
             if (reg > 1023) reg = 1023;
             if (reg < 1) reg = 1;
 
+            // Apply Detune
+            reg += t.detune;
+            if (reg > 1023) reg = 1023;
+            if (reg < 1) reg = 1;
+
             // Write Tone
             // Channel 0,1,2.
             if (t.channelId < 3) {
@@ -719,9 +739,8 @@ public class SmpsSequencer implements AudioStream {
                 // Data: 00DDDDDD
                 synth.writePsg((reg >> 4) & 0x3F);
 
-                // Volume (respect override/atten)
-                int vol = t.psgVolumeOverride >= 0 ? t.psgVolumeOverride : 0;
-                vol = Math.min(0x0F, Math.max(0, vol + t.volumeOffset));
+                // Volume (attenuation)
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
             }
         }
@@ -747,6 +766,15 @@ public class SmpsSequencer implements AudioStream {
             if (t.active) return false;
         }
         return true;
+    }
+
+    private void refreshVolume(Track t) {
+        if (t.type == TrackType.FM) {
+            refreshInstrument(t);
+        } else if (t.type == TrackType.PSG && t.channelId < 3) {
+            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+            synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | vol);
+        }
     }
 
     private void refreshInstrument(Track t) {
@@ -800,12 +828,26 @@ public class SmpsSequencer implements AudioStream {
         t.modPos = (t.modPos + 1) & 0xFF;
         int signedDepth = (t.modPos & 0x80) != 0 ? -t.modDepth : t.modDepth;
         int fnum = t.baseFnum + signedDepth;
+        // Apply detune here as well
+        fnum += t.detune;
+
         if (fnum < 0) fnum = 0;
         if (fnum > 0x7FF) fnum = 0x7FF;
         int hwCh = t.channelId;
         int port = (hwCh < 3) ? 0 : 1;
         int ch = (hwCh % 3);
         writeFmFreq(port, ch, fnum, t.baseBlock);
+    }
+
+    private void setDetune(Track t) {
+        if (t.pos < data.length) {
+            t.detune = data[t.pos++];
+        }
+    }
+
+    private void handleFadeIn(Track t) {
+        t.active = false;
+        stopNote(t);
     }
 
     /**
@@ -836,6 +878,7 @@ public class SmpsSequencer implements AudioStream {
             dt.tieNext = t.tieNext;
             dt.modEnabled = t.modEnabled;
             dt.modDepth = t.modDepth;
+            dt.detune = t.detune;
             dt.loopCounter = (t.loopCounters != null && t.loopCounters.length > 0) ? t.loopCounters[0] : 0;
             dt.position = t.pos;
             state.tracks.add(dt);
@@ -865,6 +908,7 @@ public class SmpsSequencer implements AudioStream {
         public boolean tieNext;
         public boolean modEnabled;
         public int modDepth;
+        public int detune;
         public int loopCounter;
         public int position;
     }
