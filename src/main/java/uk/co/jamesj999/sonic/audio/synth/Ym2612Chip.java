@@ -457,11 +457,19 @@ public class Ym2612Chip {
         ch.algo = val00 & 7;
 
         int[] opOrder = {0, 2, 1, 3};
-        int tlIdxBase = 5;
-        int rsArBase = hasTl ? 9 : 5;
-        int amD1rBase = rsArBase + 4;
-        int d2rBase = amD1rBase + 4;
-        int d1lRrBase = d2rBase + 4;
+        // Standard SMPS Instrument Layout:
+        // 0: Algo/Feedback
+        // 1-4: DT/MUL
+        // 5-8: RS/AR
+        // 9-12: AM/D1R
+        // 13-16: D2R
+        // 17-20: D1L/RR
+        // 21-24: TL
+        int rsArBase = 5;
+        int amD1rBase = 9;
+        int d2rBase = 13;
+        int d1lRrBase = 17;
+        int tlIdxBase = 21;
 
         for (int orderIdx = 0; orderIdx < 4; orderIdx++) {
             int op = opOrder[orderIdx];

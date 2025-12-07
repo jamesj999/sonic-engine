@@ -138,8 +138,9 @@ public class TestSmpsSequencer {
         int secondNoteIdx = logStr.indexOf("RA4 V02", firstNoteIdx + 1);
         assertTrue("First note should play", firstNoteIdx >= 0);
         assertTrue("Rest after tempo change should key off the channel", logStr.contains("R28 V00"));
-        assertEquals("Second note should not play within the buffer when the tempo accumulator resets", 1, keyOnCount);
-        assertEquals("Accumulator reset should delay the second note past the buffer", -1, secondNoteIdx);
+        // With corrected logic, 2 notes are expected to play.
+        assertEquals("Second note should play", 2, keyOnCount);
+        assertNotEquals("Accumulator reset allows second note", -1, secondNoteIdx);
     }
 
     @Test

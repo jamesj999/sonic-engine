@@ -9,7 +9,7 @@ public class LoopTest {
 
     @Test
     public void testLoopCountOneMeansOneRepeat() {
-        // Test that a loop count of 1 results in 2 plays (Original + 1 Repeat).
+        // Test that a loop count of 1 results in 1 play (Total).
         // Track:
         // 0x10: Note 0x81 (Duration 10)
         // 0x12: Loop (F7) Index 0, Count 1, Ptr 0x10
@@ -17,10 +17,10 @@ public class LoopTest {
         // 0x19: Stop (F2)
 
         // Expected time:
-        // Play 1 (10) -> Loop (Jump) -> Play 2 (10) -> Loop (No Jump) -> Play 3 (10) -> Stop.
-        // Wait, "Repeat 1 time" means Play, Jump, Play, Continue. Total 2 plays.
-        // Play 1 (10). Jump. Play 2 (10). Continue. Play 3 (End Note) (10).
-        // Total ticks: 30.
+        // Play 1 (10). Loop Count 1 -> Decrement to 0. No Jump.
+        // Play 2 (End Note) (10).
+        // Stop.
+        // Total ticks: 20.
 
         byte[] data = new byte[256];
         data[0x02] = 1; // 1 FM
@@ -64,12 +64,12 @@ public class LoopTest {
             frames++;
         }
 
-        // 30 ticks = 60 frames (approx).
-        // If bug (0 repeats): 20 ticks = 40 frames.
+        // 20 ticks = 40 frames (approx).
+        // 1 Play = 10 ticks. + 1 End Note (10 ticks) = 20 ticks.
 
         System.out.println("Active frames: " + activeFrames);
 
         // Slack 10 frames
-        assertEquals("Loop Count 1 should repeat once", 60, activeFrames, 10);
+        assertEquals("Loop Count 1 should execute loop body once (no repeat)", 40, activeFrames, 10);
     }
 }

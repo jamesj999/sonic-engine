@@ -15,19 +15,20 @@ public class TestYm2612InstrumentTone {
         Ym2612Chip chip = new Ym2612Chip();
 
         // Simple bright voice: all carriers, fast attack/decay.
+        // Updated to Standard SMPS Layout (TL at 21).
         byte[] voice = new byte[] {
-                (byte) 0x07,             // alg=7 (all carriers), fb=0
-                (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01, // DT/MUL ops 1,3,2,4
-                // TL for 4 ops
-                0x00, 0x00, 0x00, 0x00,
-                // RS/AR
+                (byte) 0x07,             // 0: alg=7 (all carriers), fb=0
+                (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01, // 1-4: DT/MUL ops 1,3,2,4
+                // 5-8: RS/AR
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
-                // AM/D1R
+                // 9-12: AM/D1R
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
-                // D2R
+                // 13-16: D2R
                 0x0A, 0x0A, 0x0A, 0x0A,
-                // D1L/RR
-                (byte) 0x0F, (byte) 0x0F, (byte) 0x0F, (byte) 0x0F
+                // 17-20: D1L/RR
+                (byte) 0x0F, (byte) 0x0F, (byte) 0x0F, (byte) 0x0F,
+                // 21-24: TL for 4 ops
+                0x00, 0x00, 0x00, 0x00
         };
 
         chip.setInstrument(0, voice);
