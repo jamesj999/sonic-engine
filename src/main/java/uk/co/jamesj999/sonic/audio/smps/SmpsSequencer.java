@@ -22,6 +22,10 @@ public class SmpsSequencer implements AudioStream {
     private double sampleCounter = 0;
     private boolean primed;
 
+    // Default Sonic 2 Channel Order (from SMPSPlay loader_def.c)
+    private static final int[] FM_CHN_ORDER = {0x16, 0, 1, 2, 4, 5, 6};
+    private static final int[] PSG_CHN_ORDER = {0x80, 0xA0, 0xC0};
+
     // F-Num table for Octave 4
     private static final int[] FNUM_TABLE = {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
@@ -64,6 +68,7 @@ public class SmpsSequencer implements AudioStream {
         int detune;
         int modEnvId;
         int instrumentId;
+        boolean noiseMode;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -95,47 +100,59 @@ public class SmpsSequencer implements AudioStream {
         int[] fmPointers = smpsData.getFmPointers();
         int[] psgPointers = smpsData.getPsgPointers();
 
-        // DAC track (channel 5) if present
-        int dacPtr = relocate(smpsData.getDacPointer(), z80Start);
-        boolean hasDac = false;
-        if (dacPtr >= 0 && dacPtr < data.length) {
-            Track t = new Track(dacPtr, TrackType.DAC, 5);
-            t.dividingTiming = dividingTiming;
-            tracks.add(t);
-            hasDac = true;
-        }
-
-        // FM tracks
+        // FM tracks mapping
         for (int i = 0; i < fmPointers.length; i++) {
-            // If we have a DAC track, FM channel 6 (index 5) is unavailable
-            if (hasDac && i == 5) {
+            int chnVal = (i < FM_CHN_ORDER.length) ? FM_CHN_ORDER[i] : -1;
+
+            // 0x16 or 0x10 is DAC
+            if (chnVal == 0x16 || chnVal == 0x10) {
+                // DAC Track
+                int ptr = relocate(fmPointers[i], z80Start);
+                if (ptr >= 0 && ptr < data.length) {
+                    Track t = new Track(ptr, TrackType.DAC, 5); // DAC uses channel 5 (FM6) slot
+                    t.dividingTiming = dividingTiming;
+                    tracks.add(t);
+                }
                 continue;
             }
 
-            int ptr = relocate(fmPointers[i], z80Start);
-            if (ptr < 0 || ptr >= data.length) {
-                continue;
+            // FM Channel
+            int linearCh = mapFmChannel(chnVal);
+            if (linearCh >= 0) {
+                int ptr = relocate(fmPointers[i], z80Start);
+                if (ptr < 0 || ptr >= data.length) {
+                    continue;
+                }
+                Track t = new Track(ptr, TrackType.FM, linearCh);
+                int[] fmKeys = smpsData.getFmKeyOffsets();
+                int[] fmVols = smpsData.getFmVolumeOffsets();
+                if (i < fmKeys.length) {
+                    t.keyOffset = (byte) fmKeys[i];
+                }
+                if (i < fmVols.length) {
+                    t.volumeOffset = fmVols[i];
+                }
+                t.dividingTiming = dividingTiming;
+                loadVoice(t, 0); // default instrument
+                tracks.add(t);
             }
-            Track t = new Track(ptr, TrackType.FM, i);
-            int[] fmKeys = smpsData.getFmKeyOffsets();
-            int[] fmVols = smpsData.getFmVolumeOffsets();
-            if (i < fmKeys.length) {
-                t.keyOffset = (byte) fmKeys[i];
-            }
-            if (i < fmVols.length) {
-                t.volumeOffset = fmVols[i];
-            }
-            t.dividingTiming = dividingTiming;
-            loadVoice(t, 0); // default instrument to avoid silence before EF
-            tracks.add(t);
         }
 
+        // PSG tracks mapping
         for (int i = 0; i < psgPointers.length; i++) {
             int ptr = relocate(psgPointers[i], z80Start);
             if (ptr < 0 || ptr >= data.length) {
                 continue;
             }
-            Track t = new Track(ptr, TrackType.PSG, i);
+
+            int chnVal = (i < PSG_CHN_ORDER.length) ? PSG_CHN_ORDER[i] : -1;
+            int linearCh = mapPsgChannel(chnVal);
+            if (linearCh < 0) {
+                // Fallback for extra channels (like Noise if mapped linearly)
+                linearCh = i;
+            }
+
+            Track t = new Track(ptr, TrackType.PSG, linearCh);
             int[] psgKeys = smpsData.getPsgKeyOffsets();
             int[] psgVols = smpsData.getPsgVolumeOffsets();
             int[] psgMods = smpsData.getPsgModEnvs();
@@ -155,22 +172,26 @@ public class SmpsSequencer implements AudioStream {
             t.dividingTiming = dividingTiming;
             tracks.add(t);
         }
+    }
 
-        // Some manually constructed SMPS blobs only provide a single pointer in the "DAC" slot.
-        // If no FM tracks were created but we have a valid pointer and at least one FM channel
-        // declared, repurpose that pointer as an FM track on hardware channel 5 (DAC slot).
-        boolean hasFmTrack = tracks.stream().anyMatch(t -> t.type == TrackType.FM);
-        if (!hasFmTrack && smpsData.getChannels() > 0 && dacPtr > 0 && dacPtr < data.length) {
-            Track dacTrack = tracks.stream()
-                    .filter(t -> t.type == TrackType.DAC && t.pos == dacPtr)
-                    .findFirst()
-                    .orElse(null);
-            if (dacTrack != null) {
-                dacTrack.type = TrackType.FM;
-                dacTrack.channelId = 5;
-            } else {
-                tracks.add(new Track(dacPtr, TrackType.FM, 5));
-            }
+    private int mapFmChannel(int val) {
+        switch (val) {
+            case 0: return 0; // FM1
+            case 1: return 1; // FM2
+            case 2: return 2; // FM3
+            case 4: return 3; // FM4
+            case 5: return 4; // FM5
+            case 6: return 5; // FM6
+            default: return -1;
+        }
+    }
+
+    private int mapPsgChannel(int val) {
+        switch (val) {
+            case 0x80: return 0;
+            case 0xA0: return 1;
+            case 0xC0: return 2;
+            default: return -1;
         }
     }
 
@@ -199,7 +220,6 @@ public class SmpsSequencer implements AudioStream {
         }
 
         if (tempoWeight == 0) {
-            // Tempo zero stalls progression; render still runs synth mix (silence) without ticking.
             return buffer.length;
         }
 
@@ -209,8 +229,7 @@ public class SmpsSequencer implements AudioStream {
                 sampleCounter -= samplesPerFrame;
                 processTempoFrame();
             }
-            // Generate 1 sample
-            short[] single = new short[1]; // Inefficient but simple for now
+            short[] single = new short[1];
             synth.render(single);
             buffer[i] = single[0];
         }
@@ -225,13 +244,11 @@ public class SmpsSequencer implements AudioStream {
             if (t.duration > 0) {
                 t.duration--;
 
-                // Handle Fill (Gate Time)
                 if (t.fill > 0 && t.duration <= t.fill && !t.tieNext) {
                     stopNote(t);
                 }
 
                 if (t.duration > 0) {
-                    // Apply modulation during sustain for FM channels
                     if (t.type == TrackType.FM && t.modEnabled) {
                         applyModulation(t);
                     }
@@ -239,7 +256,6 @@ public class SmpsSequencer implements AudioStream {
                 }
             }
 
-            // Read next command
             while (t.duration == 0 && t.active) {
                 if (t.pos >= data.length) {
                     t.active = false;
@@ -249,34 +265,27 @@ public class SmpsSequencer implements AudioStream {
                 int cmd = data[t.pos++] & 0xFF;
 
                 if (cmd >= 0xE0) {
-                    // Flags
                     handleFlag(t, cmd);
                 } else if (cmd >= 0x80) {
-                    // Note
                     t.note = cmd;
-                    // Check next byte for duration
                     if (t.pos < data.length) {
                         int next = data[t.pos] & 0xFF;
                         if (next < 0x80) {
                             setDuration(t, next);
                             t.pos++;
                         } else {
-                            // Reuse previous duration if not specified.
                             reuseDuration(t);
                         }
                     }
                     playNote(t);
-                    break; // Consumed time
+                    break;
                 } else {
-                    // Duration only
                     setDuration(t, cmd);
                     playNote(t);
                     break;
                 }
             }
 
-            // If the track became inactive during this tick (e.g., ran off the end without an explicit stop),
-            // make sure we silence the channel. Otherwise the last PSG tone can linger.
             if (!t.active && wasActive) {
                 stopNote(t);
             }
@@ -285,7 +294,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void processTempoFrame() {
         if (tempoWeight == 0) {
-            return; // tempo zero halts progression
+            return;
         }
         tempoAccumulator += tempoWeight;
         while (tempoAccumulator >= TEMPO_MOD_BASE) {
@@ -300,25 +309,25 @@ public class SmpsSequencer implements AudioStream {
                 t.active = false;
                 stopNote(t);
                 break;
-            case 0xE3: // Return (alt opcode)
+            case 0xE3: // Return
                 handleReturn(t);
                 break;
-            case 0xF6: // Jump (2 byte param)
+            case 0xF6: // Jump
                 handleJump(t);
                 break;
-            case 0xF7: // Loop (4 byte param)
+            case 0xF7: // Loop
                 handleLoop(t);
                 break;
-            case 0xF8: // Call (2 byte param)
+            case 0xF8: // Call
                 handleCall(t);
                 break;
-            case 0xF9: // Return from subroutine (S2: paired with F8 call)
+            case 0xF9: // Return
                 handleReturn(t);
                 break;
-            case 0xF0: // Modulation (4 byte param)
+            case 0xF0: // Modulation
                 handleModulation(t);
                 break;
-            case 0xF1: // Modulation on (resume)
+            case 0xF1: // Modulation on
                 t.modEnabled = true;
                 break;
             case 0xE0: // Pan
@@ -333,22 +342,22 @@ public class SmpsSequencer implements AudioStream {
             case 0xE4: // Fade in (stop track placeholder)
                 handleFadeIn(t);
                 break;
-            case 0xE5: // Tick multiplier (track-local)
+            case 0xE5: // Tick multiplier
                 setTrackDividingTiming(t);
                 break;
-            case 0xE6: // Channel volume attenuation
+            case 0xE6: // Volume
                 setVolumeOffset(t);
                 break;
-            case 0xE7: // Tie next note (prevent attack)
+            case 0xE7: // Tie next
                 t.tieNext = true;
                 break;
-            case 0xE8: // Note fill (release early)
+            case 0xE8: // Note fill
                 setFill(t);
                 break;
             case 0xE9: // Key displacement
                 setKeyOffset(t);
                 break;
-            case 0xEC: // PSG volume override (S2 uses EC)
+            case 0xEC: // PSG volume
                 setPsgVolume(t);
                 break;
             case 0xF3: // PSG Noise
@@ -357,20 +366,20 @@ public class SmpsSequencer implements AudioStream {
             case 0xF4: // Modulation off
                 clearModulation(t);
                 break;
-            case 0xF5: // PSG instrument (not emulated) - consume param
+            case 0xF5: // PSG instrument
                 if (t.pos < data.length) {
                     t.pos++;
                 }
                 break;
             case 0xEF:
-                // Set Voice (1 byte param)
+                // Set Voice
                 if (t.pos < data.length) {
                     int voiceId = data[t.pos++] & 0xFF;
                     loadVoice(t, voiceId);
                 }
                 break;
             case 0xEA:
-                // Set main tempo (immediate effect)
+                // Set main tempo
                 if (t.pos < data.length) {
                     int newTempo = data[t.pos++] & 0xFF;
                     setTempoWeight(newTempo);
@@ -384,7 +393,6 @@ public class SmpsSequencer implements AudioStream {
                 }
                 break;
             default:
-                // Unknown flag: consume known parameter length to keep parser in sync
                 int params = flagParamLength(cmd);
                 int advance = Math.min(params, data.length - t.pos);
                 t.pos += advance;
@@ -392,47 +400,16 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
-    /**
-     * Parameter lengths for SMPS (Sonic 2 Z80) coordination flags.
-     * Counts bytes after the flag byte. Unknowns return 0.
-     */
     private int flagParamLength(int cmd) {
         switch (cmd) {
-            // 1-byte params
-            case 0xE0: // Pan/AMS/FMS
-            case 0xE1: // Detune
-            case 0xE2: // Set comm / detune variant
-            case 0xE5: // Tick multiplier (current track)
-            case 0xE6: // Channel volume offset
-            case 0xE8: // Note fill
-            case 0xE9: // Key displacement
-            case 0xEA: // Tempo weight
-            case 0xEB: // Dividing timing (all tracks)
-            case 0xEC: // PSG volume
-            case 0xED: // Ignore (consume param)
-            case 0xF3: // PSG noise
-            case 0xF5: // PSG instrument placeholder
-            case 0xEF:  // Set voice
+            case 0xE0: case 0xE1: case 0xE2: case 0xE5: case 0xE6:
+            case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC:
+            case 0xED: case 0xF3: case 0xF5: case 0xEF:
                 return 1;
-            // 2-byte params
-            case 0xF6: // Jump
-            case 0xF8:  // Call
+            case 0xF6: case 0xF8:
                 return 2;
-            // 3-byte params
-
-            // 4-byte params
-            case 0xF0: // Modulation setup
-            case 0xF7:  // Loop (index + count + ptr)
+            case 0xF0: case 0xF7:
                 return 4;
-            // 0-byte params
-            case 0xE3: // Return
-            case 0xE4: // Fade in
-            case 0xE7: // Hold
-            case 0xF1: // Mod on
-            case 0xF2: // Stop
-            case 0xF4: // Mod off
-            case 0xF9: case 0xFA: case 0xFB: case 0xFC: case 0xFD: case 0xFE: case 0xFF: // End / no-op
-                return 0;
             default:
                 return 0;
         }
@@ -455,7 +432,6 @@ public class SmpsSequencer implements AudioStream {
         if (newPos != -1) {
             t.pos = newPos;
         } else {
-            // Invalid jump, stop track
             t.active = false;
         }
     }
@@ -471,10 +447,9 @@ public class SmpsSequencer implements AudioStream {
                 return;
             }
             if (count == 0) {
-                t.pos = newPos; // infinite loop
+                t.pos = newPos;
                 return;
             }
-            // Ensure capacity
             if (index >= t.loopCounters.length) {
                 int[] newCounters = new int[Math.max(t.loopCounters.length * 2, index + 1)];
                 System.arraycopy(t.loopCounters, 0, newCounters, 0, t.loopCounters.length);
@@ -561,13 +536,13 @@ public class SmpsSequencer implements AudioStream {
     private void setPsgNoise(Track t) {
         if (t.pos < data.length) {
             int val = data[t.pos++] & 0xFF;
+            t.noiseMode = true;
             synth.writePsg(0xE0 | (val & 0x0F));
         }
     }
 
     private void setPsgVolume(Track t) {
         if (t.pos < data.length) {
-            // S2 uses EC to ADD to volume attenuation (signed byte)
             t.volumeOffset += (byte) data[t.pos++];
             refreshVolume(t);
         }
@@ -581,7 +556,7 @@ public class SmpsSequencer implements AudioStream {
     private void setTrackDividingTiming(Track t) {
         if (t.pos < data.length) {
             int newDiv = data[t.pos++] & 0xFF;
-            if (newDiv == 0) newDiv = 256; // Treat 0 as 256 ticks (driver behaviour)
+            if (newDiv == 0) newDiv = 256;
             t.dividingTiming = newDiv;
         }
     }
@@ -611,7 +586,6 @@ public class SmpsSequencer implements AudioStream {
         int factor = track.dividingTiming == 0 ? 256 : track.dividingTiming;
         int scaled = rawDuration * factor;
         if (scaled == 0) {
-            // 0 duration represents 256 frames in S3K when timing is 0
             return 256;
         }
         return scaled;
@@ -624,8 +598,6 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        // Determine voice stride and length based on SMPS format (S1 vs S2)
-        // Both now return 25 as standard stride.
         int voiceLen = smpsData.getFmVoiceLength();
         int offset = voicePtr + (voiceId * voiceLen);
 
@@ -633,11 +605,6 @@ public class SmpsSequencer implements AudioStream {
             byte[] voice = new byte[voiceLen];
             System.arraycopy(data, offset, voice, 0, voiceLen);
 
-            // For Sonic 2 (Little Endian), the voice data is typically 21 bytes (Header + Regs)
-            // but stored with 25-byte stride (padding at end).
-            // However, it DOES NOT contain Total Level (TL) bytes at index 5.
-            // Ym2612Chip.setInstrument() detects TL presence by checking if length >= 25.
-            // Since we read 25 bytes, we must truncate it to 21 bytes for S2 to force the "No TL" mapping.
             if (smpsData.isLittleEndian()) {
                 byte[] s2Voice = new byte[21];
                 System.arraycopy(voice, 0, s2Voice, 0, 21);
@@ -651,7 +618,7 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void playNote(Track t) {
-        if (t.note == 0x80) { // Rest
+        if (t.note == 0x80) {
             stopNote(t);
             return;
         }
@@ -661,8 +628,6 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        // Map note to freq
-        // 81 = C.
         int n = t.note - 0x81 + t.keyOffset;
         if (n < 0) return;
 
@@ -670,22 +635,17 @@ public class SmpsSequencer implements AudioStream {
         int noteIdx = n % 12;
 
         if (t.type == TrackType.FM) {
-            // YM2612
             int hwCh = t.channelId;
             int port = (hwCh < 3) ? 0 : 1;
             int ch = (hwCh % 3);
 
-            // FNum = Table[noteIdx]
-            // Block = octave
             int fnum = FNUM_TABLE[noteIdx];
             int block = octave;
 
-            // Handle high octaves by using Block 7 and higher F-Num (if possible)
             if (block > 7) {
                 int shift = block - 7;
                 block = 7;
                 fnum <<= shift;
-                // Clamp F-Num to max 11-bit value to prevent wrapping
                 if (fnum > 0x7FF) {
                     fnum = 0x7FF;
                 }
@@ -696,67 +656,50 @@ public class SmpsSequencer implements AudioStream {
             t.baseFnum = fnum;
             t.baseBlock = block;
 
-            // Apply Detune (Frequency Displacement)
-            // Detune adds to the final frequency. For FM, this means adding to F-Num (mostly).
-            // Proper way: (block << 11) | fnum -> add detune -> unpack.
             int packed = (block << 11) | fnum;
             packed += t.detune;
-            // Unpack
             block = (packed >> 11) & 7;
             fnum = packed & 0x7FF;
 
-            // Write A4 (Block/FNumMSB) and A0 (FNumLSB)
             writeFmFreq(port, ch, fnum, block);
-
-            // Apply pan/AMS/FMS control
             applyFmPanAmsFms(t);
 
-            // Key On unless tied
             if (!t.tieNext) {
                 int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
-                synth.writeFm(0, 0x28, 0xF0 | chVal); // Key On all ops
+                synth.writeFm(0, 0x28, 0xF0 | chVal);
             }
             t.tieNext = false;
 
         } else {
             // PSG
-            // Freq in Hz
-            // Table values are F-Num. Need Hz.
-            // Hz = (FNum * Clock) / (72 * 2^(20-Block))
-            // Clock 7670453.
-            // For PSG, Block shifts.
-            // SMPS PSG frequency table index 0 is 131Hz (Low C).
-            // Java FNUM_TABLE[0] (617) at block 0 is 62Hz (Low C one octave lower).
-            // So we need to shift up by 1 octave.
+            // Octave fixed: +1
             double freq = (FNUM_TABLE[noteIdx] * 7670453.0) / (72.0 * (1 << (20 - (octave + 1))));
 
-            // PSG Register = 3579545 / (32 * freq)
             int reg = (int) (3579545.0 / (32.0 * freq));
             if (reg > 1023) reg = 1023;
             if (reg < 1) reg = 1;
 
-            // Apply Detune
             reg += t.detune;
             if (reg > 1023) reg = 1023;
             if (reg < 1) reg = 1;
 
-            // Write Tone
-            // Channel 0,1,2.
-            if (t.channelId < 3) {
-                // Latch Tone: 1cc0dddd
+            if (t.channelId < 3 && !t.noiseMode) {
                 int data = reg & 0xF;
                 int type = 0;
                 int ch = t.channelId;
                 synth.writePsg(0x80 | (ch << 5) | (type << 4) | data);
-                // Data: 00DDDDDD
                 synth.writePsg((reg >> 4) & 0x3F);
 
-                // Volume (attenuation)
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
+            } else if (t.channelId == 2 && t.noiseMode) {
+                // Channel 2 (Tone 2) used as Noise (Control Ch3)
+                // We typically only update volume for noise channel here
+                // unless frequency control is needed (handled by F3 or Freq/Ch2)
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             } else if (t.channelId == 3) {
-                // Noise Channel (Channel 3)
-                // Just update Volume (attenuation). Frequency/Type controlled by F3 command (setPsgNoise).
+                // Direct Channel 3 access?
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             }
@@ -767,12 +710,18 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             int hwCh = t.channelId;
             int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
-            synth.writeFm(0, 0x28, 0x00 | chVal); // Key Off
+            synth.writeFm(0, 0x28, 0x00 | chVal);
         } else if (t.type == TrackType.DAC) {
             synth.stopDac();
         } else {
             if (t.channelId <= 3) {
-                synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F); // Silence
+                // If noise mode, silence noise channel?
+                // Or just silence the channel ID.
+                if (t.noiseMode && t.channelId == 2) {
+                     synth.writePsg(0x80 | (3 << 5) | (1 << 4) | 0x0F);
+                } else {
+                     synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | 0x0F);
+                }
             }
         }
     }
@@ -788,9 +737,15 @@ public class SmpsSequencer implements AudioStream {
     private void refreshVolume(Track t) {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
-        } else if (t.type == TrackType.PSG && t.channelId <= 3) {
+        } else if (t.type == TrackType.PSG) {
             int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
-            synth.writePsg(0x80 | (t.channelId << 5) | (1 << 4) | vol);
+            int ch = t.channelId;
+            if (t.noiseMode && ch == 2) {
+                ch = 3;
+            }
+            if (ch <= 3) {
+                synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
+            }
         }
     }
 
@@ -800,7 +755,6 @@ public class SmpsSequencer implements AudioStream {
         }
         byte[] voice = new byte[t.voiceData.length];
         System.arraycopy(t.voiceData, 0, voice, 0, voice.length);
-        // Apply volume offset to TL bytes if present (19-byte voices omit TL -> use 0)
         boolean hasTl = voice.length >= 25;
         int tlBase = hasTl ? 5 : -1;
         if (tlBase >= 0) {
@@ -845,7 +799,6 @@ public class SmpsSequencer implements AudioStream {
         t.modPos = (t.modPos + 1) & 0xFF;
         int signedDepth = (t.modPos & 0x80) != 0 ? -t.modDepth : t.modDepth;
         int fnum = t.baseFnum + signedDepth;
-        // Apply detune here as well
         fnum += t.detune;
 
         if (fnum < 0) fnum = 0;
@@ -867,9 +820,6 @@ public class SmpsSequencer implements AudioStream {
         stopNote(t);
     }
 
-    /**
-     * Debug snapshot of current sequencer state for overlays/diagnostics.
-     */
     public VirtualSynthesizer getSynthesizer() {
         return synth;
     }
