@@ -14,6 +14,8 @@ public class SmpsData {
     private final int[] psgPointers;
     private final int[] psgKeyOffsets;
     private final int[] psgVolumeOffsets;
+    private final int[] psgModEnvs;
+    private final int[] psgInstruments;
     private final boolean littleEndian;
     private int z80StartAddress = 0;
 
@@ -42,9 +44,9 @@ public class SmpsData {
             this.tempo = data[5] & 0xFF;
             this.dacPointer = read16(data, 6);
 
-            // SMPS header layout (Sonic 2 final): DAC ptr @ 6, then FM entries (ptr + key + vol) starting at 0x0A,
-            // followed by PSG entries (ptr + key + vol).
-            int fmStart = 0x0A;
+            // SMPS header layout (Sonic 2 final): DAC ptr @ 6, then FM entries (ptr + key + vol) starting at 0x06.
+            // Note: SMPSPlay reads tracks starting from 0x06. Track 0 is usually DAC.
+            int fmStart = 0x06;
             int[] fmPtrs = new int[channels];
             int[] fmKeys = new int[channels];
             int[] fmVols = new int[channels];
@@ -68,21 +70,29 @@ public class SmpsData {
             int[] psgPtrs = new int[psgChannels];
             int[] psgKeys = new int[psgChannels];
             int[] psgVols = new int[psgChannels];
+            int[] psgMods = new int[psgChannels];
+            int[] psgInsts = new int[psgChannels];
             for (int i = 0; i < psgChannels; i++) {
-                if (offset + 1 < data.length) {
+                if (offset + 5 < data.length) {
                     psgPtrs[i] = read16(data, offset);
                     psgKeys[i] = (byte) data[offset + 2];
                     psgVols[i] = (byte) data[offset + 3];
+                    psgMods[i] = data[offset + 4] & 0xFF;
+                    psgInsts[i] = data[offset + 5] & 0xFF;
                 } else {
                     psgPtrs[i] = 0;
                     psgKeys[i] = 0;
                     psgVols[i] = 0;
+                    psgMods[i] = 0;
+                    psgInsts[i] = 0;
                 }
-                offset += 4; // skip key + volume
+                offset += 6; // pointer(2) + key(1) + vol(1) + mod(1) + ins(1)
             }
             this.psgPointers = psgPtrs;
             this.psgKeyOffsets = psgKeys;
             this.psgVolumeOffsets = psgVols;
+            this.psgModEnvs = psgMods;
+            this.psgInstruments = psgInsts;
         } else {
             this.voicePtr = 0;
             this.channels = 0;
@@ -96,6 +106,8 @@ public class SmpsData {
             this.psgPointers = new int[0];
             this.psgKeyOffsets = new int[0];
             this.psgVolumeOffsets = new int[0];
+            this.psgModEnvs = new int[0];
+            this.psgInstruments = new int[0];
         }
     }
 
@@ -149,6 +161,14 @@ public class SmpsData {
 
     public int[] getPsgVolumeOffsets() {
         return psgVolumeOffsets;
+    }
+
+    public int[] getPsgModEnvs() {
+        return psgModEnvs;
+    }
+
+    public int[] getPsgInstruments() {
+        return psgInstruments;
     }
 
     public int getZ80StartAddress() {
