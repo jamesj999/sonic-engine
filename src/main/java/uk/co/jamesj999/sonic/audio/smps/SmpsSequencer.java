@@ -31,6 +31,8 @@ public class SmpsSequencer implements AudioStream {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
 
+    private static final int[] ALGO_OUT_MASK = {0x08, 0x08, 0x08, 0x08, 0x0C, 0x0E, 0x0E, 0x0F};
+
     public enum TrackType { FM, PSG, DAC }
 
     private class Track {
@@ -69,6 +71,8 @@ public class SmpsSequencer implements AudioStream {
         int modEnvId;
         int instrumentId;
         boolean noiseMode;
+        int decayOffset;
+        int decayTimer;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -251,6 +255,17 @@ public class SmpsSequencer implements AudioStream {
                 if (t.duration > 0) {
                     if (t.type == TrackType.FM && t.modEnabled) {
                         applyModulation(t);
+                    }
+                    if (t.type == TrackType.PSG && t.noiseMode) {
+                        // Simple decay for noise if no envelope support yet
+                        t.decayTimer++;
+                        if (t.decayTimer >= 4) { // Decay every 4 ticks
+                            t.decayTimer = 0;
+                            if (t.decayOffset < 15) {
+                                t.decayOffset++;
+                                refreshVolume(t);
+                            }
+                        }
                     }
                     continue;
                 }
@@ -704,6 +719,9 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
+
+        t.decayOffset = 0;
+        t.decayTimer = 0;
     }
 
     private void stopNote(Track t) {
@@ -738,7 +756,7 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
-            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.decayOffset));
             int ch = t.channelId;
             if (t.noiseMode && ch == 2) {
                 ch = 3;
@@ -758,11 +776,15 @@ public class SmpsSequencer implements AudioStream {
         boolean hasTl = voice.length >= 25;
         int tlBase = hasTl ? 5 : -1;
         if (tlBase >= 0) {
+            int algo = voice[0] & 0x07;
+            int mask = ALGO_OUT_MASK[algo];
             for (int op = 0; op < 4; op++) {
-                int idx = tlBase + op;
-                int tl = (voice[idx] & 0x7F) + t.volumeOffset;
-                if (tl > 0x7F) tl = 0x7F;
-                voice[idx] = (byte) tl;
+                if ((mask & (1 << op)) != 0) {
+                    int idx = tlBase + op;
+                    int tl = (voice[idx] & 0x7F) + t.volumeOffset;
+                    if (tl > 0x7F) tl = 0x7F;
+                    voice[idx] = (byte) tl;
+                }
             }
         }
         synth.setInstrument(t.channelId, voice);
@@ -846,6 +868,7 @@ public class SmpsSequencer implements AudioStream {
             dt.modEnabled = t.modEnabled;
             dt.modDepth = t.modDepth;
             dt.detune = t.detune;
+            dt.decayOffset = t.decayOffset;
             dt.loopCounter = (t.loopCounters != null && t.loopCounters.length > 0) ? t.loopCounters[0] : 0;
             dt.position = t.pos;
             state.tracks.add(dt);
@@ -876,6 +899,7 @@ public class SmpsSequencer implements AudioStream {
         public boolean modEnabled;
         public int modDepth;
         public int detune;
+        public int decayOffset;
         public int loopCounter;
         public int position;
     }
