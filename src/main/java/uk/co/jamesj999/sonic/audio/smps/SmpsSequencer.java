@@ -54,6 +54,7 @@ public class SmpsSequencer implements AudioStream {
         final int[] returnStack = new int[4];
         int returnSp = 0;
         int dividingTiming = 1;
+        int detune = 0;
         // Simple modulation (F0) approximation
         int modDelay;
         int modStep;
@@ -315,7 +316,11 @@ public class SmpsSequencer implements AudioStream {
             case 0xE0: // Pan
                 setPanAmsFms(t);
                 break;
-            case 0xE1: // Detune (unused placeholder)
+            case 0xE1: // Detune
+                if (t.pos < data.length) {
+                    t.detune = data[t.pos++];
+                }
+                break;
             case 0xE2: // Detune variant / comms
                 if (t.pos < data.length) t.pos++;
                 break;
@@ -663,6 +668,17 @@ public class SmpsSequencer implements AudioStream {
             // Block = octave
             int fnum = FNUM_TABLE[noteIdx];
             int block = octave;
+
+            // Apply Detune
+            fnum += t.detune;
+
+            // Adjust Block/FNum if FNum overflowed/underflowed
+            while (fnum > 0x7FF && block < 7) {
+                fnum >>= 1;
+                block++;
+            }
+            if (fnum < 0) fnum = 0;
+            if (fnum > 0x7FF) fnum = 0x7FF;
 
             // Handle high octaves by using Block 7 and higher F-Num (if possible)
             if (block > 7) {
