@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.audio.NullAudioBackend;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
+import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
 import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
@@ -69,7 +70,11 @@ public final class SoundTestApp {
             return;
         }
 
-        Sonic2SmpsLoader loader = new Sonic2SmpsLoader(rom);
+        SmpsLoader loader = createLoader(rom, options);
+        if (loader == null) {
+            System.err.println("Could not determine Loader for ROM. Defaulting to Sonic 2.");
+            loader = new Sonic2SmpsLoader(rom);
+        }
         DacData dacData = loader.loadDacData();
         AudioBackend backend = options.nullAudio ? new NullAudioBackend() : new JOALAudioBackend();
         backend.init();
@@ -82,7 +87,7 @@ public final class SoundTestApp {
         }
     }
 
-    private static void runInteractiveWindow(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
+    private static void runInteractiveWindow(Options options, SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
         InteractiveState state = new InteractiveState(options.songId, loader, dacData, backend);
         SwingUtilities.invokeAndWait(() -> state.show(options.nullAudio, options.romPath));
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
@@ -92,7 +97,7 @@ public final class SoundTestApp {
         backend.destroy();
     }
 
-    private static void runConsole(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
+    private static void runConsole(Options options, SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
         System.out.println("Sound test ready.");
         System.out.println("ROM: " + options.romPath);
         System.out.println("Backend: " + backend.getClass().getSimpleName() + (options.nullAudio ? " (silent)" : ""));
@@ -147,7 +152,7 @@ public final class SoundTestApp {
         System.out.println("Sound test exited.");
     }
 
-    private static void playSong(Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend, int songId) {
+    private static void playSong(SmpsLoader loader, DacData dacData, AudioBackend backend, int songId) {
         int offset = loader.findMusicOffset(songId);
         AbstractSmpsData data = loader.loadMusic(songId);
         if (data == null) {
@@ -193,7 +198,7 @@ public final class SoundTestApp {
     }
 
     private static class InteractiveState {
-        private final Sonic2SmpsLoader loader;
+        private final SmpsLoader loader;
         private final DacData dacData;
         private final AudioBackend backend;
         private int songId;
@@ -208,7 +213,7 @@ public final class SoundTestApp {
         private boolean playing;
         private Integer playingSongId;
 
-        InteractiveState(int songId, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) {
+        InteractiveState(int songId, SmpsLoader loader, DacData dacData, AudioBackend backend) {
             this.songId = songId;
             this.loader = loader;
             this.dacData = dacData;
@@ -264,6 +269,21 @@ public final class SoundTestApp {
                     }
 
                     switch (code) {
+            case KeyEvent.VK_O:
+                javax.swing.JFileChooser fileChooser = new javax.swing.JFileChooser();
+                fileChooser.setCurrentDirectory(new java.io.File("."));
+                int result = fileChooser.showOpenDialog(frame);
+                if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
+                    java.io.File selectedFile = fileChooser.getSelectedFile();
+                    // Close current and restart with new ROM
+                    // Since SoundTestApp structure is static, we might need to relaunch or reset.
+                    // For now, let's just print a message that restart is required or try to hot-swap.
+                    // Hot-swap is complex due to backend.
+                    System.out.println("File selected: " + selectedFile.getAbsolutePath());
+                    System.out.println("Please restart application with new ROM for now.");
+                    // Ideally we would dispose frame, destroy backend, and re-run main logic.
+                }
+                break;
                         case KeyEvent.VK_UP:
                             songId = getNextValidSong(songId);
                             updateLabel();
@@ -583,5 +603,25 @@ public final class SoundTestApp {
             return prev;
         }
         return VALID_SONGS.last();
+    }
+
+    private static SmpsLoader createLoader(Rom rom, Options options) {
+        // Simple detection based on filename or user option
+        String path = options.romPath.toLowerCase();
+        if (path.contains("sonic 1") || path.contains("sonic1") || path.contains("s1")) {
+            System.out.println("Detected Sonic 1");
+            return new uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsLoader(rom);
+        }
+        if (path.contains("sonic 3") || path.contains("sonic3") || path.contains("s3")) {
+            System.out.println("Detected Sonic 3");
+            return new uk.co.jamesj999.sonic.audio.smps.Sonic3SmpsLoader(rom);
+        }
+        if (path.contains("knuckles") || path.contains("s&k") || path.contains("sk")) {
+            System.out.println("Detected Sonic & Knuckles");
+            return new uk.co.jamesj999.sonic.audio.smps.SonicAndKnucklesSmpsLoader(rom);
+        }
+        // Default
+        System.out.println("Defaulting to Sonic 2");
+        return new uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader(rom);
     }
 }

@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
-public class Sonic2SmpsLoader {
+public class Sonic2SmpsLoader implements SmpsLoader {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SmpsLoader.class.getName());
     private final Rom rom;
     private final SaxmanDecompressor decompressor = new SaxmanDecompressor();
