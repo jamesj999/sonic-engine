@@ -522,8 +522,9 @@ public class SmpsSequencer implements AudioStream {
         if (t.pos + 4 <= data.length) {
             t.modDelayInit = data[t.pos++] & 0xFF;
             t.modDelay = t.modDelayInit;
-            t.modRate = data[t.pos++] & 0xFF;
-            t.modDelta = data[t.pos++] & 0xFF;
+            int rate = data[t.pos++] & 0xFF;
+            t.modRate = (rate == 0) ? 256 : rate;
+            t.modDelta = data[t.pos++];
             t.modSteps = data[t.pos++] & 0xFF;
 
             t.modRateCounter = t.modRate;
