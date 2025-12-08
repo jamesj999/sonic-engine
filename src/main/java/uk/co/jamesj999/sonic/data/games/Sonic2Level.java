@@ -46,14 +46,15 @@ public class Sonic2Level implements Level {
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
                        int solidTilesAngleAddr,
-                       int objectsAddr) throws IOException {
+                       int objectsAddr,
+                       int objectsSize) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
-        loadObjects(rom, objectsAddr);
+        loadObjects(rom, objectsAddr, objectsSize);
     }
 
     @Override
@@ -302,27 +303,44 @@ public class Sonic2Level implements Level {
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
     }
 
-    private void loadObjects(Rom rom, int objectsAddr) throws IOException {
+    private void loadObjects(Rom rom, int objectsAddr, int objectsSize) throws IOException {
         objects = new ArrayList<>();
         int currentAddr = objectsAddr;
 
-        while (true) {
-            int x = rom.read16BitAddr(currentAddr);
-            if (x == 0xFFFF) {
-                break;
+        // If a specific size is provided, load exactly that many bytes.
+        // Otherwise, read until the terminator (0xFFFF).
+        if (objectsSize > 0) {
+            int endAddr = objectsAddr + objectsSize;
+            while (currentAddr < endAddr) {
+                int x = rom.read16BitAddr(currentAddr);
+                // Even with fixed size, 0xFFFF might still be a terminator, but usually fixed size implies all data is valid.
+                // However, let's just read 6 bytes at a time.
+                int y = rom.read16BitAddr(currentAddr + 2);
+                int id = Byte.toUnsignedInt(rom.readByte(currentAddr + 4));
+                int subtype = Byte.toUnsignedInt(rom.readByte(currentAddr + 5));
+
+                objects.add(new LevelObject(x, y, id, subtype));
+                currentAddr += 6;
             }
-            // Sonic 2 object layout:
-            // x (2 bytes)
-            // y (2 bytes) - top 4 bits are flags usually (render flags / status)
-            // id (1 byte)
-            // subtype (1 byte)
-            int y = rom.read16BitAddr(currentAddr + 2);
-            int id = Byte.toUnsignedInt(rom.readByte(currentAddr + 4));
-            int subtype = Byte.toUnsignedInt(rom.readByte(currentAddr + 5));
+        } else {
+            while (true) {
+                int x = rom.read16BitAddr(currentAddr);
+                if (x == 0xFFFF) {
+                    break;
+                }
+                // Sonic 2 object layout:
+                // x (2 bytes)
+                // y (2 bytes) - top 4 bits are flags usually (render flags / status)
+                // id (1 byte)
+                // subtype (1 byte)
+                int y = rom.read16BitAddr(currentAddr + 2);
+                int id = Byte.toUnsignedInt(rom.readByte(currentAddr + 4));
+                int subtype = Byte.toUnsignedInt(rom.readByte(currentAddr + 5));
 
-            objects.add(new LevelObject(x, y, id, subtype));
+                objects.add(new LevelObject(x, y, id, subtype));
 
-            currentAddr += 6;
+                currentAddr += 6;
+            }
         }
         LOG.info("Loaded " + objects.size() + " objects.");
     }

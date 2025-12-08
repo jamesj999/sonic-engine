@@ -107,6 +107,7 @@ public class Sonic2 extends Game {
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
         int objectsAddr = getObjectLayoutAddr(levelIdx);
+        int objectsSize = getObjectLayoutSize(levelIdx);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -120,7 +121,7 @@ public class Sonic2 extends Game {
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
         System.out.printf("Objects addr: 0x%08X%n", objectsAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr, objectsSize);
     }
 
     private int getSolidTileHeightsAddr() {
@@ -220,6 +221,10 @@ public class Sonic2 extends Game {
     }
 
     private int getObjectLayoutAddr(int levelIdx) throws IOException {
+        // Hardcoded address for EHZ Act 1
+        if (levelIdx == 0) {
+            return 0x00E684A;
+        }
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
 
@@ -230,5 +235,12 @@ public class Sonic2 extends Game {
         int objectOffset = rom.read16BitAddr(objectOffsetAddr);
 
         return objectLayoutDirAddr + objectOffset;
+    }
+
+    private int getObjectLayoutSize(int levelIdx) {
+        if (levelIdx == 0) {
+            return 810;
+        }
+        return -1;
     }
 }
