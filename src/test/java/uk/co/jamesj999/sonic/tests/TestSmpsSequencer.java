@@ -60,9 +60,9 @@ public class TestSmpsSequencer {
         }
         // Check full log for frequency components
         String logStr = synth.log.toString();
-        // Note C (81) -> FNum 617 (0x269). Block 0.
-        // RA4 V02, RA0 V69.
-        if (logStr.contains("RA4 V02") && logStr.contains("RA0 V69")) foundFreq = true;
+        // Note C (81) -> S2 Base Note (+1) -> Index 1 -> FNum 653 (0x28D). Block 0.
+        // RA4 V02, RA0 V8D.
+        if (logStr.contains("RA4 V02") && logStr.contains("RA0 V8D")) foundFreq = true;
 
         assertTrue("Should set Frequency. Log: " + logStr, foundFreq);
         assertTrue("Should Key On", foundKeyOn);
@@ -185,7 +185,7 @@ public class TestSmpsSequencer {
     @Test
     public void testLoopCommandS2() {
         byte[] data = new byte[256];
-        data[2] = 1; // Channels = 1 (FM)
+        data[2] = 2; // Channels = 2 (DAC, FM1)
         data[4] = 1; // Div = 1
         data[5] = 100; // Tempo
 

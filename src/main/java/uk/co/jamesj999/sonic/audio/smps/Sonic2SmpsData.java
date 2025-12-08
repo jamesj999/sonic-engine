@@ -110,38 +110,9 @@ public class Sonic2SmpsData extends AbstractSmpsData {
             System.arraycopy(data, offset + 5, voice, 9, 16);
         }
 
-        // SWAP Operators 2 and 3 to convert Hardware Order (1, 2, 3, 4) to Standard Order (1, 3, 2, 4).
-        // Index 2 corresponds to Op 2. Index 3 corresponds to Op 3.
-        // Swap indices 2 and 3 in each 4-byte group.
-        // Groups start at: 1 (DT), 5 (TL), 9 (RS), 13 (AM), 17 (D2R), 21 (RR).
-
-        for (int i = 1; i < 25; i += 4) {
-            byte temp = voice[i + 2]; // Index 2 (Hardware Op 3? Wait)
-            // Hardware Order: 0=Op1, 1=Op2, 2=Op3, 3=Op4.
-            // Wait.
-            // Hardware Order is: Op1, Op2, Op3, Op4.
-            // Standard Order is: Op1, Op3, Op2, Op4.
-            // Source[0] -> Op1 -> Target[0]
-            // Source[1] -> Op2 -> Target[2]
-            // Source[2] -> Op3 -> Target[1]
-            // Source[3] -> Op4 -> Target[3]
-
-            // So we take Source[1] and put to Target[2].
-            // Take Source[2] and put to Target[1].
-
-            // In my array copy above, I copied Source -> Target directly (Hardware Order).
-            // So voice[i+1] is Source[1] (Op2).
-            // voice[i+2] is Source[2] (Op3).
-
-            // We want Target[1] to be Op3 (Source[2]).
-            // We want Target[2] to be Op2 (Source[1]).
-
-            // So Swap voice[i+1] and voice[i+2].
-
-            temp = voice[i + 1];
-            voice[i + 1] = voice[i + 2];
-            voice[i + 2] = temp;
-        }
+        // Source is Hardware Order (1, 2, 3, 4).
+        // Target is Hardware Order (1, 2, 3, 4).
+        // No Swap needed.
 
         return voice;
     }

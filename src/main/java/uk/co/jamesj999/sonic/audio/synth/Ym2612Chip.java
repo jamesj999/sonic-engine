@@ -503,7 +503,10 @@ public class Ym2612Chip {
         int port = (chIdx < 3) ? 0 : 1;
         int hwCh = chIdx % 3;
         // opIdx -> slot code used by the YM register map (0,1,2,3 correspond to op1, op3, op2, op4)
-        int[] slotCode = {0, 1, 2, 3};
+        // Voice Data (ch.ops) is in Logical Order (1, 2, 3, 4).
+        // YM Registers use Slot Order (0=Op1, 1=Op3, 2=Op2, 3=Op4).
+        // Map: OpIdx 0(Op1)->Slot0, OpIdx 1(Op2)->Slot2, OpIdx 2(Op3)->Slot1, OpIdx 3(Op4)->Slot3.
+        int[] slotCode = {0, 2, 1, 3};
         for (int opIdx = 0; opIdx < 4; opIdx++) {
             int slot = slotCode[opIdx];
             Operator o = ch.ops[opIdx];

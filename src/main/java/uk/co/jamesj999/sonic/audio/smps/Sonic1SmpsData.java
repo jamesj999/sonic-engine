@@ -131,9 +131,21 @@ public class Sonic1SmpsData extends AbstractSmpsData {
         System.arraycopy(raw, 17, voice, 21, 4); // RR
 
         // Operator Order:
-        // If Source is Standard Order (1, 3, 2, 4) and Target is Standard Order (1, 3, 2, 4), NO SWAP needed.
-        // If Source is Hardware Order (1, 2, 3, 4), SWAP needed.
-        // Assuming Standard Order for S1.
+        // Source is Standard Order (1, 3, 2, 4).
+        // Target is Hardware Order (1, 2, 3, 4).
+        // Swap Op2 and Op3.
+        // Op1 (Idx 0) -> Same.
+        // Op3 (Idx 1) -> Target Op3 (Idx 2).
+        // Op2 (Idx 2) -> Target Op2 (Idx 1).
+        // Op4 (Idx 3) -> Same.
+
+        // Swap indices 1 and 2 in each 4-byte group.
+        // Groups start at: 1 (DT), 5 (TL), 9 (RS), 13 (AM), 17 (D2R), 21 (RR).
+        for (int i = 1; i < 25; i += 4) {
+            byte temp = voice[i + 1];
+            voice[i + 1] = voice[i + 2];
+            voice[i + 2] = temp;
+        }
 
         return voice;
     }

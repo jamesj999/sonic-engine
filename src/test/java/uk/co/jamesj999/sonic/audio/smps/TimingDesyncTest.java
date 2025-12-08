@@ -18,7 +18,7 @@ public class TimingDesyncTest {
         // If bug exists: 10 + (Rescale adds 10) + 20 = 40.
 
         byte[] data = new byte[256];
-        data[0x02] = 1; // 1 FM channel
+        data[0x02] = 2; // 2 FM (FM1 is Index 1)
         data[0x04] = 1; // Dividing timing 1
         data[0x05] = (byte) 0x80; // Tempo
 
@@ -110,7 +110,7 @@ public class TimingDesyncTest {
     public void testDurationSequence() {
          // Re-implementing with precise tick counting via debugState monitoring
         byte[] data = new byte[256];
-        data[0x02] = 1;
+        data[0x02] = 2; // 2 FM
         data[0x04] = 1;
         data[0x05] = (byte) 0x80; // 128 -> 0.5 ticks per frame (1 tick every 2 frames)
 

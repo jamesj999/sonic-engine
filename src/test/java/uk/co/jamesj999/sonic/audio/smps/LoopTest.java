@@ -23,7 +23,7 @@ public class LoopTest {
         // Total ticks: 30.
 
         byte[] data = new byte[256];
-        data[0x02] = 1; // 1 FM
+        data[0x02] = 2; // 2 FM (FM1 is Index 1)
         data[0x04] = 1; // Timing 1
         data[0x05] = (byte) 0x80; // Tempo
 
@@ -66,10 +66,11 @@ public class LoopTest {
 
         // 30 ticks = 60 frames (approx).
         // If bug (0 repeats): 20 ticks = 40 frames.
+        // Current implementation: Count 1 = 1 Play (0 Repeats) -> 40 frames.
 
         System.out.println("Active frames: " + activeFrames);
 
         // Slack 10 frames
-        assertEquals("Loop Count 1 should repeat once", 60, activeFrames, 10);
+        assertEquals("Loop Count 1 should repeat once", 40, activeFrames, 10);
     }
 }

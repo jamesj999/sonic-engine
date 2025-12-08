@@ -77,14 +77,19 @@ public class TestSmpsSequencerInstrumentLoading {
 
         // Expected Voice (Reordered: DT, TL, RS, AM, D2R, RR)
         // Source: DT, RS, AM, D2R, RR, TL
+        // Source Order: Standard (1, 3, 2, 4)
+        // Target Order: Logical (1, 2, 3, 4). Swap Op2/Op3 (Indices 1 and 2).
+
         byte[] expectedVoice = new byte[25];
         expectedVoice[0] = 10; // Algo
-        System.arraycopy(data, v+1, expectedVoice, 1, 4); // DT (11..14)
-        System.arraycopy(data, v+21, expectedVoice, 5, 4); // TL (31..34) -> Moved from end
-        System.arraycopy(data, v+5, expectedVoice, 9, 4); // RS (15..18)
-        System.arraycopy(data, v+9, expectedVoice, 13, 4); // AM (19..22)
-        System.arraycopy(data, v+13, expectedVoice, 17, 4); // D2R (23..26)
-        System.arraycopy(data, v+17, expectedVoice, 21, 4); // RR (27..30)
+
+        // Helper to copy and swap
+        copyAndSwap(data, v+1, expectedVoice, 1); // DT
+        copyAndSwap(data, v+21, expectedVoice, 5); // TL
+        copyAndSwap(data, v+5, expectedVoice, 9); // RS
+        copyAndSwap(data, v+9, expectedVoice, 13); // AM
+        copyAndSwap(data, v+13, expectedVoice, 17); // D2R
+        copyAndSwap(data, v+17, expectedVoice, 21); // RR
 
         // Explicitly set to Big Endian (S1) to verify 25-byte voice loading
         AbstractSmpsData smps = new Sonic1SmpsData(data, 0);
@@ -100,5 +105,16 @@ public class TestSmpsSequencerInstrumentLoading {
         // Track 0 maps to HW Channel 0 (FM1)
         assertEquals("Channel ID should be 0", 0, synth.lastChannelId);
         assertArrayEquals("Voice data should match", expectedVoice, synth.lastVoice);
+    }
+
+    private void copyAndSwap(byte[] src, int srcPos, byte[] dest, int destPos) {
+        // Source 0 -> Dest 0
+        dest[destPos] = src[srcPos];
+        // Source 1 -> Dest 2
+        dest[destPos+2] = src[srcPos+1];
+        // Source 2 -> Dest 1
+        dest[destPos+1] = src[srcPos+2];
+        // Source 3 -> Dest 3
+        dest[destPos+3] = src[srcPos+3];
     }
 }

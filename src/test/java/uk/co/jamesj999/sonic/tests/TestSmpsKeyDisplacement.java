@@ -45,7 +45,7 @@ public class TestSmpsKeyDisplacement {
 
         // Header
         data[0] = 0x00; data[1] = 0x28; // Voice Ptr (Big Endian 0028 = 40)
-        data[2] = 1; // 1 FM Channel
+        data[2] = 2; // 2 FM Channels (FM1 is Index 1)
         data[3] = 0; // 0 PSG
         data[5] = (byte) 0x80; // Tempo
 
