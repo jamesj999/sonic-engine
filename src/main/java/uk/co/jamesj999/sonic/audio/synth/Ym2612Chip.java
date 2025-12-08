@@ -456,7 +456,7 @@ public class Ym2612Chip {
         ch.feedback = (val00 >> 3) & 7;
         ch.algo = val00 & 7;
 
-        int[] opOrder = {0, 2, 1, 3};
+        int[] opOrder = {0, 1, 2, 3};
         int tlIdxBase = 5;
         int rsArBase = hasTl ? 9 : 5;
         int amD1rBase = rsArBase + 4;
@@ -503,7 +503,7 @@ public class Ym2612Chip {
         int port = (chIdx < 3) ? 0 : 1;
         int hwCh = chIdx % 3;
         // opIdx -> slot code used by the YM register map (0,1,2,3 correspond to op1, op3, op2, op4)
-        int[] slotCode = {0, 2, 1, 3};
+        int[] slotCode = {0, 1, 2, 3};
         for (int opIdx = 0; opIdx < 4; opIdx++) {
             int slot = slotCode[opIdx];
             Operator o = ch.ops[opIdx];
@@ -745,10 +745,6 @@ public class Ym2612Chip {
                 boolean right = (channels[ch].pan & 0x1) != 0;
                 if (left) mixL += out;
                 if (right) mixR += out;
-                if (!left && !right) {
-                    mixL += out * 0.5;
-                    mixR += out * 0.5;
-                }
             }
             if (LPF_ALPHA > 0) {
                 lpfStateL += (mixL - lpfStateL) * LPF_ALPHA;
@@ -787,10 +783,6 @@ public class Ym2612Chip {
                 boolean right = (channels[ch].pan & 0x1) != 0;
                 if (left) mixL += out;
                 if (right) mixR += out;
-                if (!left && !right) {
-                    mixL += out * 0.5;
-                    mixR += out * 0.5;
-                }
             }
 
             if (LPF_ALPHA > 0) {
@@ -928,10 +920,7 @@ public class Ym2612Chip {
         double carrier = computeCarrierSum(ch.algo, opOut);
         carrier *= ch.attackRamp;
 
-        boolean left = (ch.pan & 0x2) != 0;
-        boolean right = (ch.pan & 0x1) != 0;
-        double panGain = (left && right) ? 1.0 : 0.7;
-        return carrier * OUTPUT_GAIN * panGain;
+        return carrier * OUTPUT_GAIN;
     }
 
     public static double computeModulationInput(int algo, int opIndex, double[] opOut, double feedback) {
