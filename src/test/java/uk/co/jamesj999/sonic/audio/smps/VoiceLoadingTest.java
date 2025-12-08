@@ -28,8 +28,8 @@ public class VoiceLoadingTest {
     public void testVoiceLoadingSonic1() {
         // Big Endian (Sonic 1)
         // Source: Header, DT, RS, AM, D2R, RR, TL
-        // Source Order: Standard (1, 3, 2, 4)
-        // Expect Target: Logical (1, 2, 3, 4). Swap Op2/Op3 (Indices 1 and 2).
+        // Source Order: Logical (1, 2, 3, 4) (SMPSPlay Default)
+        // Expect Target: Logical (1, 2, 3, 4). No Swap.
 
         byte[] voiceData = new byte[25];
         voiceData[0] = (byte) 0x01; // Header
@@ -73,34 +73,33 @@ public class VoiceLoadingTest {
         byte[] expected = new byte[25];
         expected[0] = (byte) 0x01;
 
-        // DT (10). Source: 10, 11, 12, 13.
-        // Swap indices 1 and 2: 10, 12, 11, 13.
-        expected[1]=0x10; expected[2]=0x12; expected[3]=0x11; expected[4]=0x13;
+        // DT (10). No Swap.
+        fill4(expected, 1, 0x10);
 
-        // TL (Moved from 21). Source: 60, 61, 62, 63. Swap: 60, 62, 61, 63.
-        expected[5]=0x60; expected[6]=0x62; expected[7]=0x61; expected[8]=0x63;
+        // TL (Moved from 21). No Swap.
+        fill4(expected, 5, 0x60);
 
-        // RS (Moved from 5). Source: 20, 21, 22, 23. Swap: 20, 22, 21, 23.
-        expected[9]=0x20; expected[10]=0x22; expected[11]=0x21; expected[12]=0x23;
+        // RS (Moved from 5). No Swap.
+        fill4(expected, 9, 0x20);
 
-        // AM (30). Swap: 30, 32, 31, 33.
-        expected[13]=0x30; expected[14]=0x32; expected[15]=0x31; expected[16]=0x33;
+        // AM (30). No Swap.
+        fill4(expected, 13, 0x30);
 
-        // D2R (40). Swap: 40, 42, 41, 43.
-        expected[17]=0x40; expected[18]=0x42; expected[19]=0x41; expected[20]=0x43;
+        // D2R (40). No Swap.
+        fill4(expected, 17, 0x40);
 
-        // RR (50). Swap: 50, 52, 51, 53.
-        expected[21]=0x50; expected[22]=0x52; expected[23]=0x51; expected[24]=0x53;
+        // RR (50). No Swap.
+        fill4(expected, 21, 0x50);
 
-        assertArrayEquals("Sonic 1 Voice Reordering (Standard -> Logical)", expected, synth.lastInstrument);
+        assertArrayEquals("Sonic 1 Voice Reordering (Logical -> Logical)", expected, synth.lastInstrument);
     }
 
     @Test
     public void testVoiceLoadingSonic2() {
         // Little Endian (Sonic 2)
         // Source: Header, DT, RS, AM, D2R, RR, TL (TL is padding/unused)
-        // Source order within 4 bytes: 1, 2, 3, 4 (Hardware)
-        // Expect Target: Hardware (1, 2, 3, 4). No Swap.
+        // Source Order: Standard (1, 3, 2, 4) (SMPSPlay Hardware)
+        // Expect Target: Logical (1, 2, 3, 4). Swap 2 and 3.
 
         byte[] voiceData = new byte[25];
         voiceData[0] = (byte) 0x01; // Header
@@ -142,29 +141,29 @@ public class VoiceLoadingTest {
         SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth);
 
         // Expected reordered data (25 bytes for S2 normalization)
-        // No Swap (Source HW -> Target HW)
+        // Swap 2 and 3 (Indices 1 and 2).
         byte[] expected = new byte[25];
         expected[0] = (byte) 0x01;
 
-        // DT (10). Source 1,2,3,4. Target 1,2,3,4.
-        expected[1] = 0x11; expected[2] = 0x12; expected[3] = 0x13; expected[4] = 0x14;
+        // DT (10). Source 11, 12, 13, 14. Target 11, 13, 12, 14.
+        expected[1] = 0x11; expected[2] = 0x13; expected[3] = 0x12; expected[4] = 0x14;
 
         // TL (0)
         expected[5] = 0; expected[6] = 0; expected[7] = 0; expected[8] = 0;
 
-        // RS (20) -> Moved to 9. No Swap.
-        expected[9] = 0x21; expected[10] = 0x22; expected[11] = 0x23; expected[12] = 0x24;
+        // RS (20). Source 21, 22, 23, 24. Target 21, 23, 22, 24.
+        expected[9] = 0x21; expected[10] = 0x23; expected[11] = 0x22; expected[12] = 0x24;
 
-        // AM (30) -> Moved to 13. No Swap.
-        expected[13] = 0x31; expected[14] = 0x32; expected[15] = 0x33; expected[16] = 0x34;
+        // AM (30).
+        expected[13] = 0x31; expected[14] = 0x33; expected[15] = 0x32; expected[16] = 0x34;
 
-        // D2R (40) -> Moved to 17. No Swap.
-        expected[17] = 0x41; expected[18] = 0x42; expected[19] = 0x43; expected[20] = 0x44;
+        // D2R (40).
+        expected[17] = 0x41; expected[18] = 0x43; expected[19] = 0x42; expected[20] = 0x44;
 
-        // RR (50) -> Moved to 21. No Swap.
-        expected[21] = 0x51; expected[22] = 0x52; expected[23] = 0x53; expected[24] = 0x54;
+        // RR (50).
+        expected[21] = 0x51; expected[22] = 0x53; expected[23] = 0x52; expected[24] = 0x54;
 
-        assertArrayEquals("Sonic 2 Voice Reordering (Hardware -> Logical)", expected, synth.lastInstrument);
+        assertArrayEquals("Sonic 2 Voice Reordering (Standard -> Logical)", expected, synth.lastInstrument);
     }
 
     private void fill4(byte[] arr, int offset, int val) {
