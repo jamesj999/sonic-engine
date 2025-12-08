@@ -12,58 +12,33 @@ public class Sonic1SmpsData extends AbstractSmpsData {
 
     @Override
     protected void parseHeader() {
-        // Sonic 1 Header Layout
+        // Sonic 1 Header Layout (Generic SMPS 68k)
         // Assuming Big Endian pointers.
-        // Layout:
-        // Voice Ptr (0-1)
-        // Channels (2)
-        // PSG Channels (3)
-        // Tempo (4) ? (S2 has dividing timing here)
-        // Wait, S1 header is different.
-        // Assuming Standard SMPS 68k header.
-        // Offsets might differ.
-
-        // For now, I will implement generic logic assuming similar structure but Big Endian.
-        // S1 has PtrFmt = Z80 (which usually means relative?).
-        // No, S1 is 68k, usually Absolute Big Endian?
-        // Let's assume structure matches S2 but Big Endian and different offsets if needed.
-        // S2 offset 0x06 is used for FM Ptr. S1 uses 0x0A?
-        // Let's use 0x0A for S1 FM Start as per previous Test.
+        // Offsets:
+        // 00: Voice Ptr (16-bit)
+        // 02: Channels (2 FM)
+        // 03: PSG Channels (3 PSG)
+        // 04: Tempo
+        // 05: Dividing Timing
+        // 06: DAC Ptr (16-bit)
+        // 08: FM1 Ptr (16-bit), 0A: Transpose, 0B: Volume
+        // ...
 
         if (data.length >= 8) {
             this.voicePtr = read16(0);
             this.channels = data[2] & 0xFF;
-            // Dividing Timing / Tempo might be swapped or different?
-            // Sonic 1: 04=Tempo, 05=Divider? Or same?
-            // DefDrv.txt for S2: TickMult at offset...
-            // Let's assume same layout for simplicity until proven otherwise, just different pointer formats.
             this.psgChannels = data[3] & 0xFF;
-            this.dividingTiming = data[4] & 0xFF;
-            this.tempo = data[5] & 0xFF;
-            // DAC Pointer? S1 usually has DAC as channel?
+            this.tempo = data[4] & 0xFF;
+            this.dividingTiming = data[5] & 0xFF;
             this.dacPointer = read16(6);
 
-            // Sonic 1 Header FM Start
-            int fmStart = 0x06; // Default to same? Or 0x0A?
-            // If I look at `SmpsSequencerTest` for "Big Endian", it put FM ptr at 0x0A.
-            // Let's check `SmpsData` (previous implementation) logic.
-            // `int fmStart = 0x06;` was hardcoded.
-            // But S1 header usually has pointers at 0x16 or so.
-            // However, since I don't have S1 DefDrv, I will stick to what `SmpsSequencerTest` used: 0x0A.
-            // Actually, wait. The test used 0x0A because it assumed S1 layout.
-            // I'll set it to 0x06 for now to match the AbstractSmpsData base logic, but override if needed.
-            // Or better, let's look at `SmpsLoader` equivalent for S1.
-            // If S1 uses `PtrFmt=68K` (Big Endian).
-
-            // I will use 0x06 for now. If tests fail I adjust.
-            // Wait, if I use 0x06, I am consistent with AbstractSmpsData fields.
-
+            int fmStart = 0x08; // Pointers start here
             this.fmPointers = new int[channels];
             this.fmKeyOffsets = new int[channels];
             this.fmVolumeOffsets = new int[channels];
             int offset = fmStart;
             for (int i = 0; i < channels; i++) {
-                if (offset + 1 < data.length) {
+                if (offset + 3 < data.length) {
                     this.fmPointers[i] = read16(offset);
                     this.fmKeyOffsets[i] = (byte) data[offset + 2];
                     this.fmVolumeOffsets[i] = (byte) data[offset + 3];
@@ -98,29 +73,28 @@ public class Sonic1SmpsData extends AbstractSmpsData {
         if (ptr >= 0 && ptr < data.length) {
             offset = ptr;
         } else if (z80StartAddress > 0) {
-            // Relocation logic for S1? Usually Absolute.
-            int rel = ptr - z80StartAddress;
-            if (rel >= 0 && rel < data.length) {
-                offset = rel;
-            }
+            // Check for relative address
+            // Usually absolute ROM address in S1 (68k pointer).
+            // But we have a chunk of data.
+            // If the pointer is > start address, we map it.
+            // S1 SMPS pointers are usually 16-bit offsets from the start of the song?
+            // No, Header pointers are 16-bit relative to start of song header in some formats.
+            // In S1 (68k), header pointers are 16-bit relative to start of header.
+            // Let's assume relative to header start (offset 0).
+            offset = ptr;
         }
-        if (offset < 0) offset = ptr; // Try raw
+
+        if (offset < 0) offset = ptr;
 
         int stride = 25;
         offset += (voiceId * stride);
 
         if (offset < 0 || offset + 25 > data.length) return null;
 
-        // Sonic 1 (Big Endian) Voices are 25 bytes.
-        // Structure: Header, DT, TL, RS, AM, D2R, RR (Standard Order?)
-        // Wait. `SmpsSequencer` comments said:
-        // "Sonic 1 (Big Endian / Default Order)"
-        // "Source: Header, DT, RS, AM, D2R, RR, TL"
-        // "Target (Ym2612Chip with len=25): Header, DT, TL, RS, AM, D2R, RR."
-
         byte[] raw = new byte[25];
         System.arraycopy(data, offset, raw, 0, 25);
 
+        // Convert S1 (Standard Order 1,3,2,4, TL at end) to Hardware Order (1,2,3,4, TL interleaved)
         byte[] voice = new byte[25];
         voice[0] = raw[0]; // FB/Algo
         System.arraycopy(raw, 1, voice, 1, 4); // DT
@@ -130,17 +104,7 @@ public class Sonic1SmpsData extends AbstractSmpsData {
         System.arraycopy(raw, 13, voice, 17, 4); // D2R
         System.arraycopy(raw, 17, voice, 21, 4); // RR
 
-        // Operator Order:
-        // Source is Standard Order (1, 3, 2, 4).
-        // Target is Hardware Order (1, 2, 3, 4).
-        // Swap Op2 and Op3.
-        // Op1 (Idx 0) -> Same.
-        // Op3 (Idx 1) -> Target Op3 (Idx 2).
-        // Op2 (Idx 2) -> Target Op2 (Idx 1).
-        // Op4 (Idx 3) -> Same.
-
-        // Swap indices 1 and 2 in each 4-byte group.
-        // Groups start at: 1 (DT), 5 (TL), 9 (RS), 13 (AM), 17 (D2R), 21 (RR).
+        // Swap Ops 2 and 3 (Indices 1 and 2 in groups)
         for (int i = 1; i < 25; i += 4) {
             byte temp = voice[i + 1];
             voice[i + 1] = voice[i + 2];
@@ -158,7 +122,6 @@ public class Sonic1SmpsData extends AbstractSmpsData {
 
     @Override
     public int getBaseNoteOffset() {
-        return 0; // Sonic 1 uses Base Note C (+0 offset?) or B?
-        // S1 Base Note is typically C (0).
+        return 0;
     }
 }
