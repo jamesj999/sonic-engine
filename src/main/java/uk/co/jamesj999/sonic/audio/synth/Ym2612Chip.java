@@ -96,7 +96,7 @@ public class Ym2612Chip {
 
     private static final double OUTPUT_GAIN = 3000.0;
     private static final double LPF_CUTOFF_HZ = 22000.0;
-    private static final double LPF_ALPHA = 1.0;
+    private static final double LPF_ALPHA = 0.0;
     private static final double TIMER_BASE = (CLOCK / SAMPLE_RATE) * (4096.0 / 144.0);
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / SAMPLE_RATE;
     private static final double DAC_GAIN = 64.0;
@@ -1029,20 +1029,27 @@ public class Ym2612Chip {
              envVal = ENV_TAB[envIdx];
         }
 
-        double level = 1.0 - (envVal * (96.0 / ENV_LEN) / 96.0);
-        level = Math.max(0.0, Math.min(1.0, level));
+        // Convert envVal (0..4096, 96dB range) to EXP_OUT index (step 0.1875dB)
+        // Ratio: (96/4096) / 0.1875 = 1/8.
+        int attenIdx = envVal >> 3;
+        if (attenIdx >= EXP_OUT.length) attenIdx = EXP_OUT.length - 1;
+        double level = EXP_OUT[attenIdx];
 
         if (o.ssgInverted) level = 1.0 - level;
         if (o.ssgEnabled) level = Math.max(level, 0.5);
 
-        double tlDb = (o.tl & 0x7F) * 0.75;
-        double amsDb = 0.0;
+        int tlIdx = (o.tl & 0x7F) << 2; // TL step 0.75dB = 4 * 0.1875dB
+        int amsIdx = 0;
         if (lfoEnabled && o.am != 0 && ams > 0) {
             double lfoUnipolar = (lfoVal + 1.0) * 0.5;
-            amsDb = AMS_DEPTH[Math.min(ams, AMS_DEPTH.length - 1)] * lfoUnipolar;
+            double amsDb = AMS_DEPTH[Math.min(ams, AMS_DEPTH.length - 1)] * lfoUnipolar;
+            amsIdx = (int) (amsDb / ATT_STEP_DB);
         }
 
-        return level * Math.pow(10.0, -(tlDb + amsDb) / 20.0);
+        int totalExtraIdx = tlIdx + amsIdx;
+        if (totalExtraIdx >= EXP_OUT.length) totalExtraIdx = EXP_OUT.length - 1;
+
+        return level * EXP_OUT[totalExtraIdx];
     }
 
     private void tickTimers(int samples) {

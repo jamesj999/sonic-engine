@@ -60,12 +60,16 @@ public class SmpsSequencer implements AudioStream {
         final int[] returnStack = new int[4];
         int returnSp = 0;
         int dividingTiming = 1;
-        // Simple modulation (F0) approximation
+        // Modulation (F0)
         int modDelay;
-        int modStep;
-        int modDepth;
-        int modTimer;
-        int modPos;
+        int modDelayInit;
+        int modRate;
+        int modDelta;
+        int modSteps;
+        int modRateCounter;
+        int modStepCounter;
+        int modAccumulator;
+        int modCurrentDelta;
         boolean modEnabled;
         int detune;
         int modEnvId;
@@ -516,19 +520,23 @@ public class SmpsSequencer implements AudioStream {
 
     private void handleModulation(Track t) {
         if (t.pos + 4 <= data.length) {
-            t.modDelay = data[t.pos++] & 0xFF;
-            t.modStep = data[t.pos++] & 0xFF;
-            t.modDepth = data[t.pos++] & 0xFF;
-            t.modTimer = data[t.pos++] & 0xFF;
-            t.modPos = 0;
+            t.modDelayInit = data[t.pos++] & 0xFF;
+            t.modDelay = t.modDelayInit;
+            t.modRate = data[t.pos++] & 0xFF;
+            t.modDelta = data[t.pos++] & 0xFF;
+            t.modSteps = data[t.pos++] & 0xFF;
+
+            t.modRateCounter = t.modRate;
+            t.modStepCounter = t.modSteps / 2;
+            t.modAccumulator = 0;
+            t.modCurrentDelta = t.modDelta;
             t.modEnabled = true;
         }
     }
 
     private void clearModulation(Track t) {
         t.modEnabled = false;
-        t.modPos = 0;
-        t.modTimer = 0;
+        t.modAccumulator = 0;
     }
 
     private void setPanAmsFms(Track t) {
@@ -713,6 +721,14 @@ public class SmpsSequencer implements AudioStream {
             t.baseFnum = fnum;
             t.baseBlock = block;
 
+            if (t.modEnabled) {
+                 t.modDelay = t.modDelayInit;
+                 t.modRateCounter = t.modRate;
+                 t.modStepCounter = t.modSteps / 2;
+                 t.modAccumulator = 0;
+                 t.modCurrentDelta = t.modDelta;
+            }
+
             // Pitch Slide / Wrapping logic
             int packed = (block << 11) | fnum;
             packed += t.detune;
@@ -880,31 +896,48 @@ public class SmpsSequencer implements AudioStream {
 
     private void applyModulation(Track t) {
         if (!t.modEnabled) return;
+
+        boolean changed = false;
+
         if (t.modDelay > 0) {
             t.modDelay--;
             return;
         }
-        if (t.modTimer > 0) {
-            t.modTimer--;
-            return;
+
+        if (t.modRateCounter > 0) {
+            t.modRateCounter--;
         }
-        t.modTimer = t.modStep;
-        t.modPos = (t.modPos + 1) & 0xFF;
-        int signedDepth = (t.modPos & 0x80) != 0 ? -t.modDepth : t.modDepth;
 
-        // Calculate packed frequency (Block|FNum) to support octave wrapping
-        int packed = (t.baseBlock << 11) | t.baseFnum;
-        packed += signedDepth + t.detune;
+        if (t.modRateCounter == 0) {
+            t.modRateCounter = t.modRate;
+            changed = true;
 
-        packed = getPitchSlideFreq(packed);
+            if (t.modStepCounter == 0) {
+                t.modStepCounter = t.modSteps;
+                t.modCurrentDelta = -t.modCurrentDelta;
+                // Hold one step at peak
+                // We do not add to accumulator this time
+            } else {
+                t.modStepCounter--;
+                t.modAccumulator += t.modCurrentDelta;
+            }
+        }
 
-        int block = (packed >> 11) & 7;
-        int fnum = packed & 0x7FF;
+        if (changed) {
+            // Calculate packed frequency (Block|FNum) to support octave wrapping
+            int packed = (t.baseBlock << 11) | t.baseFnum;
+            packed += t.modAccumulator + t.detune;
 
-        int hwCh = t.channelId;
-        int port = (hwCh < 3) ? 0 : 1;
-        int ch = (hwCh % 3);
-        writeFmFreq(port, ch, fnum, block);
+            packed = getPitchSlideFreq(packed);
+
+            int block = (packed >> 11) & 7;
+            int fnum = packed & 0x7FF;
+
+            int hwCh = t.channelId;
+            int port = (hwCh < 3) ? 0 : 1;
+            int ch = (hwCh % 3);
+            writeFmFreq(port, ch, fnum, block);
+        }
     }
 
     private void setDetune(Track t) {
@@ -942,7 +975,7 @@ public class SmpsSequencer implements AudioStream {
             dt.fms = t.fms;
             dt.tieNext = t.tieNext;
             dt.modEnabled = t.modEnabled;
-            dt.modDepth = t.modDepth;
+            dt.modAccumulator = t.modAccumulator;
             dt.detune = t.detune;
             dt.decayOffset = t.decayOffset;
             dt.loopCounter = (t.loopCounters != null && t.loopCounters.length > 0) ? t.loopCounters[0] : 0;
@@ -973,7 +1006,7 @@ public class SmpsSequencer implements AudioStream {
         public int fms;
         public boolean tieNext;
         public boolean modEnabled;
-        public int modDepth;
+        public int modAccumulator;
         public int detune;
         public int decayOffset;
         public int loopCounter;
