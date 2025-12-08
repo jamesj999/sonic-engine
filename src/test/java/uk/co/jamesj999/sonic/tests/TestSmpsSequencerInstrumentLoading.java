@@ -1,8 +1,9 @@
 package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Test;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
@@ -86,7 +87,7 @@ public class TestSmpsSequencerInstrumentLoading {
         System.arraycopy(data, v+17, expectedVoice, 21, 4); // RR (27..30)
 
         // Explicitly set to Big Endian (S1) to verify 25-byte voice loading
-        SmpsData smps = new SmpsData(data, 0, false);
+        AbstractSmpsData smps = new Sonic1SmpsData(data, 0);
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(new HashMap<>(), new HashMap<>()); // Empty
 

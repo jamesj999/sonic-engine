@@ -1,8 +1,9 @@
 package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Test;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
@@ -78,7 +79,7 @@ public class TestSmpsFrequencyWrap {
             data[v+i] = 0;
         }
 
-        SmpsData smps = new SmpsData(data, 0, false); // Big Endian
+        AbstractSmpsData smps = new Sonic2SmpsData(data, 0);
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(new HashMap<>(), new HashMap<>());
         SmpsSequencer seq = new SmpsSequencer(smps, dac, synth);

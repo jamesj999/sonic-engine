@@ -6,6 +6,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
 
 public class VoiceLoadingTest {
 
@@ -60,7 +63,7 @@ public class VoiceLoadingTest {
         // Voice Data at 0x200
         System.arraycopy(voiceData, 0, data, 0x200, 25);
 
-        SmpsData smpsData = new SmpsData(data, 0, false); // Force Big Endian
+        AbstractSmpsData smpsData = new Sonic1SmpsData(data, 0); // S1 Big Endian
         MockSynthesizer synth = new MockSynthesizer();
         DacData dacData = new DacData(Collections.emptyMap(), Collections.emptyMap());
 
@@ -120,31 +123,38 @@ public class VoiceLoadingTest {
 
         System.arraycopy(voiceData, 0, data, 0x200, 25);
 
-        SmpsData smpsData = new SmpsData(data, 0, true); // Force Little Endian
+        AbstractSmpsData smpsData = new Sonic2SmpsData(data, 0); // S2 Little Endian
         MockSynthesizer synth = new MockSynthesizer();
         DacData dacData = new DacData(Collections.emptyMap(), Collections.emptyMap());
 
         SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth);
 
-        // Expected reordered data (21 bytes)
-        // Swap 1 and 2 in each group
-        byte[] expected = new byte[21];
+        // Expected reordered data (25 bytes for S2 normalization)
+        // Swap 2 and 3 in each group (Source HW 1,2,3,4 -> Target STD 1,3,2,4)
+        // Group indices: 0(1), 1(2), 2(3), 3(4). Swap 1 and 2.
+        byte[] expected = new byte[25];
         expected[0] = (byte) 0x01;
 
-        // DT (10) -> Expected swap: 11, 13, 12, 14
+        // DT (10) -> Swap indices 2(13) and 3(12) ? No.
+        // Array loop: indices 1,2,3,4.
+        // i=1. voice[i+1] (idx 2) swapped with voice[i+2] (idx 3).
+        // 11, 13, 12, 14.
         expected[1] = 0x11; expected[2] = 0x13; expected[3] = 0x12; expected[4] = 0x14;
 
-        // RS (20) -> Moved to 5 (Ym2612 expects RS at 5 if no TL). Swap: 21, 23, 22, 24
-        expected[5] = 0x21; expected[6] = 0x23; expected[7] = 0x22; expected[8] = 0x24;
+        // TL (0) -> Swap: 0, 0, 0, 0
+        expected[5] = 0; expected[6] = 0; expected[7] = 0; expected[8] = 0;
 
-        // AM (30) -> Swap: 31, 33, 32, 34
-        expected[9] = 0x31; expected[10] = 0x33; expected[11] = 0x32; expected[12] = 0x34;
+        // RS (20) -> Moved to 9. Swap: 21, 23, 22, 24
+        expected[9] = 0x21; expected[10] = 0x23; expected[11] = 0x22; expected[12] = 0x24;
 
-        // D2R (40) -> Swap: 41, 43, 42, 44
-        expected[13] = 0x41; expected[14] = 0x43; expected[15] = 0x42; expected[16] = 0x44;
+        // AM (30) -> Moved to 13. Swap: 31, 33, 32, 34
+        expected[13] = 0x31; expected[14] = 0x33; expected[15] = 0x32; expected[16] = 0x34;
 
-        // RR (50) -> Swap: 51, 53, 52, 54
-        expected[17] = 0x51; expected[18] = 0x53; expected[19] = 0x52; expected[20] = 0x54;
+        // D2R (40) -> Moved to 17. Swap: 41, 43, 42, 44
+        expected[17] = 0x41; expected[18] = 0x43; expected[19] = 0x42; expected[20] = 0x44;
+
+        // RR (50) -> Moved to 21. Swap: 51, 53, 52, 54
+        expected[21] = 0x51; expected[22] = 0x53; expected[23] = 0x52; expected[24] = 0x54;
 
         assertArrayEquals("Sonic 2 Voice Reordering & Swapping", expected, synth.lastInstrument);
     }

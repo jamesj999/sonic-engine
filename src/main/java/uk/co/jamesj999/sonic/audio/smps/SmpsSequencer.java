@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SmpsSequencer implements AudioStream {
-    private final SmpsData smpsData;
+    private final AbstractSmpsData smpsData;
     private final byte[] data;
     private final VirtualSynthesizer synth;
     private final List<Track> tracks = new ArrayList<>();
@@ -85,11 +85,11 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
-    public SmpsSequencer(SmpsData smpsData, DacData dacData) {
+    public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData) {
         this(smpsData, dacData, new VirtualSynthesizer());
     }
 
-    public SmpsSequencer(SmpsData smpsData, DacData dacData, VirtualSynthesizer synth) {
+    public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData, VirtualSynthesizer synth) {
         this.smpsData = smpsData;
         this.data = smpsData.getData();
         this.synth = synth;
@@ -436,13 +436,9 @@ public class SmpsSequencer implements AudioStream {
 
     private int readPointer(Track t) {
         if (t.pos + 2 > data.length) return 0;
-        int p1 = data[t.pos++] & 0xFF;
-        int p2 = data[t.pos++] & 0xFF;
-        if (smpsData.isLittleEndian()) {
-            return p1 | (p2 << 8);
-        } else {
-            return (p1 << 8) | p2;
-        }
+        int ptr = smpsData.read16(t.pos);
+        t.pos += 2;
+        return ptr;
     }
 
     private void handleJump(Track t) {
@@ -628,55 +624,8 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void loadVoice(Track t, int voiceId) {
-        int voicePtr = smpsData.getVoicePtr();
-        voicePtr = relocate(voicePtr, z80Base);
-        if (voicePtr < 0 || voicePtr >= data.length) {
-            return;
-        }
-
-        int voiceLen = smpsData.getFmVoiceLength();
-        int offset = voicePtr + (voiceId * voiceLen);
-
-        if (offset >= 0 && offset + voiceLen <= data.length) {
-            byte[] voice;
-
-            if (smpsData.isLittleEndian()) {
-                // Sonic 2 (Little Endian / Hardware Order)
-                // Source: Header, DT, RS, AM, D2R, RR, Padding(TL?).
-                // Padding is often garbage/0xFF, so we must ignore it (treat TL as 0).
-                // Target (Ym2612Chip with len=25): Header, DT, TL(0), RS, AM, D2R, RR.
-
-                voice = new byte[25];
-                voice[0] = data[offset]; // Header
-                System.arraycopy(data, offset + 1, voice, 1, 4); // DT
-                // TL (bytes 5-8) initialized to 0 by default
-                System.arraycopy(data, offset + 5, voice, 9, 16); // RS, AM, D2R, RR
-
-                // Swap Operators 2 and 3 (Hardware 1,2,3,4 -> Standard 1,3,2,4)
-                // for DT, TL, RS, AM, D2R, RR.
-                for (int i = 1; i < 25; i += 4) {
-                    byte temp = voice[i + 1];
-                    voice[i + 1] = voice[i + 2];
-                    voice[i + 2] = temp;
-                }
-            } else {
-                // Sonic 1 (Big Endian / Default Order)
-                // Source: Header, DT, RS, AM, D2R, RR, TL
-                // Target (Ym2612Chip with len=25): Header, DT, TL, RS, AM, D2R, RR.
-
-                byte[] raw = new byte[25];
-                System.arraycopy(data, offset, raw, 0, 25);
-
-                voice = new byte[25];
-                voice[0] = raw[0]; // FB/Algo
-                System.arraycopy(raw, 1, voice, 1, 4); // DT
-                System.arraycopy(raw, 21, voice, 5, 4); // TL (Moved from end)
-                System.arraycopy(raw, 5, voice, 9, 4); // RS
-                System.arraycopy(raw, 9, voice, 13, 4); // AM
-                System.arraycopy(raw, 13, voice, 17, 4); // D2R
-                System.arraycopy(raw, 17, voice, 21, 4); // RR
-            }
-
+        byte[] voice = smpsData.getVoice(voiceId);
+        if (voice != null) {
             t.voiceData = voice;
             t.voiceId = voiceId;
             refreshInstrument(t);
@@ -696,7 +645,7 @@ public class SmpsSequencer implements AudioStream {
 
         // Adjust for Base Note.
         // Sonic 2 (Little Endian) uses Base Note B (+1), meaning Note 0x81 maps to index 1.
-        int baseNoteOffset = smpsData.isLittleEndian() ? 1 : 0;
+        int baseNoteOffset = smpsData.getBaseNoteOffset();
         int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
         if (n < 0) return;
 

@@ -1,7 +1,7 @@
 package uk.co.jamesj999.sonic.audio;
 
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 
 public class NullAudioBackend implements AudioBackend {
     @Override
@@ -11,10 +11,10 @@ public class NullAudioBackend implements AudioBackend {
     public void playMusic(int musicId) {}
 
     @Override
-    public void playSmps(SmpsData data, DacData dacData) {}
+    public void playSmps(AbstractSmpsData data, DacData dacData) {}
 
     @Override
-    public void playSfxSmps(SmpsData data, DacData dacData) {}
+    public void playSfxSmps(AbstractSmpsData data, DacData dacData) {}
 
     @Override
     public void playSfx(String sfxName) {}

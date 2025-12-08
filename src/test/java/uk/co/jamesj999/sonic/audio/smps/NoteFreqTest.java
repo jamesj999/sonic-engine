@@ -49,7 +49,7 @@ public class NoteFreqTest {
         data[t++] = 0x01; // Duration
         data[t++] = (byte) 0xF2; // Stop
 
-        SmpsData smps = new SmpsData(data, 0, true); // Force Little Endian
+        AbstractSmpsData smps = new Sonic2SmpsData(data, 0); // S2 Little Endian
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(Collections.emptyMap(), Collections.emptyMap());
 

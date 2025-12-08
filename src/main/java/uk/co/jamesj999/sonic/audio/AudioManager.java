@@ -1,8 +1,8 @@
 package uk.co.jamesj999.sonic.audio;
 
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.data.Rom;
 
 import java.util.logging.Logger;
@@ -11,7 +11,7 @@ public class AudioManager {
     private static final Logger LOGGER = Logger.getLogger(AudioManager.class.getName());
     private static AudioManager instance;
     private AudioBackend backend;
-    private SmpsLoader smpsLoader;
+    private Sonic2SmpsLoader smpsLoader;
     private DacData dacData;
 
     private AudioManager() {
@@ -42,13 +42,13 @@ public class AudioManager {
     }
 
     public void setRom(Rom rom) {
-        this.smpsLoader = new SmpsLoader(rom);
+        this.smpsLoader = new Sonic2SmpsLoader(rom);
         this.dacData = smpsLoader.loadDacData();
     }
 
     public void playMusic(int musicId) {
         if (smpsLoader != null) {
-            SmpsData data = smpsLoader.loadMusic(musicId);
+            AbstractSmpsData data = smpsLoader.loadMusic(musicId);
             if (data != null) {
                 backend.playSmps(data, dacData);
                 return;
@@ -59,7 +59,7 @@ public class AudioManager {
 
     public void playSfx(String sfxName) {
         if (smpsLoader != null) {
-            SmpsData sfx = smpsLoader.loadSfx(sfxName);
+            AbstractSmpsData sfx = smpsLoader.loadSfx(sfxName);
             if (sfx != null) {
                 backend.playSfxSmps(sfx, dacData);
                 return;

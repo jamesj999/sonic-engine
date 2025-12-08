@@ -7,8 +7,8 @@ import com.jogamp.openal.ALCcontext;
 import com.jogamp.openal.ALCdevice;
 import com.jogamp.common.nio.Buffers;
 
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 
 import javax.sound.sampled.*;
@@ -110,7 +110,7 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     @Override
-    public void playSmps(SmpsData data, DacData dacData) {
+    public void playSmps(AbstractSmpsData data, DacData dacData) {
         stopStream();
         // Stop music source if playing wav
         al.alSourceStop(musicSource);
@@ -122,7 +122,7 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     @Override
-    public void playSfxSmps(SmpsData data, DacData dacData) {
+    public void playSfxSmps(AbstractSmpsData data, DacData dacData) {
         this.sfxStream = new SmpsSequencer(data, dacData);
         // We probably don't want to mute SFX channels based on music muting preferences,
         // but if we did, we'd apply it here. For now, we leave SFX unmuted.

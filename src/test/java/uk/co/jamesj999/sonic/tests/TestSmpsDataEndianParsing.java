@@ -3,7 +3,9 @@ package uk.co.jamesj999.sonic.tests;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
@@ -42,7 +44,8 @@ public class TestSmpsDataEndianParsing {
         byte[] data = new byte[8];
         data[0] = 0x34;
         data[1] = 0x12;
-        SmpsData smps = new SmpsData(data);
+        // In Sonic2SmpsData, read16 uses offset 0 for voice ptr
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
         assertEquals(0x1234, smps.getVoicePtr());
     }
 
@@ -53,7 +56,8 @@ public class TestSmpsDataEndianParsing {
         byte[] data = new byte[8];
         data[0] = 0x12;
         data[1] = 0x34;
-        SmpsData smps = new SmpsData(data);
+        // In Sonic1SmpsData, read16 uses offset 0 for voice ptr
+        AbstractSmpsData smps = new Sonic1SmpsData(data);
         assertEquals(0x1234, smps.getVoicePtr());
     }
 

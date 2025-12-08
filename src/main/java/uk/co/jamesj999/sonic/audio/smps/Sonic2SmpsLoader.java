@@ -9,15 +9,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
-public class SmpsLoader {
-    private static final Logger LOGGER = Logger.getLogger(SmpsLoader.class.getName());
+public class Sonic2SmpsLoader {
+    private static final Logger LOGGER = Logger.getLogger(Sonic2SmpsLoader.class.getName());
     private final Rom rom;
     private final SaxmanDecompressor decompressor = new SaxmanDecompressor();
     private final DcmDecoder dcmDecoder = new DcmDecoder();
     private final Map<Integer, Integer> musicMap = new HashMap<>();
     private final Map<String, Integer> sfxMap = new HashMap<>();
 
-    public SmpsLoader(Rom rom) {
+    public Sonic2SmpsLoader(Rom rom) {
         this.rom = rom;
         // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
         musicMap.put(0x00, 0x0F0002); // Continue
@@ -56,7 +56,7 @@ public class SmpsLoader {
         sfxMap.put("RING", 0xFFEAD);
     }
 
-    public SmpsData loadMusic(int musicId) {
+    public AbstractSmpsData loadMusic(int musicId) {
         int offset = findMusicOffset(musicId);
         if (offset == -1) {
             LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map/flags.");
@@ -75,7 +75,7 @@ public class SmpsLoader {
         return mapped != null ? mapped : resolveMusicOffset(musicId);
     }
 
-    public SmpsData loadSfx(String name) {
+    public AbstractSmpsData loadSfx(String name) {
         Integer offset = sfxMap.get(name);
         if (offset != null) {
             // Sonic 2 SFX usually loaded at Z80 0x1C00 (Guess)
@@ -124,12 +124,12 @@ public class SmpsLoader {
         }
     }
 
-    public SmpsData loadSmps(int offset) {
+    public AbstractSmpsData loadSmps(int offset) {
         // Default fallback: assume ROM mapping or unknown
         return loadSmps(offset, 0x8000 | (offset & 0x7FFF));
     }
 
-    public SmpsData loadSmps(int offset, int z80Addr) {
+    public AbstractSmpsData loadSmps(int offset, int z80Addr) {
         try {
             // SMPS Z80 data uses little-endian Saxman size headers.
             int b1 = rom.readByte(offset) & 0xFF;
@@ -150,7 +150,7 @@ public class SmpsLoader {
 
             byte[] decompressed = decompressor.decompress(compressed, true);
             LOGGER.info("Decompressed SMPS at " + Integer.toHexString(offset) + ". Size: " + decompressed.length);
-            return new SmpsData(decompressed, z80Addr);
+            return new Sonic2SmpsData(decompressed, z80Addr);
         } catch (Exception e) {
             LOGGER.severe("Failed to load SMPS at " + Integer.toHexString(offset));
             e.printStackTrace();

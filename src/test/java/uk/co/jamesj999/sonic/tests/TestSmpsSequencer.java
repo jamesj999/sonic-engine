@@ -1,7 +1,8 @@
 package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Test;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
@@ -43,7 +44,7 @@ public class TestSmpsSequencer {
         data[0x15] = 0x01; // Duration
         data[0x16] = (byte)0xF2; // Stop
 
-        SmpsData smps = new SmpsData(data);
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
@@ -85,7 +86,7 @@ public class TestSmpsSequencer {
         data[trackDataPtr] = (byte) 0x81; // Note on FM1
         data[trackDataPtr + 1] = 0x01; // Duration
 
-        SmpsData smps = new SmpsData(data);
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
@@ -123,7 +124,7 @@ public class TestSmpsSequencer {
         data[trackDataPtr + 7] = 0x01;
         data[trackDataPtr + 8] = (byte) 0xF2; // Stop
 
-        SmpsData smps = new SmpsData(data);
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
@@ -167,7 +168,7 @@ public class TestSmpsSequencer {
         data[0x1F] = 0x01;                  // Duration
         data[0x20] = (byte) 0xF9;           // Return
 
-        SmpsData smps = new SmpsData(data);
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
@@ -215,7 +216,7 @@ public class TestSmpsSequencer {
         // 4. Stop
         data[pos++] = (byte) 0xF2;
 
-        SmpsData smps = new SmpsData(data, 0, true); // Force Little Endian
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 

@@ -2,9 +2,9 @@ package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Before;
 import org.junit.Test;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -17,7 +17,7 @@ import static org.junit.Assert.*;
 
 public class TestRomAudioIntegration {
     private Rom rom;
-    private SmpsLoader loader;
+    private Sonic2SmpsLoader loader;
 
     @Before
     public void setUp() {
@@ -25,7 +25,7 @@ public class TestRomAudioIntegration {
         rom = new Rom();
         boolean opened = rom.open(romFile.getAbsolutePath());
         assertTrue("Failed to open ROM", opened);
-        loader = new SmpsLoader(rom);
+        loader = new Sonic2SmpsLoader(rom);
     }
 
     private static class LoggingSynth extends VirtualSynthesizer {
@@ -61,7 +61,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testMusicDecompressionAndLoading() {
-        SmpsData data = loader.loadMusic(0x82);
+        AbstractSmpsData data = loader.loadMusic(0x82);
         assertNotNull("Should load EHZ music", data);
         assertTrue("Voice Ptr > 0", data.getVoicePtr() > 0);
         int channels = data.getChannels();
@@ -83,7 +83,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testSequencerPlayback() {
-        SmpsData data = loader.loadMusic(0x82); // EHZ
+        AbstractSmpsData data = loader.loadMusic(0x82); // EHZ
         DacData dac = loader.loadDacData();
 
         SmpsSequencer seq = new SmpsSequencer(data, dac);
@@ -101,7 +101,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testMusicEmitsChipCommandsFromRomData() {
-        SmpsData data = loader.loadMusic(0x82); // Emerald Hill Zone
+        AbstractSmpsData data = loader.loadMusic(0x82); // Emerald Hill Zone
         DacData dac = loader.loadDacData();
 
         LoggingSynth synth = new LoggingSynth();
@@ -126,7 +126,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testDacSamplePlaybackUsesRomSamples() {
-        SmpsData smps = loader.loadMusic(0x82); // Emerald Hill Zone contains DAC drums
+        AbstractSmpsData smps = loader.loadMusic(0x82); // Emerald Hill Zone contains DAC drums
         DacData dacData = loader.loadDacData();
         LoggingSynth synth = new LoggingSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth);

@@ -44,7 +44,7 @@ public class LoopTest {
 
         data[pos++] = (byte) 0xF2;
 
-        SmpsData smpsData = new SmpsData(data, 0, true);
+        AbstractSmpsData smpsData = new Sonic2SmpsData(data, 0);
         SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
 
         // Prime

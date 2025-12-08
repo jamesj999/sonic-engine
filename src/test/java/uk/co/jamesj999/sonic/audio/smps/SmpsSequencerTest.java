@@ -44,7 +44,7 @@ public class SmpsSequencerTest {
         data[0x11] = 100;         // Duration 100
         data[0x12] = (byte) 0xF2; // Stop
 
-        SmpsData smpsData = new SmpsData(data, 0, true); // Force Little Endian
+        Sonic2SmpsData smpsData = new Sonic2SmpsData(data, 0); // S2 is Little Endian
         SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
 
         // First call primes the sequencer (calls tick() if tempoWeight != 0).
@@ -86,7 +86,7 @@ public class SmpsSequencerTest {
         data[0x21] = 10;
         data[0x22] = (byte) 0xF2;
 
-        SmpsData smpsData = new SmpsData(data, 0, true); // LE
+        Sonic2SmpsData smpsData = new Sonic2SmpsData(data, 0);
         SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
 
         // Prime
@@ -120,7 +120,7 @@ public class SmpsSequencerTest {
         data[0x05] = (byte) 0x80;
 
         // FM Ptr at 0x06 -> 0x10 (BE: 00 10)
-        // SmpsData constructor reads header from 0x06 for tracks.
+        // Sonic1SmpsData constructor reads header from 0x06 for tracks.
         data[0x06] = 0x00;
         data[0x07] = 0x10;
 
@@ -134,7 +134,7 @@ public class SmpsSequencerTest {
         data[0x21] = 10;
         data[0x22] = (byte) 0xF2;
 
-        SmpsData smpsData = new SmpsData(data, 0, false); // BE
+        Sonic1SmpsData smpsData = new Sonic1SmpsData(data, 0); // BE
         SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
 
         // Prime

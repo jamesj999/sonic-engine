@@ -47,7 +47,7 @@ public class GlobalTimingTest {
         data[0x22] = (byte) 0xEB; data[0x23] = 2;  // Global Mult 2
         data[0x24] = (byte) 0xF2; // Stop
 
-        SmpsData smpsData = new SmpsData(data, 0, true);
+        AbstractSmpsData smpsData = new Sonic2SmpsData(data, 0);
         SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
 
         sequencer.read(new short[1]); // Prime

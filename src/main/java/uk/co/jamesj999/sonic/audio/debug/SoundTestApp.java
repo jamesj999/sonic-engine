@@ -4,9 +4,9 @@ import uk.co.jamesj999.sonic.audio.AudioBackend;
 import uk.co.jamesj999.sonic.audio.ChannelType;
 import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.audio.NullAudioBackend;
+import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsData;
-import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -69,7 +69,7 @@ public final class SoundTestApp {
             return;
         }
 
-        SmpsLoader loader = new SmpsLoader(rom);
+        Sonic2SmpsLoader loader = new Sonic2SmpsLoader(rom);
         DacData dacData = loader.loadDacData();
         AudioBackend backend = options.nullAudio ? new NullAudioBackend() : new JOALAudioBackend();
         backend.init();
@@ -82,7 +82,7 @@ public final class SoundTestApp {
         }
     }
 
-    private static void runInteractiveWindow(Options options, SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
+    private static void runInteractiveWindow(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
         InteractiveState state = new InteractiveState(options.songId, loader, dacData, backend);
         SwingUtilities.invokeAndWait(() -> state.show(options.nullAudio, options.romPath));
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
@@ -92,7 +92,7 @@ public final class SoundTestApp {
         backend.destroy();
     }
 
-    private static void runConsole(Options options, SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
+    private static void runConsole(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
         System.out.println("Sound test ready.");
         System.out.println("ROM: " + options.romPath);
         System.out.println("Backend: " + backend.getClass().getSimpleName() + (options.nullAudio ? " (silent)" : ""));
@@ -147,9 +147,9 @@ public final class SoundTestApp {
         System.out.println("Sound test exited.");
     }
 
-    private static void playSong(SmpsLoader loader, DacData dacData, AudioBackend backend, int songId) {
+    private static void playSong(Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend, int songId) {
         int offset = loader.findMusicOffset(songId);
-        SmpsData data = loader.loadMusic(songId);
+        AbstractSmpsData data = loader.loadMusic(songId);
         if (data == null) {
             System.out.println(String.format("Song %s not found (offset %s).", toHex(songId), toHex(offset)));
             return;
@@ -193,7 +193,7 @@ public final class SoundTestApp {
     }
 
     private static class InteractiveState {
-        private final SmpsLoader loader;
+        private final Sonic2SmpsLoader loader;
         private final DacData dacData;
         private final AudioBackend backend;
         private int songId;
@@ -208,7 +208,7 @@ public final class SoundTestApp {
         private boolean playing;
         private Integer playingSongId;
 
-        InteractiveState(int songId, SmpsLoader loader, DacData dacData, AudioBackend backend) {
+        InteractiveState(int songId, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) {
             this.songId = songId;
             this.loader = loader;
             this.dacData = dacData;
@@ -324,7 +324,7 @@ public final class SoundTestApp {
 
         private void playCurrent() {
             int offset = loader.findMusicOffset(songId);
-            SmpsData data = loader.loadMusic(songId);
+            AbstractSmpsData data = loader.loadMusic(songId);
             if (data != null) {
                 backend.playSmps(data, dacData);
                 playing = true;
@@ -335,7 +335,7 @@ public final class SoundTestApp {
 
         private void updateLabel() {
             int offset = loader.findMusicOffset(songId);
-            SmpsData data = loader.loadMusic(songId);
+            AbstractSmpsData data = loader.loadMusic(songId);
             StringBuilder sb = new StringBuilder();
             sb.append("Song ").append(toHex(songId));
             sb.append(" | Offset ").append(toHex(offset));
