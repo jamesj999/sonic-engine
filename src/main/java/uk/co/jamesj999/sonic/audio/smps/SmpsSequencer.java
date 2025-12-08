@@ -629,13 +629,31 @@ public class SmpsSequencer implements AudioStream {
         int offset = voicePtr + (voiceId * voiceLen);
 
         if (offset >= 0 && offset + voiceLen <= data.length) {
-            byte[] voice = new byte[voiceLen];
-            System.arraycopy(data, offset, voice, 0, voiceLen);
+            byte[] voice = new byte[25];
+            System.arraycopy(data, offset, voice, 0, 25);
+
+            // Reorder to Ym2612Chip expected layout: DT, TL, RS, AM, D2R, RR
+            // Source (Sonic 1/2): DT, RS, AM, D2R, RR, TL
+            byte[] reordered = new byte[25];
+            reordered[0] = voice[0]; // FB/Algo
+            System.arraycopy(voice, 1, reordered, 1, 4); // DT
+            System.arraycopy(voice, 21, reordered, 5, 4); // TL (Moved from end)
+            System.arraycopy(voice, 5, reordered, 9, 4); // RS
+            System.arraycopy(voice, 9, reordered, 13, 4); // AM
+            System.arraycopy(voice, 13, reordered, 17, 4); // D2R
+            System.arraycopy(voice, 17, reordered, 21, 4); // RR
+
+            voice = reordered;
 
             if (smpsData.isLittleEndian()) {
-                byte[] s2Voice = new byte[21];
-                System.arraycopy(voice, 0, s2Voice, 0, 21);
-                voice = s2Voice;
+                // If Sonic 2 (Hardware Order), swap Operators 2 and 3 to match Ym2612Chip (Default/Interleaved Order)
+                // Hardware Order: 1, 2, 3, 4. Standard Order: 1, 3, 2, 4.
+                // Swap bytes at offset+1 and offset+2 for each 4-byte group.
+                for (int i = 1; i < 25; i += 4) {
+                    byte temp = voice[i + 1];
+                    voice[i + 1] = voice[i + 2];
+                    voice[i + 2] = temp;
+                }
             }
 
             t.voiceData = voice;

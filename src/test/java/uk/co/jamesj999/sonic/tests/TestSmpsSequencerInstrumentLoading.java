@@ -45,7 +45,7 @@ public class TestSmpsSequencerInstrumentLoading {
         data[0] = 0x00;
         data[1] = 0x28;
 
-        data[2] = 1; // 1 FM Channel
+        data[2] = 2; // 2 FM Channels (to reach FM1, as Chn 0 is DAC)
         data[3] = 0;
         data[5] = (byte) 0x80; // Main tempo
 
@@ -69,11 +69,21 @@ public class TestSmpsSequencerInstrumentLoading {
 
         // Voice Data at 40
         int v = 40;
-        byte[] expectedVoice = new byte[25];
+        // Generate source voice
         for(int i=0; i<25; i++) {
             data[v+i] = (byte) (i + 10);
-            expectedVoice[i] = (byte) (i + 10);
         }
+
+        // Expected Voice (Reordered: DT, TL, RS, AM, D2R, RR)
+        // Source: DT, RS, AM, D2R, RR, TL
+        byte[] expectedVoice = new byte[25];
+        expectedVoice[0] = 10; // Algo
+        System.arraycopy(data, v+1, expectedVoice, 1, 4); // DT (11..14)
+        System.arraycopy(data, v+21, expectedVoice, 5, 4); // TL (31..34) -> Moved from end
+        System.arraycopy(data, v+5, expectedVoice, 9, 4); // RS (15..18)
+        System.arraycopy(data, v+9, expectedVoice, 13, 4); // AM (19..22)
+        System.arraycopy(data, v+13, expectedVoice, 17, 4); // D2R (23..26)
+        System.arraycopy(data, v+17, expectedVoice, 21, 4); // RR (27..30)
 
         // Explicitly set to Big Endian (S1) to verify 25-byte voice loading
         SmpsData smps = new SmpsData(data, 0, false);
@@ -86,7 +96,7 @@ public class TestSmpsSequencerInstrumentLoading {
         seq.read(buf); // Should trigger tick and process commands
 
         assertTrue("setInstrument should be called", synth.setInstrumentCalled);
-        // Track 0 maps to HW Channel 0
+        // Track 0 maps to HW Channel 0 (FM1)
         assertEquals("Channel ID should be 0", 0, synth.lastChannelId);
         assertArrayEquals("Voice data should match", expectedVoice, synth.lastVoice);
     }
