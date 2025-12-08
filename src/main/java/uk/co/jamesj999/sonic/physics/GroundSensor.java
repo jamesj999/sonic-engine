@@ -116,7 +116,7 @@ public class GroundSensor extends Sensor {
                 // If originalY=100. nextY=112. (112+16-0) - 100 = 28.
                 // Matches my test expectation (28).
                 // So we can use calculateDistance with height=0 at nextX/nextY.
-                byte distance = calculateDistance((byte) 0, originalX, originalY, nextX, nextY, globalDirection);
+                byte distance = calculateDistance((byte) 0, originalX, originalY, nextX, nextY, globalDirection, false, false);
                 return new SensorResult((byte) 0, distance, 0, globalDirection);
             }
         } else {
@@ -159,14 +159,14 @@ public class GroundSensor extends Sensor {
 
     private SensorResult createResult(SolidTile tile, ChunkDesc desc, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean vertical) {
         byte metric = getMetric(tile, desc, checkX, checkY, vertical);
-        byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction);
+        boolean hFlip = (desc != null) && desc.getHFlip();
+        boolean vFlip = (desc != null) && desc.getVFlip();
+        byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction, hFlip, vFlip);
 
         byte angle = 0;
         int index = 0;
         if (tile != null) {
             // Get angle with flips
-            boolean hFlip = (desc != null) && desc.getHFlip();
-            boolean vFlip = (desc != null) && desc.getVFlip();
             angle = tile.getAngle(hFlip, vFlip);
             index = tile.getIndex();
         }
@@ -174,7 +174,7 @@ public class GroundSensor extends Sensor {
         return new SensorResult(angle, distance, index, direction);
     }
 
-    private byte calculateDistance(byte metric, short originalX, short originalY, short checkX, short checkY, Direction direction) {
+    private byte calculateDistance(byte metric, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean hFlip, boolean vFlip) {
         // Round down to block start
         short tileX = (short) (checkX & ~0x0F);
         short tileY = (short) (checkY & ~0x0F);
@@ -193,11 +193,19 @@ public class GroundSensor extends Sensor {
             case RIGHT:
                 // Looking for Wall (Left of solid). Solid from Right?
                 // Logic: (TileX + 16 - Width) - SensorX
-                return (byte) ((tileX + 16 - metric) - originalX);
+                if (hFlip) {
+                    return (byte) (tileX - originalX);
+                } else {
+                    return (byte) ((tileX + 16 - metric) - originalX);
+                }
             case LEFT:
                 // Looking for Wall (Right of solid). Solid from Left?
                 // Logic: SensorX - (TileX + Width)
-                return (byte) (originalX - (tileX + metric));
+                if (hFlip) {
+                    return (byte) (originalX - (tileX + 16));
+                } else {
+                    return (byte) (originalX - (tileX + metric));
+                }
         }
         return 0;
     }
