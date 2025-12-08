@@ -35,9 +35,9 @@ public class SmpsSequencerTest {
         data[0x04] = 3; // Dividing timing 3
         data[0x05] = (byte) 0x80; // Tempo
 
-        // FM Track Ptr at 0x0A (Little Endian for S2)
-        data[0x0A] = 0x10;
-        data[0x0B] = 0x00;
+        // FM Track Ptr at 0x06 (Little Endian for S2 - SmpsData reads from 0x06)
+        data[0x06] = 0x10;
+        data[0x07] = 0x00;
 
         // Track Data at 0x10
         data[0x10] = (byte) 0x81; // Note C
@@ -72,9 +72,9 @@ public class SmpsSequencerTest {
         data[0x04] = 1;
         data[0x05] = (byte) 0x80;
 
-        // FM Ptr at 0x0A -> 0x10
-        data[0x0A] = 0x10;
-        data[0x0B] = 0x00;
+        // FM Ptr at 0x06 -> 0x10
+        data[0x06] = 0x10;
+        data[0x07] = 0x00;
 
         // Track at 0x10: Jump to 0x20
         data[0x10] = (byte) 0xF6;
@@ -119,12 +119,10 @@ public class SmpsSequencerTest {
         data[0x04] = 1;
         data[0x05] = (byte) 0x80;
 
-        // FM Ptr at 0x0A -> 0x10 (BE: 00 10)
-        // Wait, SmpsData constructor reads header.
-        // FM pointers start at 0x0A.
-        // If BE, it reads 0x0A as MSB, 0x0B as LSB.
-        data[0x0A] = 0x00;
-        data[0x0B] = 0x10;
+        // FM Ptr at 0x06 -> 0x10 (BE: 00 10)
+        // SmpsData constructor reads header from 0x06 for tracks.
+        data[0x06] = 0x00;
+        data[0x07] = 0x10;
 
         // Track at 0x10: Jump to 0x20
         data[0x10] = (byte) 0xF6;

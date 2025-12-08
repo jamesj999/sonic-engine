@@ -644,14 +644,17 @@ public class SmpsSequencer implements AudioStream {
                 // Sonic 2 (Little Endian / Hardware Order)
                 // Source: Header, DT, RS, AM, D2R, RR, Padding(TL?).
                 // Padding is often garbage/0xFF, so we must ignore it (treat TL as 0).
-                // Target (Ym2612Chip with len=21): Header, DT, RS, AM, D2R, RR. (TL defaults to 0).
+                // Target (Ym2612Chip with len=25): Header, DT, TL(0), RS, AM, D2R, RR.
 
-                voice = new byte[21];
-                System.arraycopy(data, offset, voice, 0, 21);
+                voice = new byte[25];
+                voice[0] = data[offset]; // Header
+                System.arraycopy(data, offset + 1, voice, 1, 4); // DT
+                // TL (bytes 5-8) initialized to 0 by default
+                System.arraycopy(data, offset + 5, voice, 9, 16); // RS, AM, D2R, RR
 
                 // Swap Operators 2 and 3 (Hardware 1,2,3,4 -> Standard 1,3,2,4)
-                // for DT, RS, AM, D2R, RR.
-                for (int i = 1; i < 21; i += 4) {
+                // for DT, TL, RS, AM, D2R, RR.
+                for (int i = 1; i < 25; i += 4) {
                     byte temp = voice[i + 1];
                     voice[i + 1] = voice[i + 2];
                     voice[i + 2] = temp;
@@ -865,9 +868,14 @@ public class SmpsSequencer implements AudioStream {
         if (tlBase >= 0) {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
+            // Mask bits use Hardware Operator Order (1, 2, 3, 4)
+            // Voice array uses Standard Operator Order (1, 3, 2, 4)
+            // Mapping: Op1->0, Op2->2, Op3->1, Op4->3
+            int[] opMap = {0, 2, 1, 3};
+
             for (int op = 0; op < 4; op++) {
                 if ((mask & (1 << op)) != 0) {
-                    int idx = tlBase + op;
+                    int idx = tlBase + opMap[op];
                     // Correct wrapping for TL volume (adding volume offset = more attenuation)
                     int tl = (voice[idx] & 0x7F) + t.volumeOffset;
                     tl &= 0x7F; // Wrap around 7-bit as per SMPS Z80 behavior
