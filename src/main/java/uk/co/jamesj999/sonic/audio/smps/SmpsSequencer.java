@@ -682,7 +682,10 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        int n = t.note - 0x81 + t.keyOffset;
+        // Adjust for Base Note.
+        // Sonic 2 (Little Endian) uses Base Note B (+1), meaning Note 0x81 maps to index 1.
+        int baseNoteOffset = smpsData.isLittleEndian() ? 1 : 0;
+        int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
         if (n < 0) return;
 
         int octave = n / 12;
@@ -718,6 +721,12 @@ public class SmpsSequencer implements AudioStream {
 
             block = (packed >> 11) & 7;
             fnum = packed & 0x7FF;
+
+            // Re-trigger / Key Off if not legato
+            if (!t.tieNext) {
+                int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
+                synth.writeFm(0, 0x28, 0x00 | chVal);
+            }
 
             writeFmFreq(port, ch, fnum, block);
             applyFmPanAmsFms(t);
