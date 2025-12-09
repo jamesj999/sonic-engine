@@ -627,7 +627,7 @@ public class SmpsSequencer implements AudioStream {
             int port = (hwCh < 3) ? 0 : 1;
             int ch = (hwCh % 3);
 
-            // Write 0x0F to 0x88 + ch (Op 3) and 0x8C + ch (Op 4)
+            // Write 0x0F to 0x88 + ch (Op 2) and 0x8C + ch (Op 4)
             // 0x80 register: SL/RR. 0x0F means SL=0, RR=15 (Max Release).
             synth.writeFm(this, port, 0x88 + ch, 0x0F);
             synth.writeFm(this, port, 0x8C + ch, 0x0F);
@@ -969,7 +969,7 @@ public class SmpsSequencer implements AudioStream {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
             // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
-            // Voice TL bytes are in slot order too.
+            // Voice data is also in Slot Order (Op1, Op3, Op2, Op4), so we use identity mapping.
             int[] opMap = {0, 1, 2, 3};
 
             for (int op = 0; op < 4; op++) {

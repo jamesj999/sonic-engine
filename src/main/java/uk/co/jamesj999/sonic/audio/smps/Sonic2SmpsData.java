@@ -79,6 +79,7 @@ public class Sonic2SmpsData extends AbstractSmpsData {
         if (offset < 0 || offset + 25 > data.length) return null;
 
         // Return raw 25-byte voice in SMPS slot order (Op1, Op3, Op2, Op4).
+        // This corresponds to Hardware Order (Register Offsets 0x00, 0x04, 0x08, 0x0C).
         byte[] voice = new byte[25];
         System.arraycopy(data, offset, voice, 0, 25);
         return voice;
