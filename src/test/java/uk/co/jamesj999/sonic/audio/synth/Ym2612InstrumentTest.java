@@ -9,60 +9,60 @@ public class Ym2612InstrumentTest {
     public void testSetInstrumentMapping() {
         Ym2612Chip chip = new Ym2612Chip();
 
-        // Format: Op Order 1, 2, 3, 4 (Linear).
+        // Format: Op Order 1, 3, 2, 4 (Standard).
         // Byte 0: FB=5 (101), Algo=3 (011) -> 101011 = 0x2B
 
         // Params:
         // Group 1: DT/MUL. (DT upper 3, MUL lower 4).
         // Op 1: DT=1, MUL=1 -> 0x11
-        // Op 2: DT=2, MUL=2 -> 0x22
         // Op 3: DT=3, MUL=3 -> 0x33
+        // Op 2: DT=2, MUL=2 -> 0x22
         // Op 4: DT=4, MUL=4 -> 0x44
 
         // Group 2: RS/AR. (RS upper 2, AR lower 5).
         // Op 1: RS=0, AR=1 -> 0x01
-        // Op 2: RS=1, AR=2 -> 0x42
         // Op 3: RS=2, AR=3 -> 0x83
+        // Op 2: RS=1, AR=2 -> 0x42
         // Op 4: RS=3, AR=4 -> 0xC4
 
         // Group 3: AM/D1R. (AM bit 7, D1R lower 5).
         // Op 1: AM=0, D1R=1 -> 0x01
-        // Op 2: AM=0, D1R=2 -> 0x02
         // Op 3: AM=1, D1R=3 -> 0x83
+        // Op 2: AM=0, D1R=2 -> 0x02
         // Op 4: AM=1, D1R=4 -> 0x84
 
         // Group 4: D2R. (Lower 5).
         // Op 1: 0x01
-        // Op 2: 0x02
         // Op 3: 0x03
+        // Op 2: 0x02
         // Op 4: 0x04
 
         // Group 5: D1L/RR. (D1L upper 4, RR lower 4).
         // Op 1: D1L=1, RR=1 -> 0x11
-        // Op 2: D1L=2, RR=2 -> 0x22
         // Op 3: D1L=3, RR=3 -> 0x33
+        // Op 2: D1L=2, RR=2 -> 0x22
         // Op 4: D1L=4, RR=4 -> 0x44
 
         // Group 6: TL. (Lower 7).
         // Op 1: 0x01
-        // Op 2: 0x02
         // Op 3: 0x03
+        // Op 2: 0x02
         // Op 4: 0x04
 
         byte[] voice = new byte[] {
             (byte)0x2B, // 0: FB/Algo
 
-            (byte)0x11, (byte)0x22, (byte)0x33, (byte)0x44, // 1-4: DT/MUL (1, 2, 3, 4)
+            (byte)0x11, (byte)0x33, (byte)0x22, (byte)0x44, // 1-4: DT/MUL (1, 3, 2, 4)
 
-            (byte)0x01, (byte)0x42, (byte)0x83, (byte)0xC4, // 5-8: RS/AR
+            (byte)0x01, (byte)0x83, (byte)0x42, (byte)0xC4, // 5-8: RS/AR
 
-            (byte)0x01, (byte)0x02, (byte)0x83, (byte)0x84, // 9-12: AM/D1R
+            (byte)0x01, (byte)0x83, (byte)0x02, (byte)0x84, // 9-12: AM/D1R
 
-            (byte)0x01, (byte)0x02, (byte)0x03, (byte)0x04, // 13-16: D2R
+            (byte)0x01, (byte)0x03, (byte)0x02, (byte)0x04, // 13-16: D2R
 
-            (byte)0x11, (byte)0x22, (byte)0x33, (byte)0x44, // 17-20: D1L/RR
+            (byte)0x11, (byte)0x33, (byte)0x22, (byte)0x44, // 17-20: D1L/RR
 
-            (byte)0x01, (byte)0x02, (byte)0x03, (byte)0x04  // 21-24: TL
+            (byte)0x01, (byte)0x03, (byte)0x02, (byte)0x04  // 21-24: TL
         };
 
         chip.setInstrument(0, voice);

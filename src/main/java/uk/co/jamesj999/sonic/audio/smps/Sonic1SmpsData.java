@@ -112,28 +112,19 @@ public class Sonic1SmpsData extends AbstractSmpsData {
         if (offset < 0 || offset + 25 > data.length) return null;
 
         // Sonic 1 (Big Endian) Voices are 25 bytes.
-        // Structure: Header, DT, TL, RS, AM, D2R, RR (Standard Order?)
-        // Wait. `SmpsSequencer` comments said:
-        // "Sonic 1 (Big Endian / Default Order)"
-        // "Source: Header, DT, RS, AM, D2R, RR, TL"
-        // "Target (Ym2612Chip with len=25): Header, DT, TL, RS, AM, D2R, RR."
-
-        byte[] raw = new byte[25];
-        System.arraycopy(data, offset, raw, 0, 25);
+        // Source Structure: Header, DT, RS, AM, D2R, RR, TL (Logical Order 1,2,3,4)
+        // Target Structure: Header, DT, RS, AM, D2R, RR, TL (Standard Order 1,3,2,4)
 
         byte[] voice = new byte[25];
-        voice[0] = raw[0]; // FB/Algo
-        System.arraycopy(raw, 1, voice, 1, 4); // DT
-        System.arraycopy(raw, 21, voice, 5, 4); // TL (Moved from end)
-        System.arraycopy(raw, 5, voice, 9, 4); // RS
-        System.arraycopy(raw, 9, voice, 13, 4); // AM
-        System.arraycopy(raw, 13, voice, 17, 4); // D2R
-        System.arraycopy(raw, 17, voice, 21, 4); // RR
+        System.arraycopy(data, offset, voice, 0, 25);
 
-        // Operator Order:
-        // Source is Logical Order (1, 2, 3, 4) (SMPSPlay "Default").
-        // Target is Logical Order (1, 2, 3, 4).
-        // No swap needed.
+        // Convert Logical (1,2,3,4) to Standard (1,3,2,4) by swapping Op 2/3.
+        // Groups start at 1, 5, 9, 13, 17, 21.
+        for (int i = 1; i < 25; i += 4) {
+             byte temp = voice[i+1]; // Op 2
+             voice[i+1] = voice[i+2]; // Op 3 -> Op 2 pos
+             voice[i+2] = temp;       // Op 2 -> Op 3 pos
+        }
 
         return voice;
     }

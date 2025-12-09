@@ -456,12 +456,12 @@ public class Ym2612Chip {
         ch.feedback = (val00 >> 3) & 7;
         ch.algo = val00 & 7;
 
-        // Map input (Linear Order: Op1, Op2, Op3, Op4) to Internal Op Index (0=Op1, 1=Op2, 2=Op3, 3=Op4)
+        // Map input (Standard Order: Op1, Op3, Op2, Op4) to Internal Op Index (0=Op1, 1=Op2, 2=Op3, 3=Op4)
         // Index 0 (Op 1) -> ops[0]
-        // Index 1 (Op 2) -> ops[1]
-        // Index 2 (Op 3) -> ops[2]
+        // Index 1 (Op 3) -> ops[2]
+        // Index 2 (Op 2) -> ops[1]
         // Index 3 (Op 4) -> ops[3]
-        int[] opOrder = {0, 1, 2, 3};
+        int[] opOrder = {0, 2, 1, 3};
 
         int rsArBase = 5;
         int amD1rBase = 9;

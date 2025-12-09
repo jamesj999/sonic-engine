@@ -89,36 +89,14 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
         offset += (voiceId * stride);
 
-        if (offset < 0 || offset + 21 > data.length) return null; // Need at least 21 bytes
+        if (offset < 0 || offset + 25 > data.length) return null;
 
-        // Create 25-byte normalized array (Standard Order: 1, 3, 2, 4)
-        // Source is Hardware Order (1, 2, 3, 4)
-        // Structure: Header, DT, RS, AM, D2R, RR, TL(padding)
-        // Target: Header, DT, TL(0), RS, AM, D2R, RR
+        // Sonic 2 Voices are 25 bytes.
+        // Source is Standard Order (1, 3, 2, 4) with TL at the end.
+        // We pass it through raw to Ym2612Chip which now handles this format.
 
         byte[] voice = new byte[25];
-        voice[0] = data[offset]; // Header
-        System.arraycopy(data, offset + 1, voice, 1, 4); // DT (Hardware Order)
-
-        // TL slots (5-8) initialized to 0.
-
-        // Copy remaining parameters (RS, AM, D2R, RR)
-        // Source offset + 5.
-        // We need 16 bytes (4 parameters * 4 operators).
-        // Check bounds
-        if (offset + 5 + 16 <= data.length) {
-            System.arraycopy(data, offset + 5, voice, 9, 16);
-        }
-
-        // Source is Standard Order (1, 3, 2, 4) (SMPSPlay "Hardware" mapping to registers).
-        // Target is Logical Order (1, 2, 3, 4).
-        // Swap Op2 and Op3.
-
-        for (int i = 1; i < 25; i += 4) {
-            byte temp = voice[i + 1];
-            voice[i + 1] = voice[i + 2];
-            voice[i + 2] = temp;
-        }
+        System.arraycopy(data, offset, voice, 0, 25);
 
         return voice;
     }

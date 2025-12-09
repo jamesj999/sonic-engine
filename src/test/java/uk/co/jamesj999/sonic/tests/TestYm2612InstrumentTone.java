@@ -17,7 +17,7 @@ public class TestYm2612InstrumentTone {
         // Simple bright voice: all carriers, fast attack/decay.
         byte[] voice = new byte[] {
                 (byte) 0x07,             // alg=7 (all carriers), fb=0
-                (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01, // DT/MUL ops 1,2,3,4
+                (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01, // DT/MUL ops 1,3,2,4
                 // RS/AR
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
                 // AM/D1R
