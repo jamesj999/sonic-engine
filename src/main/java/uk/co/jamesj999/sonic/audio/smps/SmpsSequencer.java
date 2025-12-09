@@ -32,7 +32,8 @@ public class SmpsSequencer implements AudioStream {
     private int commData = 0; // Communication byte (E2)
 
     private static final double SAMPLE_RATE = 44100.0;
-    private static final int TEMPO_MOD_BASE = 256; // Sonic 2 main tempo duty cycle
+    // Sonic 2 main tempo duty cycle (Equivalent to SMPSPlay TEMPO_OVERFLOW2 mode: 0x100)
+    private static final int TEMPO_MOD_BASE = 256;
     private double samplesPerFrame = 44100.0 / 60.0;
     private int tempoWeight;
     private int tempoAccumulator;

@@ -207,6 +207,7 @@ public final class SoundTestApp {
         private Timer refreshTimer;
         private boolean playing;
         private Integer playingSongId;
+        private boolean speedShoes = false;
 
         InteractiveState(int songId, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) {
             this.songId = songId;
@@ -237,7 +238,7 @@ public final class SoundTestApp {
             heading.setAlignmentX(JLabel.LEFT_ALIGNMENT);
             tracksPanel.add(heading);
             frame.getContentPane().add(tracksPanel, BorderLayout.CENTER);
-            JLabel info = new JLabel(String.format("ROM: %s | Backend: %s%s | Up/Down change | Enter play | Esc quit",
+            JLabel info = new JLabel(String.format("ROM: %s | Backend: %s%s | Up/Down change | Enter play | S Speed Shoes | Esc quit",
                     romPath, backend.getClass().getSimpleName(), nullAudio ? " (silent)" : ""), SwingConstants.CENTER);
             info.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             frame.getContentPane().add(info, BorderLayout.SOUTH);
@@ -290,6 +291,10 @@ public final class SoundTestApp {
                             // DAC (FM5 / Channel 5)
                             if (shift) backend.toggleSolo(ChannelType.DAC, 5);
                             else backend.toggleMute(ChannelType.DAC, 5);
+                            break;
+                        case KeyEvent.VK_S:
+                            speedShoes = !speedShoes;
+                            backend.setSpeedShoes(speedShoes);
                             break;
                         default:
                             break;

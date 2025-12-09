@@ -11,7 +11,7 @@ public class NoteFreqTest {
         int lastFnum = -1;
 
         @Override
-        public void writeFm(int port, int reg, int val) {
+        public void writeFm(Object source, int port, int reg, int val) {
             // Channel 0 (FM1) uses registers A0/A4. Port 0.
             if (port == 0) {
                 if (reg == 0xA0) {

@@ -31,6 +31,8 @@ public interface AudioBackend {
     boolean isMuted(ChannelType type, int channel);
     boolean isSoloed(ChannelType type, int channel);
 
+    void setSpeedShoes(boolean enabled);
+
     void update();
     void destroy();
 }

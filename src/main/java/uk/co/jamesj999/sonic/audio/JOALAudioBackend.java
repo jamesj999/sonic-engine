@@ -53,6 +53,8 @@ public class JOALAudioBackend implements AudioBackend {
     private final boolean[] psgUserMutes = new boolean[4];
     private final boolean[] psgUserSolos = new boolean[4];
 
+    private boolean speedShoesEnabled = false;
+
     public JOALAudioBackend() {
         // Initialize fallback mappings
         // SFX
@@ -130,6 +132,7 @@ public class JOALAudioBackend implements AudioBackend {
         }
 
         SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+        seq.setSpeedShoes(speedShoesEnabled);
         smpsDriver.addSequencer(seq, false);
         currentSmps = seq;
         
@@ -335,6 +338,14 @@ public class JOALAudioBackend implements AudioBackend {
             case FM, DAC -> (channel >= 0 && channel < 6) && fmUserSolos[channel];
             case PSG -> (channel >= 0 && channel < 4) && psgUserSolos[channel];
         };
+    }
+
+    @Override
+    public void setSpeedShoes(boolean enabled) {
+        this.speedShoesEnabled = enabled;
+        if (currentSmps != null) {
+            currentSmps.setSpeedShoes(enabled);
+        }
     }
 
     private void updateSynthesizerConfig() {

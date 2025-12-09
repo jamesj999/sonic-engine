@@ -21,11 +21,11 @@ public class TestSmpsSequencerInstrumentLoading {
         byte[] lastVoice = null;
 
         @Override
-        public void setInstrument(int channelId, byte[] voice) {
+        public void setInstrument(Object source, int channelId, byte[] voice) {
             this.setInstrumentCalled = true;
             this.lastChannelId = channelId;
             this.lastVoice = voice;
-            super.setInstrument(channelId, voice);
+            super.setInstrument(source, channelId, voice);
         }
     }
 

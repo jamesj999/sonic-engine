@@ -32,12 +32,12 @@ public class TestSmpsFrequencyWrap {
         List<FmWrite> writes = new ArrayList<>();
 
         @Override
-        public void writeFm(int port, int reg, int val) {
+        public void writeFm(Object source, int port, int reg, int val) {
             // Log frequency writes (A0/A4)
             if ((reg & 0xF0) == 0xA0) {
                 writes.add(new FmWrite(port, reg, val));
             }
-            super.writeFm(port, reg, val);
+            super.writeFm(source, port, reg, val);
         }
     }
 

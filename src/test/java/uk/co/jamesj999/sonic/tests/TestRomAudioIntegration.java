@@ -41,21 +41,21 @@ public class TestRomAudioIntegration {
         }
 
         @Override
-        public void writeFm(int port, int reg, int val) {
+        public void writeFm(Object source, int port, int reg, int val) {
             fm.add(String.format("P%d %02X %02X", port, reg, val));
-            super.writeFm(port, reg, val);
+            super.writeFm(source, port, reg, val);
         }
 
         @Override
-        public void writePsg(int val) {
+        public void writePsg(Object source, int val) {
             psg.add(val);
-            super.writePsg(val);
+            super.writePsg(source, val);
         }
 
         @Override
-        public void playDac(int note) {
+        public void playDac(Object source, int note) {
             dac.add(note);
-            super.playDac(note);
+            super.playDac(source, note);
         }
     }
 
