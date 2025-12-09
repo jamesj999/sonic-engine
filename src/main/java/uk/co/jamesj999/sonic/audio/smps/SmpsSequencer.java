@@ -77,6 +77,11 @@ public class SmpsSequencer implements AudioStream {
         boolean noiseMode;
         int decayOffset;
         int decayTimer;
+        // PSG Volume Envelope
+        byte[] envData;
+        int envPos;
+        int envValue;
+        boolean envHold;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -176,6 +181,7 @@ public class SmpsSequencer implements AudioStream {
             }
             if (i < psgInsts.length) {
                 t.instrumentId = psgInsts[i];
+                loadPsgEnvelope(t, t.instrumentId);
             }
             t.dividingTiming = dividingTiming;
             tracks.add(t);
@@ -260,16 +266,8 @@ public class SmpsSequencer implements AudioStream {
                     if (t.type == TrackType.FM && t.modEnabled) {
                         applyModulation(t);
                     }
-                    if (t.type == TrackType.PSG && t.noiseMode) {
-                        // Simple decay for noise if no envelope support yet
-                        t.decayTimer++;
-                        if (t.decayTimer >= 4) { // Decay every 4 ticks
-                            t.decayTimer = 0;
-                            if (t.decayOffset < 15) {
-                                t.decayOffset++;
-                                refreshVolume(t);
-                            }
-                        }
+                    if (t.type == TrackType.PSG) {
+                        processPsgEnvelope(t);
                     }
                     continue;
                 }
@@ -387,7 +385,9 @@ public class SmpsSequencer implements AudioStream {
                 break;
             case 0xF5: // PSG instrument
                 if (t.pos < data.length) {
-                    t.pos++;
+                    int insId = data[t.pos++] & 0xFF;
+                    t.instrumentId = insId;
+                    loadPsgEnvelope(t, insId);
                 }
                 break;
             case 0xEF:
@@ -736,13 +736,28 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             } else if (t.channelId == 3) {
                 // Direct Channel 3 access?
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
                 synth.writePsg(0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
 
         t.decayOffset = 0;
         t.decayTimer = 0;
+        // Reset Envelope
+        t.envPos = 0;
+        t.envHold = false;
+        // Process first tick of envelope immediately?
+        // SMPS typically updates envelope on next tick, but we should init value.
+        // Let's execute one step of envelope logic if possible to set initial volume
+        if (t.envData != null && t.envData.length > 0) {
+             int val = t.envData[0] & 0xFF;
+             if (val < 0x80) {
+                 t.envValue = val;
+                 t.envPos = 1;
+             }
+        } else {
+            t.envValue = 0;
+        }
     }
 
     private int getPitchSlideFreq(int freq) {
@@ -795,7 +810,7 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
-            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.decayOffset));
+            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
             int ch = t.channelId;
             if (t.noiseMode && ch == 2) {
                 ch = 3;
@@ -803,6 +818,45 @@ public class SmpsSequencer implements AudioStream {
             if (ch <= 3) {
                 synth.writePsg(0x80 | (ch << 5) | (1 << 4) | vol);
             }
+        }
+    }
+
+    private void loadPsgEnvelope(Track t, int id) {
+        byte[] env = smpsData.getPsgEnvelope(id);
+        if (env != null) {
+            t.envData = env;
+            t.envPos = 0;
+            t.envHold = false;
+            t.envValue = 0; // Reset value or keep? Reset seems safer.
+        } else {
+            t.envData = null;
+            t.envValue = 0;
+        }
+    }
+
+    private void processPsgEnvelope(Track t) {
+        if (t.envData == null || t.envHold) return;
+
+        if (t.envPos < t.envData.length) {
+            int val = t.envData[t.envPos] & 0xFF;
+            if (val < 0x80) {
+                t.envValue = val; // Absolute or Relative? SMPS Z80 uses relative to volume, but the value itself is absolute attenuation from envelope
+                // wait, "EnvVol = Trk->VolEnvCache". "FinalVol = Trk->Volume + EnvVol".
+                // So the envelope value is added to the track volume.
+                // The byte in the envelope IS the value.
+                t.envPos++;
+                refreshVolume(t);
+            } else {
+                // Command
+                if (val == 0x80) { // Hold
+                    t.envHold = true;
+                } else {
+                    // Treat others as hold for now
+                    t.envHold = true;
+                }
+            }
+        } else {
+            t.envHold = true; // End of data
         }
     }
 

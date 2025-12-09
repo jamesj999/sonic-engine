@@ -44,6 +44,8 @@ public abstract class AbstractSmpsData {
 
     public abstract byte[] getVoice(int voiceId);
 
+    public abstract byte[] getPsgEnvelope(int id);
+
     public abstract int read16(int offset);
 
     public abstract int getBaseNoteOffset();

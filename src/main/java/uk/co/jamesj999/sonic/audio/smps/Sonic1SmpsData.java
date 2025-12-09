@@ -139,6 +139,11 @@ public class Sonic1SmpsData extends AbstractSmpsData {
     }
 
     @Override
+    public byte[] getPsgEnvelope(int id) {
+        return null;
+    }
+
+    @Override
     public int read16(int offset) {
         if (offset + 1 >= data.length) return 0;
         return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF); // Big Endian

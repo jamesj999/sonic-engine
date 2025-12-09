@@ -123,9 +123,9 @@ public class PsgChip {
             if (noiseVol != 0x0F) {
                 int noiseReg = registers[6];
                 double rateVal = switch (noiseReg & 0x3) {
-                    case 0 -> 0x10;
-                    case 1 -> 0x20;
-                    case 2 -> 0x40;
+                    case 0 -> 0x20;
+                    case 1 -> 0x40;
+                    case 2 -> 0x80;
                     default -> Math.max(1, tonePeriod[2] * 2);
                 };
 

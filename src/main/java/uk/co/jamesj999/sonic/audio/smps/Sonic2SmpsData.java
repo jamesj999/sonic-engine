@@ -56,15 +56,6 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
     @Override
     public byte[] getVoice(int voiceId) {
-        int voiceLen = 21; // Sonic 2 (Little Endian / Hardware Order) voices are 21 bytes but may be packed tighter?
-        // Wait, SMPS Z80 stores 21 bytes?
-        // Let's assume the pointer logic is correct.
-        // But we need to use 'voicePtr' which might be Z80 relocated.
-
-        // Relocate logic duplicated from SmpsSequencer?
-        // Ideally AbstractSmpsData should have relocate() or similar.
-        // But relocate uses z80Start.
-
         int ptr = voicePtr;
         if (ptr == 0) return null;
 
@@ -81,39 +72,25 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
         if (offset < 0) return null;
 
-        // 25-byte stride for Sonic 1, but for Sonic 2?
-        // Sonic 2 SMPS Z80 seems to use 25 bytes? Or 21?
-        // Memory said: "Sonic 2 (Little Endian) also uses 25 bytes (21 used + 4 padding), despite memory suggesting 19."
-        // So we use 25 byte stride.
+        // Sonic 2 SMPS Z80 uses 25 bytes (Hardware Order).
         int stride = 25;
 
         offset += (voiceId * stride);
 
-        if (offset < 0 || offset + 21 > data.length) return null; // Need at least 21 bytes
+        if (offset < 0 || offset + 25 > data.length) return null;
 
         // Create 25-byte normalized array (Standard Order: 1, 3, 2, 4)
         // Source is Hardware Order (1, 2, 3, 4)
-        // Structure: Header, DT, RS, AM, D2R, RR, TL(padding)
-        // Target: Header, DT, TL(0), RS, AM, D2R, RR
+        // Source Structure: Header(1), DT(4), RS/AR(4), AM/D1R(4), D2R(4), D1L/RR(4), TL(4)
+        // Target Structure: Header(1), DT(4), TL(4), RS/AR(4), AM/D1R(4), D2R(4), D1L/RR(4)
 
         byte[] voice = new byte[25];
         voice[0] = data[offset]; // Header
-        System.arraycopy(data, offset + 1, voice, 1, 4); // DT (Hardware Order)
+        System.arraycopy(data, offset + 1, voice, 1, 4); // DT
+        System.arraycopy(data, offset + 21, voice, 5, 4); // TL (from end)
+        System.arraycopy(data, offset + 5, voice, 9, 16); // Other params (RS..RR)
 
-        // TL slots (5-8) initialized to 0.
-
-        // Copy remaining parameters (RS, AM, D2R, RR)
-        // Source offset + 5.
-        // We need 16 bytes (4 parameters * 4 operators).
-        // Check bounds
-        if (offset + 5 + 16 <= data.length) {
-            System.arraycopy(data, offset + 5, voice, 9, 16);
-        }
-
-        // Source is Standard Order (1, 3, 2, 4) (SMPSPlay "Hardware" mapping to registers).
-        // Target is Logical Order (1, 2, 3, 4).
-        // Swap Op2 and Op3.
-
+        // Swap Op2 and Op3 to convert Hardware Order (1, 2, 3, 4) to SMPS Standard/Internal (1, 3, 2, 4).
         for (int i = 1; i < 25; i += 4) {
             byte temp = voice[i + 1];
             voice[i + 1] = voice[i + 2];
@@ -121,6 +98,11 @@ public class Sonic2SmpsData extends AbstractSmpsData {
         }
 
         return voice;
+    }
+
+    @Override
+    public byte[] getPsgEnvelope(int id) {
+        return Sonic2PsgEnvelopes.getEnvelope(id);
     }
 
     @Override
