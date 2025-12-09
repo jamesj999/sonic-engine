@@ -511,6 +511,8 @@ public class SmpsSequencer implements AudioStream {
                     int newTempo = data[t.pos++] & 0xFF;
                     normalTempo = newTempo;
                     calculateTempo();
+                    // Parity: EA (Tempo Set) resets the tempo accumulator/counter to the new tempo value
+                    tempoAccumulator = tempoWeight;
                 }
                 break;
             case 0xEB:
@@ -538,9 +540,14 @@ public class SmpsSequencer implements AudioStream {
                 return 2;
             case 0xF0: case 0xF7:
                 return 4;
+            // E3, E4, E7, EE, F1, F2, F4, F9 are 0 parameters
             default:
                 return 0;
         }
+    }
+
+    public int getCommData() {
+        return commData;
     }
 
     private int readPointer(Track t) {
@@ -612,18 +619,18 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void handleSndOff(Track t) {
-        t.active = false; 
-        stopNote(t);
+        // SMPSPlay CF_SND_OFF: Only writes to specific operators' release rates.
+        // It does NOT stop the track (active=false) or explicitly stop the note.
         
         if (t.type == TrackType.FM) {
             int hwCh = t.channelId;
             int port = (hwCh < 3) ? 0 : 1;
             int ch = (hwCh % 3);
-            int[] ops = {0, 4, 8, 12};
-            for (int op : ops) {
-                synth.writeFm(this, port, 0x80 + op + ch, 0xFF);
-                synth.writeFm(this, port, 0x40 + op + ch, 0x7F);
-            }
+
+            // Write 0x0F to 0x88 + ch (Op 3) and 0x8C + ch (Op 4)
+            // 0x80 register: SL/RR. 0x0F means SL=0, RR=15 (Max Release).
+            synth.writeFm(this, port, 0x88 + ch, 0x0F);
+            synth.writeFm(this, port, 0x8C + ch, 0x0F);
         }
     }
 
@@ -701,7 +708,6 @@ public class SmpsSequencer implements AudioStream {
     private void setTrackDividingTiming(Track t) {
         if (t.pos < data.length) {
             int newDiv = data[t.pos++] & 0xFF;
-            if (newDiv == 0) newDiv = 256;
             t.dividingTiming = newDiv;
         }
     }
@@ -728,10 +734,10 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private int scaleDuration(Track track, int rawDuration) {
-        int factor = track.dividingTiming == 0 ? 256 : track.dividingTiming;
+        int factor = track.dividingTiming;
         int scaled = rawDuration * factor;
         if (scaled == 0) {
-            return 256;
+            return 65536; // Emulate SMPS wrap-around behavior (0 ticks -> 65536 ticks)
         }
         return scaled;
     }

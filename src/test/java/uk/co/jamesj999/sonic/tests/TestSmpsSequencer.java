@@ -26,6 +26,7 @@ public class TestSmpsSequencer {
     public void testNoteParsing() {
         byte[] data = new byte[32];
         data[2] = 2; // 2 FM Channels. Track 0 is DAC. Track 1 is FM1.
+        data[4] = 1; // Dividing Timing 1
         data[5] = (byte) 0x80; // Tempo (unsigned)
 
         // Track 0 Header at 0x06 (Ignore)
@@ -60,9 +61,12 @@ public class TestSmpsSequencer {
         }
         // Check full log for frequency components
         String logStr = synth.log.toString();
-        // Note C (81) -> S2 Base Note (+1) -> Index 1 -> FNum 653 (0x28D). Block 0.
-        // RA4 V02, RA0 V8D.
-        if (logStr.contains("RA4 V02") && logStr.contains("RA0 V8D")) foundFreq = true;
+        // Note C (81) -> S2 Base Note (+13) -> Index 1 -> FNum 653 (0x28D). Block 1.
+        // 0x28D -> FNum 28D, Block 1.
+        // Reg A4: (Block << 3) | (FNum >> 8) -> (1 << 3) | 2 = 10 (0x0A).
+        // Reg A0: FNum & 0xFF -> 0x8D.
+        // RA4 V0A, RA0 V8D.
+        if (logStr.contains("RA4 V0A") && logStr.contains("RA0 V8D")) foundFreq = true;
 
         assertTrue("Should set Frequency. Log: " + logStr, foundFreq);
         assertTrue("Should Key On", foundKeyOn);
@@ -128,16 +132,17 @@ public class TestSmpsSequencer {
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
-        // Enough samples for ~27 frames. Without resetting the accumulator, the leftover fast-tempo ticks
-        // would advance to the second note, but with a reset the slow tempo keeps it out of range.
-        short[] buf = new short[20000];
+        // Enough samples for ~16 frames. Without resetting the accumulator, the leftover fast-tempo ticks
+        // would advance to the second note (takes ~10 frames), but with a reset the slow tempo (takes ~17 frames)
+        // keeps it out of range of this buffer.
+        short[] buf = new short[12000];
         seq.read(buf);
 
         String logStr = synth.log.toString();
         long keyOnCount = synth.log.stream().filter(entry -> entry.contains("R28 VF")).count();
-        int firstNoteIdx = logStr.indexOf("RA4 V02");
-        int secondNoteIdx = logStr.indexOf("RA4 V02", firstNoteIdx + 1);
-        assertTrue("First note should play", firstNoteIdx >= 0);
+        int firstNoteIdx = logStr.indexOf("RA4 V0A");
+        int secondNoteIdx = logStr.indexOf("RA4 V0A", firstNoteIdx + 1);
+        assertTrue("First note should play. Log: " + logStr, firstNoteIdx >= 0);
         assertTrue("Rest after tempo change should key off the channel", logStr.contains("R28 V00"));
         assertEquals("Second note should not play within the buffer when the tempo accumulator resets", 1, keyOnCount);
         assertEquals("Accumulator reset should delay the second note past the buffer", -1, secondNoteIdx);
@@ -186,6 +191,7 @@ public class TestSmpsSequencer {
     public void testSndOffF9() {
         byte[] data = new byte[32];
         data[2] = 2;
+        data[4] = 1; // Fix Dividing Timing to 1 so duration is 1 tick, not 65536
         data[5] = (byte) 0x80;
 
         // Track 1
@@ -194,20 +200,84 @@ public class TestSmpsSequencer {
 
         data[0x14] = (byte) 0x81; // Note
         data[0x15] = 0x01;
-        data[0x16] = (byte) 0xF9; // SND_OFF (should silence and stop)
+        data[0x16] = (byte) 0xF9; // SND_OFF (writes specific registers, does NOT stop track)
+        data[0x17] = (byte) 0xF2; // Stop
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
 
-        short[] buf = new short[2000];
+        short[] buf = new short[5000];
         seq.read(buf);
 
         String logStr = String.join(" | ", synth.log);
-        // Expect writes to 0x80+ (Release) and 0x40+ (TL) for all ops.
-        // e.g. FM P0 R80 VFF
-        assertTrue("Should write max release rate (Silence)", logStr.contains("R80 VFF"));
-        assertTrue("Should write max TL (Silence)", logStr.contains("R40 V7F"));
+
+        // SMPSPlay: Writes 0x0F to 0x88 and 0x8C (Op 3/4 Release Rate).
+        // FM P0 R88 V0F
+        assertTrue("Should write to 0x88 (RR Op3). Log: " + logStr, logStr.contains("FM P0 R88 V0F"));
+        assertTrue("Should write to 0x8C (RR Op4). Log: " + logStr, logStr.contains("FM P0 R8C V0F"));
+
+        // Should NOT write to 0x40 (TL) as before (unless caused by note on/off, but F9 itself shouldn't)
+        // Note: DoNoteOff writes to 0x28 (Key Off).
+        // Since F9 doesn't stop track, we expect F2 to stop it.
+    }
+
+    @Test
+    public void testGetCommData() {
+        byte[] data = new byte[32];
+        data[2] = 2;
+        data[5] = (byte) 0x80;
+
+        // Track 1
+        data[0x0A] = 0x14;
+        data[0x0B] = 0x00;
+
+        data[0x14] = (byte) 0xE2;
+        data[0x15] = (byte) 0xAA; // Comm byte
+        data[0x16] = (byte) 0xF2;
+
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        short[] buf = new short[100];
+        seq.read(buf);
+
+        assertEquals("Comm data should be 0xAA", 0xAA, seq.getCommData());
+    }
+
+    @Test
+    public void testTickMultZero() {
+        byte[] data = new byte[64];
+        data[2] = 2; // 2 FM Channels
+        data[5] = (byte) 0x80; // Tempo
+
+        // Track 1 Header at 0x0A
+        data[0x0A] = 0x14;
+        data[0x0B] = 0x00;
+
+        // Data
+        int pos = 0x14;
+        data[pos++] = (byte) 0xE5; // Tick Mult
+        data[pos++] = 0x00;        // 0 -> should mean "65536" scaling effectively
+
+        data[pos++] = (byte) 0x81; // Note
+        data[pos++] = 0x01;        // Duration 1 * 65536 = 65536 ticks
+
+        data[pos++] = (byte) 0xF2; // Stop
+
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        // Read small buffer. Track should still be active and playing the note.
+        short[] buf = new short[2000];
+        seq.read(buf);
+
+        SmpsSequencer.DebugState state = seq.debugState();
+        // Index 0 is FM1 (DAC track skipped because ptr is 0)
+        assertTrue("Track should be active", state.tracks.get(0).active);
+        assertTrue("Duration should be very large (> 60000). Was: " + state.tracks.get(0).duration, state.tracks.get(0).duration > 60000);
     }
 
     @Test
