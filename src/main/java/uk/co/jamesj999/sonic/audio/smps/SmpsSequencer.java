@@ -885,7 +885,9 @@ public class SmpsSequencer implements AudioStream {
                     int idx = tlBase + opMap[op];
                     // Correct wrapping for TL volume (adding volume offset = more attenuation)
                     int tl = (voice[idx] & 0x7F) + t.volumeOffset;
-                    tl &= 0x7F; // Wrap around 7-bit as per SMPS Z80 behavior
+                    // Clamp to 0-127 instead of wrapping, as negative volumeOffset (louder) + 0 should be 0 (max loud), not 127-ish.
+                    if (tl < 0) tl = 0;
+                    if (tl > 127) tl = 127;
                     voice[idx] = (byte) tl;
                 }
             }

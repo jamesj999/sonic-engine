@@ -3,7 +3,7 @@ package uk.co.jamesj999.sonic.audio.synth;
 public class PsgChip {
     private static final double CLOCK = 3579545.0; // Master NTSC clock
     private static final double SAMPLE_RATE = 44100.0;
-    private static final double CLOCK_DIV = 16.0; // SN76489 divides clock by 16
+    private static final double CLOCK_DIV = 8.0; // SN76489 divides clock by 16, but we simulate 8 for finer grain
     private static final double STEP = (CLOCK / CLOCK_DIV) / SAMPLE_RATE;
     private static final double LPF_CUTOFF_HZ = 12000.0;
     private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
@@ -103,7 +103,7 @@ public class PsgChip {
                 int vol = registers[ch * 2 + 1] & 0x0F;
                 if (vol == 0x0F) continue;
 
-                double period = Math.max(1, tonePeriod[ch]) * 2.0;
+                double period = Math.max(1, tonePeriod[ch]) * 4.0;
                 counters[ch] -= STEP;
                 while (counters[ch] <= 0) {
                     counters[ch] += period;
@@ -123,10 +123,10 @@ public class PsgChip {
             if (noiseVol != 0x0F) {
                 int noiseReg = registers[6];
                 double rateVal = switch (noiseReg & 0x3) {
-                    case 0 -> 0x20;
-                    case 1 -> 0x40;
-                    case 2 -> 0x80;
-                    default -> Math.max(1, tonePeriod[2] * 2);
+                    case 0 -> 0x40;
+                    case 1 -> 0x80;
+                    case 2 -> 0x100;
+                    default -> Math.max(1, tonePeriod[2] * 4);
                 };
 
                 counters[3] -= STEP;
