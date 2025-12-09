@@ -3,7 +3,8 @@ package uk.co.jamesj999.sonic.audio.synth;
 public class PsgChip {
     private static final double CLOCK = 3579545.0; // Master NTSC clock
     private static final double SAMPLE_RATE = 44100.0;
-    private static final double CLOCK_DIV = 8.0; // SN76489 divides clock by 16, but we simulate 8 for finer grain
+    // Use master/8 so tone freq matches SN76496 formula f = clock / (32 * N) (SMPSPlay parity)
+    private static final double CLOCK_DIV = 8.0;
     private static final double STEP = (CLOCK / CLOCK_DIV) / SAMPLE_RATE;
     private static final double LPF_CUTOFF_HZ = 12000.0;
     private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
