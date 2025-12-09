@@ -957,18 +957,20 @@ public class SmpsSequencer implements AudioStream {
         byte[] voice = new byte[t.voiceData.length];
         System.arraycopy(t.voiceData, 0, voice, 0, voice.length);
         boolean hasTl = voice.length >= 25;
-        int tlBase = hasTl ? 5 : -1;
+        // SMPS (S2) stores TL at the end of the 25-byte blob (bytes 21-24).
+        int tlBase = hasTl ? 21 : -1;
         if (tlBase >= 0) {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
-            int[] opMap = {0, 2, 1, 3};
+            // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
+            // Voice TL bytes are in slot order too.
+            int[] opMap = {0, 1, 2, 3};
 
             for (int op = 0; op < 4; op++) {
                 if ((mask & (1 << op)) != 0) {
                     int idx = tlBase + opMap[op];
                     int tl = (voice[idx] & 0x7F) + t.volumeOffset;
-                    if (tl < 0) tl = 0;
-                    if (tl > 127) tl = 127;
+                    tl &= 0x7F; // wrap like the Z80 interpreter (7-bit)
                     voice[idx] = (byte) tl;
                 }
             }

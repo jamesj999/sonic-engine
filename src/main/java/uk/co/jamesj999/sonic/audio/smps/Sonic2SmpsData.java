@@ -59,7 +59,7 @@ public class Sonic2SmpsData extends AbstractSmpsData {
         int ptr = voicePtr;
         if (ptr == 0) return null;
 
-        // Basic relocation:
+        // Relocate voice table from Z80 address space if needed.
         int offset = -1;
         if (ptr >= 0 && ptr < data.length) {
             offset = ptr;
@@ -72,27 +72,15 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
         if (offset < 0) return null;
 
-        // Sonic 2 SMPS Z80 uses 25 bytes (Hardware Order).
+        // Sonic 2 SMPS Z80 uses 25-byte voices (slot order).
         int stride = 25;
-
         offset += (voiceId * stride);
 
         if (offset < 0 || offset + 25 > data.length) return null;
 
-        // Create 25-byte normalized array (Standard Order: 1, 3, 2, 4)
-        // Source is Hardware Order (1, 2, 3, 4)
-        // Source Structure: Header(1), DT(4), RS/AR(4), AM/D1R(4), D2R(4), D1L/RR(4), TL(4)
-        // Target Structure: Header(1), DT(4), TL(4), RS/AR(4), AM/D1R(4), D2R(4), D1L/RR(4)
-
+        // Return raw 25-byte voice in SMPS slot order (Op1, Op3, Op2, Op4).
         byte[] voice = new byte[25];
-        voice[0] = data[offset]; // Header
-        System.arraycopy(data, offset + 1, voice, 1, 4); // DT
-        System.arraycopy(data, offset + 21, voice, 5, 4); // TL (from end)
-        System.arraycopy(data, offset + 5, voice, 9, 16); // Other params (RS..RR)
-
-        // Note: Sonic 2 uses Hardware Order (1, 2, 3, 4), which matches what we want.
-        // No swap needed.
-
+        System.arraycopy(data, offset, voice, 0, 25);
         return voice;
     }
 
