@@ -113,18 +113,10 @@ public class Sonic1SmpsData extends AbstractSmpsData {
 
         // Sonic 1 (Big Endian) Voices are 25 bytes.
         // Source Structure: Header, DT, RS, AM, D2R, RR, TL (Logical Order 1,2,3,4)
-        // Target Structure: Header, DT, RS, AM, D2R, RR, TL (Standard Order 1,3,2,4)
+        // Target Structure: Header, DT, RS, AM, D2R, RR, TL (Logical Order 1,2,3,4)
 
         byte[] voice = new byte[25];
         System.arraycopy(data, offset, voice, 0, 25);
-
-        // Convert Logical (1,2,3,4) to Standard (1,3,2,4) by swapping Op 2/3.
-        // Groups start at 1, 5, 9, 13, 17, 21.
-        for (int i = 1; i < 25; i += 4) {
-             byte temp = voice[i+1]; // Op 2
-             voice[i+1] = voice[i+2]; // Op 3 -> Op 2 pos
-             voice[i+2] = temp;       // Op 2 -> Op 3 pos
-        }
 
         return voice;
     }

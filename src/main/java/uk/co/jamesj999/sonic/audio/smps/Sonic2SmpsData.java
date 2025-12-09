@@ -93,10 +93,18 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
         // Sonic 2 Voices are 25 bytes.
         // Source is Standard Order (1, 3, 2, 4) with TL at the end.
-        // We pass it through raw to Ym2612Chip which now handles this format.
+        // We convert to Linear Order (1, 2, 3, 4) for Ym2612Chip.
 
         byte[] voice = new byte[25];
         System.arraycopy(data, offset, voice, 0, 25);
+
+        // Convert Standard (1,3,2,4) to Linear (1,2,3,4) by swapping Op 2/3.
+        // Groups start at 1, 5, 9, 13, 17, 21.
+        for (int i = 1; i < 25; i += 4) {
+             byte temp = voice[i+1]; // Op 3 (in Standard)
+             voice[i+1] = voice[i+2]; // Op 2 (in Standard) -> Op 2 pos
+             voice[i+2] = temp;       // Op 3 -> Op 3 pos
+        }
 
         return voice;
     }
