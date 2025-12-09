@@ -2,10 +2,8 @@ package uk.co.jamesj999.sonic.audio.smps;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
-import java.util.Arrays;
 import java.util.Collections;
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
@@ -97,9 +95,10 @@ public class VoiceLoadingTest {
     @Test
     public void testVoiceLoadingSonic2() {
         // Little Endian (Sonic 2)
-        // Source: Header, DT, RS, AM, D2R, RR, TL (TL is padding/unused)
-        // Source Order: Standard (1, 3, 2, 4) (SMPSPlay Hardware)
-        // Expect Target: Logical (1, 2, 3, 4). Swap 2 and 3.
+        // Source: Header, DT, RS, AM, D2R, RR, TL
+        // Source Order: 1, 2, 3, 4
+        // Target Order: 1, 3, 2, 4 (Swap 2nd and 3rd bytes)
+        // Target Structure: Header, DT, RS, AM, D2R, RR, TL. (No operator reordering)
 
         byte[] voiceData = new byte[25];
         voiceData[0] = (byte) 0x01; // Header
@@ -113,8 +112,8 @@ public class VoiceLoadingTest {
         voiceData[13] = 0x41; voiceData[14] = 0x42; voiceData[15] = 0x43; voiceData[16] = 0x44;
         // RR
         voiceData[17] = 0x51; voiceData[18] = 0x52; voiceData[19] = 0x53; voiceData[20] = 0x54;
-        // TL (Padding in S2)
-        voiceData[21] = (byte)0xFF; voiceData[22] = (byte)0xFF; voiceData[23] = (byte)0xFF; voiceData[24] = (byte)0xFF;
+        // TL
+        voiceData[21] = (byte)0xF1; voiceData[22] = (byte)0xF2; voiceData[23] = (byte)0xF3; voiceData[24] = (byte)0xF4;
 
         byte[] data = new byte[1024];
 
@@ -140,28 +139,28 @@ public class VoiceLoadingTest {
 
         SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth);
 
-        // Expected reordered data (25 bytes for S2 normalization)
-        // Swap 2 and 3 (Indices 1 and 2).
+        // Expected reordered data
+        // Swap 2nd and 3rd byte of each 4-byte group.
         byte[] expected = new byte[25];
         expected[0] = (byte) 0x01;
 
         // DT (10). Source 11, 12, 13, 14. Target 11, 13, 12, 14.
         expected[1] = 0x11; expected[2] = 0x13; expected[3] = 0x12; expected[4] = 0x14;
 
-        // TL (0)
-        expected[5] = 0; expected[6] = 0; expected[7] = 0; expected[8] = 0;
-
         // RS (20). Source 21, 22, 23, 24. Target 21, 23, 22, 24.
-        expected[9] = 0x21; expected[10] = 0x23; expected[11] = 0x22; expected[12] = 0x24;
+        expected[5] = 0x21; expected[6] = 0x23; expected[7] = 0x22; expected[8] = 0x24;
 
         // AM (30).
-        expected[13] = 0x31; expected[14] = 0x33; expected[15] = 0x32; expected[16] = 0x34;
+        expected[9] = 0x31; expected[10] = 0x33; expected[11] = 0x32; expected[12] = 0x34;
 
         // D2R (40).
-        expected[17] = 0x41; expected[18] = 0x43; expected[19] = 0x42; expected[20] = 0x44;
+        expected[13] = 0x41; expected[14] = 0x43; expected[15] = 0x42; expected[16] = 0x44;
 
         // RR (50).
-        expected[21] = 0x51; expected[22] = 0x53; expected[23] = 0x52; expected[24] = 0x54;
+        expected[17] = 0x51; expected[18] = 0x53; expected[19] = 0x52; expected[20] = 0x54;
+
+        // TL (F0). Source F1, F2, F3, F4. Target F1, F3, F2, F4.
+        expected[21] = (byte)0xF1; expected[22] = (byte)0xF3; expected[23] = (byte)0xF2; expected[24] = (byte)0xF4;
 
         assertArrayEquals("Sonic 2 Voice Reordering (Standard -> Logical)", expected, synth.lastInstrument);
     }
