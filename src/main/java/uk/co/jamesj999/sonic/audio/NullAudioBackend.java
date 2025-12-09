@@ -35,6 +35,9 @@ public class NullAudioBackend implements AudioBackend {
     public boolean isSoloed(ChannelType type, int channel) { return false; }
 
     @Override
+    public void setSpeedShoes(boolean enabled) {}
+
+    @Override
     public void update() {}
 
     @Override
