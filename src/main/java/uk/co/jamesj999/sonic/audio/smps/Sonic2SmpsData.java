@@ -90,7 +90,12 @@ public class Sonic2SmpsData extends AbstractSmpsData {
         System.arraycopy(data, offset + 21, voice, 5, 4); // TL (from end)
         System.arraycopy(data, offset + 5, voice, 9, 16); // Other params (RS..RR)
 
-        // No swap needed for Hardware Order (1, 2, 3, 4) as we use Logical Order (1, 2, 3, 4) internally.
+        // Swap Op2 and Op3 to convert Hardware Order (1, 3, 2, 4) to SMPS Standard/Internal (1, 2, 3, 4).
+        for (int i = 1; i < 25; i += 4) {
+            byte temp = voice[i + 1];
+            voice[i + 1] = voice[i + 2];
+            voice[i + 2] = temp;
+        }
 
         return voice;
     }
