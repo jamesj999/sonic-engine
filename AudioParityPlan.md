@@ -1,4 +1,5 @@
 # Audio Parity Plan (Sonic 2 vs SMPSPlay)
+**Instructions:** Aim for accuracy first. Use the SMPSPlay source under `docs/SMPS-rips/SMPSPlay/src` and the Sonic 2 configs/rips under `docs/SMPS-rips/Sonic The Hedgehog 2` as primary references. Derive data from the original ROM where possible; if not available, use the bundled ripped data or hardcode known values. If critical details are still missing, perform an online search to confirm expected behavior before diverging.
 
 Composite plan that preserves the original gap list, adds SMPSPlay code references, and notes new work landed in this branch.
 
