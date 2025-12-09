@@ -10,7 +10,7 @@ Composite plan that preserves the original gap list, adds SMPSPlay code referenc
   1) In `SmpsSequencer` ctor, call `setRegion(Region.NTSC)` so `samplesPerFrame` is non-zero by default.
   2) Match `DoTempo`: `tempoAccumulator += tempoWeight; if >= 0x100 -> tempoAccumulator &= 0xFF; tick()`. No extra ticks.
   3) PAL: use 50Hz frame rate; if PAL-speedup not disabled (`!palSpeedupDisabled`), multiply tempoWeight by exact 60/50 (or the driver’s constant) rather than a guess.
-  4) Speed Shoes: load fast tempos from data (e.g., `SpeedUpTempos.txt`) into a map; when `speedShoes` flag is set, override `tempoWeight` with the map value (fallback to normal tempo).
+  4) Speed Shoes: derive fast tempos from ROM/plan data; if ROM unavailable, hardcode the table already in code. When `speedShoes` flag is set, override `tempoWeight` with that value (fallback to normal tempo).
   5) Add regression test: NTSC vs PAL vs PAL-disabled vs speed-shoes to assert tick counts over fixed frames.
 
 ## Command/Flag Coverage
@@ -38,8 +38,8 @@ Composite plan that preserves the original gap list, adds SMPSPlay code referenc
 - Current: DAC interpolate toggle added; aliases partially mapped in loader.
 - SMPSPlay refs: `src/Engine/dac.c`, `src/Engine/smps_drums.c`.
 - Implementation steps:
-  1) Parse DAC.ini (BaseRate/RateDiv/BaseCycles/LoopCycles/LoopSamples) and per-ID Rate/aliases 88–91 into DacData.
-  2) Use parsed rates to compute dacStep; expose config to toggle interpolation.
+  1) Prefer deriving rates/aliases from ROM tables (ECF7C/ECF9C); if ROM unavailable, fall back to hardcoded values equivalent to DAC.ini (BaseRate/RateDiv/BaseCycles/LoopCycles/LoopSamples, per-ID rates, aliases 88–91).
+  2) Use parsed/derived rates to compute dacStep; expose config to toggle interpolation.
   3) Add test: DAC note produces expected sample count/frequency for a known rate (compare to SMPSPlay output or expected step).
 
 ## PSG Envelopes, Clock & Noise
@@ -47,7 +47,7 @@ Composite plan that preserves the original gap list, adds SMPSPlay code referenc
 - Current: Clock comment fixed (master/8); envelopes still hardcoded.
 - SMPSPlay refs: `src/Engine/smps.c` (PSG writes/envelopes), `src/Engine/smps_structs_int.h` (PSG env state), SN init in `src/Sound.c`.
 - Implementation steps:
-  1) Load PSG.lst binary into envelope table; map IDs as in SMPSPlay loader.
+  1) Prefer deriving envelopes from ROM (if present) or bundled PSG.lst; if external not available, hardcode the PSG.lst values into code matching SMPSPlay ordering.
   2) Ensure envelope values add to track volume (no clamp to 0 unless driver does).
   3) Validate SN76496 tone/noise frequency formula matches `clock/(32*N)`; add test to compare to SMPSPlay for a given period.
   4) Add test: envelope steps advance and hold per 0x80 command.
@@ -77,7 +77,7 @@ Composite plan that preserves the original gap list, adds SMPSPlay code referenc
 - Implementation steps:
   1) On channel lock by SFX, mark corresponding music track overridden and stop its tick/key-ons.
   2) On release, clear override and re-key if needed (respect tie).
-  3) Complete SFX ID map from pointer table; add test: overlapping SFX doesn’t permanently steal music channel.
+  3) Complete SFX ID map from ROM pointer table; if ROM not available, hardcode the table from docs; add test: overlapping SFX doesn’t permanently steal music channel.
 
 ## Bank/Pointer Resolution
 - Gap: Need full bank/flag decoding for music/SFX.
@@ -85,7 +85,8 @@ Composite plan that preserves the original gap list, adds SMPSPlay code referenc
 - SMPSPlay refs: `src/loader_smps.c` (bank flag decode), `src/loader_def.c` (driver defs).
 - Implementation steps:
   1) Implement flag bits (bank, uncompressed, pointer index) per Pointers.txt.
-  2) Add tests: known IDs resolve to expected ROM offsets for both banks; uncompressed flag honored.
+  2) Prefer deriving offsets from ROM; if ROM unavailable, hardcode known offsets for Sonic 2 final.
+  3) Add tests: known IDs resolve to expected ROM offsets for both banks; uncompressed flag honored.
 
 ## Audio Backend Fidelity
 - Gap: YM2612/PSG emu still approximate vs SMPSPlay cores.
