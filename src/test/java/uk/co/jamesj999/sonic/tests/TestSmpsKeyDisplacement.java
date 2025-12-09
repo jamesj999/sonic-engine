@@ -31,11 +31,11 @@ public class TestSmpsKeyDisplacement {
         List<FmWrite> writes = new ArrayList<>();
 
         @Override
-        public void writeFm(int port, int reg, int val) {
+        public void writeFm(Object source, int port, int reg, int val) {
             if ((reg & 0xF0) == 0xA0) {
                 writes.add(new FmWrite(port, reg, val));
             }
-            super.writeFm(port, reg, val);
+            super.writeFm(source, port, reg, val);
         }
     }
 

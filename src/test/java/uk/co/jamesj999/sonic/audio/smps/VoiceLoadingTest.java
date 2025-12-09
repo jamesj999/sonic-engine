@@ -17,7 +17,7 @@ public class VoiceLoadingTest {
         int lastChannelId;
 
         @Override
-        public void setInstrument(int channelId, byte[] voice) {
+        public void setInstrument(Object source, int channelId, byte[] voice) {
             this.lastChannelId = channelId;
             this.lastInstrument = new byte[voice.length];
             System.arraycopy(voice, 0, this.lastInstrument, 0, voice.length);
