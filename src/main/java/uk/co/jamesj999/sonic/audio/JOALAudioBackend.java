@@ -7,9 +7,12 @@ import com.jogamp.openal.ALCcontext;
 import com.jogamp.openal.ALCdevice;
 import com.jogamp.common.nio.Buffers;
 
+import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;
@@ -38,6 +41,7 @@ public class JOALAudioBackend implements AudioBackend {
     private static final int STREAM_BUFFER_COUNT = 3;
     private static final int STREAM_BUFFER_SIZE = 4096;
     private SmpsSequencer currentSmps;
+    private SmpsDriver smpsDriver;
 
     // Fallback mappings
     private final Map<Integer, String> musicFallback = new HashMap<>();
@@ -115,17 +119,45 @@ public class JOALAudioBackend implements AudioBackend {
         // Stop music source if playing wav
         al.alSourceStop(musicSource);
 
-        currentSmps = new SmpsSequencer(data, dacData);
+        smpsDriver = new SmpsDriver();
+        
+        // Configure Region
+        String regionStr = SonicConfigurationService.getInstance().getString(SonicConfiguration.REGION);
+        if ("PAL".equalsIgnoreCase(regionStr)) {
+            smpsDriver.setRegion(SmpsSequencer.Region.PAL);
+        } else {
+            smpsDriver.setRegion(SmpsSequencer.Region.NTSC);
+        }
+
+        SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+        smpsDriver.addSequencer(seq, false);
+        currentSmps = seq;
+        
         updateSynthesizerConfig();
-        currentStream = currentSmps;
+        currentStream = smpsDriver;
         startStream();
     }
 
     @Override
     public void playSfxSmps(AbstractSmpsData data, DacData dacData) {
-        this.sfxStream = new SmpsSequencer(data, dacData);
-        // We probably don't want to mute SFX channels based on music muting preferences,
-        // but if we did, we'd apply it here. For now, we leave SFX unmuted.
+        if (smpsDriver != null && currentStream == smpsDriver) {
+            // Mix into current driver
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+            smpsDriver.addSequencer(seq, true);
+        } else {
+            // Standalone SFX driver
+            SmpsDriver sfxDriver;
+            if (sfxStream instanceof SmpsDriver) {
+                sfxDriver = (SmpsDriver) sfxStream;
+            } else {
+                sfxDriver = new SmpsDriver();
+                sfxStream = sfxDriver;
+            }
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
+            sfxDriver.addSequencer(seq, true);
+        }
+
+        // Ensure stream is running
         int[] queued = new int[1];
         al.alGetSourcei(musicSource, AL.AL_BUFFERS_QUEUED, queued, 0);
         if (queued[0] == 0) {
@@ -161,6 +193,10 @@ public class JOALAudioBackend implements AudioBackend {
             }
             currentStream = null;
             currentSmps = null;
+            if (smpsDriver != null) {
+                smpsDriver.stopAll();
+                smpsDriver = null;
+            }
         }
     }
 

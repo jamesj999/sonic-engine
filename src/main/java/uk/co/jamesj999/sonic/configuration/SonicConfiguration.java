@@ -109,6 +109,11 @@ public enum SonicConfiguration {
 	/**
 	 * Whether to enable Audio (Music/SFX)
 	 */
-	AUDIO_ENABLED;
+	AUDIO_ENABLED,
+
+	/**
+	 * Region (NTSC/PAL) for audio timing.
+	 */
+	REGION;
 
 }

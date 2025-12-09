@@ -17,7 +17,7 @@ public class TestSmpsSequencer {
         List<String> log = new ArrayList<>();
 
         @Override
-        public void writeFm(int port, int reg, int val) {
+        public void writeFm(Object source, int port, int reg, int val) {
             log.add(String.format("FM P%d R%02X V%02X", port, reg, val));
         }
     }
@@ -144,7 +144,7 @@ public class TestSmpsSequencer {
     }
 
     @Test
-    public void testCallAndReturnWithF9() {
+    public void testCallAndReturn() {
         byte[] data = new byte[48];
         data[2] = 2;            // 1 FM channel (slot after DAC)
         data[4] = 0x01;         // Dividing timing
@@ -166,7 +166,7 @@ public class TestSmpsSequencer {
         // Call target at 0x1E
         data[0x1E] = (byte) 0x81;           // Note inside subroutine
         data[0x1F] = 0x01;                  // Duration
-        data[0x20] = (byte) 0xF9;           // Return
+        data[0x20] = (byte) 0xE3;           // Return
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
@@ -180,6 +180,34 @@ public class TestSmpsSequencer {
                 .filter(s -> s.startsWith("FM") && s.contains("R28") && s.contains("VF"))
                 .count();
         assertEquals("Call/return should allow both notes to play. Log: " + logStr, 2, keyOnCount);
+    }
+
+    @Test
+    public void testSndOffF9() {
+        byte[] data = new byte[32];
+        data[2] = 2;
+        data[5] = (byte) 0x80;
+
+        // Track 1
+        data[0x0A] = 0x14;
+        data[0x0B] = 0x00;
+
+        data[0x14] = (byte) 0x81; // Note
+        data[0x15] = 0x01;
+        data[0x16] = (byte) 0xF9; // SND_OFF (should silence and stop)
+
+        AbstractSmpsData smps = new Sonic2SmpsData(data);
+        MockSynth synth = new MockSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        short[] buf = new short[2000];
+        seq.read(buf);
+
+        String logStr = String.join(" | ", synth.log);
+        // Expect writes to 0x80+ (Release) and 0x40+ (TL) for all ops.
+        // e.g. FM P0 R80 VFF
+        assertTrue("Should write max release rate (Silence)", logStr.contains("R80 VFF"));
+        assertTrue("Should write max TL (Silence)", logStr.contains("R40 V7F"));
     }
 
     @Test

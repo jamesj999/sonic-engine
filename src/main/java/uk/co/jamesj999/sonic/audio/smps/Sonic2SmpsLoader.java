@@ -63,7 +63,20 @@ public class Sonic2SmpsLoader {
             return null;
         }
         // Sonic 2 music loaded at Z80 0x1380
-        return loadSmps(offset, 0x1380);
+        AbstractSmpsData data = loadSmps(offset, 0x1380);
+        if (data != null) {
+            data.setId(musicId);
+            if (musicId >= 0x81) {
+                try {
+                    int flagsAddr = 0x0ECF36 + (musicId - 0x81);
+                    int flags = rom.readByte(flagsAddr) & 0xFF;
+                    data.setPalSpeedupDisabled((flags & 0x40) != 0);
+                } catch (Exception e) {
+                    LOGGER.fine("Failed to read flags for music ID " + Integer.toHexString(musicId));
+                }
+            }
+        }
+        return data;
     }
 
     /**
@@ -78,10 +91,43 @@ public class Sonic2SmpsLoader {
     public AbstractSmpsData loadSfx(String name) {
         Integer offset = sfxMap.get(name);
         if (offset != null) {
-            // Sonic 2 SFX usually loaded at Z80 0x1C00 (Guess)
             return loadSmps(offset, 0x1C00);
         }
+        // Try parsing as hex ID (e.g. "A0")
+        try {
+            int id = Integer.parseInt(name, 16);
+            if (id >= 0xA0 && id <= 0xF0) {
+                return loadSfx(id);
+            }
+        } catch (NumberFormatException ignored) {}
         return null;
+    }
+
+    public AbstractSmpsData loadSfx(int sfxId) {
+        // SFX Pointer Table at 0xFEE91.
+        // IDs start at 0xA0.
+        // Pointers are 2 bytes (LE), relative to bank start 0xF8000 (Z80 0x8000).
+        if (sfxId < 0xA0) return null;
+        
+        try {
+            int index = sfxId - 0xA0;
+            int tableAddr = 0xFEE91;
+            int entryAddr = tableAddr + (index * 2);
+            
+            int lo = rom.readByte(entryAddr) & 0xFF;
+            int hi = rom.readByte(entryAddr + 1) & 0xFF;
+            int ptr = lo | (hi << 8); // Z80 pointer (e.g. 0x8xxx)
+            
+            // Map Z80 0x8000-0xFFFF to ROM 0xF8000-0xFFFFF
+            int romOffset = 0xF8000 + (ptr & 0x7FFF);
+            
+            // SFX usually loaded at Z80 0x1C00 or dynamic
+            return loadSmps(romOffset, 0x1C00);
+        } catch (Exception e) {
+            LOGGER.severe("Failed to load SFX ID " + Integer.toHexString(sfxId));
+            e.printStackTrace();
+            return null;
+        }
     }
 
     /**

@@ -17,6 +17,8 @@ public abstract class AbstractSmpsData {
     protected int[] psgModEnvs;
     protected int[] psgInstruments;
     protected int z80StartAddress = 0;
+    protected int id;
+    protected boolean palSpeedupDisabled;
 
     protected AbstractSmpsData(byte[] data, int z80StartAddress) {
         this.data = data;
@@ -112,5 +114,21 @@ public abstract class AbstractSmpsData {
 
     public int getZ80StartAddress() {
         return z80StartAddress;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public boolean isPalSpeedupDisabled() {
+        return palSpeedupDisabled;
+    }
+
+    public void setPalSpeedupDisabled(boolean palSpeedupDisabled) {
+        this.palSpeedupDisabled = palSpeedupDisabled;
     }
 }

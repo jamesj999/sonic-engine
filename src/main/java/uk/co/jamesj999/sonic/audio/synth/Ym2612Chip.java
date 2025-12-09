@@ -104,7 +104,7 @@ public class Ym2612Chip {
     private static final double DAC_BASE_CYCLES = 288.0;
     private static final double DAC_LOOP_CYCLES = 26.0;
     private static final double DAC_LOOP_SAMPLES = 2.0;
-    private static final boolean DAC_INTERPOLATE = true;
+    private boolean dacInterpolate = true;
 
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
@@ -294,6 +294,10 @@ public class Ym2612Chip {
         if (ch >= 0 && ch < 6) {
             mutes[ch] = mute;
         }
+    }
+
+    public void setDacInterpolate(boolean interpolate) {
+        this.dacInterpolate = interpolate;
     }
 
     public void reset() {
@@ -822,7 +826,7 @@ public class Ym2612Chip {
                 int idx = (int) dacPos;
                 double frac = dacPos - idx;
                 int s1 = (data[idx] & 0xFF) - 128;
-                if (DAC_INTERPOLATE) {
+            if (dacInterpolate) {
                     int s2 = (idx + 1 < data.length) ? ((data[idx + 1] & 0xFF) - 128) : s1;
                     double lerp = s1 * (1.0 - frac) + s2 * frac;
                     sample = (int) Math.round(lerp);
