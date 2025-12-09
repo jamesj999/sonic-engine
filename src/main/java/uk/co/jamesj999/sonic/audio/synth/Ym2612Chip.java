@@ -233,7 +233,7 @@ public class Ym2612Chip {
 
     private enum EnvState { ATTACK, DECAY1, DECAY2, RELEASE, IDLE }
 
-    private static class Operator {
+    static class Operator {
         int dt1, mul;
         int tl;
         int rs, ar;
@@ -253,7 +253,7 @@ public class Ym2612Chip {
         boolean ssgHold;
     }
 
-    private static class Channel {
+    static class Channel {
         int fNum;
         int block;
         boolean specialMode;
@@ -279,7 +279,7 @@ public class Ym2612Chip {
         }
     }
 
-    private final Channel[] channels = new Channel[6];
+    final Channel[] channels = new Channel[6];
     private final boolean[] mutes = new boolean[6];
     private boolean channel3SpecialMode;
 
@@ -439,10 +439,10 @@ public class Ym2612Chip {
         if (chIdx < 0 || chIdx >= 6 || voice.length < 1) return;
         Channel ch = channels[chIdx];
 
-        boolean hasTl = voice.length >= 25;
-        // Sonic 2 voices might be 21 bytes (1 header + 20 regs) but lack TL.
-        // We ensure we read up to index 20, so we need at least 21 bytes.
-        int expectedLen = hasTl ? 25 : 21;
+        // Ensure we have enough bytes (padding if necessary)
+        // Standard length is 25 bytes (1 header + 4 * 6 regs).
+        // If shorter, missing values (like TL) default to 0.
+        int expectedLen = 25;
         if (voice.length < expectedLen) {
             byte[] padded = new byte[expectedLen];
             System.arraycopy(voice, 0, padded, 0, voice.length);
@@ -456,12 +456,18 @@ public class Ym2612Chip {
         ch.feedback = (val00 >> 3) & 7;
         ch.algo = val00 & 7;
 
-        int[] opOrder = {0, 1, 2, 3};
-        int tlIdxBase = 5;
-        int rsArBase = hasTl ? 9 : 5;
-        int amD1rBase = rsArBase + 4;
-        int d2rBase = amD1rBase + 4;
-        int d1lRrBase = d2rBase + 4;
+        // Map input (Slot Order: Op1, Op3, Op2, Op4) to Internal Op Index (0=Op1, 1=Op2, 2=Op3, 3=Op4)
+        // Index 0 (Op 1) -> ops[0]
+        // Index 1 (Op 3) -> ops[2]
+        // Index 2 (Op 2) -> ops[1]
+        // Index 3 (Op 4) -> ops[3]
+        int[] opOrder = {0, 2, 1, 3};
+
+        int rsArBase = 5;
+        int amD1rBase = 9;
+        int d2rBase = 13;
+        int d1lRrBase = 17;
+        int tlIdxBase = 21;
 
         for (int orderIdx = 0; orderIdx < 4; orderIdx++) {
             int op = opOrder[orderIdx];
@@ -470,7 +476,7 @@ public class Ym2612Chip {
             o.dt1 = (dtmul >> 4) & 7;
             o.mul = dtmul & 0xF;
 
-            int tlVal = hasTl ? get.applyAsInt(tlIdxBase + orderIdx) : 0;
+            int tlVal = get.applyAsInt(tlIdxBase + orderIdx);
             o.tl = tlVal & 0x7F;
 
             int rsar = get.applyAsInt(rsArBase + orderIdx);

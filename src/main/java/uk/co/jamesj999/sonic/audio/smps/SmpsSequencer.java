@@ -810,21 +810,22 @@ public class SmpsSequencer implements AudioStream {
         if (t.type != TrackType.FM || t.voiceData == null) {
             return;
         }
-        byte[] voice = new byte[t.voiceData.length];
-        System.arraycopy(t.voiceData, 0, voice, 0, voice.length);
-        boolean hasTl = voice.length >= 25;
-        int tlBase = hasTl ? 5 : -1;
+        // Ensure voice buffer is at least 25 bytes for TL access
+        byte[] voice = new byte[Math.max(25, t.voiceData.length)];
+        System.arraycopy(t.voiceData, 0, voice, 0, t.voiceData.length);
+
+        int tlBase = 21; // TL is now at the end
         if (tlBase >= 0) {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
             // Mask bits use Slot Order (Bit 0=Slot 0/Op1, Bit 1=Slot 1/Op3, Bit 2=Slot 2/Op2, Bit 3=Slot 3/Op4).
-            // Voice array uses Logical Operator Order (1, 2, 3, 4).
+            // Voice array uses Slot Order (Op 1, 3, 2, 4) in the new format.
             // Mapping:
             // Bit 0 (Op1) -> Idx 0
-            // Bit 1 (Op3) -> Idx 2
-            // Bit 2 (Op2) -> Idx 1
+            // Bit 1 (Op3) -> Idx 1
+            // Bit 2 (Op2) -> Idx 2
             // Bit 3 (Op4) -> Idx 3
-            int[] opMap = {0, 2, 1, 3};
+            int[] opMap = {0, 1, 2, 3};
 
             for (int op = 0; op < 4; op++) {
                 if ((mask & (1 << op)) != 0) {
