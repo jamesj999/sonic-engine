@@ -461,35 +461,36 @@ public class Ym2612Chip {
         ch.algo = val00 & 7;
 
         // Voice data is in slot order (Op1, Op3, Op2, Op4) with TL at the end (bytes 21-24).
-        int[] opOrder = {0, 1, 2, 3};
+        // Reorder into logical Op1, Op2, Op3, Op4 inside the chip; map to slots when writing registers.
+        int[] slotToLogical = {0, 2, 1, 3}; // slot0->Op1, slot1->Op3, slot2->Op2, slot3->Op4
         int tlIdxBase = 21;
         int rsArBase = 5;
         int amD1rBase = 9;
         int d2rBase = 13;
         int d1lRrBase = 17;
 
-        for (int orderIdx = 0; orderIdx < 4; orderIdx++) {
-            int op = opOrder[orderIdx];
-            Operator o = ch.ops[op];
-            int dtmul = get.applyAsInt(1 + orderIdx);
+        for (int slotIdx = 0; slotIdx < 4; slotIdx++) {
+            int logical = slotToLogical[slotIdx];
+            Operator o = ch.ops[logical];
+            int dtmul = get.applyAsInt(1 + slotIdx);
             o.dt1 = (dtmul >> 4) & 7;
             o.mul = dtmul & 0xF;
 
-            int tlVal = hasTl ? get.applyAsInt(tlIdxBase + orderIdx) : 0;
+            int tlVal = hasTl ? get.applyAsInt(tlIdxBase + slotIdx) : 0;
             o.tl = tlVal & 0x7F;
 
-            int rsar = get.applyAsInt(rsArBase + orderIdx);
+            int rsar = get.applyAsInt(rsArBase + slotIdx);
             o.rs = (rsar >> 6) & 3;
             o.ar = rsar & 0x1F;
 
-            int amd1r = get.applyAsInt(amD1rBase + orderIdx);
+            int amd1r = get.applyAsInt(amD1rBase + slotIdx);
             o.am = (amd1r >> 7) & 1;
             o.d1r = amd1r & 0x1F;
 
-            int d2r = get.applyAsInt(d2rBase + orderIdx);
+            int d2r = get.applyAsInt(d2rBase + slotIdx);
             o.d2r = d2r & 0x1F;
 
-            int d1lrr = get.applyAsInt(d1lRrBase + orderIdx);
+            int d1lrr = get.applyAsInt(d1lRrBase + slotIdx);
             o.d1l = (d1lrr >> 4) & 0xF;
             o.rr = d1lrr & 0xF;
 
@@ -507,11 +508,10 @@ public class Ym2612Chip {
         // Push voice parameters into YM registers immediately so the next key-on uses them.
         int port = (chIdx < 3) ? 0 : 1;
         int hwCh = chIdx % 3;
-        // opIdx -> slot code used by the YM register map (0,1,2,3 correspond to op1, op3, op2, op4)
-        // Voice Data (ch.ops) is in Logical Order (1, 2, 3, 4).
+        // opIdx -> logical operator (Op1, Op2, Op3, Op4).
         // YM Registers use Slot Order (0=Op1, 1=Op3, 2=Op2, 3=Op4).
-        // Voice/opOrder already matches slot order, so codes align directly.
-        int[] slotCode = {0, 1, 2, 3};
+        // Map logical Op1,Op2,Op3,Op4 to register slot codes.
+        int[] slotCode = {0, 2, 1, 3};
         for (int opIdx = 0; opIdx < 4; opIdx++) {
             int slot = slotCode[opIdx];
             Operator o = ch.ops[opIdx];
@@ -884,8 +884,9 @@ public class Ym2612Chip {
         ch.feedbackHist1 = ch.feedbackHist2;
         ch.feedbackHist2 = op0.lastOutput;
 
+        // Operator indices are now logical: 0=Op1, 1=Op2, 2=Op3, 3=Op4.
         int[][] algoRoutes = {
-                {0, 1, 2, 3}, {0, 1, 2, 3}, {0, 2, 1, 3}, {0, 1, 2, 3},
+                {0, 1, 2, 3}, {0, 1, 2, 3}, {0, 1, 2, 3}, {0, 1, 2, 3},
                 {0, 1, 2, 3}, {0, 1, 2, 3}, {0, 1, 2, 3}, {0, 1, 2, 3}
         };
 
@@ -932,27 +933,29 @@ public class Ym2612Chip {
     }
 
     public static double computeModulationInput(int algo, int opIndex, double[] opOut, double feedback) {
+        // opIndex is logical: 0=Op1, 1=Op2, 2=Op3, 3=Op4.
         if (opIndex == 0) return feedback;
         return switch (algo) {
-            case 0 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[1] : opOut[2]);
-            case 1 -> (opIndex == 2 ? opOut[0] + opOut[1] : opIndex == 3 ? opOut[2] : 0);
-            case 2 -> (opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[2] + opOut[0] : 0);
-            case 3 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[1] + opOut[2] : 0);
-            case 4 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[2] : 0);
-            case 5 -> (opIndex == 1 || opIndex == 2 || opIndex == 3 ? opOut[0] : 0);
-            case 6 -> (opIndex == 1 ? opOut[0] : 0);
+            case 0 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[1] : opOut[2]); // 1->2->3->4
+            case 1 -> (opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[2] : 0);        // 1->2->3, 4 carrier
+            case 2 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[2] : 0);        // 1->2, 3->4
+            case 3 -> (opIndex == 2 ? opOut[0] + opOut[1] : opIndex == 3 ? opOut[2] : 0); // (1+2)->3->4
+            case 4 -> (opIndex == 2 ? opOut[0] : opIndex == 3 ? opOut[1] : 0);        // 1->3, 2->4 (dual carriers)
+            case 5 -> (opIndex == 1 || opIndex == 2 || opIndex == 3 ? opOut[0] : 0);  // 1->(2,3,4)
+            case 6 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[0] : 0);        // 1->2 and 1->3
             case 7 -> 0;
             default -> 0;
         };
     }
 
     public static double computeCarrierSum(int algo, double[] opOut) {
+        // opOut indices are logical: 0=Op1, 1=Op2, 2=Op3, 3=Op4.
         return switch (algo) {
             case 0 -> opOut[3];
             case 1 -> opOut[3];
-            case 2 -> opOut[3];
+            case 2 -> opOut[1] + opOut[3];
             case 3 -> opOut[3];
-            case 4 -> opOut[1] + opOut[3];
+            case 4 -> opOut[2] + opOut[3];
             case 5 -> opOut[1] + opOut[2] + opOut[3];
             case 6 -> opOut[1] + opOut[2] + opOut[3];
             case 7 -> opOut[0] + opOut[1] + opOut[2] + opOut[3];
