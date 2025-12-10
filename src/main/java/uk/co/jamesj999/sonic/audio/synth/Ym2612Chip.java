@@ -833,32 +833,45 @@ public class Ym2612Chip {
                        TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
                 ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
                 break;
-            case 4:
-                in1 += ch.opOut[1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1]) >> OUT_SHIFT;
+            case 4: {
+                // op1 (S0) -> op3 (S1) carrier; op2 (S2) -> op4 (S3) carrier
+                in1 += ch.opOut[1]; // op1 output (feedback delayed)
+                int o3 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
+                int o2 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
+                in3 += o2;
+                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
+                ch.out = (o4 + o3) >> OUT_SHIFT;
                 break;
-            case 5:
+            }
+            case 5: {
+                // op1 modulates op2, op3, op4 (three carriers)
                 in1 += ch.opOut[1];
                 in2 += ch.opOut[1];
                 in3 += ch.opOut[1];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2]) >> OUT_SHIFT;
+                int o2 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
+                int o3 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
+                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
+                ch.out = (o4 + o2 + o3) >> OUT_SHIFT;
                 break;
-            case 6:
+            }
+            case 6: {
+                // op1->op2 stack, plus op3 and op4 as independent carriers
                 in1 += ch.opOut[1];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2]) >> OUT_SHIFT;
+                int o2 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
+                int o3 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
+                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
+                ch.out = (o4 + o2 + o3) >> OUT_SHIFT;
                 break;
-            case 7:
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2] +
-                          ch.opOut[1]) >> OUT_SHIFT;
+            }
+            case 7: {
+                // All four operators are carriers (op1 already includes feedback)
+                int o1 = ch.opOut[1]; // previous op1 output after feedback step
+                int o2 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
+                int o3 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
+                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
+                ch.out = (o4 + o2 + o3 + o1) >> OUT_SHIFT;
                 break;
+            }
         }
 
     }
@@ -892,15 +905,14 @@ public class Ym2612Chip {
         int amD1rBase = 9;
         int d2rBase = 13;
         int d1lRrBase = 17;
-        // SMPS voice op order: Op1, Op3, Op2, Op4.
-        // YM slots (per channel): slot1/op1 @ +0, slot2/op2 @ +4, slot3/op3 @ +8, slot4/op4 @ +12.
-        int[] opToVoiceIdx = {0, 2, 1, 3}; // slot order -> voice op index
-        int[] dtIdx   = {1, 3, 2, 4};
-        int[] tlIdx   = {21, 23, 22, 24};
-        int[] rsArIdx = {5, 7, 6, 8};
-        int[] amIdx   = {9, 11, 10, 12};
-        int[] d2rIdx  = {13, 15, 14, 16};
-        int[] d1lRrIdx= {17, 19, 18, 20};
+        // SMPS voice op order matches YM register order: Op1, Op3, Op2, Op4
+        // Register slots are 0x30/34/38/3C (+channel), mapped internally as Op1, Op3, Op2, Op4.
+        int[] dtIdx   = {1, 2, 3, 4};
+        int[] tlIdx   = {21, 22, 23, 24};
+        int[] rsArIdx = {5, 6, 7, 8};
+        int[] amIdx   = {9, 10, 11, 12};
+        int[] d2rIdx  = {13, 14, 15, 16};
+        int[] d1lRrIdx= {17, 18, 19, 20};
 
         for (int slot = 0; slot < 4; slot++) {
             int hwRegBase = 0x30 + slot * 4 + hwCh;
