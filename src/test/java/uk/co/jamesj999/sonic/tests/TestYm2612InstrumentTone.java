@@ -18,13 +18,15 @@ public class TestYm2612InstrumentTone {
         byte[] voice = new byte[] {
                 (byte) 0x07,             // alg=7 (all carriers), fb=0
                 (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01, // DT/MUL ops 1,3,2,4
-                // RS/AR (Indices 5-8) - Set to Max AR (0x1F)
+                // TL (Indices 5-8) - Set to Max Vol (0)
+                0x00, 0x00, 0x00, 0x00,
+                // RS/AR (Indices 9-12) - Set to Max AR (0x1F)
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
-                // AM/D1R (Indices 9-12)
+                // AM/D1R (Indices 13-16)
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
-                // D2R (Indices 13-16)
+                // D2R (Indices 17-20)
                 0x0A, 0x0A, 0x0A, 0x0A,
-                // D1L/RR (Indices 17-20)
+                // D1L/RR (Indices 21-24)
                 (byte) 0x0F, (byte) 0x0F, (byte) 0x0F, (byte) 0x0F
         };
 

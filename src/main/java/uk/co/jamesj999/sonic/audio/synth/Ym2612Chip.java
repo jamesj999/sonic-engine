@@ -887,11 +887,11 @@ public class Ym2612Chip {
 
         write(port, 0xB0 + hwCh, (feedback << 3) | algo);
 
-        int tlIdxBase = 21;
-        int rsArBase = 5;
-        int amD1rBase = 9;
-        int d2rBase = 13;
-        int d1lRrBase = 17;
+        int tlIdxBase = 5;
+        int rsArBase = 9;
+        int amD1rBase = 13;
+        int d2rBase = 17;
+        int d1lRrBase = 21;
 
         // Map HW Index (0,1,2,3) to Register Offset (Slot 0,2,1,3) -> (0, 8, 4, 12)
         int[] regOffsets = {0, 8, 4, 12};

@@ -1028,8 +1028,8 @@ public class SmpsSequencer implements AudioStream {
         byte[] voice = new byte[t.voiceData.length];
         System.arraycopy(t.voiceData, 0, voice, 0, voice.length);
         boolean hasTl = voice.length >= 25;
-        // SMPS (S2) stores TL at the end of the 25-byte blob (bytes 21-24).
-        int tlBase = hasTl ? 21 : -1;
+        // SMPS (S2) stores TL at bytes 5-8 (Standard SMPS Z80).
+        int tlBase = hasTl ? 5 : -1;
         if (tlBase >= 0) {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
