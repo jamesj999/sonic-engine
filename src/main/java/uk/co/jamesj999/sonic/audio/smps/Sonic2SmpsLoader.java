@@ -64,6 +64,9 @@ public class Sonic2SmpsLoader {
         }
         // Sonic 2 music loaded at Z80 0x1380
         AbstractSmpsData data = loadSmps(offset, 0x1380);
+        if (data instanceof Sonic2SmpsData) {
+            ((Sonic2SmpsData) data).setPsgEnvelopes(loadPsgEnvelopes());
+        }
         if (data != null) {
             data.setId(musicId);
             if (musicId >= 0x81) {
@@ -135,10 +138,19 @@ public class Sonic2SmpsLoader {
      * Flag bits: 0-4 = pointer index, bit5 = uncompressed (1=uncompressed), bit7 = bank (0=0xF0000,1=0xF8000).
      */
     private int resolveMusicOffset(int musicId) {
-        // Legacy map is more reliable; only use flags if map entry missing.
+        // Prefer deriving from ROM.
+        int romOffset = resolveMusicOffsetFromRom(musicId);
+        if (romOffset != -1) return romOffset;
+
+        // Fallback to legacy map
         Integer mapped = musicMap.get(musicId);
         if (mapped != null) return mapped;
+        return -1;
+    }
+
+    private int resolveMusicOffsetFromRom(int musicId) {
         // Known music IDs start at 0x81; map ID to flag index by subtracting 0x81.
+        if (musicId < 0x81) return -1;
         int flagIndex = musicId - 0x81;
         int flagsAddr = 0x0ECF36 + flagIndex;
         try {
@@ -163,9 +175,6 @@ public class Sonic2SmpsLoader {
             }
             return offset;
         } catch (Exception e) {
-            // Fallback to legacy map if available
-            Integer mapOffset = musicMap.get(musicId);
-            if (mapOffset != null) return mapOffset;
             return -1;
         }
     }
@@ -214,6 +223,55 @@ public class Sonic2SmpsLoader {
             LOGGER.severe("Failed to read ROM bytes at " + Integer.toHexString(offset));
             return null;
         }
+    }
+
+    private Map<Integer, byte[]> loadPsgEnvelopes() {
+        Map<Integer, byte[]> envelopes = new HashMap<>();
+        // PSG Envelopes at 0x0F2E5C (Pointer Table)
+        int tableAddr = 0x0F2E5C;
+        int bankBase = 0x0F0000;
+
+        try {
+            // Read 16 entries
+            for (int id = 1; id <= 16; id++) {
+                int ptrAddr = tableAddr + (id - 1) * 2;
+                int p1 = rom.readByte(ptrAddr) & 0xFF;
+                int p2 = rom.readByte(ptrAddr + 1) & 0xFF;
+                int ptr = p1 | (p2 << 8);
+
+                if (ptr == 0) continue;
+
+                // Map Z80 0x8000-0xFFFF to ROM
+                int offset = ptr & 0x7FFF;
+                int romAddr = bankBase + offset;
+
+                byte[] buffer = new byte[256];
+                int len = 0;
+                for (int i = 0; i < 256; i++) {
+                    int b = rom.readByte(romAddr + i) & 0xFF;
+                    buffer[i] = (byte) b;
+                    len++;
+                    // 0x80 = Reset/End, 0x81 = Hold, 0x83 = Stop
+                    if (b == 0x80 || b == 0x81 || b == 0x83) {
+                        break;
+                    } else if (b == 0x82 || b == 0x84) {
+                        // Loop (82) or Multiplier (84) takes a parameter
+                        i++;
+                        b = rom.readByte(romAddr + i) & 0xFF;
+                        buffer[i] = (byte) b;
+                        len++;
+                        if (buffer[i - 1] == (byte) 0x82) break;
+                    }
+                }
+
+                byte[] env = new byte[len];
+                System.arraycopy(buffer, 0, env, 0, len);
+                envelopes.put(id, env);
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Failed to load PSG Envelopes from ROM");
+        }
+        return envelopes;
     }
 
     public DacData loadDacData() {

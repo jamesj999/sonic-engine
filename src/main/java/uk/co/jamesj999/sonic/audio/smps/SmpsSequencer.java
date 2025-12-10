@@ -30,6 +30,19 @@ public class SmpsSequencer implements AudioStream {
     private boolean speedShoes = false;
     private int normalTempo;
     private int commData = 0; // Communication byte (E2)
+    private boolean fm6DacOff = false;
+
+    private static class FadeState {
+        int steps;
+        int delayInit;
+        int delayCounter;
+        int addFm;
+        int addPsg;
+        boolean active;
+        boolean fadeOut; // true = Fade Out, false = Fade In
+    }
+
+    private final FadeState fadeState = new FadeState();
 
     private static final double SAMPLE_RATE = 44100.0;
     // Sonic 2 main tempo duty cycle (Equivalent to SMPSPlay TEMPO_OVERFLOW2 mode: 0x100)
@@ -254,6 +267,10 @@ public class SmpsSequencer implements AudioStream {
         this.speedShoes = active;
         calculateTempo();
     }
+
+    public void setFm6DacOff(boolean active) {
+        this.fm6DacOff = active;
+    }
     
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
         for (Track t : tracks) {
@@ -355,8 +372,9 @@ public class SmpsSequencer implements AudioStream {
     private void tick() {
         for (Track t : tracks) {
             if (!t.active) continue;
-            // Check override
-            if (t.overridden) continue;
+            // Note: In SMPS, overridden tracks continue to process (tick) in the background,
+            // but their output is blocked (or overwritten) by the SFX.
+            // SmpsDriver blocks the writes if locked.
             
             boolean wasActive = t.active;
 
@@ -421,7 +439,48 @@ public class SmpsSequencer implements AudioStream {
         tempoAccumulator += tempoWeight;
         if (tempoAccumulator >= TEMPO_MOD_BASE) {
             tempoAccumulator &= 0xFF;
+            processFade();
             tick();
+        }
+    }
+
+    private void processFade() {
+        if (!fadeState.active || fadeState.steps == 0) {
+            return;
+        }
+
+        if (fadeState.delayCounter > 0) {
+            fadeState.delayCounter--;
+            return;
+        }
+
+        fadeState.delayCounter = fadeState.delayInit;
+        fadeState.steps--;
+
+        if (fadeState.steps == 0) {
+            if (fadeState.fadeOut) {
+                // Stop all tracks
+                for (Track t : tracks) {
+                    t.active = false;
+                    stopNote(t);
+                }
+            } else {
+                // Fade In complete
+            }
+            fadeState.active = false;
+            return;
+        }
+
+        int dir = fadeState.fadeOut ? 1 : -1;
+
+        for (Track t : tracks) {
+            if (!t.active) continue;
+
+            int add = (t.type == TrackType.PSG) ? fadeState.addPsg : fadeState.addFm;
+            int change = add * dir;
+
+            t.volumeOffset += change;
+            refreshVolume(t);
         }
     }
 
@@ -619,7 +678,8 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void handleSndOff(Track t) {
-        // SMPSPlay CF_SND_OFF: Only writes to specific operators' release rates.
+        // SMPSPlay CF_SND_OFF: Only writes to specific operators' release rates (Op 2 and 4).
+        // Confirmed via SMPSPlay src/Engine/smps_commands.c that it does NOT write Total Level (TL).
         // It does NOT stop the track (active=false) or explicitly stop the note.
         
         if (t.type == TrackType.FM) {
@@ -808,6 +868,11 @@ public class SmpsSequencer implements AudioStream {
             fnum = packed & 0x7FF;
 
             if (!t.tieNext) {
+                // [not in driver] turn DAC off when playing a note on FM6
+                if (fm6DacOff && hwCh == 5) {
+                    synth.writeFm(this, 0, 0x2B, 0x00);
+                }
+
                 int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
                 synth.writeFm(this, 0, 0x28, 0x00 | chVal);
             }
@@ -1051,8 +1116,20 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void handleFadeIn(Track t) {
-        t.active = false;
-        stopNote(t);
+        // E4 is Fade Out in Sonic 2 (despite the name in code comments)
+        // Default Sonic 2 Fade Out settings:
+        // Steps: 0x28 (40)
+        // Delay: 3
+        // AddFM: 1
+        // AddPSG: 1
+        fadeState.steps = 40;
+        fadeState.delayInit = 3;
+        fadeState.addFm = 1;
+        fadeState.addPsg = 1;
+
+        fadeState.delayCounter = fadeState.delayInit;
+        fadeState.active = true;
+        fadeState.fadeOut = true;
     }
 
     public Synthesizer getSynthesizer() {
@@ -1099,6 +1176,7 @@ public class SmpsSequencer implements AudioStream {
         public TrackType type;
         public int channelId;
         public boolean active;
+        public boolean overridden;
         public int duration;
         public int rawDuration;
         public int note;

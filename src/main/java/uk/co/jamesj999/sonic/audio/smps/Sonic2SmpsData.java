@@ -1,6 +1,9 @@
 package uk.co.jamesj999.sonic.audio.smps;
 
+import java.util.Map;
+
 public class Sonic2SmpsData extends AbstractSmpsData {
+    private Map<Integer, byte[]> psgEnvelopes;
 
     public Sonic2SmpsData(byte[] data) {
         this(data, 0);
@@ -8,6 +11,10 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
     public Sonic2SmpsData(byte[] data, int z80StartAddress) {
         super(data, z80StartAddress);
+    }
+
+    public void setPsgEnvelopes(Map<Integer, byte[]> psgEnvelopes) {
+        this.psgEnvelopes = psgEnvelopes;
     }
 
     @Override
@@ -87,6 +94,9 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
     @Override
     public byte[] getPsgEnvelope(int id) {
+        if (psgEnvelopes != null && psgEnvelopes.containsKey(id)) {
+            return psgEnvelopes.get(id);
+        }
         return Sonic2PsgEnvelopes.getEnvelope(id);
     }
 

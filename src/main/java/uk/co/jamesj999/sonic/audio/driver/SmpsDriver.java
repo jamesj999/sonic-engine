@@ -78,12 +78,26 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
 
     private void releaseLocks(SmpsSequencer seq) {
         for (int i = 0; i < 6; i++) {
-            if (fmLocks[i] == seq) fmLocks[i] = null;
+            if (fmLocks[i] == seq) {
+                fmLocks[i] = null;
+                updateOverrides(SmpsSequencer.TrackType.FM, i, false);
+            }
         }
         for (int i = 0; i < 4; i++) {
-            if (psgLocks[i] == seq) psgLocks[i] = null;
+            if (psgLocks[i] == seq) {
+                psgLocks[i] = null;
+                updateOverrides(SmpsSequencer.TrackType.PSG, i, false);
+            }
         }
         psgLatches.remove(seq);
+    }
+
+    private void updateOverrides(SmpsSequencer.TrackType type, int ch, boolean overridden) {
+        for (SmpsSequencer s : sequencers) {
+            if (!isSfx(s)) {
+                s.setChannelOverridden(type, ch, overridden);
+            }
+        }
     }
 
     @Override
@@ -116,7 +130,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         
         if (ch >= 0 && ch < 6) {
             if (isSfx(source)) {
-                fmLocks[ch] = (SmpsSequencer) source;
+                if (fmLocks[ch] != source) {
+                    fmLocks[ch] = (SmpsSequencer) source;
+                    updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
+                }
                 super.writeFm(source, port, reg, val);
             } else {
                 if (fmLocks[ch] == null) {
@@ -137,7 +154,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             psgLatches.put(source, ch);
             
             if (isSfx(source)) {
-                psgLocks[ch] = (SmpsSequencer) source;
+                if (psgLocks[ch] != source) {
+                    psgLocks[ch] = (SmpsSequencer) source;
+                    updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
+                }
                 super.writePsg(source, val);
             } else {
                 if (psgLocks[ch] == null) {
@@ -187,7 +207,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         // DAC is on Channel 5 (FM6)
         int ch = 5;
         if (isSfx(source)) {
-            fmLocks[ch] = (SmpsSequencer) source;
+            if (fmLocks[ch] != source) {
+                fmLocks[ch] = (SmpsSequencer) source;
+                updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
+            }
             super.playDac(source, note);
         } else {
             if (fmLocks[ch] == null) {
