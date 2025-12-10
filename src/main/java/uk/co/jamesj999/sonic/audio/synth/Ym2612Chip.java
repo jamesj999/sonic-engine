@@ -42,6 +42,9 @@ public class Ym2612Chip {
     private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 14
     private static final int LIMIT_CH_OUT = (int) ((1 << OUT_BITS) * 1.5) - 1;
 
+    // Gain to fit soft-clipper headroom (approx -12dB)
+    private static final double OUTPUT_SCALE = 0.25;
+
     private static final int PG_CUT_OFF = (int) (78.0 / ENV_STEP);
 
     // Rate constants
@@ -729,7 +732,7 @@ public class Ym2612Chip {
             for (int ch = 0; ch < 6; ch++) {
                 if (mutes[ch]) continue;
                 if (ch == 5 && dacEnabled) continue;
-                double out = renderChannel(ch, envLfo, freqLfo);
+                double out = renderChannel(ch, envLfo, freqLfo) * OUTPUT_SCALE;
 
                 boolean left = channels[ch].leftMask != 0;
                 boolean right = channels[ch].rightMask != 0;
@@ -776,7 +779,7 @@ public class Ym2612Chip {
             for (int ch = 0; ch < 6; ch++) {
                 if (mutes[ch]) continue;
                 if (ch == 5 && dacEnabled) continue;
-                double out = renderChannel(ch, envLfo, freqLfo);
+                double out = renderChannel(ch, envLfo, freqLfo) * OUTPUT_SCALE;
                 boolean left = channels[ch].leftMask != 0;
                 boolean right = channels[ch].rightMask != 0;
                 if (left) mixL += out;
