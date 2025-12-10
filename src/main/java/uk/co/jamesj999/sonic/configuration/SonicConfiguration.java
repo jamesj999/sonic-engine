@@ -114,6 +114,17 @@ public enum SonicConfiguration {
 	/**
 	 * Region (NTSC/PAL) for audio timing.
 	 */
-	REGION;
+	REGION,
+
+	/**
+	 * Whether to enable DAC Interpolation (smoother sound).
+	 */
+	DAC_INTERPOLATE,
+
+	/**
+	 * Whether to mute FM6 when playing a note on it (if DAC is enabled).
+	 * Parity hack from SMPSPlay.
+	 */
+	FM6_DAC_OFF;
 
 }

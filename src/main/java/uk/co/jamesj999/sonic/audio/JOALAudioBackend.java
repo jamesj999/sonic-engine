@@ -131,8 +131,14 @@ public class JOALAudioBackend implements AudioBackend {
             smpsDriver.setRegion(SmpsSequencer.Region.NTSC);
         }
 
+        boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
+        smpsDriver.setDacInterpolate(dacInterpolate);
+
+        boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
+
         SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
         seq.setSpeedShoes(speedShoesEnabled);
+        seq.setFm6DacOff(fm6DacOff);
         smpsDriver.addSequencer(seq, false);
         currentSmps = seq;
         
@@ -143,9 +149,15 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSfxSmps(AbstractSmpsData data, DacData dacData) {
+        boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
+        boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
+
         if (smpsDriver != null && currentStream == smpsDriver) {
             // Mix into current driver
+            // Note: DAC interpolation is global on the driver/synth.
+            // FM6 DAC Off is per-sequencer.
             SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+            seq.setFm6DacOff(fm6DacOff);
             smpsDriver.addSequencer(seq, true);
         } else {
             // Standalone SFX driver
@@ -154,9 +166,11 @@ public class JOALAudioBackend implements AudioBackend {
                 sfxDriver = (SmpsDriver) sfxStream;
             } else {
                 sfxDriver = new SmpsDriver();
+                sfxDriver.setDacInterpolate(dacInterpolate);
                 sfxStream = sfxDriver;
             }
             SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
+            seq.setFm6DacOff(fm6DacOff);
             sfxDriver.addSequencer(seq, true);
         }
 

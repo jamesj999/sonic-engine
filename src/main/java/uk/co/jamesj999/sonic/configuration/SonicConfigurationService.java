@@ -116,6 +116,8 @@ public class SonicConfigurationService {
         // Force debug view enabled for tests/headless use unless explicitly overridden
         config.put(SonicConfiguration.DEBUG_VIEW_ENABLED.name(), true);
         putDefault(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED, false);
+        putDefault(SonicConfiguration.DAC_INTERPOLATE, true);
+        putDefault(SonicConfiguration.FM6_DAC_OFF, true); // Default true for Sonic 2 parity
     }
 
     private void putDefault(SonicConfiguration key, Object value) {
