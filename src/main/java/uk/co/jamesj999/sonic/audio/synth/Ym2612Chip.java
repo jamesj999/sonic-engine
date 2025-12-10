@@ -39,7 +39,8 @@ public class Ym2612Chip {
     // Output bits logic
     private static final int MAX_OUT_BITS = SIN_HBITS + SIN_LBITS + 2; // 28
     private static final int OUT_BITS = 14; // OUTPUT_BITS - 2 = 16 - 2 = 14
-    private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 14
+    // Match libvgm/GPGX: shift an extra bit when converting phase output -> channel sample
+    private static final int OUT_SHIFT = (MAX_OUT_BITS - OUT_BITS) + 1; // 15
     private static final int LIMIT_CH_OUT = (int) ((1 << OUT_BITS) * 1.5) - 1;
 
     private static final int PG_CUT_OFF = (int) (78.0 / ENV_STEP);
@@ -105,7 +106,7 @@ public class Ym2612Chip {
                 TL_TAB[i] = 0;
             } else {
                 double x = MAX_OUT;
-                x /= Math.pow(10, (ENV_STEP * i) / 20); // dB -> Voltage
+                x /= StrictMath.pow(10, (ENV_STEP * i) / 20); // dB -> Voltage
                 TL_TAB[i] = (int) x;
                 TL_TAB[TL_LEN + i] = -TL_TAB[i];
             }
@@ -113,8 +114,8 @@ public class Ym2612Chip {
 
         // SIN_TAB generation
         for (int i = 1; i <= SIN_LEN / 4; i++) {
-            double x = Math.sin(2.0 * Math.PI * i / SIN_LEN);
-            x = 20 * Math.log10(1.0 / x); // to dB
+            double x = StrictMath.sin(2.0 * StrictMath.PI * i / SIN_LEN);
+            x = 20 * StrictMath.log10(1.0 / x); // to dB
             int j = (int) (x / ENV_STEP); // TL range
             if (j > PG_CUT_OFF) j = PG_CUT_OFF;
 
@@ -128,13 +129,13 @@ public class Ym2612Chip {
 
         // LFO Table
         for (int i = 0; i < LFO_LEN; i++) {
-            double x = Math.sin(2.0 * Math.PI * i / LFO_LEN);
+            double x = StrictMath.sin(2.0 * StrictMath.PI * i / LFO_LEN);
             x += 1.0;
             x /= 2.0; // positive only
             x *= 11.8 / ENV_STEP; // adjusted to MAX envelope modulation
             LFO_ENV_TAB[i] = (int) x;
 
-            x = Math.sin(2.0 * Math.PI * i / LFO_LEN);
+            x = StrictMath.sin(2.0 * StrictMath.PI * i / LFO_LEN);
             x *= (double) ((1 << (LFO_HBITS - 1)) - 1);
             LFO_FREQ_TAB[i] = (int) x;
         }
@@ -142,12 +143,12 @@ public class Ym2612Chip {
         // Envelope Table
         for (int i = 0; i < ENV_LEN; i++) {
             // Attack curve (x^8)
-            double x = Math.pow(((double) (ENV_LEN - 1 - i) / ENV_LEN), 8.0);
+            double x = StrictMath.pow(((double) (ENV_LEN - 1 - i) / ENV_LEN), 8.0);
             x *= ENV_LEN;
             ENV_TAB[i] = (int) x;
 
             // Decay curve (x^1)
-            x = Math.pow(((double) i / ENV_LEN), 1.0);
+            x = StrictMath.pow(((double) i / ENV_LEN), 1.0);
             x *= ENV_LEN;
             ENV_TAB[ENV_LEN + i] = (int) x;
         }
