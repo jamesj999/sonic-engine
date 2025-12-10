@@ -1,4 +1,4 @@
-# Guidance for future Codex agents
+# Guidance for future AI agents
 
 ## Project Mission
 This project is a faithful recreation of the **Sonic the Hedgehog** game engine in Java. It aims to:
