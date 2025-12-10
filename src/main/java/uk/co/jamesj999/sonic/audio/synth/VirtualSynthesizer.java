@@ -22,23 +22,23 @@ public class VirtualSynthesizer implements Synthesizer {
     }
 
     public void render(short[] buffer) {
-        int[] left = new int[buffer.length];
-        int[] right = new int[buffer.length];
+        // Assume buffer is Stereo Interleaved (L, R, L, R...)
+        int frames = buffer.length / 2;
+        int[] left = new int[frames];
+        int[] right = new int[frames];
 
         psg.renderStereo(left, right);
         ym.renderStereo(left, right);
 
-        for (int i = 0; i < buffer.length; i++) {
-            // Downmix to mono: average L and R
-            int mixed = (left[i] + right[i]) / 2;
+        for (int i = 0; i < frames; i++) {
+            int l = (int) (left[i] * 0.25);
+            int r = (int) (right[i] * 0.25);
 
-            // Apply Master Gain (approx -12dB headroom)
-            mixed = (int) (mixed * 0.25);
+            if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
+            if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
 
-            if (mixed > 32767) mixed = 32767;
-            else if (mixed < -32768) mixed = -32768;
-
-            buffer[i] = (short) mixed;
+            buffer[i * 2] = (short) l;
+            buffer[i * 2 + 1] = (short) r;
         }
     }
 

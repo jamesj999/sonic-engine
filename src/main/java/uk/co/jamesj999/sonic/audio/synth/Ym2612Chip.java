@@ -175,7 +175,6 @@ public class Ym2612Chip {
         for (int i = 0; i < 2048; i++) {
             double x = (double) i * YM2612_FREQUENCY;
             x *= (double) (1 << (SIN_LBITS + SIN_HBITS - (21 - 7))); // 12
-            x /= 2.0;
             FINC_TAB[i] = (int) x;
         }
 
@@ -233,7 +232,7 @@ public class Ym2612Chip {
     private static final double Z80_CLOCK = 3579545.0;
     private static final double DAC_GAIN = 64.0;
     private boolean dacInterpolate = true;
-    private boolean dacHighpassEnabled = true;
+    private boolean dacHighpassEnabled = false;
     private int dac_highpass;
     private static final int HIGHPASS_FRACT = 15;
     private static final int HIGHPASS_SHIFT = 9;
@@ -266,7 +265,8 @@ public class Ym2612Chip {
     private enum EnvState { ATTACK, DECAY1, DECAY2, RELEASE, IDLE }
 
     private static class Operator {
-        int dt1, mul;
+        int dt1;
+        double mul;
         int tl;
         int tll;
         int rs, ar;
@@ -367,7 +367,7 @@ public class Ym2612Chip {
             for (int i = 0; i < 4; i++) {
                 ch.opOut[i] = 0;
                 Operator o = ch.ops[i];
-                o.dt1 = 0; o.mul = 1; o.tl = 0; o.tll = 0;
+                o.dt1 = 0; o.mul = 0.5; o.tl = 0; o.tll = 0;
                 o.ksr = 0; o.ar = 0; o.am = 0; o.d1r = 0;
                 o.d2r = 0; o.d1l = 0; o.rr = 0;
                 o.ssgEg = 0;
@@ -448,7 +448,7 @@ public class Ym2612Chip {
                 if (((mode ^ val) & 0x40) != 0) {
                     channels[2].ops[0].fInc = -1;
                 }
-                status &= ~((val >> 4) & (val >> 2));
+                status &= (~val >> 4) & (val >> 2);
                 mode = val;
                 channel3SpecialMode = (val & 0x40) != 0;
                 timerAEnabled = (val & 0x01) != 0;
@@ -496,8 +496,8 @@ public class Ym2612Chip {
 
         switch (addr & 0xF0) {
             case 0x30:
-                sl.mul = val & 0x0F;
-                if (sl.mul != 0) sl.mul <<= 1; else sl.mul = 1;
+                int mulVal = val & 0x0F;
+                sl.mul = (mulVal == 0) ? 0.5 : (double) mulVal;
                 sl.dt1 = (val >> 4) & 7;
                 ch.ops[0].fInc = -1;
                 break;
@@ -591,7 +591,7 @@ public class Ym2612Chip {
     }
 
     private void calcFIncSlot(Operator sl, int finc, int kc) {
-        sl.fInc = (finc + DT_TAB[sl.dt1][kc]) * sl.mul;
+        sl.fInc = (int) ((finc + DT_TAB[sl.dt1][kc]) * sl.mul);
         int ksr = kc >> sl.rs;
         if (sl.ksr != ksr) {
             sl.ksr = ksr;

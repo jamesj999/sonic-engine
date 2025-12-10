@@ -44,7 +44,11 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
 
     @Override
     public int read(short[] buffer) {
-        for (int i = 0; i < buffer.length; i++) {
+        // Render interleaved stereo frames (2 samples per frame)
+        int frames = buffer.length / 2;
+        short[] frameBuf = new short[2];
+
+        for (int i = 0; i < frames; i++) {
             // Tick all sequencers
             for (int s = 0; s < sequencers.size(); s++) {
                 SmpsSequencer seq = sequencers.get(s);
@@ -57,12 +61,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
                 }
             }
             
-            // Render Synth
-            short[] single = new short[1];
-            // Since this class IS the synthesizer, we call the render logic.
-            // But we extend VirtualSynthesizer which has render().
-            super.render(single);
-            buffer[i] = single[0];
+            // Render Synth (Stereo Frame)
+            super.render(frameBuf);
+            buffer[i * 2] = frameBuf[0];
+            buffer[i * 2 + 1] = frameBuf[1];
         }
         return buffer.length;
     }
