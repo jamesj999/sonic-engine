@@ -1034,7 +1034,7 @@ public class SmpsSequencer implements AudioStream {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
             // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
-            // Voice data is also in Slot Order (Op1, Op3, Op2, Op4), so we use identity mapping.
+            // Voice data is in Slot Order (Op1, Op3, Op2, Op4). Identity mapping.
             int[] opMap = {0, 1, 2, 3};
 
             for (int op = 0; op < 4; op++) {

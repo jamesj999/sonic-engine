@@ -82,18 +82,8 @@ public class PsgChip {
         }
     }
 
-    public void render(short[] buffer) {
-        short[] tmpL = new short[buffer.length];
-        short[] tmpR = new short[buffer.length];
-        renderStereo(tmpL, tmpR);
-        for (int i = 0; i < buffer.length; i++) {
-            int mixed = (tmpL[i] + tmpR[i]) / 2;
-            int sample = Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, buffer[i] + mixed));
-            buffer[i] = (short) sample;
-        }
-    }
 
-    public void renderStereo(short[] left, short[] right) {
+    public void renderStereo(int[] left, int[] right) {
         int len = Math.min(left.length, right.length);
         for (int i = 0; i < len; i++) {
             double sampleL = 0;
@@ -159,10 +149,8 @@ public class PsgChip {
             lpfStateL += (hpOutL - lpfStateL) * LPF_ALPHA;
             lpfStateR += (hpOutR - lpfStateR) * LPF_ALPHA;
 
-            int outL = (int) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, lpfStateL));
-            int outR = (int) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, lpfStateR));
-            left[i] = (short) (left[i] + outL);
-            right[i] = (short) (right[i] + outR);
+            left[i] += (int) lpfStateL;
+            right[i] += (int) lpfStateR;
         }
     }
 }

@@ -30,7 +30,7 @@ public class Ym2612VerificationTest {
         chip.write(0, 0x27, 0x01); // Enable Timer A
 
         // Render some samples to tick timers
-        chip.render(new short[100]);
+        chip.renderStereo(new int[100], new int[100]);
 
         // Check status
         int status = chip.readStatus();

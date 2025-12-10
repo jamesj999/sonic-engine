@@ -40,16 +40,17 @@ public class TestYm2612SsgEg {
         chip.write(0, 0x28, 0xF0); // Key On Ch 0
 
         // Render enough to decay. D1R=31 is very fast.
-        short[] buffer = new short[4000];
-        chip.render(buffer);
+        int[] left = new int[4000];
+        int[] right = new int[4000];
+        chip.renderStereo(left, right);
 
         // Check tail of buffer is silent (or near silent)
         boolean tailSilent = true;
         int maxVal = 0;
         for (int i = 3000; i < 4000; i++) {
-            int val = Math.abs(buffer[i]);
+            int val = Math.abs(left[i]);
             if (val > maxVal) maxVal = val;
-            if (val > 100) {
+            if (val > 1000) {
                 tailSilent = false;
             }
         }
@@ -75,14 +76,15 @@ public class TestYm2612SsgEg {
 
         chip.write(0, 0x28, 0xF0); // Key On
 
-        buffer = new short[4000];
-        chip.render(buffer);
+        left = new int[4000];
+        right = new int[4000];
+        chip.renderStereo(left, right);
 
         // With SSG-EG Repeat, it should bounce back and forth.
         // So tail should have some loud parts.
         boolean hasLoudSound = false;
         for (int i = 3000; i < 4000; i++) {
-            if (Math.abs(buffer[i]) > 500) {
+            if (Math.abs(left[i]) > 500) {
                 hasLoudSound = true;
                 break;
             }

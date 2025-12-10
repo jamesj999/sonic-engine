@@ -248,12 +248,13 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void fillBuffer(int bufferId) {
-        short[] data = new short[STREAM_BUFFER_SIZE];
+        // Stereo buffer: 2 channels * STREAM_BUFFER_SIZE
+        short[] data = new short[STREAM_BUFFER_SIZE * 2];
         int read = (currentStream != null) ? currentStream.read(data) : 0;
         // If music stream ended or not present, buffer is 0.
 
         if (sfxStream != null) {
-            short[] sfxData = new short[STREAM_BUFFER_SIZE];
+            short[] sfxData = new short[STREAM_BUFFER_SIZE * 2];
             sfxStream.read(sfxData);
 
             for(int i=0; i<data.length; i++) {
@@ -269,7 +270,7 @@ public class JOALAudioBackend implements AudioBackend {
         }
 
         ShortBuffer sBuffer = Buffers.newDirectShortBuffer(data);
-        al.alBufferData(bufferId, AL.AL_FORMAT_MONO16, sBuffer, data.length * 2, 44100);
+        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, data.length * 2, 44100);
     }
 
     /**

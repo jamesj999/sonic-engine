@@ -22,8 +22,26 @@ public class VirtualSynthesizer implements Synthesizer {
     }
 
     public void render(short[] buffer) {
-        psg.render(buffer);
-        ym.render(buffer);
+        // Assume buffer is Stereo Interleaved (L, R, L, R...)
+        int frames = buffer.length / 2;
+        int[] left = new int[frames];
+        int[] right = new int[frames];
+
+        psg.renderStereo(left, right);
+        ym.renderStereo(left, right);
+
+        for (int i = 0; i < frames; i++) {
+            // Apply Master Gain (approx -36dB to match reference level)
+            // Reference uses 1/128 effectively, but we use 1/64 here to be safe.
+            int l = (int) (left[i] / 64.0);
+            int r = (int) (right[i] / 64.0);
+
+            if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
+            if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
+
+            buffer[i * 2] = (short) l;
+            buffer[i * 2 + 1] = (short) r;
+        }
     }
 
     @Override

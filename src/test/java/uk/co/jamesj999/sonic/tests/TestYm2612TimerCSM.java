@@ -43,10 +43,11 @@ public class TestYm2612TimerCSM {
         }
 
         // Verify it is silent initially (no Key On)
-        short[] buffer = new short[100];
-        chip.render(buffer);
+        int[] left = new int[100];
+        int[] right = new int[100];
+        chip.renderStereo(left, right);
         boolean silent = true;
-        for (short s : buffer) {
+        for (int s : left) {
             if (s != 0) {
                 silent = false;
                 break;
@@ -72,11 +73,12 @@ public class TestYm2612TimerCSM {
         // Samples to overflow = 4190208 / 4948 ~ 846 samples.
 
         // Let's render 2000 samples to be sure.
-        buffer = new short[2000];
-        chip.render(buffer);
+        left = new int[2000];
+        right = new int[2000];
+        chip.renderStereo(left, right);
 
         boolean hasSound = false;
-        for (short s : buffer) {
+        for (int s : left) {
             if (s != 0) {
                 hasSound = true;
                 break;

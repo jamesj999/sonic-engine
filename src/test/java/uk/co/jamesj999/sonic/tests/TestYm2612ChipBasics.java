@@ -16,11 +16,12 @@ public class TestYm2612ChipBasics {
         Ym2612Chip chip = new Ym2612Chip();
         configureSimpleVoice(chip);
 
-        short[] buffer = new short[512];
-        chip.render(buffer);
+        int[] left = new int[512];
+        int[] right = new int[512];
+        chip.renderStereo(left, right);
 
         boolean hasSignal = false;
-        for (short v : buffer) {
+        for (int v : left) {
             if (v != 0) {
                 hasSignal = true;
                 break;
@@ -37,8 +38,9 @@ public class TestYm2612ChipBasics {
         chip.write(0, 0x25, 0x00); // Timer A low
         chip.write(0, 0x27, 0x01); // Enable timer A
 
-        short[] buffer = new short[900];
-        chip.render(buffer);
+        int[] left = new int[900];
+        int[] right = new int[900];
+        chip.renderStereo(left, right);
 
         int status = chip.readStatus();
         assertNotEquals("Timer A flag should be raised after overflow", 0, status & 0x01);
@@ -52,19 +54,19 @@ public class TestYm2612ChipBasics {
         chip.write(1, 0xB2, 0xC0);
         chip.write(0, 0x2A, 0xFF); // Latch max unsigned PCM
 
-        short[] left = new short[32];
-        short[] right = new short[32];
+        int[] left = new int[32];
+        int[] right = new int[32];
         chip.renderStereo(left, right);
 
         boolean leftHas = false;
-        for (short v : left) {
+        for (int v : left) {
             if (v != 0) {
                 leftHas = true;
                 break;
             }
         }
         boolean rightHas = false;
-        for (short v : right) {
+        for (int v : right) {
             if (v != 0) {
                 rightHas = true;
                 break;
