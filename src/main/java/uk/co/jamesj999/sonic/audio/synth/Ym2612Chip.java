@@ -806,70 +806,91 @@ public class Ym2612Chip {
         in2 = ch.ops[2].fCnt;
         in3 = ch.ops[3].fCnt;
 
-        in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
-        ch.opOut[1] = ch.opOut[0];
-        ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
-
         switch (ch.algo) {
             case 0:
+                // DO_FEEDBACK
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                // DO_ALGO_0 (libvgm)
                 in1 += ch.opOut[1];
                 in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
                 in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
                 ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
                 break;
             case 1:
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
                 in2 += ch.opOut[1] + TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
                 in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
                 ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
                 break;
             case 2:
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
                 in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
                 in3 += ch.opOut[1] + TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
                 ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
                 break;
             case 3:
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
                 in1 += ch.opOut[1];
                 in3 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
                        TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
                 ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
                 break;
             case 4: {
-                // op1 (S0) -> op3 (S1) carrier; op2 (S2) -> op4 (S3) carrier
-                in1 += ch.opOut[1]; // op1 output (feedback delayed)
-                int o3 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                int o2 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                in3 += o2;
-                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
-                ch.out = (o4 + o3) >> OUT_SHIFT;
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                in1 += ch.opOut[1];
+                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1]) >> OUT_SHIFT;
+                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
+                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
             }
             case 5: {
-                // op1 modulates op2, op3, op4 (three carriers)
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
                 in1 += ch.opOut[1];
                 in2 += ch.opOut[1];
                 in3 += ch.opOut[1];
-                int o2 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                int o3 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
-                ch.out = (o4 + o2 + o3) >> OUT_SHIFT;
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
+                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2]) >> OUT_SHIFT;
+                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
+                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
             }
             case 6: {
-                // op1->op2 stack, plus op3 and op4 as independent carriers
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
                 in1 += ch.opOut[1];
-                int o2 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                int o3 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
-                ch.out = (o4 + o2 + o3) >> OUT_SHIFT;
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
+                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2]) >> OUT_SHIFT;
+                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
+                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
             }
             case 7: {
-                // All four operators are carriers (op1 already includes feedback)
-                int o1 = ch.opOut[1]; // previous op1 output after feedback step
-                int o2 = TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                int o3 = TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                int o4 = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3];
-                ch.out = (o4 + o2 + o3 + o1) >> OUT_SHIFT;
+                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                ch.opOut[1] = ch.opOut[0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
+                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2] +
+                          ch.opOut[1]) >> OUT_SHIFT;
+                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
+                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
             }
         }
@@ -905,25 +926,39 @@ public class Ym2612Chip {
         int amD1rBase = 9;
         int d2rBase = 13;
         int d1lRrBase = 17;
-        // SMPS voice op order matches YM register order: Op1, Op3, Op2, Op4
-        // Register slots are 0x30/34/38/3C (+channel), mapped internally as Op1, Op3, Op2, Op4.
-        int[] dtIdx   = {1, 2, 3, 4};
-        int[] tlIdx   = {21, 22, 23, 24};
-        int[] rsArIdx = {5, 6, 7, 8};
-        int[] amIdx   = {9, 10, 11, 12};
-        int[] d2rIdx  = {13, 14, 15, 16};
-        int[] d1lRrIdx= {17, 18, 19, 20};
+        // Reorder SMPS voice (Op1, Op3, Op2, Op4) into YM operator order (Op1, Op2, Op3, Op4).
+        int[] dtIdx   = {1, 3, 2, 4};
+        int[] tlIdx   = {21, 23, 22, 24};
+        int[] rsArIdx = {5, 7, 6, 8};
+        int[] amIdx   = {9, 11, 10, 12};
+        int[] d2rIdx  = {13, 15, 14, 16};
+        int[] d1lRrIdx= {17, 19, 18, 20};
+
+        // Map to YM order into temporary arrays for clarity
+        int[] dt   = new int[4];
+        int[] tl   = new int[4];
+        int[] rsar = new int[4];
+        int[] amd1 = new int[4];
+        int[] d2r  = new int[4];
+        int[] d1lrr= new int[4];
+        for (int i = 0; i < 4; i++) {
+            dt[i]    = get.applyAsInt(dtIdx[i]);
+            tl[i]    = hasTl ? get.applyAsInt(tlIdx[i]) : 0;
+            rsar[i]  = get.applyAsInt(rsArIdx[i]);
+            amd1[i]  = get.applyAsInt(amIdx[i]);
+            d2r[i]   = get.applyAsInt(d2rIdx[i]);
+            d1lrr[i] = get.applyAsInt(d1lRrIdx[i]);
+        }
 
         for (int slot = 0; slot < 4; slot++) {
-            int hwRegBase = 0x30 + slot * 4 + hwCh;
-            write(port, hwRegBase, get.applyAsInt(dtIdx[slot]));
-            int tl = hasTl ? get.applyAsInt(tlIdx[slot]) : 0;
-            write(port, 0x40 + slot * 4 + hwCh, tl);
-            write(port, 0x50 + slot * 4 + hwCh, get.applyAsInt(rsArIdx[slot]));
-            write(port, 0x60 + slot * 4 + hwCh, get.applyAsInt(amIdx[slot]));
-            write(port, 0x70 + slot * 4 + hwCh, get.applyAsInt(d2rIdx[slot]));
-            write(port, 0x80 + slot * 4 + hwCh, get.applyAsInt(d1lRrIdx[slot]));
-            write(port, 0x90 + slot * 4 + hwCh, 0);
+            int base = hwCh;
+            write(port, 0x30 + slot * 4 + base, dt[slot]);
+            write(port, 0x40 + slot * 4 + base, tl[slot]);
+            write(port, 0x50 + slot * 4 + base, rsar[slot]);
+            write(port, 0x60 + slot * 4 + base, amd1[slot]);
+            write(port, 0x70 + slot * 4 + base, d2r[slot]);
+            write(port, 0x80 + slot * 4 + base, d1lrr[slot]);
+            write(port, 0x90 + slot * 4 + base, 0);
         }
     }
 

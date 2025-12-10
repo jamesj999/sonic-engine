@@ -98,8 +98,8 @@ public class SmpsSequencer implements AudioStream {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
 
-    // Carrier bitmask per YM2612 algorithm, using slot order Op1, Op3, Op2, Op4 (the order SMPS voice bytes use).
-    // alg4 carriers are Op3+Op4 (bits 1 and 3 = 0x0A).
+    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3, Op4) mapped to bits 0-3.
+    // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
     private static final int[] ALGO_OUT_MASK = {0x08, 0x08, 0x08, 0x08, 0x0A, 0x0E, 0x0E, 0x0F};
 
     public enum TrackType { FM, PSG, DAC }
@@ -875,16 +875,16 @@ public class SmpsSequencer implements AudioStream {
                     synth.writeFm(this, 0, 0x2B, 0x00);
                 }
 
-                int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
-                synth.writeFm(this, 0, 0x28, 0x00 | chVal);
+                int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
+                synth.writeFm(this, port, 0x28, 0x00 | chVal);
             }
 
             writeFmFreq(port, ch, fnum, block);
             applyFmPanAmsFms(t);
 
             if (!t.tieNext) {
-                int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
-                synth.writeFm(this, 0, 0x28, 0xF0 | chVal);
+                int chVal = (port == 0) ? ch : (ch + 4);
+                synth.writeFm(this, port, 0x28, 0xF0 | chVal);
             }
             t.tieNext = false;
 
@@ -951,8 +951,10 @@ public class SmpsSequencer implements AudioStream {
     private void stopNote(Track t) {
         if (t.type == TrackType.FM) {
             int hwCh = t.channelId;
-            int chVal = (hwCh >= 3) ? (hwCh + 1) : hwCh;
-            synth.writeFm(this, 0, 0x28, 0x00 | chVal);
+            int port = (hwCh < 3) ? 0 : 1;
+            int ch = hwCh % 3;
+            int chVal = (port == 0) ? ch : (ch + 4);
+            synth.writeFm(this, port, 0x28, 0x00 | chVal);
         } else if (t.type == TrackType.DAC) {
             synth.stopDac(this);
         } else {
@@ -1038,8 +1040,9 @@ public class SmpsSequencer implements AudioStream {
             // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
             // Voice data is in Slot Order (Op1, Op3, Op2, Op4). Identity mapping.
             // Voice TL bytes are stored in SMPS slot order: Op1, Op3, Op2, Op4.
-            // Mask bits and TL bytes are both in SMPS slot order: Op1, Op3, Op2, Op4.
-            int[] opMap = {0, 1, 2, 3};
+            // Mask bits are YM operator order (Op1, Op2, Op3, Op4); TL bytes are SMPS order (Op1, Op3, Op2, Op4).
+            // Map mask bit -> TL index offset.
+            int[] opMap = {0, 2, 1, 3};
 
             for (int op = 0; op < 4; op++) {
                 if ((mask & (1 << op)) != 0) {
