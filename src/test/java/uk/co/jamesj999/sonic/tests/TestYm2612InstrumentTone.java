@@ -18,15 +18,13 @@ public class TestYm2612InstrumentTone {
         byte[] voice = new byte[] {
                 (byte) 0x07,             // alg=7 (all carriers), fb=0
                 (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01, // DT/MUL ops 1,3,2,4
-                // TL for 4 ops
-                0x00, 0x00, 0x00, 0x00,
-                // RS/AR
+                // RS/AR (Indices 5-8) - Set to Max AR (0x1F)
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
-                // AM/D1R
+                // AM/D1R (Indices 9-12)
                 (byte) 0x1F, (byte) 0x1F, (byte) 0x1F, (byte) 0x1F,
-                // D2R
+                // D2R (Indices 13-16)
                 0x0A, 0x0A, 0x0A, 0x0A,
-                // D1L/RR
+                // D1L/RR (Indices 17-20)
                 (byte) 0x0F, (byte) 0x0F, (byte) 0x0F, (byte) 0x0F
         };
 
@@ -39,11 +37,11 @@ public class TestYm2612InstrumentTone {
         // Key on all operators for ch0
         chip.write(0, 0x28, 0xF0 | 0);
 
-        short[] buffer = new short[2048];
+        int[] buffer = new int[2048];
         chip.render(buffer);
 
         long sum = 0;
-        for (short s : buffer) {
+        for (int s : buffer) {
             sum += Math.abs(s);
         }
         double avg = sum / (double) buffer.length;

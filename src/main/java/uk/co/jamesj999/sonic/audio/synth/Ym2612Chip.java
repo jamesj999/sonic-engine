@@ -42,9 +42,6 @@ public class Ym2612Chip {
     private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 14
     private static final int LIMIT_CH_OUT = (int) ((1 << OUT_BITS) * 1.5) - 1;
 
-    // Gain to fit soft-clipper headroom (approx -12dB)
-    private static final double OUTPUT_SCALE = 0.25;
-
     private static final int PG_CUT_OFF = (int) (78.0 / ENV_STEP);
 
     // Rate constants
@@ -236,6 +233,9 @@ public class Ym2612Chip {
     private static final double Z80_CLOCK = 3579545.0;
     private static final double DAC_GAIN = 64.0;
     private boolean dacInterpolate = true;
+    private int dac_highpass;
+    private static final int HIGHPASS_FRACT = 15;
+    private static final int HIGHPASS_SHIFT = 9;
 
     private int status;
     private int mode;
@@ -259,10 +259,6 @@ public class Ym2612Chip {
 
     private int lfoCnt;
     private int lfoInc;
-
-    private double lpfStateL;
-    private double lpfStateR;
-    private static final double LPF_ALPHA = 0.0;
 
     private boolean channel3SpecialMode;
 
@@ -310,8 +306,6 @@ public class Ym2612Chip {
         int leftMask = 0;
         int rightMask = 0;
 
-        double attackRamp = 1.0;
-
         final int[] opOut = new int[4];
         int out;
 
@@ -356,6 +350,7 @@ public class Ym2612Chip {
         lfoInc = 0;
 
         dacEnabled = false;
+        dac_highpass = 0;
 
         for (Channel ch : channels) {
             ch.fNum = 0;
@@ -367,7 +362,6 @@ public class Ym2612Chip {
             ch.fms = 0;
             ch.leftMask = 0xFFFFFFFF;
             ch.rightMask = 0xFFFFFFFF;
-            ch.attackRamp = 1.0;
 
             for (int i = 0; i < 4; i++) {
                 ch.opOut[i] = 0;
@@ -707,7 +701,7 @@ public class Ym2612Chip {
         }
     }
 
-    public void render(short[] buffer) {
+    public void render(int[] buffer) {
         for (int i = 0; i < buffer.length; i++) {
             int freqLfo = 0;
             int envLfo = 0;
@@ -718,42 +712,30 @@ public class Ym2612Chip {
                 freqLfo = LFO_FREQ_TAB[idx];
             }
 
-            double mixL = 0;
-            double mixR = 0;
-            double dacOut = renderDac();
+            int dacOut = renderDac();
             Channel dacCh = channels[5];
             boolean dacLeft = dacCh.leftMask != 0;
             boolean dacRight = dacCh.rightMask != 0;
             if (!mutes[5]) {
-                if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
-                if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+                if (dacLeft || (!dacLeft && !dacRight)) buffer[i] += dacOut;
+                if (dacRight || (!dacLeft && !dacRight)) buffer[i] += dacOut;
             }
 
             for (int ch = 0; ch < 6; ch++) {
                 if (mutes[ch]) continue;
                 if (ch == 5 && dacEnabled) continue;
-                double out = renderChannel(ch, envLfo, freqLfo) * OUTPUT_SCALE;
+                int out = renderChannel(ch, envLfo, freqLfo);
 
                 boolean left = channels[ch].leftMask != 0;
                 boolean right = channels[ch].rightMask != 0;
-                if (left) mixL += out;
-                if (right) mixR += out;
+                if (left) buffer[i] += out;
+                if (right) buffer[i] += out;
             }
-            if (LPF_ALPHA > 0) {
-                lpfStateL += (mixL - lpfStateL) * LPF_ALPHA;
-                lpfStateR += (mixR - lpfStateR) * LPF_ALPHA;
-                mixL = lpfStateL;
-                mixR = lpfStateR;
-            }
-            double mono = (mixL + mixR) * 0.5;
-            double soft = softClip(mono);
-            int s = (int) Math.max(-32768, Math.min(32767, soft));
-            buffer[i] = (short) (buffer[i] + s);
             tickTimers(1);
         }
     }
 
-    public void renderStereo(short[] leftBuf, short[] rightBuf) {
+    public void renderStereo(int[] leftBuf, int[] rightBuf) {
         int len = Math.min(leftBuf.length, rightBuf.length);
         for (int i = 0; i < len; i++) {
             int freqLfo = 0;
@@ -765,57 +747,31 @@ public class Ym2612Chip {
                 freqLfo = LFO_FREQ_TAB[idx];
             }
 
-            double mixL = 0;
-            double mixR = 0;
-            double dacOut = renderDac();
+            int dacOut = renderDac();
             Channel dacCh = channels[5];
             boolean dacLeft = dacCh.leftMask != 0;
             boolean dacRight = dacCh.rightMask != 0;
             if (!mutes[5]) {
-                if (dacLeft || (!dacLeft && !dacRight)) mixL += dacOut;
-                if (dacRight || (!dacLeft && !dacRight)) mixR += dacOut;
+                if (dacLeft || (!dacLeft && !dacRight)) leftBuf[i] += dacOut;
+                if (dacRight || (!dacLeft && !dacRight)) rightBuf[i] += dacOut;
             }
 
             for (int ch = 0; ch < 6; ch++) {
                 if (mutes[ch]) continue;
                 if (ch == 5 && dacEnabled) continue;
-                double out = renderChannel(ch, envLfo, freqLfo) * OUTPUT_SCALE;
+                int out = renderChannel(ch, envLfo, freqLfo);
                 boolean left = channels[ch].leftMask != 0;
                 boolean right = channels[ch].rightMask != 0;
-                if (left) mixL += out;
-                if (right) mixR += out;
+                if (left) leftBuf[i] += out;
+                if (right) rightBuf[i] += out;
             }
-
-            if (LPF_ALPHA > 0) {
-                lpfStateL += (mixL - lpfStateL) * LPF_ALPHA;
-                lpfStateR += (mixR - lpfStateR) * LPF_ALPHA;
-                mixL = lpfStateL;
-                mixR = lpfStateR;
-            }
-
-            double softL = softClip(mixL);
-            double softR = softClip(mixR);
-            int outL = (int) Math.max(-32768, Math.min(32767, softL));
-            int outR = (int) Math.max(-32768, Math.min(32767, softR));
-            leftBuf[i] = (short) (leftBuf[i] + outL);
-            rightBuf[i] = (short) (rightBuf[i] + outR);
             tickTimers(1);
         }
     }
 
-    private double softClip(double x) {
-        double norm = x / 32768.0;
-        double clipped = Math.tanh(norm);
-        return clipped * 32767.0;
-    }
-
-    private double renderChannel(int chIdx, int envLfo, int freqLfo) {
+    private int renderChannel(int chIdx, int envLfo, int freqLfo) {
         Channel ch = channels[chIdx];
         if (ch.ops[0].fInc == -1) calcFIncChannel(ch);
-
-        if (ch.attackRamp < 1.0) {
-            ch.attackRamp = Math.min(1.0, ch.attackRamp + 0.003);
-        }
 
         int fms = ch.fms;
         int lfoShift = fms != 0 ? (fms * freqLfo) >> (LFO_HBITS - 1) : 0;
@@ -847,19 +803,21 @@ public class Ym2612Chip {
         if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
         else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
 
-        return (double) ch.out * ch.attackRamp;
+
+        return ch.out;
     }
 
     private void GET_CURRENT_ENV(Channel ch, int slot, int envLfo) {
         Operator sl = ch.ops[slot];
         int env = ENV_TAB[sl.eCnt >> ENV_LBITS] + sl.tll;
-        if (lfoInc != 0) {
-            env += (envLfo >> sl.ams);
-        }
 
         if ((sl.ssgEg & 4) != 0) {
              if (env > ENV_MASK) env = 0;
-             else env ^= ENV_MASK;
+             else env = (env ^ ENV_MASK) + (lfoInc != 0 ? (envLfo >> sl.ams) : 0);
+        } else {
+             if (lfoInc != 0) {
+                env += (envLfo >> sl.ams);
+             }
         }
 
         switch(slot) {
@@ -876,10 +834,7 @@ public class Ym2612Chip {
         in2 = ch.ops[2].fCnt;
         in3 = ch.ops[3].fCnt;
 
-        int fb = ch.feedback;
-        if (fb < 9) {
-            in0 += (ch.opOut[0] + ch.opOut[1]) >> fb;
-        }
+        in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
         ch.opOut[1] = ch.opOut[0];
         ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
 
@@ -998,7 +953,7 @@ public class Ym2612Chip {
         dacPos = 0;
     }
 
-    private double renderDac() {
+    private int renderDac() {
         if (!dacEnabled) {
             return 0;
         }
@@ -1027,7 +982,15 @@ public class Ym2612Chip {
         } else {
             return 0;
         }
-        return sample * DAC_GAIN;
+
+        sample = (int) (sample * DAC_GAIN);
+
+        // Highpass Filter
+        sample = (sample << HIGHPASS_FRACT) - dac_highpass;
+        dac_highpass += sample >> HIGHPASS_SHIFT;
+        sample >>= HIGHPASS_FRACT;
+
+        return sample;
     }
 
     /**
@@ -1037,13 +1000,13 @@ public class Ym2612Chip {
     public static double computeModulationInput(int algo, int opIndex, double[] opOut, double feedback) {
         if (opIndex == 0) return feedback;
         return switch (algo) {
-            case 0 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[1] : opOut[2]);
-            case 1 -> (opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[2] : 0);
-            case 2 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[2] : 0);
-            case 3 -> (opIndex == 2 ? opOut[0] + opOut[1] : opIndex == 3 ? opOut[2] : 0);
-            case 4 -> (opIndex == 2 ? opOut[0] : opIndex == 3 ? opOut[1] : 0);
+            case 0 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[2] : 0);
+            case 1 -> (opIndex == 2 ? opOut[0] + opOut[1] : opIndex == 3 ? opOut[2] : 0);
+            case 2 -> (opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[0] + opOut[2] : 0);
+            case 3 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[1] + opOut[2] : 0);
+            case 4 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[2] : 0);
             case 5 -> (opIndex == 1 || opIndex == 2 || opIndex == 3 ? opOut[0] : 0);
-            case 6 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[0] : 0);
+            case 6 -> (opIndex == 1 ? opOut[0] : 0);
             case 7 -> 0;
             default -> 0;
         };
@@ -1056,9 +1019,9 @@ public class Ym2612Chip {
         return switch (algo) {
             case 0 -> opOut[3];
             case 1 -> opOut[3];
-            case 2 -> opOut[1] + opOut[3];
+            case 2 -> opOut[3];
             case 3 -> opOut[3];
-            case 4 -> opOut[2] + opOut[3];
+            case 4 -> opOut[1] + opOut[3];
             case 5 -> opOut[1] + opOut[2] + opOut[3];
             case 6 -> opOut[1] + opOut[2] + opOut[3];
             case 7 -> opOut[0] + opOut[1] + opOut[2] + opOut[3];

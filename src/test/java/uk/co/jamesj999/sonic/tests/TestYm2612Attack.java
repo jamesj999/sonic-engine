@@ -25,15 +25,15 @@ public class TestYm2612Attack {
 
         chip.write(0, 0x28, 0xF0); // Key On
 
-        short[] buf1 = new short[100];
+        int[] buf1 = new int[2000];
         chip.render(buf1);
         int max1 = getMax(buf1);
 
-        short[] buf2 = new short[100];
+        int[] buf2 = new int[2000];
         chip.render(buf2);
         int max2 = getMax(buf2);
 
-        short[] buf3 = new short[100];
+        int[] buf3 = new int[2000];
         chip.render(buf3);
         int max3 = getMax(buf3);
 
@@ -46,9 +46,9 @@ public class TestYm2612Attack {
                    max3 >= max2);
     }
 
-    private int getMax(short[] buf) {
+    private int getMax(int[] buf) {
         int m = 0;
-        for (short s : buf) {
+        for (int s : buf) {
             int abs = Math.abs(s);
             if (abs > m) m = abs;
         }

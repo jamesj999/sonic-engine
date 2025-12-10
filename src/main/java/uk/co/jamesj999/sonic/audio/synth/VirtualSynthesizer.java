@@ -22,8 +22,20 @@ public class VirtualSynthesizer implements Synthesizer {
     }
 
     public void render(short[] buffer) {
-        psg.render(buffer);
-        ym.render(buffer);
+        int[] mixBuffer = new int[buffer.length];
+        psg.render(mixBuffer);
+        ym.render(mixBuffer);
+
+        for (int i = 0; i < buffer.length; i++) {
+            int sample = mixBuffer[i];
+            // Apply Master Gain (approx -12dB headroom)
+            sample = (int) (sample * 0.25);
+
+            if (sample > 32767) sample = 32767;
+            else if (sample < -32768) sample = -32768;
+
+            buffer[i] = (short) sample;
+        }
     }
 
     @Override

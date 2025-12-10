@@ -40,7 +40,7 @@ public class TestYm2612SsgEg {
         chip.write(0, 0x28, 0xF0); // Key On Ch 0
 
         // Render enough to decay. D1R=31 is very fast.
-        short[] buffer = new short[4000];
+        int[] buffer = new int[4000];
         chip.render(buffer);
 
         // Check tail of buffer is silent (or near silent)
@@ -49,7 +49,7 @@ public class TestYm2612SsgEg {
         for (int i = 3000; i < 4000; i++) {
             int val = Math.abs(buffer[i]);
             if (val > maxVal) maxVal = val;
-            if (val > 100) {
+            if (val > 1000) {
                 tailSilent = false;
             }
         }
@@ -75,7 +75,7 @@ public class TestYm2612SsgEg {
 
         chip.write(0, 0x28, 0xF0); // Key On
 
-        buffer = new short[4000];
+        buffer = new int[4000];
         chip.render(buffer);
 
         // With SSG-EG Repeat, it should bounce back and forth.
