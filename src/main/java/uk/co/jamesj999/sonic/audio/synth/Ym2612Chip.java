@@ -175,6 +175,7 @@ public class Ym2612Chip {
         for (int i = 0; i < 2048; i++) {
             double x = (double) i * YM2612_FREQUENCY;
             x *= (double) (1 << (SIN_LBITS + SIN_HBITS - (21 - 7))); // 12
+            x *= 0.5; // MUL = value * 2 in the hardware step, so pre-divide here
             FINC_TAB[i] = (int) x;
         }
 
