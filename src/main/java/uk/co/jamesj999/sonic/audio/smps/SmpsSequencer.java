@@ -98,7 +98,9 @@ public class SmpsSequencer implements AudioStream {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
 
-    private static final int[] ALGO_OUT_MASK = {0x08, 0x08, 0x08, 0x08, 0x0C, 0x0E, 0x0E, 0x0F};
+    // Carrier bitmask per YM2612 algorithm, using operator order 1,2,3,4 mapped to bits 0-3.
+    // Alg 4 carriers are op2+op4 (0x0A), not op3+op4.
+    private static final int[] ALGO_OUT_MASK = {0x08, 0x08, 0x08, 0x08, 0x0A, 0x0E, 0x0E, 0x0F};
 
     public enum TrackType { FM, PSG, DAC }
 
@@ -1035,7 +1037,9 @@ public class SmpsSequencer implements AudioStream {
             int mask = ALGO_OUT_MASK[algo];
             // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
             // Voice data is in Slot Order (Op1, Op3, Op2, Op4). Identity mapping.
-            int[] opMap = {0, 1, 2, 3};
+            // Voice TL bytes are stored in SMPS slot order: Op1, Op3, Op2, Op4.
+            // Map carrier bits (Op1, Op2, Op3, Op4) to those TL indices.
+            int[] opMap = {0, 2, 1, 3};
 
             for (int op = 0; op < 4; op++) {
                 if ((mask & (1 << op)) != 0) {

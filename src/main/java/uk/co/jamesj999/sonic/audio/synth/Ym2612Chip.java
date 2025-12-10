@@ -892,16 +892,26 @@ public class Ym2612Chip {
         int amD1rBase = 9;
         int d2rBase = 13;
         int d1lRrBase = 17;
+        // SMPS voice op order: Op1, Op3, Op2, Op4.
+        // YM slots (per channel): slot1/op1 @ +0, slot2/op2 @ +4, slot3/op3 @ +8, slot4/op4 @ +12.
+        int[] opToVoiceIdx = {0, 2, 1, 3}; // slot order -> voice op index
+        int[] dtIdx   = {1, 3, 2, 4};
+        int[] tlIdx   = {21, 23, 22, 24};
+        int[] rsArIdx = {5, 7, 6, 8};
+        int[] amIdx   = {9, 11, 10, 12};
+        int[] d2rIdx  = {13, 15, 14, 16};
+        int[] d1lRrIdx= {17, 19, 18, 20};
 
-        for (int i = 0; i < 4; i++) {
-            write(port, 0x30 + i * 4 + hwCh, get.applyAsInt(1 + i));
-            int tl = hasTl ? get.applyAsInt(tlIdxBase + i) : 0;
-            write(port, 0x40 + i * 4 + hwCh, tl);
-            write(port, 0x50 + i * 4 + hwCh, get.applyAsInt(rsArBase + i));
-            write(port, 0x60 + i * 4 + hwCh, get.applyAsInt(amD1rBase + i));
-            write(port, 0x70 + i * 4 + hwCh, get.applyAsInt(d2rBase + i));
-            write(port, 0x80 + i * 4 + hwCh, get.applyAsInt(d1lRrBase + i));
-            write(port, 0x90 + i * 4 + hwCh, 0);
+        for (int slot = 0; slot < 4; slot++) {
+            int hwRegBase = 0x30 + slot * 4 + hwCh;
+            write(port, hwRegBase, get.applyAsInt(dtIdx[slot]));
+            int tl = hasTl ? get.applyAsInt(tlIdx[slot]) : 0;
+            write(port, 0x40 + slot * 4 + hwCh, tl);
+            write(port, 0x50 + slot * 4 + hwCh, get.applyAsInt(rsArIdx[slot]));
+            write(port, 0x60 + slot * 4 + hwCh, get.applyAsInt(amIdx[slot]));
+            write(port, 0x70 + slot * 4 + hwCh, get.applyAsInt(d2rIdx[slot]));
+            write(port, 0x80 + slot * 4 + hwCh, get.applyAsInt(d1lRrIdx[slot]));
+            write(port, 0x90 + slot * 4 + hwCh, 0);
         }
     }
 

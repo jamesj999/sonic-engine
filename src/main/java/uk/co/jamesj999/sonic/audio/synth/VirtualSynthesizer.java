@@ -31,10 +31,9 @@ public class VirtualSynthesizer implements Synthesizer {
         ym.renderStereo(left, right);
 
         for (int i = 0; i < frames; i++) {
-            // Apply Master Gain (approx -36dB to match reference level)
-            // Reference uses 1/128 effectively, but we use 1/64 here to be safe.
-            int l = (int) (left[i] / 64.0);
-            int r = (int) (right[i] / 64.0);
+            // Apply Master Gain. Raised to 1/16 to avoid overly quiet output; clipping guarded below.
+            int l = (int) (left[i] / 16.0);
+            int r = (int) (right[i] / 16.0);
 
             if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
             if (r > 32767) r = 32767; else if (r < -32768) r = -32768;

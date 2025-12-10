@@ -29,7 +29,7 @@ The project is in a **pre-alpha** state.
 *   **Entry point:** `uk.co.jamesj999.sonic.Engine` (declared in the manifest). A `main` method creates an OpenGL canvas with an `FPSAnimator`.
 *   **Build:** `mvn package`. Tests can be run with `mvn test` (JUnit 4).
 *   **Run:** `java -jar target/sonic-engine-0.05-BETA-jar-with-dependencies.jar`.
-*   **ROM Requirement:** A compatible Sonic 2 ROM named `Sonic The Hedgehog 2 (W) (REV01) [!].gen` is expected for level loading. Without it, level logic may fail at runtime. If the ROM is not present locally, it can be downloaded for debugging, coding, and testing from `http://bluetoaster.net/secretfolder/Sonic%20The%20Hedgehog%202%20%28W%29%20%28REV01%29%20%5B!%5D.gen`.
+*   **ROM Requirement:** A compatible Sonic 2 ROM named `Sonic The Hedgehog 2 (W) (REV01) [!].gen` is expected for level loading. Without it, level logic may fail at runtime. If the ROM is not present locally, it can be downloaded for debugging, coding, and testing from `http://bluetoaster.net/secretfolder/Sonic%20The%20Hedgehog%202%20%28W%29%20%28REV01%29%20%5B!%5D.gen`. The ROM is likely to be in .gitignore, so may be invisible to the agent.
 *   **Important packages** under `src/main/java/uk/co/jamesj999/sonic`:
     *   `Control` – input handling
     *   `camera` – camera logic
