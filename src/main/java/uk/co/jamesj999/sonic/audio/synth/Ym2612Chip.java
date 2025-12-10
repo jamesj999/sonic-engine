@@ -887,25 +887,21 @@ public class Ym2612Chip {
 
         write(port, 0xB0 + hwCh, (feedback << 3) | algo);
 
-        int tlIdxBase = 5;
-        int rsArBase = 9;
-        int amD1rBase = 13;
-        int d2rBase = 17;
-        int d1lRrBase = 21;
-
-        // Map HW Index (0,1,2,3) to Register Offset (Slot 0,2,1,3) -> (0, 8, 4, 12)
-        int[] regOffsets = {0, 8, 4, 12};
+        int tlIdxBase = 21;
+        int rsArBase = 5;
+        int amD1rBase = 9;
+        int d2rBase = 13;
+        int d1lRrBase = 17;
 
         for (int i = 0; i < 4; i++) {
-            int regOff = regOffsets[i];
-            write(port, 0x30 + regOff + hwCh, get.applyAsInt(1 + i));
+            write(port, 0x30 + i * 4 + hwCh, get.applyAsInt(1 + i));
             int tl = hasTl ? get.applyAsInt(tlIdxBase + i) : 0;
-            write(port, 0x40 + regOff + hwCh, tl);
-            write(port, 0x50 + regOff + hwCh, get.applyAsInt(rsArBase + i));
-            write(port, 0x60 + regOff + hwCh, get.applyAsInt(amD1rBase + i));
-            write(port, 0x70 + regOff + hwCh, get.applyAsInt(d2rBase + i));
-            write(port, 0x80 + regOff + hwCh, get.applyAsInt(d1lRrBase + i));
-            write(port, 0x90 + regOff + hwCh, 0);
+            write(port, 0x40 + i * 4 + hwCh, tl);
+            write(port, 0x50 + i * 4 + hwCh, get.applyAsInt(rsArBase + i));
+            write(port, 0x60 + i * 4 + hwCh, get.applyAsInt(amD1rBase + i));
+            write(port, 0x70 + i * 4 + hwCh, get.applyAsInt(d2rBase + i));
+            write(port, 0x80 + i * 4 + hwCh, get.applyAsInt(d1lRrBase + i));
+            write(port, 0x90 + i * 4 + hwCh, 0);
         }
     }
 
