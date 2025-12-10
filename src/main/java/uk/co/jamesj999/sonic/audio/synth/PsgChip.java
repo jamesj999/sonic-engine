@@ -82,15 +82,6 @@ public class PsgChip {
         }
     }
 
-    public void render(int[] buffer) {
-        int[] tmpL = new int[buffer.length];
-        int[] tmpR = new int[buffer.length];
-        renderStereo(tmpL, tmpR);
-        for (int i = 0; i < buffer.length; i++) {
-            int mixed = (tmpL[i] + tmpR[i]) / 2;
-            buffer[i] += mixed;
-        }
-    }
 
     public void renderStereo(int[] left, int[] right) {
         int len = Math.min(left.length, right.length);

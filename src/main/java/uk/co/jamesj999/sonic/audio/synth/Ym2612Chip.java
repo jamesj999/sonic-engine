@@ -233,6 +233,7 @@ public class Ym2612Chip {
     private static final double Z80_CLOCK = 3579545.0;
     private static final double DAC_GAIN = 64.0;
     private boolean dacInterpolate = true;
+    private boolean dacHighpassEnabled = true;
     private int dac_highpass;
     private static final int HIGHPASS_FRACT = 15;
     private static final int HIGHPASS_SHIFT = 9;
@@ -386,6 +387,10 @@ public class Ym2612Chip {
 
     public void setDacInterpolate(boolean interpolate) {
         this.dacInterpolate = interpolate;
+    }
+
+    public void setDacHighpassEnabled(boolean enabled) {
+        this.dacHighpassEnabled = enabled;
     }
 
     public void setDacData(DacData data) {
@@ -701,39 +706,6 @@ public class Ym2612Chip {
         }
     }
 
-    public void render(int[] buffer) {
-        for (int i = 0; i < buffer.length; i++) {
-            int freqLfo = 0;
-            int envLfo = 0;
-            if (lfoInc != 0) {
-                lfoCnt += lfoInc;
-                int idx = (lfoCnt >> LFO_LBITS) & LFO_MASK;
-                envLfo = LFO_ENV_TAB[idx];
-                freqLfo = LFO_FREQ_TAB[idx];
-            }
-
-            int dacOut = renderDac();
-            Channel dacCh = channels[5];
-            boolean dacLeft = dacCh.leftMask != 0;
-            boolean dacRight = dacCh.rightMask != 0;
-            if (!mutes[5]) {
-                if (dacLeft || (!dacLeft && !dacRight)) buffer[i] += dacOut;
-                if (dacRight || (!dacLeft && !dacRight)) buffer[i] += dacOut;
-            }
-
-            for (int ch = 0; ch < 6; ch++) {
-                if (mutes[ch]) continue;
-                if (ch == 5 && dacEnabled) continue;
-                int out = renderChannel(ch, envLfo, freqLfo);
-
-                boolean left = channels[ch].leftMask != 0;
-                boolean right = channels[ch].rightMask != 0;
-                if (left) buffer[i] += out;
-                if (right) buffer[i] += out;
-            }
-            tickTimers(1);
-        }
-    }
 
     public void renderStereo(int[] leftBuf, int[] rightBuf) {
         int len = Math.min(leftBuf.length, rightBuf.length);
@@ -752,8 +724,8 @@ public class Ym2612Chip {
             boolean dacLeft = dacCh.leftMask != 0;
             boolean dacRight = dacCh.rightMask != 0;
             if (!mutes[5]) {
-                if (dacLeft || (!dacLeft && !dacRight)) leftBuf[i] += dacOut;
-                if (dacRight || (!dacLeft && !dacRight)) rightBuf[i] += dacOut;
+                if (dacLeft) leftBuf[i] += dacOut;
+                if (dacRight) rightBuf[i] += dacOut;
             }
 
             for (int ch = 0; ch < 6; ch++) {
@@ -921,15 +893,19 @@ public class Ym2612Chip {
         int d2rBase = 13;
         int d1lRrBase = 17;
 
+        // Map HW Index (0,1,2,3) to Register Offset (Slot 0,2,1,3) -> (0, 8, 4, 12)
+        int[] regOffsets = {0, 8, 4, 12};
+
         for (int i = 0; i < 4; i++) {
-            write(port, 0x30 + i * 4 + hwCh, get.applyAsInt(1 + i));
+            int regOff = regOffsets[i];
+            write(port, 0x30 + regOff + hwCh, get.applyAsInt(1 + i));
             int tl = hasTl ? get.applyAsInt(tlIdxBase + i) : 0;
-            write(port, 0x40 + i * 4 + hwCh, tl);
-            write(port, 0x50 + i * 4 + hwCh, get.applyAsInt(rsArBase + i));
-            write(port, 0x60 + i * 4 + hwCh, get.applyAsInt(amD1rBase + i));
-            write(port, 0x70 + i * 4 + hwCh, get.applyAsInt(d2rBase + i));
-            write(port, 0x80 + i * 4 + hwCh, get.applyAsInt(d1lRrBase + i));
-            write(port, 0x90 + i * 4 + hwCh, 0);
+            write(port, 0x40 + regOff + hwCh, tl);
+            write(port, 0x50 + regOff + hwCh, get.applyAsInt(rsArBase + i));
+            write(port, 0x60 + regOff + hwCh, get.applyAsInt(amD1rBase + i));
+            write(port, 0x70 + regOff + hwCh, get.applyAsInt(d2rBase + i));
+            write(port, 0x80 + regOff + hwCh, get.applyAsInt(d1lRrBase + i));
+            write(port, 0x90 + regOff + hwCh, 0);
         }
     }
 
@@ -985,10 +961,12 @@ public class Ym2612Chip {
 
         sample = (int) (sample * DAC_GAIN);
 
-        // Highpass Filter
-        sample = (sample << HIGHPASS_FRACT) - dac_highpass;
-        dac_highpass += sample >> HIGHPASS_SHIFT;
-        sample >>= HIGHPASS_FRACT;
+        if (dacHighpassEnabled) {
+            // Highpass Filter
+            sample = (sample << HIGHPASS_FRACT) - dac_highpass;
+            dac_highpass += sample >> HIGHPASS_SHIFT;
+            sample >>= HIGHPASS_FRACT;
+        }
 
         return sample;
     }

@@ -37,14 +37,15 @@ public class TestYm2612InstrumentTone {
         // Key on all operators for ch0
         chip.write(0, 0x28, 0xF0 | 0);
 
-        int[] buffer = new int[2048];
-        chip.render(buffer);
+        int[] left = new int[2048];
+        int[] right = new int[2048];
+        chip.renderStereo(left, right);
 
         long sum = 0;
-        for (int s : buffer) {
+        for (int s : left) {
             sum += Math.abs(s);
         }
-        double avg = sum / (double) buffer.length;
+        double avg = sum / (double) left.length;
         assertTrue("Expected audible output after key-on", avg > 50.0);
     }
 }

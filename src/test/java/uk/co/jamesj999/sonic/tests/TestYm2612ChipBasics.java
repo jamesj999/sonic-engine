@@ -16,11 +16,12 @@ public class TestYm2612ChipBasics {
         Ym2612Chip chip = new Ym2612Chip();
         configureSimpleVoice(chip);
 
-        int[] buffer = new int[512];
-        chip.render(buffer);
+        int[] left = new int[512];
+        int[] right = new int[512];
+        chip.renderStereo(left, right);
 
         boolean hasSignal = false;
-        for (int v : buffer) {
+        for (int v : left) {
             if (v != 0) {
                 hasSignal = true;
                 break;
@@ -37,8 +38,9 @@ public class TestYm2612ChipBasics {
         chip.write(0, 0x25, 0x00); // Timer A low
         chip.write(0, 0x27, 0x01); // Enable timer A
 
-        int[] buffer = new int[900];
-        chip.render(buffer);
+        int[] left = new int[900];
+        int[] right = new int[900];
+        chip.renderStereo(left, right);
 
         int status = chip.readStatus();
         assertNotEquals("Timer A flag should be raised after overflow", 0, status & 0x01);

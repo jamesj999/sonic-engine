@@ -25,17 +25,20 @@ public class TestYm2612Attack {
 
         chip.write(0, 0x28, 0xF0); // Key On
 
-        int[] buf1 = new int[2000];
-        chip.render(buf1);
-        int max1 = getMax(buf1);
+        int[] l1 = new int[2000];
+        int[] r1 = new int[2000];
+        chip.renderStereo(l1, r1);
+        int max1 = getMax(l1);
 
-        int[] buf2 = new int[2000];
-        chip.render(buf2);
-        int max2 = getMax(buf2);
+        int[] l2 = new int[2000];
+        int[] r2 = new int[2000];
+        chip.renderStereo(l2, r2);
+        int max2 = getMax(l2);
 
-        int[] buf3 = new int[2000];
-        chip.render(buf3);
-        int max3 = getMax(buf3);
+        int[] l3 = new int[2000];
+        int[] r3 = new int[2000];
+        chip.renderStereo(l3, r3);
+        int max3 = getMax(l3);
 
         // We expect volume to increase: max1 < max2 < max3
         // Note: initial samples might be 0.
