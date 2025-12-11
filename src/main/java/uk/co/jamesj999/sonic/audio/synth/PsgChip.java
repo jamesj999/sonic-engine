@@ -27,9 +27,9 @@ public class PsgChip {
     private final boolean[] mutes = new boolean[4];
 
     static {
-        // Approximate SN76489 2 dB steps (15 -> silence)
+        // SN76489 2 dB steps (15 -> silence)
         for (int i = 0; i < 15; i++) {
-            VOLUME_TABLE[i] = Math.pow(10.0, -(i * 2.0) / 20.0) * 3000.0;
+            VOLUME_TABLE[i] = Math.pow(2.0, i / -3.0) * 8192.0;
         }
         VOLUME_TABLE[15] = 0.0;
     }

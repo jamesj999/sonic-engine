@@ -39,8 +39,7 @@ public class Ym2612Chip {
     // Output bits logic
     private static final int MAX_OUT_BITS = SIN_HBITS + SIN_LBITS + 2; // 28
     private static final int OUT_BITS = 14; // OUTPUT_BITS - 2 = 16 - 2 = 14
-    // Match libvgm/GPGX: shift an extra bit when converting phase output -> channel sample
-    private static final int OUT_SHIFT = (MAX_OUT_BITS - OUT_BITS) + 1; // 15
+    private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 14
     private static final int LIMIT_CH_OUT = (int) ((1 << OUT_BITS) * 1.5) - 1;
 
     private static final int PG_CUT_OFF = (int) (78.0 / ENV_STEP);
