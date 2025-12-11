@@ -99,6 +99,7 @@ public class Sonic2SmpsLoader {
 
     public void cacheAllSfx() {
         LOGGER.info("Caching all SFX...");
+        System.out.println("Scanning for SFX from 0xA0 to 0xEF...");
         // Scan 0xA0 to 0xEF
         for (int id = 0xA0; id <= 0xEF; id++) {
             AbstractSmpsData sfx = loadSfxInternal(id);
@@ -109,11 +110,17 @@ public class Sonic2SmpsLoader {
                 }
             }
         }
-        LOGGER.info("Cached " + sfxCache.size() + " SFX.");
+        String msg = "Cached " + sfxCache.size() + " SFX.";
+        LOGGER.info(msg);
+        System.out.println(msg);
     }
 
     public Map<Integer, String> getSfxList() {
         return new HashMap<>(sfxNames);
+    }
+
+    public java.util.Set<Integer> getAvailableSfxIds() {
+        return new java.util.HashSet<>(sfxCache.keySet());
     }
 
     public AbstractSmpsData loadMusic(int musicId) {

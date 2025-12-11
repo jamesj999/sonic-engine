@@ -225,9 +225,12 @@ public final class SoundTestApp {
             this.dacData = dacData;
             this.backend = backend;
             this.sfxNames = loader.getSfxList();
-            this.validSfx = new TreeSet<>(sfxNames.keySet());
+            // Use available SFX IDs from cache to ensure we only list what we successfully loaded
+            this.validSfx = new TreeSet<>(loader.getAvailableSfxIds());
             if (!validSfx.isEmpty()) {
                 this.sfxId = validSfx.first();
+            } else {
+                System.out.println("No SFX available in cache.");
             }
         }
 
@@ -374,7 +377,10 @@ public final class SoundTestApp {
         private void playCurrentSfx() {
             AbstractSmpsData data = loader.loadSfx(sfxId);
             if (data != null) {
+                System.out.println(String.format("Playing SFX %s (Size: %d)", toHex(sfxId), data.getData().length));
                 backend.playSfxSmps(data, dacData);
+            } else {
+                System.out.println("Failed to load SFX " + toHex(sfxId));
             }
         }
 
