@@ -10,6 +10,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,11 +63,11 @@ public class TestRomAudioIntegration {
     @Test
     public void testMusicDecompressionAndLoading() {
         AbstractSmpsData data = loader.loadMusic(0x82);
-        assertNotNull("Should load EHZ music", data);
+        assertNotNull("Should load Metropolis music (0x82)", data);
         assertTrue("Voice Ptr > 0", data.getVoicePtr() > 0);
         int channels = data.getChannels();
         assertTrue("Channels should be valid (e.g. 6)", channels > 0 && channels <= 7);
-        System.out.println("EHZ Loaded. Size: " + data.getData().length);
+        System.out.println("Metropolis Loaded. Size: " + data.getData().length);
     }
 
     @Test
@@ -83,7 +84,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testSequencerPlayback() {
-        AbstractSmpsData data = loader.loadMusic(0x82); // EHZ
+        AbstractSmpsData data = loader.loadMusic(0x82); // Metropolis
         DacData dac = loader.loadDacData();
 
         SmpsSequencer seq = new SmpsSequencer(data, dac);
@@ -101,7 +102,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testMusicEmitsChipCommandsFromRomData() {
-        AbstractSmpsData data = loader.loadMusic(0x82); // Emerald Hill Zone
+        AbstractSmpsData data = loader.loadMusic(0x82); // Metropolis
         DacData dac = loader.loadDacData();
 
         LoggingSynth synth = new LoggingSynth();
@@ -126,7 +127,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testDacSamplePlaybackUsesRomSamples() {
-        AbstractSmpsData smps = loader.loadMusic(0x82); // Emerald Hill Zone contains DAC drums
+        AbstractSmpsData smps = loader.loadMusic(0x82); // Metropolis contains DAC drums
         DacData dacData = loader.loadDacData();
         LoggingSynth synth = new LoggingSynth();
         SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth);
@@ -137,5 +138,46 @@ public class TestRomAudioIntegration {
         assertSame("Sequencer should wire ROM DAC data into the synthesizer", dacData, synth.configuredDacData);
         assertFalse("ROM DAC table should expose samples", dacData.samples.isEmpty());
         assertTrue("ROM DAC table should map drum notes", dacData.mapping.containsKey(0x81));
+    }
+
+    @Test
+    public void testLevelMusicMapping() throws IOException {
+        uk.co.jamesj999.sonic.data.games.Sonic2 game = new uk.co.jamesj999.sonic.data.games.Sonic2(rom);
+
+        // Emerald Hill (0x81)
+        assertEquals("Emerald Hill 1 Music ID", 0x81, game.getMusicId(0));
+        assertEquals("Emerald Hill 2 Music ID", 0x81, game.getMusicId(1));
+
+        // Chemical Plant (0x8C)
+        assertEquals("Chemical Plant 1 Music ID", 0x8C, game.getMusicId(2));
+        assertEquals("Chemical Plant 2 Music ID", 0x8C, game.getMusicId(3));
+
+        // Aquatic Ruin (0x86)
+        assertEquals("Aquatic Ruin 1 Music ID", 0x86, game.getMusicId(4));
+
+        // Casino Night (0x83)
+        assertEquals("Casino Night 1 Music ID", 0x83, game.getMusicId(6));
+
+        // Hill Top (0x94)
+        assertEquals("Hill Top 1 Music ID", 0x94, game.getMusicId(8));
+
+        // Mystic Cave (0x84)
+        assertEquals("Mystic Cave 1 Music ID", 0x84, game.getMusicId(10));
+
+        // Oil Ocean (0x8F)
+        assertEquals("Oil Ocean 1 Music ID", 0x8F, game.getMusicId(12));
+
+        // Metropolis (0x82)
+        assertEquals("Metropolis 1 Music ID", 0x82, game.getMusicId(14));
+        assertEquals("Metropolis 3 Music ID", 0x82, game.getMusicId(16));
+
+        // Sky Chase (0x8E)
+        assertEquals("Sky Chase Music ID", 0x8E, game.getMusicId(17));
+
+        // Wing Fortress (0x90)
+        assertEquals("Wing Fortress Music ID", 0x90, game.getMusicId(18));
+
+        // Death Egg (0x87)
+        assertEquals("Death Egg Music ID", 0x87, game.getMusicId(19));
     }
 }

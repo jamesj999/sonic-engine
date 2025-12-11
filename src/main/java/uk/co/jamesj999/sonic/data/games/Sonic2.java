@@ -95,8 +95,43 @@ public class Sonic2 extends Game {
 
     @Override
     public int getMusicId(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        return rom.readByte(MUSIC_PLAYLIST_ADDR + zoneIdx) & 0xFF;
+        switch (levelIdx) {
+            case 0: // Emerald Hill 1
+            case 1: // Emerald Hill 2
+                return 0x81;
+            case 2: // Chemical Plant 1
+            case 3: // Chemical Plant 2
+                return 0x8C;
+            case 4: // Aquatic Ruin 1
+            case 5: // Aquatic Ruin 2
+                return 0x86;
+            case 6: // Casino Night 1
+            case 7: // Casino Night 2
+                return 0x83;
+            case 8: // Hill Top 1
+            case 9: // Hill Top 2
+                return 0x94;
+            case 10: // Mystic Cave 1
+            case 11: // Mystic Cave 2
+                return 0x84;
+            case 12: // Oil Ocean 1
+            case 13: // Oil Ocean 2
+                return 0x8F;
+            case 14: // Metropolis 1
+            case 15: // Metropolis 2
+            case 16: // Metropolis 3
+                return 0x82;
+            case 17: // Sky Chase
+                return 0x8E;
+            case 18: // Wing Fortress
+                return 0x90;
+            case 19: // Death Egg
+                return 0x87;
+            default:
+                // Fallback to original logic for unknown levels (e.g. 2P)
+                int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+                return rom.readByte(MUSIC_PLAYLIST_ADDR + zoneIdx) & 0xFF;
+        }
     }
 
     @Override
