@@ -47,14 +47,14 @@ public class TestSmpsFrequencyWrap {
         byte[] data = new byte[100];
 
         // Header
-        data[0] = 0x00; data[1] = 0x28; // Voice Ptr (Big Endian 0028 = 40)
+        data[0] = 0x28; data[1] = 0x00; // Voice Ptr (Little Endian 0x0028 = 40)
         data[2] = 2; // 2 FM Channels (FM1 is Index 1)
         data[3] = 0; // 0 PSG
         data[5] = (byte) 0x80; // Tempo
 
         // FM Track 1 Ptr at offset 0x0A (10) -> 0x0010 (16)
-        data[10] = 0x00;
-        data[11] = 0x10;
+        data[10] = 0x10;
+        data[11] = 0x00;
 
         // Track Data at 16
         int t = 16;

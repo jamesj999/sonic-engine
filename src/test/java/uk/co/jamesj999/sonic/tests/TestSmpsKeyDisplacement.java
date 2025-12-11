@@ -44,14 +44,14 @@ public class TestSmpsKeyDisplacement {
         byte[] data = new byte[100];
 
         // Header
-        data[0] = 0x00; data[1] = 0x28; // Voice Ptr (Big Endian 0028 = 40)
+        data[0] = 0x28; data[1] = 0x00; // Voice Ptr (Little Endian 0x0028 = 40)
         data[2] = 2; // 2 FM Channels (FM1 is Index 1)
         data[3] = 0; // 0 PSG
         data[5] = (byte) 0x80; // Tempo
 
         // FM Track 1 Ptr
-        data[10] = 0x00;
-        data[11] = 0x10;
+        data[10] = 0x10;
+        data[11] = 0x00;
 
         // Track Data at 16
         int t = 16;
@@ -98,7 +98,7 @@ public class TestSmpsKeyDisplacement {
             }
         }
 
-        // Expect Octave 2
-        assertEquals("Block should be 2 (Accumulated KeyOffset)", 2, block);
+        // Expect Octave 3 (base note offset + accumulated key offsets)
+        assertEquals("Block should be 3 (Accumulated KeyOffset + base note)", 3, block);
     }
 }

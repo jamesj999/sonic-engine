@@ -933,6 +933,12 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private int getPitchSlideFreq(int freq) {
+        // SMPS driver wraps slides within octaves to avoid discontinuities, but never past the top octave.
+        int block = (freq >> 11) & 0x7;
+        if (block >= 7) {
+            return freq;
+        }
+
         int baseFreq = 0x269;
         int lowFreq = baseFreq;
         int highFreq = baseFreq * 2;

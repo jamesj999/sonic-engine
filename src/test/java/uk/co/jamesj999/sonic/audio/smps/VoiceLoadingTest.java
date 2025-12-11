@@ -140,30 +140,29 @@ public class VoiceLoadingTest {
 
         SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth);
 
-        // Expected reordered data (25 bytes for S2 normalization)
-        // Swap 2 and 3 (Indices 1 and 2).
+        // Expected SMPS slot-order data (Op1, Op3, Op2, Op4) with TL adjusted for carriers by refreshInstrument.
         byte[] expected = new byte[25];
         expected[0] = (byte) 0x01;
 
-        // DT (10). Source 11, 12, 13, 14. Target 11, 13, 12, 14.
-        expected[1] = 0x11; expected[2] = 0x13; expected[3] = 0x12; expected[4] = 0x14;
+        // DT (no swap, SMPS slot order)
+        expected[1] = 0x11; expected[2] = 0x12; expected[3] = 0x13; expected[4] = 0x14;
 
-        // TL (0)
-        expected[5] = 0; expected[6] = 0; expected[7] = 0; expected[8] = 0;
+        // RS (slot order)
+        expected[5] = 0x21; expected[6] = 0x22; expected[7] = 0x23; expected[8] = 0x24;
 
-        // RS (20). Source 21, 22, 23, 24. Target 21, 23, 22, 24.
-        expected[9] = 0x21; expected[10] = 0x23; expected[11] = 0x22; expected[12] = 0x24;
+        // AM (slot order).
+        expected[9] = 0x31; expected[10] = 0x32; expected[11] = 0x33; expected[12] = 0x34;
 
-        // AM (30).
-        expected[13] = 0x31; expected[14] = 0x33; expected[15] = 0x32; expected[16] = 0x34;
+        // D2R (slot order).
+        expected[13] = 0x41; expected[14] = 0x42; expected[15] = 0x43; expected[16] = 0x44;
 
-        // D2R (40).
-        expected[17] = 0x41; expected[18] = 0x43; expected[19] = 0x42; expected[20] = 0x44;
+        // RR (slot order).
+        expected[17] = 0x51; expected[18] = 0x52; expected[19] = 0x53; expected[20] = 0x54;
 
-        // RR (50).
-        expected[21] = 0x51; expected[22] = 0x53; expected[23] = 0x52; expected[24] = 0x54;
+        // TL (algo 1 only carriers Op4 -> index 24 masked to 0x7F)
+        expected[21] = (byte) 0xFF; expected[22] = (byte) 0xFF; expected[23] = (byte) 0xFF; expected[24] = 0x7F;
 
-        assertArrayEquals("Sonic 2 Voice Reordering (Standard -> Logical)", expected, synth.lastInstrument);
+        assertArrayEquals("Sonic 2 Voice Reordering (Standard -> SMPS slot order passthrough)", expected, synth.lastInstrument);
     }
 
     private void fill4(byte[] arr, int offset, int val) {
