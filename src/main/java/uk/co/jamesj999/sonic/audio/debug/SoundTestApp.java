@@ -257,6 +257,7 @@ public final class SoundTestApp {
                     romPath, backend.getClass().getSimpleName(), nullAudio ? " (silent)" : ""), SwingConstants.CENTER);
             info.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             frame.getContentPane().add(info, BorderLayout.SOUTH);
+            frame.setFocusTraversalKeysEnabled(false);
             frame.addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyPressed(KeyEvent e) {
