@@ -546,7 +546,7 @@ public class SmpsSequencer implements AudioStream {
                 }
 
                 if (t.duration > 0) {
-                    if (t.type == TrackType.FM && t.modEnabled) {
+                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled) {
                         applyModulation(t);
                     }
                     if (t.type == TrackType.PSG) {
@@ -1086,6 +1086,15 @@ public class SmpsSequencer implements AudioStream {
 
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
+                // Initialize modulation state for PSG slides
+                t.baseFnum = reg;
+                if (t.modEnabled) {
+                    t.modDelay = t.modDelayInit;
+                    t.modRateCounter = t.modRate;
+                    t.modStepCounter = t.modSteps / 2;
+                    t.modAccumulator = 0;
+                    t.modCurrentDelta = t.modDelta;
+                }
             } else if (t.channelId == 2 && t.noiseMode) {
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
@@ -1285,18 +1294,29 @@ public class SmpsSequencer implements AudioStream {
         }
 
         if (changed) {
-            int packed = (t.baseBlock << 11) | t.baseFnum;
-            packed += t.modAccumulator + t.detune;
+            if (t.type == TrackType.FM) {
+                int packed = (t.baseBlock << 11) | t.baseFnum;
+                packed += t.modAccumulator + t.detune;
 
-            packed = getPitchSlideFreq(packed);
+                packed = getPitchSlideFreq(packed);
 
-            int block = (packed >> 11) & 7;
-            int fnum = packed & 0x7FF;
+                int block = (packed >> 11) & 7;
+                int fnum = packed & 0x7FF;
 
-            int hwCh = t.channelId;
-            int port = (hwCh < 3) ? 0 : 1;
-            int ch = (hwCh % 3);
-            writeFmFreq(port, ch, fnum, block);
+                int hwCh = t.channelId;
+                int port = (hwCh < 3) ? 0 : 1;
+                int ch = (hwCh % 3);
+                writeFmFreq(port, ch, fnum, block);
+            } else if (t.type == TrackType.PSG && !t.noiseMode && t.channelId < 3) {
+                int reg = t.baseFnum + t.modAccumulator + t.detune;
+                if (reg < 1) reg = 1;
+                if (reg > 0x3FF) reg = 0x3FF;
+
+                int data = reg & 0xF;
+                int ch = t.channelId;
+                synth.writePsg(this, 0x80 | (ch << 5) | data);
+                synth.writePsg(this, (reg >> 4) & 0x3F);
+            }
         }
     }
 
