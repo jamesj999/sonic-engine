@@ -207,10 +207,26 @@ public class Sonic2SmpsLoader {
             // SFX usually loaded at Z80 0x1C00 or dynamic
             // Try loading as UNCOMPRESSED first
             try {
-                byte[] raw = rom.readBytes(romOffset, 2048);
-                Sonic2SmpsData sfx = new Sonic2SmpsData(raw, 0x1C00);
+                // Increase buffer to 16KB to cover larger offsets/pointers
+                byte[] raw = rom.readBytes(romOffset, 16384);
+
+                // Detect Z80 Base Address from Voice Pointer
+                int z80Base = 0x1C00; // Default
+                if (raw.length >= 2) {
+                    int vPtr = (raw[0] & 0xFF) | ((raw[1] & 0xFF) << 8);
+                    if (vPtr >= 0x8000) {
+                        z80Base = 0x8000;
+                    } else if (vPtr < 0x1000) {
+                        z80Base = 0;
+                    }
+                    // Else stick with 0x1C00 or dynamic
+                }
+
+                Sonic2SmpsData sfx = new Sonic2SmpsData(raw, z80Base);
                 if (isValidSfx(sfx)) {
                     return sfx;
+                } else {
+                    LOGGER.fine("Uncompressed SFX at " + Integer.toHexString(romOffset) + " rejected. Base: " + Integer.toHexString(z80Base) + " VoicePtr: " + Integer.toHexString(sfx.getVoicePtr()));
                 }
             } catch (Exception e) {
                 LOGGER.fine("Failed to load uncompressed SFX at " + Integer.toHexString(romOffset));
