@@ -152,6 +152,7 @@ public class SmpsSequencer implements AudioStream {
         int envPos;
         int envValue;
         boolean envHold;
+        boolean forceRefresh;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -277,7 +278,18 @@ public class SmpsSequencer implements AudioStream {
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
         for (Track t : tracks) {
             if (t.type == type && t.channelId == channelId) {
+                boolean wasOverridden = t.overridden;
                 t.overridden = overridden;
+                if (wasOverridden && !overridden) {
+                    // Channel released from SFX, restore instrument and volume
+                    refreshInstrument(t);
+                    if (t.type == TrackType.PSG) {
+                        refreshVolume(t);
+                    }
+                    if (t.type == TrackType.FM) {
+                        applyFmPanAmsFms(t);
+                    }
+                }
             }
         }
     }
@@ -693,6 +705,9 @@ public class SmpsSequencer implements AudioStream {
             // 0x80 register: SL/RR. 0x0F means SL=0, RR=15 (Max Release).
             synth.writeFm(this, port, 0x88 + ch, 0x0F);
             synth.writeFm(this, port, 0x8C + ch, 0x0F);
+
+            // Mark track for instrument refresh on next note to undo SL/RR changes
+            t.forceRefresh = true;
         }
     }
 
@@ -819,6 +834,11 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
+        if (t.forceRefresh) {
+            refreshInstrument(t);
+            t.forceRefresh = false;
+        }
+
         if (t.type == TrackType.DAC) {
             synth.playDac(this, t.note);
             return;
@@ -876,7 +896,7 @@ public class SmpsSequencer implements AudioStream {
                 }
 
                 int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
-                synth.writeFm(this, port, 0x28, 0x00 | chVal);
+                synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
             }
 
             writeFmFreq(port, ch, fnum, block);
@@ -884,7 +904,7 @@ public class SmpsSequencer implements AudioStream {
 
             if (!t.tieNext) {
                 int chVal = (port == 0) ? ch : (ch + 4);
-                synth.writeFm(this, port, 0x28, 0xF0 | chVal);
+                synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Key On/Off is always on Port 0
             }
             t.tieNext = false;
 
@@ -960,7 +980,7 @@ public class SmpsSequencer implements AudioStream {
             int port = (hwCh < 3) ? 0 : 1;
             int ch = hwCh % 3;
             int chVal = (port == 0) ? ch : (ch + 4);
-            synth.writeFm(this, port, 0x28, 0x00 | chVal);
+            synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
         } else if (t.type == TrackType.DAC) {
             synth.stopDac(this);
         } else {

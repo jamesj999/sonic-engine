@@ -194,7 +194,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         // Channel ID is passed explicitly.
         if (channelId >= 0 && channelId < 6) {
             if (isSfx(source)) {
-                fmLocks[channelId] = (SmpsSequencer) source;
+                if (fmLocks[channelId] != source) {
+                    fmLocks[channelId] = (SmpsSequencer) source;
+                    updateOverrides(SmpsSequencer.TrackType.FM, channelId, true);
+                }
                 super.setInstrument(source, channelId, voice);
             } else {
                 if (fmLocks[channelId] == null) {
