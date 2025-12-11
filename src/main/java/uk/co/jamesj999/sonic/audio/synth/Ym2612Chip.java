@@ -414,7 +414,7 @@ public class Ym2612Chip {
         if (addr < 0x30) {
             writeYm(addr, val);
         } else {
-            if (addr < 0xA0) {
+            if ((addr & 0xFF) < 0xA0) {
                 writeSlot(addr, val);
             } else {
                 writeChannel(addr, val);
