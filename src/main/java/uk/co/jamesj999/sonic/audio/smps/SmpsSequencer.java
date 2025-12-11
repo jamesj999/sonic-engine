@@ -28,6 +28,7 @@ public class SmpsSequencer implements AudioStream {
 
     private Region region = Region.NTSC;
     private boolean speedShoes = false;
+    private boolean sfxMode = false;
     private int normalTempo;
     private int commData = 0; // Communication byte (E2)
     private boolean fm6DacOff = false;
@@ -277,6 +278,16 @@ public class SmpsSequencer implements AudioStream {
     public void setFm6DacOff(boolean active) {
         this.fm6DacOff = active;
     }
+
+    public void setSfxMode(boolean active) {
+        this.sfxMode = active;
+        if (active) {
+            updateDividingTiming(1);
+        } else {
+            updateDividingTiming(smpsData.getDividingTiming());
+        }
+        calculateTempo();
+    }
     
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
         for (Track t : tracks) {
@@ -322,6 +333,11 @@ public class SmpsSequencer implements AudioStream {
     }
     
     private void calculateTempo() {
+        if (sfxMode) {
+            this.tempoWeight = TEMPO_MOD_BASE; // 0x100: Tick every frame
+            return;
+        }
+
         int base = normalTempo;
         if (base == 0) {
             base = 0x100; // Default to 1 tick/frame if tempo is 0 (common for SFX)

@@ -158,6 +158,7 @@ public class JOALAudioBackend implements AudioBackend {
             // FM6 DAC Off is per-sequencer.
             SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
             seq.setFm6DacOff(fm6DacOff);
+            seq.setSfxMode(true);
             smpsDriver.addSequencer(seq, true);
         } else {
             // Standalone SFX driver
@@ -171,6 +172,7 @@ public class JOALAudioBackend implements AudioBackend {
             }
             SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
             seq.setFm6DacOff(fm6DacOff);
+            seq.setSfxMode(true);
             sfxDriver.addSequencer(seq, true);
         }
 
