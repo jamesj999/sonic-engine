@@ -152,6 +152,7 @@ public class SmpsSequencer implements AudioStream {
         int envPos;
         int envValue;
         boolean envHold;
+        boolean forceRefresh;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -277,7 +278,18 @@ public class SmpsSequencer implements AudioStream {
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
         for (Track t : tracks) {
             if (t.type == type && t.channelId == channelId) {
+                boolean wasOverridden = t.overridden;
                 t.overridden = overridden;
+                if (wasOverridden && !overridden) {
+                    // Channel released from SFX, restore instrument and volume
+                    refreshInstrument(t);
+                    if (t.type == TrackType.PSG) {
+                        refreshVolume(t);
+                    }
+                    if (t.type == TrackType.FM) {
+                        applyFmPanAmsFms(t);
+                    }
+                }
             }
         }
     }
@@ -693,6 +705,9 @@ public class SmpsSequencer implements AudioStream {
             // 0x80 register: SL/RR. 0x0F means SL=0, RR=15 (Max Release).
             synth.writeFm(this, port, 0x88 + ch, 0x0F);
             synth.writeFm(this, port, 0x8C + ch, 0x0F);
+
+            // Mark track for instrument refresh on next note to undo SL/RR changes
+            t.forceRefresh = true;
         }
     }
 
@@ -817,6 +832,11 @@ public class SmpsSequencer implements AudioStream {
         if (t.note == 0x80) {
             stopNote(t);
             return;
+        }
+
+        if (t.forceRefresh) {
+            refreshInstrument(t);
+            t.forceRefresh = false;
         }
 
         if (t.type == TrackType.DAC) {
