@@ -233,7 +233,7 @@ public class Ym2612Chip {
     private static final double DAC_LOOP_CYCLES = 26.0;
     private static final double DAC_LOOP_SAMPLES = 2.0;
     private static final double Z80_CLOCK = 3579545.0;
-    private static final double DAC_GAIN = 64.0;
+    private static final double DAC_GAIN = 128.0;
     private boolean dacInterpolate = true;
     private boolean dacHighpassEnabled = false;
     private int dac_highpass;
