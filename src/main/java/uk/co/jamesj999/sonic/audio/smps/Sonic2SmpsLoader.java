@@ -16,9 +16,13 @@ public class Sonic2SmpsLoader {
     private final DcmDecoder dcmDecoder = new DcmDecoder();
     private final Map<Integer, Integer> musicMap = new HashMap<>();
     private final Map<String, Integer> sfxMap = new HashMap<>();
+    private final Map<Integer, AbstractSmpsData> sfxCache = new HashMap<>();
+    private final Map<Integer, String> sfxNames = new HashMap<>();
 
     public Sonic2SmpsLoader(Rom rom) {
         this.rom = rom;
+        populateSfxNames();
+        cacheAllSfx();
         // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
         musicMap.put(0x00, 0x0F0002); // Continue
         musicMap.put(0x80, 0x0F84F6); // Casino Night 2P
@@ -54,6 +58,62 @@ public class Sonic2SmpsLoader {
         // SFX Map (Populate with discovered offsets)
         // Potential candidate for SFX: 0xFFEAD (FM=1)
         sfxMap.put("RING", 0xFFEAD);
+    }
+
+    private void populateSfxNames() {
+        // Common Sonic 2 SFX
+        sfxNames.put(0xA0, "Jump");
+        sfxNames.put(0xA1, "Checkpoint");
+        sfxNames.put(0xA2, "Spike Hit");
+        sfxNames.put(0xA3, "Destroy Badnik");
+        sfxNames.put(0xA4, "Skid");
+        sfxNames.put(0xA5, "Slide");
+        sfxNames.put(0xA6, "Spindash Rev");
+        sfxNames.put(0xA7, "Roll");
+        sfxNames.put(0xA8, "Splash");
+        sfxNames.put(0xA9, "Spring");
+        sfxNames.put(0xAA, "Teleport");
+        sfxNames.put(0xAB, "Ring Loss");
+        sfxNames.put(0xAC, "Shield");
+        sfxNames.put(0xAD, "Bubble");
+        sfxNames.put(0xAE, "Drown Warning");
+        sfxNames.put(0xAF, "Drown");
+        sfxNames.put(0xB0, "Death");
+        sfxNames.put(0xB1, "Signpost");
+        sfxNames.put(0xB2, "Fire");
+        sfxNames.put(0xB3, "Crumble");
+        sfxNames.put(0xB4, "Bumper");
+        sfxNames.put(0xB5, "Ring");
+        sfxNames.put(0xB6, "Spikes");
+        sfxNames.put(0xB7, "Enter Special Stage");
+        sfxNames.put(0xB8, "Register");
+        sfxNames.put(0xB9, "Spring (Alt)");
+        sfxNames.put(0xBA, "Switch");
+        sfxNames.put(0xBB, "Break");
+        sfxNames.put(0xBC, "Push");
+        sfxNames.put(0xBD, "Air Bubble");
+        sfxNames.put(0xBE, "Explosion");
+        sfxNames.put(0xBF, "Score Add");
+        sfxNames.put(0xC0, "Coin");
+    }
+
+    public void cacheAllSfx() {
+        LOGGER.info("Caching all SFX...");
+        // Scan 0xA0 to 0xEF
+        for (int id = 0xA0; id <= 0xEF; id++) {
+            AbstractSmpsData sfx = loadSfxInternal(id);
+            if (sfx != null) {
+                sfxCache.put(id, sfx);
+                if (!sfxNames.containsKey(id)) {
+                    sfxNames.put(id, "SFX " + Integer.toHexString(id).toUpperCase());
+                }
+            }
+        }
+        LOGGER.info("Cached " + sfxCache.size() + " SFX.");
+    }
+
+    public Map<Integer, String> getSfxList() {
+        return new HashMap<>(sfxNames);
     }
 
     public AbstractSmpsData loadMusic(int musicId) {
@@ -107,23 +167,36 @@ public class Sonic2SmpsLoader {
     }
 
     public AbstractSmpsData loadSfx(int sfxId) {
+        if (sfxCache.containsKey(sfxId)) {
+            return sfxCache.get(sfxId);
+        }
+        AbstractSmpsData data = loadSfxInternal(sfxId);
+        if (data != null) {
+            sfxCache.put(sfxId, data);
+        }
+        return data;
+    }
+
+    private AbstractSmpsData loadSfxInternal(int sfxId) {
         // SFX Pointer Table at 0xFEE91.
         // IDs start at 0xA0.
         // Pointers are 2 bytes (LE), relative to bank start 0xF8000 (Z80 0x8000).
         if (sfxId < 0xA0) return null;
-        
+
         try {
             int index = sfxId - 0xA0;
             int tableAddr = 0xFEE91;
             int entryAddr = tableAddr + (index * 2);
-            
+
             int lo = rom.readByte(entryAddr) & 0xFF;
             int hi = rom.readByte(entryAddr + 1) & 0xFF;
             int ptr = lo | (hi << 8); // Z80 pointer (e.g. 0x8xxx)
-            
+
+            if (ptr == 0) return null;
+
             // Map Z80 0x8000-0xFFFF to ROM 0xF8000-0xFFFFF
             int romOffset = 0xF8000 + (ptr & 0x7FFF);
-            
+
             // SFX usually loaded at Z80 0x1C00 or dynamic
             return loadSmps(romOffset, 0x1C00);
         } catch (Exception e) {

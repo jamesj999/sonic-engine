@@ -203,6 +203,8 @@ public final class SoundTestApp {
         private final DacData dacData;
         private final AudioBackend backend;
         private int songId;
+        private int sfxId = 0xA0;
+        private boolean sfxMode = false;
         private JFrame frame;
         private JLabel label;
         private JLabel titleLabel;
@@ -214,12 +216,19 @@ public final class SoundTestApp {
         private boolean playing;
         private Integer playingSongId;
         private boolean speedShoes = false;
+        private final TreeSet<Integer> validSfx;
+        private final Map<Integer, String> sfxNames;
 
         InteractiveState(int songId, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) {
             this.songId = songId;
             this.loader = loader;
             this.dacData = dacData;
             this.backend = backend;
+            this.sfxNames = loader.getSfxList();
+            this.validSfx = new TreeSet<>(sfxNames.keySet());
+            if (!validSfx.isEmpty()) {
+                this.sfxId = validSfx.first();
+            }
         }
 
         void show(boolean nullAudio, String romPath) {
@@ -244,7 +253,7 @@ public final class SoundTestApp {
             heading.setAlignmentX(JLabel.LEFT_ALIGNMENT);
             tracksPanel.add(heading);
             frame.getContentPane().add(tracksPanel, BorderLayout.CENTER);
-            JLabel info = new JLabel(String.format("ROM: %s | Backend: %s%s | Up/Down change | Enter play | S Speed Shoes | Esc quit",
+            JLabel info = new JLabel(String.format("ROM: %s | Backend: %s%s | Tab: Music/SFX | Up/Down change | Enter play | S Speed Shoes | Esc quit",
                     romPath, backend.getClass().getSimpleName(), nullAudio ? " (silent)" : ""), SwingConstants.CENTER);
             info.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             frame.getContentPane().add(info, BorderLayout.SOUTH);
@@ -271,19 +280,35 @@ public final class SoundTestApp {
                     }
 
                     switch (code) {
+                        case KeyEvent.VK_TAB:
+                            sfxMode = !sfxMode;
+                            updateLabel();
+                            break;
                         case KeyEvent.VK_UP:
-                            songId = getNextValidSong(songId);
+                            if (sfxMode) {
+                                sfxId = getNextValidSfx(sfxId);
+                            } else {
+                                songId = getNextValidSong(songId);
+                            }
                             updateLabel();
                             break;
                         case KeyEvent.VK_DOWN:
-                            songId = getPreviousValidSong(songId);
+                            if (sfxMode) {
+                                sfxId = getPreviousValidSfx(sfxId);
+                            } else {
+                                songId = getPreviousValidSong(songId);
+                            }
                             updateLabel();
                             break;
                         case KeyEvent.VK_ENTER:
-                            backend.stopPlayback();
-                            playing = false;
-                            playingSongId = null;
-                            playCurrent();
+                            if (sfxMode) {
+                                playCurrentSfx();
+                            } else {
+                                backend.stopPlayback();
+                                playing = false;
+                                playingSongId = null;
+                                playCurrent();
+                            }
                             break;
                         case KeyEvent.VK_SPACE:
                             backend.stopPlayback();
@@ -345,7 +370,31 @@ public final class SoundTestApp {
             updateLabel();
         }
 
+        private void playCurrentSfx() {
+            AbstractSmpsData data = loader.loadSfx(sfxId);
+            if (data != null) {
+                backend.playSfxSmps(data, dacData);
+            }
+        }
+
         private void updateLabel() {
+            if (sfxMode) {
+                String name = sfxNames.get(sfxId);
+                String sfxTxt = String.format("SFX %s (%s)", toHex(sfxId), name != null ? name : "Unknown");
+                label.setText(sfxTxt);
+
+                String playingTxt = "";
+                if (playing && playingSongId != null) {
+                    String playingTitle = lookupTitle(playingSongId);
+                    playingTxt = String.format("Playing Music: '%s' (%s)", playingTitle != null ? playingTitle : "Unknown", toHex(playingSongId));
+                } else {
+                    playingTxt = "Music Stopped";
+                }
+                titleLabel.setText(playingTxt + " | " + sfxTxt);
+                updateDetails();
+                return;
+            }
+
             int offset = loader.findMusicOffset(songId);
             AbstractSmpsData data = loader.loadMusic(songId);
             StringBuilder sb = new StringBuilder();
@@ -376,6 +425,22 @@ public final class SoundTestApp {
                 titleLabel.setText(txt);
             }
             updateDetails();
+        }
+
+        private int getNextValidSfx(int current) {
+            Integer next = validSfx.higher(current);
+            if (next != null) {
+                return next;
+            }
+            return validSfx.isEmpty() ? current : validSfx.first();
+        }
+
+        private int getPreviousValidSfx(int current) {
+            Integer prev = validSfx.lower(current);
+            if (prev != null) {
+                return prev;
+            }
+            return validSfx.isEmpty() ? current : validSfx.last();
         }
 
         private void updateDetails() {

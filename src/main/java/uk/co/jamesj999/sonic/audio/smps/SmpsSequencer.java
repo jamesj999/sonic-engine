@@ -288,10 +288,30 @@ public class SmpsSequencer implements AudioStream {
                     }
                     if (t.type == TrackType.FM) {
                         applyFmPanAmsFms(t);
+                        if (t.active && t.duration > 0) {
+                            restoreFrequency(t);
+                        }
                     }
                 }
             }
         }
+    }
+
+    private void restoreFrequency(Track t) {
+        if (t.type != TrackType.FM) return;
+
+        int packed = (t.baseBlock << 11) | t.baseFnum;
+        packed += t.modAccumulator + t.detune;
+
+        packed = getPitchSlideFreq(packed);
+
+        int block = (packed >> 11) & 7;
+        int fnum = packed & 0x7FF;
+
+        int hwCh = t.channelId;
+        int port = (hwCh < 3) ? 0 : 1;
+        int ch = (hwCh % 3);
+        writeFmFreq(port, ch, fnum, block);
     }
     
     public List<Track> getTracks() {
