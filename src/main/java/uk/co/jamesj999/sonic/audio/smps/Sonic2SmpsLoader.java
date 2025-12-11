@@ -205,12 +205,35 @@ public class Sonic2SmpsLoader {
             int romOffset = 0xF8000 + (ptr & 0x7FFF);
 
             // SFX usually loaded at Z80 0x1C00 or dynamic
+            // Try loading as UNCOMPRESSED first
+            try {
+                byte[] raw = rom.readBytes(romOffset, 2048);
+                Sonic2SmpsData sfx = new Sonic2SmpsData(raw, 0x1C00);
+                if (isValidSfx(sfx)) {
+                    return sfx;
+                }
+            } catch (Exception e) {
+                LOGGER.fine("Failed to load uncompressed SFX at " + Integer.toHexString(romOffset));
+            }
+
             return loadSmps(romOffset, 0x1C00);
         } catch (Exception e) {
             LOGGER.severe("Failed to load SFX ID " + Integer.toHexString(sfxId));
             e.printStackTrace();
             return null;
         }
+    }
+
+    private boolean isValidSfx(AbstractSmpsData data) {
+        // Basic validation: Channels should be within reasonable limits for Genesis
+        // FM: 0-6, PSG: 0-4
+        int fm = data.getChannels();
+        int psg = data.getPsgChannels();
+        if (fm > 7 || psg > 4) return false;
+        // Also checks if header was parsed at all
+        if (fm == 0 && psg == 0 && data.getVoicePtr() == 0) return false;
+
+        return true;
     }
 
     /**

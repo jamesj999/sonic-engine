@@ -377,7 +377,9 @@ public final class SoundTestApp {
         private void playCurrentSfx() {
             AbstractSmpsData data = loader.loadSfx(sfxId);
             if (data != null) {
-                System.out.println(String.format("Playing SFX %s (Size: %d)", toHex(sfxId), data.getData().length));
+                System.out.println(String.format("Playing SFX %s (Size: %d) | FM: %d PSG: %d Tempo: %d Div: %d",
+                        toHex(sfxId), data.getData().length,
+                        data.getChannels(), data.getPsgChannels(), data.getTempo(), data.getDividingTiming()));
                 backend.playSfxSmps(data, dacData);
             } else {
                 System.out.println("Failed to load SFX " + toHex(sfxId));
