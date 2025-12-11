@@ -99,6 +99,7 @@ public final class SoundTestApp {
         printControls(options.songId);
 
         int currentSong = options.songId;
+        boolean speedShoes = false;
         playSong(loader, dacData, backend, currentSong);
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
@@ -119,6 +120,11 @@ public final class SoundTestApp {
                         break;
                     case "r":
                         playSong(loader, dacData, backend, currentSong);
+                        break;
+                    case "s":
+                        speedShoes = !speedShoes;
+                        backend.setSpeedShoes(speedShoes);
+                        System.out.println("Speed shoes: " + (speedShoes ? "ON" : "OFF"));
                         break;
                     case "n":
                         currentSong = getNextValidSong(currentSong);
@@ -173,7 +179,7 @@ public final class SoundTestApp {
     }
 
     private static void printControls(int currentSong) {
-        System.out.println(String.format("Controls: n/p next-prev | r restart | hex/dec number to jump | q quit | current=%s", toHex(currentSong)));
+        System.out.println(String.format("Controls: n/p next-prev | r restart | s Speed Shoes | hex/dec number to jump | q quit | current=%s", toHex(currentSong)));
     }
 
     private static int parseSongId(String token) {
@@ -295,6 +301,7 @@ public final class SoundTestApp {
                         case KeyEvent.VK_S:
                             speedShoes = !speedShoes;
                             backend.setSpeedShoes(speedShoes);
+                            updateLabel();
                             break;
                         default:
                             break;
@@ -356,9 +363,17 @@ public final class SoundTestApp {
             String selectedTitle = lookupTitle(songId);
             if (playing && playingSongId != null) {
                 String playingTitle = lookupTitle(playingSongId);
-                titleLabel.setText(String.format("Playing: '%s' (%s)", playingTitle != null ? playingTitle : "Unknown Track", toHex(playingSongId)));
+                String txt = String.format("Playing: '%s' (%s)", playingTitle != null ? playingTitle : "Unknown Track", toHex(playingSongId));
+                if (speedShoes) {
+                    txt += " [SPEED SHOES]";
+                }
+                titleLabel.setText(txt);
             } else {
-                titleLabel.setText(String.format("Stopped. Selected: '%s' (%s)", selectedTitle != null ? selectedTitle : "Unknown Track", toHex(songId)));
+                String txt = String.format("Stopped. Selected: '%s' (%s)", selectedTitle != null ? selectedTitle : "Unknown Track", toHex(songId));
+                if (speedShoes) {
+                    txt += " [SPEED SHOES]";
+                }
+                titleLabel.setText(txt);
             }
             updateDetails();
         }
