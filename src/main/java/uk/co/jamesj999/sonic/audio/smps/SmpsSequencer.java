@@ -176,6 +176,9 @@ public class SmpsSequencer implements AudioStream {
         synth.writeFm(this, 0, 0x2B, 0x80);
 
         dividingTiming = smpsData.getDividingTiming();
+        if (dividingTiming == 0) {
+            dividingTiming = 1;
+        }
         normalTempo = smpsData.getTempo();
         
         // Initialize Region and Tempo
@@ -320,8 +323,12 @@ public class SmpsSequencer implements AudioStream {
     
     private void calculateTempo() {
         int base = normalTempo;
+        if (base == 0) {
+            base = 0x100; // Default to 1 tick/frame if tempo is 0 (common for SFX)
+        }
+
         if (speedShoes) {
-            base = SPEED_UP_TEMPOS.getOrDefault(smpsData.getId(), normalTempo);
+            base = SPEED_UP_TEMPOS.getOrDefault(smpsData.getId(), base);
         }
         
         double multiplier = 1.0;
