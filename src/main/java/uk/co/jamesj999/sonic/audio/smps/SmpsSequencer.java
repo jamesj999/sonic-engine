@@ -896,7 +896,7 @@ public class SmpsSequencer implements AudioStream {
                 }
 
                 int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
-                synth.writeFm(this, port, 0x28, 0x00 | chVal);
+                synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
             }
 
             writeFmFreq(port, ch, fnum, block);
@@ -904,7 +904,7 @@ public class SmpsSequencer implements AudioStream {
 
             if (!t.tieNext) {
                 int chVal = (port == 0) ? ch : (ch + 4);
-                synth.writeFm(this, port, 0x28, 0xF0 | chVal);
+                synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Key On/Off is always on Port 0
             }
             t.tieNext = false;
 
@@ -980,7 +980,7 @@ public class SmpsSequencer implements AudioStream {
             int port = (hwCh < 3) ? 0 : 1;
             int ch = hwCh % 3;
             int chVal = (port == 0) ? ch : (ch + 4);
-            synth.writeFm(this, port, 0x28, 0x00 | chVal);
+            synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
         } else if (t.type == TrackType.DAC) {
             synth.stopDac(this);
         } else {
