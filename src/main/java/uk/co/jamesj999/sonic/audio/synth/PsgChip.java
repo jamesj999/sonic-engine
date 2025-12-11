@@ -39,6 +39,12 @@ public class PsgChip {
             registers[i] = 0xF; // Silence
         }
         tonePeriod[0] = tonePeriod[1] = tonePeriod[2] = 1;
+        for (int ch = 0; ch < 3; ch++) {
+            outputs[ch] = true;
+            counters[ch] = tonePeriod[ch] * 4.0;
+        }
+        outputs[3] = (lfsr & 1) == 1;
+        counters[3] = 1.0;
     }
 
     public void setMute(int ch, boolean mute) {
@@ -82,9 +88,61 @@ public class PsgChip {
         }
     }
 
+    private double integrateToneChannel(int ch, double period, double clocksPerSample) {
+        double remaining = counters[ch] <= 0 ? period : counters[ch];
+        double sample = 0.0;
+        double time = clocksPerSample;
+
+        while (time > 0) {
+            if (remaining > time) {
+                sample += (outputs[ch] ? time : -time);
+                remaining -= time;
+                time = 0;
+            } else {
+                sample += (outputs[ch] ? remaining : -remaining);
+                time -= remaining;
+                outputs[ch] = !outputs[ch];
+                remaining = period;
+            }
+        }
+
+        counters[ch] = remaining;
+        return sample / clocksPerSample;
+    }
+
+    private void stepNoiseLfsr(int noiseReg) {
+        int bit0 = lfsr & 1;
+        int tap = ((noiseReg & 0x04) != 0) ? bit0 ^ ((lfsr >> 3) & 1) : bit0;
+        lfsr = (lfsr >> 1) | (tap << 15);
+        outputs[3] = (lfsr & 1) == 1;
+    }
+
+    private double integrateNoiseChannel(int noiseReg, double period, double clocksPerSample) {
+        double remaining = counters[3] <= 0 ? period : counters[3];
+        double sample = 0.0;
+        double time = clocksPerSample;
+
+        while (time > 0) {
+            if (remaining > time) {
+                sample += (outputs[3] ? time : -time);
+                remaining -= time;
+                time = 0;
+            } else {
+                sample += (outputs[3] ? remaining : -remaining);
+                time -= remaining;
+                stepNoiseLfsr(noiseReg);
+                remaining = period;
+            }
+        }
+
+        counters[3] = remaining;
+        return sample / clocksPerSample;
+    }
+
 
     public void renderStereo(int[] left, int[] right) {
         int len = Math.min(left.length, right.length);
+        double clocksPerSample = STEP;
         for (int i = 0; i < len; i++) {
             double sampleL = 0;
             double sampleR = 0;
@@ -92,17 +150,10 @@ public class PsgChip {
             // Tone Channels
             for (int ch = 0; ch < 3; ch++) {
                 int vol = registers[ch * 2 + 1] & 0x0F;
-                if (vol == 0x0F) continue;
-
                 double period = Math.max(1, tonePeriod[ch]) * 4.0;
-                counters[ch] -= STEP;
-                while (counters[ch] <= 0) {
-                    counters[ch] += period;
-                    outputs[ch] = !outputs[ch];
-                }
-
+                double wave = integrateToneChannel(ch, period, clocksPerSample);
                 double amp = VOLUME_TABLE[vol];
-                double voice = outputs[ch] ? amp : -amp;
+                double voice = wave * amp;
                 if (!mutes[ch]) {
                     sampleL += voice;
                     sampleR += voice;
@@ -110,30 +161,19 @@ public class PsgChip {
             }
 
             // Noise Channel
+            int noiseReg = registers[6];
+            double rateVal = switch (noiseReg & 0x3) {
+                case 0 -> 0x40;
+                case 1 -> 0x80;
+                case 2 -> 0x100;
+                default -> Math.max(1, tonePeriod[2] * 4.0);
+            };
             int noiseVol = registers[7] & 0x0F;
-            if (noiseVol != 0x0F) {
-                int noiseReg = registers[6];
-                double rateVal = switch (noiseReg & 0x3) {
-                    case 0 -> 0x40;
-                    case 1 -> 0x80;
-                    case 2 -> 0x100;
-                    default -> Math.max(1, tonePeriod[2] * 4);
-                };
-
-                counters[3] -= STEP;
-                while (counters[3] <= 0) {
-                    counters[3] += rateVal;
-                    int bit0 = lfsr & 1;
-                    int tap = ((noiseReg & 0x04) != 0) ? bit0 ^ ((lfsr >> 3) & 1) : bit0;
-                    lfsr = (lfsr >> 1) | (tap << 15);
-                    outputs[3] = (lfsr & 1) == 1;
-                }
-                double amp = VOLUME_TABLE[noiseVol];
-                double voice = outputs[3] ? amp : -amp;
-                if (!mutes[3]) {
-                    sampleL += voice;
-                    sampleR += voice;
-                }
+            double noiseWave = integrateNoiseChannel(noiseReg, rateVal, clocksPerSample);
+            double noiseVoice = noiseWave * VOLUME_TABLE[noiseVol];
+            if (!mutes[3]) {
+                sampleL += noiseVoice;
+                sampleR += noiseVoice;
             }
 
             // Apply high-pass to remove DC then optional LPF for smoothing

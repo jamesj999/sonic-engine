@@ -96,6 +96,8 @@ public class Ym2612Chip {
 
     private static final double YM2612_FREQUENCY = (CLOCK / SAMPLE_RATE) / 144.0;
     private static final int MAX_OUT = (1 << MAX_OUT_BITS) - 1;
+    // Operator slot order matches ym2612.c (S0,S1,S2,S3) mapping to ops[0,2,1,3]
+    private static final int[] OP_TO_SLOT = {0, 2, 1, 3};
 
     static {
         // TL_TAB generation
@@ -803,55 +805,61 @@ public class Ym2612Chip {
 
     private void doAlgo(Channel ch) {
         in0 = ch.ops[0].fCnt;
-        in1 = ch.ops[1].fCnt;
-        in2 = ch.ops[2].fCnt;
+        // Slot order matches ym2612.c: S1=op0, S2=op2, S3=op1, S4=op3
+        in1 = ch.ops[2].fCnt;
+        in2 = ch.ops[1].fCnt;
         in3 = ch.ops[3].fCnt;
+
+        final int env0 = en0;
+        final int env1 = en2;
+        final int env2 = en1;
+        final int env3 = en3;
 
         switch (ch.algo) {
             case 0:
                 // DO_FEEDBACK
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
                 // DO_ALGO_0 (libvgm)
                 in1 += ch.opOut[1];
-                in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
+                in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1];
+                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
+                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
                 break;
             case 1:
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
-                in2 += ch.opOut[1] + TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
+                in2 += ch.opOut[1] + TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1];
+                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
+                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
                 break;
             case 2:
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
-                in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1];
-                in3 += ch.opOut[1] + TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
+                in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1];
+                in3 += ch.opOut[1] + TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
+                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
                 break;
             case 3:
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
                 in1 += ch.opOut[1];
-                in3 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                       TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] >> OUT_SHIFT;
+                in3 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
+                       TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
+                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
                 break;
             case 4: {
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
                 in1 += ch.opOut[1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1]) >> OUT_SHIFT;
+                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1]) >> OUT_SHIFT;
                 if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
                 else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
@@ -859,13 +867,13 @@ public class Ym2612Chip {
             case 5: {
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
                 in1 += ch.opOut[1];
                 in2 += ch.opOut[1];
                 in3 += ch.opOut[1];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2]) >> OUT_SHIFT;
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
+                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2]) >> OUT_SHIFT;
                 if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
                 else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
@@ -873,11 +881,11 @@ public class Ym2612Chip {
             case 6: {
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
                 in1 += ch.opOut[1];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2]) >> OUT_SHIFT;
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
+                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2]) >> OUT_SHIFT;
                 if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
                 else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
                 break;
@@ -885,10 +893,10 @@ public class Ym2612Chip {
             case 7: {
                 in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + en0];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + en3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + en1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + en2] +
+                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
+                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
+                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
+                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2] +
                           ch.opOut[1]) >> OUT_SHIFT;
                 if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
                 else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
@@ -1031,14 +1039,22 @@ public class Ym2612Chip {
      */
     public static double computeModulationInput(int algo, int opIndex, double[] opOut, double feedback) {
         if (opIndex == 0) return feedback;
+        if (opIndex < 0 || opIndex >= OP_TO_SLOT.length) return 0;
+        // Map op outputs into slot order (S0,S1,S2,S3) used by ym2612.c algorithms.
+        double slot0 = opOut[0]; // Op1 (feedback operator)
+        double slot1 = opOut[2]; // Op3
+        double slot2 = opOut[1]; // Op2
+        double slot3 = opOut[3]; // Op4
+        int slotIndex = OP_TO_SLOT[opIndex];
+
         return switch (algo) {
-            case 0 -> (opIndex == 1 ? opOut[0] : opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[2] : 0);
-            case 1 -> (opIndex == 2 ? opOut[0] + opOut[1] : opIndex == 3 ? opOut[2] : 0);
-            case 2 -> (opIndex == 2 ? opOut[1] : opIndex == 3 ? opOut[0] + opOut[2] : 0);
-            case 3 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[1] + opOut[2] : 0);
-            case 4 -> (opIndex == 1 ? opOut[0] : opIndex == 3 ? opOut[2] : 0);
-            case 5 -> (opIndex == 1 || opIndex == 2 || opIndex == 3 ? opOut[0] : 0);
-            case 6 -> (opIndex == 1 ? opOut[0] : 0);
+            case 0 -> (slotIndex == 1 ? slot0 : slotIndex == 2 ? slot1 : slotIndex == 3 ? slot2 : 0);
+            case 1 -> (slotIndex == 2 ? slot0 + slot1 : slotIndex == 3 ? slot2 : 0);
+            case 2 -> (slotIndex == 2 ? slot1 : slotIndex == 3 ? slot0 + slot2 : 0);
+            case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot1 + slot2 : 0);
+            case 4 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot2 : 0);
+            case 5 -> (slotIndex == 1 || slotIndex == 2 || slotIndex == 3 ? slot0 : 0);
+            case 6 -> (slotIndex == 1 ? slot0 : 0);
             case 7 -> 0;
             default -> 0;
         };
@@ -1048,16 +1064,16 @@ public class Ym2612Chip {
      * Legacy helper for unit tests (TestYm2612AlgorithmRouting).
      */
     public static double computeCarrierSum(int algo, double[] opOut) {
+        double slot0 = opOut[0];
+        double slot1 = opOut[2];
+        double slot2 = opOut[1];
+        double slot3 = opOut[3];
         return switch (algo) {
-            case 0 -> opOut[3];
-            case 1 -> opOut[3];
-            case 2 -> opOut[3];
-            case 3 -> opOut[3];
-            case 4 -> opOut[1] + opOut[3];
-            case 5 -> opOut[1] + opOut[2] + opOut[3];
-            case 6 -> opOut[1] + opOut[2] + opOut[3];
-            case 7 -> opOut[0] + opOut[1] + opOut[2] + opOut[3];
-            default -> opOut[3];
+            case 0, 1, 2, 3 -> slot3;
+            case 4 -> slot1 + slot3;
+            case 5, 6 -> slot1 + slot2 + slot3;
+            case 7 -> slot0 + slot1 + slot2 + slot3;
+            default -> slot3;
         };
     }
 
