@@ -27,13 +27,20 @@ public class VirtualSynthesizer implements Synthesizer {
         int[] left = new int[frames];
         int[] right = new int[frames];
 
-        psg.renderStereo(left, right);
         ym.renderStereo(left, right);
 
+        // Apply SMPSPlay mixing weight: YM (FM/DAC) x2, PSG x1.
         for (int i = 0; i < frames; i++) {
-            // Apply Master Gain. Raised to 1/16 to avoid overly quiet output; clipping guarded below.
-            int l = (int) (left[i] / 16.0);
-            int r = (int) (right[i] / 16.0);
+            left[i] <<= 1;
+            right[i] <<= 1;
+        }
+
+        psg.renderStereo(left, right);
+
+        for (int i = 0; i < frames; i++) {
+            // Master Gain: No division (1.0) to match SMPSPlay levels which push near clipping.
+            int l = left[i];
+            int r = right[i];
 
             if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
             if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
