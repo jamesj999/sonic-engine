@@ -233,7 +233,36 @@ public class Sonic2SmpsLoader {
         // Also checks if header was parsed at all
         if (fm == 0 && psg == 0 && data.getVoicePtr() == 0) return false;
 
+        // Check pointers
+        int z80Start = data.getZ80StartAddress();
+        int dataLen = data.getData().length;
+
+        if (!isValidPointer(data.getVoicePtr(), z80Start, dataLen)) return false;
+        if (data.getDacPointer() != 0 && !isValidPointer(data.getDacPointer(), z80Start, dataLen)) return false;
+
+        if (data.getFmPointers() != null) {
+            for (int ptr : data.getFmPointers()) {
+                if (ptr != 0 && !isValidPointer(ptr, z80Start, dataLen)) return false;
+            }
+        }
+        if (data.getPsgPointers() != null) {
+            for (int ptr : data.getPsgPointers()) {
+                if (ptr != 0 && !isValidPointer(ptr, z80Start, dataLen)) return false;
+            }
+        }
+
         return true;
+    }
+
+    private boolean isValidPointer(int ptr, int start, int len) {
+        if (ptr == 0) return true;
+        int offset = ptr;
+        if (start > 0) {
+            // If pointers are absolute Z80 addresses, they must map to our buffer
+            if (ptr < start) return false;
+            offset = ptr - start;
+        }
+        return offset >= 0 && offset < len;
     }
 
     /**
