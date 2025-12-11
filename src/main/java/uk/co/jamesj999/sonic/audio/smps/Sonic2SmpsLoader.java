@@ -204,35 +204,33 @@ public class Sonic2SmpsLoader {
             // Map Z80 0x8000-0xFFFF to ROM 0xF8000-0xFFFFF
             int romOffset = 0xF8000 + (ptr & 0x7FFF);
 
-            // SFX usually loaded at Z80 0x1C00 or dynamic
-            // Try loading as UNCOMPRESSED first
-            try {
-                // Increase buffer to 16KB to cover larger offsets/pointers
-                byte[] raw = rom.readBytes(romOffset, 16384);
+            // SFX are stored uncompressed in Sonic 2. Read raw bytes until next pointer/bank end.
+            int bankBase = 0xF8000;
+            int headerOffset = romOffset - bankBase;
+            int sfxLength = computeRawSfxLength(index, romOffset);
 
-                // Detect Z80 Base Address from Voice Pointer
-                int z80Base = 0x1C00; // Default
-                if (raw.length >= 2) {
-                    int vPtr = (raw[0] & 0xFF) | ((raw[1] & 0xFF) << 8);
-                    if (vPtr >= 0x8000) {
-                        z80Base = 0x8000;
-                    } else if (vPtr < 0x1000) {
-                        z80Base = 0;
-                    }
-                    // Else stick with 0x1C00 or dynamic
-                }
-
-                Sonic2SmpsData sfx = new Sonic2SmpsData(raw, z80Base);
-                if (isValidSfx(sfx)) {
-                    return sfx;
-                } else {
-                    LOGGER.fine("Uncompressed SFX at " + Integer.toHexString(romOffset) + " rejected. Base: " + Integer.toHexString(z80Base) + " VoicePtr: " + Integer.toHexString(sfx.getVoicePtr()));
-                }
-            } catch (Exception e) {
-                LOGGER.fine("Failed to load uncompressed SFX at " + Integer.toHexString(romOffset));
+            // Extend buffer if the voice table sits past the next pointer.
+            int voicePtr = (rom.readByte(romOffset) & 0xFF) | ((rom.readByte(romOffset + 1) & 0xFF) << 8);
+            int minLength = headerOffset + sfxLength;
+            // Reserve up to 0x100 bytes past the voice table start (25 bytes per voice, rounded up)
+            int voiceOffset = voicePtr == 0 ? -1 : (voicePtr & 0x7FFF);
+            int voiceReach = voiceOffset < 0 ? 0 : voiceOffset + 0x100;
+            int readLength = Math.max(minLength, voiceReach);
+            int bankLimit = 0x8000; // 32 KB bank
+            if (readLength > bankLimit) {
+                readLength = bankLimit;
             }
 
-            return loadSmps(romOffset, 0x1C00);
+            // Read from bankBase up to end of this SFX (bounded by next pointer/bank end/voice table)
+            byte[] raw = rom.readBytes(bankBase, readLength);
+
+            Sonic2SfxData sfx = new Sonic2SfxData(raw, 0x8000, 0, headerOffset);
+            if (isValidSfx(sfx)) {
+                return sfx;
+            }
+
+            LOGGER.severe("Failed to parse SFX ID " + Integer.toHexString(sfxId));
+            return null;
         } catch (Exception e) {
             LOGGER.severe("Failed to load SFX ID " + Integer.toHexString(sfxId));
             e.printStackTrace();
@@ -241,6 +239,9 @@ public class Sonic2SmpsLoader {
     }
 
     private boolean isValidSfx(AbstractSmpsData data) {
+        if (data instanceof Sonic2SfxData sfxData) {
+            return !sfxData.getTrackEntries().isEmpty();
+        }
         // Basic validation: Channels should be within reasonable limits for Genesis
         // FM: 0-6, PSG: 0-4
         int fm = data.getChannels();
@@ -359,6 +360,64 @@ public class Sonic2SmpsLoader {
             e.printStackTrace();
             return null;
         }
+    }
+
+    private AbstractSmpsData loadSfxSmps(int offset, int z80Addr) {
+        try {
+            int b1 = rom.readByte(offset) & 0xFF;
+            int b2 = rom.readByte(offset + 1) & 0xFF;
+            int sizeLe = (b1) | (b2 << 8);
+            int sizeBe = (b1 << 8) | b2; // fallback only if LE is zero/invalid
+            int maxAvail = (int) Math.max(0L, rom.getSize() - offset - 2L);
+
+            int compressedSize = (sizeLe > 0 && sizeLe <= maxAvail)
+                    ? sizeLe
+                    : (sizeBe > 0 && sizeBe <= maxAvail ? sizeBe : maxAvail);
+
+            byte[] compressed = readCompressed(offset, compressedSize, maxAvail);
+            if (compressed == null) {
+                LOGGER.severe("Failed to read SMPS at " + Integer.toHexString(offset));
+                return null;
+            }
+
+            byte[] decompressed = decompressor.decompress(compressed, true);
+            LOGGER.info("Decompressed SFX SMPS at " + Integer.toHexString(offset) + ". Size: " + decompressed.length);
+            return new Sonic2SfxData(decompressed, z80Addr, 0, 0);
+        } catch (Exception e) {
+            LOGGER.severe("Failed to load SMPS at " + Integer.toHexString(offset));
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private int computeRawSfxLength(int tableIndex, int romOffset) throws IOException {
+        int bankBase = 0xF8000;
+        int bankEnd = bankBase + 0x8000;
+
+        // Bound by next SFX pointer in the table
+        int nextOffset = bankEnd;
+        int tableAddr = 0xFEE91;
+        for (int idx = tableIndex + 1; idx <= (0xEF - 0xA0); idx++) {
+            int entryAddr = tableAddr + (idx * 2);
+            int lo = rom.readByte(entryAddr) & 0xFF;
+            int hi = rom.readByte(entryAddr + 1) & 0xFF;
+            int ptr = lo | (hi << 8);
+            if (ptr != 0) {
+                int candidate = bankBase + (ptr & 0x7FFF);
+                if (candidate > romOffset) {
+                    nextOffset = candidate;
+                    break;
+                }
+            }
+        }
+
+        int length = nextOffset - romOffset;
+        if (length <= 0 || length > (bankEnd - romOffset)) {
+            length = bankEnd - romOffset;
+        }
+        // safety floor
+        if (length < 16) length = 16;
+        return length;
     }
 
     private byte[] readCompressed(int offset, int sizeHeader, int maxAvail) {

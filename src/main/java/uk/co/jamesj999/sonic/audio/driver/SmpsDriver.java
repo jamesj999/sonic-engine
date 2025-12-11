@@ -79,16 +79,31 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     }
 
     private void releaseLocks(SmpsSequencer seq) {
+        boolean isSfx = isSfx(seq);
         for (int i = 0; i < 6; i++) {
             if (fmLocks[i] == seq) {
+                // If this was an SFX, ensure the channel is silenced before handing it back.
+                if (isSfx) {
+                    seq.forceSilence(SmpsSequencer.TrackType.FM, i);
+                }
                 fmLocks[i] = null;
                 updateOverrides(SmpsSequencer.TrackType.FM, i, false);
             }
         }
         for (int i = 0; i < 4; i++) {
             if (psgLocks[i] == seq) {
+                if (isSfx) {
+                    seq.forceSilence(SmpsSequencer.TrackType.PSG, i);
+                }
                 psgLocks[i] = null;
                 updateOverrides(SmpsSequencer.TrackType.PSG, i, false);
+            }
+        }
+        // Belt-and-braces: if this was an SFX, mute all PSG channels to avoid lingering tones
+        // in cases where music is not currently writing PSG.
+        if (isSfx) {
+            for (int ch = 0; ch < 4; ch++) {
+                seq.forceSilence(SmpsSequencer.TrackType.PSG, ch);
             }
         }
         psgLatches.remove(seq);

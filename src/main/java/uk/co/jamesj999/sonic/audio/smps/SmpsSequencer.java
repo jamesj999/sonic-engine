@@ -11,6 +11,7 @@ import java.util.Map;
 
 public class SmpsSequencer implements AudioStream {
     private final AbstractSmpsData smpsData;
+    private AbstractSmpsData fallbackVoiceData;
     private final byte[] data;
     private final Synthesizer synth;
     private final List<Track> tracks = new ArrayList<>();
@@ -32,6 +33,7 @@ public class SmpsSequencer implements AudioStream {
     private int normalTempo;
     private int commData = 0; // Communication byte (E2)
     private boolean fm6DacOff = false;
+    private int maxTicks = Integer.MAX_VALUE;
 
     private static class FadeState {
         int steps;
@@ -186,6 +188,12 @@ public class SmpsSequencer implements AudioStream {
         setRegion(Region.NTSC);
 
         int z80Start = smpsData.getZ80StartAddress();
+
+        if (smpsData instanceof Sonic2SfxData) {
+            initSfxTracks((Sonic2SfxData) smpsData, z80Start);
+            return;
+        }
+
         int[] fmPointers = smpsData.getFmPointers();
         int[] psgPointers = smpsData.getPsgPointers();
 
@@ -264,6 +272,42 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
+    public AbstractSmpsData getSmpsData() {
+        return smpsData;
+    }
+
+    /**
+     * Optional: provide another SMPS data set (usually the currently playing music)
+     * to supply instrument voices if this sequence has no local voice table.
+     */
+    public void setFallbackVoiceData(AbstractSmpsData fallbackVoiceData) {
+        this.fallbackVoiceData = fallbackVoiceData;
+    }
+
+    /**
+     * Force-silence a hardware channel that was previously owned by this sequencer.
+     * Used by the driver when releasing SFX locks so stray tones don't linger
+     * if there is no music track to immediately rewrite the channel.
+     */
+    public void forceSilence(TrackType type, int channelId) {
+        if (type == TrackType.FM) {
+            int hwCh = channelId;
+            int port = (hwCh < 3) ? 0 : 1;
+            int ch = hwCh % 3;
+            int chVal = (port == 0) ? ch : (ch + 4);
+            synth.writeFm(this, 0, 0x28, 0x00 | chVal); // key off
+            if (hwCh == 5) {
+                // If this was DAC (FM6), stop DAC playback too.
+                synth.stopDac(this);
+            }
+        } else if (type == TrackType.PSG) {
+            int ch = Math.max(0, Math.min(3, channelId));
+            synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | 0x0F); // volume -> silence
+        } else if (type == TrackType.DAC) {
+            synth.stopDac(this);
+        }
+    }
+
     public void setRegion(Region region) {
         this.region = region;
         this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
@@ -281,12 +325,28 @@ public class SmpsSequencer implements AudioStream {
 
     public void setSfxMode(boolean active) {
         this.sfxMode = active;
+        int div = smpsData.getDividingTiming();
+        if (smpsData instanceof Sonic2SfxData) {
+            div = ((Sonic2SfxData) smpsData).getTickMultiplier();
+        }
+        if (div == 0) {
+            div = 1;
+        }
         if (active) {
-            updateDividingTiming(1);
+            updateDividingTiming(div);
         } else {
             updateDividingTiming(smpsData.getDividingTiming());
         }
+        // SFX tick every tempo frame; keep frame pacing tied to region to avoid double-speed playback.
+        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
         calculateTempo();
+
+        // Safety: cap SFX to a reasonable tick budget so bad data doesn't hang forever.
+        if (active) {
+            this.maxTicks = 2048;
+        } else {
+            this.maxTicks = Integer.MAX_VALUE;
+        }
     }
     
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
@@ -376,6 +436,49 @@ public class SmpsSequencer implements AudioStream {
             case 0xA0: return 1;
             case 0xC0: return 2;
             default: return -1;
+        }
+    }
+
+    private void initSfxTracks(Sonic2SfxData sfxData, int z80Start) {
+        int tickMult = sfxData.getTickMultiplier();
+        if (tickMult <= 0) {
+            tickMult = 1;
+        }
+        updateDividingTiming(tickMult);
+
+        for (Sonic2SfxData.TrackEntry entry : sfxData.getTrackEntries()) {
+            int ptr = relocate(entry.pointer, z80Start);
+            if (ptr < 0 || ptr >= data.length) {
+                continue;
+            }
+
+            int chnVal = entry.channelMask;
+            TrackType type;
+            int linearCh;
+
+            if (chnVal == 0x16 || chnVal == 0x10) {
+                type = TrackType.DAC;
+                linearCh = 5;
+            } else {
+                int fmCh = mapFmChannel(chnVal);
+                if (fmCh >= 0) {
+                    type = TrackType.FM;
+                    linearCh = fmCh;
+                } else {
+                    int psgCh = mapPsgChannel(chnVal);
+                    if (psgCh < 0) {
+                        continue;
+                    }
+                    type = TrackType.PSG;
+                    linearCh = psgCh;
+                }
+            }
+
+            Track t = new Track(ptr, type, linearCh);
+            t.keyOffset = (byte) entry.transpose;
+            t.volumeOffset = entry.volume;
+            t.dividingTiming = tickMult;
+            tracks.add(t);
         }
     }
 
@@ -498,6 +601,15 @@ public class SmpsSequencer implements AudioStream {
             tempoAccumulator &= 0xFF;
             processFade();
             tick();
+            if (sfxMode) {
+                maxTicks--;
+                if (maxTicks <= 0) {
+                    for (Track t : tracks) {
+                        t.active = false;
+                        stopNote(t);
+                    }
+                }
+            }
         }
     }
 
@@ -864,6 +976,9 @@ public class SmpsSequencer implements AudioStream {
 
     private void loadVoice(Track t, int voiceId) {
         byte[] voice = smpsData.getVoice(voiceId);
+        if (voice == null && fallbackVoiceData != null) {
+            voice = fallbackVoiceData.getVoice(voiceId);
+        }
         if (voice != null) {
             t.voiceData = voice;
             t.voiceId = voiceId;

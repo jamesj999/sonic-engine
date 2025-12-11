@@ -136,11 +136,13 @@ public class JOALAudioBackend implements AudioBackend {
 
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
-        SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
-        seq.setSpeedShoes(speedShoesEnabled);
-        seq.setFm6DacOff(fm6DacOff);
-        smpsDriver.addSequencer(seq, false);
-        currentSmps = seq;
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+            seq.setSpeedShoes(speedShoesEnabled);
+            seq.setFm6DacOff(fm6DacOff);
+            // Music is the primary voice source for SFX fallback
+            seq.setFallbackVoiceData(data);
+            smpsDriver.addSequencer(seq, false);
+            currentSmps = seq;
         
         updateSynthesizerConfig();
         currentStream = smpsDriver;
@@ -159,6 +161,9 @@ public class JOALAudioBackend implements AudioBackend {
             SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
+            if (currentSmps != null) {
+                seq.setFallbackVoiceData(currentSmps.getSmpsData());
+            }
             smpsDriver.addSequencer(seq, true);
         } else {
             // Standalone SFX driver
@@ -173,6 +178,9 @@ public class JOALAudioBackend implements AudioBackend {
             SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
+            if (currentSmps != null) {
+                seq.setFallbackVoiceData(currentSmps.getSmpsData());
+            }
             sfxDriver.addSequencer(seq, true);
         }
 
