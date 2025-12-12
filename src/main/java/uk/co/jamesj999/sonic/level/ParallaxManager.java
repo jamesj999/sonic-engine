@@ -135,28 +135,32 @@ public class ParallaxManager {
             short baseB;
 
             // Banding based on Map Y (256px height)
-            // Sky: 0-80
-            // Water Surface: 80-128 (Ripple here)
-            // Grass/Hills: 128-256 (No Ripple)
+            // Sky: 0-80 (0.25x)
+            // Water Surface: 80-112 (0.5x + Ripple) - Narrowed to avoid hills
+            // Grass/Hills: 112-256 (0.75x) - Faster/Nearer
 
             if (mapY < 80) {
                 baseB = (short) -(camX >> 2);
-            } else {
+            } else if (mapY < 112) {
                 baseB = (short) -(camX >> 1);
+            } else {
+                // 0.75x approximation
+                baseB = (short) (-(camX >> 1) - (camX >> 2));
             }
 
             short b = baseB;
 
             // Water region ripple
-            // Limited to the Water Surface band (80-128)
-            if (mapY >= 80 && mapY < 128) {
+            // Limited to the Water Surface band (80-112)
+            if (mapY >= 80 && mapY < 112) {
                 if (ehzRipple != null && ehzRipple.length > 0) {
                     int slowFrame = frameCounter >> 3;
                     // Use mapY for ripple index
                     int idx = (slowFrame + (mapY - 80)) % ehzRipple.length;
                     if (idx < 0) idx += ehzRipple.length;
 
-                    int offset = ehzRipple[idx] & 0x3;
+                    // Reduced ripple amplitude to 0-1 to fix "wrong" look
+                    int offset = ehzRipple[idx] & 0x1;
                     b += (short) offset;
                 }
             }
