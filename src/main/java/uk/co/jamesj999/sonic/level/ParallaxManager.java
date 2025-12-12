@@ -24,6 +24,9 @@ public class ParallaxManager {
     // Plane A is FG, Plane B is BG.
     private final int[] hScroll = new int[VISIBLE_LINES];
 
+    private int minScroll = 0;
+    private int maxScroll = 0;
+
     // ROM Tables
     private byte[] ehzRipple;
     private byte[] wfzNormalSegs;
@@ -72,11 +75,13 @@ public class ParallaxManager {
         return hScroll;
     }
 
+    public int getMinScroll() { return minScroll; }
+    public int getMaxScroll() { return maxScroll; }
+
     public void update(int zoneId, int actId, Camera cam, int frameCounter) {
-        // If not loaded or failed, use minimal
-        // However, if load failed, loaded is false, but arrays are initialized empty.
-        // We can run updateMinimal or just generic.
-        // If arrays are empty, zone specific code might do nothing or fail if not careful.
+        // Reset min/max
+        minScroll = Integer.MAX_VALUE;
+        maxScroll = Integer.MIN_VALUE;
 
         if (!loaded) {
              // Try to be safe even if not loaded properly via ROM
@@ -104,6 +109,8 @@ public class ParallaxManager {
         short planeA = (short) -camX;
         // Plane B generic parallax (0.5)
         short planeB = (short) -(camX >> 1);
+
+        updateMinMax(planeB);
 
         int packed = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
         for (int y = 0; y < VISIBLE_LINES; y++) hScroll[y] = packed;
@@ -139,6 +146,8 @@ public class ParallaxManager {
                 }
             }
 
+            updateMinMax(b);
+
             hScroll[y] = ((planeA & 0xFFFF) << 16) | (b & 0xFFFF);
         }
     }
@@ -164,6 +173,7 @@ public class ParallaxManager {
                 int idx = segs[i + 1] & 0xFF;
 
                 short planeB = (idx < layerScroll.length) ? layerScroll[idx] : layerScroll[0];
+                updateMinMax(planeB);
 
                 int packed = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
                 for (int n = 0; n < count && y < VISIBLE_LINES; n++, y++) {
@@ -175,7 +185,13 @@ public class ParallaxManager {
         // Fill remaining
         while (y < VISIBLE_LINES) {
             short planeB = (short) -(camX >> 1);
+            updateMinMax(planeB);
             hScroll[y++] = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
         }
+    }
+
+    private void updateMinMax(short val) {
+        if (val < minScroll) minScroll = val;
+        if (val > maxScroll) maxScroll = val;
     }
 }

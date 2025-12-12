@@ -227,6 +227,25 @@ public class LevelManager {
 
         int xStart = drawX;
         int xEnd = bgCameraX + cameraWidth;
+
+        if (hScroll != null) {
+            int minScroll = parallaxManager.getMinScroll();
+            int maxScroll = parallaxManager.getMaxScroll();
+
+            // Adjust xStart/xEnd to ensure coverage for all scroll values.
+            // We need to cover range [-maxScroll, Width - minScroll].
+            // Current drawX is aligned to bgCameraX (0.5x), but we might need 0.25x (slower/further left).
+
+            xStart = -maxScroll;
+            xEnd = cameraWidth - minScroll;
+
+            // Align xStart to chunk boundary
+            xStart -= (xStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH) % LevelConstants.CHUNK_WIDTH;
+
+            // Add buffer
+            xStart -= LevelConstants.CHUNK_WIDTH;
+            xEnd += LevelConstants.CHUNK_WIDTH;
+        }
         int yStart = drawY;
         int yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
 
