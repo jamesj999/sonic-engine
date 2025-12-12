@@ -126,6 +126,12 @@ public class Camera {
 		if (y < 0) {
 			y = 0;
 		}
+		if (x > maxX) {
+			x = maxX;
+		}
+		if (y > maxY) {
+			y = maxY;
+		}
 		if (framesBehind > 0) {
 			framesBehind--;
 		}

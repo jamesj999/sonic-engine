@@ -539,18 +539,23 @@ public class LevelManager {
 
     public void loadCurrentLevel() {
         try {
-            LevelData level = levels.get(currentZone).get(currentAct);
-            loadLevel(level.getLevelIndex());
+            LevelData levelData = levels.get(currentZone).get(currentAct);
+            loadLevel(levelData.getLevelIndex());
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
-            player.setX((short) level.getStartXPos());
-            player.setY((short) level.getStartYPos());
+            player.setX((short) levelData.getStartXPos());
+            player.setY((short) levelData.getStartYPos());
             if (player instanceof AbstractPlayableSprite) {
                 ((AbstractPlayableSprite) player).setXSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setYSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setGSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setAir(false);
                 ((AbstractPlayableSprite) player).setRolling(false);
-                Camera.getInstance().setFocusedSprite((AbstractPlayableSprite) player);
+                Camera camera = Camera.getInstance();
+                camera.setFocusedSprite((AbstractPlayableSprite) player);
+                camera.setMinX((short) level.getMinX());
+                camera.setMaxX((short) level.getMaxX());
+                camera.setMinY((short) level.getMinY());
+                camera.setMaxY((short) level.getMaxY());
             }
 
         } catch (IOException e) {
