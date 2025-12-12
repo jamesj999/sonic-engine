@@ -136,25 +136,25 @@ public class ParallaxManager {
 
             // Banding based on Map Y (256px height)
             // Sky: 0-80 (0.25x)
-            // Water Surface: 80-112 (0.25x + Ripple) - Base speed matches sky for reflections
-            // Grass/Hills: 112-256 (Ramp 0.25x to 0.75x) - Creates depth
+            // Water Surface: 80-112 (0.25x + Ripple) - Base speed matches sky
+            // Grass/Hills: 112-256 (Stepped bands for obvious parallax)
 
             if (mapY < 80) {
                 baseB = (short) -(camX >> 2);
             } else if (mapY < 112) {
-                baseB = (short) -(camX >> 2); // Match sky speed for reflections
+                baseB = (short) -(camX >> 2);
             } else {
-                // Grass Ramp: 0.25 at 112, up to 0.75 at 256.
-                // Range 144 pixels.
-                // Scroll = -CamX * Speed
+                // Grass Bands (Stepped)
+                // 112-148: 0.375x (3/8)
+                // 148-184: 0.5x   (4/8)
+                // 184-220: 0.625x (5/8)
+                // 220-256: 0.75x  (6/8)
 
-                int grassOffset = mapY - 112;
-                int denom = 144;
-                // Ramp scroll from 0 to 0.5*CamX additional
-                // rampScroll = (CamX / 2) * grassOffset / denom
-                int rampScroll = (int)((long)(camX >> 1) * grassOffset / denom);
+                int grassSection = (mapY - 112) / 36;
 
-                baseB = (short) (-(camX >> 2) - rampScroll);
+                // Base 0.25. Add (grassSection + 1) * 0.125
+                int increment = (camX >> 3) * (grassSection + 1);
+                baseB = (short) (-(camX >> 2) - increment);
             }
 
             short b = baseB;
