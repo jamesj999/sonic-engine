@@ -664,7 +664,11 @@ public class LevelManager {
     }
 
     public void setClearColor(GL2 gl) {
-        Palette.Color backgroundColor = level.getPalette(0).getColor(0);
+        // In Sonic 2, Palette 0 is the Character Palette (Sonic/Tails).
+        // Palette 1 is the first Level Palette, which typically contains the background color at Index 0.
+        // For EHZ, this corresponds to the blue color (0x0C20).
+        // We use Palette 1 (index 1) instead of Palette 0.
+        Palette.Color backgroundColor = level.getPalette(1).getColor(0);
         gl.glClearColor(
                 Byte.toUnsignedInt(backgroundColor.r) / 255f,
                 Byte.toUnsignedInt(backgroundColor.g) / 255f,
