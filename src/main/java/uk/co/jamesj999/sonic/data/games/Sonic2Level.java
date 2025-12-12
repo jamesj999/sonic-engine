@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.*;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
+import uk.co.jamesj999.sonic.camera.Camera;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -42,13 +43,15 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
+                       int solidTilesAngleAddr,
+                       int levelBoundariesAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
+        loadBoundaries(rom, levelBoundariesAddr);
     }
 
     @Override
@@ -290,5 +293,26 @@ public class Sonic2Level implements Level {
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void loadBoundaries(Rom rom, int addr) throws IOException {
+        if (addr == 0) {
+            LOG.warning("Level boundaries address is 0. Skipping load.");
+            return;
+        }
+        // Load the level boundaries
+        // WORD XStart, XEnd, YStart, YEnd
+        short xStart = (short) rom.read16BitAddr(addr);
+        short xEnd = (short) rom.read16BitAddr(addr + 2);
+        short yStart = (short) rom.read16BitAddr(addr + 4);
+        short yEnd = (short) rom.read16BitAddr(addr + 6);
+
+        Camera camera = Camera.getInstance();
+        camera.setMinX(xStart);
+        camera.setMaxX(xEnd);
+        camera.setMinY(yStart);
+        camera.setMaxY(yEnd);
+
+        LOG.info("Level boundaries loaded: XStart=" + xStart + ", XEnd=" + xEnd + ", YStart=" + yStart + ", YEnd=" + yEnd);
     }
 }
