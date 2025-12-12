@@ -228,36 +228,4 @@ public class Camera {
 		}
 		return camera;
 	}
-
-	public short getMinX() {
-		return minX;
-	}
-
-	public void setMinX(short minX) {
-		this.minX = minX;
-	}
-
-	public short getMinY() {
-		return minY;
-	}
-
-	public void setMinY(short minY) {
-		this.minY = minY;
-	}
-
-	public short getMaxX() {
-		return maxX;
-	}
-
-	public void setMaxX(short maxX) {
-		this.maxX = maxX;
-	}
-
-	public short getMaxY() {
-		return maxY;
-	}
-
-	public void setMaxY(short maxY) {
-		this.maxY = maxY;
-	}
 }
