@@ -34,7 +34,7 @@ public class Sonic2Level implements Level {
     private int maxX;
     private int minY;
     private int maxY;
-    private static final boolean KOS_DEBUG_LOG = true;
+    private static final boolean KOS_DEBUG_LOG = false;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
@@ -273,13 +273,13 @@ public class Sonic2Level implements Level {
      */
     private void loadSolidTiles(Rom rom, int tileHeightsAddr, int tileWidthsAddr, int anglesAddr) throws IOException {
 
-        solidTileCount = (Sonic2.SOLID_TILE_MAP_SIZE + 1) / SolidTile.TILE_SIZE_IN_ROM;
+        solidTileCount = (Sonic2Constants.SOLID_TILE_MAP_SIZE + 1) / SolidTile.TILE_SIZE_IN_ROM;
         LOG.info("how many solid tiles fit?:" + solidTileCount);
 
-        byte[] solidTileHeightsBuffer = rom.readBytes(tileHeightsAddr, Sonic2.SOLID_TILE_MAP_SIZE);
-        byte[] solidTileWidthsBuffer = rom.readBytes(tileWidthsAddr, Sonic2.SOLID_TILE_MAP_SIZE);
+        byte[] solidTileHeightsBuffer = rom.readBytes(tileHeightsAddr, Sonic2Constants.SOLID_TILE_MAP_SIZE);
+        byte[] solidTileWidthsBuffer = rom.readBytes(tileWidthsAddr, Sonic2Constants.SOLID_TILE_MAP_SIZE);
 
-        if (solidTileHeightsBuffer.length % Sonic2.SOLID_TILE_MAP_SIZE != 0) {
+        if (solidTileHeightsBuffer.length % Sonic2Constants.SOLID_TILE_MAP_SIZE != 0) {
             throw new IOException("Inconsistent SolidTile data");
         }
 

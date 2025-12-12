@@ -104,6 +104,27 @@ public enum SonicConfiguration {
 	/**
 	 * Whether to enable Debug Movement Mode
 	 */
-	DEBUG_MODE;
+	DEBUG_MODE,
+
+	/**
+	 * Whether to enable Audio (Music/SFX)
+	 */
+	AUDIO_ENABLED,
+
+	/**
+	 * Region (NTSC/PAL) for audio timing.
+	 */
+	REGION,
+
+	/**
+	 * Whether to enable DAC Interpolation (smoother sound).
+	 */
+	DAC_INTERPOLATE,
+
+	/**
+	 * Whether to mute FM6 when playing a note on it (if DAC is enabled).
+	 * Parity hack from SMPSPlay.
+	 */
+	FM6_DAC_OFF;
 
 }

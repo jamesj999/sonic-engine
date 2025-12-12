@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.interactive.monitors;
 
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 
@@ -39,7 +41,7 @@ public class RingMonitor extends AbstractMonitor {
     @Override
     public boolean onCollide(AbstractSprite sprite) {
         // Add rings here:
-
+        AudioManager.getInstance().playSfx(GameSound.RING);
 
         // Call standard method for monitor collision:
         return super.onCollide(sprite);

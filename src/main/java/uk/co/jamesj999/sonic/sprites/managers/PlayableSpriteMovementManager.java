@@ -4,6 +4,8 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
@@ -14,6 +16,7 @@ public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
 	private final TerrainCollisionManager terrainCollisionManager = TerrainCollisionManager
 			.getInstance();
+    private final AudioManager audioManager = AudioManager.getInstance();
 
 	private final short max;
 	private final short runAccel;
@@ -28,6 +31,7 @@ public class PlayableSpriteMovementManager extends
 
 	private boolean jumpPressed;
 	private boolean jumpHeld;
+    private boolean skidding;
 
 	private boolean testKeyPressed;
 
@@ -436,10 +440,13 @@ public class PlayableSpriteMovementManager extends
 		} else {
 			sprite.setSpindashConstant(sprite.getSpindashConstant() + 2f);
 		}
+        float pitch = 1.0f + (sprite.getSpindashConstant() / 24.0f);
+        audioManager.playSfx(GameSound.SPINDASH_CHARGE, pitch);
 	}
 
 	private void releaseSpindash(AbstractPlayableSprite sprite) {
 		sprite.setSpindash(false);
+        audioManager.playSfx(GameSound.SPINDASH_RELEASE);
 		short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
 		if(Direction.LEFT.equals(sprite.getDirection())) {
 			sprite.setGSpeed((short) (0 - spindashGSpeed));
@@ -507,7 +514,12 @@ public class PlayableSpriteMovementManager extends
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
+                if(gSpeed >= 4 * 256 && !skidding) {
+                    audioManager.playSfx(GameSound.SKID);
+                    skidding = true;
+                }
 			} else if (!sprite.getRolling()) {
+                skidding = false;
 				if (gSpeed > -maxSpeed) {
 					gSpeed -= accel;
 				} else {
@@ -518,7 +530,12 @@ public class PlayableSpriteMovementManager extends
 		if (right) {
 			if (gSpeed < 0) {
 				gSpeed += decel;
+                if(gSpeed <= -4 * 256 && !skidding) {
+                    audioManager.playSfx(GameSound.SKID);
+                    skidding = true;
+                }
 			} else if (!sprite.getRolling()) {
+                skidding = false;
 				if (gSpeed < maxSpeed) {
 					gSpeed = (short) (gSpeed + accel);
 				} else {
@@ -526,6 +543,9 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		}
+        if(!left && !right) {
+            skidding = false;
+        }
 		if ((!left && !right) || (sprite.getRolling() && left && gSpeed < 0) || (sprite.getRolling() && right && gSpeed > 0)) {
 			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
 					&& gSpeed < 0) {
@@ -548,6 +568,7 @@ public class PlayableSpriteMovementManager extends
 	private void jump(AbstractPlayableSprite sprite) {
 		sprite.setAir(true);
 		sprite.setRolling(true);
+        audioManager.playSfx(GameSound.JUMP);
 		int angle = calculateAngle(sprite);
 		jumpPressed = true;
 		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()

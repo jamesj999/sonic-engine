@@ -11,8 +11,10 @@ import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
+import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
+import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -71,6 +73,10 @@ public class LevelManager {
             rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
             parallaxManager.load(rom);
             Game game = new Sonic2(rom);
+            AudioManager.getInstance().setRom(rom);
+            AudioManager.getInstance().setSoundMap(game.getSoundMap());
+            AudioManager.getInstance().resetRingSound();
+            AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
@@ -195,7 +201,6 @@ public class LevelManager {
         frameCounter++;
         Camera camera = Camera.getInstance();
         parallaxManager.update(currentZone, currentAct, camera, frameCounter);
-
         List<GLCommand> commands = new ArrayList<>();
 
         // Draw Background (Layer 1)
@@ -299,10 +304,6 @@ public class LevelManager {
         }
     }
 
-    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
-        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0);
-    }
-
     /**
      * Draws a chunk of the level based on the provided chunk description.
      *
@@ -311,10 +312,11 @@ public class LevelManager {
      * @param x         the x-coordinate to draw the chunk at
      * @param y         the y-coordinate to draw the chunk at
      * @param drawCollision whether to draw collision debug info
-     * @param hScroll   horizontal scroll table (or null)
-     * @param screenY   base screen Y for the chunk
-     * @param baseBgCameraX base background camera X
      */
+    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
+        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0);
+    }
+
     private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision, int[] hScroll, int screenY, int baseBgCameraX) {
         int chunkIndex = chunkDesc.getChunkIndex();
         if (chunkIndex >= level.getChunkCount()) {
@@ -598,11 +600,12 @@ public class LevelManager {
 
     public void loadCurrentLevel() {
         try {
-            LevelData levelData = levels.get(currentZone).get(currentAct);
-            loadLevel(levelData.getLevelIndex());
+            LevelData level = levels.get(currentZone).get(currentAct);
+            loadLevel(level.getLevelIndex());
+            frameCounter = 0;
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
-            player.setX((short) levelData.getStartXPos());
-            player.setY((short) levelData.getStartYPos());
+            player.setX((short) level.getStartXPos());
+            player.setY((short) level.getStartYPos());
             if (player instanceof AbstractPlayableSprite) {
                 ((AbstractPlayableSprite) player).setXSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setYSpeed((short) 0);
@@ -664,10 +667,7 @@ public class LevelManager {
     }
 
     public void setClearColor(GL2 gl) {
-        // In Sonic 2, Palette 0 is the Character Palette (Sonic/Tails).
-        // Palette 1 is the first Level Palette, which typically contains the background color at Index 0.
-        // For EHZ, this corresponds to the blue color (0x0C20).
-        // We use Palette 1 (index 1) instead of Palette 0.
+        // In Sonic 2, Palette 1 is the level palette (Palette 0 is character).
         Palette.Color backgroundColor = level.getPalette(1).getColor(0);
         gl.glClearColor(
                 Byte.toUnsignedInt(backgroundColor.r) / 255f,

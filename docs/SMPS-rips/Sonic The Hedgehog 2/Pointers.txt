@@ -1,0 +1,52 @@
+General Pointer List:	N/A (everything is hardcoded into the driver)
+Music Bank List:	11F5 (final) (Z80 RAM)
+Music Pointer List:	0F0000 / 0F8000 (all versions)
+SFX Pointer List:	0FEE91 (final, CENSOR, Beta 4-8)
+Mod. Pointer List:	N/A
+PSG Pointer List:	1029 (final) (Z80 RAM)
+DAC Drum Playlist:	124F (final) (Z80 RAM)
+DAC Drum Pointer List:	1233 (final) (Z80 RAM) (points to bank 0E8000)
+DAC Sound Data:		0ED100 (final, CENSOR, Beta 4-8)
+SEGA sound:		0F1E8C (all versions)
+Z80 Snd Driver Offset:	0EC0E8 (final, CENSOR, Beta 4-8) (Saxman compressed)
+Sound RAM:		1B80 (Z80 RAM)
+
+DAC Playlist Format:
+1 byte  - DAC Note (81+)
+1 byte  - Pitch
+
+DAC Pointer Format:
+2 bytes - Start Offset (Z80 Bank Offset)
+2 bytes - Data Length
+
+Data is DPCM compressed with the usual delta-array.
+00 01 02 04 08 10 20 40 80 FF FE FC F8 F0 E0 C0 (Z80 Driver offset 01B3 [final])
+
+
+Notes:
+- The Bank List uses the following format:
+	Bits 0-4 (1F): Song Pointer ID in the respective bank
+	Bits  5  (20): Compression (00 - Saxman compressed, 20 - uncompressed)
+	Bits  6  (40): disable PAL music speedup (for Drowning jingle)
+	Bits  7  (80): ROM Bank (00 - 0F0000, 80 - 0F8000)
+- All builds from proto 08-21 until the final Sonic 2 build use a different Tempo algorithm than the Simon Wai prototype.
+  Sonic 2 final: Tempo Counter += Tempo Increment, delay unless the addition overflows
+- The GoodGen (W) version of Sonic 2 is Rev 01.
+- sound driver versions:
+			size	size
+	ROM Date	compr	uncompr	notes
+	1992-09-25	0F64	1308	final build
+
+- The Nick Arcade prototype uses an unmodified Sonic 1 sound driver.
+- PSG Envelope 0D differs between Simon Wai and prototype 08-21/.../final.
+- All DAC sounds but 81, 82 and 85 were changed between Simon Wai and prototype 08-21/.../final.
+- DAC sound 86 was shortened by 100h bytes between prototype 09-14 and CENSOR.
+- The Speed Shoe tempo values differ between prototype 08-21/09-14/CENSOR/Beta 4/5 and Beta 6-8/final.
+  The values in the Simon Wai proto are the same ones as used in Sonic 1.
+- Most work on the sound driver was done between the Simon Wai proto and proto 08-21, including the Spindash SFX code and misc fixes/improvements.
+- between proto 08-21 and 09-14, special handling for the "Gloop" sound effect (sound ID DA) was added
+- between proto 09-14 and CENSOR/Beta 4, the following features were added:
+  - the PAL speed fix for music (including the option to disable it per-song)
+  - support for Saxman compressed music
+- The code for handling the Push SFX from S1 was removed between Beta 4 and 5.
+- The way of handling Game Pause was modified between Beta 7 and 8. All other modifications between Beta 5 and the final build were minor.

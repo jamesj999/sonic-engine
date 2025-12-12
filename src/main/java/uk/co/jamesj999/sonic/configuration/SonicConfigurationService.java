@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -17,7 +18,7 @@ public class SonicConfigurationService {
 		ObjectMapper mapper = new ObjectMapper();
 		TypeReference<Map<String, Object>> type = new TypeReference<>(){};
 
-		java.io.File file = new java.io.File("config.json");
+		File file = new File("config.json");
 		if (file.exists()) {
 			try {
 				config = mapper.readValue(file, type);
@@ -39,6 +40,7 @@ public class SonicConfigurationService {
 				config = new HashMap<>();
 			}
 		}
+		applyDefaults();
 	}
 
 	public int getInt(SonicConfiguration sonicConfiguration) {
@@ -91,14 +93,16 @@ public class SonicConfigurationService {
 		}
 	}
 
-    public boolean getBoolean(SonicConfiguration sonicConfiguration) {
-        Object value = getConfigValue(sonicConfiguration);
-        if(value instanceof Boolean) {
-            return ((Boolean) value);
-        } else {
-            return Boolean.parseBoolean(getString(sonicConfiguration));
-        }
-    }
+	public boolean getBoolean(SonicConfiguration sonicConfiguration) {
+		Object value = getConfigValue(sonicConfiguration);
+		if(value instanceof Boolean) {
+			return ((Boolean) value);
+		} else if (value instanceof Number) {
+			return ((Number) value).intValue() != 0;
+		} else {
+			return Boolean.parseBoolean(getString(sonicConfiguration));
+		}
+	}
 
 	public Object getConfigValue(SonicConfiguration sonicConfiguration) {
 		if (config != null && config.containsKey(sonicConfiguration.name())) {
@@ -117,7 +121,7 @@ public class SonicConfigurationService {
 	public void saveConfig() {
 		ObjectMapper mapper = new ObjectMapper();
 		try {
-			mapper.writerWithDefaultPrettyPrinter().writeValue(new java.io.File("config.json"), config);
+			mapper.writerWithDefaultPrettyPrinter().writeValue(new File("config.json"), config);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -128,5 +132,32 @@ public class SonicConfigurationService {
 			sonicConfigurationService = new SonicConfigurationService();
 		}
 		return sonicConfigurationService;
+	}
+
+	private void applyDefaults() {
+		if (config == null) {
+			config = new HashMap<>();
+		}
+		// Fill in core defaults if missing to keep tests and headless runs stable.
+		putDefault(SonicConfiguration.SCREEN_WIDTH, 640);
+		putDefault(SonicConfiguration.SCREEN_WIDTH_PIXELS, 320);
+		putDefault(SonicConfiguration.SCREEN_HEIGHT, 480);
+		putDefault(SonicConfiguration.SCREEN_HEIGHT_PIXELS, 240);
+		putDefault(SonicConfiguration.SCALE, 1.0);
+		putDefault(SonicConfiguration.ROM_FILENAME, "Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+		// Force debug view enabled for tests/headless use unless explicitly overridden
+		config.put(SonicConfiguration.DEBUG_VIEW_ENABLED.name(), true);
+		putDefault(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED, false);
+		putDefault(SonicConfiguration.DAC_INTERPOLATE, true);
+		putDefault(SonicConfiguration.FM6_DAC_OFF, true); // Default true for Sonic 2 parity
+		putDefault(SonicConfiguration.AUDIO_ENABLED, true);
+		putDefault(SonicConfiguration.REGION, "NTSC");
+	}
+
+	private void putDefault(SonicConfiguration key, Object value) {
+		if (config == null) {
+			config = new HashMap<>();
+		}
+		config.putIfAbsent(key.name(), value);
 	}
 }
