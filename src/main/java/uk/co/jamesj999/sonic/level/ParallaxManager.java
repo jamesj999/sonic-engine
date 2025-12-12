@@ -136,16 +136,25 @@ public class ParallaxManager {
 
             // Banding based on Map Y (256px height)
             // Sky: 0-80 (0.25x)
-            // Water Surface: 80-112 (0.5x + Ripple) - Narrowed to avoid hills
-            // Grass/Hills: 112-256 (0.75x) - Faster/Nearer
+            // Water Surface: 80-112 (0.25x + Ripple) - Base speed matches sky for reflections
+            // Grass/Hills: 112-256 (Ramp 0.25x to 0.75x) - Creates depth
 
             if (mapY < 80) {
                 baseB = (short) -(camX >> 2);
             } else if (mapY < 112) {
-                baseB = (short) -(camX >> 1);
+                baseB = (short) -(camX >> 2); // Match sky speed for reflections
             } else {
-                // 0.75x approximation
-                baseB = (short) (-(camX >> 1) - (camX >> 2));
+                // Grass Ramp: 0.25 at 112, up to 0.75 at 256.
+                // Range 144 pixels.
+                // Scroll = -CamX * Speed
+
+                int grassOffset = mapY - 112;
+                int denom = 144;
+                // Ramp scroll from 0 to 0.5*CamX additional
+                // rampScroll = (CamX / 2) * grassOffset / denom
+                int rampScroll = (int)((long)(camX >> 1) * grassOffset / denom);
+
+                baseB = (short) (-(camX >> 2) - rampScroll);
             }
 
             short b = baseB;
@@ -159,7 +168,6 @@ public class ParallaxManager {
                     int idx = (slowFrame + (mapY - 80)) % ehzRipple.length;
                     if (idx < 0) idx += ehzRipple.length;
 
-                    // Reduced ripple amplitude to 0-1 to fix "wrong" look
                     int offset = ehzRipple[idx] & 0x1;
                     b += (short) offset;
                 }
