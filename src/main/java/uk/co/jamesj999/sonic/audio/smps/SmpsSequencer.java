@@ -399,9 +399,6 @@ public class SmpsSequencer implements AudioStream {
         }
 
         int base = normalTempo;
-        if (base == 0) {
-            base = 0x100; // Default to 1 tick/frame if tempo is 0 (common for SFX)
-        }
 
         if (speedShoes) {
             base = SPEED_UP_TEMPOS.getOrDefault(smpsData.getId(), base);
@@ -1200,21 +1197,40 @@ public class SmpsSequencer implements AudioStream {
     private void processPsgEnvelope(Track t) {
         if (t.envData == null || t.envHold) return;
 
-        if (t.envPos < t.envData.length) {
+        // Loop to handle commands that require immediate processing of next byte (e.g. RESET)
+        while (true) {
+            if (t.envPos >= t.envData.length) {
+                t.envHold = true;
+                return;
+            }
             int val = t.envData[t.envPos] & 0xFF;
+            t.envPos++;
+
             if (val < 0x80) {
-                t.envValue = val; 
-                t.envPos++;
+                t.envValue = val;
                 refreshVolume(t);
+                return;
             } else {
-                if (val == 0x80) { 
+                if (val == 0x80) {
+                    // RESET / LOOP
+                    t.envPos = 0;
+                    // Continue loop to process first byte immediately
+                } else if (val == 0x81) {
+                    // HOLD
                     t.envHold = true;
+                    return;
+                } else if (val == 0x83) {
+                    // STOP
+                    t.envHold = true;
+                    t.envValue = 0x0F; // Silence
+                    refreshVolume(t);
+                    return;
                 } else {
+                    // Unknown/Other: Treat as HOLD
                     t.envHold = true;
+                    return;
                 }
             }
-        } else {
-            t.envHold = true; 
         }
     }
 
