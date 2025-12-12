@@ -251,8 +251,8 @@ public class LevelManager {
                     if (val > localMax) localMax = val;
                 }
 
-                rowXStart = -localMax - bgCameraX;
-                rowXEnd = cameraWidth - localMin - bgCameraX;
+                rowXStart = -localMax;
+                rowXEnd = cameraWidth - localMin;
 
                 // Align to chunk boundary
                 rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH) % LevelConstants.CHUNK_WIDTH;
