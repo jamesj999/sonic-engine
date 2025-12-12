@@ -97,7 +97,11 @@ public class Sonic2 extends Game {
     @Override
     public Level loadLevel(int levelIdx) throws IOException {
         int characterPaletteAddr = getCharacterPaletteAddr();
-        int levelPalettesAddr = getLevelPalettesAddr(levelIdx);
+
+        int[] levelPaletteInfo = getLevelPaletteInfo(levelIdx);
+        int levelPalettesAddr = levelPaletteInfo[0];
+        int levelPalettesSize = levelPaletteInfo[1];
+
         int patternsAddr = getPatternsAddr(levelIdx);
         int chunksAddr = getChunksAddr(levelIdx);
         int blocksAddr = getBlocksAddr(levelIdx);
@@ -112,6 +116,7 @@ public class Sonic2 extends Game {
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
+        System.out.printf("Level palettes size: %d bytes%n", levelPalettesSize);
         System.out.printf("Patterns addr: 0x%08X%n", patternsAddr);
         System.out.printf("Chunks addr: 0x%08X%n", chunksAddr);
         System.out.printf("Blocks addr: 0x%08X%n", blocksAddr);
@@ -123,7 +128,7 @@ public class Sonic2 extends Game {
         System.out.printf("Objects addr: 0x%08X%n", objectsAddr);
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr, levelBoundariesAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr, levelBoundariesAddr);
     }
 
     private int getLevelBoundariesAddr(int levelIdx) throws IOException {
@@ -176,11 +181,25 @@ public class Sonic2 extends Game {
         return SONIC_TAILS_PALETTE_ADDR;
     }
 
-    private int getLevelPalettesAddr(int levelIdx) throws IOException {
+    /**
+     * Returns an array containing { address, size } for the level palettes.
+     */
+    private int[] getLevelPaletteInfo(int levelIdx) throws IOException {
         int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
         int dataAddr = getDataAddress(zoneIdx, 8);
         int paletteIndex = dataAddr >> 24;
-        return rom.read32BitAddr(LEVEL_PALETTE_DIR + paletteIndex * 8);
+
+        int entryAddr = LEVEL_PALETTE_DIR + paletteIndex * 8;
+        int address = rom.read32BitAddr(entryAddr);
+        int countMinus1 = rom.read16BitAddr(entryAddr + 6);
+        int size = (countMinus1 + 1) * 4;
+
+        return new int[]{address, size};
+    }
+
+    // Kept for compatibility if needed, but unused now internally
+    private int getLevelPalettesAddr(int levelIdx) throws IOException {
+        return getLevelPaletteInfo(levelIdx)[0];
     }
 
     private int getBlocksAddr(int levelIdx) throws IOException {

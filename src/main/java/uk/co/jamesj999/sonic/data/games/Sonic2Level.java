@@ -41,6 +41,7 @@ public class Sonic2Level implements Level {
     public Sonic2Level(Rom rom,
                        int characterPaletteAddr,
                        int levelPalettesAddr,
+                       int levelPalettesSize,
                        int patternsAddr,
                        int chunksAddr,
                        int blocksAddr,
@@ -52,7 +53,7 @@ public class Sonic2Level implements Level {
                        int solidTilesAngleAddr,
                        int objectsAddr,
                        int levelBoundariesAddr) throws IOException {
-        loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
+        loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
@@ -152,7 +153,7 @@ public class Sonic2Level implements Level {
         return maxY;
     }
 
-    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
+    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
         GraphicsManager graphicsMan = GraphicsManager.getInstance();
 
@@ -162,14 +163,27 @@ public class Sonic2Level implements Level {
         palettes[0].fromSegaFormat(buffer);
 
         // Load level palettes
-        buffer = rom.readBytes(levelPalettesAddr, Palette.PALETTE_SIZE_IN_ROM * 3);
+        // levelPalettesSize is the total size of bytes to read from the ROM.
+        // We will read all of them, then slice them into palette-sized chunks.
+        buffer = rom.readBytes(levelPalettesAddr, levelPalettesSize);
 
-        //FIXME: 4 = max palettes in Mega Drive
+        // Calculate how many full palettes we have available in the data
+        int loadedPalettes = levelPalettesSize / Palette.PALETTE_SIZE_IN_ROM;
+
+        // Mega Drive has 4 palettes total. Palette 0 is character palette (already loaded).
+        // Palettes 1, 2, 3 are level palettes.
         for (int i = 0; i < PALETTE_COUNT - 1; i++) {
             palettes[i + 1] = new Palette();
-            // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Palette.PALETTE_SIZE_IN_ROM, (i + 1) * Palette.PALETTE_SIZE_IN_ROM);
-            palettes[i + 1].fromSegaFormat(subArray);
+            if (i < loadedPalettes) {
+                // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
+                int start = i * Palette.PALETTE_SIZE_IN_ROM;
+                int end = (i + 1) * Palette.PALETTE_SIZE_IN_ROM;
+                // Ensure we don't go out of bounds if size is weird
+                if (end <= buffer.length) {
+                    byte[] subArray = Arrays.copyOfRange(buffer, start, end);
+                    palettes[i + 1].fromSegaFormat(subArray);
+                }
+            }
         }
 
         if (graphicsMan.getGraphics() != null) {
