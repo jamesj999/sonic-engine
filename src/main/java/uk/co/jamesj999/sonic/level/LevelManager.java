@@ -213,7 +213,7 @@ public class LevelManager {
         if (layerIndex == 1) {
             // Sonic 2 Background heights
             if (currentZone == 0) { // EHZ
-                return 256;
+                return 512;
             }
         }
         return height;
@@ -548,8 +548,8 @@ public class LevelManager {
 		int wrappedY = y;
 
 		if (layer == 1) {
-			int levelHeight = getLayerHeight(layer);
-			wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
+			int height = getLayerHeight(layer);
+			wrappedY = ((y % height) + height) % height;
 		}
 
         ChunkDesc chunkDesc = block.getChunkDesc((wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
