@@ -39,7 +39,7 @@ public class JOALAudioBackend implements AudioBackend {
     private AudioStream sfxStream;
     private int[] streamBuffers;
     private static final int STREAM_BUFFER_COUNT = 3;
-    private static final int STREAM_BUFFER_SIZE = 4096;
+    private static final int STREAM_BUFFER_SIZE = 1024;
     private SmpsSequencer currentSmps;
     private SmpsDriver smpsDriver;
 
@@ -87,7 +87,12 @@ public class JOALAudioBackend implements AudioBackend {
                  throw new RuntimeException("AL Error during init");
             }
 
-            LOGGER.info("OpenAL Initialized.");
+            LOGGER.info("OpenAL Initialized. Buffer Size: " + STREAM_BUFFER_SIZE);
+
+            // Preload SFX
+            for (String sfxPath : sfxFallback.values()) {
+                loadWav(sfxPath);
+            }
 
             // Generate music source
             int[] src = new int[1];
