@@ -121,26 +121,21 @@ public class ParallaxManager {
         short planeA = (short) -camX;
 
         // EHZ Parallax approximation
+        // Unified speed for Sky/Hills to prevent cloud tearing (which happens if the transition line cuts through a cloud).
+        // Standard speed 0.5.
         for (int y = 0; y < VISIBLE_LINES; y++) {
-            short baseB;
-
-            // Simple banding approximation
-            if (y < 48) {
-                baseB = (short) -(camX >> 2); // Sky moves slower (0.25)
-            } else {
-                baseB = (short) -(camX >> 1); // Hills/Water move at 0.5
-            }
-
+            short baseB = (short) -(camX >> 1);
             short b = baseB;
 
             // Water region ripple
             if (y >= 112 && y < VISIBLE_LINES) {
                 if (ehzRipple != null && ehzRipple.length > 0) {
-                    int idx = (frameCounter + (y - 112)) % ehzRipple.length;
+                    // Slow down ripple animation to reduce erratic movement
+                    int slowFrame = frameCounter >> 3;
+                    int idx = (slowFrame + (y - 112)) % ehzRipple.length;
                     if (idx < 0) idx += ehzRipple.length;
 
-                    // Sanitize ripple data to 0-3 range to prevent garbage data causing chaos
-                    // User specified values are 0-3. Masking ensures this even if ROM read is noisy.
+                    // Sanitize ripple data to 0-3 range
                     int offset = ehzRipple[idx] & 0x3;
                     b += (short) offset;
                 }
