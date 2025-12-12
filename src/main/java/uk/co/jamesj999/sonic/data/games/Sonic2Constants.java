@@ -12,11 +12,13 @@ public class Sonic2Constants {
     public static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
     public static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
     public static final int ALT_COLLISION_LAYOUT_DIR_ADDR = 0x4A2C;
+    public static final int OBJECT_LAYOUT_DIR_ADDR = 0x44D34;
     public static final int SOLID_TILE_VERTICAL_MAP_ADDR = 0x42E50;
     public static final int SOLID_TILE_HORIZONTAL_MAP_ADDR = 0x43E50;
     public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     public static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100;
+    public static final int LEVEL_BOUNDARIES_ADDR = 0xC054;
     public static final int MUSIC_PLAYLIST_ADDR = 0x3EA0;
 
     // Audio Constants

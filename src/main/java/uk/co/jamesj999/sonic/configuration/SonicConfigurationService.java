@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -16,18 +17,30 @@ public class SonicConfigurationService {
 	private SonicConfigurationService() {
 		ObjectMapper mapper = new ObjectMapper();
 		TypeReference<Map<String, Object>> type = new TypeReference<>(){};
-		try (InputStream is = getClass().getResourceAsStream("/config.json")) {
-			if (is != null) {
-				config = mapper.readValue(is, type);
-			} else {
-				System.err.println("Could not find config.json, using defaults.");
+
+		File file = new File("config.json");
+		if (file.exists()) {
+			try {
+				config = mapper.readValue(file, type);
+			} catch (IOException e) {
+				System.err.println("Failed to load config.json from working directory: " + e.getMessage());
+			}
+		}
+
+		if (config == null) {
+			try (InputStream is = getClass().getResourceAsStream("/config.json")) {
+				if (is != null) {
+					config = mapper.readValue(is, type);
+				} else {
+					System.err.println("Could not find config.json, using defaults.");
+					config = new HashMap<>();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
 				config = new HashMap<>();
 			}
-		} catch (IOException e) {
-			e.printStackTrace();
-			config = new HashMap<>();
 		}
-        applyDefaults();
+		applyDefaults();
 	}
 
 	public int getInt(SonicConfiguration sonicConfiguration) {
@@ -80,22 +93,38 @@ public class SonicConfigurationService {
 		}
 	}
 
-    public boolean getBoolean(SonicConfiguration sonicConfiguration) {
-        Object value = getConfigValue(sonicConfiguration);
-        if(value instanceof Boolean) {
-            return ((Boolean) value);
-        } else if (value instanceof Number) {
-            return ((Number) value).intValue() != 0;
-        } else {
-            return Boolean.parseBoolean(getString(sonicConfiguration));
-        }
-    }
+	public boolean getBoolean(SonicConfiguration sonicConfiguration) {
+		Object value = getConfigValue(sonicConfiguration);
+		if(value instanceof Boolean) {
+			return ((Boolean) value);
+		} else if (value instanceof Number) {
+			return ((Number) value).intValue() != 0;
+		} else {
+			return Boolean.parseBoolean(getString(sonicConfiguration));
+		}
+	}
 
-	private Object getConfigValue(SonicConfiguration sonicConfiguration) {
+	public Object getConfigValue(SonicConfiguration sonicConfiguration) {
 		if (config != null && config.containsKey(sonicConfiguration.name())) {
 			return config.get(sonicConfiguration.name());
 		}
 		return null;
+	}
+
+	public void setConfigValue(SonicConfiguration key, Object value) {
+		if (config == null) {
+			config = new HashMap<>();
+		}
+		config.put(key.name(), value);
+	}
+
+	public void saveConfig() {
+		ObjectMapper mapper = new ObjectMapper();
+		try {
+			mapper.writerWithDefaultPrettyPrinter().writeValue(new File("config.json"), config);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public synchronized static SonicConfigurationService getInstance() {
@@ -105,25 +134,30 @@ public class SonicConfigurationService {
 		return sonicConfigurationService;
 	}
 
-    private void applyDefaults() {
-        // Fill in core defaults if missing to keep tests and headless runs stable.
-        putDefault(SonicConfiguration.SCREEN_WIDTH, 640);
-        putDefault(SonicConfiguration.SCREEN_WIDTH_PIXELS, 320);
-        putDefault(SonicConfiguration.SCREEN_HEIGHT, 480);
-        putDefault(SonicConfiguration.SCREEN_HEIGHT_PIXELS, 240);
-        putDefault(SonicConfiguration.SCALE, 1.0);
-        putDefault(SonicConfiguration.ROM_FILENAME, "Sonic The Hedgehog 2 (W) (REV01) [!].gen");
-        // Force debug view enabled for tests/headless use unless explicitly overridden
-        config.put(SonicConfiguration.DEBUG_VIEW_ENABLED.name(), true);
-        putDefault(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED, false);
-        putDefault(SonicConfiguration.DAC_INTERPOLATE, true);
-        putDefault(SonicConfiguration.FM6_DAC_OFF, true); // Default true for Sonic 2 parity
-    }
+	private void applyDefaults() {
+		if (config == null) {
+			config = new HashMap<>();
+		}
+		// Fill in core defaults if missing to keep tests and headless runs stable.
+		putDefault(SonicConfiguration.SCREEN_WIDTH, 640);
+		putDefault(SonicConfiguration.SCREEN_WIDTH_PIXELS, 320);
+		putDefault(SonicConfiguration.SCREEN_HEIGHT, 480);
+		putDefault(SonicConfiguration.SCREEN_HEIGHT_PIXELS, 240);
+		putDefault(SonicConfiguration.SCALE, 1.0);
+		putDefault(SonicConfiguration.ROM_FILENAME, "Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+		// Force debug view enabled for tests/headless use unless explicitly overridden
+		config.put(SonicConfiguration.DEBUG_VIEW_ENABLED.name(), true);
+		putDefault(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED, false);
+		putDefault(SonicConfiguration.DAC_INTERPOLATE, true);
+		putDefault(SonicConfiguration.FM6_DAC_OFF, true); // Default true for Sonic 2 parity
+		putDefault(SonicConfiguration.AUDIO_ENABLED, true);
+		putDefault(SonicConfiguration.REGION, "NTSC");
+	}
 
-    private void putDefault(SonicConfiguration key, Object value) {
-        if (config == null) {
-            config = new HashMap<>();
-        }
-        config.putIfAbsent(key.name(), value);
-    }
+	private void putDefault(SonicConfiguration key, Object value) {
+		if (config == null) {
+			config = new HashMap<>();
+		}
+		config.putIfAbsent(key.name(), value);
+	}
 }

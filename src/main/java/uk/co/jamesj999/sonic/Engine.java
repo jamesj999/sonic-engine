@@ -7,6 +7,7 @@ import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.configuration.OptionsMenu;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugState;
@@ -207,6 +208,16 @@ public class Engine extends GLCanvas implements GLEventListener {
 				final JFrame frame = new JFrame(); // Swing's JFrame or AWT's
 													// Frame
 				frame.getContentPane().add(canvas);
+
+				JMenuBar menuBar = new JMenuBar();
+				JMenu fileMenu = new JMenu("File");
+				JMenuItem optionsItem = new JMenuItem("Options");
+				optionsItem.addActionListener(e -> {
+					new OptionsMenu(frame).setVisible(true);
+				});
+				fileMenu.add(optionsItem);
+				menuBar.add(fileMenu);
+				frame.setJMenuBar(menuBar);
 				((Engine) canvas).setInputHandler(new InputHandler(canvas));
 				frame.addWindowListener(new WindowAdapter() {
 					@Override

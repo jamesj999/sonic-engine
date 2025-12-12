@@ -7,7 +7,9 @@ import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Logger;
 
 public class Sonic2Level implements Level {
@@ -22,11 +24,16 @@ public class Sonic2Level implements Level {
     private Block[] blocks;
     private SolidTile[] solidTiles;
     private Map map;
+    private List<LevelObject> objects;
 
     private int patternCount;
     private int chunkCount;
     private int blockCount;
     private int solidTileCount;
+    private int minX;
+    private int maxX;
+    private int minY;
+    private int maxY;
     private static final boolean KOS_DEBUG_LOG = false;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
@@ -34,6 +41,7 @@ public class Sonic2Level implements Level {
     public Sonic2Level(Rom rom,
                        int characterPaletteAddr,
                        int levelPalettesAddr,
+                       int levelPalettesSize,
                        int patternsAddr,
                        int chunksAddr,
                        int blocksAddr,
@@ -42,13 +50,17 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
-        loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
+                       int solidTilesAngleAddr,
+                       int objectsAddr,
+                       int levelBoundariesAddr) throws IOException {
+        loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
+        loadObjects(rom, objectsAddr);
+        loadBoundaries(rom, levelBoundariesAddr);
     }
 
     @Override
@@ -116,7 +128,32 @@ public class Sonic2Level implements Level {
         return map;
     }
 
-    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
+    @Override
+    public List<LevelObject> getObjects() {
+        return objects;
+    }
+
+    @Override
+    public int getMinX() {
+        return minX;
+    }
+
+    @Override
+    public int getMaxX() {
+        return maxX;
+    }
+
+    @Override
+    public int getMinY() {
+        return minY;
+    }
+
+    @Override
+    public int getMaxY() {
+        return maxY;
+    }
+
+    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
         GraphicsManager graphicsMan = GraphicsManager.getInstance();
 
@@ -126,14 +163,27 @@ public class Sonic2Level implements Level {
         palettes[0].fromSegaFormat(buffer);
 
         // Load level palettes
-        buffer = rom.readBytes(levelPalettesAddr, Palette.PALETTE_SIZE_IN_ROM * 3);
+        // levelPalettesSize is the total size of bytes to read from the ROM.
+        // We will read all of them, then slice them into palette-sized chunks.
+        buffer = rom.readBytes(levelPalettesAddr, levelPalettesSize);
 
-        //FIXME: 4 = max palettes in Mega Drive
+        // Calculate how many full palettes we have available in the data
+        int loadedPalettes = levelPalettesSize / Palette.PALETTE_SIZE_IN_ROM;
+
+        // Mega Drive has 4 palettes total. Palette 0 is character palette (already loaded).
+        // Palettes 1, 2, 3 are level palettes.
         for (int i = 0; i < PALETTE_COUNT - 1; i++) {
             palettes[i + 1] = new Palette();
-            // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Palette.PALETTE_SIZE_IN_ROM, (i + 1) * Palette.PALETTE_SIZE_IN_ROM);
-            palettes[i + 1].fromSegaFormat(subArray);
+            if (i < loadedPalettes) {
+                // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
+                int start = i * Palette.PALETTE_SIZE_IN_ROM;
+                int end = (i + 1) * Palette.PALETTE_SIZE_IN_ROM;
+                // Ensure we don't go out of bounds if size is weird
+                if (end <= buffer.length) {
+                    byte[] subArray = Arrays.copyOfRange(buffer, start, end);
+                    palettes[i + 1].fromSegaFormat(subArray);
+                }
+            }
         }
 
         if (graphicsMan.getGraphics() != null) {
@@ -290,5 +340,43 @@ public class Sonic2Level implements Level {
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void loadObjects(Rom rom, int objectsAddr) throws IOException {
+        objects = new ArrayList<>();
+        int currentAddr = objectsAddr;
+
+        while (true) {
+            int x = rom.read16BitAddr(currentAddr);
+            if (x == 0xFFFF) {
+                break;
+            }
+            // Sonic 2 object layout:
+            // x (2 bytes)
+            // y (2 bytes) - top 4 bits are flags usually (render flags / status)
+            // id (1 byte)
+            // subtype (1 byte)
+            int y = rom.read16BitAddr(currentAddr + 2);
+            int id = Byte.toUnsignedInt(rom.readByte(currentAddr + 4));
+            int subtype = Byte.toUnsignedInt(rom.readByte(currentAddr + 5));
+
+            objects.add(new LevelObject(x, y, id, subtype));
+
+            currentAddr += 6;
+        }
+        LOG.info("Loaded " + objects.size() + " objects.");
+    }
+
+    private void loadBoundaries(Rom rom, int levelBoundariesAddr) throws IOException {
+        // Each entry is 8 bytes:
+        // 0-1: minX (unsigned)
+        // 2-3: maxX (unsigned)
+        // 4-5: minY (signed)
+        // 6-7: maxY (signed)
+
+        this.minX = rom.read16BitAddr(levelBoundariesAddr);
+        this.maxX = rom.read16BitAddr(levelBoundariesAddr + 2);
+        this.minY = (short) rom.read16BitAddr(levelBoundariesAddr + 4);
+        this.maxY = (short) rom.read16BitAddr(levelBoundariesAddr + 6);
     }
 }

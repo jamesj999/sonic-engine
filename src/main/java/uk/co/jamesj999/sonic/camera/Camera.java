@@ -10,6 +10,11 @@ public class Camera {
 	private short x = 0;
 	private short y = 0;
 
+	private short minX;
+	private short minY;
+	private short maxX;
+	private short maxY;
+
 	private int framesBehind = 0;
 
 	private boolean frozen = false;
@@ -121,6 +126,12 @@ public class Camera {
 		if (y < 0) {
 			y = 0;
 		}
+		if (x > maxX) {
+			x = maxX;
+		}
+		if (y > maxY) {
+			y = maxY;
+		}
 		if (framesBehind > 0) {
 			framesBehind--;
 		}
@@ -169,6 +180,38 @@ public class Camera {
 	
 	public short getHeight() {
 		return height;
+	}
+
+	public short getMinX() {
+		return minX;
+	}
+
+	public void setMinX(short minX) {
+		this.minX = minX;
+	}
+
+	public short getMinY() {
+		return minY;
+	}
+
+	public void setMinY(short minY) {
+		this.minY = minY;
+	}
+
+	public short getMaxX() {
+		return maxX;
+	}
+
+	public void setMaxX(short maxX) {
+		this.maxX = maxX;
+	}
+
+	public short getMaxY() {
+		return maxY;
+	}
+
+	public void setMaxY(short maxY) {
+		this.maxY = maxY;
 	}
 
 	public void incrementX(short amount) {

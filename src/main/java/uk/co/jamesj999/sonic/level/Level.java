@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.level;
 
+import java.util.List;
+
 /**
  * Abstract class representing a Level, containing palettes, patterns, chunks, and blocks.
  */
@@ -35,4 +37,11 @@ public interface Level {
 
     // Abstract method to get the map associated with the level
     public Map getMap();
+
+    public List<LevelObject> getObjects();
+
+    int getMinX();
+    int getMaxX();
+    int getMinY();
+    int getMaxY();
 }
