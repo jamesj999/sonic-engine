@@ -17,7 +17,13 @@ public class NullAudioBackend implements AudioBackend {
     public void playSfxSmps(AbstractSmpsData data, DacData dacData) {}
 
     @Override
+    public void playSfxSmps(AbstractSmpsData data, DacData dacData, float pitch) {}
+
+    @Override
     public void playSfx(String sfxName) {}
+
+    @Override
+    public void playSfx(String sfxName, float pitch) {}
 
     @Override
     public void stopPlayback() {}

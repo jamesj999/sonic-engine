@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
@@ -439,11 +440,13 @@ public class PlayableSpriteMovementManager extends
 		} else {
 			sprite.setSpindashConstant(sprite.getSpindashConstant() + 2f);
 		}
+        float pitch = 1.0f + (sprite.getSpindashConstant() / 24.0f);
+        audioManager.playSfx(GameSound.SPINDASH_CHARGE, pitch);
 	}
 
 	private void releaseSpindash(AbstractPlayableSprite sprite) {
 		sprite.setSpindash(false);
-        audioManager.playSfx("SPINDASH");
+        audioManager.playSfx(GameSound.SPINDASH_RELEASE);
 		short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
 		if(Direction.LEFT.equals(sprite.getDirection())) {
 			sprite.setGSpeed((short) (0 - spindashGSpeed));
@@ -512,7 +515,7 @@ public class PlayableSpriteMovementManager extends
 			if (gSpeed > 0) {
 				gSpeed -= decel;
                 if(gSpeed >= 4 * 256 && !skidding) {
-                    audioManager.playSfx("SKID");
+                    audioManager.playSfx(GameSound.SKID);
                     skidding = true;
                 }
 			} else if (!sprite.getRolling()) {
@@ -528,7 +531,7 @@ public class PlayableSpriteMovementManager extends
 			if (gSpeed < 0) {
 				gSpeed += decel;
                 if(gSpeed <= -4 * 256 && !skidding) {
-                    audioManager.playSfx("SKID");
+                    audioManager.playSfx(GameSound.SKID);
                     skidding = true;
                 }
 			} else if (!sprite.getRolling()) {
@@ -565,7 +568,7 @@ public class PlayableSpriteMovementManager extends
 	private void jump(AbstractPlayableSprite sprite) {
 		sprite.setAir(true);
 		sprite.setRolling(true);
-        audioManager.playSfx("JUMP");
+        audioManager.playSfx(GameSound.JUMP);
 		int angle = calculateAngle(sprite);
 		jumpPressed = true;
 		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()

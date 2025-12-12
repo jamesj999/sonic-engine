@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.data.Rom;
 
+import java.util.Map;
 import java.util.logging.Logger;
 
 public class AudioManager {
@@ -13,6 +14,8 @@ public class AudioManager {
     private AudioBackend backend;
     private Sonic2SmpsLoader smpsLoader;
     private DacData dacData;
+    private Map<GameSound, Integer> soundMap;
+    private boolean ringLeft = true;
 
     private AudioManager() {
         // Default to NullBackend
@@ -46,6 +49,14 @@ public class AudioManager {
         this.dacData = smpsLoader.loadDacData();
     }
 
+    public void setSoundMap(Map<GameSound, Integer> soundMap) {
+        this.soundMap = soundMap;
+    }
+
+    public void resetRingSound() {
+        ringLeft = true;
+    }
+
     public void playMusic(int musicId) {
         if (smpsLoader != null) {
             AbstractSmpsData data = smpsLoader.loadMusic(musicId);
@@ -58,14 +69,53 @@ public class AudioManager {
     }
 
     public void playSfx(String sfxName) {
+        playSfx(sfxName, 1.0f);
+    }
+
+    public void playSfx(String sfxName, float pitch) {
         if (smpsLoader != null) {
             AbstractSmpsData sfx = smpsLoader.loadSfx(sfxName);
             if (sfx != null) {
-                backend.playSfxSmps(sfx, dacData);
+                backend.playSfxSmps(sfx, dacData, pitch);
                 return;
             }
         }
-        backend.playSfx(sfxName);
+        backend.playSfx(sfxName, pitch);
+    }
+
+    public void playSfx(GameSound sound) {
+        playSfx(sound, 1.0f);
+    }
+
+    public void playSfx(GameSound sound, float pitch) {
+        if (sound == GameSound.RING) {
+            playSfx(ringLeft ? GameSound.RING_LEFT : GameSound.RING_RIGHT, pitch);
+            ringLeft = !ringLeft;
+            return;
+        }
+
+        boolean played = false;
+        if (soundMap != null && soundMap.containsKey(sound)) {
+            played = playSfx(soundMap.get(sound), pitch);
+        }
+        if (!played) {
+            backend.playSfx(sound.name(), pitch);
+        }
+    }
+
+    public boolean playSfx(int sfxId) {
+        return playSfx(sfxId, 1.0f);
+    }
+
+    public boolean playSfx(int sfxId, float pitch) {
+        if (smpsLoader != null) {
+            AbstractSmpsData sfx = smpsLoader.loadSfx(sfxId);
+            if (sfx != null) {
+                backend.playSfxSmps(sfx, dacData, pitch);
+                return true;
+            }
+        }
+        return false;
     }
 
     public void update() {

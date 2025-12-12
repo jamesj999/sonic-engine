@@ -1,60 +1,18 @@
 package uk.co.jamesj999.sonic.data.games;
 
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.Level;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import static uk.co.jamesj999.sonic.data.games.Sonic2Constants.*;
 
 public class Sonic2 extends Game {
-    private static final int DEFAULT_ROM_SIZE = 0x100000;  // 1MB
-    private static final int DEFAULT_LEVEL_LAYOUT_DIR_ADDR = 0x045A80;
-    private static final int LEVEL_LAYOUT_DIR_ADDR_LOC = 0xE46E;
-    private static final int LEVEL_LAYOUT_DIR_SIZE = 68;
-    private static final int LEVEL_SELECT_ADDR = 0x9454;
-    private static final int LEVEL_DATA_DIR = 0x42594;
-    private static final int LEVEL_DATA_DIR_ENTRY_SIZE = 12;
-    private static final int LEVEL_PALETTE_DIR = 0x2782;
-    private static final int SONIC_TAILS_PALETTE_ADDR = 0x29E2;
-    private static final int COLLISION_LAYOUT_DIR_ADDR = 0x49E8;
-    private static final int ALT_COLLISION_LAYOUT_DIR_ADDR = 0x4A2C;
-    private static final int SOLID_TILE_VERTICAL_MAP_ADDR = 0x42E50;
-    private static final int SOLID_TILE_HORIZONTAL_MAP_ADDR = 0x43E50;
-    public static final int SOLID_TILE_MAP_SIZE = 0x1000;
-    private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
-    public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
-    private static final int MUSIC_PLAYLIST_ADDR = 0x3EA0;
-
-    private static final int[][] START_POSITIONS = {
-            {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
-            {0x0060, 0x02AF}, // 1 Emerald Hill 2   (EHZ_2.bin)
-            {0x0000, 0x0000}, // 2 Unused           (e.g. HPZ / WZ / etc. – not wired in final game)
-            {0x0000, 0x0000}, // 3 Unused
-            {0x0060, 0x01EC}, // 4 Chemical Plant 1 (CPZ_1.bin)
-            {0x0000, 0x0000}, // 5 Chemical Plant 2 (CPZ_2.bin – not fetched)
-            {0x0000, 0x0000}, // 6 Aquatic Ruin 1   (ARZ_1.bin – not fetched)
-            {0x0000, 0x0000}, // 7 Aquatic Ruin 2   (ARZ_2.bin – not fetched)
-            {0x0000, 0x0000}, // 8 Casino Night 1   (CNZ_1.bin – not fetched)
-            {0x0000, 0x0000}, // 9 Casino Night 2   (CNZ_2.bin – not fetched)
-            {0x0060, 0x03EF}, // 10 Hill Top 1      (HTZ_1.bin)
-            {0x0000, 0x0000}, // 11 Hill Top 2      (HTZ_2.bin – not fetched)
-            {0x0060, 0x06AC}, // 12 Mystic Cave 1   (MCZ_1.bin)
-            {0x0000, 0x0000}, // 13 Mystic Cave 2   (MCZ_2.bin – not fetched)
-            {0x0060, 0x06AC}, // 14 Oil Ocean 1     (OOZ_1.bin)
-            {0x0000, 0x0000}, // 15 Oil Ocean 2     (OOZ_2.bin – not fetched)
-            {0x0060, 0x028C}, // 16 Metropolis 1    (MTZ_1.bin)
-            {0x0000, 0x0000}, // 17 Metropolis 2    (MTZ_2.bin – not fetched)
-            {0x0000, 0x0000}, // 18 Metropolis 3    (MTZ_3.bin – not fetched)
-            {0x0000, 0x0000}, // 19 Unused
-            {0x0120, 0x0070}, // 20 Sky Chase 1     (SCZ.bin)
-            {0x0000, 0x0000}, // 21 Unused
-            {0x0060, 0x04CC}, // 22 Wing Fortress 1 (WFZ_1.bin)
-            {0x0000, 0x0000}, // 23 Unused
-            {0x0060, 0x012D}, // 24 Death Egg 1     (DEZ_1.bin)
-            {0x0000, 0x0000}, // 25 Unused
-            {0x0000, 0x0000}, // 26 Special Stage
-    };
 
     private final Rom rom;
 
@@ -132,6 +90,23 @@ public class Sonic2 extends Game {
                 int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
                 return rom.readByte(MUSIC_PLAYLIST_ADDR + zoneIdx) & 0xFF;
         }
+    }
+
+    @Override
+    public Map<GameSound, Integer> getSoundMap() {
+        Map<GameSound, Integer> map = new HashMap<>();
+        map.put(GameSound.JUMP, SFX_JUMP);
+        map.put(GameSound.RING_LEFT, SFX_RING_LEFT);
+        map.put(GameSound.RING_RIGHT, SFX_RING_RIGHT);
+        map.put(GameSound.SPINDASH_CHARGE, SFX_SPINDASH_CHARGE);
+        map.put(GameSound.SPINDASH_RELEASE, SFX_SPINDASH_RELEASE);
+        map.put(GameSound.SKID, SFX_SKID);
+        map.put(GameSound.DEATH, SFX_DEATH);
+        map.put(GameSound.BADNIK_HIT, SFX_BADNIK_HIT);
+        map.put(GameSound.CHECKPOINT, SFX_CHECKPOINT);
+        map.put(GameSound.SPIKE_HIT, SFX_SPIKE_HIT);
+        map.put(GameSound.SPRING, SFX_SPRING);
+        return map;
     }
 
     @Override

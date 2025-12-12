@@ -34,6 +34,11 @@ public class SmpsSequencer implements AudioStream {
     private int commData = 0; // Communication byte (E2)
     private boolean fm6DacOff = false;
     private int maxTicks = Integer.MAX_VALUE;
+    private float pitch = 1.0f;
+
+    public void setPitch(float pitch) {
+        this.pitch = pitch;
+    }
 
     private static class FadeState {
         int steps;
@@ -378,6 +383,17 @@ public class SmpsSequencer implements AudioStream {
         packed += t.modAccumulator + t.detune;
 
         packed = getPitchSlideFreq(packed);
+
+        if (pitch != 1.0f) {
+            int b = (packed >> 11) & 7;
+            int f = packed & 0x7FF;
+            f = (int) (f * pitch);
+            while (f > 0x7FF && b < 7) {
+                f >>= 1;
+                b++;
+            }
+            packed = (b << 11) | (f & 0x7FF);
+        }
 
         int block = (packed >> 11) & 7;
         int fnum = packed & 0x7FF;
@@ -1041,6 +1057,17 @@ public class SmpsSequencer implements AudioStream {
 
             packed = getPitchSlideFreq(packed);
 
+            if (pitch != 1.0f) {
+                int b = (packed >> 11) & 7;
+                int f = packed & 0x7FF;
+                f = (int) (f * pitch);
+                while (f > 0x7FF && b < 7) {
+                    f >>= 1;
+                    b++;
+                }
+                packed = (b << 11) | (f & 0x7FF);
+            }
+
             block = (packed >> 11) & 7;
             fnum = packed & 0x7FF;
 
@@ -1073,6 +1100,12 @@ public class SmpsSequencer implements AudioStream {
             reg += t.detune;
             if (reg > 1023) reg = 1023;
             if (reg < 1) reg = 1;
+
+            if (pitch != 1.0f) {
+                reg = (int) (reg / pitch);
+                if (reg > 1023) reg = 1023;
+                if (reg < 1) reg = 1;
+            }
 
             if (t.channelId < 3 && !t.noiseMode) {
                 int data = reg & 0xF;
@@ -1316,6 +1349,17 @@ public class SmpsSequencer implements AudioStream {
 
                 packed = getPitchSlideFreq(packed);
 
+                if (pitch != 1.0f) {
+                    int b = (packed >> 11) & 7;
+                    int f = packed & 0x7FF;
+                    f = (int) (f * pitch);
+                    while (f > 0x7FF && b < 7) {
+                        f >>= 1;
+                        b++;
+                    }
+                    packed = (b << 11) | (f & 0x7FF);
+                }
+
                 int block = (packed >> 11) & 7;
                 int fnum = packed & 0x7FF;
 
@@ -1327,6 +1371,12 @@ public class SmpsSequencer implements AudioStream {
                 int reg = t.baseFnum + t.modAccumulator + t.detune;
                 if (reg < 1) reg = 1;
                 if (reg > 0x3FF) reg = 0x3FF;
+
+                if (pitch != 1.0f) {
+                    reg = (int) (reg / pitch);
+                    if (reg < 1) reg = 1;
+                    if (reg > 0x3FF) reg = 0x3FF;
+                }
 
                 int data = reg & 0xF;
                 int ch = t.channelId;
