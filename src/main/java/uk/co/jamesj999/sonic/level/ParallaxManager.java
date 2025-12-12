@@ -115,16 +115,27 @@ public class ParallaxManager {
 
         // EHZ Parallax approximation
         for (int y = 0; y < VISIBLE_LINES; y++) {
-            short baseB = (short) -(camX >> 1); // Default 0.5 speed
+            short baseB;
+
+            // Simple banding approximation
+            if (y < 48) {
+                baseB = (short) -(camX >> 2); // Sky moves slower (0.25)
+            } else {
+                baseB = (short) -(camX >> 1); // Hills/Water move at 0.5
+            }
+
             short b = baseB;
 
             // Water region ripple
-            // EHZ water usually starts around line 128?
-            if (y >= 120 && y < VISIBLE_LINES) {
+            if (y >= 112 && y < VISIBLE_LINES) {
                 if (ehzRipple != null && ehzRipple.length > 0) {
-                    int idx = (frameCounter + (y - 120)) % ehzRipple.length;
+                    int idx = (frameCounter + (y - 112)) % ehzRipple.length;
                     if (idx < 0) idx += ehzRipple.length;
-                    b += (short) ehzRipple[idx];
+
+                    // Sanitize ripple data to 0-3 range to prevent garbage data causing chaos
+                    // User specified values are 0-3. Masking ensures this even if ROM read is noisy.
+                    int offset = ehzRipple[idx] & 0x3;
+                    b += (short) offset;
                 }
             }
 
