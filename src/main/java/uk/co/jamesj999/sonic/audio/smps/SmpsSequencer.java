@@ -1197,33 +1197,40 @@ public class SmpsSequencer implements AudioStream {
     private void processPsgEnvelope(Track t) {
         if (t.envData == null || t.envHold) return;
 
-        if (t.envPos < t.envData.length) {
+        // Loop to handle commands that require immediate processing of next byte (e.g. RESET)
+        while (true) {
+            if (t.envPos >= t.envData.length) {
+                t.envHold = true;
+                return;
+            }
             int val = t.envData[t.envPos] & 0xFF;
+            t.envPos++;
+
             if (val < 0x80) {
-                t.envValue = val; 
-                t.envPos++;
+                t.envValue = val;
                 refreshVolume(t);
+                return;
             } else {
-                if (val == 0x80) { 
-                    // Treating 0x80 as STOP per user request to fix lingering SFX (Jump)
-                    // Standard SMPS might treat this as RESET, but Sonic 2 seems to rely on stop here.
-                    t.envHold = true;
-                    t.envValue = 0x0F; // Silence
-                    refreshVolume(t);
+                if (val == 0x80) {
+                    // RESET / LOOP
+                    t.envPos = 0;
+                    // Continue loop to process first byte immediately
                 } else if (val == 0x81) {
                     // HOLD
                     t.envHold = true;
+                    return;
                 } else if (val == 0x83) {
                     // STOP
                     t.envHold = true;
                     t.envValue = 0x0F; // Silence
                     refreshVolume(t);
+                    return;
                 } else {
+                    // Unknown/Other: Treat as HOLD
                     t.envHold = true;
+                    return;
                 }
             }
-        } else {
-            t.envHold = true; 
         }
     }
 
