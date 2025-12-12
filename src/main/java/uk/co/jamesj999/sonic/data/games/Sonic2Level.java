@@ -34,6 +34,7 @@ public class Sonic2Level implements Level {
     private int maxX;
     private int minY;
     private int maxY;
+    private int backgroundHeight;
     private static final boolean KOS_DEBUG_LOG = true;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
@@ -151,6 +152,11 @@ public class Sonic2Level implements Level {
     @Override
     public int getMaxY() {
         return maxY;
+    }
+
+    @Override
+    public int getBackgroundHeight() {
+        return backgroundHeight;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize) throws IOException {
@@ -339,7 +345,27 @@ public class Sonic2Level implements Level {
 
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
+        calculateBackgroundHeight();
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void calculateBackgroundHeight() {
+        // Layer 1 is Background
+        byte layer = 1;
+        int maxRow = -1;
+        for (int y = 0; y < map.getHeight(); y++) {
+             for (int x = 0; x < map.getWidth(); x++) {
+                 if (map.getValue(layer, x, y) != 0) {
+                     maxRow = y;
+                     break; // Found content in this row
+                 }
+             }
+        }
+        if (maxRow != -1) {
+            backgroundHeight = (maxRow + 1) * LevelConstants.BLOCK_HEIGHT;
+        } else {
+            backgroundHeight = map.getHeight() * LevelConstants.BLOCK_HEIGHT;
+        }
     }
 
     private void loadObjects(Rom rom, int objectsAddr) throws IOException {

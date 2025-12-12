@@ -44,4 +44,13 @@ public interface Level {
     int getMaxX();
     int getMinY();
     int getMaxY();
+
+    /**
+     * Gets the effective height of the background layer (Layer 1) in pixels.
+     * Used for vertical wrapping.
+     * @return Height in pixels, or 0 if full map height.
+     */
+    default int getBackgroundHeight() {
+        return 0;
+    }
 }
