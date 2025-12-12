@@ -15,11 +15,15 @@ public interface AudioBackend {
 
     void playSfxSmps(AbstractSmpsData data, DacData dacData);
 
+    void playSfxSmps(AbstractSmpsData data, DacData dacData, float pitch);
+
     /**
      * Plays a sound effect by name (mapped to a WAV file).
      * @param sfxName The name of the SFX (e.g., "JUMP", "RING").
      */
     void playSfx(String sfxName);
+
+    void playSfx(String sfxName, float pitch);
 
     /**
      * Stops any active music/streaming playback.

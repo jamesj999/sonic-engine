@@ -151,6 +151,11 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSfxSmps(AbstractSmpsData data, DacData dacData) {
+        playSfxSmps(data, dacData, 1.0f);
+    }
+
+    @Override
+    public void playSfxSmps(AbstractSmpsData data, DacData dacData, float pitch) {
         boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
@@ -161,6 +166,7 @@ public class JOALAudioBackend implements AudioBackend {
             SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
+            seq.setPitch(pitch);
             if (currentSmps != null) {
                 seq.setFallbackVoiceData(currentSmps.getSmpsData());
             }
@@ -178,6 +184,7 @@ public class JOALAudioBackend implements AudioBackend {
             SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
+            seq.setPitch(pitch);
             if (currentSmps != null) {
                 seq.setFallbackVoiceData(currentSmps.getSmpsData());
             }
@@ -292,12 +299,17 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSfx(String sfxName) {
+        playSfx(sfxName, 1.0f);
+    }
+
+    @Override
+    public void playSfx(String sfxName, float pitch) {
         String filename = sfxFallback.get(sfxName);
         if (filename != null) {
             int source = getAvailableSource();
             if (source != -1) {
                 sfxSources.add(source);
-                playWav(filename, source, false);
+                playWav(filename, source, false, pitch);
             }
         } else {
             LOGGER.fine("SFX not found in fallback map: " + sfxName);
@@ -409,6 +421,10 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void playWav(String resourcePath, int source, boolean loop) {
+        playWav(resourcePath, source, loop, 1.0f);
+    }
+
+    private void playWav(String resourcePath, int source, boolean loop, float pitch) {
         try {
             // Check if buffer exists
             if (!buffers.containsKey(resourcePath)) {
@@ -421,6 +437,7 @@ public class JOALAudioBackend implements AudioBackend {
                 al.alSourceStop(source);
                 al.alSourcei(source, AL.AL_BUFFER, buffer);
                 al.alSourcei(source, AL.AL_LOOPING, loop ? AL.AL_TRUE : AL.AL_FALSE);
+                al.alSourcef(source, AL.AL_PITCH, pitch);
                 al.alSourcePlay(source);
             } else {
                 LOGGER.fine("Could not load buffer for: " + resourcePath);
