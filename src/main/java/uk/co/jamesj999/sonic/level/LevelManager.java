@@ -208,6 +208,17 @@ public class LevelManager {
         graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
     }
 
+    private int getLayerHeight(int layerIndex) {
+        int height = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+        if (layerIndex == 1) {
+            // Sonic 2 Background heights
+            if (currentZone == 0) { // EHZ
+                return 256;
+            }
+        }
+        return height;
+    }
+
     private void drawLayer(List<GLCommand> commands, int layerIndex, Camera camera, float parallaxX, float parallaxY) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
@@ -223,7 +234,7 @@ public class LevelManager {
         int drawY = bgCameraY - (bgCameraY % LevelConstants.CHUNK_HEIGHT);
 
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+        int levelHeight = getLayerHeight(layerIndex);
 
         int xStart = drawX;
         int xEnd = bgCameraX + cameraWidth;
@@ -490,7 +501,7 @@ public class LevelManager {
         }
 
 		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-		int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+		int levelHeight = getLayerHeight(layer);
 
 		// Handle wrapping for X
 		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
@@ -537,7 +548,7 @@ public class LevelManager {
 		int wrappedY = y;
 
 		if (layer == 1) {
-			int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+			int levelHeight = getLayerHeight(layer);
 			wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
 		}
 
