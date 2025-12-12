@@ -39,4 +39,9 @@ public interface Level {
     public Map getMap();
 
     public List<LevelObject> getObjects();
+
+    int getMinX();
+    int getMaxX();
+    int getMinY();
+    int getMaxY();
 }

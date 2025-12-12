@@ -25,6 +25,7 @@ public class Sonic2 extends Game {
     public static final int SOLID_TILE_MAP_SIZE = 0x1000;
     private static final int SOLID_TILE_ANGLE_ADDR = 0x42D50;
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100; //TODO are we sure?
+    private static final int LEVEL_BOUNDARIES_ADDR = 0xC054;
 
     private static final int[][] START_POSITIONS = {
             {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
@@ -107,6 +108,7 @@ public class Sonic2 extends Game {
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
         int objectsAddr = getObjectLayoutAddr(levelIdx);
+        int levelBoundariesAddr = getLevelBoundariesAddr(levelIdx);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -119,8 +121,19 @@ public class Sonic2 extends Game {
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
         System.out.printf("Objects addr: 0x%08X%n", objectsAddr);
+        System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr, levelBoundariesAddr);
+    }
+
+    private int getLevelBoundariesAddr(int levelIdx) throws IOException {
+        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+        int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
+
+        // 8 bytes per entry. 2 entries per zone (usually 2 acts, sometimes 1).
+        // It seems standard Sonic 2 stride is based on 2 acts per zone for this table.
+        // Or it's a linear table indexed by (Zone * 2 + Act).
+        return LEVEL_BOUNDARIES_ADDR + ((zoneIdx * 2) + actIdx) * 8;
     }
 
     private int getSolidTileHeightsAddr() {

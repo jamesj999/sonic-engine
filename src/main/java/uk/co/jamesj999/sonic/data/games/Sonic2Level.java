@@ -30,6 +30,10 @@ public class Sonic2Level implements Level {
     private int chunkCount;
     private int blockCount;
     private int solidTileCount;
+    private int minX;
+    private int maxX;
+    private int minY;
+    private int maxY;
     private static final boolean KOS_DEBUG_LOG = true;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
@@ -46,7 +50,8 @@ public class Sonic2Level implements Level {
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
                        int solidTilesAngleAddr,
-                       int objectsAddr) throws IOException {
+                       int objectsAddr,
+                       int levelBoundariesAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
@@ -54,6 +59,7 @@ public class Sonic2Level implements Level {
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
         loadObjects(rom, objectsAddr);
+        loadBoundaries(rom, levelBoundariesAddr);
     }
 
     @Override
@@ -124,6 +130,26 @@ public class Sonic2Level implements Level {
     @Override
     public List<LevelObject> getObjects() {
         return objects;
+    }
+
+    @Override
+    public int getMinX() {
+        return minX;
+    }
+
+    @Override
+    public int getMaxX() {
+        return maxX;
+    }
+
+    @Override
+    public int getMinY() {
+        return minY;
+    }
+
+    @Override
+    public int getMaxY() {
+        return maxY;
     }
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
@@ -325,5 +351,18 @@ public class Sonic2Level implements Level {
             currentAddr += 6;
         }
         LOG.info("Loaded " + objects.size() + " objects.");
+    }
+
+    private void loadBoundaries(Rom rom, int levelBoundariesAddr) throws IOException {
+        // Each entry is 8 bytes:
+        // 0-1: minX (unsigned)
+        // 2-3: maxX (unsigned)
+        // 4-5: minY (signed)
+        // 6-7: maxY (signed)
+
+        this.minX = rom.read16BitAddr(levelBoundariesAddr);
+        this.maxX = rom.read16BitAddr(levelBoundariesAddr + 2);
+        this.minY = (short) rom.read16BitAddr(levelBoundariesAddr + 4);
+        this.maxY = (short) rom.read16BitAddr(levelBoundariesAddr + 6);
     }
 }
