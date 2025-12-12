@@ -69,6 +69,10 @@ public class TestLevelManager {
         @Override public SolidTile getSolidTile(int index) { return null; }
         @Override public Map getMap() { return map; }
         @Override public java.util.List<LevelObject> getObjects() { return java.util.Collections.emptyList(); }
+        @Override public int getMinX() { return 0; }
+        @Override public int getMaxX() { return 0; }
+        @Override public int getMinY() { return 0; }
+        @Override public int getMaxY() { return 0; }
         public short getStartX() { return 0; }
         public short getStartY() { return 0; }
     }
