@@ -228,29 +228,41 @@ public class LevelManager {
         int xStart = drawX;
         int xEnd = bgCameraX + cameraWidth;
 
-        if (hScroll != null) {
-            int minScroll = parallaxManager.getMinScroll();
-            int maxScroll = parallaxManager.getMaxScroll();
-
-            // Adjust xStart/xEnd to ensure coverage for all scroll values.
-            // We need to cover range [-maxScroll, Width - minScroll].
-            // Current drawX is aligned to bgCameraX (0.5x), but we might need 0.25x (slower/further left).
-
-            xStart = -maxScroll;
-            xEnd = cameraWidth - minScroll;
-
-            // Align xStart to chunk boundary
-            xStart -= (xStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH) % LevelConstants.CHUNK_WIDTH;
-
-            // Add buffer
-            xStart -= LevelConstants.CHUNK_WIDTH;
-            xEnd += LevelConstants.CHUNK_WIDTH;
-        }
         int yStart = drawY;
         int yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
 
         for (int y = yStart; y <= yEnd; y += LevelConstants.CHUNK_HEIGHT) {
-            for (int x = xStart; x <= xEnd; x += LevelConstants.CHUNK_WIDTH) {
+            int rowXStart = xStart;
+            int rowXEnd = xEnd;
+
+            if (hScroll != null) {
+                int screenY = y - bgCameraY;
+                int localMin = Integer.MAX_VALUE;
+                int localMax = Integer.MIN_VALUE;
+
+                // Check scroll values for the scanlines covered by this chunk row
+                for (int i = 0; i < LevelConstants.CHUNK_HEIGHT; i++) {
+                    int line = screenY + i;
+                    if (line < 0) line = 0;
+                    if (line >= ParallaxManager.VISIBLE_LINES) line = ParallaxManager.VISIBLE_LINES - 1;
+
+                    short val = (short)(hScroll[line] & 0xFFFF);
+                    if (val < localMin) localMin = val;
+                    if (val > localMax) localMax = val;
+                }
+
+                rowXStart = -localMax - bgCameraX;
+                rowXEnd = cameraWidth - localMin - bgCameraX;
+
+                // Align to chunk boundary
+                rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH) % LevelConstants.CHUNK_WIDTH;
+
+                // Add buffer
+                rowXStart -= LevelConstants.CHUNK_WIDTH;
+                rowXEnd += LevelConstants.CHUNK_WIDTH;
+            }
+
+            for (int x = rowXStart; x <= rowXEnd; x += LevelConstants.CHUNK_WIDTH) {
                 // Handle wrapping for X
                 int wrappedX = x;
                 wrappedX = ((wrappedX % levelWidth) + levelWidth) % levelWidth;
