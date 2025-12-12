@@ -125,7 +125,7 @@ public class ParallaxManager {
         // Calculate vertical background position to map bands to world coordinates (avoiding tearing during vertical scroll)
         // Background moves at 0.1 vertical parallax.
         int bgCamY = (int)(cam.getY() * 0.1f);
-        int mapHeight = 512; // Assuming 512px height for EHZ background loop
+        int mapHeight = 256; // Adjusted to 256 based on observation of "bottom rows" wrapping behavior
 
         for (int y = 0; y < VISIBLE_LINES; y++) {
             // Map screen line to background map line
@@ -136,7 +136,9 @@ public class ParallaxManager {
 
             // Banding based on Map Y
             // Sky (0-80 approx): Slower (0.25)
-            // Hills (80+): Normal (0.5)
+            // Hills (80-128 approx): Normal (0.5)
+            // Water (128+): Normal (0.5) + Ripple
+
             if (mapY < 80) {
                 baseB = (short) -(camX >> 2);
             } else {
@@ -146,12 +148,12 @@ public class ParallaxManager {
             short b = baseB;
 
             // Water region ripple
-            // Water usually starts lower down. Trying 240.
-            if (mapY >= 240) {
+            // Starting at 128 (Halfway down 256px map)
+            if (mapY >= 128) {
                 if (ehzRipple != null && ehzRipple.length > 0) {
                     int slowFrame = frameCounter >> 3;
                     // Use mapY for ripple index to keep ripple consistent with world
-                    int idx = (slowFrame + (mapY - 240)) % ehzRipple.length;
+                    int idx = (slowFrame + (mapY - 128)) % ehzRipple.length;
                     if (idx < 0) idx += ehzRipple.length;
 
                     int offset = ehzRipple[idx] & 0x3;
