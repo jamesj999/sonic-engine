@@ -121,21 +121,39 @@ public class ParallaxManager {
         short planeA = (short) -camX;
 
         // EHZ Parallax approximation
-        // Unified speed for Sky/Hills to prevent cloud tearing (which happens if the transition line cuts through a cloud).
-        // Standard speed 0.5.
+
+        // Calculate vertical background position to map bands to world coordinates (avoiding tearing during vertical scroll)
+        // Background moves at 0.1 vertical parallax.
+        int bgCamY = (int)(cam.getY() * 0.1f);
+        int mapHeight = 512; // Assuming 512px height for EHZ background loop
+
         for (int y = 0; y < VISIBLE_LINES; y++) {
-            short baseB = (short) -(camX >> 1);
+            // Map screen line to background map line
+            int mapY = (y + bgCamY) % mapHeight;
+            if (mapY < 0) mapY += mapHeight;
+
+            short baseB;
+
+            // Banding based on Map Y
+            // Sky (0-80 approx): Slower (0.25)
+            // Hills (80+): Normal (0.5)
+            if (mapY < 80) {
+                baseB = (short) -(camX >> 2);
+            } else {
+                baseB = (short) -(camX >> 1);
+            }
+
             short b = baseB;
 
             // Water region ripple
-            if (y >= 112 && y < VISIBLE_LINES) {
+            // Water usually starts lower down. Trying 240.
+            if (mapY >= 240) {
                 if (ehzRipple != null && ehzRipple.length > 0) {
-                    // Slow down ripple animation to reduce erratic movement
                     int slowFrame = frameCounter >> 3;
-                    int idx = (slowFrame + (y - 112)) % ehzRipple.length;
+                    // Use mapY for ripple index to keep ripple consistent with world
+                    int idx = (slowFrame + (mapY - 240)) % ehzRipple.length;
                     if (idx < 0) idx += ehzRipple.length;
 
-                    // Sanitize ripple data to 0-3 range
                     int offset = ehzRipple[idx] & 0x3;
                     b += (short) offset;
                 }
