@@ -399,9 +399,6 @@ public class SmpsSequencer implements AudioStream {
         }
 
         int base = normalTempo;
-        if (base == 0) {
-            base = 0x100; // Default to 1 tick/frame if tempo is 0 (common for SFX)
-        }
 
         if (speedShoes) {
             base = SPEED_UP_TEMPOS.getOrDefault(smpsData.getId(), base);
@@ -1208,7 +1205,19 @@ public class SmpsSequencer implements AudioStream {
                 refreshVolume(t);
             } else {
                 if (val == 0x80) { 
+                    // Treating 0x80 as STOP per user request to fix lingering SFX (Jump)
+                    // Standard SMPS might treat this as RESET, but Sonic 2 seems to rely on stop here.
                     t.envHold = true;
+                    t.envValue = 0x0F; // Silence
+                    refreshVolume(t);
+                } else if (val == 0x81) {
+                    // HOLD
+                    t.envHold = true;
+                } else if (val == 0x83) {
+                    // STOP
+                    t.envHold = true;
+                    t.envValue = 0x0F; // Silence
+                    refreshVolume(t);
                 } else {
                     t.envHold = true;
                 }

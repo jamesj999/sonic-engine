@@ -147,11 +147,14 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         
         if (ch >= 0 && ch < 6) {
             if (isSfx(source)) {
-                if (fmLocks[ch] != source) {
+                if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
                     fmLocks[ch] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
                 }
-                super.writeFm(source, port, reg, val);
+
+                if (fmLocks[ch] == source) {
+                    super.writeFm(source, port, reg, val);
+                }
             } else {
                 if (fmLocks[ch] == null) {
                     super.writeFm(source, port, reg, val);
@@ -171,11 +174,14 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             psgLatches.put(source, ch);
             
             if (isSfx(source)) {
-                if (psgLocks[ch] != source) {
+                if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
                     psgLocks[ch] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
                 }
-                super.writePsg(source, val);
+
+                if (psgLocks[ch] == source) {
+                    super.writePsg(source, val);
+                }
             } else {
                 if (psgLocks[ch] == null) {
                     super.writePsg(source, val);
@@ -187,6 +193,11 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             if (ch != null) {
                 if (isSfx(source)) {
                     // Update lock just in case? Already locked by Latch.
+                    if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
+                        psgLocks[ch] = (SmpsSequencer) source;
+                        updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
+                    }
+
                     if (psgLocks[ch] == (SmpsSequencer) source) {
                         super.writePsg(source, val);
                     }
@@ -209,11 +220,14 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         // Channel ID is passed explicitly.
         if (channelId >= 0 && channelId < 6) {
             if (isSfx(source)) {
-                if (fmLocks[channelId] != source) {
+                if (shouldStealLock(fmLocks[channelId], (SmpsSequencer) source)) {
                     fmLocks[channelId] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.FM, channelId, true);
                 }
-                super.setInstrument(source, channelId, voice);
+
+                if (fmLocks[channelId] == source) {
+                    super.setInstrument(source, channelId, voice);
+                }
             } else {
                 if (fmLocks[channelId] == null) {
                     super.setInstrument(source, channelId, voice);
@@ -227,11 +241,14 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         // DAC is on Channel 5 (FM6)
         int ch = 5;
         if (isSfx(source)) {
-            if (fmLocks[ch] != source) {
+            if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
                 fmLocks[ch] = (SmpsSequencer) source;
                 updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
             }
-            super.playDac(source, note);
+
+            if (fmLocks[ch] == source) {
+                super.playDac(source, note);
+            }
         } else {
             if (fmLocks[ch] == null) {
                 super.playDac(source, note);
@@ -239,6 +256,19 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         }
     }
     
+    private boolean shouldStealLock(SmpsSequencer currentLock, SmpsSequencer challenger) {
+        if (currentLock == null) return true;
+        if (currentLock == challenger) return true;
+        if (!isSfx(currentLock)) return true; // Challenger is SFX, current is Music -> Steal
+
+        // Both are SFX. Priority: Newer wins.
+        // Index in list: higher is newer.
+        int currentIdx = sequencers.indexOf(currentLock);
+        int challengerIdx = sequencers.indexOf(challenger);
+
+        return challengerIdx > currentIdx;
+    }
+
     @Override
     public void stopDac(Object source) {
         int ch = 5;
