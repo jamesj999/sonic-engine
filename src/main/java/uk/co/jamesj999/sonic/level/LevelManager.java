@@ -665,6 +665,10 @@ public class LevelManager {
 
     public void setClearColor(GL2 gl) {
         Palette.Color backgroundColor = level.getPalette(0).getColor(0);
-        gl.glClearColor(backgroundColor.r / 255f, backgroundColor.g / 255f, backgroundColor.b / 255f, 1.0f);
+        gl.glClearColor(
+                Byte.toUnsignedInt(backgroundColor.r) / 255f,
+                Byte.toUnsignedInt(backgroundColor.g) / 255f,
+                Byte.toUnsignedInt(backgroundColor.b) / 255f,
+                1.0f);
     }
 }
