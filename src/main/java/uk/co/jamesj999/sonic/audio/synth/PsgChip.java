@@ -166,7 +166,7 @@ public class PsgChip {
                 case 0 -> 0x10;
                 case 1 -> 0x20;
                 case 2 -> 0x40;
-                default -> Math.max(1, tonePeriod[2]);
+                default -> Math.max(1, tonePeriod[2] * 2);
             };
             int noiseVol = registers[7] & 0x0F;
             double noiseWave = integrateNoiseChannel(noiseReg, rateVal, clocksPerSample);

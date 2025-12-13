@@ -52,6 +52,10 @@ public abstract class AbstractSmpsData {
 
     public abstract int getBaseNoteOffset();
 
+    public int getPsgBaseNoteOffset() {
+        return getBaseNoteOffset();
+    }
+
     public byte[] getData() {
         return data;
     }

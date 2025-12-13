@@ -1015,7 +1015,7 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        int baseNoteOffset = smpsData.getBaseNoteOffset();
+        int baseNoteOffset = (t.type == TrackType.PSG) ? smpsData.getPsgBaseNoteOffset() : smpsData.getBaseNoteOffset();
         int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
         if (n < 0) return;
 

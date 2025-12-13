@@ -34,10 +34,10 @@ public class NoteFreqTest {
     @Test
     public void testSonic2BaseNote() {
         // Sonic 2 (Little Endian). Note 0x81.
-        // BaseNoteOffset = 1.
-        // n = 0x81 - 0x81 + 1 = 1.
+        // BaseNoteOffset = 13.
+        // n = 0x81 - 0x81 + 13 = 13.
         // n % 12 = 1 -> FNUM_TABLE[1] = 653.
-        // n / 12 = 0 -> Block 0.
+        // n / 12 = 1 -> Block 1.
 
         byte[] data = new byte[100];
         // Header (LE)
@@ -67,8 +67,8 @@ public class NoteFreqTest {
 
         // FNUM_TABLE[1] = 653.
         assertEquals("Sonic 2 Note 0x81 FNum", 653, synth.lastFnum);
-        // Block should be 0 (Octave 0)
-        assertEquals("Sonic 2 Note 0x81 Block", 0, synth.lastBlock);
+        // Block should be 1 (Octave 1)
+        assertEquals("Sonic 2 Note 0x81 Block", 1, synth.lastBlock);
     }
 
     private void write16(byte[] data, int offset, int val, boolean le) {
