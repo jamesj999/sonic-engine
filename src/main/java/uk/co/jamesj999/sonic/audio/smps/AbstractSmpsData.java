@@ -52,6 +52,14 @@ public abstract class AbstractSmpsData {
 
     public abstract int getBaseNoteOffset();
 
+    /**
+     * Some drivers (e.g., Sonic 2) use different base notes for FM vs PSG.
+     * Defaults to the FM base note unless overridden.
+     */
+    public int getPsgBaseNoteOffset() {
+        return getBaseNoteOffset();
+    }
+
     public byte[] getData() {
         return data;
     }

@@ -148,4 +148,9 @@ public class Sonic2SfxData extends AbstractSmpsData {
     public int getBaseNoteOffset() {
         return 13; // Sonic 2 base note (B)
     }
+
+    @Override
+    public int getPsgBaseNoteOffset() {
+        return 0; // PSG base note C for SFX (matches DefDrv default)
+    }
 }

@@ -105,6 +105,15 @@ public class SmpsSequencer implements AudioStream {
     private static final int[] FNUM_TABLE = {
         617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
     };
+    // SMPSPlay DEF_PSGFREQ_68K table (register values). Slice from DEF_PSGFREQ_PRE starting at index 12 (count 70).
+    private static final int[] PSG_FREQ_TABLE = {
+        0x356, 0x326, 0x2F9, 0x2CE, 0x2A5, 0x280, 0x25C, 0x23A, 0x21A, 0x1FB, 0x1DF, 0x1C4,
+        0x1AB, 0x193, 0x17D, 0x167, 0x153, 0x140, 0x12E, 0x11D, 0x10D, 0x0FE, 0x0EF, 0x0E2,
+        0x0D6, 0x0C9, 0x0BE, 0x0B4, 0x0A9, 0x0A0, 0x097, 0x08F, 0x087, 0x07F, 0x078, 0x071,
+        0x06B, 0x065, 0x05F, 0x05A, 0x055, 0x050, 0x04B, 0x047, 0x043, 0x040, 0x03C, 0x039,
+        0x036, 0x033, 0x030, 0x02D, 0x02B, 0x028, 0x026, 0x024, 0x022, 0x020, 0x01F, 0x01D,
+        0x01B, 0x01A, 0x018, 0x017, 0x016, 0x015, 0x013, 0x012, 0x011, 0x010
+    };
 
     // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3, Op4) mapped to bits 0-3.
     // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
@@ -1015,7 +1024,7 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        int baseNoteOffset = smpsData.getBaseNoteOffset();
+        int baseNoteOffset = (t.type == TrackType.PSG) ? smpsData.getPsgBaseNoteOffset() : smpsData.getBaseNoteOffset();
         int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
         if (n < 0) return;
 
@@ -1091,11 +1100,11 @@ public class SmpsSequencer implements AudioStream {
             t.tieNext = false;
 
         } else {
-            double freq = (FNUM_TABLE[noteIdx] * 7670453.0) / (72.0 * (1 << (20 - (octave + 1))));
-
-            int reg = (int) (3579545.0 / (32.0 * freq));
-            if (reg > 1023) reg = 1023;
-            if (reg < 1) reg = 1;
+            // Use SMPSPlay PSG register table (Def_68k) for accuracy against the Sonic 2 driver definition.
+            int psgNote = octave * 12 + noteIdx;
+            if (psgNote < 0) psgNote = 0;
+            if (psgNote >= PSG_FREQ_TABLE.length) psgNote = PSG_FREQ_TABLE.length - 1;
+            int reg = PSG_FREQ_TABLE[psgNote];
 
             reg += t.detune;
             if (reg > 1023) reg = 1023;

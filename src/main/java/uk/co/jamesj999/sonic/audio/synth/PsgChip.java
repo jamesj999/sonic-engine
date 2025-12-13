@@ -3,8 +3,8 @@ package uk.co.jamesj999.sonic.audio.synth;
 public class PsgChip {
     private static final double CLOCK = 3579545.0; // Master NTSC clock
     private static final double SAMPLE_RATE = 44100.0;
-    // Use master/8 so tone freq matches SN76496 formula f = clock / (32 * N) (SMPSPlay parity)
-    private static final double CLOCK_DIV = 8.0;
+    // SN76489 pre-divides master by 16 (see libvgm sn76489.c dClock)
+    private static final double CLOCK_DIV = 16.0;
     private static final double STEP = (CLOCK / CLOCK_DIV) / SAMPLE_RATE;
     private static final double LPF_CUTOFF_HZ = 12000.0;
     private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
@@ -41,7 +41,7 @@ public class PsgChip {
         tonePeriod[0] = tonePeriod[1] = tonePeriod[2] = 1;
         for (int ch = 0; ch < 3; ch++) {
             outputs[ch] = true;
-            counters[ch] = tonePeriod[ch] * 4.0;
+            counters[ch] = tonePeriod[ch];
         }
         outputs[3] = (lfsr & 1) == 1;
         counters[3] = 1.0;
@@ -150,7 +150,7 @@ public class PsgChip {
             // Tone Channels
             for (int ch = 0; ch < 3; ch++) {
                 int vol = registers[ch * 2 + 1] & 0x0F;
-                double period = Math.max(1, tonePeriod[ch]) * 4.0;
+                double period = Math.max(1, tonePeriod[ch]);
                 double wave = integrateToneChannel(ch, period, clocksPerSample);
                 double amp = VOLUME_TABLE[vol];
                 double voice = wave * amp;
@@ -166,7 +166,7 @@ public class PsgChip {
                 case 0 -> 0x40;
                 case 1 -> 0x80;
                 case 2 -> 0x100;
-                default -> Math.max(1, tonePeriod[2] * 4.0);
+                default -> Math.max(1, tonePeriod[2]);
             };
             int noiseVol = registers[7] & 0x0F;
             double noiseWave = integrateNoiseChannel(noiseReg, rateVal, clocksPerSample);
