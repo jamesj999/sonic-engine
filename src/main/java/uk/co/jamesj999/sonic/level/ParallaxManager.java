@@ -78,7 +78,7 @@ public class ParallaxManager {
     public int getMinScroll() { return minScroll; }
     public int getMaxScroll() { return maxScroll; }
 
-    public void update(int zoneId, int actId, Camera cam, int frameCounter) {
+    public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY) {
         // Reset min/max
         minScroll = Integer.MAX_VALUE;
         maxScroll = Integer.MIN_VALUE;
@@ -92,7 +92,7 @@ public class ParallaxManager {
 
         switch (zoneId) {
             case ZONE_EHZ:
-                updateEhz(cam, frameCounter);
+                updateEhz(cam, frameCounter, bgScrollY);
                 break;
             case ZONE_WFZ:
                 updateWfz(cam, frameCounter);
@@ -116,20 +116,18 @@ public class ParallaxManager {
         for (int y = 0; y < VISIBLE_LINES; y++) hScroll[y] = packed;
     }
 
-    private void updateEhz(Camera cam, int frameCounter) {
+    private void updateEhz(Camera cam, int frameCounter, int bgScrollY) {
         int camX = cam.getX();
         short planeA = (short) -camX;
 
         // EHZ Parallax approximation
 
         // Calculate vertical background position to map bands to world coordinates (avoiding tearing during vertical scroll)
-        // Background moves at 0.1 vertical parallax.
-        int bgCamY = (int)(cam.getY() * 0.1f);
         int mapHeight = 256; // Adjusted to 256 based on observation of "bottom rows" wrapping behavior
 
         for (int y = 0; y < VISIBLE_LINES; y++) {
             // Map screen line to background map line
-            int mapY = (y + bgCamY) % mapHeight;
+            int mapY = (y + bgScrollY) % mapHeight;
             if (mapY < 0) mapY += mapHeight;
 
             short baseB;
