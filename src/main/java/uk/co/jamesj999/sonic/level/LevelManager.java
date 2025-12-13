@@ -34,6 +34,7 @@ public class LevelManager {
     private static final Logger LOGGER = Logger.getLogger(LevelManager.class.getName());
     private static LevelManager levelManager;
     private Level level;
+    private Game game;
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
@@ -72,7 +73,7 @@ public class LevelManager {
             Rom rom = new Rom();
             rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
             parallaxManager.load(rom);
-            Game game = new Sonic2(rom);
+            game = new Sonic2(rom);
             AudioManager.getInstance().setRom(rom);
             AudioManager.getInstance().setSoundMap(game.getSoundMap());
             AudioManager.getInstance().resetRingSound();
@@ -221,6 +222,12 @@ public class LevelManager {
 
         int bgCameraX = (int) (cameraX * parallaxX);
         int bgCameraY = (int) (cameraY * parallaxY);
+
+        if (layerIndex == 1 && game != null) {
+            int levelIdx = levels.get(currentZone).get(currentAct).getLevelIndex();
+            int[] scroll = game.getBackgroundScroll(levelIdx, cameraX, cameraY);
+            bgCameraY = scroll[1];
+        }
 
         int[] hScroll = (layerIndex == 1) ? parallaxManager.getHScroll() : null;
 

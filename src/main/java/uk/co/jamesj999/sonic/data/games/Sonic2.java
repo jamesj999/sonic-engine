@@ -15,6 +15,7 @@ import static uk.co.jamesj999.sonic.data.games.Sonic2Constants.*;
 public class Sonic2 extends Game {
 
     private final Rom rom;
+    private static final int BG_SCROLL_TABLE_ADDR = 0x00C296;
 
     public Sonic2(Rom rom) {
         this.rom = rom;
@@ -144,6 +145,107 @@ public class Sonic2 extends Game {
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
         return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr, levelBoundariesAddr);
+    }
+
+    @Override
+    public int[] getBackgroundScroll(int levelIdx, int cameraX, int cameraY) {
+        try {
+            int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
+            int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
+
+            if (zoneIdx > 16) {
+                return new int[]{0, 0};
+            }
+
+            int offset = rom.read16BitAddr(BG_SCROLL_TABLE_ADDR + zoneIdx * 2);
+            int routineAddr = BG_SCROLL_TABLE_ADDR + offset;
+
+            int d0 = cameraX;
+            int d1 = cameraY;
+
+            int ee08 = 0; // Y
+            int ee0c = 0; // X
+
+            switch (routineAddr) {
+                case 0x00C2B8: // Clear/Reset
+                case 0x00C2F4: // Clear/Reset
+                    ee08 = 0;
+                    ee0c = 0;
+                    break;
+
+                case 0x00C2E4: // Common parallax scaling
+                    d0 = (d0 >>> 2) & 0xFFFF;
+                    ee0c = d0;
+                    d1 = (d1 >>> 3) & 0xFFFF;
+                    ee08 = d1;
+                    break;
+
+                case 0x00C2F2:
+                case 0x00C320:
+                case 0x00C38A:
+                    // RTS only. Using 0 as we start fresh.
+                    break;
+
+                case 0x00C322: // Scaled + constant, then clear base
+                    d0 = (d0 >>> 3) & 0xFFFF;
+                    d0 = (d0 + 0x0050) & 0xFFFF;
+                    ee0c = d0;
+                    ee08 = 0;
+                    break;
+
+                case 0x00C332: // Act-dependent baseline shift
+                    ee08 = 0;
+                    if (actIdx != 0) {
+                        // Act 2: RTS, so use 0 (or previous? but we assume init so 0)
+                    } else {
+                        d0 = (d0 | 0x0003) & 0xFFFF;
+                        d0 = (d0 - 0x0140) & 0xFFFF;
+                        ee0c = d0;
+                    }
+                    break;
+
+                case 0x00C364: // Clear specific bases
+                    ee08 = 0;
+                    ee0c = 0;
+                    break;
+
+                case 0x00C372: // Multi-layer vertical bases
+                    d0 = (d0 >>> 2) & 0xFFFF;
+                    ee0c = d0;
+                    d1 = (d1 >>> 1) & 0xFFFF;
+                    // EE10 = d1 (Ignored for now, using EE08 as primary)
+                    d1 = (d1 >>> 2) & 0xFFFF;
+                    ee08 = d1;
+                    break;
+
+                case 0x00C3C6: // Clear primary bases
+                    ee08 = 0;
+                    ee0c = 0;
+                    break;
+
+                case 0x00C38C: // Act-dependent plus MULU scale
+                    if (actIdx != 0) {
+                        d0 = (d0 - 0x00E0) & 0xFFFF;
+                        d0 = (d0 >>> 1) & 0xFFFF;
+                        ee0c = d0;
+                    } else {
+                        d0 = (d0 - 0x0180) & 0xFFFF;
+                        ee0c = d0;
+                    }
+                    long mulRes = (d1 & 0xFFFFL) * 0x0119L;
+                    d1 = (int) (mulRes >> 8);
+                    ee08 = d1 & 0xFFFF;
+                    break;
+
+                default:
+                    // Unknown routine, default to 0
+                    break;
+            }
+
+            return new int[]{ ee0c, ee08 };
+        } catch (IOException e) {
+            return new int[]{0, 0};
+        }
     }
 
     private int getSolidTileHeightsAddr() {
