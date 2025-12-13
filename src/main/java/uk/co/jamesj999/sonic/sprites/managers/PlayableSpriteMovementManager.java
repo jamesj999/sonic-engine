@@ -4,15 +4,19 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.timer.timers.ControlLockTimer;
 import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
 	private final TerrainCollisionManager terrainCollisionManager = TerrainCollisionManager
 			.getInstance();
+    private final AudioManager audioManager = AudioManager.getInstance();
 
 	private final short max;
 	private final short runAccel;
@@ -26,7 +30,8 @@ public class PlayableSpriteMovementManager extends
 	private final short rollDecel;
 
 	private boolean jumpPressed;
-    private boolean jumpHeld;
+	private boolean jumpHeld;
+    private boolean skidding;
 
 	private boolean testKeyPressed;
 
@@ -45,112 +50,147 @@ public class PlayableSpriteMovementManager extends
 		rollDecel = sprite.getRollDecel();
 	}
 	@Override
-    public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
+	public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
 		// A simple way to test our running modes...
-        if (testKey && !testKeyPressed) {
+		if (testKey && !testKeyPressed) {
 			testKeyPressed = true;
-            if ((GroundMode.GROUND.equals(sprite.getGroundMode()))) {
-                sprite.setGroundMode(GroundMode.RIGHTWALL);
-            } else if(GroundMode.RIGHTWALL.equals(sprite.getGroundMode())) {
+			if ((GroundMode.GROUND.equals(sprite.getGroundMode()))) {
+				sprite.setGroundMode(GroundMode.RIGHTWALL);
+			} else if(GroundMode.RIGHTWALL.equals(sprite.getGroundMode())) {
 				sprite.setGroundMode(GroundMode.CEILING);
 			} else if(GroundMode.CEILING.equals(sprite.getGroundMode())) {
 				sprite.setGroundMode(GroundMode.LEFTWALL);
 			} else {
 				sprite.setGroundMode(GroundMode.GROUND);
 			}
-        }
+		}
 
 		if(testKeyPressed && !testKey) {
 			testKeyPressed = false;
 		}
 
-        short originalX = sprite.getX();
-        short originalY = sprite.getY();
+		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null;
 
-        // First thing to do is run this additional method to find out if the jump button has been released recently
-        // in order to shorten the jump.
-        if (jumpPressed) {
-            jumpHandler(jump);
-        }
+		if (controlLocked) {
+			left = false;
+			right = false;
+		}
 
-        if(sprite.getSpindash()) {
-             //A little bit of logic to make sure holding jump doesn't accelerate the spindash on each frame.
-            if(jumpHeld && jump) {
-                jump = false;
-            } else if(jumpHeld && !jump) {
-                jumpHeld = false;
-            } else if(!jumpHeld && jump) {
-                jumpHeld = true;
-            }
+		short originalX = sprite.getX();
+		short originalY = sprite.getY();
 
-            if(!down) {
-                releaseSpindash(sprite);
-                // Can't jump straight out of a spindash:
-                jump = false;
+		// First thing to do is run this additional method to find out if the jump button has been released recently
+		// in order to shorten the jump.
+		if (jumpPressed) {
+			jumpHandler(jump);
+		}
 
-                // This won't actually work IRL as it will cause the sprite to be able to clip through walls etc.
-                // (It's just here for testing until I can work out a better way to do this):
-                return;
-            }
+		if(sprite.getSpindash()) {
+			//A little bit of logic to make sure holding jump doesn't accelerate the spindash on each frame.
+			if(jumpHeld && jump) {
+				jump = false;
+			} else if(jumpHeld && !jump) {
+				jumpHeld = false;
+			} else if(!jumpHeld && jump) {
+				jumpHeld = true;
+			}
 
-            if(down && !jump) {
-                spindashCooldown(sprite);
-                return;
-            }
-        }
+			if(!down) {
+				releaseSpindash(sprite);
+				// Can't jump straight out of a spindash:
+				jump = false;
 
-         //Detect the start of spindash or deal with 'revving'.
-        if(down && !left && !right && sprite.getGSpeed() == 0 && jump && !sprite.getAir()) {
-            handleSpindash(sprite);
-            return;
-        }
+				// This won't actually work IRL as it will cause the sprite to be able to clip through walls etc.
+				// (It's just here for testing until I can work out a better way to do this):
+				return;
+			}
 
-        // Next thing to do is calculate movement and acceleration.
-        if(sprite.getAir()) {
-            // Sonic is in the air
-            calculateAirMovement(sprite, left, right);
-        } else {
-            // Sonic is on the ground
-            if (jump && !jumpPressed) {
-                // Commence jump
-                jump(sprite);
-            } else {
-                calculateGSpeed(sprite, left, right);
-                // Since this will update the gSpeed, we now need to update the X/Y from this.
-                calculateXYFromGSpeed(sprite);
-            }
-        }
+			if(down && !jump) {
+				spindashCooldown(sprite);
+				return;
+			}
+		}
 
-        // Now, move the sprite as per the air movement or GSpeed rules:
-        sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
+		//Detect the start of spindash or deal with 'revving'.
+		if(down && !left && !right && sprite.getGSpeed() == 0 && jump && !sprite.getAir()) {
+			handleSpindash(sprite);
+			return;
+		}
 
-        // Has the sprite slowed down enough to stop rolling? Do we need to start rolling?
-        // (Only applicable if not in the air)
-        if (!sprite.getAir()) {
+		// Next thing to do is calculate movement and acceleration.
+		if(sprite.getAir()) {
+			// Sonic is in the air
+			calculateAirMovement(sprite, left, right);
+		} else {
+			// Sonic is on the ground
+			if (jump && !jumpPressed) {
+				// Commence jump
+				jump(sprite);
+			} else {
+				calculateGSpeed(sprite, left, right);
+				// Since this will update the gSpeed, we now need to update the X/Y from this.
+				calculateXYFromGSpeed(sprite);
+
+				if (!controlLocked) {
+					// Check for slip/fall condition
+					short absGSpeed = (short) Math.abs(sprite.getGSpeed());
+					int angle = sprite.getAngle() & 0xFF;
+
+					// If too slow (speed < 2.5 pixels) and on a steep slope (angle between 33 and 223)
+					if (absGSpeed < 640 && (angle >= 33 && angle <= 223)) {
+						// Detach
+						sprite.setAir(true);
+						// Lock controls
+						sprite.setGSpeed((short) 0);
+						sprite.setXSpeed((short) 0);
+						sprite.setYSpeed((short) 0);
+
+						TimerManager.getInstance().registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
+					}
+				}
+			}
+		}
+
+		sprite.updateSensors(originalX, originalY);
+
+		boolean inAir = sprite.getAir();
+		if(!inAir) {
+			doWallCollision(sprite);
+		}
+
+		// Now, move the sprite as per the air movement or GSpeed rules:
+		sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
+
+		// Has the sprite slowed down enough to stop rolling? Do we need to start rolling?
+		// (Only applicable if not in the air)
+		if (!sprite.getAir()) {
 			calculateRoll(sprite, down);
 		}
 
-        // Store some attributes in case we need to 'reset' the terrain collision:
-        short yBeforeTerrainCollision = sprite.getY();
-        boolean inAir = sprite.getAir();
-        boolean isRoll = sprite.getRolling();
+		// Store some attributes in case we need to 'reset' the terrain collision:
+		short yBeforeTerrainCollision = sprite.getY();
+		inAir = sprite.getAir();
+		boolean isRoll = sprite.getRolling();
 
-        // Perform terrain checks - results are updated directly into the sprite
-        SensorResult[] groundResult = terrainCollisionManager.getSensorResult(sprite.getGroundSensors());
+		if(inAir) {
+			doWallCollision(sprite);
+		}
+
+		// Perform terrain checks - results are updated directly into the sprite
+		SensorResult[] groundResult = terrainCollisionManager.getSensorResult(sprite.getGroundSensors());
 		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
-		SensorResult[] pushResult = terrainCollisionManager.getSensorResult(sprite.getPushSensors());
 
-        doTerrainCollision(sprite, groundResult);
-		//doWallCollision(sprite, pushResult);
+		doTerrainCollision(sprite, groundResult);
+		doCeilingCollision(sprite, ceilingResult);
 
-        // This won't work when graphics are involved...
-        if(sprite.getX() > originalX) {
-            sprite.setDirection(Direction.RIGHT);
-        } else if(sprite.getX() < originalX) {
-            sprite.setDirection(Direction.LEFT);
-        }
+		// This won't work when graphics are involved...
+		if(sprite.getX() > originalX) {
+			sprite.setDirection(Direction.RIGHT);
+		} else if(sprite.getX() < originalX) {
+			sprite.setDirection(Direction.LEFT);
+		}
 
-        // Temporary 'death' detection - just resets X/Y of sprite.
+		// Temporary 'death' detection - just resets X/Y of sprite.
 		// TODO - This no longer works. y <= 0 would put sonic above the viewport. Needs to work based on level height once merged.
         /*if (sprite.getY() <= 0) {
             sprite.setX((short) 50);
@@ -163,22 +203,112 @@ public class PlayableSpriteMovementManager extends
 
 		// Update active sensors
 		sprite.updateSensors(originalX, originalY);
-    }
+	}
 
-    private void doWallCollision(AbstractPlayableSprite sprite, SensorResult[] pushResult) {
-		SensorResult lowestResult = findLowestSensorResult(pushResult);
-		if(lowestResult != null) {
-			Direction direction = lowestResult.direction();
-			byte distance = lowestResult.distance();
-			if (distance < 0) {
-				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
-				sprite.setXSpeed((short) 0);
-				sprite.setGSpeed((short) 0);
+	private void doCeilingCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
+		// Only check ceiling collision if we are moving upwards (ySpeed < 0)
+		if (sprite.getYSpeed() < 0) {
+			SensorResult lowestResult = findLowestSensorResult(results);
+			if (lowestResult != null) {
+				// Distance is positive if we are below the ceiling, negative if we have penetrated it.
+				// If distance < 0, we have hit the ceiling.
+				// A small threshold might be needed, but < 0 is standard for penetration.
+				if (lowestResult.distance() < 0) {
+					// We hit the ceiling.
+					// 1. Correct position.
+					// distance is negative (e.g. -5). We need to move DOWN by 5.
+					// moveForSensorResult handles direction UP: y - distance => y - (-5) => y + 5. Correct.
+					moveForSensorResult(sprite, lowestResult);
+
+					// 2. Stop vertical movement
+					sprite.setYSpeed((short) 0);
+				}
 			}
 		}
-    }
+	}
 
-    private void doTerrainCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
+	private void doWallCollision(AbstractPlayableSprite sprite) {
+		SensorResult[] pushResult = new SensorResult[sprite.getPushSensors().length];
+		// If grounded, we need to check if we're going to hit a wall based on our xSpeed.
+		// If we are, we need to stop moving.
+		if(!sprite.getAir()) {
+			// Grounded collision
+			// TODO: This really should be xSpeed and ySpeed but we only care about xSpeed for now.
+			// We scan for the wall at the position we will be at next frame.
+			// If we find a wall, we move to it and stop.
+			for(int i = 0; i < sprite.getPushSensors().length; i++) {
+				pushResult[i] = sprite.getPushSensors()[i].scan((short) (sprite.getXSpeed() / 256), (short) (sprite.getYSpeed() / 256));
+			}
+			SensorResult lowestResult = findLowestSensorResult(pushResult);
+			if(lowestResult != null) {
+				byte distance = lowestResult.distance();
+				Direction dir = lowestResult.direction();
+
+				boolean movingTowards = false;
+				if (dir == Direction.LEFT && sprite.getXSpeed() < 0) movingTowards = true;
+				else if (dir == Direction.RIGHT && sprite.getXSpeed() > 0) movingTowards = true;
+				else if (dir == Direction.UP && sprite.getYSpeed() < 0) movingTowards = true;
+				else if (dir == Direction.DOWN && sprite.getYSpeed() > 0) movingTowards = true;
+
+				if (distance < 0 || (distance == 0 && movingTowards)) {
+					short lookaheadX = (short) (sprite.getXSpeed() / 256);
+					short lookaheadY = (short) (sprite.getYSpeed() / 256);
+					short subX = (short) (sprite.getXSubpixel() & 0xFF);
+					short subY = (short) (sprite.getYSubpixel() & 0xFF);
+
+					if (dir == Direction.LEFT || dir == Direction.RIGHT) {
+						short move = lookaheadX;
+						if (dir == Direction.LEFT) {
+							move -= distance;
+						} else {
+							move += distance;
+						}
+						sprite.setXSpeed((short) ((move * 256) - subX));
+					} else {
+						short move = lookaheadY;
+						if (dir == Direction.UP) {
+							move -= distance;
+						} else {
+							move += distance;
+						}
+						sprite.setYSpeed((short) ((move * 256) - subY));
+					}
+					sprite.setGSpeed((short) 0);
+				}
+			}
+		} else {
+			// Airborne collision
+			// We scan at current position (because we already moved).
+			// If we are inside a wall, we move out.
+			for(int i = 0; i < sprite.getPushSensors().length; i++) {
+				pushResult[i] = sprite.getPushSensors()[i].scan((short) 0, (short) 0);
+			}
+			SensorResult lowestResult = findLowestSensorResult(pushResult);
+			if(lowestResult != null) {
+				byte distance = lowestResult.distance();
+				Direction dir = lowestResult.direction();
+				boolean collision = distance < 0;
+				if (!collision && distance == 0) {
+					if (dir == Direction.RIGHT && (sprite.getXSubpixel() & 0xFF) > 0) collision = true;
+					else if (dir == Direction.DOWN && (sprite.getYSubpixel() & 0xFF) > 0) collision = true;
+				}
+
+				if (collision) {
+					// Add a 1px buffer to prevent sticking to walls
+					if (dir == Direction.RIGHT) {
+						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1), lowestResult.tileId(), lowestResult.direction());
+					} else if (dir == Direction.LEFT) {
+						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1), lowestResult.tileId(), lowestResult.direction());
+					}
+					moveForSensorResult(sprite, lowestResult);
+					sprite.setXSpeed((short) 0);
+					sprite.setGSpeed((short) 0);
+				}
+			}
+		}
+	}
+
+	private void doTerrainCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
 		SensorResult lowestResult = findLowestSensorResult(results);
 
 		if(sprite.getAir()) {
@@ -201,21 +331,42 @@ public class PlayableSpriteMovementManager extends
 				// Check whether
 				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
 					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
-					sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
+					moveForSensorResult(sprite, lowestResult);
 					// And set sonic's new angle based on the tile found:
-					sprite.setAngle(lowestResult.angle());
+					if (lowestResult.angle() == (byte) 0xFF) {
+						switch (sprite.getGroundMode()) {
+							case GROUND -> sprite.setAngle((byte) 0x00);
+							case RIGHTWALL -> sprite.setAngle((byte) 0xC0);
+							case CEILING -> sprite.setAngle((byte) 0x80);
+							case LEFTWALL -> sprite.setAngle((byte) 0x40);
+						}
+					} else {
+						sprite.setAngle(lowestResult.angle());
+					}
 
 					// And maybe run our landing code
 					calculateLanding(sprite);
+
+					updateGroundMode(sprite);
 				}
 			}
 		} else {
 			// Check if we are still on the ground:
 			// Work out the speeds required to consider us still on the ground
-			short requiredSpeed = (short) Math.min(Math.abs(sprite.getXSpeed()) + 4, 14);
+			short speed = (short) Math.abs(sprite.getXSpeed());
+			if (sprite.getGroundMode() == GroundMode.LEFTWALL || sprite.getGroundMode() == GroundMode.RIGHTWALL) {
+				speed = (short) Math.abs(sprite.getYSpeed());
+			}
+			short requiredSpeed = (short) Math.min(speed + 4, 14);
+
 			if(lowestResult.distance() < requiredSpeed) {
-				sprite.moveForGroundModeAndDirection(lowestResult.distance(), lowestResult.direction());
-				sprite.setAngle(lowestResult.angle());
+				moveForSensorResult(sprite, lowestResult);
+				if (lowestResult.angle() == (byte) 0xFF) {
+					sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
+				} else {
+					sprite.setAngle(lowestResult.angle());
+				}
+				updateGroundMode(sprite);
 			} else {
 				sprite.setAir(true);
 			}
@@ -280,39 +431,42 @@ public class PlayableSpriteMovementManager extends
 //				sprite.setY((short) (terrainHeight - (sprite.getHeight() / 2)));
 //			}
 //        }
-    }
+	}
 
-    private void handleSpindash(AbstractPlayableSprite sprite) {
-        if (!sprite.getSpindash()) {
-            sprite.setSpindash(true);
-            sprite.setSpindashConstant(2f);
-        } else {
-            sprite.setSpindashConstant(sprite.getSpindashConstant() + 2f);
-        }
-    }
+	private void handleSpindash(AbstractPlayableSprite sprite) {
+		if (!sprite.getSpindash()) {
+			sprite.setSpindash(true);
+			sprite.setSpindashConstant(2f);
+		} else {
+			sprite.setSpindashConstant(sprite.getSpindashConstant() + 2f);
+		}
+        float pitch = 1.0f + (sprite.getSpindashConstant() / 24.0f);
+        audioManager.playSfx(GameSound.SPINDASH_CHARGE, pitch);
+	}
 
-    private void releaseSpindash(AbstractPlayableSprite sprite) {
-        sprite.setSpindash(false);
-        short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
-        if(Direction.LEFT.equals(sprite.getDirection())) {
-            sprite.setGSpeed((short) (0 - spindashGSpeed));
-        } else if(Direction.RIGHT.equals(sprite.getDirection())) {
-            sprite.setGSpeed(spindashGSpeed);
-        }
+	private void releaseSpindash(AbstractPlayableSprite sprite) {
+		sprite.setSpindash(false);
+        audioManager.playSfx(GameSound.SPINDASH_RELEASE);
+		short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
+		if(Direction.LEFT.equals(sprite.getDirection())) {
+			sprite.setGSpeed((short) (0 - spindashGSpeed));
+		} else if(Direction.RIGHT.equals(sprite.getDirection())) {
+			sprite.setGSpeed(spindashGSpeed);
+		}
 		Camera.getInstance().setFrozen(true);
 		TimerManager.getInstance().registerTimer(new SpindashCameraTimer("spindash", (32 - (int) sprite.getSpindashConstant())));
 
 		sprite.setSpindashConstant(0f);
-    }
+	}
 
-    private void spindashCooldown(AbstractPlayableSprite sprite) {
-        float spindashConstant = sprite.getSpindashConstant();
-        spindashConstant -= ((spindashConstant / 0.125) / 256);
-        if(spindashConstant < 0.01) {
-            spindashConstant = 0f;
-        }
-        sprite.setSpindashConstant(spindashConstant);
-    }
+	private void spindashCooldown(AbstractPlayableSprite sprite) {
+		float spindashConstant = sprite.getSpindashConstant();
+		spindashConstant -= ((spindashConstant / 0.125) / 256);
+		if(spindashConstant < 0.01) {
+			spindashConstant = 0f;
+		}
+		sprite.setSpindashConstant(spindashConstant);
+	}
 
 	/**
 	 * Will calculate gSpeed for Sprite based on current terrain and left/right
@@ -327,7 +481,7 @@ public class PlayableSpriteMovementManager extends
 	 *            Whether or not the right key is pressed
 	 */
 	private void calculateGSpeed(AbstractPlayableSprite sprite, boolean left,
-			boolean right) {
+								 boolean right) {
 		short gSpeed = sprite.getGSpeed();
 		int angle = calculateAngle(sprite);
 
@@ -356,11 +510,16 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed -= slopeRunningVariant * Math.sin(Math.toRadians(angle));
+		gSpeed += slopeRunningVariant * Math.sin(Math.toRadians(angle));
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
+                if(gSpeed >= 4 * 256 && !skidding) {
+                    audioManager.playSfx(GameSound.SKID);
+                    skidding = true;
+                }
 			} else if (!sprite.getRolling()) {
+                skidding = false;
 				if (gSpeed > -maxSpeed) {
 					gSpeed -= accel;
 				} else {
@@ -371,7 +530,12 @@ public class PlayableSpriteMovementManager extends
 		if (right) {
 			if (gSpeed < 0) {
 				gSpeed += decel;
+                if(gSpeed <= -4 * 256 && !skidding) {
+                    audioManager.playSfx(GameSound.SKID);
+                    skidding = true;
+                }
 			} else if (!sprite.getRolling()) {
+                skidding = false;
 				if (gSpeed < maxSpeed) {
 					gSpeed = (short) (gSpeed + accel);
 				} else {
@@ -379,6 +543,9 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		}
+        if(!left && !right) {
+            skidding = false;
+        }
 		if ((!left && !right) || (sprite.getRolling() && left && gSpeed < 0) || (sprite.getRolling() && right && gSpeed > 0)) {
 			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
 					&& gSpeed < 0) {
@@ -401,9 +568,10 @@ public class PlayableSpriteMovementManager extends
 	private void jump(AbstractPlayableSprite sprite) {
 		sprite.setAir(true);
 		sprite.setRolling(true);
+        audioManager.playSfx(GameSound.JUMP);
 		int angle = calculateAngle(sprite);
 		jumpPressed = true;
-		sprite.setXSpeed((short) (sprite.getXSpeed() - sprite.getJump()
+		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()
 				* Math.sin(Math.toRadians(angle))));
 		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
 				* Math.cos(Math.toRadians(angle))));
@@ -421,7 +589,7 @@ public class PlayableSpriteMovementManager extends
 	 *            Whether or not the right key is pressed
 	 */
 	private void calculateAirMovement(AbstractPlayableSprite sprite,
-			boolean left, boolean right) {
+									  boolean left, boolean right) {
 		short xSpeed = sprite.getXSpeed();
 		short ySpeed = sprite.getYSpeed();
 		// In the air
@@ -480,15 +648,15 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * -(Math.signum(Math
-							.cos(Math.toRadians(angle)))));
+					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(Math
+							.sin(Math.toRadians(angle)))));
 				}
 			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
 					|| (originalAngle >= (byte) 0x20 && originalAngle <= (byte) 0x3F)) {
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * -(Math.signum(Math.cos(Math
+					gSpeed = (short) (ySpeed * (Math.signum(Math.sin(Math
 							.toRadians(angle)))));
 				}
 			}
@@ -526,7 +694,7 @@ public class PlayableSpriteMovementManager extends
 	 *         radians before using Math.sin etc.
 	 */
 	private int calculateAngle(AbstractPlayableSprite sprite) {
-		int angle = (int) ((256 - sprite.getAngle()) * 1.40625);
+		int angle = (int) ((sprite.getAngle() & 0xFF) * 1.40625);
 
 		return angle % 360;
 	}
@@ -563,5 +731,35 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 		return lowestResult;
+	}
+
+	private void moveForSensorResult(AbstractPlayableSprite sprite, SensorResult result) {
+		byte distance = result.distance();
+		switch (result.direction()) {
+			case UP -> sprite.setY((short) (sprite.getY() - distance));
+			case DOWN -> sprite.setY((short) (sprite.getY() + distance));
+			case LEFT -> sprite.setX((short) (sprite.getX() - distance));
+			case RIGHT -> sprite.setX((short) (sprite.getX() + distance));
+		}
+	}
+
+	private void updateGroundMode(AbstractPlayableSprite sprite) {
+		int angle = sprite.getAngle() & 0xFF;
+		GroundMode currentMode = sprite.getGroundMode();
+		GroundMode newMode = currentMode;
+
+		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
+			newMode = GroundMode.GROUND;
+		} else if (angle >= 33 && angle <= 95) {
+			newMode = GroundMode.LEFTWALL;
+		} else if (angle >= 96 && angle <= 160) {
+			newMode = GroundMode.CEILING;
+		} else if (angle >= 161 && angle <= 223) {
+			newMode = GroundMode.RIGHTWALL;
+		}
+
+		if (newMode != currentMode) {
+			sprite.setGroundMode(newMode);
+		}
 	}
 }

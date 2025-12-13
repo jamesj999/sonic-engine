@@ -18,7 +18,8 @@ public class TestRomLogic {
     @Test
     public void testRomLogic() throws IOException {
         Rom rom = new Rom();
-        rom.open("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+        String romFile = RomTestUtils.ensureRomAvailable().getAbsolutePath();
+        rom.open(romFile);
         Game game = new Sonic2(rom);
 
         assertTrue(game.isCompatible());

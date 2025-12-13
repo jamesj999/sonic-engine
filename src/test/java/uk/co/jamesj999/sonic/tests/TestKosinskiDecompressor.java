@@ -7,6 +7,8 @@ import uk.co.jamesj999.sonic.tools.KosinskiReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.channels.Channels;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.logging.Logger;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -55,6 +57,11 @@ public class TestKosinskiDecompressor {
                 (byte) 0x30, (byte) 0x30, (byte) 0x30, (byte) 0x30
         };
 
+        byte[] kosEHZ16 = Files.readAllBytes(Paths.get("src/test/resources/EHZ-16x16.kos"));
+        byte[] rawEHZ16 = Files.readAllBytes(Paths.get("src/test/resources/EHZ-16x16.raw"));
+
+        test(kosEHZ16, rawEHZ16);
+
        // LOG.info("Uncompressed Kosinski Data");
         test(uncompressedKosinskiData, uncompressedData);
 
@@ -69,10 +76,11 @@ public class TestKosinskiDecompressor {
         LOG.info("Input: " + bytesToHexString(input));
         LOG.info("Expected Output " + bytesToHexString(expected));
 
-        KosinskiReader reader = new KosinskiReader();
-        byte[] buffer = new byte[expected.length];
-        reader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),buffer, expected.length);
-        LOG.info("Our Output: " + bytesToHexString(buffer));
+        LOG.info("Old Reader");
+        long start = System.currentTimeMillis();
+        byte[] buffer = KosinskiReader.decompress(Channels.newChannel(new ByteArrayInputStream(input)),true);
+        long end = System.currentTimeMillis();
+        LOG.info("(" + (end-start) + ") Our Output: " + bytesToHexString(buffer));
 
         assertArrayEquals(expected, buffer);
 

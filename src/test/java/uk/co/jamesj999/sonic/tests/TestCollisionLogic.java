@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Test;
+import org.junit.Assume;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.IOException;
@@ -15,20 +16,15 @@ public class TestCollisionLogic {
     public void testCollisionLogic() throws IOException {
         String ehzPriColPath = "EHZ and HTZ primary 16x16 collision index.kos";
         Path path = Path.of(ehzPriColPath);
-        System.out.println(path.toAbsolutePath().toString());
+        Assume.assumeTrue("Test data not available", path.toFile().exists());
         FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE);
 
-        KosinskiReader reader = new KosinskiReader();
-        byte[] collisionBuffer = new byte[0x300];
         int[] collisionArray = new int[0x300];
 
-        var result = reader.decompress(fileChannel, collisionBuffer, collisionBuffer.length);
+        byte[] collisionBuffer = KosinskiReader.decompress(fileChannel, true);
 
         for (int i=0; i< collisionBuffer.length; i++) {
             collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
-        }
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
         }
 
     }

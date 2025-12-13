@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 
 /**
  * All configurable properties are put here. Eventually, these will be loaded
- * from a file. Use {@link SonicConfigurationSerivce} to retrieve the values for
+ * from a file. Use SonicConfigurationSerivce to retrieve the values for
  * these properties. This way, the service can eventually populate the options
  * from the file.
  * 
@@ -17,31 +17,31 @@ public enum SonicConfiguration {
 	/**
 	 * Current Version number.
 	 */
-	VERSION("Alpha With ROM Loading Logic - V0.06"),
+	VERSION,
 	/**
 	 * Actual width of the screen (number of available x-coordinates).
 	 */
-	SCREEN_WIDTH_PIXELS(320),
+	SCREEN_WIDTH_PIXELS,
 	/**
 	 * Actual height of the screen (number of available y-coordinates).
 	 */
-	SCREEN_HEIGHT_PIXELS(224),
+	SCREEN_HEIGHT_PIXELS,
 	/**
 	 * Current width of the screen.
 	 */
-	SCREEN_WIDTH(640),
+	SCREEN_WIDTH,
 	/**
 	 * Current height of the screen.
 	 */
-	SCREEN_HEIGHT(480),
+	SCREEN_HEIGHT,
 	/**
 	 * Scale used with BufferedImage TODO: Work out what this does
 	 */
-	SCALE(1),
+	SCALE,
 	/**
 	 * Frames per second to render. Will make the game faster/slower!
 	 */
-	FPS(60),
+	FPS,
 	/*
 	 * ALWAYS DEFINE BUTTONS IN THE ORDER: UP, DOWN, LEFT, RIGHT. NOT FOR ANY
 	 * TECHNICAL REASON, JUST BECAUSE LEVEL SELECT.
@@ -49,50 +49,82 @@ public enum SonicConfiguration {
 	/**
 	 * Key to look up.
 	 */
-	UP(KeyEvent.VK_UP),
+	UP,
 	/**
 	 * Key to crouch/roll.
 	 */
-	DOWN(KeyEvent.VK_DOWN),
+	DOWN,
 	/**
 	 * Key to move Sonic left.
 	 */
-	LEFT(KeyEvent.VK_LEFT),
+	LEFT,
 	/**
 	 * Key to move Sonic right.
 	 */
-	RIGHT(KeyEvent.VK_RIGHT),
+	RIGHT,
 	/**
 	 * Key to jump etc.
 	 */
-	JUMP(KeyEvent.VK_SPACE),
+	JUMP,
+
+	/**
+	 * Test button only used in debug
+	 */
+	TEST,
+
+	/**
+	 * Test button for next act
+	 */
+	NEXT_ACT,
+
+	/**
+	 * Test button for next zone
+	 */
+	NEXT_ZONE,
+
 	/**
 	 * Code of the sprite of the main playable character.
 	 */
-	MAIN_CHARACTER_CODE("sonic"),
+	MAIN_CHARACTER_CODE,
     /**
      * Whether to display debugging information on screen.
      */
-    DEBUG_VIEW_ENABLED(true),
+    DEBUG_VIEW_ENABLED,
+
+	/**
+	 * Whether to display debugging collision information on screen.
+	 */
+	DEBUG_COLLISION_VIEW_ENABLED,
 
 	/**
 	 * Filename of ROM to use (temporary)
 	 */
-	ROM_FILENAME("Sonic The Hedgehog 2 (W) (REV01) [!].gen"),
+	ROM_FILENAME,
 
 	/**
 	 * Whether to enable Debug Movement Mode
 	 */
-	DEBUG_MODE(false);
+	DEBUG_MODE,
 
-	private Object value;
+	/**
+	 * Whether to enable Audio (Music/SFX)
+	 */
+	AUDIO_ENABLED,
 
-	private SonicConfiguration(final Object value) {
-		this.value = value;
-	}
+	/**
+	 * Region (NTSC/PAL) for audio timing.
+	 */
+	REGION,
 
-	protected Object getValue() {
-		return value;
-	}
+	/**
+	 * Whether to enable DAC Interpolation (smoother sound).
+	 */
+	DAC_INTERPOLATE,
+
+	/**
+	 * Whether to mute FM6 when playing a note on it (if DAC is enabled).
+	 * Parity hack from SMPSPlay.
+	 */
+	FM6_DAC_OFF;
 
 }

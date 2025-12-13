@@ -1,0 +1,1209 @@
+<!DOCTYPE
+  HTML PUBLIC 
+  "-//W3C//DTD HTML 4.01//EN" 
+  "http://www.w3.org/TR/html4/strict.dtd">
+
+<html>
+    <head>
+        <title>YM2612 - Documents - Maxim’s World of Stuff</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <link rel='stylesheet' title="Maxim's theme" href='https://www.smspower.org/maxim/pub/skins/maxim/maxim.css' type='text/css'>
+	<link rel='stylesheet' title="Print view" href='https://www.smspower.org/maxim/pub/skins/maxim/print.css' type='text/css' media="print">
+        <!--HTMLHeader--><style type='text/css'><!--
+  ul, ol, pre, dl, p { margin-top:0px; margin-bottom:0px; }
+  code.escaped { white-space: nowrap; }
+  .vspace { margin-top:1.33em; }
+  .indent { margin-left:40px; }
+  .outdent { margin-left:40px; text-indent:-40px; }
+  a.createlinktext { text-decoration:none; border-bottom:1px dotted gray; }
+  a.createlink { text-decoration:none; position:relative; top:-0.5em;
+    font-weight:bold; font-size:smaller; border-bottom:none; }
+  img { border:0px; }
+  .editconflict { color:green; 
+  font-style:italic; margin-top:1.33em; margin-bottom:1.33em; }
+
+  table.markup { border:2px dotted #ccf; width:90%; }
+  td.markup1, td.markup2 { padding-left:10px; padding-right:10px; }
+  table.vert td.markup1 { border-bottom:1px solid #ccf; }
+  table.horiz td.markup1 { width:23em; border-right:1px solid #ccf; }
+  table.markup caption { text-align:left; }
+  div.faq p, div.faq pre { margin-left:2em; }
+  div.faq p.question { margin:1em 0 0.75em 0; font-weight:bold; }
+  div.faqtoc div.faq * { display:none; }
+  div.faqtoc div.faq p.question 
+    { display:block; font-weight:normal; margin:0.5em 0 0.5em 20px; line-height:normal; }
+  div.faqtoc div.faq p.question * { display:inline; }
+   
+    .frame 
+      { border:1px solid #cccccc; padding:4px; background-color:#f9f9f9; }
+    .lfloat { float:left; margin-right:0.5em; }
+    .rfloat { float:right; margin-left:0.5em; }
+a.varlink { text-decoration:none; }
+
+--></style><meta http-equiv='Content-Type' content='text/html; charset=utf-8' /><link rel='alternate' title='Maxim’s World of Stuff RSS' href="https://www.smspower.org/maxim/RecentChanges?action=rss" type='application/rss+xml' />
+<link rel='stylesheet' type='text/css' href="https://www.smspower.org/pub/attachtable/attachtable.css" />  <meta name='robots' content='index,follow' />
+<link rel='stylesheet' type='text/css' href="https://www.smspower.org/maxim/pub/highslide/highslide.css" />
+
+
+		<script type="afff7985d08378b0f92209b4-text/javascript">
+		<!-- //
+		
+		isIE = 0;
+		browser_type = navigator.appName;
+		if (browser_type == "Microsoft Internet Explorer") { 
+			document.write("<link href='https://www.smspower.org/maxim/pub/skins/maxim/maxim-ie.css' rel='stylesheet' type='text/css'>"); 
+			isIE = 1;
+		}
+
+        // -->
+        </script>
+    </head>
+
+    <body>
+	    
+		<div id="header" style="background: url(https://www.smspower.org/maxim/pub/skins/maxim/image/Box-Top-35.png) no-repeat; " >
+                        <div id="page-title"><a href="https://www.smspower.org/maxim">Maxim’s World of Stuff</a></div>
+                        <div id="page-subtitle"><a href="https://www.smspower.org/maxim/Documents" title='Documents Home'>Documents</a> :: YM2612</div>
+        </div>
+
+        <div id="main">
+            <div class="content-mat">
+                <div id="content">
+			<!--PageText-->
+<div id='wikitext'>
+<p><a name='top' id='top'></a>
+</p><h1>Sega Genesis Technical Manual - YM2612 section</h1>
+<p>Many years ago, there was a file called SEGA2.DOC which was a Mega Drive technical manual with a bunch of errors and some file corruption. A bit less long ago, a bunch of scans surfaced which seemed to exactly match, including a lot of hand-written parts corresponding to the more extreme errors; I transcribed and corrected the errors on this page.
+</p>
+<p class='vspace'>More recently, some better scans of the same manual, but in better quality without all the errors and some slightly different wording, appeared. I've updated this page with those scans and their pagination. Pages are numbered and hyperlinked for your convenience. <span  style='background-color: #eee; display: inline;'>Shading indicates additions/corrections/comments.</span>
+</p>
+<div class='vspace'></div><h2>Contents</h2>
+<ul><li><a href='#overview'>Overview</a>
+</li><li><a href='#alittlebitaboutoperators'>A little bit about operators</a>
+</li><li><a href='#registeroverview'>Register overview</a>
+</li><li><a href='#envelopespecification'>Envelope specification</a>
+</li><li><a href='#partimemorymap'>Part I memory map</a>
+</li><li><a href='#theregisters'>The registers</a>
+<ul><li><a href='#reg22'>Register 22H</a> - LFO
+</li><li><a href='#reg24'>Registers 24H &amp; 25H</a> - Timer A
+</li><li><a href='#reg26'>Register 26H</a> - Timer B
+</li><li><a href='#reg27'>Register 27H</a> - Timers; Ch3/6 mode
+</li><li><a href='#reg28'>Register 28H</a> - Key on/off
+</li><li><a href='#reg2b'>Registers 2AH &amp; 2BH</a> - DAC
+</li><li><a href='#reg30'>Register 30H+</a> - detune; multiple
+</li><li><a href='#reg40'>Register 40H+</a> - total level
+</li><li><a href='#reg50'>Register 50H+</a> - rate scaling; attack rate
+</li><li><a href='#reg60'>Register 60H+</a> - first decay rate; amplitude modulation
+</li><li><a href='#reg70'>Register 70H+</a> - secondary decay rate
+</li><li><a href='#reg80'>Register 80H+</a> - secondary amplitude; release rate
+</li><li><a href='#reg90'>Register 90H+</a> - proprietary
+</li><li><a href='#rega0'>Registers A0H-AFH+</a> - frequency
+</li><li><a href='#regb0'>Register B0H+</a> - feedback; algorithm
+</li></ul></li><li><a href='#testprogram'>Test program</a>
+</li></ul><div class='vspace'></div><h2>Original page numbers</h2>
+<p><a href='#page4'>4</a> - <a href='#page5'>5</a> - <a href='#page6'>6</a> - <a href='#page7'>7</a> - <a href='#page8'>8</a> - <a href='#page9'>9</a> - <a href='#page10'>10</a> -
+<a href='#page11'>11</a> - <a href='#page12'>12</a> - <a href='#page13'>13</a> - <a href='#page14'>14</a> - <a href='#page15'>15</a> - <a href='#page16'>16</a> - <a href='#page17'>17</a>
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page4' id='page4'></a>Page 4 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page4.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'><a name='overview' id='overview'></a>
+</p><h2>Overview</h2>
+<p>The Yamaha 2612 Frequency Modulation (FM) sound synthesis IC resembles the Yamaha 2151 (used in Sega's coin-op machines) and the chips used in Yamaha's synthesizers.
+</p>
+<p class='vspace'>Its capabilities include:
+</p>
+<div class='vspace'></div><ul><li>6 channels of FM sound
+</li><li>An 8-bit Digitized Audio channel (as replacement for one of the FM channels)
+</li><li>Stereo output capability
+</li><li>One LFO (low frequency oscillator) to distort the FM sounds
+</li><li>2 timers, for use by software
+</li></ul><p class='vspace'>To define these terms more carefully: an FM channel is capable of expressing, with a high degree of realism, a single note in almost any instrument's voice. Chords are generally created by using multiple FM channels.
+</p>
+<p class='vspace'>The standard FM channels each have a single overall frequency and data for how to turn this frequency into the complex final wave form (the voice). This conversion process uses four dedicated channel components called 'operators', each possessing a frequency (a variant of the overall frequency), an envelope, and the capability to modulate its input using the frequency and envelope. The operator frequencies are offsets of integral multiples of the overall frequency.
+</p>
+<p class='vspace'>There are two sets of three FM channels, named channels 1 to 3 and 4 to 6 respectively. Channels 3 and 6, the last in each set, have the capability to use a totally separate frequency for each operator rather than offsets of integral multiples. This works well (l believe) for percussion instruments, which have harmonics at odd multiples such as 1.4 or 1.7 of the fundamental.
+</p>
+<p class='vspace'>The 8-bit Digitized Audio exists as a replacement of FM channel 6, meaning that turning on the DAC turns off FM channel 6. Unfortunately, all timing must be done by software -- meaning that unless the software has been very cleverly constructed, it is impossible to use any of the FM channels at the same time as the DAC. <span  style='background-color: #eee; display: inline;'>As you probably know, loads of games actually do this.</span>
+</p>
+<p class='vspace'>Stereo output capability means that any of the sounds, FM or DAC, may be directed to the left, the right, or both outputs. The stereo is output only through the headphone jack.
+</p>
+<p class='vspace'>The LFO, or Low Frequency Oscillator, allows for amplitude and/or frequency distortions of the FM sounds. Each channel elects the degree to which it will be distorted by the LFO, if at all. This could be used, for example, in a guitar solo.
+</p>
+<p class='vspace'>Finally, the system has two software timers, which may be used as an alternative to the Z80 VBLANK interrupt. Unfortunately, these timers do not cause interrupts - they must be read by the software to determine if they have finished counting.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page5' id='page5'></a>Page 5 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page5.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'><a name='alittlebitaboutoperators' id='alittlebitaboutoperators'></a>
+</p><h2>A little bit about operators</h2>
+<p>There are four dedicated operators assigned to every channel, with the following properties:
+</p>
+<div class='vspace'></div><ul><li>An operator has an input, a frequency and envelope with which to modify the input, and an output.
+</li><li>The operators have two types, those whose outputs feed into another operator, and those that are summed to form the final wave form. The latter are called "slots".
+</li><li>The slots may be independently enabled, though Sega's software always enables or disables them all simultaneously.
+</li><li>Operator 1 may feed back into itself, resulting in a more complex waveform.
+</li></ul><p class='vspace'>These operators may be arranged in eight different configurations, called "algorithms". Following is a diagram of the algorithms.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page6' id='page6'></a>Page 6 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page6.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>Algorithm #
+</td><td  valign='top'>Layout
+</td><td  valign='top'>Suggested uses
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout0.png" alt='' title='' />
+</td><td  valign='top'>Distortion guitar, "high hat chopper" (?) bass
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout1.png" alt='' title='' />
+</td><td  valign='top'>Harp, PSG (programmable sound generator) sound
+</td></tr><tr><td  valign='top'>2
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout2.png" alt='' title='' />
+</td><td  valign='top'>Bass, electric guitar, brass, piano, woods
+</td></tr><tr><td  valign='top'>3
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout3.png" alt='' title='' />
+</td><td  valign='top'>Strings, folk guitar, chimes
+</td></tr><tr><td  valign='top'>4
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout4.png" alt='' title='' />
+</td><td  valign='top'>Flute, bells, chorus, bass drum, snare drum, tom-tom
+</td></tr><tr><td  valign='top'>5
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout5.png" alt='' title='' />
+</td><td  valign='top'>Brass, organ
+</td></tr><tr><td  valign='top'>6
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout6.png" alt='' title='' />
+</td><td  valign='top'>Xylophone, tom-tom, organ, vibraphone, snare drum, base drum
+</td></tr><tr><td  valign='top'>7
+</td><td  valign='top'><img src="https://www.smspower.org/maxim/uploads/Documents/Layout7.png" alt='' title='' />
+</td><td  valign='top'>Pipe organ
+</td></tr></table>
+<p class='vspace'>Slots are indicated by shading.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page7' id='page7'></a>Page 7 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page7.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'><a name='registeroverview' id='registeroverview'></a>
+</p><h2>Register overview</h2>
+<p>The system is controlled by means of a large number of registers. General system registers are:
+</p>
+<div class='vspace'></div><ul><li>timer values and status, software use
+</li><li>LFO enable and frequency, to distort the FM channels
+</li><li>DAC enable and amplitude
+</li><li>output enables for each of the 6 FM channels
+</li><li>number of frequencies to be used in FM channels 3 and 6<br />  Usually, an FM channel has only one overall frequency, but if so elected, FM channels 3 and 6 use four separate frequencies, one for each operator.
+</li></ul><p class='vspace'>The remainder of the registers apply to a single FM channel, or to an operator in that channel. Registers that refer to the channel as a whole are:
+</p>
+<div class='vspace'></div><ul><li>frequency number (in the standard case)
+</li><li>algorithm number
+</li><li>extent of self-feedback in operator 1
+</li><li>output type, to L, R, or both speakers. This can only be heard if headphones are used.
+</li><li>the extent to which the channel is distorted by the LFO.
+</li></ul><p class='vspace'>Registers that refer to each operator make up the remainder. The four operator's connections are determined by the algorithm used, but the envelope is always specified individually for each operator. In the case of FM channels 3 and 6, the frequency may be specified individually for each operator.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page8' id='page8'></a>Page 8 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page8.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'><a name='envelopespecification' id='envelopespecification'></a>
+</p><h2>Envelope specification</h2>
+<div  style='text-align: center;'><img src="https://www.smspower.org/maxim/uploads/Documents/envspec.png" alt='' title='' /></div>
+<p class='vspace'>The sound starts when the key is depressed, a process called 'key on'. The sound has an attack, a strong primary decay, followed by a slow secondary decay. The sound continues this secondary decay until the key is released, a process called 'key off'. The sound then begins a rapid final decay, representing for example a piano note after the key has been released and the damper has come down on the strings.
+</p>
+<p class='vspace'>The envelope is represented by the above amplitudes and angles, and a few supplementary registers. Used in the above diagram are:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>TL
+</td><td  valign='top'>Total level, the highest amplitude of the waveform.
+</td></tr><tr><td  valign='top'>AR
+</td><td  valign='top'>Attack rate, the angle of initial amplitude increase. This can be made very steep if desired. The problem with slow attack rates is that if the notes are short, the release (called 'key off') occurs before the note has reached a reasonable level.
+</td></tr><tr><td  valign='top'>D1R
+</td><td  valign='top'>The angle of initial amplitude decrease.
+</td></tr><tr><td  valign='top'>T1L
+</td><td  valign='top'>The amplitude at which the slower amplitude decrease starts.
+</td></tr><tr><td  valign='top'>D2R
+</td><td  valign='top'>The angle of secondary amplitude decrease. This will continue indefinitely unless 'key off' occurs.
+</td></tr><tr><td  valign='top'>RR
+</td><td  valign='top'>The final angle of amplitude decrease, after 'key off'.
+</td></tr></table>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page9' id='page9'></a>Page 9 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page9.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'>Additional registers are:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>RS
+</td><td  valign='top'>Rate scaling, the degree to which envelopes become shorter as frequencies become higher. For example, high notes on a piano fade much more quickly than low notes.
+</td></tr><tr><td  valign='top'>AM
+</td><td  valign='top'>Amplitude Modulation enable, whether or not this operator will allow itself to be modified by the LFO. Changing the amplitude of the slots (those colored gray in the <a href='#page3'>diagram on page 3</a>) changes the loudness of the note; changing the amplitude of the other operators changes its flavor.
+</td></tr><tr><td  valign='top'>SSG-EG
+</td><td  valign='top'>A proprietary register whose usage is unknown. It should be set to 0.
+</td></tr></table>
+<p class='vspace'>The YM-2612 may be accessed from either the 68000 or the Z80. In both cases, however, the bus is only 8 bits wide.
+</p>
+<p class='vspace'>The YM-2612 is accessed through memory locations 4000H - 4003H in the Z80 case, or A04000H - A04003H in the 68000 case. These will be referred to as 4000 to 4003.
+</p>
+<p class='vspace'>The internal registers of the FM-2612 are divided as follows:
+</p><div  style='text-align: center;'><img src="https://www.smspower.org/maxim/uploads/Documents/registers.png" alt='' title='' /></div>
+<p class='vspace'>To write to Part I, write the 8 bit address to 4000 and the data to 4001. To write to Part II, write the 8-bit address to 4002 and the data to 4003.
+</p>
+<p class='vspace'>CAUTION: Before writing, read from any address to determine if the YM-2612 I/O is still busy from the last write. Delay until bit 7 returns to 0.
+</p>
+<p class='vspace'>CAUTION: in the case of registers that are "ganged together" to form a longer number, for example the 10-bit Timer A value or the 14-bit frequencies, write the high register first.
+</p>
+<p class='vspace'>READ DATA: Reading from any of the four locations <span  style='background-color: #eee; display: inline;'>gives:</span>
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>Busy
+</td><td colspan='5'  valign='top'>
+</td><td  valign='top'>Overflow A
+</td><td  valign='top'>Overflow B
+</td></tr></table>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'><strong>Busy</strong>
+</td><td  valign='top'>1 if busy, 0 if ready for new data
+</td></tr><tr><td  valign='top'><strong>Overflow</strong>
+</td><td  valign='top'>1 if the timer has counted up and overflowed. See <a href='#reg27'>register 27H</a>.
+</td></tr></table>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page10' id='page10'></a>Page 10 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page10.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'><a name='partimemorymap' id='partimemorymap'></a>
+</p><h2>Part I memory map</h2>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'><a href='#reg22'>22H</a>
+</td><td colspan='4'  valign='top'>
+</td><td  valign='top'>LFO enable
+</td><td colspan='3'  valign='top'>LFO frequency
+</td></tr><tr><td  valign='top'><a href='#reg24'>24H</a>
+</td><td colspan='8'  valign='top'>Timer A MSBs
+</td></tr><tr><td  valign='top'><a href='#reg24'>25H</a>
+</td><td colspan='6'  valign='top'>
+</td><td colspan='2'  valign='top'>Timer A LSBs
+</td></tr><tr><td  valign='top'><a href='#reg26'>26H</a>
+</td><td colspan='8'  valign='top'>Timer B
+</td></tr><tr><td  valign='top'><a href='#reg27'>27H</a>
+</td><td colspan='2'  valign='top'>Ch3 mode
+</td><td  valign='top'>Reset B
+</td><td  valign='top'>Reset A
+</td><td  valign='top'>Enable B
+</td><td  valign='top'>Enable A
+</td><td  valign='top'>Load B
+</td><td  valign='top'>Load A
+</td></tr><tr><td  valign='top'><a href='#reg28'>28H</a>
+</td><td colspan='4'  valign='top'>Operator
+</td><td  valign='top'>
+</td><td colspan='3'  valign='top'>Channel
+</td></tr><tr><td  valign='top'><a href='#reg29'>29H</a>
+</td><td colspan='8'  valign='top'>
+</td></tr><tr><td  valign='top'><a href='#reg2a'>2AH</a>
+</td><td colspan='8'  valign='top'>DAC
+</td></tr><tr><td  valign='top'><a href='#reg2a'>2BH</a>
+</td><td  valign='top'>DAC en
+</td><td colspan='7'  valign='top'>
+</td></tr><tr><td colspan='9'  valign='top'>
+</td></tr><tr><td  valign='top'><a href='#reg30'>30H+</a>
+</td><td  valign='top'>
+</td><td colspan='3'  valign='top'>DT1
+</td><td colspan='4'  valign='top'>MUL
+</td></tr><tr><td  valign='top'><a href='#reg40'>40H+</a>
+</td><td  valign='top'>
+</td><td colspan='7'  valign='top'>TL
+</td></tr><tr><td  valign='top'><a href='#reg50'>50H+</a>
+</td><td colspan='2'  valign='top'>RS
+</td><td  valign='top'>
+</td><td colspan='5'  valign='top'>AR
+</td></tr><tr><td  valign='top'><a href='#reg60'>60H+</a>
+</td><td  valign='top'>AM
+</td><td colspan='2'  valign='top'>
+</td><td colspan='5'  valign='top'>D1R
+</td></tr><tr><td  valign='top'><a href='#reg70'>70H+</a>
+</td><td colspan='3'  valign='top'>
+</td><td colspan='5'  valign='top'>D2R
+</td></tr><tr><td  valign='top'><a href='#reg80'>80H+</a>
+</td><td colspan='4'  valign='top'>D1L
+</td><td colspan='4'  valign='top'>RR
+</td></tr><tr><td  valign='top'><a href='#reg90'>90H+</a>
+</td><td colspan='4'  valign='top'>
+</td><td colspan='4'  valign='top'>SSG-EG
+</td></tr><tr><td colspan='9'  valign='top'>
+</td></tr><tr><td  valign='top'><a href='#rega0'>A0H+</a>
+</td><td colspan='8'  valign='top'>Frequency number LSB
+</td></tr><tr><td  valign='top'><a href='#rega0'>A4H+</a>
+</td><td colspan='2'  valign='top'>
+</td><td colspan='3'  valign='top'>Block
+</td><td colspan='3'  valign='top'>Frequency Number MSB
+</td></tr><tr><td  valign='top'><a href='#rega0'>A8H+</a>
+</td><td colspan='8'  valign='top'>Ch3 supplementary frequency number
+</td></tr><tr><td  valign='top'><a href='#rega0'>ACH+</a>
+</td><td colspan='2'  valign='top'>
+</td><td colspan='3'  valign='top'>Ch3 supplementary block
+</td><td colspan='3'  valign='top'>Ch3 supplementary frequency number
+</td></tr><tr><td  valign='top'><a href='#regb0'>B0H+</a>
+</td><td colspan='2'  valign='top'>
+</td><td colspan='3'  valign='top'>Feedback
+</td><td colspan='3'  valign='top'>Algorithm
+</td></tr><tr><td  valign='top'><a href='#regb4'>B4H+</a>
+</td><td  valign='top'>L
+</td><td  valign='top'>R
+</td><td colspan='2'  valign='top'>AMS
+</td><td  valign='top'>
+</td><td colspan='3'  valign='top'>FMS
+</td></tr></table>
+<p class='vspace'><a name='chanoparrangements' id='chanoparrangements'></a>
+Each of 30H-90H has twelve entries, three channels × four operators:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>30H
+</td><td  valign='top'>Ch 1 op 1
+</td></tr><tr><td  valign='top'>31H
+</td><td  valign='top'>Ch 2 op 1
+</td></tr><tr><td  valign='top'>32H
+</td><td  valign='top'>Ch 3 op 1
+</td></tr><tr><td  valign='top'>33H
+</td><td  valign='top'>
+</td></tr><tr><td  valign='top'>34H
+</td><td  valign='top'>Ch 1 op 2
+</td></tr><tr><td  valign='top'>35H
+</td><td  valign='top'>Ch 2 op 2
+</td></tr><tr><td  valign='top'>36H
+</td><td  valign='top'>Ch 3 op 2
+</td></tr><tr><td  valign='top'>37H
+</td><td  valign='top'>
+</td></tr><tr><td  valign='top'>38H
+</td><td  valign='top'>Ch 1 op 3
+</td></tr><tr><td  valign='top'>39H
+</td><td  valign='top'>Ch 2 op 3
+</td></tr><tr><td  valign='top'>3AH
+</td><td  valign='top'>Ch 3 op 3
+</td></tr><tr><td  valign='top'>3BH
+</td><td  valign='top'>
+</td></tr><tr><td  valign='top'>3CH
+</td><td  valign='top'>Ch 1 op 4
+</td></tr><tr><td  valign='top'>3DH
+</td><td  valign='top'>Ch 2 op 4
+</td></tr><tr><td  valign='top'>3EH
+</td><td  valign='top'>Ch 3 op 4
+</td></tr><tr><td  valign='top'>3FH
+</td><td  valign='top'>
+</td></tr></table>
+<p class='vspace'>Channels 1-3 become channels 4-6 in Part II.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page11' id='page11'></a>Page 11 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page11.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'>Each of A0H-B4H has three entries. All follow the pattern:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>A0H
+</td><td  valign='top'>Ch 1
+</td></tr><tr><td  valign='top'>A1H
+</td><td  valign='top'>Ch 2
+</td></tr><tr><td  valign='top'>A2H
+</td><td  valign='top'>Ch 3
+</td></tr><tr><td  valign='top'>A3H
+</td><td  valign='top'>
+</td></tr></table>
+<p class='vspace'>with the exception that A8H and ACH follow the pattern:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>A8H
+</td><td  valign='top'>Ch 3 op 2
+</td></tr><tr><td  valign='top'>A9H
+</td><td  valign='top'>Ch 3 op 3
+</td></tr><tr><td  valign='top'>AAH
+</td><td  valign='top'>Ch 3 op 4
+</td></tr><tr><td  valign='top'>ABH
+</td><td  valign='top'>
+</td></tr></table>
+<p class='vspace'>"Part II" is a duplication of 30H - B4H, where channels 1-3 are replaced by 4-6.
+</p>
+<p class='vspace'><a name='theregisters' id='theregisters'></a>
+</p><h2>The registers</h2>
+<p><a name='reg22' id='reg22'></a>
+</p><h3>Register 22H - LFO</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>22H
+</td><td colspan='4'  valign='top'>
+</td><td  valign='top'>LFO enable
+</td><td colspan='3'  valign='top'>LFO frequency
+</td></tr></table>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'><strong>LFO enable</strong>
+</td><td colspan='8'  valign='top'>1 is enabled, 0 is disabled.
+</td></tr><tr><td rowspan='2'  valign='top'><strong>LFO frequency</strong><br />/Hz
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>2
+</td><td  valign='top'>3
+</td><td  valign='top'>4
+</td><td  valign='top'>5
+</td><td  valign='top'>6
+</td><td  valign='top'>7
+</td></tr><tr><td  valign='top'>3.98
+</td><td  valign='top'>5.56
+</td><td  valign='top'>6.02
+</td><td  valign='top'>6.37
+</td><td  valign='top'>6.88
+</td><td  valign='top'>9.63
+</td><td  valign='top'>48.1
+</td><td  valign='top'>72.2
+</td></tr></table>
+<p class='vspace'>The LFO (Low frequency Oscillator) is used to distort the FM sounds' amplitude and phase. It is <em>triply</em> enabled, as there is:
+</p>
+<div class='vspace'></div><ol  style='list-style: lower-roman;'><li> A global enable in register <a href='#reg22'>22H</a>
+</li><li>A sensitivity enable on a channel by channel basis, in registers <a href='#regb4'>B4H-B6H</a>.
+</li><li>An amplitude enable on an operation by operation basis, in registers <a href='#reg60'>60H-6EH</a>.
+</li></ol><p class='vspace'>If the LFO is desired, enable it by register 22H. Next, select which channels will be affected by the LFO, to what degree, and whether their amplitude or frequency is
+affected, by setting registers B4-B6H. Finally. if a channel's amplitude is affected, make sure that it is only the "slots" that are affected by setting registers 60H - 6EH.
+</p>
+<p class='vspace'><a name='reg24' id='reg24'></a>
+</p><h3>Registers 24H &amp; 25H - Timer A</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>24H
+</td><td colspan='8'  valign='top'>Timer A MSBs
+</td></tr><tr><td  valign='top'>25H
+</td><td colspan='6'  valign='top'>
+</td><td colspan='2'  valign='top'>Timer A LSBs
+</td></tr></table>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page12' id='page12'></a>Page 12 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page12.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'>Registers 24H and 25H are ganged together to form 10-bit <strong>Timer A</strong>, with register 25H containing the least significant bits. They should be set in the order 24H, 25H. The timer lasts:
+</p>
+<div class='vspace'></div><dl><dd><div class='indent'>18 × (1024 - Timer A) microseconds
+</div></dd></dl><p class='vspace'>Timer A = all 1's -&gt; 18 µs = 0.018 ms<br />Timer A = all 0's -&gt; 18,400 µs = 18.4 ms
+</p>
+<p class='vspace'><a name='reg26' id='reg26'></a>
+</p><h3>Register 26H - Timer B</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>26H
+</td><td colspan='8'  valign='top'>Timer B
+</td></tr></table>
+<p class='vspace'>8 Bit <strong>Timer B</strong> lasts:
+</p>
+<div class='vspace'></div><dl><dd><div class='indent'>288 × (256 - Timer B ) microseconds
+</div></dd></dl><p class='vspace'>Timer B = all 1's -&gt; 0.288 ms<br />Timer B = all 0's -&gt; 73.44 ms
+</p>
+<p class='vspace'><a name='reg27' id='reg27'></a>
+</p><h3>Register 27H - Timers; Ch3/6 mode</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>27H
+</td><td colspan='2'  valign='top'>Ch3 mode
+</td><td  valign='top'>Reset B
+</td><td  valign='top'>Reset A
+</td><td  valign='top'>Enable B
+</td><td  valign='top'>Enable A
+</td><td  valign='top'>Load B
+</td><td  valign='top'>Load A
+</td></tr></table>
+<p class='vspace'>Register 27H controls the <strong>software timers</strong> and the <strong>Channel 3</strong> (and 6) <strong>mode</strong>, two entirely separate items.
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>Ch3 mode
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>Description
+</td></tr><tr><td  valign='top'>Normal
+</td><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>Channel 3 is the same as the others
+</td></tr><tr><td  valign='top'>Special
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>Channel 3 has 4 separate frequencies
+</td></tr><tr><td rowspan='2'  valign='top'>Illegal
+</td><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td rowspan='2'  valign='top'>
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>1
+</td></tr></table>
+<p class='vspace'>A normal channel's operators use offsets of integral multiples of a single frequency. In special mode, each operator has an entirely separate frequency. Channel 3 operator 1's frequency is in registers A2 and A6. Operators 2 to 4 are in registers A8 and AC, A9 and AD, and AA and AE respectively.
+</p>
+<p class='vspace'>No one at Sega has used the timer feature, but the Japanese manual says:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>Load
+</td><td  valign='top'>1 starts the timer, 0 stops it.
+</td></tr><tr><td  valign='top'>Enable
+</td><td  valign='top'>1 causes timer overflow to set the read register flag. 0 means the timer keeps cycling without setting the flag.
+</td></tr><tr><td  valign='top'>Reset
+</td><td  valign='top'>Writing a 1 clears the read register flag, writing a 0 has no effect.
+</td></tr></table>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page13' id='page13'></a>Page 13 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page13.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'><a name='reg28' id='reg28'></a>
+</p><h3>Register 28H - Key on/off</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td rowspan='2'  valign='top'>28H
+</td><td colspan='4'  valign='top'>Operator
+</td><td rowspan='2'  valign='top'>
+</td><td rowspan='2' colspan='3'  valign='top'>Channel
+</td></tr><tr><td  valign='top'>4
+</td><td  valign='top'>3
+</td><td  valign='top'>2
+</td><td  valign='top'>1
+</td></tr></table>
+<p class='vspace'>This register is used for "Key on" and "Key off". "Key on" is the depression of the synthesizer key, "Key off" is its release. The sequence of operations is: set parameters, Key on, wait, key off. When key off occurs, the FM channel stops its slow decline and starts the rapid decline specified by "RR", the release rate.
+</p>
+<p class='vspace'>In a single write to register 28H, one sets the status of all operators for a single channel. Sega always sets them to the same value, on (1) or off (0). Using a special channel 3, I believe it is possible to have each operator be a separate note, so there is possible justification for turning then on and off separately.
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td><td  valign='top'>Channel
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>2
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>3
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>4
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>5
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>6
+</td></tr></table>
+<p class='vspace'><a name='reg2b' id='reg2b'></a>
+</p><h3>Registers 2AH &amp; 2BH - DAC</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>2AH
+</td><td colspan='8'  valign='top'>DAC
+</td></tr><tr><td  valign='top'>2BH
+</td><td  valign='top'>DAC en
+</td><td colspan='7'  valign='top'>
+</td></tr></table>
+<p class='vspace'>Register 2AH contains 8 bit DAC data.
+</p>
+<p class='vspace'>If the DAC enable is 1, the DAC data is output as a replacement for channel 6. The only Channel 6 register that affects the DAC is the stereo output portion of register B4H.
+</p>
+<p class='vspace'>Registers 30H - 90H are all single-operator registers. Please see <a href='#chanoparrangements'>page 8</a> for how the twelve channel-operator combinations are arranged.
+</p>
+<p class='vspace'><a name='reg30' id='reg30'></a>
+</p><h3>Register 30H+ - detune &amp; multiple</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>30H+
+</td><td  valign='top'>
+</td><td colspan='3'  valign='top'>DT1
+</td><td colspan='4'  valign='top'>MUL
+</td></tr></table>
+<p class='vspace'>Both DT1 (detune) and MUL (multiple) relate the operator's frequency to the overall frequency.
+</p>
+<p class='vspace'>MUL ranges from 0 to 15 (decimal), and multiplies the overall frequency, with the exception that 0 results in multiplication by 1/2. That is, MUL=0 to 15 gives ×1/2, ×1, ×2, ... ×15.
+</p>
+<p class='vspace'>DT1 gives small variations from the overall frequency × MUL. The MSB of DT1 is a primitive sign bit, and the two LSB's are magnitude bits. See the next page for a diagram.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page14' id='page14'></a>Page 14 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page14.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>Multiplicative effect
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>No change
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>×(1+ε)
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>×(1+2ε)
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>1
+</td><td  valign='top'>×(1+3ε)
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>0
+</td><td  valign='top'>No change
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>×(1-ε)
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>1
+</td><td  valign='top'>0
+</td><td  valign='top'>×(1-2ε)
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>1
+</td><td  valign='top'>1
+</td><td  valign='top'>×(1-3ε)
+</td></tr></table>
+<p class='vspace'>where ε is a small number.
+</p>
+<p class='vspace'><a name='reg40' id='reg40'></a>
+</p><h3>Register 40H+ - total level</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>40H+
+</td><td  valign='top'>
+</td><td colspan='7'  valign='top'>TL
+</td></tr></table>
+<p class='vspace'>TL (total level) represents the envelope's highest amplitude, with 0 being the largest and 127 (decimal) the smallest. A change of one unit is about 0.75 dB.
+</p>
+<p class='vspace'>To make a note softer, only change the TL of the slots (the output operators). Changing the other operators will affect the flavor of the note.
+</p>
+<p class='vspace'><a name='reg50' id='reg50'></a>
+</p><h3>Register 50H+ - rate scaling; attack rate</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>50H+
+</td><td colspan='2'  valign='top'>RS
+</td><td  valign='top'>X
+</td><td colspan='5'  valign='top'>AR
+</td></tr></table>
+<p class='vspace'>Register 50H contains RS (rate scaling) and AR (attack rate). AR is the steepness of the initial amplitude rise, shown on <a href='#page5'>page 5</a>.
+</p>
+<p class='vspace'>RS affects AR, D1R, D2R and RR in the same way. RS is the degree to which the envelope becomes narrower as the frequency becomes higher.
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page15' id='page15'></a>Page 15 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page15.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'>The frequency's top five bits (3 octave bits and 2 note bits) are called KC (Key code) in the following rate formulae:
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>RS
+</td><td  valign='top'>Final rate
+</td></tr><tr><td  valign='top'>0
+</td><td  valign='top'>2×Rate+(KC/8)
+</td></tr><tr><td  valign='top'>1
+</td><td  valign='top'>2×Rate+(KC/4)
+</td></tr><tr><td  valign='top'>2
+</td><td  valign='top'>2×Rate+(KC/2)
+</td></tr><tr><td  valign='top'>3
+</td><td  valign='top'>2×Rate+(KC/1)
+</td></tr></table>
+<p class='vspace'>(KC/n) is always rounded down
+</p>
+<p class='vspace'>As Rate ranges from 0-31, this means that the RS influence ranges from small (at 0-3) to very large (at 0-31).
+</p>
+<p class='vspace'><a name='reg60' id='reg60'></a>
+</p><h3>Register 60H+ - first decay rate; amplitude modulation</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>60H+
+</td><td  valign='top'>AM
+</td><td colspan='2'  valign='top'>
+</td><td colspan='5'  valign='top'>D1R
+</td></tr></table>
+<p class='vspace'>D1R (first decay rate) is the initial steep amplitude decay rate (see page 4). It is, like all rates, 0-31 in value and affected by RS.
+</p>
+<p class='vspace'>AM is the amplitude modulation enable, whether of not <em>this</em> operator will be subject to amplitude modulation by the LFO. This bit is not relevant unless both the LFO is enabled and register B4's AMS (amplitude modulation sensitivity) is non-zero.
+</p>
+<p class='vspace'><a name='reg70' id='reg70'></a>
+</p><h3>Register 70H+ - secondary decay rate</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>70H+
+</td><td colspan='3'  valign='top'>
+</td><td colspan='5'  valign='top'>D2R
+</td></tr></table>
+<p class='vspace'>D2R (secondary decay rate) is the long tail off of the sound that continues as long as the key is depressed.
+</p>
+<p class='vspace'><span  style='background-color: #eee; display: inline;'>This section not found in the linked scans</span>
+</p>
+<p class='vspace'><a name='reg80' id='reg80'></a>
+</p><h3>Register 80H+ - secondary amplitude; release rate</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>80H+
+</td><td colspan='4'  valign='top'>D1L
+</td><td colspan='4'  valign='top'>RR
+</td></tr></table>
+<p class='vspace'>D1L is the secondary amplitude reached after the first period of rapid decay. It should be multiplied by 8 if one wishes to compare it to TL. Again as TL, the higher the number, the more attenuated the sound.
+</p>
+<p class='vspace'>RR is the release rate, the final sharp decrease in volume after the key is released. All rates are 5 bit numbers, but there are only four bits available in the register. Thus, for comparison and calculation purposes, these four bits are the MSBs and the LSB is always 1. In other words, double it and add one.
+</p>
+<p class='vspace'><span  style='background-color: #eee; display: inline;'>Back to the scans...</span>
+</p>
+<p class='vspace'><a name='reg90' id='reg90'></a>
+</p><h3>Register 90H+ - proprietary</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>90H+
+</td><td colspan='4'  valign='top'>
+</td><td colspan='4'  valign='top'>SSG-EG
+</td></tr></table>
+<p class='vspace'>This register is proprietary and should be set to zero.
+</p>
+<p class='vspace'>The final registers relate mostly to a single channel. Each register is tripled; please see the diagram on <a href='#page9'>page 9</a>.
+</p>
+<p class='vspace'><a name='rega0' id='rega0'></a>
+</p><h3>Registers A0H-AFH - frequency</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>A0H+
+</td><td colspan='8'  valign='top'>Frequency number LSB
+</td></tr><tr><td  valign='top'>A4H+
+</td><td colspan='2'  valign='top'>
+</td><td colspan='3'  valign='top'>Block
+</td><td colspan='3'  valign='top'>Frequency number MSB
+</td></tr><tr><td  valign='top'>A8H+
+</td><td colspan='8'  valign='top'>Ch3 supplementary frequency number
+</td></tr><tr><td  valign='top'>ACH+
+</td><td colspan='2'  valign='top'>
+</td><td colspan='3'  valign='top'>Ch3 supplementary block
+</td><td colspan='3'  valign='top'>Ch3 supplementary frequency number
+</td></tr></table>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page16' id='page16'></a>Page 16 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page16.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'>Channel 1's frequency is in A0 and A4H.<br />Channel 2's frequency is in A1 and A5H.<br />Channel 3's frequency, if it is in normal mode (please see <a href='#reg27'>page 12</a>), is in A2 and A6H.
+</p>
+<p class='vspace'>If Channel 3 is in special mode:<br />Operator 1's frequency is in A2 and A6H<br />Operator 2's frequency is in A8 and ACH<br />Operator 3's frequency is in A9 and ADH<br />Operator 4's frequency is in AA and AEH
+</p>
+<p class='vspace'>The frequency is a 14-bit number that should be set high byte, low byte (e.g. A4H then A0H). The highest 3 bits, called the "block", give the octave. The next 10 bits give the position in the octave, and a possible 12-tone sequence is:
+</p>
+<div class='vspace'></div><pre class='escaped'>
+Low                                                              High
+617   653   692   733   777   823   872   924   979  1037  1099  1164
+   635   372   392   755   800   847   898   951   1008  1131  1199
+   (36)  (39)  (41)  (44)  (46)  (49)  (52)  (55)  (58)  (62)  (70)
+</pre>
+<p>(all numbers in base 10)
+</p>
+<p class='vspace'>This sequence should be used inside each octave.
+</p>
+<p class='vspace'><a name='regb0' id='regb0'></a>
+</p><h3>Register B0H+ - feedback; algorithm</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>B0H+
+</td><td colspan='2'  valign='top'>
+</td><td colspan='3'  valign='top'>Feedback
+</td><td colspan='3'  valign='top'>Algorithm
+</td></tr></table>
+<p class='vspace'>Feedback is the degree to which operator 1 feeds back into itself. In the voice library, self feedback is represented as this:
+</p>
+<div class='vspace'></div><div  style='text-align: center;'><img src="https://www.smspower.org/maxim/uploads/Documents/feedback.png" alt='' title='' /></div>
+<p class='vspace'>The algorithm is the type of inter-operator connection used. Please see the list of the eight operators on <a href='#page3'>page 3</a>.
+</p>
+<p class='vspace'><a name='regb4' id='regb4'></a>
+</p><h3>Register B4H+ - stereo; LFO sensitivity</h3>
+<table border='1' ><tr><td  valign='top'>
+</td><td  valign='top'>D7
+</td><td  valign='top'>D6
+</td><td  valign='top'>D5
+</td><td  valign='top'>D4
+</td><td  valign='top'>D3
+</td><td  valign='top'>D2
+</td><td  valign='top'>D1
+</td><td  valign='top'>D0
+</td></tr><tr><td  valign='top'>B4H+
+</td><td  valign='top'>L
+</td><td  valign='top'>R
+</td><td colspan='3'  valign='top'>AMS
+</td><td  valign='top'>
+</td><td colspan='2'  valign='top'>FMS
+</td></tr></table>
+<p class='vspace'>Register B4H contains stereo output control and LFO sensitivity control.
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>L
+</td><td  valign='top'>Left Output, 1 is on, 0 is off.
+</td></tr><tr><td  valign='top'>R
+</td><td  valign='top'>Right Output, 1 is on, 0 is off.
+</td></tr></table>
+<p class='vspace'>NOTE: The stereo may only be heard by headphones.
+</p>
+<p class='vspace'><span  style='background-color: #eee; display: inline;'>Or with an AV lead connected to the headphone socket... or in an emulator.</span>
+</p>
+<p class='vspace'  style='background-color: #666; color: white; padding: 0.3em; text-align: right;'><a style='color: white' name='page17' id='page17'></a>Page 17 - <a style='color: white' class='urllink' href="https://www.smspower.org/maxim/uploads/Documents/ym2612page17.png" rel='nofollow'>original</a> - <a style='color: white' href='#top'>top</a>
+</p>
+<p class='vspace'>AMS (amplitude modulation sensitivity) and FMS (frequency modulation sensitivity) are the degree to which the channel is affected by the LFO. If the LFO is disabled. this register need not be set. Additionally, amplitude modulation is also enabled on an operator-by-operator level.
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>AMS
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>2
+</td><td  valign='top'>3
+</td></tr><tr><td  valign='top'>Sensitivity /dB
+</td><td  valign='top'>0
+</td><td  valign='top'>1.4
+</td><td  valign='top'>5.9
+</td><td  valign='top'>11.8
+</td></tr></table>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'>FMS
+</td><td  valign='top'>0
+</td><td  valign='top'>1
+</td><td  valign='top'>2
+</td><td  valign='top'>3
+</td><td  valign='top'>4
+</td><td  valign='top'>5
+</td><td  valign='top'>6
+</td><td  valign='top'>7
+</td></tr><tr><td  valign='top'>% of a halftone
+</td><td  valign='top'>0
+</td><td  valign='top'>±3.4
+</td><td  valign='top'>±6.7
+</td><td  valign='top'>±10
+</td><td  valign='top'>±14
+</td><td  valign='top'>±20
+</td><td  valign='top'>±40
+</td><td  valign='top'>±80
+</td></tr></table>
+<p class='vspace'><a name='testprogram' id='testprogram'></a>
+</p><h2>Test program</h2>
+<p>Here's a tested power-on initialization and sample note in the "Grand Piano" voice (page 27)
+</p>
+<p class='vspace'><span  style='background-color: #eee; display: inline;'>Page 27 presumably has some sample instrument parameters... but is not included in sega2.doc or the scans.</span>
+</p>
+<div class='vspace'></div>
+<table border='1' ><tr><td  valign='top'><strong>Register</strong>
+</td><td  valign='top'><strong>Value</strong>
+</td><td  valign='top'><strong>Comments</strong>
+</td></tr><tr><td  valign='top'>22H
+</td><td  valign='top'>0
+</td><td  valign='top'>LFO off
+</td></tr><tr><td  valign='top'>27H
+</td><td  valign='top'>0
+</td><td  valign='top'>Channel 3 mode normal
+</td></tr><tr><td rowspan='6'  valign='top'>28H
+</td><td  valign='top'>0
+</td><td rowspan='6'  valign='top'>All channels off
+</td></tr><tr><td  valign='top'>1
+</td></tr><tr><td  valign='top'>2
+</td></tr><tr><td  valign='top'>4
+</td></tr><tr><td  valign='top'>5
+</td></tr><tr><td  valign='top'>6
+</td></tr><tr><td  valign='top'>2BH
+</td><td  valign='top'>0
+</td><td  valign='top'>DAC off
+</td></tr><tr><td  valign='top'>30H
+</td><td  valign='top'>71H
+</td><td rowspan='4'  valign='top'>DT1/MUL
+</td></tr><tr><td  valign='top'>34H
+</td><td  valign='top'>0DH
+</td></tr><tr><td  valign='top'>38H
+</td><td  valign='top'>33H
+</td></tr><tr><td  valign='top'>3CH
+</td><td  valign='top'>01H
+</td></tr><tr><td  valign='top'>40H
+</td><td  valign='top'>23H
+</td><td rowspan='4'  valign='top'>Total Level
+</td></tr><tr><td  valign='top'>44H
+</td><td  valign='top'>2DH
+</td></tr><tr><td  valign='top'>48H
+</td><td  valign='top'>26H
+</td></tr><tr><td  valign='top'>4CH
+</td><td  valign='top'>00H
+</td></tr><tr><td  valign='top'>50H
+</td><td  valign='top'>5FH
+</td><td rowspan='4'  valign='top'>RS/AR
+</td></tr><tr><td  valign='top'>54H
+</td><td  valign='top'>99H
+</td></tr><tr><td  valign='top'>58H
+</td><td  valign='top'>5FH
+</td></tr><tr><td  valign='top'>5CH
+</td><td  valign='top'>94H
+</td></tr><tr><td  valign='top'>60H
+</td><td  valign='top'>5
+</td><td rowspan='4'  valign='top'>AM/D1R
+</td></tr><tr><td  valign='top'>64H
+</td><td  valign='top'>5
+</td></tr><tr><td  valign='top'>68H
+</td><td  valign='top'>5
+</td></tr><tr><td  valign='top'>6CH
+</td><td  valign='top'>7
+</td></tr><tr><td  valign='top'>70H
+</td><td  valign='top'>2
+</td><td rowspan='4'  valign='top'>D2R
+</td></tr><tr><td  valign='top'>74H
+</td><td  valign='top'>2
+</td></tr><tr><td  valign='top'>78H
+</td><td  valign='top'>2
+</td></tr><tr><td  valign='top'>7CH
+</td><td  valign='top'>2
+</td></tr><tr><td  valign='top'>80H
+</td><td  valign='top'>11H
+</td><td rowspan='4'  valign='top'>D1L/RR
+</td></tr><tr><td  valign='top'>84H
+</td><td  valign='top'>11H
+</td></tr><tr><td  valign='top'>88H
+</td><td  valign='top'>11H
+</td></tr><tr><td  valign='top'>8CH
+</td><td  valign='top'>A6H
+</td></tr><tr><td  valign='top'>90H
+</td><td  valign='top'>0
+</td><td rowspan='4'  valign='top'>Proprietary
+</td></tr><tr><td  valign='top'>94H
+</td><td  valign='top'>0
+</td></tr><tr><td  valign='top'>98H
+</td><td  valign='top'>0
+</td></tr><tr><td  valign='top'>9CH
+</td><td  valign='top'>0
+</td></tr><tr><td  valign='top'>B0H
+</td><td  valign='top'>32H
+</td><td  valign='top'>Feedback/algorithm
+</td></tr><tr><td  valign='top'>B4H
+</td><td  valign='top'>C0H
+</td><td  valign='top'>Both speakers on
+</td></tr><tr><td  valign='top'>28H
+</td><td  valign='top'>00H
+</td><td  valign='top'>Key off
+</td></tr><tr><td  valign='top'>A4H
+</td><td  valign='top'>22H
+</td><td rowspan='2'  valign='top'>Set frequency
+</td></tr><tr><td  valign='top'>A0H
+</td><td  valign='top'>69H
+</td></tr><tr><td  valign='top'>28H
+</td><td  valign='top'>F0H
+</td><td  valign='top'>Key on
+</td></tr><tr><td colspan='3'  valign='top'>&lt;Wait&gt;
+</td></tr><tr><td  valign='top'>28H
+</td><td  valign='top'>00H
+</td><td  valign='top'>Key off
+</td></tr></table>
+<p class='vspace'>Notes:
+</p>
+<div class='vspace'></div><ol><li>Write address then data.
+</li><li>Loop until read register D7 becomes 0
+</li><li>Follow MSB/LSB sequence.
+</li></ol>
+</div>
+
+			<div id='sidebar'><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/">Blag</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Mountainous">Mountainous</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/XanderMingxuanZhao">Xander Mingxuan Zhao</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/ImNotDead">I’m Not Dead</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/WonderBoyInMonsterLandSphinxQuestions">Wonder Boy In Monster Land Sphinx Questions</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/StatueInARestaurant">Statue In A Restaurant</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Archive">Older...</a> <a class='wikilink' href="https://www.smspower.org/maxim/RSS"><img src="https://www.smspower.org/maxim/uploads/Site/rss.png" alt='RSS' title='RSS' /></a>
+</li></ul>
+</div>
+<div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/Software/Index">Software</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/BMP2Tile">BMP2Tile</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/GBAVGMPlayer">GBA VGM Player</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/HeaderReader">Header Reader</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/MekaConfigurator">Meka Configurator</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/ScreenshotAutostitcher">Screenshot Autostitcher</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/SMSChecker">SMS Checker</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/SMSOffsetConvertor">SMS Offset Convertor</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/SMSReader">SMS Reader</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Software/TileDecoder">Tile Decoder</a>
+</li></ul>
+</div>
+<div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/Index">SMS Software</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/BocksBirthday2002">Bock's Birthday 2002</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/BocksBirthday2003">Bock's Birthday 2003</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/BocksBirthday2004">Bock's Birthday 2004</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/Chip8">Chip 8</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/Compressors">Compressors</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/NotOnlyWordsPrettyPhoto">Not Only Words / Pretty Photo</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/Ono">ono</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/Picross">Picross</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/SMSSoftware/VGMPlayer">VGM Player</a>
+</li></ul>
+</div>
+<div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/HowToProgram/Index">How To Program</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/HowToProgram/Lesson1">Lesson 1</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/HowToProgram/Lesson2">Lesson 2</a>
+</li></ul>
+</div>
+<div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/Maps/Index">Maps</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/PsychoFox">Psycho Fox</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/DesertStrike">Desert Strike</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/ArcadeSmashHits">Arcade Smash Hits</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/MicroMachines">Micro Machines</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/FIFAInternationalSoccer">FIFA International Soccer</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/AztecAdventure">Aztec Adventure</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/SonicTheHedgehog">Sonic the Hedgehog</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/LuckyDimeCaper">The Lucky Dime Caper</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/CoolSpot">Cool Spot</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/RCGrandPrix">R.C. Grand Prix</a>
+</li></ul>
+</div>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Maps/Index">More...</a>
+</li></ul><div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/Documents/Index">Documents</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/JapaneseSMSPCB">Japanese SMS PCB</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/MusicEngineAdvancedHacking">Music Engine Advanced Hacking</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/MusicEngineTriggerHacking">Music Engine Trigger Hacking</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/PauseHack">Pause Hack</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/Pinouts">Pinouts</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/SN76489">SN76489</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/YM2413ApplicationManual">YM2413 Application Manual</a>
+</li><li><a class='selflink' href="https://www.smspower.org/maxim/Documents/YM2612">YM2612</a>
+</li></ul>
+</div>
+<div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/Winamp/Index">Winamp</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Winamp/InVgm">in_vgm</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Winamp/RegionTxtGenerator">region.txt Generator</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Winamp/Skins">Skins</a>
+</li></ul>
+</div>
+<div class='vspace'></div><div class='fpltemplate'><h2><a class='wikilink' href="https://www.smspower.org/maxim/Misc/Index">Misc</a></h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Misc/16-Bit">16-Bit</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Misc/OtherStuff">Other Stuff</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Misc/POV-RayBox">POV-Ray Box</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Misc/Software">Software</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Misc/TripleHeadWallpaper">Triple Head Wallpaper</a>
+</li></ul>
+</div>
+<div class='vspace'></div><h2>Meta</h2>
+<ul><li><a class='wikilink' href="https://www.smspower.org/maxim/Site/Contact">Contact</a>
+</li><li><a class='wikilink' href="https://www.smspower.org/maxim/Documents/YM2612?action=print">Print</a>
+</li></ul>
+</div>
+                </div>
+                <div class="clearer"></div>
+            </div>
+        </div>
+
+        <div id="footer">
+            <div id="copyright">
+                <span style="float: left; padding-left: 20px;">
+                    <!-- Site Meter -->
+<script type="afff7985d08378b0f92209b4-text/javascript" src="https://sm5.sitemeter.com/js/counter.js?site=sm5smscheck">
+<noscript>
+<a href="http://sm5.sitemeter.com/stats.asp?site=sm5smscheck">
+<img src="http://sm5.sitemeter.com/meter.asp?site=sm5smscheck" alt="Site Meter">
+</a>
+</noscript>
+<!-- Copyright (c)2009 Site Meter -->
+</script>
+                </span>
+                <span style="float: right; display: block; padding-right: 20px;">
+                    Powered by Z80A
+                </span>
+            </div>
+        </div>
+    <!--HTMLFooter-->
+    <script src="/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js" data-cf-settings="afff7985d08378b0f92209b4-|49" defer></script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a519fd6891676af',t:'MTc2NDI0NjQ5NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"0677fdfcf4eb4d9f827812472a80b085","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>

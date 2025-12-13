@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+
+    <meta name="generator" content="Hugo 0.120.4"><meta name="theme-color" content="#fff" />
+    <meta name="color-scheme" content="light dark">
+
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    
+    <meta http-equiv="Cache-Control" content="no-transform" />
+    
+    <meta http-equiv="Cache-Control" content="no-siteapp" />
+
+    <title>Emulating the YM2612: Part 5 - Analog Output | jsgroth&#39;s blog</title>
+
+    <link rel="stylesheet" href="/blog/css/meme.min.6501190a375dd9a0b56ed15d92eaafd1eadb748488a5f37fedbdb575f6c3843c.css"/>
+
+    
+    
+        
+            <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js" defer></script><script src="/blog/js/meme.min.b22f9589d1fff2cacbc5f90caead907eeb8083c35ebbdb63fae9c622a604c86f.js"></script>
+
+        
+    
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM&#43;Plex&#43;Serif:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Source&#43;Code&#43;Pro:ital,wght@0,400;0,700;1,400;1,700&amp;family=Comfortaa:wght@700&amp;display=swap" media="print" onload="this.media='all'" />
+        <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM&#43;Plex&#43;Serif:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Source&#43;Code&#43;Pro:ital,wght@0,400;0,700;1,400;1,700&amp;family=Comfortaa:wght@700&amp;display=swap" /></noscript>
+
+    <meta name="author" content="jsgroth" /><meta name="description" content="This is the fifth in a series of posts on emulating the main Sega Genesis sound chip, the YM2612.
+Part 1 - Interface Part 2 - Phase Part 3 - Envelopes Part 4 - Digital Output This post will cover a few aspects of the YM2612’s audio hardware, particularly the DAC (digital-to-analog converter), that are not strictly related to sample generation but do noticeably affect the sound of the final output." />
+
+    <link rel="shortcut icon" href="/blog/favicon.ico" type="image/x-icon" />
+    <link rel="mask-icon" href="/blog/icons/safari-pinned-tab.svg" color="#2a6df4" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/blog/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="jsgroth&#39;s blog" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="jsgroth&#39;s blog" />
+    <meta name="msapplication-starturl" content="../../../" />
+    <meta name="msapplication-TileColor" content="#fff" />
+    <meta name="msapplication-TileImage" content="../../../icons/mstile-150x150.png" />
+    <link rel="manifest" href="/blog/manifest.json" />
+
+    
+    
+
+    
+        <link rel="canonical" href="https://jsgroth.dev/blog/posts/emulating-ym2612-part-5/" />
+    
+
+<script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "datePublished": "2025-04-05T11:49:22-05:00",
+        "dateModified": "2025-04-10T15:40:05-05:00",
+        "url": "https://jsgroth.dev/blog/posts/emulating-ym2612-part-5/",
+        "headline": "Emulating the YM2612: Part 5 - Analog Output",
+        "description": "This is the fifth in a series of posts on emulating the main Sega Genesis sound chip, the YM2612.\nPart 1 - Interface Part 2 - Phase Part 3 - Envelopes Part 4 - Digital Output This post will cover a few aspects of the YM2612’s audio hardware, particularly the DAC (digital-to-analog converter), that are not strictly related to sample generation but do noticeably affect the sound of the final output.",
+        "inLanguage" : "en",
+        "articleSection": "posts",
+        "wordCount":  1950 ,
+        "image": ["https://jsgroth.dev/blog/blog/images/ym2612/ladder-effect.png","https://jsgroth.dev/blog/blog/images/ym2612/sine-ladder-effect.png","https://jsgroth.dev/blog/blog/images/ym2612/non-negative-dac-slots.png","https://jsgroth.dev/blog/blog/images/ym2612/negative-dac-slots.png","https://jsgroth.dev/blog/blog/images/scd/butter1-response.png"],
+        "author": {
+            "@type": "Person",
+            "image": "https://jsgroth.dev/icons/apple-touch-icon.png",
+            "url": "https://jsgroth.dev/",
+            "name": "jsgroth"
+        },
+        "license": "[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)",
+        "publisher": {
+            "@type": "Organization",
+            "name": "jsgroth's blog",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://jsgroth.dev/icons/apple-touch-icon.png"
+            },
+            "url": "https://jsgroth.dev/blog/"
+        },
+        "mainEntityOfPage": {
+            "@type": "WebSite",
+            "@id": "https://jsgroth.dev/blog/"
+        }
+    }
+</script>
+
+    
+    
+
+    
+    
+
+    
+</head>
+
+    <body>
+        <div class="container">
+            
+    <header class="header">
+        
+            <div class="header-wrapper">
+                <div class="header-inner single">
+                    
+    <div class="site-brand">
+        
+            <a href="/blog/" class="brand">jsgroth&#39;s blog</a>
+        
+    </div>
+
+                    <nav class="nav">
+    <ul class="menu" id="menu">
+        
+            
+        
+        
+        
+        
+            
+                <li class="menu-item active"><a href="/blog/posts/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon archive"><path d="M32 448c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32V160H32v288zm160-212c0-6.6 5.4-12 12-12h104c6.6 0 12 5.4 12 12v8c0 6.6-5.4 12-12 12H204c-6.6 0-12-5.4-12-12v-8zM480 32H32C14.3 32 0 46.3 0 64v48c0 8.8 7.2 16 16 16h480c8.8 0 16-7.2 16-16V64c0-17.7-14.3-32-32-32z"/></svg><span class="menu-item-name">Posts</span></a>
+                </li>
+            
+        
+            
+                <li class="menu-item"><a href="/blog/categories/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon th"><path d="M149.333 56v80c0 13.255-10.745 24-24 24H24c-13.255 0-24-10.745-24-24V56c0-13.255 10.745-24 24-24h101.333c13.255 0 24 10.745 24 24zm181.334 240v-80c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.256 0 24.001-10.745 24.001-24zm32-240v80c0 13.255 10.745 24 24 24H488c13.255 0 24-10.745 24-24V56c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24zm-32 80V56c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.256 0 24.001-10.745 24.001-24zm-205.334 56H24c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24zM0 376v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H24c-13.255 0-24 10.745-24 24zm386.667-56H488c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24zm0 160H488c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24zM181.333 376v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24z"/></svg><span class="menu-item-name">Categories</span></a>
+                </li>
+            
+        
+            
+                <li class="menu-item"><a href="/blog/tags/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" class="icon tags"><path d="M497.941 225.941L286.059 14.059A48 48 0 0 0 252.118 0H48C21.49 0 0 21.49 0 48v204.118a48 48 0 0 0 14.059 33.941l211.882 211.882c18.744 18.745 49.136 18.746 67.882 0l204.118-204.118c18.745-18.745 18.745-49.137 0-67.882zM112 160c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48zm513.941 133.823L421.823 497.941c-18.745 18.745-49.137 18.745-67.882 0l-.36-.36L527.64 323.522c16.999-16.999 26.36-39.6 26.36-63.64s-9.362-46.641-26.36-63.64L331.397 0h48.721a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882z"/></svg><span class="menu-item-name">Tags</span></a>
+                </li>
+            
+        
+            
+                
+                    
+                    
+                        <li class="menu-item">
+                            <a id="theme-switcher" href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon theme-icon-light"><path d="M193.2 104.5l48.8-97.5a18 18 0 0128 0l48.8 97.5 103.4 -34.5a18 18 0 0119.8 19.8l-34.5 103.4l97.5 48.8a18 18 0 010 28l-97.5 48.8 34.5 103.4a18 18 0 01-19.8 19.8l-103.4-34.5-48.8 97.5a18 18 0 01-28 0l-48.8-97.5l-103.4 34.5a18 18 0 01-19.8-19.8l34.5-103.4-97.5-48.8a18 18 0 010-28l97.5-48.8-34.5-103.4a18 18 0 0119.8-19.8zM256 128a128 128 0 10.01 0M256 160a96 96 0 10.01 0"/></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon theme-icon-dark"><path d="M27 412a256 256 0 10154-407a11.5 11.5 0 00-5 20a201.5 201.5 0 01-134 374a11.5 11.5 0 00-15 13"/></svg></a>
+                        </li>
+                    
+                
+            
+        
+            
+                
+            
+        
+            
+                <li class="menu-item search-item">
+                        <form id="search" class="search" role="search">
+    <label for="search-input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon search-icon"><path d="M505 442.7L405.3 343c-4.5-4.5-10.6-7-17-7H372c27.6-35.3 44-79.7 44-128C416 93.1 322.9 0 208 0S0 93.1 0 208s93.1 208 208 208c48.3 0 92.7-16.4 128-44v16.3c0 6.4 2.5 12.5 7 17l99.7 99.7c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.4-9.4 9.4-24.6.1-34zM208 336c-70.7 0-128-57.2-128-128 0-70.7 57.2-128 128-128 70.7 0 128 57.2 128 128 0 70.7-57.2 128-128 128z"/></svg></label>
+    <input type="search" id="search-input" class="search-input">
+</form>
+
+<template id="search-result" hidden>
+    <article class="content post">
+        <h2 class="post-title"><a class="summary-title-link"></a></h2>
+        <summary class="summary"></summary>
+        <div class="read-more-container">
+            <a class="read-more-link">Read More »</a>
+        </div>
+    </article>
+</template>
+
+                    </li>
+                
+            
+        
+    </ul>
+</nav>
+
+                    
+                </div>
+            </div>
+            
+    <input type="checkbox" id="nav-toggle" aria-hidden="true" />
+    <label for="nav-toggle" class="nav-toggle"></label>
+    <label for="nav-toggle" class="nav-curtain"></label>
+
+
+        
+    </header>
+
+
+
+
+            
+            
+    <main class="main single" id="main">
+    <div class="main-inner">
+
+        
+
+        <article class="content post h-entry" data-small-caps="true" data-align="default" data-type="posts">
+
+            <h1 class="post-title p-name">Emulating the YM2612: Part 5 - Analog Output</h1>
+
+            
+
+            
+                
+            
+
+            
+                
+
+<div class="post-meta">
+    
+        
+        <time datetime="2025-04-05T11:49:22-05:00" class="post-meta-item published dt-published"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon post-meta-icon"><path d="M148 288h-40c-6.6 0-12-5.4-12-12v-40c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm108-12v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm96 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm-96 96v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm-96 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm96-260v352c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V112c0-26.5 21.5-48 48-48h48V12c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h128V12c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h48c26.5 0 48 21.5 48 48zm-48 346V160H48v298c0 3.3 2.7 6 6 6h340c3.3 0 6-2.7 6-6z"/></svg>&nbsp;2025.4.5</time>
+    
+    
+        
+        <time datetime="2025-04-10T15:40:05-05:00" class="post-meta-item modified dt-updated"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon post-meta-icon"><path d="M400 64h-48V12c0-6.627-5.373-12-12-12h-40c-6.627 0-12 5.373-12 12v52H160V12c0-6.627-5.373-12-12-12h-40c-6.627 0-12 5.373-12 12v52H48C21.49 64 0 85.49 0 112v352c0 26.51 21.49 48 48 48h352c26.51 0 48-21.49 48-48V112c0-26.51-21.49-48-48-48zm-6 400H54a6 6 0 0 1-6-6V160h352v298a6 6 0 0 1-6 6zm-52.849-200.65L198.842 404.519c-4.705 4.667-12.303 4.637-16.971-.068l-75.091-75.699c-4.667-4.705-4.637-12.303.068-16.971l22.719-22.536c4.705-4.667 12.303-4.637 16.97.069l44.104 44.461 111.072-110.181c4.705-4.667 12.303-4.637 16.971.068l22.536 22.718c4.667 4.705 4.636 12.303-.069 16.97z"/></svg>&nbsp;2025.4.10</time>
+    
+    
+    
+        
+        
+        
+            
+                <span class="post-meta-item category"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M464 128H272l-54.63-54.63c-6-6-14.14-9.37-22.63-9.37H48C21.49 64 0 85.49 0 112v288c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V176c0-26.51-21.49-48-48-48zm0 272H48V112h140.12l54.63 54.63c6 6 14.14 9.37 22.63 9.37H464v224z"/></svg>&nbsp;<a href="/blog/categories/emulation/" class="category-link p-category">Emulation</a></span>
+            
+        
+    
+    
+        
+        <span class="post-meta-item wordcount"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M497.9 142.1l-46.1 46.1c-4.7 4.7-12.3 4.7-17 0l-111-111c-4.7-4.7-4.7-12.3 0-17l46.1-46.1c18.7-18.7 49.1-18.7 67.9 0l60.1 60.1c18.8 18.7 18.8 49.1 0 67.9zM284.2 99.8L21.6 362.4.4 483.9c-2.9 16.4 11.4 30.6 27.8 27.8l121.5-21.3 262.6-262.6c4.7-4.7 4.7-12.3 0-17l-111-111c-4.8-4.7-12.4-4.7-17.1 0zM124.1 339.9c-5.5-5.5-5.5-14.3 0-19.8l154-154c5.5-5.5 14.3-5.5 19.8 0s5.5 14.3 0 19.8l-154 154c-5.5 5.5-14.3 5.5-19.8 0zM88 424h48v36.3l-64.5 11.3-31.1-31.1L51.7 376H88v48z"/></svg>&nbsp;1950</span>
+    
+    
+        
+        <span class="post-meta-item reading-time"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 448c-110.5 0-200-89.5-200-200S145.5 56 256 56s200 89.5 200 200-89.5 200-200 200zm61.8-104.4l-84.9-61.7c-3.1-2.3-4.9-5.9-4.9-9.7V116c0-6.6 5.4-12 12-12h32c6.6 0 12 5.4 12 12v141.7l66.8 48.6c5.4 3.9 6.5 11.4 2.6 16.8L334.6 349c-3.9 5.3-11.4 6.5-16.8 2.6z"/></svg>&nbsp;10&nbsp;mins</span>
+    
+    
+    
+</div>
+
+            
+
+            <nav class="contents">
+  <h2 id="contents" class="contents-title">Contents</h2><ol class="toc">
+    <li><a id="contents:panning" href="#panning">Panning</a></li>
+    <li><a id="contents:dac-quantization" href="#dac-quantization">DAC Quantization</a></li>
+    <li><a id="contents:ladder-effect" href="#ladder-effect">Ladder Effect</a></li>
+    <li><a id="contents:low-pass-filtering" href="#low-pass-filtering">Low-Pass Filtering</a></li>
+    <li><a id="contents:to-be-continued" href="#to-be-continued">To Be Continued</a></li>
+  </ol>
+</nav><div class="post-body e-content">
+                <p>This is the fifth in a series of posts on emulating the main Sega Genesis sound chip, the YM2612.</p>
+<ul>
+<li><a href="/blog/posts/emulating-ym2612-part-1/">Part 1 - Interface</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-2/">Part 2 - Phase</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-3/">Part 3 - Envelopes</a></li>
+<li><a href="/blog/posts/emulating-ym2612-part-4/">Part 4 - Digital Output</a></li>
+</ul>
+<p>This post will cover a few aspects of the YM2612&rsquo;s audio hardware, particularly the DAC (digital-to-analog converter), that are not strictly related to sample generation but do noticeably affect the sound of the final output.</p>
+<h2 id="panning"><a href="#panning" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:panning" class="headings">Panning</a></h2>
+<p>Each of the YM2612&rsquo;s 6 audio channels can only output a single sample at a time, but the YM2612 supports stereo audio output via panning individual channels.</p>
+<p>Each channel has two panning bits in registers $B4-$B6, one for enabling L output (Bit 7) and one for enabling R output (Bit 6). Other bits in these registers are used to configure LFO FM (vibrato) and AM (tremolo) sensitivity.</p>
+<p>Panning is all or nothing. If a panning bit is set to 1, the channel outputs its sample value. If it&rsquo;s set to 0, the channel is muted.</p>
+<p>As I mentioned back in the first post, the DAC channel respects the Channel 6 panning bits. When the DAC channel is enabled, it works by running Channel 6 normally but then replacing Channel 6&rsquo;s generated sample at the output stage, right before applying panning.</p>
+<p>All panning bits should be initialized to 1 at power-on! A few games depend on this due to not properly initializing panning, such as After Burner II.</p>
+<p>It&rsquo;s worth noting that in actual hardware, different console revisions have different levels of support for stereo audio output:</p>
+<ul>
+<li>Model 1: TV out supports mono audio only; headphone jack supports stereo audio</li>
+<li>Model 2: Supports stereo audio</li>
+<li>Model 3: Mono audio only</li>
+</ul>
+<p>Removing stereo audio in the Model 3 might seem strange if you&rsquo;re not already familiar with what the Model 3 is: a budget model produced by Majesco several years after the Saturn released. This model also removed the connections necessary for Sega CD and 32X to work, among other changes (some of which break games, e.g. Gargoyles does not work on the Model 3 due to a bus behavior change that affects the 68000 TAS instruction).</p>
+<p>If you wanted to emulate mono audio output, you could simply average the final mixed L and R samples instead of outputting them separately.</p>
+<h2 id="dac-quantization"><a href="#dac-quantization" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:dac-quantization" class="headings">DAC Quantization</a></h2>
+<p>While operators output signed 14-bit PCM samples, the YM2612 only has a 9-bit DAC. The lowest 5 bits of each channel&rsquo;s output sample get truncated during output, and not emulating this truncation makes audio output sound a little too clean and perfect compared to actual hardware.</p>
+<p>The YM2612 multiplexes channels through its DAC instead of mixing them. In an emulator, if you&rsquo;re mixing the channels, this means that you should quantize before mixing rather than after.</p>
+<p>Relatedly, for algorithms with multiple carriers, the carrier outputs are summed using a 9-bit accumulator rather than a 14-bit accumulator. An emulator should actually quantize carrier outputs, not channel outputs. These are equivalent for the single-carrier algorithms (0-3) but not for the multi-carrier algorithms (4-7).</p>
+<p>You could implement quantization by leaving the calculations as 14-bit but masking out the lowest 5 bits of every input, e.g. for algorithm 7:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span><span class="lnt">8
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="c1">// Operator outputs are signed 14-bit
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">const</span><span class="w"> </span><span class="no">OPERATOR_MIN</span>: <span class="kt">i16</span> <span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">13</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">const</span><span class="w"> </span><span class="no">OPERATOR_MAX</span>: <span class="kt">i16</span> <span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">13</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">// Mask out lowest 5 bits
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="kd">let</span><span class="w"> </span><span class="n">mask</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">!</span><span class="p">((</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">((</span><span class="n">c1</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">mask</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">c2</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">mask</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">c3</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">mask</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">c4</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">mask</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">.</span><span class="n">clamp</span><span class="p">(</span><span class="no">OPERATOR_MIN</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">mask</span><span class="p">,</span><span class="w"> </span><span class="no">OPERATOR_MAX</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">mask</span><span class="p">)</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>You could also simply right shift everything by 5 to discard the lower bits:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="c1">// Signed 9-bit
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">const</span><span class="w"> </span><span class="no">CARRIER_MIN</span>: <span class="kt">i16</span> <span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">const</span><span class="w"> </span><span class="no">CARRIER_MAX</span>: <span class="kt">i16</span> <span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="c1">// Shift from signed 14-bit to signed 9-bit
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">((</span><span class="n">c1</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">c2</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">c3</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">c4</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">5</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">.</span><span class="n">clamp</span><span class="p">(</span><span class="no">CARRIER_MIN</span><span class="p">,</span><span class="w"> </span><span class="no">CARRIER_MAX</span><span class="p">)</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>You may want to implement an option for whether to emulate this quantization, since not emulating it is less accurate but can sound better in some games. If quantization is implemented by leaving the calculations in 14-bit but masking out the lowest 5 bits, the option to not emulate quantization only needs to change the mask to <code>!0</code>.</p>
+<p>One example of where quantization noticeably affects the sound is the jingle that plays on the Konami logo screen in many of Konami&rsquo;s games. Not emulating quantization makes the jingle sound much less noisy than it does on actual hardware. Example from Castlevania Bloodlines:</p>
+<p><figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/konami-jingle-no-quant.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">14-bit output</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/konami-jingle-quant.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">9-bit quantized output</span></p>
+<p>It&rsquo;s particularly noticeable during the fade-out at the end.</p>
+<p>This is getting ahead a bit, but the effects described later in this post also significantly affect how this jingle sounds:</p>
+<p><figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/konami-jingle-quant-ladder-lpf.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">9-bit quantized + ladder effect + low-pass filter</span></p>
+<h2 id="ladder-effect"><a href="#ladder-effect" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:ladder-effect" class="headings">Ladder Effect</a></h2>
+<p>The YM2612&rsquo;s DAC introduces a form of <a href="https://en.wikipedia.org/wiki/Crossover_distortion" target="_blank" rel="noopener">crossover distortion</a> into its output, commonly known as the &ldquo;ladder effect&rdquo;. Some games have audio designed around this effect, and the difference between emulating it and not emulating it is <em>very</em> noticeable in these games. The Streets of Rage games and After Burner II are probably the most well-known examples.</p>
+<p>I cannot explain the hardware or electrical reasons why this occurs, but I can describe how it manifests. The YM2612 DAC&rsquo;s output level is fairly linear for 9-bit samples from -256 to -1, as well as from 0 to +255, but there is a large non-linear jump between -1 and 0.</p>
+<p>This effectively amplifies low-volume waves so that they sound much louder than they would if the DAC&rsquo;s output was linear all the way from -256 to +255, while also adding a bit of audio noise. It technically amplifies higher-volume waves as well, but the effect becomes less and less noticeable as wave volume increases.</p>
+<p><img src="/blog/images/ym2612/ladder-effect.png" alt="Ladder Effect"><span class="caption">Ladder effect</span>
+<img src="/blog/images/ym2612/sine-ladder-effect.png" alt="Sine Wave with Ladder Effect"><span class="caption">Low-volume sine wave with ladder effect</span></p>
+<p>The most accurate emulation of the ladder effect thus far is the implementation originally created by nukeykt for <a href="https://github.com/nukeykt/Nuked-OPN2" target="_blank" rel="noopener">Nuked-OPN2</a>, a cycle-accurate YM2612 and YM3438 emulator that is largely a direct translation of the hardware into C. Most other emulators that are still under active development have adopted some variation of this algorithm. There is some interesting discussion of Nuked-OPN2&rsquo;s ladder effect emulation in <a href="https://github.com/ekeeke/Genesis-Plus-GX/pull/179" target="_blank" rel="noopener">this Genesis Plus GX pull request</a> to integrate Nuked-OPN2.</p>
+<p>There are two components to Nuked-OPN2&rsquo;s ladder effect emulation.</p>
+<p>First, in actual hardware, the output voltage gap between samples -1 and 0 is twice as large as it would be if the DAC was completely linear. This is emulated by adding 1 to all non-negative samples.</p>
+<p>Second, for each channel, the YM2612 actually outputs to its DAC in groups of 4 slots. The first slot is for the channel&rsquo;s output sample, and the other three slots are supposed to be silence, i.e. the output level for sample 0. However, it seems like the &ldquo;silence&rdquo; slots actually output the voltage level for either -1 or 0, pulled in the direction of the sample&rsquo;s sign bit. And again, the voltage gap between -1 and 0 is twice as large as it should be, so this is emulated by having the silence slots output either -1 or +1.</p>
+<p><img src="/blog/images/ym2612/non-negative-dac-slots.png" alt="Non-Negative DAC Slots"><span class="caption">Emulated DAC output for non-negative samples</span></p>
+<p><img src="/blog/images/ym2612/negative-dac-slots.png" alt="Negative DAC Slots"><span class="caption">Emulated DAC output for negative samples</span></p>
+<p>These silence slots appear to output the sample&rsquo;s sign bit even if the channel is muted via the L/R panning flags in registers $B4-$B6. Muting the channel this way simply turns the sample slot into a fourth &ldquo;silence&rdquo; slot, which will output -1 if the sample is negative and +1 if it&rsquo;s non-negative. This adds audio noise whenever a channel is not outputting to both the L and R outputs, if the channel&rsquo;s sample output is not a constant zero.</p>
+<p>Non-cycle-accurate emulators don&rsquo;t emulate these output slots directly. Instead, they usually do the following, for each of the 6 YM2612 channels and for each of the 2 output channels (L/R):</p>
+<ul>
+<li>If the channel is muted, output a fixed level of either +4 or -4 depending on the sample&rsquo;s sign bit</li>
+<li>If the channel is not muted, add +4 to non-negative samples and -3 to negative samples</li>
+</ul>
+<p>This produces an equivalent result to aggregating over each group of 4 slots. In aggregate, the output level gap between samples -1 and 0 is actually <em>eight times</em> what it would be if the DAC was completely linear. This sets a fairly high volume floor on the chip&rsquo;s audio output.</p>
+<p>Note that all of the above values are as 9-bit samples. If you&rsquo;re generating output using 14-bit samples, you need to left shift these values by 5.</p>
+<p>Here is an example song where ladder effect emulation makes a very noticeable difference, the Streets of Rage 2 intro:</p>
+<p><figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sor2-no-ladder.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">No ladder effect emulation</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sor2-with-ladder.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">With ladder effect emulation</span></p>
+<p>And for completeness, here&rsquo;s a version that also applies a low-pass filter:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sor2-ladder-lpf.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Ladder effect emulation + low-pass filter</span></p>
+<p>The ladder effect is not present on consoles that have a YM3438 instead of a discrete YM2612, so it is probably worth having an option for whether or not to emulate this behavior. Not emulating the distortion is more accurate to consoles with a YM3438.</p>
+<h2 id="low-pass-filtering"><a href="#low-pass-filtering" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:low-pass-filtering" class="headings">Low-Pass Filtering</a></h2>
+<p>Rather than just regurgitate something I&rsquo;ve previously written, here&rsquo;s a previous post I wrote on this topic: <a href="/blog/posts/genesis-sega-cd-audio-filtering/">Genesis &amp; Sega CD - Audio Filtering</a></p>
+<p><img src="/blog/images/scd/butter1-response.png" alt="LPF Frequency Response"><span class="caption">Frequency response for a 3.39 KHz first-order Butterworth IIR low-pass filter, source frequency 53267 Hz</span></p>
+<p>The low-pass filter is part of the Genesis hardware rather than the YM2612 hardware, unlike the DAC that causes the above two effects. The filter applies to both YM2612 output and PSG output. This is notable because there are <em>many</em> games where the low-pass filter significantly affects the sound of the PSG&rsquo;s noise channel.</p>
+<p>A first-order 3.39 KHz or 2.84 KHz low-pass filter is most accurate to the consoles that are considered to have the best audio quality. These filters will still let a lot of higher-frequency audio through - they apply barely more than 20 dB of attenuation at 20000 Hz, the upper edge of the audible frequency range - but they will attenuate higher frequencies (treble) much more than lower frequencies (bass), which has the effect of emphasizing bass. Some game audio is clearly designed around this.</p>
+<p>This is another area where you might want to offer a variety of different options. Later console revisions have a second-order low-pass filter that makes audio output sound much more muffled compared to Model 1 VA0-VA6 consoles. Some prefer the sharper sound produced by not performing any low-pass filtering, or using a low-pass filter with a very high cutoff frequency (e.g. 15 KHz or 20 KHz).</p>
+<p>Here&rsquo;s a comparison of the Seven Force boss theme from Gunstar Heroes, re-recorded after fixing some bugs in my YM2612 implementation that caused the jingling to sound slightly wrong:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/seven-force-unfiltered.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">No low-pass filter except for the resampling filter</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/seven-force-lpf.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">3390 Hz first-order Butterworth IIR filter</span></p>
+<p>And Go Straight from Streets of Rage 2, just because it&rsquo;s a very good song that I personally think benefits from the filter (mainly because it heavily attenuates the PSG&rsquo;s noise channel):
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/go-straight-unfiltered.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">No low-pass filter except for the resampling filter</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/go-straight-lpf.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">3390 Hz first-order Butterworth IIR filter</span></p>
+<p>And for one more example, here&rsquo;s the Sonic 2 recording from the end of the previous post, followed by another recording that emulates DAC quantization + ladder effect + low-pass filtering:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sonic-2-feedback.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Raw digital output</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sonic-2-quantized-filtered.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">DAC quantization + ladder effect + 3390 Hz low-pass filter</span></p>
+<p>It&rsquo;s definitely subjective which sounds better, but I think the second recording sounds much closer to actual hardware! The low-pass filter is what makes the biggest difference most of the time.</p>
+<h2 id="to-be-continued"><a href="#to-be-continued" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:to-be-continued" class="headings">To Be Continued</a></h2>
+<p>The next post will cover the LFO and the timers, which are the last pieces of the hardware that are not yet emulated (aside from SSG-EG). While this is less exciting and some games don&rsquo;t use them at all, emulating them is required to get correct audio in many games.</p>
+<p><a href="/blog/posts/emulating-ym2612-part-6/">Part 6 - LFO</a></p>
+
+            </div>
+
+            
+    
+    
+        <ul class="post-copyright">
+            <li class="copyright-item author"><span class="copyright-item-text">Author</span>: <a href="https://jsgroth.dev/" class="p-author h-card" target="_blank" rel="noopener">jsgroth</a></li>
+            
+                
+                
+                
+                
+                <li class="copyright-item link"><span class="copyright-item-text">Link</span>: <a href="/blog/posts/emulating-ym2612-part-5/" target="_blank" rel="noopener">https://jsgroth.dev/blog/posts/emulating-ym2612-part-5/</a></li>
+            
+            <li class="copyright-item license"><span class="copyright-item-text">License</span>: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a></li>
+            
+        </ul>
+    
+
+
+
+        </article>
+
+        
+
+        
+    <div class="updated-badge-container">
+        <span title="Updated @ 2025-04-10 15:40:05 CDT" style="cursor:help">
+
+<svg xmlns="http://www.w3.org/2000/svg" width="130" height="20" class="updated-badge"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="a"><rect width="130" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#a)"><path class="updated-badge-left" d="M0 0h55v20H0z"/><path class="updated-badge-right" d="M55 0h75v20H55z"/><path fill="url(#b)" d="M0 0h130v20H0z"/></g><g fill="#fff" text-anchor="middle" font-size="110"><text x="285" y="150" fill="#010101" fill-opacity=".3" textLength="450" transform="scale(.1)">updated</text><text x="285" y="140" textLength="450" transform="scale(.1)">updated</text><text x="915" y="150" fill="#010101" fill-opacity=".3" textLength="650" transform="scale(.1)">2025-04-10</text><text x="915" y="140" textLength="650" transform="scale(.1)">2025-04-10</text></g></svg>
+        </span></div>
+
+
+
+        
+
+
+        
+
+
+        
+    
+    
+        <div class="related-posts">
+            <h2 class="related-title">See Also:<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon related-icon"><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm144 276c0 6.6-5.4 12-12 12h-92v92c0 6.6-5.4 12-12 12h-56c-6.6 0-12-5.4-12-12v-92h-92c-6.6 0-12-5.4-12-12v-56c0-6.6 5.4-12 12-12h92v-92c0-6.6 5.4-12 12-12h56c6.6 0 12 5.4 12 12v92h92c6.6 0 12 5.4 12 12v56z"/></svg></h2>
+            <ul class="related-list">
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulator-bugs-sega-cd/" class="related-link">Emulator Bugs: Sega CD</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulator-bugs-fatal-rewind/" class="related-link">Emulator Bugs: Fatal Rewind</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-7/" class="related-link">Emulating the YM2612: Part 7 - SSG-EG</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-6/" class="related-link">Emulating the YM2612: Part 6 - LFO</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-4/" class="related-link">Emulating the YM2612: Part 4 - Digital Output</a>
+                    </li>
+                
+            </ul>
+        </div>
+    
+
+
+
+        
+    
+        <div class="post-tags">
+            
+                
+                
+                
+                
+                    
+                    <a href="/blog/tags/genesis/" rel="tag" class="post-tags-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon tag-icon"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>Genesis</a>
+                
+            
+                
+                
+                
+                
+                    
+                    <a href="/blog/tags/mega-drive/" rel="tag" class="post-tags-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon tag-icon"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>Mega Drive</a>
+                
+            
+        </div>
+    
+
+
+
+        
+
+
+        
+
+
+        
+    
+        
+        
+    
+    
+    
+    
+        <ul class="post-nav">
+            
+                <li class="post-nav-prev">
+                    <a href="/blog/posts/emulating-ym2612-part-6/" rel="prev">&lt; Emulating the YM2612: Part 6 - LFO</a>
+                </li>
+            
+            
+                <li class="post-nav-next">
+                    <a href="/blog/posts/emulating-ym2612-part-4/" rel="next">Emulating the YM2612: Part 4 - Digital Output &gt;</a>
+                </li>
+            
+        </ul>
+    
+
+
+
+        
+
+
+    </div>
+</main>
+
+
+            
+    <div id="back-to-top" class="back-to-top">
+        <a href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon arrow-up"><path d="M34.9 289.5l-22.2-22.2c-9.4-9.4-9.4-24.6 0-33.9L207 39c9.4-9.4 24.6-9.4 33.9 0l194.3 194.3c9.4 9.4 9.4 24.6 0 33.9L413 289.4c-9.5 9.5-25 9.3-34.3-.4L264 168.6V456c0 13.3-10.7 24-24 24h-32c-13.3 0-24-10.7-24-24V168.6L69.2 289.1c-9.3 9.8-24.8 10-34.3.4z"/></svg></a>
+    </div>
+
+
+            
+    <footer id="footer" class="footer">
+        <div class="footer-inner">
+            <div class="site-info">©&nbsp;2025&nbsp;jsgroth</div><div class="powered-by">Powered by <a href="https://github.com/gohugoio/hugo" target="_blank" rel="noopener">Hugo</a> | Theme is <a href="https://github.com/reuixiy/hugo-theme-meme" target="_blank" rel="noopener">MemE</a></div><div class="site-copyright"><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a></div>
+
+            
+
+
+            
+        </div>
+    </footer>
+
+
+        </div>
+        
+
+        
+
+
+
+
+
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/medium-zoom@latest/dist/medium-zoom.min.js"></script>
+
+<script>
+    let imgNodes = document.querySelectorAll('div.post-body img');
+    imgNodes = Array.from(imgNodes).filter(node => node.parentNode.tagName !== "A");
+
+    mediumZoom(imgNodes, {
+        background: 'hsla(var(--color-bg-h), var(--color-bg-s), var(--color-bg-l), 0.95)'
+    })
+</script>
+
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/instant.page@5.1.0/instantpage.min.js" type="module" defer></script>
+
+
+
+
+
+
+    </body>
+</html>

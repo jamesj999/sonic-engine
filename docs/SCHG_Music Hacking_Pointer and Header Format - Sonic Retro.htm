@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html class="client-nojs" lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8"/>
+<title>SCHG:Music Hacking/Pointer and Header Format - Sonic Retro</title>
+<script>document.documentElement.className = document.documentElement.className.replace( /(^|\s)client-nojs(\s|$)/, "$1client-js$2" );</script>
+<script>(window.RLQ=window.RLQ||[]).push(function(){mw.config.set({"wgCanonicalNamespace":"SCHG","wgCanonicalSpecialPageName":false,"wgNamespaceNumber":102,"wgPageName":"SCHG:Music_Hacking/Pointer_and_Header_Format","wgTitle":"Music Hacking/Pointer and Header Format","wgCurRevisionId":310634,"wgRevisionId":310634,"wgArticleId":34938,"wgIsArticle":true,"wgIsRedirect":false,"wgAction":"view","wgUserName":null,"wgUserGroups":["*"],"wgCategories":["Pages with syntax highlighting errors","SCHG: Music hacking"],"wgBreakFrames":false,"wgPageContentLanguage":"en","wgPageContentModel":"wikitext","wgSeparatorTransformTable":["",""],"wgDigitTransformTable":["",""],"wgDefaultDateFormat":"dmy","wgMonthNames":["","January","February","March","April","May","June","July","August","September","October","November","December"],"wgMonthNamesShort":["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"wgRelevantPageName":"SCHG:Music_Hacking/Pointer_and_Header_Format","wgRelevantArticleId":34938,"wgRequestId":"e0fc39cfcfa855237656f442","wgIsProbablyEditable":false,"wgRelevantPageIsProbablyEditable":false,"wgRestrictionEdit":[],"wgRestrictionMove":[]});mw.loader.state({"site.styles":"ready","noscript":"ready","user.styles":"ready","user":"ready","user.options":"loading","user.tokens":"loading","ext.pygments":"ready","ext.tmh.thumbnail.styles":"ready","mediawiki.legacy.shared":"ready","mediawiki.legacy.commonPrint":"ready","mediawiki.sectionAnchor":"ready","skins.foreground.styles":"ready"});mw.loader.implement("user.options@0bhc5ha",function($,jQuery,require,module){mw.user.options.set([]);});mw.loader.implement("user.tokens@0egx1js",function ( $, jQuery, require, module ) {
+mw.user.tokens.set({"editToken":"+\\","patrolToken":"+\\","watchToken":"+\\","csrfToken":"+\\"});/*@nomin*/
+
+});mw.loader.load(["site","mediawiki.page.startup","mediawiki.user","mediawiki.hidpi","mediawiki.page.ready","jquery.makeCollapsible","mediawiki.toc","mediawiki.searchSuggest","mw.MediaWikiPlayer.loader","mw.PopUpMediaTransform","skins.foreground.js"]);});</script>
+<link rel="stylesheet" href="/load.php?debug=false&amp;lang=en&amp;modules=ext.pygments%7Cext.tmh.thumbnail.styles%7Cmediawiki.legacy.commonPrint%2Cshared%7Cmediawiki.sectionAnchor%7Cskins.foreground.styles&amp;only=styles&amp;skin=foreground"/>
+<script async="" src="/load.php?debug=false&amp;lang=en&amp;modules=startup&amp;only=scripts&amp;skin=foreground"></script>
+<meta name="ResourceLoaderDynamicStyles" content=""/>
+<link rel="stylesheet" href="/load.php?debug=false&amp;lang=en&amp;modules=site.styles&amp;only=styles&amp;skin=foreground"/>
+<meta name="generator" content="MediaWiki 1.30.2"/>
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1.0"/>
+<meta name="theme-color" content="#787848"/>
+<link rel="shortcut icon" href="/favicon.ico"/>
+<link rel="search" type="application/opensearchdescription+xml" href="/opensearch_desc.php" title="Sonic Retro (en)"/>
+<link rel="EditURI" type="application/rsd+xml" href="https://info.sonicretro.org/api.php?action=rsd"/>
+<link rel="alternate" type="application/atom+xml" title="Sonic Retro Atom feed" href="/index.php?title=Special:RecentChanges&amp;feed=atom"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<!--[if lt IE 9]><script src="/resources/lib/html5shiv/html5shiv.min.js?40bd4"></script><![endif]-->
+</head>
+<body class="mediawiki ltr sitedir-ltr mw-hide-empty-elt ns-102 ns-subject page-SCHG_Music_Hacking_Pointer_and_Header_Format rootpage-SCHG_Music_Hacking_Pointer_and_Header_Format skin-foreground action-view"><div id='navwrapper'><!-- START FOREGROUNDTEMPLATE -->
+<link href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700,700i&display=swap" rel="stylesheet">
+<div id="title" class="bgcolor2">
+<a style="float:left; position: absolute; top: 0; left:0; height:65px; width:350px;" href="https://info.sonicretro.org"></a>
+<div id="title_button">
+<a href="https://sonicretro.org">Home</a>
+<a class="current bgcolor3" href="https://info.sonicretro.org">Info</a>
+<a href="https://forums.sonicretro.org">Forums</a>
+<a href="https://github.com/sonicretro/"><i class="fab fa-github" style="font-size:1.5em"></i></a>
+<a href="https://sonicretro.org/discord/"><i class="fab fa-discord" style="font-size:1.5em"></i></a>
+<a href="https://segaretro.org"><img src="https://sonicretro.org/segaretro-knockout.svg" alt="Sega Retro" class="navicon"></a>
+</div>
+</div>
+		<nav class="top-bar" data-topbar role="navigation" data-options="back_text: Back">
+                                <li class="toggle-topbar menu-icon">
+                                        <a href="#"><span>Menu</span></a>
+                                </li>
+
+		<section class="top-bar-section">
+
+			<ul id="top-bar-left" class="left">
+				<li class="divider show-for-small"></li>
+									<li class="has-dropdown active"  id='p-Main'>
+					<a href="#">Main</a>
+													<ul class="dropdown">
+								<li id="n-mainpage"><a href="/Main_Page" title="Visit the main page [z]" accesskey="z">Main Page</a></li><li id="n-recentchanges"><a href="/Special:RecentChanges" title="A list of recent changes in the wiki [r]" accesskey="r">Recent changes</a></li><li id="n-randompage"><a href="/Special:Random" title="Load a random page [x]" accesskey="x">Random page</a></li><li id="n-help"><a href="/Help:Contents" title="The place to find out">Help</a></li><li id="n-specialpages"><a href="/Special:SpecialPages">Special pages</a></li><li id="n-Upload"><a href="/Special:Upload">Upload file</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Games'>
+					<a href="#">Games</a>
+													<ul class="dropdown">
+								<li id="n-Game-List"><a href="/Category:Games">Game List</a></li><li id="n-Prereleases"><a href="/Category:Prereleases">Prereleases</a></li><li id="n-Unreleased"><a href="/Category:Unreleased_games">Unreleased</a></li><li id="n-Unlicensed"><a href="/Category:Unlicensed_games">Unlicensed</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Game_Info'>
+					<a href="#">Game Info</a>
+													<ul class="dropdown">
+								<li id="n-Game-Development"><a href="/Category:Development">Game Development</a></li><li id="n-Hidden-Content"><a href="/Category:Hidden_content">Hidden Content</a></li><li id="n-Bugs"><a href="/Category:Bugs">Bugs</a></li><li id="n-Characters"><a href="/Category:Characters">Characters</a></li><li id="n-Enemies"><a href="/Category:Enemies">Enemies</a></li><li id="n-Bosses"><a href="/Category:Bosses">Bosses</a></li><li id="n-Items"><a href="/Category:Items">Items</a></li><li id="n-Locations"><a href="/Category:Locations">Locations</a></li><li id="n-Level-Themes"><a href="/Category:Level_themes">Level Themes</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Music'>
+					<a href="#">Music</a>
+													<ul class="dropdown">
+								<li id="n-Albums"><a href="/Category:Albums">Albums</a></li><li id="n-EPs"><a href="/Category:EPs">EPs</a></li><li id="n-Tracks"><a href="/Category:Tracks">Tracks</a></li><li id="n-Musicians"><a href="/Category:Musicians">Musicians</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-TV_.26_Film'>
+					<a href="#">TV &amp; Film</a>
+													<ul class="dropdown">
+								<li id="n-Adventures-of-Sonic"><a href="/Category:Adventures_of_Sonic_the_Hedgehog">Adventures of Sonic</a></li><li id="n-Saturday-Morning"><a href="/Category:Sonic_the_Hedgehog_(TV_series)">Saturday Morning</a></li><li id="n-Sonic-OVA"><a href="/Category:Sonic_the_Hedgehog_(anime)">Sonic OVA</a></li><li id="n-Sonic-Underground"><a href="/Category:Sonic_Underground">Sonic Underground</a></li><li id="n-Sonic-X"><a href="/Category:Sonic_X">Sonic X</a></li><li id="n-Sonic-Boom"><a href="/Category:Sonic_Boom_(TV_series)">Sonic Boom</a></li><li id="n-Live-action-Films"><a href="/Category:Sonic_the_Hedgehog_(film_series)">Live-action Films</a></li><li id="n-Sonic-Prime"><a href="/Category:Sonic_Prime">Sonic Prime</a></li><li id="n-Shorts"><a href="/Category:Shorts">Shorts</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Printed_Media'>
+					<a href="#">Printed Media</a>
+													<ul class="dropdown">
+								<li id="n-Shogakukan-manga"><a href="/Category:Sonic_the_Hedgehog_(manga)">Shogakukan manga</a></li><li id="n-Sonic-the-Comic"><a href="/Category:Sonic_the_Comic">Sonic the Comic</a></li><li id="n-Archie-comics"><a href="/Category:Sonic_the_Hedgehog_(Archie_comics)">Archie comics</a></li><li id="n-IDW-comics"><a href="/Category:Sonic_the_Hedgehog_(IDW_comics)">IDW comics</a></li><li id="n-Books"><a href="/Category:Books">Books</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Modding'>
+					<a href="#">Modding</a>
+													<ul class="dropdown">
+								<li id="n-Hacks"><a href="/Category:Hacks">Hacks</a></li><li id="n-Community-Hacking-Guide"><a href="/Category:Sonic_Community_Hacking_Guide">Community Hacking Guide</a></li><li id="n-Programs"><a href="/Category:Programs">Programs</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Fan_Gaming'>
+					<a href="#">Fan Gaming</a>
+													<ul class="dropdown">
+								<li id="n-Fan-Games"><a href="/Category:Fan_games">Fan Games</a></li><li id="n-Resources"><a href="/Category:Fan_game_resources">Resources</a></li>							</ul>
+																							</ul>
+
+			<ul id="top-bar-right" class="right">
+				<li class="has-form">
+					<form action="/index.php" id="searchform" class="mw-search">
+						<div class="row collapse">
+						<div class="small-12 columns">
+							<input type="search" name="search" placeholder="Search Sonic Retro" title="Search Sonic Retro [f]" accesskey="f" id="searchInput"/>							<button type="submit" class="button search">Search</button>
+						</div>
+						</div>
+					</form>
+				</li>
+				<li class="divider show-for-small"></li>
+
+				<li class="has-dropdown active"><a href="#"><i class="fa fa-cogs"></i></a>
+					<ul id="toolbox-dropdown" class="dropdown">
+						<li id="t-whatlinkshere"><a href="/Special:WhatLinksHere/SCHG:Music_Hacking/Pointer_and_Header_Format" title="A list of all wiki pages that link here [j]" accesskey="j">What links here</a></li><li id="t-recentchangeslinked"><a href="/Special:RecentChangesLinked/SCHG:Music_Hacking/Pointer_and_Header_Format" rel="nofollow" title="Recent changes in pages linked from this page [k]" accesskey="k">Related changes</a></li><li id="t-specialpages"><a href="/Special:SpecialPages" title="A list of all special pages [q]" accesskey="q">Special pages</a></li><li id="t-print"><a href="/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;printable=yes" rel="alternate" title="Printable version of this page [p]" accesskey="p">Printable version</a></li><li id="t-permalink"><a href="/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;oldid=310634" title="Permanent link to this revision of the page">Permanent link</a></li><li id="t-info"><a href="/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;action=info" title="More information about this page">Page information</a></li>						<li id="n-recentchanges"><a href="/Special:RecentChanges" title="Special:RecentChanges">Recent changes</a></li>						<li id="n-help" ><a href="https://www.mediawiki.org/wiki/Special:MyLanguage/Help:Contents">Help</a></li>					</ul>
+				</li>
+
+				<li id="personal-tools-dropdown" class="has-dropdown active"><a href="#"><i class="fa fa-user"></i></a>
+					<ul class="dropdown">
+						<li id="pt-createaccount"><a href="/index.php?title=Special:CreateAccount&amp;returnto=SCHG%3AMusic+Hacking%2FPointer+and+Header+Format" title="You are encouraged to create an account and log in; however, it is not mandatory">Create account</a></li><li id="pt-login"><a href="/index.php?title=Special:UserLogin&amp;returnto=SCHG%3AMusic+Hacking%2FPointer+and+Header+Format" title="You are encouraged to log in; however, it is not mandatory [o]" accesskey="o">Log in</a></li>					</ul>
+				</li>
+
+			</ul>
+		</section>
+		</nav>
+		
+		</div>		
+		<div id="page-content">
+		<div class="row fullWidth">
+				<div class="large-12 columns">
+					<!-- Output page indicators -->
+					<div class="mw-indicators mw-body-content">
+</div>
+					<!-- If user is logged in output echo location -->
+									<!--[if lt IE 9]>
+				<div id="siteNotice" class="sitenotice panel radius">Sonic Retro may not look as expected in this version of Internet Explorer. We recommend you upgrade to a newer version of Internet Explorer or switch to a browser like Firefox or Chrome.</div>
+				<![endif]-->
+
+												</div>
+		</div>
+
+		<div id="mw-js-message" style="display:none;"></div>
+
+		<div class="row fullWidth">
+				<div id="p-cactions" class="large-12 columns">
+											<a id="actions-button" href="#" data-dropdown="actions" data-options="align:left; is_hover: true; hover_timeout:700" class="button small secondary radius"><i class="fa fa-cog"><span class="show-for-medium-up">&nbsp;Actions</span></i></a>
+						<!--RTL -->
+						<ul id="actions" class="f-dropdown" data-dropdown-content>
+							<li id="ca-nstab-schg" class="selected"><a href="/SCHG:Music_Hacking/Pointer_and_Header_Format">SCHG</a></li><li id="ca-talk" class="new"><a href="/index.php?title=SCHG_Talk:Music_Hacking/Pointer_and_Header_Format&amp;action=edit&amp;redlink=1" rel="discussion" title="Discussion about the content page [t]" accesskey="t">Discussion</a></li><li id="ca-viewsource"><a href="/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;action=edit" title="This page is protected.&#10;You can view its source [e]" accesskey="e">View source</a></li><li id="ca-history"><a href="/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;action=history" title="Past revisions of this page [h]" accesskey="h">History</a></li>													</ul>
+						<!--RTL -->
+					<h4 class="namespace label">SCHG</h4>					<div id="content">
+					<h1  id="firstHeading" class="title">Music Hacking/Pointer and Header Format</h1>
+											<h3 id="tagline">From Sonic Retro</h3>					<h5 id="siteSub" class="subtitle"></h5>
+					<div id="contentSub" class="clear_both"></div>
+					<div id="bodyContent" class="mw-bodytext">
+						<div id="mw-content-text" lang="en" dir="ltr" class="mw-content-ltr"><div class="mw-parser-output"><table class="bottomtemplate" align="left">
+
+<tr>
+<td class="bottomtemptext" align="left"><b><a href="/SCHG:Music_Hacking" title="SCHG:Music Hacking">Music Hacking</a></b>: <a class="mw-selflink selflink">Pointer and Header Format</a> | <a href="/SCHG:Music_Hacking/Voice_and_Note_Editing" title="SCHG:Music Hacking/Voice and Note Editing">Voice and Note Editing</a> | <a href="/SCHG:Music_Hacking/DAC_Samples,_Coordination_Flags,_Game_Specifics,_and_Real-Time_Music_Editing" title="SCHG:Music Hacking/DAC Samples, Coordination Flags, Game Specifics, and Real-Time Music Editing">DAC Samples, Coordination Flags, Game Specifics, and Real-Time Music Editing</a> | <a href="/SCHG:Music_Hacking/Other_Games_and_Data_Locations" title="SCHG:Music Hacking/Other Games and Data Locations">Other Games and Data Locations</a> | <a href="/SCHG:Music_Hacking/Tricks_of_the_Trade" title="SCHG:Music Hacking/Tricks of the Trade">Tricks of the Trade</a>
+</td></tr></table>
+<p><br clear="all" />
+</p><p><br />
+</p>
+<div id="toc" class="toc"><div class="toctitle"><h2>Contents</h2></div>
+<ul>
+<li class="toclevel-1 tocsection-1"><a href="#Pointer_format"><span class="tocnumber">1</span> <span class="toctext">Pointer format</span></a>
+<ul>
+<li class="toclevel-2 tocsection-2"><a href="#68k_SMPS"><span class="tocnumber">1.1</span> <span class="toctext">68k SMPS</span></a>
+<ul>
+<li class="toclevel-3 tocsection-3"><a href="#Headers"><span class="tocnumber">1.1.1</span> <span class="toctext">Headers</span></a></li>
+<li class="toclevel-3 tocsection-4"><a href="#Coordination_flags"><span class="tocnumber">1.1.2</span> <span class="toctext">Coordination flags</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-5"><a href="#Z80_SMPS"><span class="tocnumber">1.2</span> <span class="toctext">Z80 SMPS</span></a>
+<ul>
+<li class="toclevel-3 tocsection-6"><a href="#Sonic_2_Final.2FMega_Man:_Wily_Wars"><span class="tocnumber">1.2.1</span> <span class="toctext">Sonic 2 Final/Mega Man: Wily Wars</span></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-7"><a href="#Header_formats"><span class="tocnumber">2</span> <span class="toctext">Header formats</span></a>
+<ul>
+<li class="toclevel-2 tocsection-8"><a href="#Mega_Drive_SMPS"><span class="tocnumber">2.1</span> <span class="toctext">Mega Drive SMPS</span></a>
+<ul>
+<li class="toclevel-3 tocsection-9"><a href="#SMPS_main_header"><span class="tocnumber">2.1.1</span> <span class="toctext">SMPS main header</span></a></li>
+<li class="toclevel-3 tocsection-10"><a href="#SMPS_FM_and_DAC_headers"><span class="tocnumber">2.1.2</span> <span class="toctext">SMPS FM and DAC headers</span></a></li>
+<li class="toclevel-3 tocsection-11"><a href="#SMPS_PSG_headers"><span class="tocnumber">2.1.3</span> <span class="toctext">SMPS PSG headers</span></a></li>
+<li class="toclevel-3 tocsection-12"><a href="#Main_SFX_header"><span class="tocnumber">2.1.4</span> <span class="toctext">Main SFX header</span></a></li>
+<li class="toclevel-3 tocsection-13"><a href="#SFX_track_headers"><span class="tocnumber">2.1.5</span> <span class="toctext">SFX track headers</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-14"><a href="#32X_SMPS"><span class="tocnumber">2.2</span> <span class="toctext">32X SMPS</span></a></li>
+<li class="toclevel-2 tocsection-15"><a href="#Master_System.2FGame_Gear_SMPS"><span class="tocnumber">2.3</span> <span class="toctext">Master System/Game Gear SMPS</span></a></li>
+<li class="toclevel-2 tocsection-16"><a href="#Mega-CD_SMPS_.28.22SMPS-PCM.22.29"><span class="tocnumber">2.4</span> <span class="toctext">Mega-CD SMPS ("SMPS-PCM")</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-17"><a href="#References"><span class="tocnumber">3</span> <span class="toctext">References</span></a></li>
+</ul>
+</div>
+
+<h2><span class="mw-headline" id="Pointer_format">Pointer format</span></h2>
+<p>Pointers, as they pertain to SMPS, are values used to locate data at any point in the file. In the context of music editing, pointers will be used to locate the start of each channel's notation data; in addition, they are also used to branch to certain portions of data within the actual data through the use of <a href="/SCHG:Music_Hacking#Coordination_Flags" title="SCHG:Music Hacking">coordination flags</a>. This section in particular will describe the format used in the song headers and within the branching flags — F6, F7, and F8, respectively.
+</p>
+<h3><span class="mw-headline" id="68k_SMPS">68k SMPS</span></h3>
+<h4><span class="mw-headline" id="Headers">Headers</span></h4>
+<p>Pointers in the headers of a song or sound effect are 16-bits (two bytes) and work relative to the beginning of the song file. For example, when working with a standalone piece of SMPS data, if the voice pointer reads <b>0180</b>, you would go to offset $180 within the file to locate the voice data. 
+</p><p>If you're working with a song inside a full compiled ROM, the process is similar — simply take the offset where the song data starts and add the voice pointer's value to calculate the offset of the data. So, for example, if your music is at offset $E8900 in the ROM, you'd take the voice pointer value — in this case, $180 — and you'd add it to the offset in order to locate the data. In this particular instance, $E8A80 would be the resulting offset, and subsequently the location of the voice data in the song.
+</p><p>This pointer format applies to all pointers within the header of a piece of SMPS data.
+</p>
+<h4><span class="mw-headline" id="Coordination_flags">Coordination flags</span></h4>
+<p>In contrast to Z80 SMPS, the pointer format in branching coordination flags differs slightly. As before, each pointer is two bytes, but this time pointers are relative to the start of the pointer — <i>not</i> the start of the song file. To clarify, if you were using the format of the F7 flag — <b>F7 xx yy zzzz</b> — the pointer would be relative to the offset in the file where <b>zzzz</b> is stored.
+</p><p>Pointers in coordination flags use signed relative values to locate data both after and before the current location. To do this, there is an imposed limit of about $8000 bytes in either direction on how far one single flag can branch in the song. When dealing with these flags, a value of <b>FFFF</b> acts as zero; in other words, a pointer value of <b>FFFF</b> would branch to the current location — nowhere.
+</p><p>To branch ahead of the current location, one would increase the value beyond <b>FFFF</b> to jump ahead. So, for example, if our pointer was <b>0298</b>, we would be branching ahead $299 bytes from our current location. Assuming the current location is $E8000, this branch would be locating data at offset $E8299. A general formula you could use in order to calculate the length of positive branches quickly would be to increase a pointer value by $1 — this would help you get into the mindset of locating data more adeptly.
+</p><p>To branch <i>before</i> the current location, one would decrease the value beyond <b>FFFF</b> to jump back. So, for example, if our pointer was <b>FFE8</b>, we would be branching $17 bytes before the current location. Assuming our current location is, once again, $E8000, this branch would be locating data at offset $E7FE9. The easiest way to calculate the length of a negative branch would be to take the pointer value and subtract it from <b>FFFF</b>. In our previous example, subtracting <b>FFE8</b> from <b>FFFF</b> gives a result of $17.
+</p><p>68k SMPS is unique in that each song is literally self-contained — a song can be stored at any offset within a ROM and the relative nature of the pointers will always locate data properly. This is a significant advantage over the Z80 variant of the engine, which requires all data to be at absolute offsets within a data bank.
+</p><p><u><b>Points of note:</b></u>
+</p>
+<ul><li> <i><a href="/Ristar" class="mw-redirect" title="Ristar">Ristar</a>'</i>s coordination flag pointers have $1 added to them, compared to the pointers in other 68k SMPS games. If you want to convert between the two, just add or subtract $1 thusly.</li>
+<li> Some 68k SMPS games use the <i>Sonic 3</i>-style coordination flags.</li></ul>
+<h3><span class="mw-headline" id="Z80_SMPS">Z80 SMPS</span></h3>
+<p>Z80 SMPS differs from its 68k counterpart in a few different ways.
+</p><p>First and foremost, unlike 68k SMPS, the same pointer format is used in both the coordination flags <i>and</i> the headers. All pointers are stored in little-endian format due to the nature of the processor; in other words, the byte order is reversed. If a pointer reads <b>7880</b>, you should mentally parse it as referring to bank offset <b>8078</b>.
+</p><p>Secondly, pointers are absolute instead of relative, but are only absolute in terms of the current Z80 data bank. Pointer values will <i>always</i> start with a value of <b>8000</b>, regardless of whether or not the bank itself is stored at an offset that contains 8000 as part of the address; this is so the music can be properly located in the context of the Z80 bank. So, for example, if the current Z80 bank is at offset $70000, a pointer value of <b>7880</b> (which, when swapped, becomes <b>8078</b>) would be locating data at offset $70078.
+</p><p>When dealing with standalone Z80 SMPS files, it is required that you first make note of the starting offset of the song within its respective Z80 bank before you can properly calculate pointer values within the song. So, for example, if a song is located at offset $F0900 in the ROM, your starting offset for the song will be <b>8900</b>. To calculate relative offsets within the file where data is stored, subtract the starting offset from your pointer value. So, for example, if our DAC pointer reads value <b>508E</b> (which after swapping the bytes becomes <b>8E50</b>), the relative offset of our DAC notation within the file will be offset $550, or $550 bytes from the start of the song file.
+</p><p>This process is relatively simpler for the SMPS variant used in the SMS version of Sonic 2; since all music data is contained in bank 2 ($8000-$FFFF), simply convert the pointer to big endian and use that as your absolute address in the ROM.
+</p><p>In addition to within Z80 SMPS data, this format is also used to locate data within a game's music pointer index.
+</p>
+<h4><span class="mw-headline" id="Sonic_2_Final.2FMega_Man:_Wily_Wars">Sonic 2 Final/Mega Man: Wily Wars</span></h4>
+<p><i><a href="/Sonic_2" class="mw-redirect" title="Sonic 2">Sonic 2</a></i> is a special case amongst games that use the Z80 SMPS engine in that its music is compressed to individual files in the <a href="/Saxman_compression" class="mw-redirect" title="Saxman compression">saxman compression</a>, which are subsequently parsed within Z80 RAM.
+</p><p>In contrast to normal Z80 SMPS music, the only difference is that compressed music in <i>Sonic 2</i> always has a starting offset of <b>1380</b>. All operations regarding the calculation of offsets from pointers remains the same. It is, however, worth noting that not <i>all</i> music in <i>Sonic 2</i> is compressed; exceptions are noted as such later on in the guide.
+</p><p>Mega Man: Wily Wars stores songs uncompressed, but also has music copied to Z80 RAM. The starting offset for this game is always <b>$1002</b>.
+</p><p>Sorcerian stores songs <a href="/LZSS" class="mw-redirect" title="LZSS">LZSS</a>-compressed. The 68k decompresses them and copies the data to Z80 RAM, starting with offset <b>$1000</b>.
+</p><p>Virtua Racing stores songs uncompressed and has music copied to Z80 RAM. The starting offset for this game is always <b>$1872</b>.
+</p><p>Many games that use SMPS Z80 store SFX data in Z80 RAM.
+</p>
+<h2><span class="mw-headline" id="Header_formats">Header formats</span></h2>
+<h3><span class="mw-headline" id="Mega_Drive_SMPS">Mega Drive SMPS</span></h3>
+<p>All pointers in this section differ according to the game you are editing. Remember, relative pointers for 68k SMPS, and absolute little endian pointers for Z80 SMPS. The music header format listed is a universal format used in all incarnations of the SMPS engine except for <i>Knuckles' Chaotix</i>, which uses a slightly modified version to accommodate for the extra sound hardware (the PWM sound channels).
+</p>
+<h4><span class="mw-headline" id="SMPS_main_header">SMPS main header</span></h4>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th> Byte offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00‑$01
+</td>
+<td> Voice table pointer.
+</td></tr>
+<tr>
+<td> $02
+</td>
+<td>Number of FM+DAC channels. There must always be a DAC channel defined, so this is number of FM channels + 1, and the DAC channel MUST be the first one. If you don't want to use the DAC, you must put a $F2 right at the start of the track. Sonic 1 or 2 specific: There is enough track RAM for 6 FM+1 DAC. If you want to use 6 FM channels, you must put a $07 in this byte to initialize all tracks and disable the DAC as above. The DAC channel will be disabled in this case. For Sonic 2 only, DAC will be enabled during music initialization, Sonic 1 only disables it. Sonic 3 or K specific: There is enough track RAM on the z80 for 5 FM + 1 DAC. You can't use the 6th FM channel for music (you can for SFX). There is one song (the song that plays when you get a chaos emerald song) that initializes 6 FM+1 DAC as above — and it works only by luck, as the FM6 track is treated as a PSG channel and the PSG3 track is treated as an FM channel with its own voice pointer.
+</td></tr>
+<tr>
+<td> $03
+</td>
+<td>Number of PSG tracks. If you want a noise channel, the 3rd PSG channel is the only one that can be safely converted to noise.
+</td></tr>
+<tr>
+<td> $04
+</td>
+<td> Dividing timing: in all drivers I analyzed (Sonic 1, Sonic 2, Sonic 3, Sonic &amp; Knuckles, Sonic 3D Blast, Ristar, Outrunners) this works by multiplying note duration by this value. This can lead to broken notes, as the final duration is stored in a single byte; thus, the maximum note duration you can use without problems is $FF/dividing timing (round down, maximum of $7F). Sonic 3 or K specific: a dividing timing of $00 multiplies the note duration by 256, making all notes have a duration of $00 and last for 256 frames.
+</td></tr>
+<tr>
+<td> $05
+</td>
+<td> Main tempo modifier. This works as follows: Sonic 1 specific: if main tempo is nn, the song runs for nn-1 frames and is delayed by 1 frame. A main tempo of $01 runs for 0 frames and is delayed by 1 frame, hence is broken; a main tempo of $00 will overflow and run for $FF frames and be delayed by 1 frame. Sonic 2 specific: a main tempo of nn runs on nn out of 256 frames, as evenly spaced as possible. A main tempo of $00 does not run at all. Sonic 3 or K specific: a main tempo of nn runs on (256 - nn) out of 256 frames, as evenly spaced as possible. All tempo values are valid.
+</td></tr></table><p>
+<p>It is easy to convert between Sonic 2 and Sonic 3+ main tempo values:
+</p>
+<div class="mw-highlight mw-content-ltr" dir="ltr"><pre>S2 main tempo = (256 - S3 main tempo) mod 256
+S3 main tempo = (256 - S2 main tempo) mod 256</pre></div>
+<p>The conversion works for all values of main tempo other than 0 — this value cannot be converted exactly between the two drivers. The conversion of main tempos from Sonic 1 to Sonic 2 can be done (approximately) with the following formula:
+</p>
+<div class="mw-highlight mw-content-ltr" dir="ltr"><pre>S2 main tempo = floor{ [ (S1 main tempo-1) * 256 + floor(S1 main tempo/2) ] / S1 main tempo }</pre></div>
+<p>Here, a S1 main tempo of 0 should be plugged as 256. There is an error intrinsic to this approximation; this error is always less than half a frame out of every 256 frames, and the average absolute error for all main tempo values is about 0.239 frames out of every 256. This means that all Sonic 1 main tempos can be converted quite accurately to Sonic 2, or to Sonic 3+ by composing the formulas.
+</p><p>The main tempo conversion from Sonic 2 to Sonic 1 can be done with the following formula:
+</p>
+<div class="mw-highlight mw-content-ltr" dir="ltr"><pre>S1 main tempo = floor{ floor[ (768 - S2 main tempo)/2 ] / (256 - S2 main tempo) }</pre></div>
+<p>This formula has much worse error bounds that the other formula: wast swatches of Sonic 2 main tempos are squashed to the same value because they can't be accurately represented in the Sonic 1 main tempo. This is shown in this plot:
+</p><p><a href="/File:Smps2asm-conv2s1.svg" class="image"><img alt="Smps2asm-conv2s1.svg" src="/images/thumb/8/8a/Smps2asm-conv2s1.svg/567px-Smps2asm-conv2s1.svg.png" width="567" height="376" srcset="/images/thumb/8/8a/Smps2asm-conv2s1.svg/851px-Smps2asm-conv2s1.svg.png 1.5x, /images/thumb/8/8a/Smps2asm-conv2s1.svg/1134px-Smps2asm-conv2s1.svg.png 2x" /></a>
+</p><p>The "duty cycle" is how many frames the music is updated in out of every 256 frames; this illustrates how bad the formula can get for "low" S2 tempos ($C0 or less).
+</p><p>Then follows headers for FM and DAC channels, as many as are specified on byte $02 (offsets relative to header position in file).
+</p>
+<h4><span class="mw-headline" id="SMPS_FM_and_DAC_headers">SMPS FM and DAC headers</span></h4>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th> Byte offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00‑$01
+</td>
+<td> Track data pointer.
+</td></tr>
+<tr>
+<td> $02
+</td>
+<td> Initial channel key displacement (signed, ignored on DAC). This is added to the note before it is converted to a frequency. Sonic 3 or K specific: In the alternate SMPS parsing mode, the channel key displacement is added to the *frequency* instead.
+</td></tr>
+<tr>
+<td> $03
+</td>
+<td> Initial track volume attenuation: $00 is maximum volume, $7F is total silence, above that bit 7 is ignored. This is read when DAC channel is initialized, but it is ignored afterwards.
+</td></tr></table>
+<p>The first channel specified is the DAC channel, regardless of whether or not bytes $02‑$03 are zero or not. After those, there are the PSG channels:
+</p>
+<h4><span class="mw-headline" id="SMPS_PSG_headers">SMPS PSG headers</span></h4>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th> Byte offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00‑$01
+</td>
+<td> Track data pointer.
+</td></tr>
+<tr>
+<td> $02
+</td>
+<td> Initial channel key displacement (signed, ignored on DAC). This is added to the note before it is converted to a frequency. Sonic 3 or K specific: In the alternate SMPS parsing mode, the channel key displacement is added to the *frequency* instead.
+</td></tr>
+<tr>
+<td> $03
+</td>
+<td>  Initial track volume attenuation: $00 is maximum volume, $0F is total silence. Sonic 2 specific: attenuation above $0F is set to $0F. Sonic 3 or K specific: attenuation above $0F is only set to $0F if bit 4 is set, otherwise it screws up volume commands to PSG.
+</td></tr>
+<tr>
+<td> $04
+</td>
+<td>  Sonic 2 specific: ignored. Sonic 3+ specific: modulation control byte. Do not use unless you know what you are doing.
+</td></tr>
+<tr>
+<td> $05
+</td>
+<td>  Default PSG tone (index in lookup table).
+</td></tr></table>
+<p>Only PSG3 can be made into a noise channel without bugs. To use a noise channel, you need to use 3 PSG channels and convert the third into a noise channel.
+</p><p>For SFX, the header is quite different:
+</p>
+<h4><span class="mw-headline" id="Main_SFX_header">Main SFX header</span></h4>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th> Byte offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00‑$01
+</td>
+<td> Voice table pointer.
+</td></tr>
+<tr>
+<td> $02
+</td>
+<td> Dividing timing. See notes for main music header.
+</td></tr>
+<tr>
+<td> $03
+</td>
+<td>  Total channels (FM + PSG) used by SFX. Sonic 1 specific: SFX can use a maximum of 3 FM and 3 PSG channels. If the SFX index is from $D0 to $DF, it can have at most a single FM (which *must* be FM4) and a single PSG channel (which MUST be PSG 3). Sonic 2 specific: SFX can use up to 3 FM and 3 PSG channels. Sonic 3 or K specific: SFX can use up to 4 FM and 3 PSG channels.
+</td></tr></table>
+<p>Unlike the case for music, SFX track headers are equal for all tracks; there is one header for each track specified on byte $03:
+</p>
+<h4><span class="mw-headline" id="SFX_track_headers">SFX track headers</span></h4>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th> Byte offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00
+</td>
+<td> Initial playback control bitfield. Just set it to $80 and be done with it (unless you *really* know what you are doing). Sonic K specific: Bit 0 must be set for noise channels.
+</td></tr>
+<tr>
+<td> $01
+</td>
+<td> Channel identifier. For a PSG channel: $80 = PSG1, $A0 = PSG2, $C0 = PSG3, $E0 = noise. For a FM channel: $02 = FM3, $04 = FM4, $05 = FM5. Anything else is invalid. Sonic 3+ specific: you can also specify $06 to use FM6; this overrides the DAC channel.
+</td></tr>
+<tr>
+<td> $02‑$03
+</td>
+<td> Track data pointer.
+</td></tr>
+<tr>
+<td> $04
+</td>
+<td>  Initial channel key displacement (signed). See comments for music, as adequate to the track's type.
+</td></tr>
+<tr>
+<td> $05
+</td>
+<td>  Initial track volume attenuation. See comments for music, as adequate to the track's type.
+</td></tr></table>
+<p>So you must specify the channel type on a track-by-track basis. If you are careful enough designing SFX, you can theoretically play (and hear) several of them at the same time as long as they do not share the same channels — each SFX channel has a fixed location in z80 RAM and a fixed song track in RAM that it overrides on initialization. In any of the games, you can't safely use PSG3 ($C0) and the noise channel ($E0) at the same time at SFX initialization, as they will want to use the same block of RAM. Turning a channel to noise with coord. flags afterwards is safe, however you will always want to convert a PSG3 channel to noise or you will face many bugs. In Sonic &amp; Knuckles, you will want to avoid using $E0 to define a noise channel, as it will be very buggy.
+</p>
+<h3><span class="mw-headline" id="32X_SMPS">32X SMPS</span></h3>
+<p>The format for the SMPS music header is slightly different to accommodate for the 32x's extra sound hardware.
+</p>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th>Word offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00‑$01
+</td>
+<td> Voice pointer.
+</td></tr>
+<tr>
+<td> $02‑$03
+</td>
+<td> Channel setup.
+</td></tr>
+<tr>
+<td> $04‑$05
+</td>
+<td> Tempo modifier.
+</td></tr>
+<tr>
+<td> $06‑$07
+</td>
+<td> FM channel 1 pointer.
+</td></tr>
+<tr>
+<td> $08‑$09
+</td>
+<td> FM channel 1 modifier.
+</td></tr>
+<tr>
+<td> $0A‑$0B
+</td>
+<td> FM channel 2 pointer.
+</td></tr>
+<tr>
+<td> $0C‑$0D
+</td>
+<td> FM channel 2 modifier.
+</td></tr>
+<tr>
+<td> $0E‑$0F
+</td>
+<td> FM channel 3 pointer.
+</td></tr>
+<tr>
+<td> $10‑$11
+</td>
+<td> FM channel 3 modifier.
+</td></tr>
+<tr>
+<td> $12‑$13
+</td>
+<td> FM channel 4 pointer.
+</td></tr>
+<tr>
+<td> $14‑$15
+</td>
+<td> FM channel 4 modifier.
+</td></tr>
+<tr>
+<td> $16‑$17
+</td>
+<td> FM channel 5 pointer.
+</td></tr>
+<tr>
+<td> $18‑$19
+</td>
+<td> FM channel 5 modifier.
+</td></tr>
+<tr>
+<td> $1A‑$1B
+</td>
+<td> FM channel 6 pointer.
+</td></tr>
+<tr>
+<td> $1C‑$1D
+</td>
+<td> FM channel 6 modifier.
+</td></tr>
+<tr>
+<td> $1E‑$1F
+</td>
+<td> PSG channel 1 pointer.
+</td></tr>
+<tr>
+<td> $20‑$21
+</td>
+<td> PSG channel 1 modifier.
+</td></tr>
+<tr>
+<td> $22‑$23
+</td>
+<td> Current PSG 1 instrument.
+</td></tr>
+<tr>
+<td> $24‑$25
+</td>
+<td> PSG channel 2 pointer.
+</td></tr>
+<tr>
+<td> $26‑$27
+</td>
+<td> PSG channel 2 modifier.
+</td></tr>
+<tr>
+<td> $28‑$29
+</td>
+<td> Current PSG 2 instrument.
+</td></tr>
+<tr>
+<td> $2A‑$2B
+</td>
+<td> PSG channel 3 pointer.
+</td></tr>
+<tr>
+<td> $2C‑$2D
+</td>
+<td> PSG channel 3 modifier.
+</td></tr>
+<tr>
+<td> $2E‑$2F
+</td>
+<td> Current PSG 3 instrument.
+</td></tr>
+<tr>
+<td> $30‑$31
+</td>
+<td> PWM channel 1 pointer. This will point to one of the four available PWM channels used for percussion and other samples that can be played in the song. It works exactly like DAC, except there are more channels available for use.
+</td></tr>
+<tr>
+<td> $32‑$33
+</td>
+<td> PWM channel 1 modifier. Unlike DAC, the pitch and volume of a PWM channel <i>can</i> be changed, and in the same way as any other melodic sound channel. However, the volume byte will work by output strength, and not resistance — in other words, the higher the value, the louder the sample.
+</td></tr>
+<tr>
+<td> $34‑$35
+</td>
+<td> PWM channel 2 pointer.
+</td></tr>
+<tr>
+<td> $36‑$37
+</td>
+<td> PWM channel 2 modifier.
+</td></tr>
+<tr>
+<td> $38‑$39
+</td>
+<td> PWM channel 3 pointer.
+</td></tr>
+<tr>
+<td> $3A‑$3B
+</td>
+<td> PWM channel 3 modifier.
+</td></tr>
+<tr>
+<td> $3C‑$3D
+</td>
+<td> PWM channel 4 pointer.
+</td></tr>
+<tr>
+<td> $3E‑$3F
+</td>
+<td> PWM channel 4 modifier.
+</td></tr></table>
+<h3><span class="mw-headline" id="Master_System.2FGame_Gear_SMPS">Master System/Game Gear SMPS</span></h3>
+<p>Since the SMS only has 4 PSG channels (3 tone, 1 noise), the header format is changed to accomodate this.
+</p>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th>Word offset</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00‑$01
+</td>
+<td> Unknown - pointer to PSG envelope data?
+</td></tr>
+<tr>
+<td> $02‑$03
+</td>
+<td> Channel setup. Only the first byte is used, and it can range from $01 to $04.
+</td></tr>
+<tr>
+<td> $04‑$05
+</td>
+<td> Tempo modifier.
+</td></tr>
+<tr>
+<td> $06‑$07
+</td>
+<td> PSG channel 1 pointer.
+</td></tr>
+<tr>
+<td> $08‑$09
+</td>
+<td> PSG channel 1 modifier.
+</td></tr>
+<tr>
+<td> $0A‑$0B
+</td>
+<td> PSG channel 2 pointer.
+</td></tr>
+<tr>
+<td> $0C‑$0D
+</td>
+<td> PSG channel 2 modifier.
+</td></tr>
+<tr>
+<td> $0E‑$0F
+</td>
+<td> PSG channel 3 pointer.
+</td></tr>
+<tr>
+<td> $10‑$11
+</td>
+<td> PSG channel 3 modifier.
+</td></tr>
+<tr>
+<td> $12‑$13
+</td>
+<td> PSG channel 4 pointer. Channel 4 is always the noise channel.
+</td></tr>
+<tr>
+<td> $14‑$15
+</td>
+<td> PSG channel 4 modifier.
+</td></tr></table>
+<p>Understanding the header is essential to editing music. This is the basis of basic music editing, such as pitch and tempo editing. Once you understand the pointers and the header, then you are ready to start learning more advanced things.
+</p>
+<h3><span class="mw-headline" id="Mega-CD_SMPS_.28.22SMPS-PCM.22.29">Mega-CD SMPS ("SMPS-PCM")</span></h3>
+<p>Since SMPS-PCM runs on a CPU that can only access the Mega-CD's PCM chip which hooks into a global sample bank (for each SMPS program on disc), the header is different:
+</p>
+<table class="prettytable" style="width:auto;">
+<tr>
+<th>Offset</th>
+<th>Size</th>
+<th>Description
+</th></tr>
+<tr>
+<td> $00
+</td>
+<td> Word
+</td>
+<td> 0 - as SMPS grabs sample data from its own bank
+</td></tr>
+<tr>
+<td> $02
+</td>
+<td> Byte
+</td>
+<td> Channel setup. Usually 8 or 9.
+</td></tr>
+<tr>
+<td> $03
+</td>
+<td> Byte
+</td>
+<td> 0 - only one sound source is used.
+</td></tr>
+<tr>
+<td> $04‑$05
+</td>
+<td> Byte, byte
+</td>
+<td> Tempo modifier; see above. (Sonic 1 formula)
+</td></tr>
+<tr>
+<td> $06, $0A, $0E, etc.
+</td>
+<td> Word
+</td>
+<td> PCM channel n pointer
+</td></tr>
+<tr>
+<td> $08, $0C, $10, etc.
+</td>
+<td> Byte
+</td>
+<td> PCM channel n modifier. The signed value is added to the note value grabbed from the song; so if this is $FD (-$3) and the note byte in the song data is $93, it is treated as if it was a byte $90 instead. Coordination flag $FB changes this later.
+</td></tr>
+<tr>
+<td> $09, $0D, $11, etc.
+</td>
+<td> Byte
+</td>
+<td> Unknown (possibly channel pan modifier; L/R outputs have additional individual volumes)
+</td></tr>
+</table>
+<h2><span class="mw-headline" id="References">References</span></h2>
+<p><br />
+</p>
+<table class="bottomtemplate mw-collapsible mw-collapsed" align="center">
+<tr>
+<th class="bottomtemphead" colspan="2"> <a href="/SCHG:Sonic_Community_Hacking_Guide" title="SCHG:Sonic Community Hacking Guide">Sonic Community Hacking Guide</a>
+</th></tr>
+<tr>
+<th class="bottomtemphead" colspan="2"> General
+</th></tr>
+<tr>
+<td class="bottomtemptext" style="text-align:center;" colspan="2"> <a href="/SCHG:SonED2_Manual" title="SCHG:SonED2 Manual">SonED2 Manual</a> | <a href="/SCHG:Equivalent_Subroutines" title="SCHG:Equivalent Subroutines">Subroutine Equivalency List</a>
+</td></tr>
+<tr>
+<th class="bottomtemphead" colspan="2"> Game-Specific
+</th></tr>
+<tr>
+<td class="bottomtemptext" style="text-align:center;" colspan="2">  <a href="/SCHG:Sonic_the_Hedgehog_(16-bit)" title="SCHG:Sonic the Hedgehog (16-bit)">Sonic the Hedgehog (16-bit)</a> | <a href="/SCHG:Sonic_the_Hedgehog_(8-bit)" title="SCHG:Sonic the Hedgehog (8-bit)">Sonic the Hedgehog (8-bit)</a> | <a href="/SCHG:Sonic_the_Hedgehog_CD_(prototype_510)" title="SCHG:Sonic the Hedgehog CD (prototype 510)">Sonic CD (prototype 510)</a> | <a href="/SCHG:Sonic_the_Hedgehog_CD" title="SCHG:Sonic the Hedgehog CD">Sonic CD</a> | <a href="/SCHG:Sonic_the_Hedgehog_CD_(PC)" title="SCHG:Sonic the Hedgehog CD (PC)">Sonic CD (PC)</a> | <a href="/SCHG:Sonic_the_Hedgehog_CD_(2011)" title="SCHG:Sonic the Hedgehog CD (2011)">Sonic CD (2011)</a> | <a href="/SCHG:Sonic_the_Hedgehog_2_(Simon_Wai_prototype)" title="SCHG:Sonic the Hedgehog 2 (Simon Wai prototype)">Sonic 2 (Simon Wai prototype)</a> | <a href="/SCHG:Sonic_the_Hedgehog_2_(16-bit)" title="SCHG:Sonic the Hedgehog 2 (16-bit)">Sonic 2 (16-bit)</a> | <a href="/SCHG:Sonic_the_Hedgehog_2_(Master_System)" title="SCHG:Sonic the Hedgehog 2 (Master System)">Sonic 2 (Master System)</a> | <a href="/SCHG:Sonic_the_Hedgehog_3" title="SCHG:Sonic the Hedgehog 3">Sonic 3</a> | <a href="/SCHG:Sonic_the_Hedgehog_3_%26_Knuckles" title="SCHG:Sonic the Hedgehog 3 &amp; Knuckles">Sonic 3 &amp; Knuckles</a> | <a href="/SCHG:Chaotix" class="mw-redirect" title="SCHG:Chaotix">Chaotix</a> | <a href="/SCHG:Sonic_Jam" title="SCHG:Sonic Jam">Sonic Jam</a> | <a href="/SCHG:Sonic_Jam_6" title="SCHG:Sonic Jam 6">Sonic Jam 6</a> | <a href="/SCHG:Sonic_Adventure" title="SCHG:Sonic Adventure">Sonic Adventure</a> | <a href="/SCHG:Sonic_Adventure_DX:_Director%27s_Cut" title="SCHG:Sonic Adventure DX: Director&#39;s Cut">Sonic Adventure DX: Director's Cut</a> | <a href="/SCHG:Sonic_Adventure_DX:_PC" title="SCHG:Sonic Adventure DX: PC">Sonic Adventure DX: PC</a> | <a href="/SCHG:Sonic_Adventure_(2010)" title="SCHG:Sonic Adventure (2010)">Sonic Adventure (2010)</a> | <a href="/SCHG:Sonic_Adventure_2" title="SCHG:Sonic Adventure 2">Sonic Adventure 2</a> | <a href="/SCHG:Sonic_Adventure_2:_Battle" title="SCHG:Sonic Adventure 2: Battle">Sonic Adventure 2: Battle</a> | <a href="/SCHG:Sonic_Adventure_2_(PC)" title="SCHG:Sonic Adventure 2 (PC)">Sonic Adventure 2 (PC)</a> | <a href="/SCHG:Sonic_Heroes" title="SCHG:Sonic Heroes">Sonic Heroes</a> | <a href="/SCHG:Sonic_Riders" title="SCHG:Sonic Riders">Sonic Riders</a> | <a href="/SCHG:Sonic_the_Hedgehog_(2006_game)" title="SCHG:Sonic the Hedgehog (2006 game)">Sonic the Hedgehog (2006)</a> | <a href="/SCHG:Sonic_%26_Sega_All-Stars_Racing" title="SCHG:Sonic &amp; Sega All-Stars Racing">Sonic &amp; Sega All-Stars Racing</a> | <a href="/SCHG:Sonic_Unleashed_(XBOX_360/PS3)" title="SCHG:Sonic Unleashed (XBOX 360/PS3)">Sonic Unleashed (Xbox 360/PS3)</a> | <a href="/SCHG:Sonic_Colors" title="SCHG:Sonic Colors">Sonic Colours</a> | <a href="/SCHG:Sonic_Generations" title="SCHG:Sonic Generations">Sonic Generations</a> | <a href="/SCHG:Sonic_Forces" title="SCHG:Sonic Forces">Sonic Forces</a>
+</td></tr>
+<tr>
+<th class="bottomtemphead" colspan="2"> Technical information
+</th></tr>
+<tr>
+<td class="bottomtemptext" style="text-align:center;" colspan="2">  <a href="/Sonic_Eraser/Technical_information" title="Sonic Eraser/Technical information">Sonic Eraser</a> | <a href="/Sonic_the_Hedgehog_2_(Nick_Arcade_prototype)/Technical_information" title="Sonic the Hedgehog 2 (Nick Arcade prototype)/Technical information">Sonic 2 (Nick Arcade prototype)</a> | <a href="/Sonic_the_Hedgehog_CD_(Mega-CD_prototype;_1992-12-04)/Technical_information" title="Sonic the Hedgehog CD (Mega-CD prototype; 1992-12-04)/Technical information">Sonic CD (prototype; 1992-12-04)</a> | <a href="/Dr._Robotnik%27s_Mean_Bean_Machine/Technical_information" title="Dr. Robotnik&#39;s Mean Bean Machine/Technical information">Dr. Robotnik's Mean Bean Machine</a> | <a href="/Sonic_the_Hedgehog_Triple_Trouble/Technical_information" title="Sonic the Hedgehog Triple Trouble/Technical information">Sonic Triple Trouble</a> | <a href="/Tails_Adventures/Technical_information" title="Tails Adventures/Technical information">Tails Adventures</a> | <a href="/Sonic_Crackers/Technical_information" title="Sonic Crackers/Technical information">Sonic Crackers</a> | <a href="/Sonic_3D:_Flickies%27_Island/Technical_information" title="Sonic 3D: Flickies&#39; Island/Technical information">Sonic 3D: Flickies' Island</a> | <a href="/Sonic_%26_Knuckles_Collection/Technical_information" title="Sonic &amp; Knuckles Collection/Technical information">Sonic &amp; Knuckles Collection</a> | <a href="/Sonic_R/Technical_information" title="Sonic R/Technical information">Sonic R</a> | <a href="/Sonic_Shuffle/Technical_information" title="Sonic Shuffle/Technical information">Sonic Shuffle</a> | <a href="/Sonic_Advance/Technical_information" title="Sonic Advance/Technical information">Sonic Advance</a> | <a href="/Sonic_Advance_3/Technical_information" title="Sonic Advance 3/Technical information">Sonic Advance 3</a> | <a href="/Sonic_Battle/Technical_information" title="Sonic Battle/Technical information">Sonic Battle</a> | <a href="/Shadow_the_Hedgehog_(game)/Technical_information" title="Shadow the Hedgehog (game)/Technical information">Shadow the Hedgehog</a> | <a href="/Sonic_Rush/Technical_information" title="Sonic Rush/Technical information">Sonic Rush</a> | <a href="/Sonic_Classic_Collection/Technical_information" title="Sonic Classic Collection/Technical information">Sonic Classic Collection</a> | <a href="/Sonic_Free_Riders/Technical_information" title="Sonic Free Riders/Technical information">Sonic Free Riders</a> | <a href="/Sonic_Lost_World/Technical_information" title="Sonic Lost World/Technical information">Sonic Lost World</a>
+</td></tr>
+<tr>
+<th class="bottomtemphead" colspan="2"> Legacy Guides
+</th></tr>
+<tr>
+<th class="bottomtemphead" width="50%"> The Nemesis Hacking Guides
+</th>
+<th class="bottomtemphead" width="50%"> The Esrael Hacking Guides
+</th></tr>
+<tr>
+<td class="bottomtemptext" style="text-align:center;">  ROM:  <a href="/SCHG:Nem_s1" title="SCHG:Nem s1">Sonic 1</a> | <a href="/SCHG:Nem_s2" title="SCHG:Nem s2">Sonic 2</a> | <a href="/SCHG:Nem_s2b" title="SCHG:Nem s2b">Sonic 2 Beta</a> | <a href="/SCHG:Nem_s3" title="SCHG:Nem s3">Sonic 3</a>
+<p>Savestate: <a href="/SCHG:Nem_s1ss" title="SCHG:Nem s1ss">Sonic 1</a> | <a href="/SCHG:Nem_s2ss" title="SCHG:Nem s2ss">Sonic 2 Beta/Final</a> | <a href="/SCHG:Nem_s3ss" title="SCHG:Nem s3ss">Sonic 3</a>
+</p>
+</td>
+<td class="bottomtemptext" style="text-align:center;"> Sonic 1 (<a href="/SCHG:Esrael_s1" title="SCHG:Esrael s1">English</a> / <a href="/SCHG:Esrael_s1_(Portuguese)" title="SCHG:Esrael s1 (Portuguese)">Portuguese</a>) | Sonic 2 Beta (<a href="/SCHG:Esrael_s2b" title="SCHG:Esrael s2b">English</a> / <a href="/SCHG:Esrael_s2b_(Portuguese)" title="SCHG:Esrael s2b (Portuguese)">Portuguese</a>) | Sonic 2 and Knuckles (<a href="/SCHG:Esrael_s2k" title="SCHG:Esrael s2k">English</a> / <a href="/SCHG:Esrael_s2k_(Portuguese)" title="SCHG:Esrael s2k (Portuguese)">Portuguese</a>)
+</td></tr>
+<tr>
+<th class="bottomtemphead" colspan="2"> Move to <a href="/Sega_Retro" title="Sega Retro">Sega Retro</a>
+</th></tr>
+<tr>
+<td class="bottomtemptext" style="text-align:center;" colspan="2"> <a href="/SCHG:Number_Systems" title="SCHG:Number Systems">Number Systems</a> (or scrap) | <a href="/SCHG:Assembly_Hacking" title="SCHG:Assembly Hacking">Assembly Hacking Guide</a> | <a href="/SCHG:68000_Instruction_Set" title="SCHG:68000 Instruction Set">68000 Instruction Set</a> | <a href="/SCHG:68000_ASM-to-Hex_Code_Reference" title="SCHG:68000 ASM-to-Hex Code Reference">68000 ASM-to-Hex Code Reference</a> | <a href="/SCHG:Music_Hacking" title="SCHG:Music Hacking">SMPS Music Hacking Guide</a> | <a href="https://segaretro.org/Category:Mega_Drive_technical_information" class="extiw" title="sega:Category:Mega Drive technical information">Mega Drive technical information</a>
+</td></tr></table>
+|Music Hacking/Pointer and Header Format]]</p>
+
+<!-- 
+NewPP limit report
+Cached time: 20250831130651
+Cache expiry: 86400
+Dynamic content: false
+CPU time usage: 0.019 seconds
+Real time usage: 0.041 seconds
+Preprocessor visited node count: 102/1000000
+Preprocessor generated node count: 174/1000000
+Post‐expand include size: 5514/2097152 bytes
+Template argument size: 0/2097152 bytes
+Highest expansion depth: 2/40
+Expensive parser function count: 0/400
+ExtLoops count: 0
+-->
+<!--
+Transclusion expansion time report (%,ms,calls,template)
+100.00%   12.288      1 -total
+  8.49%    1.043      1 Template:SMPSHackingNav
+  4.94%    0.607      1 Template:SCHGuides
+-->
+</div>
+<!-- Saved in parser cache with key sonicret_info-wiki_:pcache:idhash:34938-0!canonical and timestamp 20250831130651 and revision id 310634
+ -->
+</div><div class="printfooter">
+Retrieved from "<a dir="ltr" href="https://info.sonicretro.org/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;oldid=310634">https://info.sonicretro.org/index.php?title=SCHG:Music_Hacking/Pointer_and_Header_Format&amp;oldid=310634</a>"</div>
+						<div class="clear_both"></div>
+					</div>
+		    	<div class="group"><div id="catlinks" class="catlinks" data-mw="interface"><div id="mw-normal-catlinks" class="mw-normal-catlinks"><a href="/Special:Categories" title="Special:Categories">Categories</a>: <ul><li><a href="/Category:Pages_with_syntax_highlighting_errors" title="Category:Pages with syntax highlighting errors">Pages with syntax highlighting errors</a></li><li><a href="/Category:SCHG:_Music_hacking" title="Category:SCHG: Music hacking">SCHG: Music hacking</a></li></ul></div></div></div>
+		    					</div>
+		    </div>
+		</div>
+
+			<footer class="row fullWidth">
+				<div id="footer">
+										<div id="footer-left" class="small-12 large-centered columns text-center">
+					<ul id="footer-left">
+													<li id="footer-lastmod"> This page was last edited on 31 March 2020, at 05:10.</li>
+													<li id="footer-privacy"><a href="/Sonic_Retro:Privacy_policy" class="mw-redirect" title="Sonic Retro:Privacy policy">Privacy policy</a></li>
+													<li id="footer-about"><a href="/Sonic_Retro:About" class="mw-redirect" title="Sonic Retro:About">About Sonic Retro</a></li>
+													<li id="footer-disclaimer"><a href="/Sonic_Retro:General_disclaimer" title="Sonic Retro:General disclaimer">Disclaimers</a></li>
+															
+					</ul>
+					</div>	
+					<div id="footer-right-icons" class="large-12 small-12 columns">
+					<ul id="poweredby">
+													<li class="poweredby">								<a href="//www.mediawiki.org/">Powered by MediaWiki</a>															</li>
+											</ul>
+					</div>								
+				</div>
+			</footer>
+
+		</div>
+		
+		<script>(window.RLQ=window.RLQ||[]).push(function(){mw.config.set({"wgPageParseReport":{"limitreport":{"cputime":"0.019","walltime":"0.041","ppvisitednodes":{"value":102,"limit":1000000},"ppgeneratednodes":{"value":174,"limit":1000000},"postexpandincludesize":{"value":5514,"limit":2097152},"templateargumentsize":{"value":0,"limit":2097152},"expansiondepth":{"value":2,"limit":40},"expensivefunctioncount":{"value":0,"limit":400},"timingprofile":["100.00%   12.288      1 -total","  8.49%    1.043      1 Template:SMPSHackingNav","  4.94%    0.607      1 Template:SCHGuides"]},"cachereport":{"timestamp":"20250831130651","ttl":86400,"transientcontent":false}}});});</script><script>
+        var ct_checkjs_val = '626889806df177d76d6b79dc1db2494f',
+            d = new Date() 
+            ctTimeMs = new Date().getTime(),
+            ctMouseEventTimerFlag = true, //Reading interval flag
+            ctMouseData = "[",
+            ctMouseDataCounter = 0;
+        
+        function ctSetCookie(c_name, value) {
+            document.cookie = c_name + "=" + encodeURIComponent(value) + "; path=/";
+        }
+        
+        ctSetCookie("ct_ps_timestamp", Math.floor(new Date().getTime()/1000));
+        ctSetCookie("ct_fkp_timestamp", "0");
+        ctSetCookie("ct_pointer_data", "0");
+        ctSetCookie("ct_timezone", "0");
+        ctSetCookie("ct_checkjs", ct_checkjs_val);        
+        setTimeout(function(){
+            ctSetCookie("ct_timezone", d.getTimezoneOffset()/60*(-1));
+        },1000);
+        
+        //Reading interval
+        var ctMouseReadInterval = setInterval(function(){
+                ctMouseEventTimerFlag = true;
+            }, 150);
+            
+        //Writting interval
+        var ctMouseWriteDataInterval = setInterval(function(){
+                var ctMouseDataToSend = ctMouseData.slice(0,-1).concat("]");
+                ctSetCookie("ct_pointer_data", ctMouseDataToSend);
+            }, 1200);
+        
+        //Stop observing function
+        function ctMouseStopData(){
+            if(typeof window.addEventListener == "function")
+                window.removeEventListener("mousemove", ctFunctionMouseMove);
+            else
+                window.detachEvent("onmousemove", ctFunctionMouseMove);
+            clearInterval(ctMouseReadInterval);
+            clearInterval(ctMouseWriteDataInterval);                
+        }
+        
+        //Logging mouse position each 300 ms
+        var ctFunctionMouseMove = function output(event){
+            if(ctMouseEventTimerFlag == true){
+                var mouseDate = new Date();
+                ctMouseData += "[" + Math.round(event.pageY) + "," + Math.round(event.pageX) + "," + Math.round(mouseDate.getTime() - ctTimeMs) + "],";
+                ctMouseDataCounter++;
+                ctMouseEventTimerFlag = false;
+                if(ctMouseDataCounter >= 100)
+                    ctMouseStopData();
+            }
+        }
+        
+        //Stop key listening function
+        function ctKeyStopStopListening(){
+            if(typeof window.addEventListener == "function"){
+                window.removeEventListener("mousedown", ctFunctionFirstKey);
+                window.removeEventListener("keydown", ctFunctionFirstKey);
+            }else{
+                window.detachEvent("mousedown", ctFunctionFirstKey);
+                window.detachEvent("keydown", ctFunctionFirstKey);
+            }
+        }
+        
+        //Writing first key press timestamp
+        var ctFunctionFirstKey = function output(event){
+            var KeyTimestamp = Math.floor(new Date().getTime()/1000);
+            ctSetCookie("ct_fkp_timestamp", KeyTimestamp);
+            ctKeyStopStopListening();
+        }
+
+        if(typeof window.addEventListener == "function"){
+            window.addEventListener("mousemove", ctFunctionMouseMove);
+            window.addEventListener("mousedown", ctFunctionFirstKey);
+            window.addEventListener("keydown", ctFunctionFirstKey);
+        }else{
+            window.attachEvent("onmousemove", ctFunctionMouseMove);
+            window.attachEvent("mousedown", ctFunctionFirstKey);
+            window.attachEvent("keydown", ctFunctionFirstKey);
+        }</script><noscript><p><b>Please enable JavaScript to pass antispam protection!</b><br />Here are the instructions how to enable JavaScript in your web browser <a href="http://www.enable-javascript.com" rel="nofollow" target="_blank">http://www.enable-javascript.com</a>.<br />Antispam by CleanTalk.</p></noscript><script>(window.RLQ=window.RLQ||[]).push(function(){mw.config.set({"wgBackendResponseTime":281});});</script>				
+		<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"940cb3f5d1824be49334cb8f5386cda8","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+		<!-- Cached/compressed 20250831130651 -->
+</html>
+

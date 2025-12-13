@@ -17,10 +17,10 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	public void draw() {
-		graphicsManager.registerCommand(new GLCommand(GLCommand.Type.RECTI,
+		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.RECTI,
 				GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
 						+ height));
-		graphicsManager.registerCommand(new GLCommand(GLCommand.Type.VERTEX2I,
+		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.VERTEX2I,
 				-1, 1, 0, 0, getCentreX(), getCentreY(), 0, 0));
 	}
 

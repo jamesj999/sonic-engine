@@ -26,15 +26,29 @@ public class SolidTile {
 	}
 
 	public byte getHeightAt(byte x) {
-		return heights[x];
+		return heights[x & 0xFF];
 	}
 
 	public byte getWidthAt(byte y) {
-		return widths[y];
+		return widths[y & 0xFF];
 	}
 
 	public byte getAngle() {
 		return angle;
+	}
+
+	public byte getAngle(boolean hFlip, boolean vFlip) {
+		if (angle == (byte) 0xFF || (!hFlip && !vFlip)) {
+			return angle;
+		}
+		byte newAngle = angle;
+		if (hFlip) {
+			newAngle = (byte) -newAngle;
+		}
+		if (vFlip) {
+			newAngle = (byte) (0x80 - newAngle);
+		}
+		return newAngle;
 	}
 
     public int getIndex() {

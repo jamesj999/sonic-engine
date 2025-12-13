@@ -21,6 +21,10 @@ package uk.co.jamesj999.sonic.level;
 public final class ChunkDesc {
     private int index;  // 16-bit stored as an int to handle bitmask operations
 
+    public void setChunkIndex(int chunkIndex) {
+        this.chunkIndex = chunkIndex;
+    }
+
     private int chunkIndex;  // Cached chunk index
 
     Chunk chunk;
@@ -32,7 +36,7 @@ public final class ChunkDesc {
     //A Chunk Descriptor that is empty (the default state)
     public static ChunkDesc EMPTY = new ChunkDesc();
 
-    private ChunkDesc() {
+    public ChunkDesc() {
         this.index = 0;
     }
 
@@ -69,9 +73,6 @@ public final class ChunkDesc {
     private void updateFields() {
 
         this.chunkIndex = index & 0x3FF;  // Extract chunk index (lower 10 bits)
-        if (chunkIndex >= 500) {
-            System.out.println("index Out of bounds:" + index);
-        }
         this.xFlip = (index & 0x0400) != 0;  // Extract X flip (11th bit)
         this.yFlip = (index & 0x0800) != 0;  // Extract Y flip (12th bit)
 

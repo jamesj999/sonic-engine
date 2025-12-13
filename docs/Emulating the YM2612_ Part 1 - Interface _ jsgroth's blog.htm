@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+
+    <meta name="generator" content="Hugo 0.120.4"><meta name="theme-color" content="#fff" />
+    <meta name="color-scheme" content="light dark">
+
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    
+    <meta http-equiv="Cache-Control" content="no-transform" />
+    
+    <meta http-equiv="Cache-Control" content="no-siteapp" />
+
+    <title>Emulating the YM2612: Part 1 - Interface | jsgroth&#39;s blog</title>
+
+    <link rel="stylesheet" href="/blog/css/meme.min.6501190a375dd9a0b56ed15d92eaafd1eadb748488a5f37fedbdb575f6c3843c.css"/>
+
+    
+    
+        
+            <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js" defer></script><script src="/blog/js/meme.min.b22f9589d1fff2cacbc5f90caead907eeb8083c35ebbdb63fae9c622a604c86f.js"></script>
+
+        
+    
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM&#43;Plex&#43;Serif:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Source&#43;Code&#43;Pro:ital,wght@0,400;0,700;1,400;1,700&amp;family=Comfortaa:wght@700&amp;display=swap" media="print" onload="this.media='all'" />
+        <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM&#43;Plex&#43;Serif:ital,wght@0,400;0,500;0,700;1,400;1,700&amp;family=Source&#43;Code&#43;Pro:ital,wght@0,400;0,700;1,400;1,700&amp;family=Comfortaa:wght@700&amp;display=swap" /></noscript>
+
+    <meta name="author" content="jsgroth" /><meta name="description" content="This is the first post in a series on emulating the main Sega Genesis sound chip, the Yamaha YM2612 FM synthesis chip, also known as the OPN2.
+To date, the YM2612 is pretty easily the most difficult-to-emulate sound chip that I have worked on." />
+
+    <link rel="shortcut icon" href="/blog/favicon.ico" type="image/x-icon" />
+    <link rel="mask-icon" href="/blog/icons/safari-pinned-tab.svg" color="#2a6df4" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/blog/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="jsgroth&#39;s blog" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="jsgroth&#39;s blog" />
+    <meta name="msapplication-starturl" content="../../../" />
+    <meta name="msapplication-TileColor" content="#fff" />
+    <meta name="msapplication-TileImage" content="../../../icons/mstile-150x150.png" />
+    <link rel="manifest" href="/blog/manifest.json" />
+
+    
+    
+
+    
+        <link rel="canonical" href="https://jsgroth.dev/blog/posts/emulating-ym2612-part-1/" />
+    
+
+<script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "datePublished": "2025-03-24T19:27:16-05:00",
+        "dateModified": "2025-04-01T08:12:28-05:00",
+        "url": "https://jsgroth.dev/blog/posts/emulating-ym2612-part-1/",
+        "headline": "Emulating the YM2612: Part 1 - Interface",
+        "description": "This is the first post in a series on emulating the main Sega Genesis sound chip, the Yamaha YM2612 FM synthesis chip, also known as the OPN2.\nTo date, the YM2612 is pretty easily the most difficult-to-emulate sound chip that I have worked on.",
+        "inLanguage" : "en",
+        "articleSection": "posts",
+        "wordCount":  3304 ,
+        "image": ["https://jsgroth.dev/blog/blog/images/ym2612/algorithms.png"],
+        "author": {
+            "@type": "Person",
+            "image": "https://jsgroth.dev/icons/apple-touch-icon.png",
+            "url": "https://jsgroth.dev/",
+            "name": "jsgroth"
+        },
+        "license": "[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)",
+        "publisher": {
+            "@type": "Organization",
+            "name": "jsgroth's blog",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://jsgroth.dev/icons/apple-touch-icon.png"
+            },
+            "url": "https://jsgroth.dev/blog/"
+        },
+        "mainEntityOfPage": {
+            "@type": "WebSite",
+            "@id": "https://jsgroth.dev/blog/"
+        }
+    }
+</script>
+
+    
+    
+
+    
+    
+
+    
+</head>
+
+    <body>
+        <div class="container">
+            
+    <header class="header">
+        
+            <div class="header-wrapper">
+                <div class="header-inner single">
+                    
+    <div class="site-brand">
+        
+            <a href="/blog/" class="brand">jsgroth&#39;s blog</a>
+        
+    </div>
+
+                    <nav class="nav">
+    <ul class="menu" id="menu">
+        
+            
+        
+        
+        
+        
+            
+                <li class="menu-item active"><a href="/blog/posts/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon archive"><path d="M32 448c0 17.7 14.3 32 32 32h384c17.7 0 32-14.3 32-32V160H32v288zm160-212c0-6.6 5.4-12 12-12h104c6.6 0 12 5.4 12 12v8c0 6.6-5.4 12-12 12H204c-6.6 0-12-5.4-12-12v-8zM480 32H32C14.3 32 0 46.3 0 64v48c0 8.8 7.2 16 16 16h480c8.8 0 16-7.2 16-16V64c0-17.7-14.3-32-32-32z"/></svg><span class="menu-item-name">Posts</span></a>
+                </li>
+            
+        
+            
+                <li class="menu-item"><a href="/blog/categories/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon th"><path d="M149.333 56v80c0 13.255-10.745 24-24 24H24c-13.255 0-24-10.745-24-24V56c0-13.255 10.745-24 24-24h101.333c13.255 0 24 10.745 24 24zm181.334 240v-80c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.256 0 24.001-10.745 24.001-24zm32-240v80c0 13.255 10.745 24 24 24H488c13.255 0 24-10.745 24-24V56c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24zm-32 80V56c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.256 0 24.001-10.745 24.001-24zm-205.334 56H24c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24zM0 376v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H24c-13.255 0-24 10.745-24 24zm386.667-56H488c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24zm0 160H488c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H386.667c-13.255 0-24 10.745-24 24v80c0 13.255 10.745 24 24 24zM181.333 376v80c0 13.255 10.745 24 24 24h101.333c13.255 0 24-10.745 24-24v-80c0-13.255-10.745-24-24-24H205.333c-13.255 0-24 10.745-24 24z"/></svg><span class="menu-item-name">Categories</span></a>
+                </li>
+            
+        
+            
+                <li class="menu-item"><a href="/blog/tags/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" class="icon tags"><path d="M497.941 225.941L286.059 14.059A48 48 0 0 0 252.118 0H48C21.49 0 0 21.49 0 48v204.118a48 48 0 0 0 14.059 33.941l211.882 211.882c18.744 18.745 49.136 18.746 67.882 0l204.118-204.118c18.745-18.745 18.745-49.137 0-67.882zM112 160c-26.51 0-48-21.49-48-48s21.49-48 48-48 48 21.49 48 48-21.49 48-48 48zm513.941 133.823L421.823 497.941c-18.745 18.745-49.137 18.745-67.882 0l-.36-.36L527.64 323.522c16.999-16.999 26.36-39.6 26.36-63.64s-9.362-46.641-26.36-63.64L331.397 0h48.721a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882z"/></svg><span class="menu-item-name">Tags</span></a>
+                </li>
+            
+        
+            
+                
+                    
+                    
+                        <li class="menu-item">
+                            <a id="theme-switcher" href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon theme-icon-light"><path d="M193.2 104.5l48.8-97.5a18 18 0 0128 0l48.8 97.5 103.4 -34.5a18 18 0 0119.8 19.8l-34.5 103.4l97.5 48.8a18 18 0 010 28l-97.5 48.8 34.5 103.4a18 18 0 01-19.8 19.8l-103.4-34.5-48.8 97.5a18 18 0 01-28 0l-48.8-97.5l-103.4 34.5a18 18 0 01-19.8-19.8l34.5-103.4-97.5-48.8a18 18 0 010-28l97.5-48.8-34.5-103.4a18 18 0 0119.8-19.8zM256 128a128 128 0 10.01 0M256 160a96 96 0 10.01 0"/></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon theme-icon-dark"><path d="M27 412a256 256 0 10154-407a11.5 11.5 0 00-5 20a201.5 201.5 0 01-134 374a11.5 11.5 0 00-15 13"/></svg></a>
+                        </li>
+                    
+                
+            
+        
+            
+                
+            
+        
+            
+                <li class="menu-item search-item">
+                        <form id="search" class="search" role="search">
+    <label for="search-input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon search-icon"><path d="M505 442.7L405.3 343c-4.5-4.5-10.6-7-17-7H372c27.6-35.3 44-79.7 44-128C416 93.1 322.9 0 208 0S0 93.1 0 208s93.1 208 208 208c48.3 0 92.7-16.4 128-44v16.3c0 6.4 2.5 12.5 7 17l99.7 99.7c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.4-9.4 9.4-24.6.1-34zM208 336c-70.7 0-128-57.2-128-128 0-70.7 57.2-128 128-128 70.7 0 128 57.2 128 128 0 70.7-57.2 128-128 128z"/></svg></label>
+    <input type="search" id="search-input" class="search-input">
+</form>
+
+<template id="search-result" hidden>
+    <article class="content post">
+        <h2 class="post-title"><a class="summary-title-link"></a></h2>
+        <summary class="summary"></summary>
+        <div class="read-more-container">
+            <a class="read-more-link">Read More »</a>
+        </div>
+    </article>
+</template>
+
+                    </li>
+                
+            
+        
+    </ul>
+</nav>
+
+                    
+                </div>
+            </div>
+            
+    <input type="checkbox" id="nav-toggle" aria-hidden="true" />
+    <label for="nav-toggle" class="nav-toggle"></label>
+    <label for="nav-toggle" class="nav-curtain"></label>
+
+
+        
+    </header>
+
+
+
+
+            
+            
+    <main class="main single" id="main">
+    <div class="main-inner">
+
+        
+
+        <article class="content post h-entry" data-small-caps="true" data-align="default" data-type="posts">
+
+            <h1 class="post-title p-name">Emulating the YM2612: Part 1 - Interface</h1>
+
+            
+
+            
+                
+            
+
+            
+                
+
+<div class="post-meta">
+    
+        
+        <time datetime="2025-03-24T19:27:16-05:00" class="post-meta-item published dt-published"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon post-meta-icon"><path d="M148 288h-40c-6.6 0-12-5.4-12-12v-40c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm108-12v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm96 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm-96 96v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm-96 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-40c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm96-260v352c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V112c0-26.5 21.5-48 48-48h48V12c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h128V12c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v52h48c26.5 0 48 21.5 48 48zm-48 346V160H48v298c0 3.3 2.7 6 6 6h340c3.3 0 6-2.7 6-6z"/></svg>&nbsp;2025.3.24</time>
+    
+    
+        
+        <time datetime="2025-04-01T08:12:28-05:00" class="post-meta-item modified dt-updated"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon post-meta-icon"><path d="M400 64h-48V12c0-6.627-5.373-12-12-12h-40c-6.627 0-12 5.373-12 12v52H160V12c0-6.627-5.373-12-12-12h-40c-6.627 0-12 5.373-12 12v52H48C21.49 64 0 85.49 0 112v352c0 26.51 21.49 48 48 48h352c26.51 0 48-21.49 48-48V112c0-26.51-21.49-48-48-48zm-6 400H54a6 6 0 0 1-6-6V160h352v298a6 6 0 0 1-6 6zm-52.849-200.65L198.842 404.519c-4.705 4.667-12.303 4.637-16.971-.068l-75.091-75.699c-4.667-4.705-4.637-12.303.068-16.971l22.719-22.536c4.705-4.667 12.303-4.637 16.97.069l44.104 44.461 111.072-110.181c4.705-4.667 12.303-4.637 16.971.068l22.536 22.718c4.667 4.705 4.636 12.303-.069 16.97z"/></svg>&nbsp;2025.4.1</time>
+    
+    
+    
+        
+        
+        
+            
+                <span class="post-meta-item category"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M464 128H272l-54.63-54.63c-6-6-14.14-9.37-22.63-9.37H48C21.49 64 0 85.49 0 112v288c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V176c0-26.51-21.49-48-48-48zm0 272H48V112h140.12l54.63 54.63c6 6 14.14 9.37 22.63 9.37H464v224z"/></svg>&nbsp;<a href="/blog/categories/emulation/" class="category-link p-category">Emulation</a></span>
+            
+        
+    
+    
+        
+        <span class="post-meta-item wordcount"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M497.9 142.1l-46.1 46.1c-4.7 4.7-12.3 4.7-17 0l-111-111c-4.7-4.7-4.7-12.3 0-17l46.1-46.1c18.7-18.7 49.1-18.7 67.9 0l60.1 60.1c18.8 18.7 18.8 49.1 0 67.9zM284.2 99.8L21.6 362.4.4 483.9c-2.9 16.4 11.4 30.6 27.8 27.8l121.5-21.3 262.6-262.6c4.7-4.7 4.7-12.3 0-17l-111-111c-4.8-4.7-12.4-4.7-17.1 0zM124.1 339.9c-5.5-5.5-5.5-14.3 0-19.8l154-154c5.5-5.5 14.3-5.5 19.8 0s5.5 14.3 0 19.8l-154 154c-5.5 5.5-14.3 5.5-19.8 0zM88 424h48v36.3l-64.5 11.3-31.1-31.1L51.7 376H88v48z"/></svg>&nbsp;3304</span>
+    
+    
+        
+        <span class="post-meta-item reading-time"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon post-meta-icon"><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 448c-110.5 0-200-89.5-200-200S145.5 56 256 56s200 89.5 200 200-89.5 200-200 200zm61.8-104.4l-84.9-61.7c-3.1-2.3-4.9-5.9-4.9-9.7V116c0-6.6 5.4-12 12-12h32c6.6 0 12 5.4 12 12v141.7l66.8 48.6c5.4 3.9 6.5 11.4 2.6 16.8L334.6 349c-3.9 5.3-11.4 6.5-16.8 2.6z"/></svg>&nbsp;16&nbsp;mins</span>
+    
+    
+    
+</div>
+
+            
+
+            <nav class="contents">
+  <h2 id="contents" class="contents-title">Contents</h2><ol class="toc">
+    <li><a id="contents:primary-source" href="#primary-source">Primary Source</a></li>
+    <li><a id="contents:four-operator-fm-synthesis" href="#four-operator-fm-synthesis">Four-Operator FM Synthesis</a></li>
+    <li><a id="contents:clock" href="#clock">Clock</a></li>
+    <li><a id="contents:interface" href="#interface">Interface</a>
+      <ol>
+        <li><a id="contents:write-ports" href="#write-ports">Write Ports</a></li>
+        <li><a id="contents:read-port" href="#read-port">Read Port</a></li>
+        <li><a id="contents:read-port-mirroring-discrete-ym2612-vs-ym3438" href="#read-port-mirroring-discrete-ym2612-vs-ym3438">Read Port Mirroring: Discrete YM2612 vs. YM3438</a></li>
+      </ol>
+    </li>
+    <li><a id="contents:first-audio-output-dac-channel" href="#first-audio-output-dac-channel">First Audio Output: DAC Channel</a></li>
+    <li><a id="contents:to-be-continued" href="#to-be-continued">To Be Continued</a></li>
+  </ol>
+</nav><div class="post-body e-content">
+                <p>This is the first post in a series on emulating the main Sega Genesis sound chip, the Yamaha YM2612 FM synthesis chip, also known as the OPN2.</p>
+<p>To date, the YM2612 is pretty easily the most difficult-to-emulate sound chip that I have worked on. It&rsquo;s not extremely complex in concept, but it has an incredible amount of specific details and quirks in how exactly it works, and many of them need to be emulated exactly correctly for game audio to sound correct. Debugging mistakes is also very, very difficult due to all of the modulation and feedback, where for example a minor mistake in envelope emulation can manifest as some instruments sounding completely wrong.</p>
+<p>These posts are not going to describe how to implement a cycle-accurate YM2612 emulator (mine is not), but I will do my best to describe how the chip works at a low level, from the perspective of someone who emulated it for the first time with modern documentation and resources available.</p>
+<p>I found a number of minor bugs and oversights in my own implementation while writing these posts, so if nothing else, writing them was useful for that!</p>
+<p>This first post will mostly cover how the YM2612 is integrated into the Genesis and how the CPUs interface with it.</p>
+<h2 id="primary-source"><a href="#primary-source" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:primary-source" class="headings">Primary Source</a></h2>
+<p>First, I should state that nearly all of my information on the YM2612 comes from this very long thread plus resources linked from it: <a href="https://gendev.spritesmind.net/forum/viewtopic.php?t=386" target="_blank" rel="noopener">https://gendev.spritesmind.net/forum/viewtopic.php?t=386</a></p>
+<p>In particular, there&rsquo;s a lot of great information posted by Nemesis (Exodus author) on how exactly this chip works. I do not believe I would have been able to throw together my own YM2612 implementation without the information in this thread.</p>
+<p>Do be wary that many earlier posts in this thread contain inaccurate information that is corrected in later posts. As one of the more obvious examples, the first post on how the ADSR envelope generators work has some major errors that are corrected many pages later.</p>
+<p>Mask of Destiny (BlastEm author) made a post that links to some of the most useful pages in that thread, as well as lots of other generally useful resources for anyone writing a Genesis emulator: <a href="https://gendev.spritesmind.net/forum/viewtopic.php?f=2&amp;t=2227" target="_blank" rel="noopener">https://gendev.spritesmind.net/forum/viewtopic.php?f=2&amp;t=2227</a></p>
+<p>One linked source is a translated manual for the YM2608 chip, which is very closely related to the YM2612. This is a particularly useful source, though note that the YM2608 is not <em>exactly</em> the same as the YM2612. I&rsquo;ll try to note some of the biggest differences where they&rsquo;re relevant.</p>
+<p>Sega&rsquo;s official Genesis documentation on the YM2612 is almost useless. Lots of major inaccuracies and it omits a lot of important information.</p>
+<h2 id="four-operator-fm-synthesis"><a href="#four-operator-fm-synthesis" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:four-operator-fm-synthesis" class="headings">Four-Operator FM Synthesis</a></h2>
+<p>I attempted to overview how Yamaha FM synthesis works at a very high level in a section of my previous post on <a href="/blog/posts/famicom-expansion-audio/#konami-vrc7">Konami&rsquo;s VRC7 mapper for the Famicom</a>. The YM2612 is similar in concept, though the details are very different from VRC7 and other OPL chips.</p>
+<p>While these chips are called &ldquo;FM&rdquo; (frequency modulation), the hardware implementation is really phase modulation: some sine wave generators are used to dynamically adjust the phase of other sine wave generators. This is true for both VRC7 and YM2612.</p>
+<p>The YM2612 has 6 audio channels, each with 4 sine wave generators called operators. Having 4 operators is a very significant change from the 2-operator FM synthesis of OPL2 and OPLL/VRC7, and it enables the chip to produce a much larger variety of sounds.</p>
+<p>A channel&rsquo;s 4 operators can be arranged in 1 of 8 different configurations, called &ldquo;algorithms&rdquo;. The algorithm determines whether any particular operator is a carrier (contributes directly to channel output) or a modulator (phase modulates another operator). Modulators may phase modulate multiple other operators depending on the algorithm, but there is no algorithm that makes any operator both a modulator and a carrier simultaneously.</p>
+<p>Each channel&rsquo;s operator 1 (counting from 1) is unique in that it supports self-feedback, like the OPLL/VRC7&rsquo;s modulator. This means that it can optionally phase modulate <em>itself</em> using the sum of its last two operator outputs.</p>
+<p>The first 4 algorithm options use the first 3 operators as modulators and the 4th operator as a carrier. The second 4 algorithm options each have multiple carriers, with the last algorithm making all 4 operators carriers. For algorithms with multiple carriers, the channel output is the sum of all carrier outputs.</p>
+<p><img src="/blog/images/ym2612/algorithms.png" alt="YM2612 Algorithms"><span class="caption">YM2612/YM2608 algorithms, from the YM2608 manual</span></p>
+<p>The chip also includes a number of features beyond the FM synthesis operators themselves: a low frequency oscillator (LFO) used to power vibrato and tremolo effects, two hardware timers for use by software, and a DAC channel that outputs raw 8-bit PCM samples if enabled.</p>
+<p>The YM2608 manual mentions support for ADPCM sample playback and some &ldquo;rhythm&rdquo; functionality, but neither of these features is present in the YM2612.</p>
+<p>To start, let&rsquo;s cover how the YM2612 is integrated into the Genesis.</p>
+<h2 id="clock"><a href="#clock" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:clock" class="headings">Clock</a></h2>
+<p>The Genesis drives the YM2612 using the exact same clock signal that it uses to drive the 68000 CPU, a roughly 7.67 MHz clock (NTSC). The exact frequency is 53693175 Hz / 7 for NTSC consoles and 53203424 Hz / 7 for PAL consoles, those 8-digit numbers being the respective Genesis master clock frequencies.</p>
+<p>The YM2612 internally divides its master clock by 6, leading to an effective clock rate of ~7.67 MHz / 6 = ~1.28 MHz in the NTSC Genesis.</p>
+<p>In an emulator, the important thing is that the YM2612&rsquo;s master clock is the 68000 CPU clock, so it should get ticked 1 internal YM2612 cycle per 6 68000 CPU clock cycles. If you&rsquo;re tracking timings in Genesis master clock cycles, the YM2612 should get 1 internal cycle per 42 mclk cycles.</p>
+<p>The YM2612 generates a full output sample once every 24 internal clock cycles&hellip;kind of. In actual hardware it repeatedly cycles through its 6 channels at a rate of 1 channel per 4 cycles and it multiplexes the channel outputs through its DAC, similar to the <a href="/blog/posts/famicom-expansion-audio/#namco-163">Famicom Namco 163 expansion audio chip</a> (though without the audio aliasing caused by that chip&rsquo;s low cycling rate). Emulators don&rsquo;t usually emulate this multiplexing - they typically mix the channels instead of multiplexing them, and they generate a mixed sample once every 24 clock cycles.</p>
+<p>This leads to an effective sample rate of about 53267 Hz for NTSC (53693175 Hz / 7 / 6 / 24) and slightly lower for PAL.</p>
+<p>Almost everything inside the YM2612 updates at the sample clock rate or at some divider of the sample clock rate, though different components update at different times throughout the 24-cycle sampling period. Emulators do not usually emulate this very precise timing - they usually update all components at once every 24 internal cycles.</p>
+<h2 id="interface"><a href="#interface" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:interface" class="headings">Interface</a></h2>
+<p>The Genesis has a split bus, with the 68000 CPU on one side and the Z80 CPU on the other. It has a bus arbiter for managing access from one side to the other, as well as for allowing the 68000 to control the Z80 by setting its BUSREQ and RESET lines. BUSREQ removes the Z80 from the bus so that the 68000 can freely access hardware on the Z80 side of the bus.</p>
+<p>The Z80 can access the 68000 side of the bus at any time, but every access introduces a variable delay for both CPUs as the bus arbiter inserts wait states to avoid a bus conflict.</p>
+<p>The Z80 is meant to be a dedicated audio processor. To support this, the YM2612 is on the Z80 side of the bus so that the Z80 can access it without needing to cross over to the 68000 side and incur difficult-to-predict delays from the bus arbiter.</p>
+<p>(Interestingly, the SN76489 PSG chip is on the 68000 side of the bus, but SN76489 interactions are generally <em>significantly</em> less timing-sensitive compared to driving the YM2612&rsquo;s DAC channel.)</p>
+<p>The 68000 can access the YM2612 through its Z80 memory map window at $A00000-$A0FFFF, as long as it first removes the Z80 from the bus by setting its BUSREQ line using the bus arbiter. Some games primarily drive audio using the 68000, such as Sonic 1 - it only really uses the Z80 for playing samples through the YM2612&rsquo;s DAC channel. Sonic 1 controls the YM2612 FM synthesis channels and the PSG using the 68000.</p>
+<p>In fact, Sonic 1 is pretty much fully playable without emulating the Z80 at all! You need to emulate the bus arbiter registers at $A11100 and $A11200, and you won&rsquo;t get any of the audio samples that it plays through the YM2612&rsquo;s DAC channel, but you&rsquo;ll get audio output from the FM synthesis channels and the PSG.</p>
+<p><figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/green-hill-no-z80.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Green Hill Zone with no Z80</span></p>
+<p>A number of Genesis games are playable without emulating the Z80 (this is not the SNES with its insanely limited 65816/SPC700 communication interface), but it&rsquo;s very common for audio to be completely missing with no Z80 emulation. Sonic 1 is a bit of an anomaly in how much it drives audio from the 68000.</p>
+<h3 id="write-ports"><a href="#write-ports" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:write-ports" class="headings">Write Ports</a></h3>
+<p>The YM2612 has four 8-bit write ports mapped to $4000-$4003 in the Z80 memory map. These ports are mirrored repeatedly throughout the address range $4000-$5FFF.</p>
+<p>According to official documentation, these are:</p>
+<ul>
+<li>$4000: Address port, group 1 (channels 1-3 + global registers)</li>
+<li>$4001: Data port, group 1</li>
+<li>$4002: Address port, group 2 (channels 4-6)</li>
+<li>$4003: Data port, group 2</li>
+</ul>
+<p>When software wants to write to a channel 1-3 register or a global register, it first writes the 8-bit register address to $4000, then it writes the 8-bit register value to $4001. For channel 4-6 registers, it writes the register address to $4002 and then the register value to $4003.</p>
+<p>&hellip;That&rsquo;s not actually how it works, though. In reality the chip only has one data port that&rsquo;s mapped to both $4001 and $4003:</p>
+<ul>
+<li>$4000: Address port + Set group 1 flag</li>
+<li>$4002: Address port + Set group 2 flag</li>
+<li>$4001 / $4003: Data port</li>
+</ul>
+<p>The chip remembers whether $4000 or $4002 was last written to, and data port writes will go to either group 1 or group 2 based on which address port was last written. Titan&rsquo;s Overdrive 2 demo depends on this because it performs all of its data port writes through $4001, though I&rsquo;m not sure if any games depend on this behavior.</p>
+<p>Looking at the 8-bit YM2612 register addresses, they all fall into three address ranges:</p>
+<ul>
+<li>$20-$2F: Global registers</li>
+<li>$30-$9F: Operator control registers</li>
+<li>$A0-$BF: Channel control registers</li>
+</ul>
+<p>For both the $30-$9F registers and the $A0-$BF registers, the lowest 2 bits of the register address are used as the channel index. For example:</p>
+<div class="table-container"><table>
+<thead>
+<tr>
+<th>Example Register Addresses</th>
+<th>Group 1 Channel</th>
+<th>Group 2 Channel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span style="display:grid; text-align:center;">$30, $34, $A0, $A4</span></td>
+<td><span style="display:grid; text-align:center;">1</span></td>
+<td><span style="display:grid; text-align:center;">4</span></td>
+</tr>
+<tr>
+<td><span style="display:grid; text-align:center;">$31, $35, $A1, $A5</span></td>
+<td><span style="display:grid; text-align:center;">2</span></td>
+<td><span style="display:grid; text-align:center;">5</span></td>
+</tr>
+<tr>
+<td><span style="display:grid; text-align:center;">$32, $36, $A2, $A6</span></td>
+<td><span style="display:grid; text-align:center;">3</span></td>
+<td><span style="display:grid; text-align:center;">6</span></td>
+</tr>
+<tr>
+<td><span style="display:grid; text-align:center;">$33, $37, $A3, $A7</span></td>
+<td><span style="display:grid; text-align:center;">None</span></td>
+<td><span style="display:grid; text-align:center;">None</span></td>
+</tr>
+</tbody>
+</table></div>
+<p>For the $30-$9F registers, bits 2 and 3 are used as the operator index, but bitswapped! Concretely:</p>
+<ul>
+<li>00 = Operator 1</li>
+<li>01 = Operator 3</li>
+<li>10 = Operator 2</li>
+<li>11 = Operator 4</li>
+</ul>
+<p>The YM2608 manual correctly documents this bitswapping. Sega&rsquo;s official Genesis documentation on the YM2612 is wrong in this regard.</p>
+<p>Examples:</p>
+<div class="table-container"><table>
+<thead>
+<tr>
+<th>Example Register Addresses</th>
+<th>Operator</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span style="display:grid; text-align:center;">$30, $31, $32, $40, $41, $42</span></td>
+<td><span style="display:grid; text-align:center;">1</span></td>
+</tr>
+<tr>
+<td><span style="display:grid; text-align:center;">$34, $35, $36, $44, $45, $46</span></td>
+<td><span style="display:grid; text-align:center;">3</span></td>
+</tr>
+<tr>
+<td><span style="display:grid; text-align:center;">$38, $39, $3A, $48, $49, $4A</span></td>
+<td><span style="display:grid; text-align:center;">2</span></td>
+</tr>
+<tr>
+<td><span style="display:grid; text-align:center;">$3C, $3D, $3E, $4C, $4D, $4E</span></td>
+<td><span style="display:grid; text-align:center;">4</span></td>
+</tr>
+</tbody>
+</table></div>
+<p>You could parse these out of the address like so:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">channel_idx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">register_addr</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">if</span><span class="w"> </span><span class="n">channel_idx</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// Invalid
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="k">return</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">if</span><span class="w"> </span><span class="n">group</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">Group</span>::<span class="n">Two</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="n">channel_idx</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">3</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="kd">let</span><span class="w"> </span><span class="n">operator_idx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">((</span><span class="n">register_addr</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="p">((</span><span class="n">register_addr</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">2</span><span class="p">);</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><h3 id="read-port"><a href="#read-port" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:read-port" class="headings">Read Port</a></h3>
+<p>The YM2612 has a single read port which is mapped to $4000 in the Z80 memory map. It contains 3 meaningful bits:</p>
+<ul>
+<li>Bit 7: Busy flag</li>
+<li>Bit 1: Timer B overflow flag</li>
+<li>Bit 0: Timer A overflow flag</li>
+</ul>
+<p>That&rsquo;s it. The other 5 bits are undefined, and the YM2612 does not expose any other information through reads.</p>
+<p>The busy flag is most commonly used. It indicates whether the YM2612 is currently processing a register write, in which case software should wait to perform any other YM2612 register writes. When games need to write to multiple registers they&rsquo;ll typically have a loop where they write to the first register, poll the busy flag until it&rsquo;s 0, write to the next register, poll the busy flag until it&rsquo;s 0, and repeat until all registers have been written.</p>
+<p>The two timer overflow bits are the only way for software to get feedback from the two YM2612 timers because they&rsquo;re not connected to any of the Z80&rsquo;s interrupt lines. Software that uses the timers needs to poll these bits to know when a timer interval has passed.</p>
+<p>Busy flag behavior doesn&rsquo;t seem to be completely consistent between different model consoles, and it probably also depends on when exactly the register write occurs within the chip&rsquo;s internal cycling between channels and operators. I leave the busy flag 1 for 32 internal YM2612 cycles after a data port write and that seems to work ok with everything I&rsquo;ve tested. (<a href="https://gendev.spritesmind.net/forum/viewtopic.php?p=31026#p31026" target="_blank" rel="noopener">Source for that number</a>)</p>
+<p>At least in earlier consoles, the busy flag reads as 1 for much longer than it takes the YM2612 to process the write, which it will always do within 24 YM2612 cycles and sometimes do within many fewer cycles - it depends on which register was written to. This makes the busy flag less useful than simply counting Z80 cycles in between writes, though this was likely not known to most developers back in the 80s and 90s.</p>
+<h3 id="read-port-mirroring-discrete-ym2612-vs-ym3438"><a href="#read-port-mirroring-discrete-ym2612-vs-ym3438" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:read-port-mirroring-discrete-ym2612-vs-ym3438" class="headings">Read Port Mirroring: Discrete YM2612 vs. YM3438</a></h3>
+<p>The read port is mirrored at $4001-$4003&hellip;on some consoles. There are at least two games that are highly sensitive to read port mirroring behavior: Earthworm Jim and Hellfire.</p>
+<p>This behavior difference is based on whether the console contains a discrete YM2612 chip or a <a href="https://en.wikipedia.org/wiki/Yamaha_YM2612#Yamaha_YM3438" target="_blank" rel="noopener">YM3438</a>, a slightly modified CMOS version of the YM2612.</p>
+<p>With the YM3438, $4001-$4003 mirror $4000. Reading from any of these addresses returns the busy flag and timer overflow bits. This chip was used in the Model 1 VA7, Model 2 VA0-VA1, Model 2 VA3-VA4, and Model 3 consoles.</p>
+<p>With the discrete YM2612, reading from $4001-$4003 is officially undefined. It seems like what happens on actual hardware is that reading from $4001-$4003 returns the last value that was read from $4000, but it decays to 0 after a certain amount of time has passed since the last $4000 read. This chip was used in the Model 1 VA0-VA6 and Model 2 VA2 consoles.</p>
+<p>Earthworm Jim occasionally reads the busy flag from $4002 instead of $4000, and on models with the discrete YM2612, this causes extremely noticeable audio stuttering. This happens because the previous $4000 read was sometimes only to poll for one of the timer overflow bits, and if the busy flag was set during that read, the game&rsquo;s audio driver will spinloop polling $4002 until the status value decays to 0.
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/earthworm-jim-ym2612.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Earthworm Jim - Discrete YM2612 behavior</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/earthworm-jim-ym3438.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Earthworm Jim - YM3438 behavior</span></p>
+<p>The discrete YM2612 recording is using a decay period of around a quarter-second&rsquo;s worth of cycles. This produces results similar to hardware recordings of this game on consoles with a discrete YM2612.</p>
+<p>Hellfire has the opposite problem: It frequently reads the busy flag from $4001 and $4003 instead of $4000, and if it can actually read the busy flag from these addresses, the music will play <em>much</em> slower than it&rsquo;s supposed to. This means that the music only plays correctly on consoles with a discrete YM2612.
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/hellfire-ym2612.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Hellfire - Discrete YM2612 behavior</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/hellfire-ym3438.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Hellfire - YM3438 behavior</span></p>
+<p>The game just so happens to write to the YM2612 registers in such a way that even on actual hardware, none of the writes are dropped despite it not correctly reading the busy flag.</p>
+<p>How to handle this in an emulator is an implementation decision. Making $4001-$4003 reads always return 0 would make both Earthworm Jim and Hellfire sound correct, but it&rsquo;s not accurate to any actual hardware, and it could break other games. Always using discrete YM2612 behavior breaks Earthworm Jim, and always using YM3438 behavior breaks Hellfire.</p>
+<p>The most reasonable solution is probably to offer an option of what behavior to emulate, maybe with something like an auto-detect option that automatically uses the ideal behavior for these two games. Other games generally only try to access the read port at $4000.</p>
+<p>Both of these behaviors are accurate to actual hardware - they&rsquo;re just accurate to different versions of the hardware.</p>
+<h2 id="first-audio-output-dac-channel"><a href="#first-audio-output-dac-channel" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:first-audio-output-dac-channel" class="headings">First Audio Output: DAC Channel</a></h2>
+<p>The DAC channel is by far the easiest thing to emulate inside the YM2612, so let&rsquo;s start with that.</p>
+<p>The DAC channel is controlled entirely by 3 registers:</p>
+<ul>
+<li>$2A: DAC channel PCM sample (unsigned 8-bit)</li>
+<li>$2B: DAC channel enabled (Bit 7)</li>
+<li>$B6: L/R panning flags and LFO sensitivity for channels 3 (group 1) and 6 (group 2)</li>
+</ul>
+<p>When enabled via register $2B, the DAC channel replaces channel 6&rsquo;s output with the 8-bit PCM sample value that was last written to register $2A. It respects the channel 6 L/R panning flags in register $B6 (group 2), but otherwise none of the channel 6 configuration affects the DAC channel.</p>
+<p>PCM samples are interpreted as unsigned 8-bit values (0-255), but for output they&rsquo;re converted to signed 8-bit by applying a bias of -128. This signed 8-bit sample is then bit shifted to match the scale of FM synthesis channel outputs.</p>
+<p>This isn&rsquo;t really relevant until later, but FM channel outputs are signed 14-bit, so the DAC channel implementation is as simple as:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">fn</span> <span class="nf">dac_channel</span><span class="p">(</span><span class="n">sample</span>: <span class="kt">u8</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kt">i16</span> <span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">(</span><span class="kt">i16</span>::<span class="n">from</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">128</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">6</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>The YM2612&rsquo;s DAC only has a 9-bit digital input, but it&rsquo;s not possible to set the truncated lower 5 bits using the DAC channel, so that&rsquo;s not important for now.</p>
+<p>For generating an output sample, you can pretend that you&rsquo;re mixing 6 channels whose outputs are each on an i14 scale, except right now only 1 channel is emulated:</p>
+<div class="highlight"><div class="chroma">
+<div class="table-container"><table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span><span class="lnt">7
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-rust" data-lang="rust"><span class="line"><span class="cl"><span class="k">fn</span> <span class="nf">output_sample</span><span class="p">(</span><span class="n">dac_channel_out</span>: <span class="kt">i16</span><span class="p">)</span><span class="w"> </span>-&gt; <span class="kt">f64</span> <span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// Convert from i14 scale to [-1, +1)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">sample</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">f64</span>::<span class="n">from</span><span class="p">(</span><span class="n">dac_channel_out</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="kt">f64</span>::<span class="n">from</span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">13</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c1">// Divide by 6 because this is only 1 of 6 channels being mixed
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="w">    </span><span class="n">sample</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">6.0</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table></div>
+</div>
+</div><p>You could also accumulate the channel outputs into an i32 instead of converting to floating-point, though you&rsquo;ll likely want to convert to floating-point eventually in order to ensure that volume is scaled correctly.</p>
+<p>Wire this up to an audio output, and as long as your emulated Z80 timing is fairly accurate, this is enough to (technically) get some YM2612 audio in games! Including the iconic &ldquo;SEGA&rdquo; intro sound in the Sonic games:
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sonic-2-sega.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Sonic the Hedgehog 2 - SEGA sound</span>
+<figure style="display: flex; justify-content: center; align-items: center;">
+  <audio controls preload="metadata">
+    <source src="/blog/audio/ym2612/sonic-2-dac-percussion.mp3" type="audio/mpeg">
+  </audio>
+</figure>
+
+<span class="caption">Sonic the Hedgehog 2 - Emerald Hill Zone (Percussion)</span></p>
+<p>It&rsquo;s a start!</p>
+<p>DAC channel output tends to sound very crunchy and noisy. This is partly because there&rsquo;s no FIFO or anything to buffer incoming samples - games must constantly send samples to the YM2612 at the desired sample rate using very carefully timed code.</p>
+<p>Playing at high sample rates doesn&rsquo;t leave the Z80 with much time to do anything else, plus the timing gets thrown off by bus arbiter delays if the Z80 ever needs to access the 68000 side of the bus (e.g. to read from cartridge ROM). Also, the 68000 needs to remove the Z80 from the bus to safely read from the controller ports, which pretty much every game does at least once per frame.</p>
+<p>Audio quality is further degraded by the chip effectively nearest-neighbor resampling up to 53267 Hz. This introduces lots of additional audio aliasing and noise, particularly if the source data is at a very low sample rate.</p>
+<h2 id="to-be-continued"><a href="#to-be-continued" class="anchor-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon anchor-icon"><path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/></svg></a><a href="#contents:to-be-continued" class="headings">To Be Continued</a></h2>
+<p>The next post will cover a probably more interesting topic: exactly how the phase generators in the FM synthesis channels work.</p>
+<p><a href="/blog/posts/emulating-ym2612-part-2/">Part 2 - Phase</a></p>
+
+            </div>
+
+            
+    
+    
+        <ul class="post-copyright">
+            <li class="copyright-item author"><span class="copyright-item-text">Author</span>: <a href="https://jsgroth.dev/" class="p-author h-card" target="_blank" rel="noopener">jsgroth</a></li>
+            
+                
+                
+                
+                
+                <li class="copyright-item link"><span class="copyright-item-text">Link</span>: <a href="/blog/posts/emulating-ym2612-part-1/" target="_blank" rel="noopener">https://jsgroth.dev/blog/posts/emulating-ym2612-part-1/</a></li>
+            
+            <li class="copyright-item license"><span class="copyright-item-text">License</span>: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a></li>
+            
+        </ul>
+    
+
+
+
+        </article>
+
+        
+
+        
+    <div class="updated-badge-container">
+        <span title="Updated @ 2025-04-01 08:12:28 CDT" style="cursor:help">
+
+<svg xmlns="http://www.w3.org/2000/svg" width="130" height="20" class="updated-badge"><linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="a"><rect width="130" height="20" rx="3" fill="#fff"/></clipPath><g clip-path="url(#a)"><path class="updated-badge-left" d="M0 0h55v20H0z"/><path class="updated-badge-right" d="M55 0h75v20H55z"/><path fill="url(#b)" d="M0 0h130v20H0z"/></g><g fill="#fff" text-anchor="middle" font-size="110"><text x="285" y="150" fill="#010101" fill-opacity=".3" textLength="450" transform="scale(.1)">updated</text><text x="285" y="140" textLength="450" transform="scale(.1)">updated</text><text x="915" y="150" fill="#010101" fill-opacity=".3" textLength="650" transform="scale(.1)">2025-04-01</text><text x="915" y="140" textLength="650" transform="scale(.1)">2025-04-01</text></g></svg>
+        </span></div>
+
+
+
+        
+
+
+        
+
+
+        
+    
+    
+        <div class="related-posts">
+            <h2 class="related-title">See Also:<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon related-icon"><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm144 276c0 6.6-5.4 12-12 12h-92v92c0 6.6-5.4 12-12 12h-56c-6.6 0-12-5.4-12-12v-92h-92c-6.6 0-12-5.4-12-12v-56c0-6.6 5.4-12 12-12h92v-92c0-6.6 5.4-12 12-12h56c6.6 0 12 5.4 12 12v92h92c6.6 0 12 5.4 12 12v56z"/></svg></h2>
+            <ul class="related-list">
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulator-bugs-sega-cd/" class="related-link">Emulator Bugs: Sega CD</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulator-bugs-fatal-rewind/" class="related-link">Emulator Bugs: Fatal Rewind</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-7/" class="related-link">Emulating the YM2612: Part 7 - SSG-EG</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-6/" class="related-link">Emulating the YM2612: Part 6 - LFO</a>
+                    </li>
+                
+                    <li class="related-item">
+                        <a href="/blog/posts/emulating-ym2612-part-5/" class="related-link">Emulating the YM2612: Part 5 - Analog Output</a>
+                    </li>
+                
+            </ul>
+        </div>
+    
+
+
+
+        
+    
+        <div class="post-tags">
+            
+                
+                
+                
+                
+                    
+                    <a href="/blog/tags/genesis/" rel="tag" class="post-tags-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon tag-icon"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>Genesis</a>
+                
+            
+                
+                
+                
+                
+                    
+                    <a href="/blog/tags/mega-drive/" rel="tag" class="post-tags-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon tag-icon"><path d="M0 252.118V48C0 21.49 21.49 0 48 0h204.118a48 48 0 0 1 33.941 14.059l211.882 211.882c18.745 18.745 18.745 49.137 0 67.882L293.823 497.941c-18.745 18.745-49.137 18.745-67.882 0L14.059 286.059A48 48 0 0 1 0 252.118zM112 64c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48z"/></svg>Mega Drive</a>
+                
+            
+        </div>
+    
+
+
+
+        
+
+
+        
+
+
+        
+    
+        
+        
+    
+    
+    
+    
+        <ul class="post-nav">
+            
+                <li class="post-nav-prev">
+                    <a href="/blog/posts/emulating-ym2612-part-2/" rel="prev">&lt; Emulating the YM2612: Part 2 - Phase</a>
+                </li>
+            
+            
+                <li class="post-nav-next">
+                    <a href="/blog/posts/famicom-expansion-audio/" rel="next">Famicom Expansion Audio &gt;</a>
+                </li>
+            
+        </ul>
+    
+
+
+
+        
+
+
+    </div>
+</main>
+
+
+            
+    <div id="back-to-top" class="back-to-top">
+        <a href="#"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="icon arrow-up"><path d="M34.9 289.5l-22.2-22.2c-9.4-9.4-9.4-24.6 0-33.9L207 39c9.4-9.4 24.6-9.4 33.9 0l194.3 194.3c9.4 9.4 9.4 24.6 0 33.9L413 289.4c-9.5 9.5-25 9.3-34.3-.4L264 168.6V456c0 13.3-10.7 24-24 24h-32c-13.3 0-24-10.7-24-24V168.6L69.2 289.1c-9.3 9.8-24.8 10-34.3.4z"/></svg></a>
+    </div>
+
+
+            
+    <footer id="footer" class="footer">
+        <div class="footer-inner">
+            <div class="site-info">©&nbsp;2025&nbsp;jsgroth</div><div class="powered-by">Powered by <a href="https://github.com/gohugoio/hugo" target="_blank" rel="noopener">Hugo</a> | Theme is <a href="https://github.com/reuixiy/hugo-theme-meme" target="_blank" rel="noopener">MemE</a></div><div class="site-copyright"><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a></div>
+
+            
+
+
+            
+        </div>
+    </footer>
+
+
+        </div>
+        
+
+        
+
+
+
+
+
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/medium-zoom@latest/dist/medium-zoom.min.js"></script>
+
+<script>
+    let imgNodes = document.querySelectorAll('div.post-body img');
+    imgNodes = Array.from(imgNodes).filter(node => node.parentNode.tagName !== "A");
+
+    mediumZoom(imgNodes, {
+        background: 'hsla(var(--color-bg-h), var(--color-bg-s), var(--color-bg-l), 0.95)'
+    })
+</script>
+
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/instant.page@5.1.0/instantpage.min.js" type="module" defer></script>
+
+
+
+
+
+
+    </body>
+</html>

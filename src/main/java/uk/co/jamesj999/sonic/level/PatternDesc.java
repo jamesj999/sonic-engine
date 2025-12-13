@@ -19,16 +19,26 @@ public final class PatternDesc {
     private int index;  // Stored as int for bitwise operations, representing 16-bit value
 
     private boolean priority;  // Cached priority flag
+
+    public void setPaletteIndex(int paletteIndex) {
+        this.paletteIndex = paletteIndex;
+    }
+
     private int paletteIndex;  // Cached palette index
     private boolean hFlip;  // Cached horizontal flip flag
     private boolean vFlip;  // Cached vertical flip flag
+
+    public void setPatternIndex(int patternIndex) {
+        this.patternIndex = patternIndex;
+    }
+
     private int patternIndex;  // Cached pattern index
 
     // Default instance of an empty pattern descriptor
     public static PatternDesc EMPTY = new PatternDesc();
 
     // Default constructor
-    private PatternDesc() {
+    public PatternDesc() {
         this.index = 0;
         updateFields();  // Initialize cached fields
     }

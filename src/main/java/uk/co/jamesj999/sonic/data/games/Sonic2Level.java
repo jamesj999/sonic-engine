@@ -1,12 +1,15 @@
 package uk.co.jamesj999.sonic.data.games;
 
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.*;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Logger;
 
 public class Sonic2Level implements Level {
@@ -21,17 +24,24 @@ public class Sonic2Level implements Level {
     private Block[] blocks;
     private SolidTile[] solidTiles;
     private Map map;
+    private List<LevelObject> objects;
 
     private int patternCount;
     private int chunkCount;
     private int blockCount;
     private int solidTileCount;
+    private int minX;
+    private int maxX;
+    private int minY;
+    private int maxY;
+    private static final boolean KOS_DEBUG_LOG = false;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
     public Sonic2Level(Rom rom,
                        int characterPaletteAddr,
                        int levelPalettesAddr,
+                       int levelPalettesSize,
                        int patternsAddr,
                        int chunksAddr,
                        int blocksAddr,
@@ -40,14 +50,17 @@ public class Sonic2Level implements Level {
                        int altCollisionsAddr,
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
-                       int solidTilesAngleAddr) throws IOException {
-        loadPalettes(rom, characterPaletteAddr, levelPalettesAddr);
+                       int solidTilesAngleAddr,
+                       int objectsAddr,
+                       int levelBoundariesAddr) throws IOException {
+        loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
-
+        loadObjects(rom, objectsAddr);
+        loadBoundaries(rom, levelBoundariesAddr);
     }
 
     @Override
@@ -115,8 +128,34 @@ public class Sonic2Level implements Level {
         return map;
     }
 
-    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr) throws IOException {
+    @Override
+    public List<LevelObject> getObjects() {
+        return objects;
+    }
+
+    @Override
+    public int getMinX() {
+        return minX;
+    }
+
+    @Override
+    public int getMaxX() {
+        return maxX;
+    }
+
+    @Override
+    public int getMinY() {
+        return minY;
+    }
+
+    @Override
+    public int getMaxY() {
+        return maxY;
+    }
+
+    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
+        GraphicsManager graphicsMan = GraphicsManager.getInstance();
 
         // Load character palette
         byte[] buffer = rom.readBytes(characterPaletteAddr, Palette.PALETTE_SIZE_IN_ROM);
@@ -124,29 +163,47 @@ public class Sonic2Level implements Level {
         palettes[0].fromSegaFormat(buffer);
 
         // Load level palettes
-        buffer = rom.readBytes(levelPalettesAddr, Palette.PALETTE_SIZE_IN_ROM * 3);
-        for (int i = 0; i < 3; i++) {
+        // levelPalettesSize is the total size of bytes to read from the ROM.
+        // We will read all of them, then slice them into palette-sized chunks.
+        buffer = rom.readBytes(levelPalettesAddr, levelPalettesSize);
+
+        // Calculate how many full palettes we have available in the data
+        int loadedPalettes = levelPalettesSize / Palette.PALETTE_SIZE_IN_ROM;
+
+        // Mega Drive has 4 palettes total. Palette 0 is character palette (already loaded).
+        // Palettes 1, 2, 3 are level palettes.
+        for (int i = 0; i < PALETTE_COUNT - 1; i++) {
             palettes[i + 1] = new Palette();
-            // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Palette.PALETTE_SIZE_IN_ROM, (i + 1) * Palette.PALETTE_SIZE_IN_ROM);
-            palettes[i + 1].fromSegaFormat(subArray);
+            if (i < loadedPalettes) {
+                // Use Arrays.copyOfRange to simulate pointer arithmetic and pass sub-arrays
+                int start = i * Palette.PALETTE_SIZE_IN_ROM;
+                int end = (i + 1) * Palette.PALETTE_SIZE_IN_ROM;
+                // Ensure we don't go out of bounds if size is weird
+                if (end <= buffer.length) {
+                    byte[] subArray = Arrays.copyOfRange(buffer, start, end);
+                    palettes[i + 1].fromSegaFormat(subArray);
+                }
+            }
         }
+
+        if (graphicsMan.getGraphics() != null) {
+            for (int i = 0; i < palettes.length; i++) {
+                graphicsMan.cachePaletteTexture(palettes[i], i);
+            }
+        }
+
     }
 
     private void loadPatterns(Rom rom, int patternsAddr) throws IOException {
         final int PATTERN_BUFFER_SIZE = 0xFFFF; // 64KB
-        byte[] buffer = new byte[PATTERN_BUFFER_SIZE];
+        GraphicsManager graphicsMan = GraphicsManager.getInstance();
         FileChannel channel = rom.getFileChannel();
         channel.position(patternsAddr);
 
-        KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, buffer, PATTERN_BUFFER_SIZE);
-        if (!result.success()) {
-            throw new IOException("Pattern decompression failed");
-        }
+        var result = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        patternCount = result.byteCount() / Pattern.PATTERN_SIZE_IN_ROM;
-        if (result.byteCount() % Pattern.PATTERN_SIZE_IN_ROM != 0) {
+        patternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
+        if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent pattern data");
         }
 
@@ -154,11 +211,16 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < patternCount; i++) {
             patterns[i] = new Pattern();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(buffer, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
+
+            if (graphicsMan.getGraphics() != null) {
+                graphicsMan.cachePatternTexture(patterns[i], i);
+            }
+
         }
 
-        LOG.info("Pattern count: " + patternCount + " (" + result.byteCount() + " bytes)");
+        LOG.info("Pattern count: " + patternCount + " (" + result.length + " bytes)");
     }
 
     //TODO both collision addresses
@@ -166,55 +228,44 @@ public class Sonic2Level implements Level {
         final int CHUNK_BUFFER_SIZE = 0xFFFF; // 64KB
         final int SOLID_TILE_REF_BUFFER_LENGTH = 0x300;
 
-        byte[] chunkBuffer = new byte[CHUNK_BUFFER_SIZE];
-        byte[] solidTileRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
-        byte[] solidTileAltRefBuffer = new byte[SOLID_TILE_REF_BUFFER_LENGTH];
-
         FileChannel channel = rom.getFileChannel();
         channel.position(chunksAddr);
 
-        KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, chunkBuffer, CHUNK_BUFFER_SIZE);
-        if (!result.success()) {
-            throw new IOException("Chunk decompression error");
-        }
+        byte[] chunkBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        chunkCount = result.byteCount() / Chunk.CHUNK_SIZE_IN_ROM;
-        if (result.byteCount() % Chunk.CHUNK_SIZE_IN_ROM != 0) {
+        chunkCount = chunkBuffer.length / Chunk.CHUNK_SIZE_IN_ROM;
+        if (chunkBuffer.length % Chunk.CHUNK_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent chunk data");
         }
 
         channel.position(collisionAddr);
 
-        result = reader.decompress(channel, solidTileRefBuffer, SOLID_TILE_REF_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Collision decompression error");
-        }
+        byte[] solidTileRefBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
         channel.position(altCollisionAddr);
 
-        result = reader.decompress(channel, solidTileAltRefBuffer, SOLID_TILE_REF_BUFFER_LENGTH);
-
-        if (!result.success()) {
-            throw new IOException("Alt Collision decompression error");
-        }
+        byte[] solidTileAltRefBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
         chunks = new Chunk[chunkCount];
         for (int i = 0; i < chunkCount; i++) {
             chunks[i] = new Chunk();
             // Pass a sub-array (slice) using Arrays.copyOfRange
             byte[] subArray = Arrays.copyOfRange(chunkBuffer, i * Chunk.CHUNK_SIZE_IN_ROM, (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
-            int solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
-            int altSolidTileIndex = Byte.toUnsignedInt(solidTileAltRefBuffer[i]);
+            int solidTileIndex = 0;
+            if (i < solidTileRefBuffer.length) {
+                solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
+            }
+            int altSolidTileIndex = 0;
+            if (i < solidTileAltRefBuffer.length) {
+                altSolidTileIndex = Byte.toUnsignedInt(solidTileAltRefBuffer[i]);
+            }
             chunks[i].fromSegaFormat(subArray, solidTileIndex, altSolidTileIndex);
         }
 
-        LOG.info("Chunk count: " + chunkCount + " (" + result.byteCount() + " bytes)");
+        LOG.info("Chunk count: " + chunkCount + " (" + chunkBuffer.length + " bytes)");
     }
 
     /**
-     *
      * @param rom
      * @param tileHeightsAddr
      * @param anglesAddr
@@ -222,21 +273,21 @@ public class Sonic2Level implements Level {
      */
     private void loadSolidTiles(Rom rom, int tileHeightsAddr, int tileWidthsAddr, int anglesAddr) throws IOException {
 
-        solidTileCount = (Sonic2.SOLID_TILE_MAP_SIZE+1) / SolidTile.TILE_SIZE_IN_ROM;
+        solidTileCount = (Sonic2Constants.SOLID_TILE_MAP_SIZE + 1) / SolidTile.TILE_SIZE_IN_ROM;
         LOG.info("how many solid tiles fit?:" + solidTileCount);
 
-        byte[] solidTileHeightsBuffer = rom.readBytes(tileHeightsAddr, Sonic2.SOLID_TILE_MAP_SIZE);
-        byte[] solidTileWidthsBuffer = rom.readBytes(tileWidthsAddr, Sonic2.SOLID_TILE_MAP_SIZE);
+        byte[] solidTileHeightsBuffer = rom.readBytes(tileHeightsAddr, Sonic2Constants.SOLID_TILE_MAP_SIZE);
+        byte[] solidTileWidthsBuffer = rom.readBytes(tileWidthsAddr, Sonic2Constants.SOLID_TILE_MAP_SIZE);
 
-        if (solidTileHeightsBuffer.length % Sonic2.SOLID_TILE_MAP_SIZE != 0) {
+        if (solidTileHeightsBuffer.length % Sonic2Constants.SOLID_TILE_MAP_SIZE != 0) {
             throw new IOException("Inconsistent SolidTile data");
         }
 
         solidTiles = new SolidTile[solidTileCount];
-        for(int i = 0; i < solidTileCount; i++) {
-            byte tileAngle = rom.readByte(anglesAddr+i);
-            byte[] totallyLegitimateHeightArraySir = Arrays.copyOfRange(solidTileHeightsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
-            byte[] totallyLegitimateWidthArraySir = Arrays.copyOfRange(solidTileWidthsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i+ 1) * SolidTile.TILE_SIZE_IN_ROM);
+        for (int i = 0; i < solidTileCount; i++) {
+            byte tileAngle = rom.readByte(anglesAddr + i);
+            byte[] totallyLegitimateHeightArraySir = Arrays.copyOfRange(solidTileHeightsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i + 1) * SolidTile.TILE_SIZE_IN_ROM);
+            byte[] totallyLegitimateWidthArraySir = Arrays.copyOfRange(solidTileWidthsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i + 1) * SolidTile.TILE_SIZE_IN_ROM);
 
             solidTiles[i] = new SolidTile(i, totallyLegitimateHeightArraySir, totallyLegitimateWidthArraySir, tileAngle);
         }
@@ -247,23 +298,16 @@ public class Sonic2Level implements Level {
 
     private void loadBlocks(Rom rom, int blocksAddr) throws IOException {
         final int BLOCK_BUFFER_SIZE = 0xFFFF; // 64KB
-        
-        byte[] blockBuffer = new byte[BLOCK_BUFFER_SIZE];
-
-
 
         FileChannel channel = rom.getFileChannel();
         KosinskiReader reader = new KosinskiReader();
 
         channel.position(blocksAddr);
-        var result = reader.decompress(channel, blockBuffer, BLOCK_BUFFER_SIZE);
+        byte[] blockBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        if (!result.success()) {
-            throw new IOException("Block decompression error");
-        }
 
-        blockCount = result.byteCount() / Block.BLOCK_SIZE_IN_ROM;
-        if (result.byteCount() % Block.BLOCK_SIZE_IN_ROM != 0) {
+        blockCount = blockBuffer.length / LevelConstants.BLOCK_SIZE_IN_ROM;
+        if (blockBuffer.length % LevelConstants.BLOCK_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent block data");
         }
 
@@ -271,34 +315,68 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < blockCount; i++) {
             blocks[i] = new Block();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * Block.BLOCK_SIZE_IN_ROM, (i + 1) * Block.BLOCK_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * LevelConstants.BLOCK_SIZE_IN_ROM, (i + 1) * LevelConstants.BLOCK_SIZE_IN_ROM);
 
             blocks[i].fromSegaFormat(subArray);
 
         }
 
-        LOG.info("Block count: " + blockCount + " (" + result.byteCount() + " bytes)");
+        LOG.info("Block count: " + blockCount + " (" + blockBuffer.length + " bytes)");
 
     }
 
     private void loadMap(Rom rom, int mapAddr) throws IOException {
         final int MAP_BUFFER_SIZE = 0xFFFF; // 64KB
-        byte[] buffer = new byte[MAP_BUFFER_SIZE];
+
         FileChannel channel = rom.getFileChannel();
         channel.position(mapAddr);
 
-        KosinskiReader reader = new KosinskiReader();
-        var result = reader.decompress(channel, buffer, MAP_BUFFER_SIZE);
-        if (!result.success()) {
-            throw new IOException("Map decompression error");
-        }
+        byte[] buffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-        if (result.byteCount() != MAP_LAYERS * MAP_HEIGHT * MAP_WIDTH) {
+        if (buffer.length != MAP_LAYERS * MAP_HEIGHT * MAP_WIDTH) {
             throw new IOException("Inconsistent map data");
         }
 
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
-        System.out.println("Map loaded successfully. Byte count: " + result.success());
+        System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+    }
+
+    private void loadObjects(Rom rom, int objectsAddr) throws IOException {
+        objects = new ArrayList<>();
+        int currentAddr = objectsAddr;
+
+        while (true) {
+            int x = rom.read16BitAddr(currentAddr);
+            if (x == 0xFFFF) {
+                break;
+            }
+            // Sonic 2 object layout:
+            // x (2 bytes)
+            // y (2 bytes) - top 4 bits are flags usually (render flags / status)
+            // id (1 byte)
+            // subtype (1 byte)
+            int y = rom.read16BitAddr(currentAddr + 2);
+            int id = Byte.toUnsignedInt(rom.readByte(currentAddr + 4));
+            int subtype = Byte.toUnsignedInt(rom.readByte(currentAddr + 5));
+
+            objects.add(new LevelObject(x, y, id, subtype));
+
+            currentAddr += 6;
+        }
+        LOG.info("Loaded " + objects.size() + " objects.");
+    }
+
+    private void loadBoundaries(Rom rom, int levelBoundariesAddr) throws IOException {
+        // Each entry is 8 bytes:
+        // 0-1: minX (unsigned)
+        // 2-3: maxX (unsigned)
+        // 4-5: minY (signed)
+        // 6-7: maxY (signed)
+
+        this.minX = rom.read16BitAddr(levelBoundariesAddr);
+        this.maxX = rom.read16BitAddr(levelBoundariesAddr + 2);
+        this.minY = (short) rom.read16BitAddr(levelBoundariesAddr + 4);
+        this.maxY = (short) rom.read16BitAddr(levelBoundariesAddr + 6);
     }
 }

@@ -1,10 +1,12 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
+import uk.co.jamesj999.sonic.Engine;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 
 public class DebugSpriteMovementManager extends AbstractSpriteMovementManager {
     private static int MOVE_SPEED = 3;
     private boolean testKeyPressed = false;
+    private int debounceTestKey = 0;
     public DebugSpriteMovementManager(Sprite sprite) {
         super(sprite);
     }
@@ -22,12 +24,22 @@ public class DebugSpriteMovementManager extends AbstractSpriteMovementManager {
         if(down) {
             sprite.setY((short) (sprite.getY() + MOVE_SPEED));
         }
-        if(testKey && !testKeyPressed) {
-            testKeyPressed = true;
-            if(sprite.getLayer() == 1) {
-                sprite.setLayer((byte) 0);
-            } else {
-                sprite.setLayer((byte) (sprite.getLayer() + 1));
+        if (space) {
+            if (debounceTestKey <= 0) {
+                Engine.nextDebugOption();
+                debounceTestKey = 10;
+            }
+            else {
+                debounceTestKey--;
+            }
+        }
+        if(testKey){
+            if (debounceTestKey <= 0) {
+                Engine.nextDebugState();
+                debounceTestKey = 10;
+            }
+            else {
+                debounceTestKey--;
             }
         }
 

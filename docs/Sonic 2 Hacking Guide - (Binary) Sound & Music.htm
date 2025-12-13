@@ -1,0 +1,402 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type"
+content="text/html; charset=iso-8859-1">
+<title>Sonic 2 Hacking Guide - (Binary) Sound & Music</title>
+</head>
+
+<body bgcolor="#FFFFFF">
+
+<p><font color="#FF8000" size="4" face="Verdana"><em><u>Sonic 2 Hacking Guide</u></em></font>
+<font color="#000080" size="5"face="Verdana"><strong><br></strong>Binary - <strong>Sound &amp; Music</strong></font></p>
+
+<p><font size="2" face="Verdana">Music is a great interest to many people. This is one of the difficult areas of the Sonic 2
+ROM. The reason is due to the compression used. This doesn't mean that you can't put your own music into Sonic 2, but it will be
+helpful to port the Sonic 2 beta music into the ROM instead since that doesn't use compression. So, to port the Sonic 2 beta music
+into the final ROM, simply copy everything from 0EC000 to 0FFFFF. Once this information is put into the final ROM, you can begin
+modifying the music.</font></p>
+
+<p><font size="2" face="Verdana">NOTE: A few things are taken from the Genesis Sound Software Manual.
+
+<p><font color="#800000" size="2" face="Verdana">0F8000</font><font size="2" face="Verdana"> - Music pointers</font><br>
+<font color="#800000" size="2" face="Verdana">0FEE91</font><font size="2" face="Verdana"> - Sound pointers</font></p>
+
+<p><font size="2" face="Verdana">Each pointer is 16-bits in size. All pointers are in little-endian format (Intel, Z80, etc). They
+point to the song data per song, in the order that they're listed on the Sonic 2 beta sound test.</font></p>
+
+<p><font size="2" face="Verdana">The format for the songs is a bit complex. Read carefully and follow along. I will number the
+important bytes from the start of the song data.</font></p>
+
+<p><font size="2" face="Verdana">HEADER:<br><strong>#1 - #48</strong></font></p>
+
+<p><font size="2" face="Verdana"><strong>1 + 2</strong> - Voice list pointer</font></p>
+
+<p><font size="2" face="Verdana"><strong>3</strong> - Number of DAC and FM channel pointers<br>
+<strong>4</strong> - Number of PSG channel pointers</font></p>
+
+<p><font size="2" face="Verdana">This is the confusing part. The header is generally 48 bytes in size. However, changing bytes 3
+and 4 can will change that theory. If byte 3 is equal to 06, that means that there will be a DAC channel, and 5 FM channels. If
+byte 3 was only 02, there would be a DAC channel and a single FM channel. The list below assumes that the song uses a DAC channel,
+5 FM channels, and 3 PSG channels. Although, if you were to exclude FM channel 5 by making byte 3 equal to 05, then
+everything after that comes sooner. So, PSG channel 1 pointer for example would be bytes 27 and 28, instead of 31 and 32. If you
+exclude another FM channel, then PSG channel 1 pointer is bytes 23 and 24.</font></p>
+
+<p><font size="2" face="Verdana"><strong>5</strong> - Tempo cut-time (4-bit only)<br>
+<strong>6</strong> - Tempo (4-bit only)</font></p>
+
+<p><font size="2" face="Verdana"><strong>7 + 8 </strong>- DAC pointer</font></p>
+
+<p><font size="2" face="Verdana"><strong>11 + 12 </strong>- FM channel 1 pointer<br>
+<strong>13</strong> - FM channel 1 key<br>
+<strong>14</strong> - FM channel 1 volume resistance<br>
+<strong>15 + 16</strong> - FM channel 2 pointer<br>
+<strong>17</strong> - FM channel 2 key<br>
+<strong>18</strong> - FM channel 2 volume resistance<br>
+<strong>19 + 20</strong> - FM channel 3 pointer<br>
+<strong>21</strong> - FM channel 3 key<br>
+<strong>22</strong> - FM channel 3 volume resistance<br>
+<strong>23 + 24</strong> - FM channel 4 pointer<br>
+<strong>25</strong> - FM channel 4 key<br>
+<strong>26</strong> - FM channel 4 volume resistance<br>
+<strong>27 + 28</strong> - FM channel 5 pointer<br>
+<strong>29</strong> - FM channel 5 key<br>
+<strong>30</strong> - FM channel 5 volume resistance</font></p>
+
+<p><font size="2" face="Verdana"><strong>31 + 32</strong> - PSG channel 1 pointer<br>
+<strong>33</strong> - PSG channel 1 key<br>
+<strong>34</strong> - PSG channel 1 volume resistance<br>
+<strong>37 + 38</strong> - PSG channel 2 pointer<br>
+<strong>39</strong> - PSG channel 2 key<br>
+<strong>40</strong> - PSG channel 2 volume resistance<br>
+<strong>43 + 44</strong> - PSG channel 3 pointer<br>
+<strong>45</strong> - PSG channel 3 key<br>
+<strong>46</strong> - PSG channel 3 volume resistance</font></p>
+
+<p><font size="2" face="Verdana">Now, here are some things you should know for editing music.</font></p>
+
+<p><font size="2" face="Verdana">00-7F - Note duration<br>
+80-DF - Notes (80 is a rest)<br>
+E0-FF - Coordination flags</font></p>
+
+<p><font size="2" face="Verdana">Whenever you need to change the duration of a note, you simply type a number ranging from 00 to 7F.
+These define how many beats the note will be held for. So, for example, one note with a duration of 06 is the same as 6 notes
+with a duration of 01.</font></p>
+
+<p><font size="2" face="Verdana">Not all the coordination flags are known yet, but here are the ones I do know of.</p>
+
+<p>E0xx - panning, AMS, FMS<br>
+E6xx - subtract xx from channel volume<br>
+E7xx - prevent next note from attacking<br>
+E8xx - set note fill amount to xx<br>
+E9xx - add xx to channel key<br>
+EAxx - set music tempo to xx<br>
+EFxx - set voice selection to xx<br>
+F0aabbccdd - modulation<br>
+F2 - stop the track<br>
+F6yyyy - jump to position yyyy<br>
+F7eexxyyyy - repeat xx times at position yyyy before moving on<br>
+F8yyyy - jump to position yyyy (keep previous position in memory for returning)<br>
+F9 - return</p>
+
+<p>aa - Wait aa, then modulate<br>
+bb - modulation speed (01 = fast, FF = slow)<br>
+cc - modulation change per step (01 = -0.2, 02 = -0.4, FF = +0.2, FE = +0.4, etc.)<br>
+dd - number of modulation steps (01 = down, up; 02 = down, up, up, down; etc.)<br>
+ee - if ee is 01, it will reset the repeat values (never-ending loop)</p>
+
+<p>E0xx can be tricky since it is handled at bit-level. So, here is the format for 'xx' within the 'E0' coordination flag.</p>
+
+<p>8-bits - <b>L R A A x F F F</b></p>
+
+<p><b>FFF</b> - This value controls the FMS (frequency modulation sensitivity). The following is a listing of all the values and the
+results they produce</p>
+
+<p>0 - 0<br>
+1 - add/sub 3.4%<br>
+2 - add/sub 6.7%<br>
+3 - add/sub 10%<br>
+4 - add/sub 14%<br>
+5 - add/sub 20%<br>
+6 - add/sub 40%<br>
+7 - add/sub 80%</p>
+
+<p><b>AA</b> - This value controls the AMS (amplitude modulation sensitivity). The following is a listing of all the values and the
+results they produce</p>
+
+<p>0 - 0dB<br>
+1 - 1.4dB<br>
+2 - 5.9dB<br>
+3 - 11.8dB</p>
+
+<p><b>R</b> - When this bit is turned on, right stereo is enabled for the channel.<br>
+<b>L</b> - When this bit is turned on, left stereo is enabled for the channel.</p>
+
+<p><font size="2" face="Verdana"></font>&nbsp;</p>
+
+<p><font color="#800000" size="2" face="Verdana">003EA0</font><font
+size="2" face="Verdana"> - Music playlist for 1 player levels<br>
+</font><font color="#800000" size="2" face="Verdana">003EB2</font><font
+size="2" face="Verdana"> - Music playlist for 2 player levels</font></p>
+
+<p><font size="2" face="Verdana">These playlists use a single
+byte for every level to tell the game what music to play for each
+level. The song values are equivelent to those listed in the
+sound test, except 80 is added to the value. The following also
+add 80 to the actual value.</font></p>
+
+<p><font color="#800000" size="2" face="Verdana">00392B</font><font
+size="2" face="Verdana"> - Sound to play for Sega logo<br>
+</font><font color="#800000" size="2" face="Verdana">0051E5</font><font
+size="2" face="Verdana"> - Sound to play for special stage<br>
+</font><font color="#800000" size="2" face="Verdana">009765</font><font
+size="2" face="Verdana"> - Sound to play for level select and
+debug codes<br>
+</font><font color="#800000" size="2" face="Verdana">009795</font><font
+size="2" face="Verdana"> - Sound to play for 14 continues code<br>
+</font><font color="#800000" size="2" face="Verdana">0097A5</font><font
+size="2" face="Verdana"> - Sound to play for Super Sonic code<br>
+</font><font color="#800000" size="2" face="Verdana">00E731</font><font
+size="2" face="Verdana"> - Sound to play for EHZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00E827</font><font
+size="2" face="Verdana"> - Sound to play for MZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00F019</font><font
+size="2" face="Verdana"> - Sound to play for HTZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00F11D</font><font
+size="2" face="Verdana"> - Sound to play for OOZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00F237</font><font
+size="2" face="Verdana"> - Sound to play for MCZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00F349</font><font
+size="2" face="Verdana"> - Sound to play for CNZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00F42B</font><font
+size="2" face="Verdana"> - Sound to play for CPZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">00F583</font><font
+size="2" face="Verdana"> - Sound to play for ARZ boss<br>
+</font><font color="#800000" size="2" face="Verdana">011FD7</font><font
+size="2" face="Verdana"> - Sound to play for ring<br>
+</font><font color="#800000" size="2" face="Verdana">012145</font><font
+size="2" face="Verdana"> - Sound to play for loosing rings<br>
+</font><font color="#800000" size="2" face="Verdana">0129CD</font><font
+size="2" face="Verdana"> - Sound to play for super ring<br>
+</font><font color="#800000" size="2" face="Verdana">012A25</font><font
+size="2" face="Verdana"> - Sound to play for super sneakers on<br>
+</font><font color="#800000" size="2" face="Verdana">012A37</font><font
+size="2" face="Verdana"> - Sound to play for shield<br>
+</font><font color="#800000" size="2" face="Verdana">012A81</font><font
+size="2" face="Verdana"> - Sound to play for invincibility<br>
+</font><font color="#800000" size="2" face="Verdana">018A69</font><font
+size="2" face="Verdana"> - Sound to play for spring up<br>
+</font><font color="#800000" size="2" face="Verdana">018BBF</font><font
+size="2" face="Verdana"> - Sound to play for spring side<br>
+</font><font color="#800000" size="2" face="Verdana">018D63</font><font
+size="2" face="Verdana"> - Sound to play for spring down<br>
+</font><font color="#800000" size="2" face="Verdana">018E97</font><font
+size="2" face="Verdana"> - Sound to play for spring diag-up<br>
+</font><font color="#800000" size="2" face="Verdana">018FA3</font><font
+size="2" face="Verdana"> - Sound to play for spring diag-down<br>
+</font><font color="#800000" size="2" face="Verdana">01926B</font><font
+size="2" face="Verdana"> - Sound to play for Sonic passing end-level
+sign<br>
+</font><font color="#800000" size="2" face="Verdana">0192F9</font><font
+size="2" face="Verdana"> - Sound to play for Tails passing end-level
+sign<br>
+</font><font color="#800000" size="2" face="Verdana">0192CD</font><font
+size="2" face="Verdana"> - Sound to play for Sonic passing end-level
+sign (winner)<br>
+</font><font color="#800000" size="2" face="Verdana">019349</font><font
+size="2" face="Verdana"> - Sound to play for Tails passing end-level
+sign (winner)<br>
+</font><font color="#800000" size="2" face="Verdana">01A153</font><font
+size="2" face="Verdana"> - Sound to play for super sneakers off<br>
+</font><font color="#800000" size="2" face="Verdana">01AAAF</font><font
+size="2" face="Verdana"> - Sound to play for Sonic jumping<br>
+</font><font color="#800000" size="2" face="Verdana">01AB9D</font><font
+size="2" face="Verdana"> - Sound to play for Super Sonic<br>
+</font><font color="#800000" size="2" face="Verdana">01C68B</font><font
+size="2" face="Verdana"> - Sound to play for Tails jumping<br>
+</font><font color="#800000" size="2" face="Verdana">01F191</font><font
+size="2" face="Verdana"> - Sound to play for starpost<br>
+</font><font color="#800000" size="2" face="Verdana">0210FB</font><font
+size="2" face="Verdana"> - Sound to play for objects being
+destroyed (enemies, monitors, etc)<br>
+</font><font color="#800000" size="2" face="Verdana">021C55</font><font
+size="2" face="Verdana"> - Sound to play for seesaw<br>
+</font><font color="#800000" size="2" face="Verdana">0223D8</font><font
+size="2" face="Verdana"> - Sound to play for tire-spring<br>
+</font><font color="#800000" size="2" face="Verdana">023D8F</font><font
+size="2" face="Verdana"> - Sound to play for jet-platform spring<br>
+</font><font color="#800000" size="2" face="Verdana">024271</font><font
+size="2" face="Verdana"> - Sound to play for upward pressure-spring<br>
+</font><font color="#800000" size="2" face="Verdana">0244C9</font><font
+size="2" face="Verdana"> - Sound to play for side pressure-spring<br>
+</font><font color="#800000" size="2" face="Verdana">02BAA9</font><font
+size="2" face="Verdana"> - Sound to play for using elevator<br>
+</font><font color="#800000" size="2" face="Verdana">02BAFB</font><font
+size="2" face="Verdana"> - Sound to play for elevator returning</font></p>
+
+<p><font size="2" face="Verdana">What's interesting is the 14 continues code. If you look at the initial value given in the
+ROM, you'll see why the sound doesn't play properly. They forgot to add 80 to the value! Add 80 to it and it'll play the
+&quot;continue&quot; sound.</font></p>
+
+<p><font color="#800000" size="2" face="Verdana">0ED100</font><font size="2" face="Verdana"> - Start of DAC sample data</font></p>
+
+<p><font size="2" face="Verdana">DAC samples are the drum beats you hear in the music. The format is very simple and easy to
+understand. Each set of 4-bits represents a pitch. All pitches are played in the piano C key. 'F' represents the highest pitched
+C you can have, and '1' represents the lowest. Zero is a null, which means that it won't play a note. Listed below are some
+pointers. All of it is written in little-endian format, so read it backwards. So, the pointer for sample 81 is '00 D1', when in
+fact this is actually read 'D1 00'. This means that sample 81 is located at address 0ED100. The length is simply 16-bits (2 bytes)
+that say how long the sample is. So, the 81 length is '94 02'. This means that it is 0294 (660 in decimal) bytes in length.</font></p>
+
+<p><font color="#800000" size="2" face="Verdana">0ECF7C</font><font size="2" face="Verdana"> - Sample 81 pointer<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF7E</font><font size="2" face="Verdana"> - Sample 81 length<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF81</font><font size="2" face="Verdana"> - Sample 82 pointer<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF83</font><font size="2" face="Verdana"> - Sample 82 length<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF85</font><font size="2" face="Verdana"> - Sample 83 pointer<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF87</font><font size="2" face="Verdana"> - Sample 83 length<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF8A</font><font size="2" face="Verdana"> - Sample 84 pointer<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF8C</font><font size="2" face="Verdana"> - Sample 84 length<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF8E</font><font size="2" face="Verdana"> - Sample 85 pointer<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF90</font><font size="2" face="Verdana"> - Sample 85 length<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF93</font><font size="2" face="Verdana"> - Sample 86 pointer<br>
+</font><font color="#800000" size="2" face="Verdana">0ECF95</font><font size="2" face="Verdana"> - Sample 86 length</p>
+
+<p><font color="#800000" size="2" face="Verdana">0ECF9C</font><font size="2" face="Verdana"> - DAC master list</p>
+
+<p><font size="2" face="Verdana">FORMAT:<br>
+<b>#1 #2</b></p>
+
+<p><font size="2" face="Verdana"><b>1</b> - Sample ID<br>
+<b>2</b> - Rate (the lower the value, the faster the rate is)</p>
+
+<p><font size="2" face="Verdana">Sample 81 - Kick<br>
+Sample 82 - Snare<br>
+Sample 83 - Clap<br>
+Sample 84 - Scratch<br>
+Sample 85 - Timpani<br>
+Sample 86 - Tom</p>
+
+<p><font color="#800000" size="2" face="Verdana">0EC23D</font><font size="2" face="Verdana"> - Change to '00' to disable DAC</font></p>
+
+<p><font color="#800000" size="2" face="Verdana">0F1E8C-0F7FFF</font><font size="2" face="Verdana"> - Sega PCM sound</font></p>
+
+<p><font size="2" face="Verdana">You can replace the Sega PCM sound easily. You simply need a WAV file that is encoded in 16kHz
+8-bit mono format. Then, copy the data in the WAV file starting at address 000038, and put it in place of the Sega PCM sound
+already in the game.</font></p>
+
+<p><font color="#800000" size="2" face="Verdana">0ECF36</font><font size="2" face="Verdana"> - Master playlist definitions</font></p>
+
+<p><font size="2" face="Verdana">The master playlist tells the game exactly what value will play what song. This is different
+from the regular music playlist because when changing these, it affects any point in the game that uses the specific sound value
+being changed. Here is the list of songs and their values.</font></p>
+
+<p><font size="2" face="Verdana">Sound #01 - 92<br>
+Sound #02 - 81<br>
+Sound #03 - 85<br>
+Sound #04 - 8F<br>
+Sound #05 - 82<br>
+Sound #06 - 94<br>
+Sound #07 - 86<br>
+Sound #08 - 80<br>
+Sound #09 - 83<br>
+Sound #0A - 87<br>
+Sound #0B - 84<br>
+Sound #0C - 91<br>
+Sound #0D - 8E<br>
+Sound #0E - 8C<br>
+Sound #0F - 90<br>
+Sound #10 - 9B<br>
+Sound #11 - 89<br>
+Sound #12 - 88<br>
+Sound #13 - 8D<br>
+Sound #14 - 8B<br>
+Sound #15 - 9A<br>
+Sound #16 - 93<br>
+Sound #17 - 95<br>
+Sound #18 - B5<br>
+Sound #19 - 96<br>
+Sound #1A - 97<br>
+Sound #1B - B8<br>
+Sound #1C - ??<br>
+Sound #1D - BA<br>
+Sound #1E - BD<br>
+Sound #1F - 9C</font></p>
+
+<p><font size="2" face="Verdana">The master playlist goes in order from sound #01 and goes up to #1F. If you see an 'FF',
+ignore it and move to the next byte.</font></p>
+
+<p><font size="2" face="Verdana">If you want to modify voices, it's not too difficult. As long as you understand how FM
+synthesis works, you should be fine. If you don't know anything about FM synthesis, you're probably going to have some trouble
+modifying voices.</font></p>
+
+<p><font size="2" face="Verdana">A voice is simply an FM 'instrument'. You can create up to 128 different voices. That's
+more than enough for a song. Most songs only need about 4 or 5. Each voice is 25 bytes in size. There isn't a header for voices.
+They're simply listed one after the other.</font></p>
+
+<p><font size="2" face="Verdana">FORMAT:<br>
+<strong>#1 - #25</strong></font></p>
+
+<p><font size="2" face="Verdana"><strong>1</strong> - Feedback (next 3 bits) / Algorithm (lower 3 bits)<br>
+<strong>2</strong> - Detune of operator 4 (nybble 1) / Coarse-frequency of operator 4 (nybble 2)<br>
+<strong>3</strong> - Detune of operator 3 (nybble 1) / Coarse-frequency of operator 3 (nybble 2)<br>
+<strong>4</strong> - Detune of operator 2 (nybble 1) / Coarse-frequency of operator 2 (nybble 2)<br>
+<strong>5</strong> - Detune of operator 1 (nybble 1) / Coarse-frequency of operator 1 (nybble 2)<br>
+<strong>6</strong> - [RS] of operator 4 (upper 2 bits) / Attack rate [AR] of operator 4 (lower 5 bits)<br>
+<strong>7</strong> - [RS] of operator 3 (upper 2 bits) / Attack rate [AR] of operator 3 (lower 5 bits)<br>
+<strong>8</strong> - [RS] of operator 2 (upper 2 bits) / Attack rate [AR] of operator 2 (lower 5 bits)<br>
+<strong>9</strong> - [RS] of operator 1 (upper 2 bits) / Attack rate [AR] of operator 1 (lower 5 bits)<br>
+<strong>10</strong> - [AM] of operator 4 / First decay rate [D1R] of operator 4 (lower 5 bits)<br>
+<strong>11</strong> - [AM] of operator 3 / First decay rate [D1R] of operator 3 (lower 5 bits)<br>
+<strong>12</strong> - [AM] of operator 2 / First decay rate [D1R] of operator 2 (lower 5 bits)<br>
+<strong>13</strong> - [AM] of operator 1 / First decay rate [D1R] of operator 1 (lower 5 bits)<br>
+<strong>14</strong> - Second decay rate [D2R] of operator 4 (00-14)<br>
+<strong>15</strong> - Second decay rate [D2R] of operator 3 (00-14)<br>
+<strong>16</strong> - Second decay rate [D2R] of operator 2 (00-14)<br>
+<strong>17</strong> - Second decay rate [D2R] of operator 1 (00-14)<br>
+<strong>18</strong> - First decay level [D1L] of operator 4 (nybble 1) / Release rate [RR] of operator 4 (nybble 2)<br>
+<strong>19</strong> - First decay level [D1L] of operator 3 (nybble 1) / Release rate [RR] of operator 3 (nybble 2)<br>
+<strong>20</strong> - First decay level [D1L] of operator 2 (nybble 1) / Release rate [RR] of operator 2 (nybble 2)<br>
+<strong>21</strong> - First decay level [D1L] of operator 1 (nybble 1) / Release rate [RR] of operator 1 (nybble 2)<br>
+<strong>22</strong> - Output level of operator 4<br>
+<strong>23</strong> - Output level of operator 3<br>
+<strong>24</strong> - Output level of operator 2<br>
+<strong>25</strong> - Output level of operator 1</font></p>
+
+<p><font size="2" face="Verdana">Use only odd numbers for velocity. Also, detune 0-7 is negative, and detune 8-F is
+positive.</font></p>
+
+<p><font size="2" face="Verdana">The YM2612 algorithms are very specific. There's 8 algorithms total. In fact, they're identical
+to the algorithms on the Yamaha TX81Z. Click </font><a href="images/tx81zalg.gif"><font size="2" face="Verdana">here</font></a><font
+size="2" face="Verdana"> if you would like to see what the algorithms are. Keep in mind that the algorithm number in the
+voice is always one less than what is listed in the chart.</font></p>
+
+<p><font size="2" face="Verdana"></font>&nbsp;</p>
+
+<p><font size="2" face="Verdana">If you're interested in putting music into Sonic 2 without copying the sound driver information
+from the beta version, you'll need to know the format of the compression. Here's how the compression works.</font></p>
+
+<p><font size="2" face="Verdana">There's a compression byte at the beginning of a song. To understand how it functions, you need
+to examine it at a bit-level. So, lets take '2B' for example.</font></p>
+
+<p><font size="2" face="Verdana">2B - 00101011</font></p>
+
+<p><font size="2" face="Verdana">Bits are read from right to left. A '1' means that there's no special copy instructions applied.
+The byte is read 'as-is'. A '0' is a flag. A flag tells the game to read bytes from a given location. So, using compression byte '2B',
+we can have something like the following.</font></p>
+
+<p><font size="2" face="Verdana">2B 00 01 (24 00) 05 (53 00) 09 (21 00) (3A 00)</font></p>
+
+<p><font size="2" face="Verdana">A flag is handled by 2 bytes. 24 00 for example means that the game will grab 3 bytes from address
+24 and read those before it continues. If you make the '00' into a '01', it will read 4 bytes from the address; '02' will read 5
+bytes, etc. Flag addresses recognize the address 001E from the beginning of the song as address 00.</font></p>
+
+<p><font size="2" face="Verdana">After the jobs of all 8 bits from the compression byte have been performed, the very next byte
+will be a compression byte that will have the same functions.</font></p>
+
+<p><font size="2" face="Verdana">Also, something important to keep in mind -- whenever you need to make jumps, the beginning of
+the song is recognized as address 1380 (starting from the first non-compression byte).</font></p>
+
+<p><font size="2" face="Verdana">Finally, at the very beginning of the song, there is a little-endian word (2 bytes) that defines
+the total size of the song. Although, whatever it reads will actually represent 2 bytes more than shown. So, if the word is C102
+(02C1 bytes), it actually represents 02C3 bytes in the song.</font></p>
+</body>
+</html>

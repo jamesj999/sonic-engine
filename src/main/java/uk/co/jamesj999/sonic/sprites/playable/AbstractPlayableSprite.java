@@ -69,6 +69,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	public void setAir(boolean air) {
 		//TODO Update ground sensors here
 		this.air = air;
+		if (air) {
+			setGroundMode(GroundMode.GROUND);
+			setAngle((byte) 0);
+		}
 	}
 
 	public short getJump() {
@@ -298,18 +302,29 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	}
 
 	public void setGroundMode(GroundMode groundMode) {
-		this.runningMode = groundMode;
+		if(this.runningMode != groundMode) {
+			updateSpriteShapeForRunningMode(groundMode, this.runningMode);
+			this.runningMode = groundMode;
+		}
 	}
 
 	protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {
 		// Best if statement ever...
-		if(((GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) &&
+		if(((GroundMode.CEILING.equals(newRunningMode) || GroundMode.GROUND.equals(newRunningMode)) &&
 				(GroundMode.LEFTWALL.equals(oldRunningMode) || GroundMode.RIGHTWALL.equals(oldRunningMode))) ||
-				((GroundMode.RIGHTWALL.equals(runningMode) || GroundMode.LEFTWALL.equals(runningMode)) &&
+				((GroundMode.RIGHTWALL.equals(newRunningMode) || GroundMode.LEFTWALL.equals(newRunningMode)) &&
 						((GroundMode.CEILING.equals(oldRunningMode) || GroundMode.GROUND.equals(oldRunningMode))))) {
 			int oldHeight = getHeight();
-			setHeight(width);
+			int oldWidth = getWidth();
+
+			short oldCentreX = getCentreX();
+			short oldCentreY = getCentreY();
+
+			setHeight(oldWidth);
 			setWidth(oldHeight);
+
+			setX((short) (oldCentreX - (getWidth() / 2)));
+			setY((short) (oldCentreY - (getHeight() / 2)));
 		}
 	}
 
@@ -364,12 +379,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 				}
 			}
 		}  else {
+			boolean pushActive = Math.abs(angle) <= 64;
 			if (xSpeed > 0) {
 				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF};
 				sensorsToDeactivate = new Sensor[] { pushE };
+				if(!pushActive) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+					sensorsToDeactivate = new Sensor[] { pushE, pushF };
+				}
 			} else if (xSpeed < 0) {
 				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE};
 				sensorsToDeactivate = new Sensor[] { pushF };
+				if(!pushActive) {
+					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+					sensorsToDeactivate = new Sensor[] { pushE, pushF };
+				}
 			} else {
 				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD};
 				sensorsToDeactivate = new Sensor[] { pushE, pushF };

@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.level;
 
+import uk.co.jamesj999.sonic.physics.Direction;
 
 /**
  *
@@ -18,6 +19,15 @@ public enum CollisionMode {
 
     public int getValue() {
         return value;
+    }
+
+    public boolean isSolid(Direction direction) {
+        return switch (this) {
+            case NO_COLLISION -> false;
+            case TOP_SOLID -> direction == Direction.DOWN;
+            case LEFT_RIGHT_BOTTOM_SOLID -> direction != Direction.DOWN;
+            case ALL_SOLID -> true;
+        };
     }
 
     public static CollisionMode fromVal(int value) {
