@@ -528,14 +528,7 @@ public class PlayableSpriteMovementManager extends
 	private int calculateAngle(AbstractPlayableSprite sprite) {
 		int angle = (int) ((256 - sprite.getAngle()) * 1.40625);
 
-		// Small hack to make sure the angle is between -360 and 360.
-		while (angle >= 360) {
-			angle -= 360;
-		}
-		while (angle <= -360) {
-			angle += 360;
-		}
-		return angle;
+		return angle % 360;
 	}
 
 	private void calculateXYFromGSpeed(AbstractPlayableSprite sprite) {
