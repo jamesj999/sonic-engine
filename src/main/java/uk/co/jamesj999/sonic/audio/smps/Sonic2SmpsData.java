@@ -108,6 +108,6 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
     @Override
     public int getBaseNoteOffset() {
-        return 13; // Sonic 2 uses Base Note B (+13 offset for 0x81)
+        return 1; // Sonic 2 uses Base Note B (+1 offset for 0x81, lowered from 13 to fix octave)
     }
 }

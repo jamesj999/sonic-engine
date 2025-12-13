@@ -9,6 +9,7 @@ public class NoteFreqTest {
 
     static class MockSynthesizer extends VirtualSynthesizer {
         int lastFnum = -1;
+        int lastBlock = -1;
 
         @Override
         public void writeFm(Object source, int port, int reg, int val) {
@@ -23,6 +24,8 @@ public class NoteFreqTest {
                     if (lastFnum == -1) lastFnum = 0;
                     int fnumHi = val & 0x07;
                     lastFnum = (lastFnum & 0xFF) | (fnumHi << 8);
+
+                    lastBlock = (val >> 3) & 0x07;
                 }
             }
         }
@@ -30,7 +33,11 @@ public class NoteFreqTest {
 
     @Test
     public void testSonic2BaseNote() {
-        // Sonic 2 (Little Endian). Note 0x81 should map to FNUM_TABLE[1] (653).
+        // Sonic 2 (Little Endian). Note 0x81.
+        // BaseNoteOffset = 1.
+        // n = 0x81 - 0x81 + 1 = 1.
+        // n % 12 = 1 -> FNUM_TABLE[1] = 653.
+        // n / 12 = 0 -> Block 0.
 
         byte[] data = new byte[100];
         // Header (LE)
@@ -58,11 +65,10 @@ public class NoteFreqTest {
         short[] buf = new short[2000];
         seq.read(buf);
 
-        // FNUM_TABLE[1] = 653. FNUM_TABLE[0] = 617.
-        // If BaseNote is handled correctly (+1), we expect 653.
-        // If not (current), we expect 617.
-
+        // FNUM_TABLE[1] = 653.
         assertEquals("Sonic 2 Note 0x81 FNum", 653, synth.lastFnum);
+        // Block should be 0 (Octave 0)
+        assertEquals("Sonic 2 Note 0x81 Block", 0, synth.lastBlock);
     }
 
     private void write16(byte[] data, int offset, int val, boolean le) {
