@@ -117,6 +117,22 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         }
     }
 
+    private boolean ensureLock(Object source, SmpsSequencer[] locks, int ch, SmpsSequencer.TrackType type) {
+        if (isSfx(source)) {
+            if (shouldStealLock(locks[ch], (SmpsSequencer) source)) {
+                SmpsSequencer victim = locks[ch];
+                if (victim != null && isSfx(victim) && victim != source) {
+                    killSequencer(victim);
+                }
+                locks[ch] = (SmpsSequencer) source;
+                updateOverrides(type, ch, true);
+            }
+            return locks[ch] == source;
+        } else {
+            return locks[ch] == null;
+        }
+    }
+
     @Override
     public void writeFm(Object source, int port, int reg, int val) {
         int ch = -1;
@@ -146,23 +162,8 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         }
         
         if (ch >= 0 && ch < 6) {
-            if (isSfx(source)) {
-                if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
-                    SmpsSequencer victim = fmLocks[ch];
-                    if (victim != null && isSfx(victim) && victim != source) {
-                        killSequencer(victim);
-                    }
-                    fmLocks[ch] = (SmpsSequencer) source;
-                    updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
-                }
-
-                if (fmLocks[ch] == source) {
-                    super.writeFm(source, port, reg, val);
-                }
-            } else {
-                if (fmLocks[ch] == null) {
-                    super.writeFm(source, port, reg, val);
-                }
+            if (ensureLock(source, fmLocks, ch, SmpsSequencer.TrackType.FM)) {
+                super.writeFm(source, port, reg, val);
             }
         } else {
             // Global or unmapped
@@ -177,50 +178,18 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             int ch = (val >> 5) & 0x03;
             psgLatches.put(source, ch);
             
-            if (isSfx(source)) {
-                if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
-                    SmpsSequencer victim = psgLocks[ch];
-                    if (victim != null && isSfx(victim) && victim != source) {
-                        killSequencer(victim);
-                    }
-                    psgLocks[ch] = (SmpsSequencer) source;
-                    updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
-                }
-
-                if (psgLocks[ch] == source) {
-                    super.writePsg(source, val);
-                }
-            } else {
-                if (psgLocks[ch] == null) {
-                    super.writePsg(source, val);
-                }
+            if (ensureLock(source, psgLocks, ch, SmpsSequencer.TrackType.PSG)) {
+                super.writePsg(source, val);
             }
         } else {
             // Data
             Integer ch = psgLatches.get(source);
             if (ch != null) {
-                if (isSfx(source)) {
-                    // Update lock just in case? Already locked by Latch.
-                    if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
-                        SmpsSequencer victim = psgLocks[ch];
-                        if (victim != null && isSfx(victim) && victim != source) {
-                            killSequencer(victim);
-                        }
-                        psgLocks[ch] = (SmpsSequencer) source;
-                        updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
-                    }
-
-                    if (psgLocks[ch] == (SmpsSequencer) source) {
-                        super.writePsg(source, val);
-                    }
-                } else {
-                    if (psgLocks[ch] == null) {
-                        super.writePsg(source, val);
-                    }
+                if (ensureLock(source, psgLocks, ch, SmpsSequencer.TrackType.PSG)) {
+                    super.writePsg(source, val);
                 }
             } else {
-                // Unknown channel (no previous latch from this source), drop or pass?
-                // Pass for safety/compatibility
+                // Unknown channel (no previous latch from this source), pass for safety/compatibility
                 super.writePsg(source, val);
             }
         }
@@ -231,23 +200,8 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     public void setInstrument(Object source, int channelId, byte[] voice) {
         // Channel ID is passed explicitly.
         if (channelId >= 0 && channelId < 6) {
-            if (isSfx(source)) {
-                if (shouldStealLock(fmLocks[channelId], (SmpsSequencer) source)) {
-                    SmpsSequencer victim = fmLocks[channelId];
-                    if (victim != null && isSfx(victim) && victim != source) {
-                        killSequencer(victim);
-                    }
-                    fmLocks[channelId] = (SmpsSequencer) source;
-                    updateOverrides(SmpsSequencer.TrackType.FM, channelId, true);
-                }
-
-                if (fmLocks[channelId] == source) {
-                    super.setInstrument(source, channelId, voice);
-                }
-            } else {
-                if (fmLocks[channelId] == null) {
-                    super.setInstrument(source, channelId, voice);
-                }
+            if (ensureLock(source, fmLocks, channelId, SmpsSequencer.TrackType.FM)) {
+                super.setInstrument(source, channelId, voice);
             }
         }
     }
@@ -256,23 +210,8 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     public void playDac(Object source, int note) {
         // DAC is on Channel 5 (FM6)
         int ch = 5;
-        if (isSfx(source)) {
-            if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
-                SmpsSequencer victim = fmLocks[ch];
-                if (victim != null && isSfx(victim) && victim != source) {
-                    killSequencer(victim);
-                }
-                fmLocks[ch] = (SmpsSequencer) source;
-                updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
-            }
-
-            if (fmLocks[ch] == source) {
-                super.playDac(source, note);
-            }
-        } else {
-            if (fmLocks[ch] == null) {
-                super.playDac(source, note);
-            }
+        if (ensureLock(source, fmLocks, ch, SmpsSequencer.TrackType.FM)) {
+            super.playDac(source, note);
         }
     }
     
