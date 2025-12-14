@@ -199,11 +199,7 @@ public class PlayableSpriteMovementManager extends
 		if (level != null) {
 			int levelHeight = level.getMaxY();
 			if (sprite.getY() >= levelHeight) {
-				sprite.setX((short) 50);
-				sprite.setY((short) 50);
-				sprite.setXSpeed((short) 0);
-				sprite.setYSpeed((short) 0);
-				sprite.setGSpeed((short) 0);
+				levelManager.loadCurrentLevel();
 			}
 		}
 
