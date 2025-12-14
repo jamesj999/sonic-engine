@@ -107,7 +107,6 @@ public class Sonic2 extends Game {
         map.put(GameSound.CHECKPOINT, SFX_CHECKPOINT);
         map.put(GameSound.SPIKE_HIT, SFX_SPIKE_HIT);
         map.put(GameSound.SPRING, SFX_SPRING);
-        map.put(GameSound.ROLLING, SFX_ROLLING);
         return map;
     }
 

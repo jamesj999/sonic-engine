@@ -1188,7 +1188,7 @@ public class SmpsSequencer implements AudioStream {
                     t.modCurrentDelta = t.modDelta;
                 }
             } else if (t.channelId == 3) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }

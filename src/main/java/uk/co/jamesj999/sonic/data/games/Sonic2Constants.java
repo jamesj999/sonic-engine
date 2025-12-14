@@ -33,7 +33,6 @@ public class Sonic2Constants {
     public static final int SFX_CHECKPOINT = 0xA1;
     public static final int SFX_SPIKE_HIT = 0xA6;
     public static final int SFX_SPRING = 0xCC;
-    public static final int SFX_ROLLING = 0xBE;
 
     public static final int[][] START_POSITIONS = {
             {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
