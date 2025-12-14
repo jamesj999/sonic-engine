@@ -1037,6 +1037,20 @@ public class SmpsSequencer implements AudioStream {
         int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
         if (n < 0) return;
 
+        t.decayOffset = 0;
+        t.decayTimer = 0;
+        t.envPos = 0;
+        t.envHold = false;
+        if (t.envData != null && t.envData.length > 0) {
+            int val = t.envData[0] & 0xFF;
+            if (val < 0x80) {
+                t.envValue = val;
+                t.envPos = 1;
+            }
+        } else {
+            t.envValue = 0;
+        }
+
         int octave = n / 12;
         int noteIdx = n % 12;
 
@@ -1144,7 +1158,7 @@ public class SmpsSequencer implements AudioStream {
                     t.modCurrentDelta = t.modDelta;
                 }
             } else if (t.channelId == 2 && t.noiseMode) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
 
                 // Mute Tone 3 (Channel 2) so it doesn't bleed through when driving Noise
@@ -1171,19 +1185,6 @@ public class SmpsSequencer implements AudioStream {
             }
         }
 
-        t.decayOffset = 0;
-        t.decayTimer = 0;
-        t.envPos = 0;
-        t.envHold = false;
-        if (t.envData != null && t.envData.length > 0) {
-             int val = t.envData[0] & 0xFF;
-             if (val < 0x80) {
-                 t.envValue = val;
-                 t.envPos = 1;
-             }
-        } else {
-            t.envValue = 0;
-        }
     }
 
     private int getPitchSlideFreq(int freq) {
@@ -1338,6 +1339,12 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void applyFmPanAmsFms(Track t) {
+        if (t.type != TrackType.FM) {
+             System.out.println("applyFmPanAmsFms skipped: type " + t.type);
+             return;
+        }
+        System.out.println("applyFmPanAmsFms writing Pan for Ch " + t.channelId);
+        System.out.println("playNote type: " + t.type);
         if (t.type != TrackType.FM) return;
         int hwCh = t.channelId;
         int port = (hwCh < 3) ? 0 : 1;
