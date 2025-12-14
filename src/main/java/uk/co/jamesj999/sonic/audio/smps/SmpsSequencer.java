@@ -1138,6 +1138,9 @@ public class SmpsSequencer implements AudioStream {
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
 
+                // Mute Tone 3 (Channel 2) so it doesn't bleed through when driving Noise
+                synth.writePsg(this, 0x80 | (2 << 5) | (1 << 4) | 0x0F);
+
                 // Even in noise mode, we must write frequency to PSG3 if modulation or mode E7 depends on it.
                 // SMPSPlay: SendPSGFrequency is called for PBKFLG_SPCMODE
                 int data = reg & 0xF;
