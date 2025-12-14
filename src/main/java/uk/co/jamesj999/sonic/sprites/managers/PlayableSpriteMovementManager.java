@@ -1,6 +1,9 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.level.Level;
+import uk.co.jamesj999.sonic.level.LevelConstants;
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
@@ -191,14 +194,19 @@ public class PlayableSpriteMovementManager extends
 		}
 
 		// Temporary 'death' detection - just resets X/Y of sprite.
-		// TODO - This no longer works. y <= 0 would put sonic above the viewport. Needs to work based on level height once merged.
-        /*if (sprite.getY() <= 0) {
-            sprite.setX((short) 50);
-            sprite.setY((short) 50);
-            sprite.setXSpeed((short) 0);
-            sprite.setYSpeed((short) 0);
-            sprite.setGSpeed((short) 0);
-        }*/
+		LevelManager levelManager = LevelManager.getInstance();
+		Level level = levelManager.getCurrentLevel();
+		if (level != null) {
+			int levelHeight = level.getMaxY();
+			if (sprite.getY() >= levelHeight) {
+				sprite.setX((short) 50);
+				sprite.setY((short) 50);
+				sprite.setXSpeed((short) 0);
+				sprite.setYSpeed((short) 0);
+				sprite.setGSpeed((short) 0);
+			}
+		}
+
 		// Update sprite ground mode for next tick:
 
 		// Update active sensors
