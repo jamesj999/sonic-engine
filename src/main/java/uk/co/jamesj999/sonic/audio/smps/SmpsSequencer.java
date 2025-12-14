@@ -162,6 +162,7 @@ public class SmpsSequencer implements AudioStream {
         int modEnvId;
         int instrumentId;
         boolean noiseMode;
+        int noiseModeVal;
         boolean resting;
         int decayOffset;
         int decayTimer;
@@ -950,6 +951,7 @@ public class SmpsSequencer implements AudioStream {
         if (t.pos < data.length) {
             int val = data[t.pos++] & 0xFF;
             t.noiseMode = true;
+            t.noiseModeVal = val;
             synth.writePsg(this, 0xE0 | (val & 0x0F));
         }
     }
@@ -1139,7 +1141,9 @@ public class SmpsSequencer implements AudioStream {
                 if (reg < 1) reg = 1;
             }
 
-            if (t.channelId < 3 && !t.noiseMode) {
+            boolean tone3Noise = t.noiseMode && (t.noiseModeVal & 0x03) == 0x03;
+
+            if (t.channelId < 3 && !tone3Noise) {
                 int data = reg & 0xF;
                 int type = 0;
                 int ch = t.channelId;
@@ -1157,7 +1161,7 @@ public class SmpsSequencer implements AudioStream {
                     t.modAccumulator = 0;
                     t.modCurrentDelta = t.modDelta;
                 }
-            } else if (t.channelId == 2 && t.noiseMode) {
+            } else if (t.channelId == 2 && tone3Noise) {
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
 
@@ -1220,7 +1224,8 @@ public class SmpsSequencer implements AudioStream {
             synth.stopDac(this);
         } else {
             if (t.channelId <= 3) {
-                if (t.noiseMode && t.channelId == 2) {
+                boolean tone3Noise = t.noiseMode && (t.noiseModeVal & 0x03) == 0x03;
+                if (tone3Noise && t.channelId == 2) {
                      synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | 0x0F);
                      // SMPSPlay mutes both Noise channel AND Tone 3 channel when in Noise Mode
                      synth.writePsg(this, 0x80 | (2 << 5) | (1 << 4) | 0x0F);
@@ -1245,7 +1250,8 @@ public class SmpsSequencer implements AudioStream {
         } else if (t.type == TrackType.PSG) {
             int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
             int ch = t.channelId;
-            if (t.noiseMode && ch == 2) {
+            boolean tone3Noise = t.noiseMode && (t.noiseModeVal & 0x03) == 0x03;
+            if (tone3Noise && ch == 2) {
                 ch = 3;
             }
             if (ch <= 3) {
