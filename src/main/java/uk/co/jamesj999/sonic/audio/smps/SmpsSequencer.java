@@ -381,6 +381,10 @@ public class SmpsSequencer implements AudioStream {
                     refreshInstrument(t);
                     if (t.type == TrackType.PSG) {
                         refreshVolume(t);
+                        // Restore Noise Mode if this track manages it (fix for missing noise after SFX)
+                        if (t.noiseMode) {
+                            synth.writePsg(this, 0xE0 | (t.noiseModeVal & 0x0F));
+                        }
                     }
                     if (t.type == TrackType.FM) {
                         applyFmPanAmsFms(t);
