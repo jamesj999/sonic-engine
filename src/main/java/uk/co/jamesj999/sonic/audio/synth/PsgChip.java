@@ -163,9 +163,9 @@ public class PsgChip {
             // Noise Channel
             int noiseReg = registers[6];
             double rateVal = switch (noiseReg & 0x3) {
-                case 0 -> 0x40;
-                case 1 -> 0x80;
-                case 2 -> 0x100;
+                case 0 -> 0x20;
+                case 1 -> 0x40;
+                case 2 -> 0x80;
                 default -> Math.max(1, tonePeriod[2]);
             };
             int noiseVol = registers[7] & 0x0F;

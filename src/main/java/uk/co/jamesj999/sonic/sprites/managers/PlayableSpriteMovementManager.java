@@ -673,6 +673,8 @@ public class PlayableSpriteMovementManager extends
 		if (down && !sprite.getAir() && !sprite.getRolling()
 				&& (gSpeed > minStartRollSpeed || gSpeed < -minStartRollSpeed)) {
 			sprite.setRolling(true);
+            //TODO we should only play this if it's not immediately the result of a spindash
+            audioManager.playSfx(GameSound.ROLLING);
 			// Return here so that we don't immediately stop rolling (although
 			// we shouldn't anyway).
 			return;

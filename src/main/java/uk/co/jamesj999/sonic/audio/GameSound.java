@@ -7,6 +7,7 @@ public enum GameSound {
     RING_RIGHT,
     SPINDASH_CHARGE,
     SPINDASH_RELEASE,
+    ROLLING,
     SKID,
     DEATH,
     BADNIK_HIT,
