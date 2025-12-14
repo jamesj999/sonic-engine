@@ -1150,7 +1150,7 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
 
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
                 synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
                 // Initialize modulation state for PSG slides
                 t.baseFnum = reg;
