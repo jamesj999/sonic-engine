@@ -1137,6 +1137,22 @@ public class SmpsSequencer implements AudioStream {
             } else if (t.channelId == 2 && t.noiseMode) {
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
+
+                // Even in noise mode, we must write frequency to PSG3 if modulation or mode E7 depends on it.
+                // SMPSPlay: SendPSGFrequency is called for PBKFLG_SPCMODE
+                int data = reg & 0xF;
+                // Channel 2 (Tone 3)
+                synth.writePsg(this, 0x80 | (2 << 5) | (0 << 4) | data);
+                synth.writePsg(this, (reg >> 4) & 0x3F);
+
+                t.baseFnum = reg;
+                if (t.modEnabled) {
+                    t.modDelay = t.modDelayInit;
+                    t.modRateCounter = t.modRate;
+                    t.modStepCounter = t.modSteps / 2;
+                    t.modAccumulator = 0;
+                    t.modCurrentDelta = t.modDelta;
+                }
             } else if (t.channelId == 3) {
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
@@ -1193,6 +1209,8 @@ public class SmpsSequencer implements AudioStream {
             if (t.channelId <= 3) {
                 if (t.noiseMode && t.channelId == 2) {
                      synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | 0x0F);
+                     // SMPSPlay mutes both Noise channel AND Tone 3 channel when in Noise Mode
+                     synth.writePsg(this, 0x80 | (2 << 5) | (1 << 4) | 0x0F);
                 } else {
                      synth.writePsg(this, 0x80 | (t.channelId << 5) | (1 << 4) | 0x0F);
                 }
@@ -1376,7 +1394,11 @@ public class SmpsSequencer implements AudioStream {
                 int port = (hwCh < 3) ? 0 : 1;
                 int ch = (hwCh % 3);
                 writeFmFreq(port, ch, fnum, block);
-            } else if (t.type == TrackType.PSG && !t.noiseMode && t.channelId < 3) {
+            } else if (t.type == TrackType.PSG && t.channelId < 3) {
+                // If noiseMode is on, we still update frequency for Channel 2 (Tone 3)
+                // because Noise Mode E7 (Tone 3) depends on it.
+                if (t.noiseMode && t.channelId != 2) return;
+
                 int reg = t.baseFnum + t.modAccumulator + t.detune;
                 if (reg < 1) reg = 1;
                 if (reg > 0x3FF) reg = 0x3FF;
