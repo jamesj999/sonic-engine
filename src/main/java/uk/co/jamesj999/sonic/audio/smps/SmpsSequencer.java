@@ -162,6 +162,7 @@ public class SmpsSequencer implements AudioStream {
         int modEnvId;
         int instrumentId;
         boolean noiseMode;
+        boolean resting;
         int decayOffset;
         int decayTimer;
         // PSG Volume Envelope
@@ -1010,9 +1011,11 @@ public class SmpsSequencer implements AudioStream {
 
     private void playNote(Track t) {
         if (t.note == 0x80) {
+            t.resting = true;
             stopNote(t);
             return;
         }
+        t.resting = false;
 
         if (t.forceRefresh) {
             refreshInstrument(t);
@@ -1258,7 +1261,7 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void processPsgEnvelope(Track t) {
-        if (t.envData == null || t.envHold) return;
+        if (t.envData == null || t.envHold || t.resting) return;
 
         // Loop to handle commands that require immediate processing of next byte (e.g. RESET)
         while (true) {

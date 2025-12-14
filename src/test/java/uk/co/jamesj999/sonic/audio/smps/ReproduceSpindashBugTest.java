@@ -128,16 +128,30 @@ public class ReproduceSpindashBugTest {
         // Check for Tone 3 Volume Silence (0xDF) AFTER Noise Mode (0xE7) is set
         boolean noiseModeSet = false;
         boolean foundTone3SilenceAfterNoise = false;
+        boolean foundTone3UnmuteBeforeNoise = false;
 
         for (int val : synth.psgWrites) {
             if (val == 0xE7) { // Noise Control E7
                 noiseModeSet = true;
             }
+
+            // Check for Unmute on Channel 2 (Tone 3)
+            // Latch Channel 2 Volume: 1 10 1 vvvv -> 0xD0 | vol.
+            // If vol != 0xF (Silence), it is unmute.
+            // 0xDF is Silence. 0xD0..0xDE is Audible.
+            if ((val & 0xF0) == 0xD0 && val != 0xDF) {
+                if (!noiseModeSet) {
+                    foundTone3UnmuteBeforeNoise = true;
+                }
+            }
+
             if (noiseModeSet && val == 0xDF) { // Latch Channel 2 (Tone 3) Volume 15 (Silence)
                 foundTone3SilenceAfterNoise = true;
-                break;
             }
         }
+
+        // We expect NO unmute of Tone 3 before noise (during Rest), because Rest should be silent.
+        assertTrue("Should NOT unmute Tone 3 during Rest (before Noise Mode)", !foundTone3UnmuteBeforeNoise);
         assertTrue("Should mute Tone 3 (Channel 2) when driving Noise Mode (after 0xE7 write)", foundTone3SilenceAfterNoise);
     }
 }
