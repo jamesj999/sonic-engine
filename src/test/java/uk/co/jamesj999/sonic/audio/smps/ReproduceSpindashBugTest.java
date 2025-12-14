@@ -124,5 +124,20 @@ public class ReproduceSpindashBugTest {
 
         // Expect failure initially (0 or very few writes)
         assertTrue("Should have many Tone 3 frequency writes due to modulation. Found: " + tone3FreqWrites, tone3FreqWrites > 5);
+
+        // Check for Tone 3 Volume Silence (0xDF) AFTER Noise Mode (0xE7) is set
+        boolean noiseModeSet = false;
+        boolean foundTone3SilenceAfterNoise = false;
+
+        for (int val : synth.psgWrites) {
+            if (val == 0xE7) { // Noise Control E7
+                noiseModeSet = true;
+            }
+            if (noiseModeSet && val == 0xDF) { // Latch Channel 2 (Tone 3) Volume 15 (Silence)
+                foundTone3SilenceAfterNoise = true;
+                break;
+            }
+        }
+        assertTrue("Should mute Tone 3 (Channel 2) when driving Noise Mode (after 0xE7 write)", foundTone3SilenceAfterNoise);
     }
 }
