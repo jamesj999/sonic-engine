@@ -148,6 +148,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         if (ch >= 0 && ch < 6) {
             if (isSfx(source)) {
                 if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
+                    SmpsSequencer victim = fmLocks[ch];
+                    if (victim != null && isSfx(victim) && victim != source) {
+                        killSequencer(victim);
+                    }
                     fmLocks[ch] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
                 }
@@ -175,6 +179,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             
             if (isSfx(source)) {
                 if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
+                    SmpsSequencer victim = psgLocks[ch];
+                    if (victim != null && isSfx(victim) && victim != source) {
+                        killSequencer(victim);
+                    }
                     psgLocks[ch] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
                 }
@@ -194,6 +202,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
                 if (isSfx(source)) {
                     // Update lock just in case? Already locked by Latch.
                     if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
+                        SmpsSequencer victim = psgLocks[ch];
+                        if (victim != null && isSfx(victim) && victim != source) {
+                            killSequencer(victim);
+                        }
                         psgLocks[ch] = (SmpsSequencer) source;
                         updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
                     }
@@ -221,6 +233,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         if (channelId >= 0 && channelId < 6) {
             if (isSfx(source)) {
                 if (shouldStealLock(fmLocks[channelId], (SmpsSequencer) source)) {
+                    SmpsSequencer victim = fmLocks[channelId];
+                    if (victim != null && isSfx(victim) && victim != source) {
+                        killSequencer(victim);
+                    }
                     fmLocks[channelId] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.FM, channelId, true);
                 }
@@ -242,6 +258,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         int ch = 5;
         if (isSfx(source)) {
             if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
+                SmpsSequencer victim = fmLocks[ch];
+                if (victim != null && isSfx(victim) && victim != source) {
+                    killSequencer(victim);
+                }
                 fmLocks[ch] = (SmpsSequencer) source;
                 updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
             }
@@ -267,6 +287,12 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         int challengerIdx = sequencers.indexOf(challenger);
 
         return challengerIdx > currentIdx;
+    }
+
+    private void killSequencer(SmpsSequencer seq) {
+        if (seq != null) {
+            seq.stop();
+        }
     }
 
     @Override
