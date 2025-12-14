@@ -1286,6 +1286,14 @@ public class SmpsSequencer implements AudioStream {
             } else {
                 if (val == 0x80) {
                     // RESET / LOOP
+                    // Hack for Spindash Release (SFX BC) which uses Env 07.
+                    // Env 07 loops (flutters), but for Spindash Release it should hold to avoid "looping 3 times".
+                    // We restrict this change to Sonic2SfxData to avoid breaking Music tracks (like Boss 0x8D).
+                    if (smpsData instanceof Sonic2SfxData && t.instrumentId == 7) {
+                        t.envHold = true;
+                        return;
+                    }
+
                     t.envPos = 0;
                     // Continue loop to process first byte immediately
                 } else if (val == 0x81) {
@@ -1339,12 +1347,6 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void applyFmPanAmsFms(Track t) {
-        if (t.type != TrackType.FM) {
-             System.out.println("applyFmPanAmsFms skipped: type " + t.type);
-             return;
-        }
-        System.out.println("applyFmPanAmsFms writing Pan for Ch " + t.channelId);
-        System.out.println("playNote type: " + t.type);
         if (t.type != TrackType.FM) return;
         int hwCh = t.channelId;
         int port = (hwCh < 3) ? 0 : 1;
