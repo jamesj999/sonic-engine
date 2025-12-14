@@ -364,6 +364,12 @@ public class SmpsSequencer implements AudioStream {
         }
     }
     
+    public void stop() {
+        for (Track t : tracks) {
+            t.active = false;
+        }
+    }
+
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
         for (Track t : tracks) {
             if (t.type == type && t.channelId == channelId) {
