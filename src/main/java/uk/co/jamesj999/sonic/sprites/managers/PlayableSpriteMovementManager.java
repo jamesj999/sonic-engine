@@ -198,7 +198,9 @@ public class PlayableSpriteMovementManager extends
 		Level level = levelManager.getCurrentLevel();
 		if (level != null) {
 			int levelHeight = level.getMaxY();
-			if (sprite.getY() >= levelHeight) {
+			int cameraHeight = Camera.getInstance().getHeight();
+			if (sprite.getY() >= levelHeight + cameraHeight) {
+				audioManager.playSfx(GameSound.DEATH, 1.0f);
 				levelManager.loadCurrentLevel();
 			}
 		}
