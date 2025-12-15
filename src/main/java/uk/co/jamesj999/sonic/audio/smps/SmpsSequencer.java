@@ -484,6 +484,7 @@ public class SmpsSequencer implements AudioStream {
             case 0x80: return 0;
             case 0xA0: return 1;
             case 0xC0: return 2;
+            case 0xE0: return 3; // Noise channel
             default: return -1;
         }
     }
@@ -1118,6 +1119,9 @@ public class SmpsSequencer implements AudioStream {
                 if (fm6DacOff && hwCh == 5) {
                     synth.writeFm(this, 0, 0x2B, 0x00);
                 }
+
+                int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
+                synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
             }
 
             writeFmFreq(port, ch, fnum, block);
@@ -1243,6 +1247,9 @@ public class SmpsSequencer implements AudioStream {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
             int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+            if (t.note == 0x80) {
+                vol = 0x0F; // Force silence if track is in Rest state
+            }
             int ch = t.channelId;
             if (t.noiseMode && ch == 2) {
                 ch = 3;
