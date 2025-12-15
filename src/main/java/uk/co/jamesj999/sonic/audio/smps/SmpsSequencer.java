@@ -1150,15 +1150,14 @@ public class SmpsSequencer implements AudioStream {
                 if (reg < 1) reg = 1;
             }
 
-            if (t.channelId < 3 && !t.noiseMode) {
+            if (t.channelId < 3) {
+                // Always write frequency for tone channels, even if used for Noise drive (Ch3)
                 int data = reg & 0xF;
                 int type = 0;
                 int ch = t.channelId;
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
 
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
-                synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
                 // Initialize modulation state for PSG slides
                 t.baseFnum = reg;
                 if (t.modEnabled) {
@@ -1168,7 +1167,26 @@ public class SmpsSequencer implements AudioStream {
                     t.modAccumulator = 0;
                     t.modCurrentDelta = t.modDelta;
                 }
-            } else if (t.channelId == 2 && t.noiseMode) {
+
+                // If not in Noise Mode (or if it is Ch3 driving noise?), write volume.
+                // If it IS Noise Mode on Ch2 (Hardware Ch3), the volume control is usually handled by the Noise Channel (3),
+                // BUT if the noise mode is periodic/white driven by Ch3, Ch3's volume might still matter or be separate.
+                // Standard SMPS: If Noise is active on Ch3, the Ch3 Tone is muted?
+                // Actually, the Noise Channel (E0) has its own Volume Register (F0).
+                // But the Ch3 (C0) Volume Register (D0) controls the Tone volume.
+                // If we are in "PSG3 Noise" mode, we usually want Ch3 Tone to be silent (or mix?).
+                // SMPS usually mutes the tone channel when it's driving noise.
+                // However, `t.volumeOffset` here applies to the logical track.
+
+                if (!t.noiseMode) {
+                    int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                    synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
+                }
+            }
+
+            if (t.channelId == 2 && t.noiseMode) {
+                // If this is Ch3 driving Noise, we wrote the frequency above.
+                // Now write the Noise Volume (Channel 3 / Register F0).
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             } else if (t.channelId == 3) {
