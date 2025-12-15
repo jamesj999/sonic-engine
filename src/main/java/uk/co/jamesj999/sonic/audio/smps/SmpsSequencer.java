@@ -563,7 +563,7 @@ public class SmpsSequencer implements AudioStream {
             if (t.duration > 0) {
                 t.duration--;
 
-                if (t.fill > 0 && t.duration <= t.fill && !t.tieNext) {
+                if (t.fill > 0 && (t.scaledDuration - t.duration) >= t.fill && !t.tieNext) {
                     stopNote(t);
                 }
 
@@ -1447,6 +1447,7 @@ public class SmpsSequencer implements AudioStream {
             dt.decayOffset = t.decayOffset;
             dt.loopCounter = (t.loopCounters != null && t.loopCounters.length > 0) ? t.loopCounters[0] : 0;
             dt.position = t.pos;
+            dt.fill = t.fill;
             state.tracks.add(dt);
         }
         return state;
@@ -1479,5 +1480,6 @@ public class SmpsSequencer implements AudioStream {
         public int decayOffset;
         public int loopCounter;
         public int position;
+        public int fill;
     }
 }
