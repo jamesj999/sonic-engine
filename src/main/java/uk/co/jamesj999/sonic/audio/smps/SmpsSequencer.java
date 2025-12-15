@@ -370,6 +370,8 @@ public class SmpsSequencer implements AudioStream {
                 boolean wasOverridden = t.overridden;
                 t.overridden = overridden;
                 if (wasOverridden && !overridden) {
+                    if (!t.active) continue;
+
                     // Channel released from SFX, restore instrument and volume
                     refreshInstrument(t);
                     if (t.type == TrackType.PSG) {
@@ -378,7 +380,7 @@ public class SmpsSequencer implements AudioStream {
                     if (t.type == TrackType.FM) {
                         applyFmPanAmsFms(t);
                     }
-                    if (t.active && t.duration > 0) {
+                    if (t.duration > 0) {
                         restoreFrequency(t);
                     }
                 }
@@ -1237,7 +1239,10 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
-            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+            int vol = 0x0F;
+            if (t.note != 0x80) {
+                vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+            }
             int ch = t.channelId;
             if (t.noiseMode && ch == 2) {
                 ch = 3;
