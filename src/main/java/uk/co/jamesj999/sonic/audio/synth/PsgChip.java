@@ -10,7 +10,14 @@ public class PsgChip {
     private static final double LPF_ALPHA = LPF_CUTOFF_HZ / (LPF_CUTOFF_HZ + SAMPLE_RATE);
     private static final double HPF_CUTOFF_HZ = 20.0;
     private static final double HPF_ALPHA = SAMPLE_RATE / (SAMPLE_RATE + (2 * Math.PI * HPF_CUTOFF_HZ));
-    private static final double[] VOLUME_TABLE = new double[16];
+
+    // SN76489 Volume Values (from sn76489.c, Mega Drive behavior)
+    private static final double[] VOLUME_TABLE = {
+            4096, 3254, 2584, 2053, 1631, 1295, 1029, 817, 649, 516, 410, 325, 258, 205, 163, 0
+    };
+
+    private static final int PSG_CUTOFF = 6;
+
     private final int[] registers = new int[8];
     private final double[] counters = new double[4];
     private final boolean[] outputs = new boolean[4];
@@ -25,14 +32,6 @@ public class PsgChip {
     private int lfsr = 0x8000; // 16-bit noise register
 
     private final boolean[] mutes = new boolean[4];
-
-    static {
-        // SN76489 2 dB steps (15 -> silence)
-        for (int i = 0; i < 15; i++) {
-            VOLUME_TABLE[i] = Math.pow(2.0, i / -3.0) * 8192.0;
-        }
-        VOLUME_TABLE[15] = 0.0;
-    }
 
     public PsgChip() {
         for (int i = 1; i < 8; i += 2) {
@@ -89,6 +88,13 @@ public class PsgChip {
     }
 
     private double integrateToneChannel(int ch, double period, double clocksPerSample) {
+        // If frequency is below cutoff, output is held constant (High)
+        if (period < PSG_CUTOFF) {
+            outputs[ch] = true;
+            counters[ch] = period; // Reset counter for when it resumes? sn76489.c does weird stuff, but this is safe
+            return 1.0;
+        }
+
         double remaining = counters[ch] <= 0 ? period : counters[ch];
         double sample = 0.0;
         double time = clocksPerSample;
@@ -170,7 +176,14 @@ public class PsgChip {
             };
             int noiseVol = registers[7] & 0x0F;
             double noiseWave = integrateNoiseChannel(noiseReg, rateVal, clocksPerSample);
-            double noiseVoice = noiseWave * VOLUME_TABLE[noiseVol];
+            double amp = VOLUME_TABLE[noiseVol];
+
+            // White Noise is half amplitude in sn76489.c
+            if ((noiseReg & 0x04) != 0) {
+                amp *= 0.5;
+            }
+
+            double noiseVoice = noiseWave * amp;
             if (!mutes[3]) {
                 sampleL += noiseVoice;
                 sampleR += noiseVoice;
