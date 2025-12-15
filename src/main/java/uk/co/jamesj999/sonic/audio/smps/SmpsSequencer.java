@@ -164,6 +164,7 @@ public class SmpsSequencer implements AudioStream {
         boolean noiseMode;
         int decayOffset;
         int decayTimer;
+        int psgNoiseParam;
         // PSG Volume Envelope
         byte[] envData;
         int envPos;
@@ -371,17 +372,15 @@ public class SmpsSequencer implements AudioStream {
                 if (wasOverridden && !overridden) {
                     // Channel released from SFX, restore instrument and volume
                     refreshInstrument(t);
+
+                    if (t.active && t.duration > 0) {
+                        restoreFrequency(t);
+                    }
+
                     if (t.type == TrackType.PSG) {
                         refreshVolume(t);
-                        if (t.active && t.duration > 0) {
-                            restoreFrequency(t);
-                        }
-                    }
-                    if (t.type == TrackType.FM) {
+                    } else if (t.type == TrackType.FM) {
                         applyFmPanAmsFms(t);
-                        if (t.active && t.duration > 0) {
-                            restoreFrequency(t);
-                        }
                     }
                 }
             }
@@ -966,6 +965,7 @@ public class SmpsSequencer implements AudioStream {
         if (t.pos < data.length) {
             int val = data[t.pos++] & 0xFF;
             t.noiseMode = true;
+            t.psgNoiseParam = val & 0x0F;
             synth.writePsg(this, 0xE0 | (val & 0x0F));
         }
     }
@@ -1031,6 +1031,8 @@ public class SmpsSequencer implements AudioStream {
             // Ensure instrument is refreshed on first note play (handles cases where
             // instrument load during initialization was blocked by driver lock logic)
             t.forceRefresh = true;
+            // Also apply Pan/AMS/FMS immediately to ensure state is set if driver allows it
+            applyFmPanAmsFms(t);
         }
     }
 
