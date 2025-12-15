@@ -373,6 +373,11 @@ public class SmpsSequencer implements AudioStream {
                     // Channel released from SFX, restore instrument and volume
                     refreshInstrument(t);
 
+                    if (!t.active) {
+                        forceSilence(t.type, t.channelId);
+                        return;
+                    }
+
                     if (t.active && t.duration > 0) {
                         restoreFrequency(t);
                     }
@@ -1113,16 +1118,13 @@ public class SmpsSequencer implements AudioStream {
                 if (fm6DacOff && hwCh == 5) {
                     synth.writeFm(this, 0, 0x2B, 0x00);
                 }
-
-                int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
-                synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
             }
 
             writeFmFreq(port, ch, fnum, block);
             applyFmPanAmsFms(t);
 
             if (!t.tieNext) {
-                int chVal = (port == 0) ? ch : (ch + 4);
+                int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
                 synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Key On/Off is always on Port 0
             }
             t.tieNext = false;
