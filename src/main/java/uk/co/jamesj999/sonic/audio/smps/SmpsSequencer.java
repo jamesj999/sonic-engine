@@ -944,6 +944,8 @@ public class SmpsSequencer implements AudioStream {
             int val = data[t.pos++] & 0xFF;
             t.noiseMode = true;
             synth.writePsg(this, 0xE0 | (val & 0x0F));
+            // Removed erroneous envelope clearing here.
+            // Noise channels must maintain envelope state (or use instrument defaults).
         }
     }
 
@@ -971,13 +973,6 @@ public class SmpsSequencer implements AudioStream {
         for (Track track : tracks) {
             track.dividingTiming = newDividingTiming;
         }
-    }
-
-    private void updateDuration(Track track, int rawDuration) {
-        track.rawDuration = rawDuration;
-        int scaled = scaleDuration(track, rawDuration);
-        track.scaledDuration = scaled;
-        track.duration = scaled;
     }
 
     private void setDuration(Track track, int rawDuration) {
@@ -1140,9 +1135,17 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
 
-                int rawVol = (t.volumeOffset + t.envValue) & 0xFF;
-                int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
-                synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
+                // Unified volume write with signed clamping
+                int volCh = t.channelId;
+                if (t.noiseMode && volCh == 2) volCh = 3;
+
+                int base = (byte)t.volumeOffset + t.envValue;
+                if (base < 0) base = 0;
+                if (base > 0x0F) base = 0x0F;
+                int vol = base;
+
+                synth.writePsg(this, 0x80 | (volCh << 5) | (1 << 4) | vol);
+
                 // Initialize modulation state for PSG slides
                 t.baseFnum = reg;
                 if (t.modEnabled) {
@@ -1153,12 +1156,22 @@ public class SmpsSequencer implements AudioStream {
                     t.modCurrentDelta = t.modDelta;
                 }
             } else if (t.channelId == 2 && t.noiseMode) {
-                int rawVol = (t.volumeOffset) & 0xFF;
-                int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
-                synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
+                // Noise Mode
+                int volCh = 3;
+
+                int base = (byte)t.volumeOffset + t.envValue;
+                if (base < 0) base = 0;
+                if (base > 0x0F) base = 0x0F;
+                int vol = base;
+
+                synth.writePsg(this, 0x80 | (volCh << 5) | (1 << 4) | vol);
             } else if (t.channelId == 3) {
-                int rawVol = (t.volumeOffset + t.envValue) & 0xFF;
-                int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
+                // PSG 3 (explicit?)
+                int base = (byte)t.volumeOffset + t.envValue;
+                if (base < 0) base = 0;
+                if (base > 0x0F) base = 0x0F;
+                int vol = base;
+
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
@@ -1219,12 +1232,11 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
-            int base = t.volumeOffset;
-            if (!t.noiseMode || t.channelId == 3) {
-                base += t.envValue;
-            }
-            int rawVol = base & 0xFF;
-            int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
+            // Unified Volume Logic
+            int base = (byte)t.volumeOffset + t.envValue;
+            if (base < 0) base = 0;
+            if (base > 0x0F) base = 0x0F;
+            int vol = base;
 
             int ch = t.channelId;
             if (t.noiseMode && ch == 2) {
