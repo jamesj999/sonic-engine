@@ -18,39 +18,42 @@ public class CpzParallaxStrategy implements ParallaxStrategy {
         short planeA = (short) -camX;
 
         // CPZ Parallax approximation
-        // Based on typical CPZ behavior (Sky, Buildings, Pipes)
+        // Based on typical CPZ behavior
+        // CPZ Background is 512px high.
+        // Sky: Moves at 1/8 speed
+        // Buildings: Moves at 3/8 speed
+        // Lower Building: Moves at 1/2 speed
+        // Pipes: Moves at 3/4 speed (0.75)
 
-        // 3 Major Bands:
-        // Top (Sky/Distant Buildings): Slow
-        // Middle (Yellow structure): Medium
-        // Bottom (Pipes/Goo): Fast
-
-        // Approximating split points (relative to background map height, ~256 or 512)
-        // But since we are rendering visible lines, we check map Y.
-
-        int mapHeight = 512; // CPZ background is tall
+        int mapHeight = 512;
 
         for (int y = 0; y < VISIBLE_LINES; y++) {
+            // Apply bgScrollY for vertical scrolling
             int mapY = (y + bgScrollY) % mapHeight;
             if (mapY < 0) mapY += mapHeight;
 
             short planeB;
 
-            // Simple banding for now
+            // Updated banding logic for smoother gradients and more accurate speed
             if (mapY < 128) {
-                // Sky/Top Buildings - Slow (0.25x)
-                planeB = (short) -(camX >> 2);
-            } else if (mapY < 320) {
-                 // Main City Structure - Medium (0.5x)
+                // Sky - Slow (0.125x)
+                planeB = (short) -(camX >> 3);
+            } else if (mapY < 256) {
+                 // Distant Buildings - (0.375x)
+                 planeB = (short) (-(camX >> 2) - (camX >> 3));
+            } else if (mapY < 384) {
+                 // Closer Buildings - (0.5x)
                  planeB = (short) -(camX >> 1);
             } else {
-                 // Pipes/Goo - Fast (0.75x or 0.875x)
-                 planeB = (short) -(camX - (camX >> 3));
+                 // Pipes/Goo - Fast (0.75x)
+                 planeB = (short) -(camX - (camX >> 2));
             }
 
-            // TODO: Add "autoscroll" for clouds or goo if needed.
-            // CPZ clouds move?
-            // CPZ chemical goo moves?
+            // Add a small cloud autoscroll to sky
+            if (mapY < 80) {
+                 int cloudScroll = (frameCounter >> 2);
+                 planeB -= cloudScroll;
+            }
 
             hScroll[y] = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
         }
