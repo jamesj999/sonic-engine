@@ -99,13 +99,6 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
                 updateOverrides(SmpsSequencer.TrackType.PSG, i, false);
             }
         }
-        // Belt-and-braces: if this was an SFX, mute all PSG channels to avoid lingering tones
-        // in cases where music is not currently writing PSG.
-        if (isSfx) {
-            for (int ch = 0; ch < 4; ch++) {
-                seq.forceSilence(SmpsSequencer.TrackType.PSG, ch);
-            }
-        }
         psgLatches.remove(seq);
     }
 

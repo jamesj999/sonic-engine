@@ -1005,6 +1005,9 @@ public class SmpsSequencer implements AudioStream {
             t.voiceData = voice;
             t.voiceId = voiceId;
             refreshInstrument(t);
+            // Ensure instrument is refreshed on first note play (handles cases where
+            // instrument load during initialization was blocked by driver lock logic)
+            t.forceRefresh = true;
         }
     }
 
