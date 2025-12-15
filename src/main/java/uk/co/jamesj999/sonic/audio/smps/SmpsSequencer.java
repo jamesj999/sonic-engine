@@ -1028,21 +1028,15 @@ public class SmpsSequencer implements AudioStream {
         int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
         if (n < 0) return;
 
+        // Reset Envelope state
         t.decayOffset = 0;
         t.decayTimer = 0;
         t.envPos = 0;
         t.envHold = false;
-        if (t.envData != null && t.envData.length > 0) {
-             int val = t.envData[0] & 0xFF;
-             if (val < 0x80) {
-                 t.envValue = val;
-                 t.envPos = 1;
-             } else {
-                 t.envValue = 0;
-             }
-        } else {
-            t.envValue = 0;
-        }
+        t.envValue = 0;
+
+        // Immediately process envelope logic for the first frame
+        processPsgEnvelope(t);
 
         int octave = n / 12;
         int noteIdx = n % 12;
@@ -1151,7 +1145,7 @@ public class SmpsSequencer implements AudioStream {
                     t.modCurrentDelta = t.modDelta;
                 }
             } else if (t.channelId == 2 && t.noiseMode) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             } else if (t.channelId == 3) {
                 int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
