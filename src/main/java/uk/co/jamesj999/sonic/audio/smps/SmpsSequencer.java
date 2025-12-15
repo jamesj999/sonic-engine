@@ -1150,6 +1150,9 @@ public class SmpsSequencer implements AudioStream {
             }
 
             // Unified volume write with signed clamping
+            // Matches SMPS Z80 'bpl' logic (clamp negative to 0/Max), fixing OOZ.
+            // Note: SMPSPlay C source appears to use unsigned clamping (>= 0x10 -> Silence),
+            // which would mute 0xE0 (-32). We stick to Z80 hardware behavior here.
             int base = (byte)t.volumeOffset + t.envValue;
             if (base < 0) base = 0;
             if (base > 0x0F) base = 0x0F;
@@ -1226,6 +1229,7 @@ public class SmpsSequencer implements AudioStream {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
             // Unified Volume Logic
+            // Matches SMPS Z80 'bpl' logic (clamp negative to 0/Max), fixing OOZ.
             int base = (byte)t.volumeOffset + t.envValue;
             if (base < 0) base = 0;
             if (base > 0x0F) base = 0x0F;
