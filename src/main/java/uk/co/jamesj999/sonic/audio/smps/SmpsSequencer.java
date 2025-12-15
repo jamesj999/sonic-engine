@@ -973,6 +973,13 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
+    private void updateDuration(Track track, int rawDuration) {
+        track.rawDuration = rawDuration;
+        int scaled = scaleDuration(track, rawDuration);
+        track.scaledDuration = scaled;
+        track.duration = scaled;
+    }
+
     private void setDuration(Track track, int rawDuration) {
         track.rawDuration = rawDuration;
         int scaled = scaleDuration(track, rawDuration);
@@ -1133,7 +1140,8 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
 
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+                int rawVol = (t.volumeOffset + t.envValue) & 0xFF;
+                int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
                 synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
                 // Initialize modulation state for PSG slides
                 t.baseFnum = reg;
@@ -1145,10 +1153,12 @@ public class SmpsSequencer implements AudioStream {
                     t.modCurrentDelta = t.modDelta;
                 }
             } else if (t.channelId == 2 && t.noiseMode) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
+                int rawVol = (t.volumeOffset) & 0xFF;
+                int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             } else if (t.channelId == 3) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+                int rawVol = (t.volumeOffset + t.envValue) & 0xFF;
+                int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
                 synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
@@ -1209,7 +1219,13 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
-            int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
+            int base = t.volumeOffset;
+            if (!t.noiseMode || t.channelId == 3) {
+                base += t.envValue;
+            }
+            int rawVol = base & 0xFF;
+            int vol = (rawVol >= 0x10) ? 0x0F : rawVol;
+
             int ch = t.channelId;
             if (t.noiseMode && ch == 2) {
                 ch = 3;
