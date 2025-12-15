@@ -394,7 +394,9 @@ public class SmpsSequencer implements AudioStream {
 
     private void restoreFrequency(Track t) {
         if (t.type == TrackType.PSG) {
-            if (t.channelId < 3 && !t.noiseMode) {
+            // Restore frequency for Tone channels (0-2) even if noise mode is set,
+            // because in Mode 3 (White Noise), Ch3 Tone frequency drives the noise pitch.
+            if (t.channelId < 3) {
                 int reg = t.baseFnum + t.modAccumulator + t.detune;
                 if (reg < 1) reg = 1;
                 if (reg > 0x3FF) reg = 0x3FF;
@@ -726,7 +728,14 @@ public class SmpsSequencer implements AudioStream {
                 handleSndOff(t);
                 break;
             case 0xF0: // Modulation
-                handleModulation(t);
+                if (smpsData instanceof Sonic2SfxData) {
+                    // Spindash Release (0xBC) and potentially others contain F0 as a "no-op" or different command
+                    // that is NOT Modulation. If we treat it as Mod, it eats subsequent bytes (like F3/Noise)
+                    // and causes track runaway.
+                    // For now, treat F0 as 0-byte command in SFX.
+                } else {
+                    handleModulation(t);
+                }
                 break;
             case 0xF1: // Modulation on
                 t.modEnabled = true;
@@ -816,7 +825,12 @@ public class SmpsSequencer implements AudioStream {
                 return 1;
             case 0xF6: case 0xF8:
                 return 2;
-            case 0xF0: case 0xF7:
+            case 0xF0:
+                if (smpsData instanceof Sonic2SfxData) {
+                    return 0;
+                }
+                return 4;
+            case 0xF7:
                 return 4;
             // E3, E4, E7, EE, F1, F2, F4, F9 are 0 parameters
             default:
@@ -1048,10 +1062,7 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
 
-        if (t.forceRefresh) {
-            refreshInstrument(t);
-            t.forceRefresh = false;
-        }
+        // Removed: forceRefresh check here. It will be done later after Key Off.
 
         if (t.type == TrackType.DAC) {
             synth.playDac(this, t.note);
@@ -1122,6 +1133,12 @@ public class SmpsSequencer implements AudioStream {
 
                 int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
                 synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
+            }
+
+            // Refresh parameters while Key is Off to prevent glitches
+            if (t.forceRefresh) {
+                refreshInstrument(t);
+                t.forceRefresh = false;
             }
 
             writeFmFreq(port, ch, fnum, block);
