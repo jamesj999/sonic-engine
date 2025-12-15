@@ -1445,6 +1445,7 @@ public class SmpsSequencer implements AudioStream {
             dt.loopCounter = (t.loopCounters != null && t.loopCounters.length > 0) ? t.loopCounters[0] : 0;
             dt.position = t.pos;
             dt.fill = t.fill;
+            dt.instrumentId = t.instrumentId;
             state.tracks.add(dt);
         }
         return state;
@@ -1478,5 +1479,6 @@ public class SmpsSequencer implements AudioStream {
         public int loopCounter;
         public int position;
         public int fill;
+        public int instrumentId;
     }
 }

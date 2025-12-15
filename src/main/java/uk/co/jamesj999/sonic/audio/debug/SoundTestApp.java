@@ -486,7 +486,7 @@ public final class SoundTestApp {
                         if (muted) statusMarker += "[M]";
                         if (soloed) statusMarker += "[S]";
 
-                        String txt = String.format("%-4s%s %-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
+                        String txt = String.format("%-4s%s %-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s ins=%02X",
                                 statusMarker,
                                 "", // spacer
                                 t.type, t.channelId + 1,
@@ -497,7 +497,8 @@ public final class SoundTestApp {
                                 t.volumeOffset,
                                 t.keyOffset,
                                 t.pan,
-                                t.modEnabled ? "Y" : "N");
+                                t.modEnabled ? "Y" : "N",
+                                t.instrumentId);
                         l.setText(txt);
                     }
                 } else {
