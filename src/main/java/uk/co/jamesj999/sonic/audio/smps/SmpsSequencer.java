@@ -162,6 +162,7 @@ public class SmpsSequencer implements AudioStream {
         int modEnvId;
         int instrumentId;
         boolean noiseMode;
+        int psgNoiseParam;
         int decayOffset;
         int decayTimer;
         // PSG Volume Envelope
@@ -376,9 +377,9 @@ public class SmpsSequencer implements AudioStream {
                     }
                     if (t.type == TrackType.FM) {
                         applyFmPanAmsFms(t);
-                        if (t.active && t.duration > 0) {
-                            restoreFrequency(t);
-                        }
+                    }
+                    if (t.active && t.duration > 0) {
+                        restoreFrequency(t);
                     }
                 }
             }
@@ -386,6 +387,29 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void restoreFrequency(Track t) {
+        if (t.type == TrackType.PSG) {
+            if (t.channelId < 3 && !t.noiseMode) {
+                int reg = t.baseFnum + t.modAccumulator + t.detune;
+                if (reg > 1023) reg = 1023;
+                if (reg < 1) reg = 1;
+
+                if (pitch != 1.0f) {
+                    reg = (int) (reg / pitch);
+                    if (reg > 1023) reg = 1023;
+                    if (reg < 1) reg = 1;
+                }
+
+                int data = reg & 0xF;
+                int type = 0;
+                int ch = t.channelId;
+                synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
+                synth.writePsg(this, (reg >> 4) & 0x3F);
+            } else if (t.noiseMode) {
+                synth.writePsg(this, 0xE0 | (t.psgNoiseParam & 0x0F));
+            }
+            return;
+        }
+
         if (t.type != TrackType.FM) return;
 
         int packed = (t.baseBlock << 11) | t.baseFnum;
@@ -943,6 +967,7 @@ public class SmpsSequencer implements AudioStream {
         if (t.pos < data.length) {
             int val = data[t.pos++] & 0xFF;
             t.noiseMode = true;
+            t.psgNoiseParam = val;
             synth.writePsg(this, 0xE0 | (val & 0x0F));
         }
     }
