@@ -271,6 +271,7 @@ public class Sonic2SmpsLoader {
             byte[] raw = rom.readBytes(bankBase, readLength);
 
             Sonic2SfxData sfx = new Sonic2SfxData(raw, 0x8000, 0, headerOffset);
+            sfx.setPsgEnvelopes(loadPsgEnvelopes());
             if (isValidSfx(sfx)) {
                 return sfx;
             }

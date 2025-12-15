@@ -125,7 +125,16 @@ public class Sonic2SfxData extends AbstractSmpsData {
 
     @Override
     public byte[] getPsgEnvelope(int id) {
+        if (psgEnvelopes != null && psgEnvelopes.containsKey(id)) {
+            return psgEnvelopes.get(id);
+        }
         return Sonic2PsgEnvelopes.getEnvelope(id);
+    }
+
+    private java.util.Map<Integer, byte[]> psgEnvelopes;
+
+    public void setPsgEnvelopes(java.util.Map<Integer, byte[]> psgEnvelopes) {
+        this.psgEnvelopes = psgEnvelopes;
     }
 
     @Override
