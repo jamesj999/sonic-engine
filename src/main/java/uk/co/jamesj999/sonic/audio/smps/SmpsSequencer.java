@@ -1128,51 +1128,44 @@ public class SmpsSequencer implements AudioStream {
                 if (reg < 1) reg = 1;
             }
 
-            if (t.channelId < 3 && !t.noiseMode) {
+            // Always write frequency for channels 0-2 (Tone 1, 2, 3), regardless of noise mode.
+            // This is required because Noise Mode 3 (White Noise 3) uses Tone 3's frequency.
+            // If we skip this, the noise pitch will be incorrect or silent (0Hz).
+            if (t.channelId < 3) {
                 int data = reg & 0xF;
-                int type = 0;
+                int type = 0; // Tone
                 int ch = t.channelId;
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
 
-                // Unified volume write with signed clamping
-                int volCh = t.channelId;
-                if (t.noiseMode && volCh == 2) volCh = 3;
-
-                int base = (byte)t.volumeOffset + t.envValue;
-                if (base < 0) base = 0;
-                if (base > 0x0F) base = 0x0F;
-                int vol = base;
-
-                synth.writePsg(this, 0x80 | (volCh << 5) | (1 << 4) | vol);
-
-                // Initialize modulation state for PSG slides
+                // Also update baseFnum for modulation
                 t.baseFnum = reg;
-                if (t.modEnabled) {
-                    t.modDelay = t.modDelayInit;
-                    t.modRateCounter = t.modRate;
-                    t.modStepCounter = t.modSteps / 2;
-                    t.modAccumulator = 0;
-                    t.modCurrentDelta = t.modDelta;
-                }
-            } else if (t.channelId == 2 && t.noiseMode) {
-                // Noise Mode
-                int volCh = 3;
+            }
 
-                int base = (byte)t.volumeOffset + t.envValue;
-                if (base < 0) base = 0;
-                if (base > 0x0F) base = 0x0F;
-                int vol = base;
+            // Write Volume
+            int volCh = t.channelId;
+            if (t.noiseMode && volCh == 2) {
+                // If this is Channel 2 (Tone 3) in Noise Mode, redirect Volume to Channel 3 (Noise).
+                volCh = 3;
+            }
 
+            // Unified volume write with signed clamping
+            int base = (byte)t.volumeOffset + t.envValue;
+            if (base < 0) base = 0;
+            if (base > 0x0F) base = 0x0F;
+            int vol = base;
+
+            if (volCh <= 3) {
                 synth.writePsg(this, 0x80 | (volCh << 5) | (1 << 4) | vol);
-            } else if (t.channelId == 3) {
-                // PSG 3 (explicit?)
-                int base = (byte)t.volumeOffset + t.envValue;
-                if (base < 0) base = 0;
-                if (base > 0x0F) base = 0x0F;
-                int vol = base;
+            }
 
-                synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
+            // Initialize modulation state for PSG slides
+            if (t.modEnabled) {
+                t.modDelay = t.modDelayInit;
+                t.modRateCounter = t.modRate;
+                t.modStepCounter = t.modSteps / 2;
+                t.modAccumulator = 0;
+                t.modCurrentDelta = t.modDelta;
             }
         }
 
