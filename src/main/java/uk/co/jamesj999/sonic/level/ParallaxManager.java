@@ -2,23 +2,19 @@ package uk.co.jamesj999.sonic.level;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.level.parallax.*;
 
-import java.io.IOException;
-import java.util.logging.Level;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Manages parallax scrolling effects, loading data tables from ROM and generating
- * per-scanline H-Scroll values.
+ * Manages parallax scrolling effects, delegating to zone-specific strategies.
  */
 public class ParallaxManager {
     private static final Logger LOGGER = Logger.getLogger(ParallaxManager.class.getName());
 
     public static final int VISIBLE_LINES = 224;
-
-    // Zone IDs (matching LevelManager list index)
-    private static final int ZONE_EHZ = 0;
-    private static final int ZONE_WFZ = 9;
 
     // Packed as (planeA << 16) | (planeB & 0xFFFF)
     // Plane A is FG, Plane B is BG.
@@ -27,22 +23,10 @@ public class ParallaxManager {
     private int minScroll = 0;
     private int maxScroll = 0;
 
-    // ROM Tables
-    private byte[] ehzRipple;
-    private byte[] wfzNormalSegs;
-    private byte[] wfzTransSegs;
-
     private boolean loaded = false;
 
-    // Addresses (REV01)
-    private static final int EHZ_RIPPLE_ADDR = 0x00C682;
-    private static final int EHZ_RIPPLE_SIZE = 66;
-    private static final int WFZ_TRANS_ADDR = 0x00C8CA;
-    private static final int WFZ_NORMAL_ADDR = 0x00C916;
-
-    // Guessing size for WFZ tables based on addresses or safe buffer
-    private static final int WFZ_TRANS_SIZE = WFZ_NORMAL_ADDR - WFZ_TRANS_ADDR;
-    private static final int WFZ_NORMAL_SIZE = 128; // Safe bet
+    private final Map<Integer, ParallaxStrategy> strategies = new HashMap<>();
+    private final ParallaxStrategy defaultStrategy = new MinimalParallaxStrategy();
 
     private static ParallaxManager instance;
 
@@ -53,22 +37,26 @@ public class ParallaxManager {
         return instance;
     }
 
+    private ParallaxManager() {
+        // Register Strategies
+        // Zone IDs match LevelManager list index
+        strategies.put(0, new EhzParallaxStrategy()); // EHZ
+        strategies.put(1, new CpzParallaxStrategy()); // CPZ
+        strategies.put(9, new WfzParallaxStrategy()); // WFZ
+
+        // Others use default for now, or can be added explicitly
+        // strategies.put(2, new ArzParallaxStrategy());
+    }
+
     public void load(Rom rom) {
         if (loaded) return;
-        try {
-            this.ehzRipple = rom.readBytes(EHZ_RIPPLE_ADDR, EHZ_RIPPLE_SIZE);
-            this.wfzTransSegs = rom.readBytes(WFZ_TRANS_ADDR, WFZ_TRANS_SIZE);
-            this.wfzNormalSegs = rom.readBytes(WFZ_NORMAL_ADDR, WFZ_NORMAL_SIZE);
-            loaded = true;
-            LOGGER.info("Parallax data loaded.");
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to load parallax data: " + e.getMessage(), e);
-            // We don't throw, just log. loaded remains false.
-            // Initialize arrays to prevent NPE if methods are called
-            ehzRipple = new byte[0];
-            wfzTransSegs = new byte[0];
-            wfzNormalSegs = new byte[0];
+
+        for (ParallaxStrategy strategy : strategies.values()) {
+            strategy.load(rom);
         }
+        defaultStrategy.load(rom);
+
+        loaded = true;
     }
 
     public int[] getHScroll() {
@@ -79,144 +67,24 @@ public class ParallaxManager {
     public int getMaxScroll() { return maxScroll; }
 
     public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY) {
-        // Reset min/max
+        // Reset min/max tracking (strategies don't track it anymore, but we can compute it if needed)
+        // The old code used updateMinMax to track range for optimization.
+        // We will re-calculate it after update if strictly necessary,
+        // or assume the renderer handles it.
+        // Looking at LevelManager, it uses localMin/localMax from hScroll array.
+        // So global minScroll/maxScroll might not be critical, but let's keep it safe.
+
+        ParallaxStrategy strategy = strategies.getOrDefault(zoneId, defaultStrategy);
+        strategy.update(cam, frameCounter, bgScrollY, hScroll);
+
+        // Recalculate Min/Max for public accessors
         minScroll = Integer.MAX_VALUE;
         maxScroll = Integer.MIN_VALUE;
 
-        if (!loaded) {
-             // Try to be safe even if not loaded properly via ROM
-             // But updateMinimal works without tables.
-             updateMinimal(cam);
-             return;
+        for (int val : hScroll) {
+            short bg = (short) (val & 0xFFFF);
+            if (bg < minScroll) minScroll = bg;
+            if (bg > maxScroll) maxScroll = bg;
         }
-
-        switch (zoneId) {
-            case ZONE_EHZ:
-                updateEhz(cam, frameCounter, bgScrollY);
-                break;
-            case ZONE_WFZ:
-                updateWfz(cam, frameCounter);
-                break;
-            default:
-                updateMinimal(cam);
-                break;
-        }
-    }
-
-    private void updateMinimal(Camera cam) {
-        int camX = cam.getX();
-        // Plane A moves with camera (FG) -> scroll = -camX
-        short planeA = (short) -camX;
-        // Plane B generic parallax (0.5)
-        short planeB = (short) -(camX >> 1);
-
-        updateMinMax(planeB);
-
-        int packed = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
-        for (int y = 0; y < VISIBLE_LINES; y++) hScroll[y] = packed;
-    }
-
-    private void updateEhz(Camera cam, int frameCounter, int bgScrollY) {
-        int camX = cam.getX();
-        short planeA = (short) -camX;
-
-        // EHZ Parallax approximation
-
-        // Calculate vertical background position to map bands to world coordinates (avoiding tearing during vertical scroll)
-        int mapHeight = 256; // Adjusted to 256 based on observation of "bottom rows" wrapping behavior
-
-        for (int y = 0; y < VISIBLE_LINES; y++) {
-            // Map screen line to background map line
-            int mapY = (y + bgScrollY) % mapHeight;
-            if (mapY < 0) mapY += mapHeight;
-
-            short baseB;
-
-            // Banding based on Map Y (256px height)
-            // Sky: 0-80 (0.25x)
-            // Water Surface: 80-112 (0.25x + Ripple) - Base speed matches sky
-            // Grass/Hills: 112-256 (Stepped bands for obvious parallax)
-
-            if (mapY < 80) {
-                baseB = (short) -(camX >> 2);
-            } else if (mapY < 112) {
-                baseB = (short) -(camX >> 2);
-            } else {
-                // Grass Bands (Stepped)
-                // 112-148: 0.375x (3/8)
-                // 148-184: 0.5x   (4/8)
-                // 184-220: 0.625x (5/8)
-                // 220-256: 0.75x  (6/8)
-
-                int grassSection = (mapY - 112) / 36;
-
-                // Base 0.25. Add (grassSection + 1) * 0.125
-                int increment = (camX >> 3) * (grassSection + 1);
-                baseB = (short) (-(camX >> 2) - increment);
-            }
-
-            short b = baseB;
-
-            // Water region ripple
-            // Limited to the Water Surface band (80-112)
-            if (mapY >= 80 && mapY < 112) {
-                if (ehzRipple != null && ehzRipple.length > 0) {
-                    int slowFrame = frameCounter >> 3;
-                    // Use mapY for ripple index
-                    int idx = (slowFrame + (mapY - 80)) % ehzRipple.length;
-                    if (idx < 0) idx += ehzRipple.length;
-
-                    int offset = ehzRipple[idx] & 0x1;
-                    b += (short) offset;
-                }
-            }
-
-            updateMinMax(b);
-
-            hScroll[y] = ((planeA & 0xFFFF) << 16) | (b & 0xFFFF);
-        }
-    }
-
-    private void updateWfz(Camera cam, int frameCounter) {
-        int camX = cam.getX();
-        short planeA = (short) -camX;
-
-        // WFZ Parallax
-        short[] layerScroll = new short[16];
-        // Populate layer scrolls (Route B approximation)
-        layerScroll[0] = (short) -(camX >> 2);  // Slow
-        layerScroll[1] = (short) -(camX >> 1);  // Medium
-        layerScroll[2] = (short) -camX;         // Fast (Near)
-        for(int i=3; i<16; i++) layerScroll[i] = (short) -(camX >> 1);
-
-        byte[] segs = wfzNormalSegs;
-
-        int y = 0;
-        if (segs != null && segs.length > 0) {
-            for (int i = 0; i + 1 < segs.length && y < VISIBLE_LINES; i += 2) {
-                int count = segs[i] & 0xFF;
-                int idx = segs[i + 1] & 0xFF;
-
-                short planeB = (idx < layerScroll.length) ? layerScroll[idx] : layerScroll[0];
-                updateMinMax(planeB);
-
-                int packed = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
-                for (int n = 0; n < count && y < VISIBLE_LINES; n++, y++) {
-                    hScroll[y] = packed;
-                }
-            }
-        }
-
-        // Fill remaining
-        while (y < VISIBLE_LINES) {
-            short planeB = (short) -(camX >> 1);
-            updateMinMax(planeB);
-            hScroll[y++] = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
-        }
-    }
-
-    private void updateMinMax(short val) {
-        if (val < minScroll) minScroll = val;
-        if (val > maxScroll) maxScroll = val;
     }
 }
