@@ -29,14 +29,25 @@ public class VirtualSynthesizer implements Synthesizer {
 
         ym.renderStereo(left, right);
 
-        // Attenuate YM/DAC by 50% to balance against the accurate (but quieter) SN76489 levels.
-        // YM output is ~24k peak, PSG is ~4k peak. Halving YM brings it to ~12k, restoring a reasonable 3:1 ratio.
+        // Attenuate YM/DAC by 50% (>> 1)
+        // YM Peak ~24k -> ~12k
         for (int i = 0; i < frames; i++) {
             left[i] >>= 1;
             right[i] >>= 1;
         }
 
-        psg.renderStereo(left, right);
+        int[] leftPsg = new int[frames];
+        int[] rightPsg = new int[frames];
+        psg.renderStereo(leftPsg, rightPsg);
+
+        // Boost PSG by 4x (<< 2) to match user expectations for Noise volume relative to FM.
+        // PSG Peak ~4k -> ~16k.
+        // Noise Peak ~2k -> ~8k.
+        // Resulting Ratio FM:Noise is ~1.5:1.
+        for (int i = 0; i < frames; i++) {
+            left[i] += (leftPsg[i] << 2);
+            right[i] += (rightPsg[i] << 2);
+        }
 
         for (int i = 0; i < frames; i++) {
             // Master Gain: No division (1.0) to match SMPSPlay levels which push near clipping.
