@@ -101,11 +101,11 @@ public class PsgChip {
 
         while (time > 0) {
             if (remaining > time) {
-                sample += (outputs[ch] ? time : -time);
+                sample += (outputs[ch] ? time : 0); // Unipolar 0..1
                 remaining -= time;
                 time = 0;
             } else {
-                sample += (outputs[ch] ? remaining : -remaining);
+                sample += (outputs[ch] ? remaining : 0); // Unipolar 0..1
                 time -= remaining;
                 outputs[ch] = !outputs[ch];
                 remaining = period;
@@ -130,11 +130,11 @@ public class PsgChip {
 
         while (time > 0) {
             if (remaining > time) {
-                sample += (outputs[3] ? time : -time);
+                sample += (outputs[3] ? time : 0); // Unipolar 0..1
                 remaining -= time;
                 time = 0;
             } else {
-                sample += (outputs[3] ? remaining : -remaining);
+                sample += (outputs[3] ? remaining : 0); // Unipolar 0..1
                 time -= remaining;
                 stepNoiseLfsr(noiseReg);
                 remaining = period;
