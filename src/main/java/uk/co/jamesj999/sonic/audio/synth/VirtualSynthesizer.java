@@ -29,11 +29,12 @@ public class VirtualSynthesizer implements Synthesizer {
 
         ym.renderStereo(left, right);
 
-        // Apply SMPSPlay mixing weight: YM (FM/DAC) x2, PSG x1.
-        // YM2612Chip already outputs at 16-bit levels (2x reference),
-        // effectively implementing the x2 weight relative to the reference 15-bit level.
-        // PSG (via PsgChip) is at reference level (x1).
-        // Therefore, we just mix them directly.
+        // Attenuate YM/DAC by 50% to balance against the accurate (but quieter) SN76489 levels.
+        // YM output is ~24k peak, PSG is ~4k peak. Halving YM brings it to ~12k, restoring a reasonable 3:1 ratio.
+        for (int i = 0; i < frames; i++) {
+            left[i] >>= 1;
+            right[i] >>= 1;
+        }
 
         psg.renderStereo(left, right);
 
