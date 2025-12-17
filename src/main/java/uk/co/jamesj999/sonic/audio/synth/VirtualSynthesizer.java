@@ -40,14 +40,14 @@ public class VirtualSynthesizer implements Synthesizer {
         int[] rightPsg = new int[frames];
         psg.renderStereo(leftPsg, rightPsg);
 
-        // Boost PSG by 8x (<< 3) to compensate for Unipolar (0..1) range logic AND match Noise volume.
-        // Unipolar logic halved the raw PSG output relative to Bipolar.
-        // 4096 (Unipolar Max) * 8 = 32768 (Full Scale).
-        // HPF centers this to +/- 16384.
-        // Ratio vs FM (12k) is ~1.3:1, maintaining the desired "Equal/Louder Noise" balance.
+        // Boost PSG by 4x (<< 2).
+        // Reduced from 8x (<< 3) per user request to effectively halve the boost volume.
+        // PSG Peak ~4k (Unipolar Max) * 4 = ~16k (Unipolar Scale) -> ~8k AC Peak.
+        // FM Peak is ~12k.
+        // New Ratio FM:PSG is ~1.5:1 (FM louder), which provides a balanced mix without overwhelming noise.
         for (int i = 0; i < frames; i++) {
-            left[i] += (leftPsg[i] << 3);
-            right[i] += (rightPsg[i] << 3);
+            left[i] += (leftPsg[i] << 2);
+            right[i] += (rightPsg[i] << 2);
         }
 
         for (int i = 0; i < frames; i++) {
