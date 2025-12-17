@@ -21,7 +21,7 @@ public class PsgChip {
     private final boolean[] outputs = new boolean[4];
     private final int[] tonePeriod = new int[3];
 
-    // Intermediate position for anti-aliasing (0.0 to 1.0, or -1.0 if not active)
+    // Intermediate position for anti-aliasing (Bipolar: -1.0 to 1.0)
     private final double[] intermediatePos = new double[3];
 
     private double clock = 0;
@@ -38,7 +38,7 @@ public class PsgChip {
         for (int ch = 0; ch < 3; ch++) {
             outputs[ch] = true;
             counters[ch] = 0;
-            intermediatePos[ch] = -1.0;
+            intermediatePos[ch] = -2.0; // Sentinel value (valid range -1.0 to 1.0)
         }
         outputs[3] = (lfsr & 1) == 1;
         counters[3] = 0;
@@ -93,10 +93,11 @@ public class PsgChip {
             for (int i = 0; i <= 2; i++) {
                 if (!mutes[i]) {
                     double sample;
-                    if (intermediatePos[i] != -1.0) {
+                    if (intermediatePos[i] != -2.0) {
                         sample = intermediatePos[i];
                     } else {
-                        sample = outputs[i] ? 1.0 : 0.0;
+                        // Flat: Bipolar +/- 1.0
+                        sample = outputs[i] ? 1.0 : -1.0;
                     }
 
                     int vol = registers[i * 2 + 1] & 0x0F;
@@ -110,8 +111,10 @@ public class PsgChip {
 
             // Noise Channel (3)
             if (!mutes[3]) {
-                // Correct Logic: Output is determined by the LFSR bit 0, NOT the clock flip-flop.
-                double noiseSample = (lfsr & 1) != 0 ? 1.0 : 0.0;
+                // Noise Logic (Bipolar)
+                // Output is determined by the LFSR bit 0.
+                // Bipolar: (lfsr & 1) ? 1.0 : -1.0
+                double noiseSample = (lfsr & 1) != 0 ? 1.0 : -1.0;
 
                 int noiseVol = registers[7] & 0x0F;
                 double amp = VOLUME_TABLE[noiseVol];
@@ -155,19 +158,19 @@ public class PsgChip {
                         double toneFreqPosVal = outputs[i] ? 1.0 : -1.0;
                         double intermediate = (numClocksForSample - clock + 2 * counters[i]) * toneFreqPosVal / (numClocksForSample + clock);
 
-                        // Map bipolar intermediate (-1..1) to unipolar (0..1)
-                        intermediatePos[i] = (intermediate + 1.0) * 0.5;
+                        // Bipolar intermediate: directly use the calculated value (-1..1)
+                        intermediatePos[i] = intermediate;
 
                         outputs[i] = !outputs[i];
                     } else {
                         // Stuck Value (Cutoff)
                         outputs[i] = true;
-                        intermediatePos[i] = -1.0;
+                        intermediatePos[i] = -2.0;
                     }
 
                     counters[i] += period * (Math.floor(numClocksForSample / period) + 1);
                 } else {
-                    intermediatePos[i] = -1.0;
+                    intermediatePos[i] = -2.0;
                 }
             }
 
@@ -181,12 +184,12 @@ public class PsgChip {
                         case 0: noiseRate = 0x10; break;
                         case 1: noiseRate = 0x20; break;
                         case 2: noiseRate = 0x40; break;
-                        default: noiseRate = 0x10; break; // Should not happen given logic above
+                        default: noiseRate = 0x10; break;
                     }
                     counters[3] += noiseRate * (Math.floor(numClocksForSample / noiseRate) + 1);
                 }
 
-                if (outputs[3]) { // Positive Edge (0 -> 1)
+                if (outputs[3]) { // Positive Edge
                      int bit0 = lfsr & 1;
                      int feedback;
                      if ((noiseReg & 0x04) != 0) { // White Noise

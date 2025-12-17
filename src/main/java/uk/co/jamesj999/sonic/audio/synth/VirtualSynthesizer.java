@@ -40,14 +40,14 @@ public class VirtualSynthesizer implements Synthesizer {
         int[] rightPsg = new int[frames];
         psg.renderStereo(leftPsg, rightPsg);
 
-        // Boost PSG by 4x (<< 2).
-        // Reduced from 8x (<< 3) per user request to effectively halve the boost volume.
-        // PSG Peak ~4k (Unipolar Max) * 4 = ~16k (Unipolar Scale) -> ~8k AC Peak.
-        // FM Peak is ~12k.
-        // New Ratio FM:PSG is ~1.5:1 (FM louder), which provides a balanced mix without overwhelming noise.
+        // No Boost for PSG.
+        // PsgChip is now Bipolar +/- 1.0 (Max Table 4096)
+        // PSG Peak ~4k.
+        // FM Peak ~12k.
+        // Ratio FM:PSG is ~3:1.
         for (int i = 0; i < frames; i++) {
-            left[i] += (leftPsg[i] << 2);
-            right[i] += (rightPsg[i] << 2);
+            left[i] += leftPsg[i];
+            right[i] += rightPsg[i];
         }
 
         for (int i = 0; i < frames; i++) {
