@@ -6,7 +6,12 @@ import uk.co.jamesj999.sonic.audio.smps.Sonic2SfxData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
+import uk.co.jamesj999.sonic.audio.synth.Synthesizer;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.audio.smps.DacData;
+import uk.co.jamesj999.sonic.data.Rom;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +37,16 @@ public class TestSmpsSequencer {
         public void writePsg(Object source, int val) {
             psgLog.add(val & 0xFF);
             super.writePsg(source, val);
+        }
+    }
+
+    static class MockFmSynth extends VirtualSynthesizer {
+        final List<String> fmLog = new ArrayList<>();
+
+        @Override
+        public void writeFm(Object source, int port, int reg, int val) {
+            fmLog.add(port + ":" + String.format("%02X", reg) + ":" + String.format("%02X", val));
+            super.writeFm(source, port, reg, val);
         }
     }
 
@@ -454,5 +469,50 @@ public class TestSmpsSequencer {
 
         assertTrue("Noise command should be issued", hasNoiseLatch);
         assertTrue("Tone 2 frequency should still be latched while in noise mode (tone2 match)", hasTone2Latch);
+    }
+
+    @Test
+    public void testSfxBcFmVoicePlaysWithCenteredPan() {
+        // Load real SFX 0xBC from ROM to exercise the FM blip.
+        File romFile = RomTestUtils.ensureRomAvailable();
+        Rom rom = new Rom();
+        assertTrue("Failed to open ROM", rom.open(romFile.getAbsolutePath()));
+        Sonic2SmpsLoader loader = new Sonic2SmpsLoader(rom);
+        AbstractSmpsData sfx = loader.loadSfx(0xBC);
+        assertNotNull("SFX 0xBC should load", sfx);
+        assertTrue("Expected Sonic2SfxData for SFX 0xBC", sfx instanceof Sonic2SfxData);
+        assertNotNull("SFX 0xBC should have voice 0", sfx.getVoice(0));
+        Sonic2SfxData sfxData = (Sonic2SfxData) sfx;
+        int ptr = sfxData.getTrackEntries().get(0).pointer;
+        assertTrue("Track pointer should be within data", ptr >= 0 && ptr < sfxData.getData().length);
+        assertEquals("SFX 0xBC track should start with Set Voice", (byte) 0xEF, sfxData.getData()[ptr]);
+
+        DacData dacData = loader.loadDacData();
+        MockFmSynth synth = new MockFmSynth();
+        SmpsSequencer seq = new SmpsSequencer(sfx, dacData, synth);
+
+        // Prime and run a few ticks
+        seq.read(new short[2]);
+        SmpsSequencer.DebugState initial = seq.debugState();
+        seq.advance(20000);
+
+        boolean hasKeyEvent = false;
+        boolean hasCenteredPan = false;
+        for (String log : synth.fmLog) {
+            if (log.contains(":28:")) {
+                hasKeyEvent = true;
+            }
+            if (log.startsWith("1:B") && log.endsWith("C0")) {
+                hasCenteredPan = true;
+            }
+        }
+
+        assertFalse("FM track should exist", initial.tracks.isEmpty());
+        assertEquals("Track 0 should be FM for SFX 0xBC", SmpsSequencer.TrackType.FM, initial.tracks.get(0).type);
+        assertEquals("FM track should use voice 0", 0, initial.tracks.get(0).voiceId);
+        assertFalse("FM track should not be tied when key-on expected", initial.tracks.get(0).tieNext);
+
+        assertTrue("SFX 0xBC FM should poke the key on/off register. FM log: " + synth.fmLog, hasKeyEvent);
+        assertTrue("SFX 0xBC FM should center pan (not inherit music pan). FM log: " + synth.fmLog, hasCenteredPan);
     }
 }

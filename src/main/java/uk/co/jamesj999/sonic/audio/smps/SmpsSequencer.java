@@ -16,6 +16,7 @@ public class SmpsSequencer implements AudioStream {
     private final Synthesizer synth;
     private final List<Track> tracks = new ArrayList<>();
     private final int z80Base;
+    private static final boolean DEBUG_FM_LOG = false;
     
     public enum Region {
         NTSC(60.0), PAL(50.0);
@@ -30,6 +31,7 @@ public class SmpsSequencer implements AudioStream {
     private Region region = Region.NTSC;
     private boolean speedShoes = false;
     private boolean sfxMode = false;
+    private final boolean isSfx;
     private int normalTempo;
     private int commData = 0; // Communication byte (E2)
     private boolean fm6DacOff = false;
@@ -186,6 +188,7 @@ public class SmpsSequencer implements AudioStream {
 
     public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData, Synthesizer synth) {
         this.smpsData = smpsData;
+        this.isSfx = smpsData instanceof Sonic2SfxData;
         this.data = smpsData.getData();
         this.synth = synth;
         this.z80Base = smpsData.getZ80StartAddress();
@@ -533,6 +536,14 @@ public class SmpsSequencer implements AudioStream {
             t.keyOffset = (byte) entry.transpose;
             t.volumeOffset = entry.volume;
             t.dividingTiming = tickMult;
+            if (type == TrackType.FM) {
+                // SFX should not inherit music state; center pan/AMS/FMS and preload voice 0 if available.
+                t.pan = 0xC0;
+                t.ams = 0;
+                t.fms = 0;
+                loadVoice(t, 0);
+                applyFmPanAmsFms(t);
+            }
             tracks.add(t);
         }
     }
@@ -1114,22 +1125,24 @@ public class SmpsSequencer implements AudioStream {
             block = (packed >> 11) & 7;
             fnum = packed & 0x7FF;
 
-            if (!t.tieNext) {
+            boolean forceKeyOn = isSfx && t.type == TrackType.FM;
+            int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
+
+            if (!t.tieNext || forceKeyOn) {
                 // [not in driver] turn DAC off when playing a note on FM6
                 if (fm6DacOff && hwCh == 5) {
                     synth.writeFm(this, 0, 0x2B, 0x00);
                 }
 
-                int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
                 synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
             }
 
             writeFmFreq(port, ch, fnum, block);
             applyFmPanAmsFms(t);
 
-            if (!t.tieNext) {
-                int chVal = (port == 0) ? ch : (ch + 4);
-                synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Key On/Off is always on Port 0
+            synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Always key on after latching frequency/pan
+            if (DEBUG_FM_LOG) {
+                System.out.println("FM KEY ON: chVal=" + Integer.toHexString(chVal) + " port=" + port + " fnum=" + Integer.toHexString(fnum) + " block=" + block + " note=" + Integer.toHexString(t.note));
             }
             t.tieNext = false;
 
@@ -1390,6 +1403,13 @@ public class SmpsSequencer implements AudioStream {
         int valA0 = fnum & 0xFF;
         synth.writeFm(this, port, 0xA4 + ch, valA4);
         synth.writeFm(this, port, 0xA0 + ch, valA0);
+        if (isSfx) {
+            int chVal = (port == 0) ? ch : (ch + 4);
+            synth.writeFm(this, 0, 0x28, 0xF0 | (chVal & 0x0F));
+            if (DEBUG_FM_LOG) {
+                System.out.println("FM KEY ON (freq latch): chVal=" + Integer.toHexString(chVal) + " fnum=" + Integer.toHexString(fnum) + " block=" + block);
+            }
+        }
     }
 
     private void applyModulation(Track t) {
