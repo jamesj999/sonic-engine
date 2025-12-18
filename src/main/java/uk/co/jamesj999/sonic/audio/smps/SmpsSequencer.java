@@ -207,6 +207,7 @@ public class SmpsSequencer implements AudioStream {
 
         if (smpsData instanceof Sonic2SfxData) {
             initSfxTracks((Sonic2SfxData) smpsData, z80Start);
+            setSfxMode(true);
             return;
         }
 
@@ -391,7 +392,10 @@ public class SmpsSequencer implements AudioStream {
 
     private void restoreFrequency(Track t) {
         if (t.type == TrackType.PSG) {
-            if (t.channelId < 3 && !t.noiseMode) {
+            boolean noiseUsesTone2 = t.noiseMode && t.channelId == 2 && (t.psgNoiseParam & 0x03) == 0x03;
+            boolean writeToneFreq = t.channelId < 3 && (!t.noiseMode || noiseUsesTone2);
+
+            if (writeToneFreq) {
                 int reg = t.baseFnum + t.modAccumulator + t.detune;
                 if (reg > 1023) reg = 1023;
                 if (reg < 1) reg = 1;
@@ -407,7 +411,9 @@ public class SmpsSequencer implements AudioStream {
                 int ch = t.channelId;
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
-            } else if (t.noiseMode) {
+            }
+
+            if (t.noiseMode) {
                 synth.writePsg(this, 0xE0 | (t.psgNoiseParam & 0x0F));
             }
             return;
@@ -968,7 +974,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void setPsgNoise(Track t) {
         if (t.pos < data.length) {
-            int val = data[t.pos++] & 0xFF;
+            int val = data[t.pos++] & 0x0F;
             t.noiseMode = true;
             t.psgNoiseParam = val;
             synth.writePsg(this, 0xE0 | (val & 0x0F));
@@ -1144,7 +1150,10 @@ public class SmpsSequencer implements AudioStream {
                 if (reg < 1) reg = 1;
             }
 
-            if (t.channelId < 3 && !t.noiseMode) {
+            boolean noiseUsesTone2 = t.noiseMode && t.channelId == 2 && (t.psgNoiseParam & 0x03) == 0x03;
+            boolean writeToneFreq = t.channelId < 3 && (!t.noiseMode || noiseUsesTone2);
+
+            if (writeToneFreq) {
                 int data = reg & 0xF;
                 int type = 0;
                 int ch = t.channelId;
@@ -1152,13 +1161,14 @@ public class SmpsSequencer implements AudioStream {
                 synth.writePsg(this, (reg >> 4) & 0x3F);
                 // Initialize modulation state for PSG slides
                 t.baseFnum = reg;
-                if (t.modEnabled) {
-                    t.modDelay = t.modDelayInit;
-                    t.modRateCounter = t.modRate;
-                    t.modStepCounter = t.modSteps / 2;
-                    t.modAccumulator = 0;
-                    t.modCurrentDelta = t.modDelta;
-                }
+            }
+
+            if (t.modEnabled) {
+                t.modDelay = t.modDelayInit;
+                t.modRateCounter = t.modRate;
+                t.modStepCounter = t.modSteps / 2;
+                t.modAccumulator = 0;
+                t.modCurrentDelta = t.modDelta;
             }
         }
 
@@ -1434,7 +1444,9 @@ public class SmpsSequencer implements AudioStream {
                 int port = (hwCh < 3) ? 0 : 1;
                 int ch = (hwCh % 3);
                 writeFmFreq(port, ch, fnum, block);
-            } else if (t.type == TrackType.PSG && !t.noiseMode && t.channelId < 3) {
+            } else if (t.type == TrackType.PSG && t.channelId < 3) {
+                boolean noiseUsesTone2 = t.noiseMode && t.channelId == 2 && (t.psgNoiseParam & 0x03) == 0x03;
+                if (!t.noiseMode || noiseUsesTone2) {
                 int reg = t.baseFnum + t.modAccumulator + t.detune;
                 if (reg < 1) reg = 1;
                 if (reg > 0x3FF) reg = 0x3FF;
@@ -1449,6 +1461,7 @@ public class SmpsSequencer implements AudioStream {
                 int ch = t.channelId;
                 synth.writePsg(this, 0x80 | (ch << 5) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
+                }
             }
         }
     }

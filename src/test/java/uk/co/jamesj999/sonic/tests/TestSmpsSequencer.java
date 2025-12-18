@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.tests;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
+import uk.co.jamesj999.sonic.audio.smps.Sonic2SfxData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -405,5 +406,53 @@ public class TestSmpsSequencer {
 
         assertEquals("PSG volume should be written once (hold, no loop)", 1, volumeWrites.size());
         assertEquals("First envelope step should apply immediately", 0x91, (int) volumeWrites.get(0));
+    }
+
+    @Test
+    public void testNoiseChannelUsesTone2Frequency() {
+        byte[] data = new byte[96];
+        data[0] = 0x00; // Voice pointer (none)
+        data[1] = 0x00;
+        data[2] = 0x01; // Tick multiplier
+        data[3] = 0x01; // Track count
+
+        // Track header: flags, channel (PSG3), pointer, transpose, volume
+        data[4] = 0x00;
+        data[5] = (byte) 0xC0;       // PSG channel 3 (noise-capable)
+        data[6] = 0x20; data[7] = (byte) 0x80; // Pointer to 0x8020 -> relocates to 0x20
+        data[8] = 0x00;
+        data[9] = 0x00;
+
+        // PSG track script at 0x20: enable noise (tone2 match), note, duration, stop
+        int pos = 0x20;
+        data[pos++] = (byte) 0xF3; // PSG noise
+        data[pos++] = 0x07;        // White noise, tone2 frequency
+        data[pos++] = (byte) 0x81; // Note
+        data[pos++] = 0x02;        // Duration
+        data[pos] = (byte) 0xF2;   // Stop
+
+        Sonic2SfxData smps = new Sonic2SfxData(data, 0x8000, 0, 0);
+
+        MockPsgSynth synth = new MockPsgSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        // Prime sequencer (runs initial tick)
+        seq.read(new short[2]);
+        // Advance enough samples for one additional tempo tick
+        seq.advance(1500);
+
+        boolean hasNoiseLatch = false;
+        boolean hasTone2Latch = false;
+        for (int val : synth.psgLog) {
+            if (val == 0xE7) {
+                hasNoiseLatch = true;
+            }
+            if ((val & 0xF0) == 0xC0) {
+                hasTone2Latch = true;
+            }
+        }
+
+        assertTrue("Noise command should be issued", hasNoiseLatch);
+        assertTrue("Tone 2 frequency should still be latched while in noise mode (tone2 match)", hasTone2Latch);
     }
 }
