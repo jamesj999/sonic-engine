@@ -170,6 +170,7 @@ public class SmpsSequencer implements AudioStream {
         int envPos;
         int envValue;
         boolean envHold;
+        boolean envAtRest;
         boolean forceRefresh;
 
         Track(int pos, TrackType type, int channelId) {
@@ -1149,9 +1150,6 @@ public class SmpsSequencer implements AudioStream {
                 int ch = t.channelId;
                 synth.writePsg(this, 0x80 | (ch << 5) | (type << 4) | data);
                 synth.writePsg(this, (reg >> 4) & 0x3F);
-
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
-                synth.writePsg(this, 0x80 | (ch << 5) | (1 << 4) | vol);
                 // Initialize modulation state for PSG slides
                 t.baseFnum = reg;
                 if (t.modEnabled) {
@@ -1161,12 +1159,6 @@ public class SmpsSequencer implements AudioStream {
                     t.modAccumulator = 0;
                     t.modCurrentDelta = t.modDelta;
                 }
-            } else if (t.channelId == 2 && t.noiseMode) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset));
-                synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
-            } else if (t.channelId == 3) {
-                int vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
-                synth.writePsg(this, 0x80 | (3 << 5) | (1 << 4) | vol);
             }
         }
 
@@ -1174,6 +1166,7 @@ public class SmpsSequencer implements AudioStream {
         t.decayTimer = 0;
         t.envPos = 0;
         t.envHold = false;
+        t.envAtRest = false;
         if (t.envData != null && t.envData.length > 0) {
              int val = t.envData[0] & 0xFF;
              if (val < 0x80) {
@@ -1182,6 +1175,10 @@ public class SmpsSequencer implements AudioStream {
              }
         } else {
             t.envValue = 0;
+        }
+
+        if (t.type == TrackType.PSG) {
+            refreshVolume(t); // Apply the first envelope step immediately on note start
         }
     }
 
@@ -1239,6 +1236,9 @@ public class SmpsSequencer implements AudioStream {
         if (t.type == TrackType.FM) {
             refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
+            if (t.envAtRest) {
+                return;
+            }
             int vol = 0x0F;
             if (t.note != 0x80) {
                 vol = Math.min(0x0F, Math.max(0, t.volumeOffset + t.envValue));
@@ -1259,6 +1259,7 @@ public class SmpsSequencer implements AudioStream {
             t.envData = env;
             t.envPos = 0;
             t.envHold = false;
+            t.envAtRest = false;
             t.envValue = 0;
         } else {
             t.envData = null;
@@ -1269,10 +1270,11 @@ public class SmpsSequencer implements AudioStream {
     private void processPsgEnvelope(Track t) {
         if (t.envData == null || t.envHold) return;
 
-        // Loop to handle commands that require immediate processing of next byte (e.g. RESET)
+        // Loop to handle envelope commands that may require immediate progression
         while (true) {
             if (t.envPos >= t.envData.length) {
                 t.envHold = true;
+                t.envAtRest = true;
                 return;
             }
             int val = t.envData[t.envPos] & 0xFF;
@@ -1284,22 +1286,48 @@ public class SmpsSequencer implements AudioStream {
                 return;
             } else {
                 if (val == 0x80) {
-                    // RESET / LOOP
-                    t.envPos = 0;
-                    // Continue loop to process first byte immediately
+                    // HOLD (Sonic 2 driver definition)
+                    t.envHold = true;
+                    t.envAtRest = true;
+                    return;
                 } else if (val == 0x81) {
                     // HOLD
                     t.envHold = true;
+                    t.envAtRest = true;
                     return;
+                } else if (val == 0x82) {
+                    // LOOP xx - next byte is target index
+                    if (t.envPos < t.envData.length) {
+                        int target = t.envData[t.envPos] & 0xFF;
+                        t.envPos = target;
+                        continue;
+                    } else {
+                        t.envHold = true;
+                        t.envAtRest = true;
+                        return;
+                    }
+                } else if (val == 0x84) {
+                    // CHGMULT xx - not modeled; consume parameter to stay in sync
+                    if (t.envPos < t.envData.length) {
+                        t.envPos++; // skip multiplier byte
+                        continue;
+                    } else {
+                        t.envHold = true;
+                        t.envAtRest = true;
+                        return;
+                    }
                 } else if (val == 0x83) {
                     // STOP
                     t.envHold = true;
                     t.envValue = 0x0F; // Silence
+                    t.envAtRest = true;
                     refreshVolume(t);
+                    stopNote(t);
                     return;
                 } else {
                     // Unknown/Other: Treat as HOLD
                     t.envHold = true;
+                    t.envAtRest = true;
                     return;
                 }
             }
@@ -1470,6 +1498,7 @@ public class SmpsSequencer implements AudioStream {
             dt.pan = t.pan;
             dt.ams = t.ams;
             dt.fms = t.fms;
+            dt.envValue = t.envValue;
             dt.tieNext = t.tieNext;
             dt.modEnabled = t.modEnabled;
             dt.modAccumulator = t.modAccumulator;
@@ -1499,6 +1528,7 @@ public class SmpsSequencer implements AudioStream {
         public int note;
         public int voiceId;
         public int volumeOffset;
+        public int envValue;
         public int keyOffset;
         public int pan;
         public int ams;

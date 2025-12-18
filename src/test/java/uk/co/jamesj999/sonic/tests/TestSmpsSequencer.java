@@ -7,7 +7,9 @@ import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 
@@ -19,6 +21,16 @@ public class TestSmpsSequencer {
         @Override
         public void writeFm(Object source, int port, int reg, int val) {
             log.add(String.format("FM P%d R%02X V%02X", port, reg, val));
+        }
+    }
+
+    static class MockPsgSynth extends VirtualSynthesizer {
+        final List<Integer> psgLog = new ArrayList<>();
+
+        @Override
+        public void writePsg(Object source, int val) {
+            psgLog.add(val & 0xFF);
+            super.writePsg(source, val);
         }
     }
 
@@ -341,5 +353,57 @@ public class TestSmpsSequencer {
 
         assertEquals("Should play C4 3 times", 3, c4Count);
         assertEquals("Should play D4 3 times", 3, d4Count);
+    }
+
+    @Test
+    public void testPsgEnvelopeHoldAndInitialStepApplied() {
+        byte[] data = new byte[64];
+        data[2] = 1; // DAC only in FM table
+        data[3] = 1; // 1 PSG channel
+        data[4] = 1; // Dividing timing
+        data[5] = (byte) 0x80; // Tempo
+
+        // DAC track stub -> stop
+        data[0x06] = 0x30;
+        data[0x07] = 0x00;
+        data[0x30] = (byte) 0xF2;
+
+        // PSG track header (pointer, key offset, vol offset, mod env, instrument)
+        data[0x0A] = 0x20;
+        data[0x0B] = 0x00;
+        data[0x0C] = 0x00;
+        data[0x0D] = 0x00;
+        data[0x0E] = 0x00;
+        data[0x0F] = 0x01; // PSG instrument 1
+
+        // PSG track script: note, duration, stop
+        int pos = 0x20;
+        data[pos++] = (byte) 0x81; // C
+        data[pos++] = 0x02;        // Duration 2
+        data[pos] = (byte) 0xF2;   // Stop
+
+        Map<Integer, byte[]> envs = new HashMap<>();
+        envs.put(1, new byte[] {0x01, (byte) 0x80}); // Step to 1, then hold
+
+        Sonic2SmpsData smps = new Sonic2SmpsData(data);
+        smps.setPsgEnvelopes(envs);
+
+        MockPsgSynth synth = new MockPsgSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+
+        // Prime sequencer (runs initial tick) without advancing tempo frames
+        seq.read(new short[2]);
+        // Advance enough samples for one additional tempo tick (2 frames @ tempo 0x80)
+        seq.advance(1500);
+
+        List<Integer> volumeWrites = new ArrayList<>();
+        for (int val : synth.psgLog) {
+            if ((val & 0xF0) == 0x90) {
+                volumeWrites.add(val);
+            }
+        }
+
+        assertEquals("PSG volume should be written once (hold, no loop)", 1, volumeWrites.size());
+        assertEquals("First envelope step should apply immediately", 0x91, (int) volumeWrites.get(0));
     }
 }

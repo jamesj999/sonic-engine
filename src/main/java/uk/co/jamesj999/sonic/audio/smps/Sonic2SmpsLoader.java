@@ -504,7 +504,7 @@ public class Sonic2SmpsLoader {
                     int b = rom.readByte(romAddr + i) & 0xFF;
                     buffer[i] = (byte) b;
                     len++;
-                    // 0x80 = Reset/End, 0x81 = Hold, 0x83 = Stop
+                    // 0x80 = Hold (S2 definition), 0x81 = Hold, 0x83 = Stop
                     if (b == 0x80 || b == 0x81 || b == 0x83) {
                         break;
                     } else if (b == 0x82 || b == 0x84) {
@@ -519,7 +519,25 @@ public class Sonic2SmpsLoader {
 
                 byte[] env = new byte[len];
                 System.arraycopy(buffer, 0, env, 0, len);
-                envelopes.put(id, env);
+                // Validate envelope bytes against expected Sonic 2 PSG semantics before accepting.
+                boolean valid = true;
+                for (byte v : env) {
+                    int val = v & 0xFF;
+                    if (val < 0x80) {
+                        // Data byte (attenuation). Sonic 2 uses 0-0x0F, but keep it lenient to preserve raw ROM data.
+                        if (val > 0x7F) { valid = false; break; }
+                    } else {
+                        if (val != 0x80 && val != 0x81 && val != 0x82 && val != 0x83 && val != 0x84) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+                if (valid) {
+                    envelopes.put(id, env);
+                } else {
+                    LOGGER.fine("Skipped invalid PSG envelope " + id + " at " + Integer.toHexString(romAddr));
+                }
             }
         } catch (Exception e) {
             LOGGER.warning("Failed to load PSG Envelopes from ROM");

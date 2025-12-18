@@ -18,7 +18,7 @@ The low-level emulation of the SN76489 chip in `PsgChip.java` is **highly accura
     *   Correctly implements Bipolar output (-1.0 to 1.0) and "Intermediate Position" sampling for anti-aliasing.
 
 ## 2. PSG Envelope Processing Discrepancy
-A critical logic difference was found in how PSG Envelope commands are interpreted.
+A critical logic difference was found in how PSG Envelope commands are interpreted, and further gaps were identified after comparing against SMPSPlay.
 
 ### The Discrepancy
 *   **Reference (`DefDrv.txt` for Sonic 2):** Explicitly defines `80 = Hold`.
@@ -40,6 +40,20 @@ A critical logic difference was found in how PSG Envelope commands are interpret
 
 ### Remediation
 Update `SmpsSequencer.java` to respect the Sonic 2 driver definition where `0x80` acts as a **HOLD** command for PSG envelopes, similar to `0x81`.
+
+## 2a. Additional SMPSPlay Parity Gaps (identified post-fix)
+*   **Envelope command coverage:** The current `processPsgEnvelope` ignores `0x82` loop targets and `0x84` multiplier, and treats unknown commands as HOLD. SMPSPlay’s `DoEnvelope` handles `RESET (80)`, `HOLD (81)`, `LOOP (82 xx)`, `STOP (83)`, and `CHGMULT (84 xx)` with specific behaviors. Missing loop/multiplier support means envelopes may stall or never reach intended release levels, affecting PSG/noise balance.
+*   **STOP handling:** SMPSPlay’s `STOP (83)` path issues `DoNoteOff`/`PBKFLG_ATREST` so the channel idles. Our implementation just sets env to `0x0F` and keeps ticking, so noise can keep running with latched volume writes.
+*   **HOLD/at-rest behavior:** SMPSPlay sets “at rest” for HOLD in `DoVolumeEnvelope` when `NoteOnPrevent == NONPREV_HOLD`, suppressing further volume writes. Our version continues to refresh volume each tick, reasserting PSG volume and potentially adding hiss.
+*   **Loader masking/validation:** `Sonic2SmpsLoader` currently clamps envelope data to 4-bit nibbles and rejects anything outside `{80,81,82,83,84}`. SMPSPlay consumes raw envelope bytes and relies on the command table to decide behavior. Clamping can discard legitimate data and force fallback to built-in envelopes, altering intended noise levels.
+*   **Write cadence:** SMPSPlay gates envelope-driven volume writes based on `WasNewNote` and “at rest.” Our code writes on every envelope step regardless, which can make noise more persistent than intended.
+
+## Task List (to align with SMPSPlay)
+1. Implement full PSG envelope interpreter parity: support `0x82` loop with target index, `0x84` multiplier, and mirror SMPSPlay’s `DoEnvelope`/`DoVolumeEnvelope` flow (including `NoteOnPrevent` behavior).
+2. Align STOP/HOLD semantics with SMPSPlay: STOP should `DoNoteOff`/set at-rest, HOLD should mark at-rest where applicable so further volume writes cease.
+3. Gate volume writes like SMPSPlay: respect `WasNewNote`/at-rest to avoid continuous PSG volume re-latching once held or stopped.
+4. Relax loader masking: read raw PSG envelopes from ROM and let the interpreter handle validity, only falling back to built-in tables when the ROM data is clearly invalid/unreadable.
+5. Recompare PSG/noise output against SMPSPlay after changes (e.g., Chemical Plant noise), checking per-frame PSG writes for volume/frequency alignment.
 
 ## 3. Driver Configuration & Timing
 *   **Tempo Mode:** `SmpsSequencer` correctly implements the `Overflow2` (0x100 base) tempo accumulation logic used by Sonic 2.

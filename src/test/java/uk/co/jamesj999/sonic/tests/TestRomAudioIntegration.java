@@ -61,6 +61,31 @@ public class TestRomAudioIntegration {
     }
 
     @Test
+    public void testChemicalPlantNoiseChannelEmitsVolume() {
+        AbstractSmpsData data = loader.loadMusic(0x8C); // Chemical Plant
+        assertNotNull("Chemical Plant should load", data);
+        DacData dac = loader.loadDacData();
+        assertNotNull("DAC data should load", dac);
+
+        LoggingSynth synth = new LoggingSynth();
+        SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
+
+        // Run enough frames to cover early percussion passages
+        short[] buffer = new short[4096];
+        for (int i = 0; i < 32; i++) {
+            seq.read(buffer);
+        }
+
+        boolean hasNoiseLatch = synth.psg.stream().anyMatch(v -> (v & 0xF0) == 0xE0);
+        long noiseVolWrites = synth.psg.stream()
+                .filter(v -> (v & 0xF0) == 0xF0 && (v & 0x0F) < 0x0F)
+                .count();
+
+        assertTrue("Noise channel should receive latch writes", hasNoiseLatch);
+        assertTrue("Noise channel should receive audible volume writes", noiseVolWrites > 0);
+    }
+
+    @Test
     public void testMusicDecompressionAndLoading() {
         AbstractSmpsData data = loader.loadMusic(0x82);
         assertNotNull("Should load Metropolis music (0x82)", data);
