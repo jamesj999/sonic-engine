@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.level.*;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -28,6 +29,7 @@ public class Sonic2Level implements Level {
     private Map map;
     private List<ObjectSpawn> objects;
     private List<RingSpawn> rings;
+    private RingSpriteSheet ringSpriteSheet;
 
     private int patternCount;
     private int chunkCount;
@@ -56,6 +58,7 @@ public class Sonic2Level implements Level {
                        int solidTilesAngleAddr,
                        List<ObjectSpawn> objectSpawns,
                        List<RingSpawn> ringSpawns,
+                       RingSpriteSheet ringSpriteSheet,
                        int levelBoundariesAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
@@ -65,6 +68,7 @@ public class Sonic2Level implements Level {
         loadMap(rom, mapAddr);
         this.objects = List.copyOf(objectSpawns);
         this.rings = List.copyOf(ringSpawns);
+        this.ringSpriteSheet = ringSpriteSheet;
         loadBoundaries(rom, levelBoundariesAddr);
     }
 
@@ -141,6 +145,11 @@ public class Sonic2Level implements Level {
     @Override
     public List<RingSpawn> getRings() {
         return rings;
+    }
+
+    @Override
+    public RingSpriteSheet getRingSpriteSheet() {
+        return ringSpriteSheet;
     }
 
     @Override

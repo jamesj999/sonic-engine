@@ -18,6 +18,8 @@ import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
+import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
+import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
@@ -49,6 +51,7 @@ public class LevelManager {
     private int frameCounter = 0;
     private ObjectPlacementManager objectPlacementManager;
     private RingPlacementManager ringPlacementManager;
+    private RingRenderManager ringRenderManager;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
@@ -90,6 +93,13 @@ public class LevelManager {
             objectPlacementManager.reset(Camera.getInstance().getX());
             ringPlacementManager = new RingPlacementManager(level.getRings());
             ringPlacementManager.reset(Camera.getInstance().getX());
+            RingSpriteSheet ringSpriteSheet = level.getRingSpriteSheet();
+            if (ringSpriteSheet != null && ringSpriteSheet.getFrameCount() > 0) {
+                ringRenderManager = new RingRenderManager(ringSpriteSheet);
+                ringRenderManager.ensurePatternsCached(graphicsManager, level.getPatternCount());
+            } else {
+                ringRenderManager = null;
+            }
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -240,6 +250,10 @@ public class LevelManager {
 
         // Register all collected drawing commands with the graphics manager
         graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+
+        if (ringRenderManager != null && ringPlacementManager != null) {
+            ringRenderManager.draw(ringPlacementManager.getActiveSpawns(), frameCounter);
+        }
 
         if (objectPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             List<GLCommand> objectCommands = new ArrayList<>();

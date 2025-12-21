@@ -15,6 +15,9 @@
   - Level integration + debug markers when `DEBUG_VIEW_ENABLED`
   - `RingSpawn` and `Sonic2RingPlacement` (Rev01 ring table at `0x0E4300`, 4-byte ring groups expanded to individual rings)
   - `RingPlacementManager` with debug ring markers
+  - `NemesisReader` (Nemesis decompression used by ring art)
+  - `Sonic2RingArt` + ring sprite sheet (ROM ring art at `0x7945C`, mappings from `0x12382`)
+  - `RingRenderManager` to render animated ring sprites
   - Debug overlay labels for object ID/subtype/flags in `DebugRenderer`
   - Tests: reader unit tests; placement snapshots for EHZ1/HTZ1/MCZ1/OOZ1/MTZ2/SCZ/DEZ; act-clamp tests for MTZ3 and single-act zones; pointer table offset check; ring placement snapshot + single-act fallback
 
@@ -23,6 +26,7 @@
 2) Backtracking parity: match `ObjectsManager` bucket scanning more closely (current backtracking does a full window refresh).
 3) Audit object placement pointer entries for CPZ/ARZ/CNZ/WFZ (current table entries point to an empty list; confirm against disassembly).
 4) Ring placement audit: confirm ring table indexing against disassembly and verify ring spacing if any zones appear offset.
-5) Acts-per-zone handling: keep stride=2 for Rev01 tables but document any per-zone exceptions once pointer tables are verified.
-6) CSV/JSON export hook for placement data (deprioritized for now).
-7) Integration touch-ups: add more placement snapshots once CPZ/ARZ/CNZ/WFZ tables are verified.
+5) Ring art parity: confirm ring sprite alignment/animation and mapping format against disassembly or a known viewer.
+6) Acts-per-zone handling: keep stride=2 for Rev01 tables but document any per-zone exceptions once pointer tables are verified.
+7) CSV/JSON export hook for placement data (deprioritized for now).
+8) Integration touch-ups: add more placement snapshots once CPZ/ARZ/CNZ/WFZ tables are verified.

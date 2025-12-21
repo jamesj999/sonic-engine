@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.level;
 import java.util.List;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 
 /**
  * Abstract class representing a Level, containing palettes, patterns, chunks, and blocks.
@@ -43,6 +44,8 @@ public interface Level {
     public List<ObjectSpawn> getObjects();
 
     public List<RingSpawn> getRings();
+
+    public RingSpriteSheet getRingSpriteSheet();
 
     int getMinX();
     int getMaxX();

@@ -169,6 +169,19 @@ Use the original engine as a behavioural guide, but start with “always respawn
 Maintain a sorted list of ring spawns and show only those within the camera load window.
 Rings do not use the object manager, but should respect the same camera window distances for debug and parity checks.
 
+### Ring art + animation (visual parity)
+
+Load ring sprite art and frame mappings directly from the ROM so ring graphics match the original game.
+
+Implementation notes:
+| Step | Description |
+| --- | --- |
+| Nemesis decompressor | Implement `NemesisReader` (Shannon-Fano based; not Huffman). Required for ring art. |
+| Ring art address | Ring sprite art is Nemesis-compressed at `0x7945C` (14 tiles). |
+| Ring mappings | Ring frame mappings are referenced by the ring object routine. For Rev01, a known mapping base is `0x12382` (offset list + frame data). |
+| Frame format | Each frame begins with a word count and uses 8-byte entries (y, size, tile word, unused word, x). Size uses VDP 2-bit width/height encoding. |
+| Rendering | Cache ring patterns after level patterns, render rings with palette line 1, and animate frames every few ticks. |
+
 ## Verification plan (accuracy-first)
 
 The agent should not consider this “done” until placement can be proven correct.
@@ -182,6 +195,7 @@ Recommended validation steps:
 | Snapshot tests | for a chosen Zone+Act, assert a handful of known objects exist at known coordinates |
 | Visual debug | render object placeholders with an ID label in a debug overlay to spot systematic off-by-one or coordinate origin bugs |
 | Ring parity | render ring placeholders and confirm obvious ring lines match the ROM |
+| Ring art parity | render ring sprites and confirm the animation matches the original ring look and timing |
 
 A good “first act” to validate is one with obvious placed objects (monitors, rings as objects if applicable, springs, etc.) and a stable camera origin.
 

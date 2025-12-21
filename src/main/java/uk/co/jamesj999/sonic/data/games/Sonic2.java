@@ -21,6 +21,7 @@ public class Sonic2 extends Game {
     private RomByteReader romReader;
     private Sonic2ObjectPlacement objectPlacement;
     private Sonic2RingPlacement ringPlacement;
+    private Sonic2RingArt ringArt;
     private static final int BG_SCROLL_TABLE_ADDR = 0x00C296;
 
     public Sonic2(Rom rom) {
@@ -139,6 +140,7 @@ public class Sonic2 extends Game {
         int levelBoundariesAddr = getLevelBoundariesAddr(zoneAct);
         List<ObjectSpawn> objectSpawns = objectPlacement.load(zoneAct);
         List<RingSpawn> ringSpawns = ringPlacement.load(zoneAct);
+        var ringSpriteSheet = ringArt.load();
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -153,7 +155,9 @@ public class Sonic2 extends Game {
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectSpawns, ringSpawns, levelBoundariesAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr,
+                blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr,
+                solidTileAngleAddr, objectSpawns, ringSpawns, ringSpriteSheet, levelBoundariesAddr);
     }
 
     @Override
@@ -304,6 +308,9 @@ public class Sonic2 extends Game {
         }
         if (ringPlacement == null) {
             ringPlacement = new Sonic2RingPlacement(romReader);
+        }
+        if (ringArt == null) {
+            ringArt = new Sonic2RingArt(rom, romReader);
         }
     }
 
