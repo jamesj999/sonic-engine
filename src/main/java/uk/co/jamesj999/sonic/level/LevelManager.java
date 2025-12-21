@@ -15,6 +15,10 @@ import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
+import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -22,6 +26,7 @@ import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -42,6 +47,8 @@ public class LevelManager {
     private int currentAct = 0;
     private int currentZone = 0;
     private int frameCounter = 0;
+    private ObjectPlacementManager objectPlacementManager;
+    private RingPlacementManager ringPlacementManager;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
@@ -79,12 +86,25 @@ public class LevelManager {
             AudioManager.getInstance().resetRingSound();
             AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
+            objectPlacementManager = new ObjectPlacementManager(level.getObjects());
+            objectPlacementManager.reset(Camera.getInstance().getX());
+            ringPlacementManager = new RingPlacementManager(level.getRings());
+            ringPlacementManager.reset(Camera.getInstance().getX());
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
         } catch (Exception e) {
             LOGGER.log(SEVERE, "Unexpected error while loading level " + levelIndex, e);
             throw new IOException("Failed to load level due to unexpected error.", e);
+        }
+    }
+
+    public void update() {
+        if (objectPlacementManager != null) {
+            objectPlacementManager.update(Camera.getInstance().getX());
+        }
+        if (ringPlacementManager != null) {
+            ringPlacementManager.update(Camera.getInstance().getX());
         }
     }
 
@@ -220,6 +240,34 @@ public class LevelManager {
 
         // Register all collected drawing commands with the graphics manager
         graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+
+        if (objectPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+            List<GLCommand> objectCommands = new ArrayList<>();
+            for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
+                objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                        -1,
+                        GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                        1f, 0f, 1f,
+                        spawn.x(), spawn.y(), 0, 0));
+            }
+            if (!objectCommands.isEmpty()) {
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
+            }
+        }
+
+        if (ringPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+            List<GLCommand> ringCommands = new ArrayList<>();
+            for (RingSpawn ring : ringPlacementManager.getActiveSpawns()) {
+                ringCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                        -1,
+                        GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                        1f, 0.85f, 0.1f,
+                        ring.x(), ring.y(), 0, 0));
+            }
+            if (!ringCommands.isEmpty()) {
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
+            }
+        }
     }
 
     private void drawLayer(List<GLCommand> commands, int layerIndex, Camera camera, float parallaxX, float parallaxY) {
@@ -611,6 +659,13 @@ public class LevelManager {
      */
     public Level getCurrentLevel() {
         return level;
+    }
+
+    public Collection<ObjectSpawn> getActiveObjectSpawns() {
+        if (objectPlacementManager == null) {
+            return List.of();
+        }
+        return objectPlacementManager.getActiveSpawns();
     }
 
     public void loadCurrentLevel() {

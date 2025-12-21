@@ -43,6 +43,23 @@ public class Rom {
         return fileChannel.size();
     }
 
+    /**
+     * Read the whole ROM into memory.
+     */
+    public byte[] readAllBytes() throws IOException {
+        long size = getSize();
+        if (size > Integer.MAX_VALUE) {
+            throw new IOException("ROM too large to buffer in memory: " + size + " bytes");
+        }
+        ByteBuffer buffer = ByteBuffer.allocate((int) size);
+        fileChannel.position(0);
+        int read = fileChannel.read(buffer);
+        if (read < size) {
+            throw new IOException("Unable to read entire ROM (read " + read + " of " + size + " bytes)");
+        }
+        return buffer.array();
+    }
+
     public int readAddrRange() throws IOException {
         return read32BitAddr(ROM_LENGTH_OFFSET);
     }

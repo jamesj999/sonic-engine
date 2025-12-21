@@ -3,7 +3,10 @@ package uk.co.jamesj999.sonic.data.games;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.level.Level;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -15,6 +18,9 @@ import static uk.co.jamesj999.sonic.data.games.Sonic2Constants.*;
 public class Sonic2 extends Game {
 
     private final Rom rom;
+    private RomByteReader romReader;
+    private Sonic2ObjectPlacement objectPlacement;
+    private Sonic2RingPlacement ringPlacement;
     private static final int BG_SCROLL_TABLE_ADDR = 0x00C296;
 
     public Sonic2(Rom rom) {
@@ -113,23 +119,26 @@ public class Sonic2 extends Game {
 
     @Override
     public Level loadLevel(int levelIdx) throws IOException {
+        ZoneAct zoneAct = getZoneAct(levelIdx);
+        ensurePlacementHelpers();
         int characterPaletteAddr = getCharacterPaletteAddr();
 
-        int[] levelPaletteInfo = getLevelPaletteInfo(levelIdx);
+        int[] levelPaletteInfo = getLevelPaletteInfo(zoneAct);
         int levelPalettesAddr = levelPaletteInfo[0];
         int levelPalettesSize = levelPaletteInfo[1];
 
-        int patternsAddr = getPatternsAddr(levelIdx);
-        int chunksAddr = getChunksAddr(levelIdx);
-        int blocksAddr = getBlocksAddr(levelIdx);
-        int mapAddr = getTilesAddr(levelIdx);
-        int collisionAddr = getCollisionMapAddr(levelIdx);
-        int altCollisionAddr = getAltCollisionMapAddr(levelIdx);
+        int patternsAddr = getPatternsAddr(zoneAct);
+        int chunksAddr = getChunksAddr(zoneAct);
+        int blocksAddr = getBlocksAddr(zoneAct);
+        int mapAddr = getTilesAddr(zoneAct);
+        int collisionAddr = getCollisionMapAddr(zoneAct);
+        int altCollisionAddr = getAltCollisionMapAddr(zoneAct);
         int solidTileHeightsAddr = getSolidTileHeightsAddr();
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
-        int objectsAddr = getObjectLayoutAddr(levelIdx);
-        int levelBoundariesAddr = getLevelBoundariesAddr(levelIdx);
+        int levelBoundariesAddr = getLevelBoundariesAddr(zoneAct);
+        List<ObjectSpawn> objectSpawns = objectPlacement.load(zoneAct);
+        List<RingSpawn> ringSpawns = ringPlacement.load(zoneAct);
 
         System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
         System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
@@ -142,10 +151,9 @@ public class Sonic2 extends Game {
         System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
         System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
-        System.out.printf("Objects addr: 0x%08X%n", objectsAddr);
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectsAddr, levelBoundariesAddr);
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr, blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr, solidTileAngleAddr, objectSpawns, ringSpawns, levelBoundariesAddr);
     }
 
     @Override
@@ -281,6 +289,24 @@ public class Sonic2 extends Game {
         return false;
     }
 
+    private ZoneAct getZoneAct(int levelIdx) throws IOException {
+        int zoneIdx = Byte.toUnsignedInt(rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2));
+        int actIdx = Byte.toUnsignedInt(rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1));
+        return new ZoneAct(zoneIdx, actIdx);
+    }
+
+    private void ensurePlacementHelpers() throws IOException {
+        if (romReader == null) {
+            romReader = RomByteReader.fromRom(rom);
+        }
+        if (objectPlacement == null) {
+            objectPlacement = new Sonic2ObjectPlacement(romReader);
+        }
+        if (ringPlacement == null) {
+            ringPlacement = new Sonic2RingPlacement(romReader);
+        }
+    }
+
     private int getDataAddress(int zoneIdx, int entryOffset) throws IOException {
         return rom.read32BitAddr(LEVEL_DATA_DIR + zoneIdx * LEVEL_DATA_DIR_ENTRY_SIZE + entryOffset);
     }
@@ -289,16 +315,15 @@ public class Sonic2 extends Game {
         return SONIC_TAILS_PALETTE_ADDR;
     }
 
-    private int getLevelPalettesAddr(int levelIdx) throws IOException {
-        return getLevelPaletteInfo(levelIdx)[0];
+    private int getLevelPalettesAddr(ZoneAct zoneAct) throws IOException {
+        return getLevelPaletteInfo(zoneAct)[0];
     }
 
     /**
      * Returns an array containing { address, size } for the level palettes.
      */
-    private int[] getLevelPaletteInfo(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        int dataAddr = getDataAddress(zoneIdx, 8);
+    private int[] getLevelPaletteInfo(ZoneAct zoneAct) throws IOException {
+        int dataAddr = getDataAddress(zoneAct.zone(), 8);
         int paletteIndex = dataAddr >> 24;
 
         int entryAddr = LEVEL_PALETTE_DIR + paletteIndex * 8;
@@ -309,35 +334,29 @@ public class Sonic2 extends Game {
         return new int[]{address, size};
     }
 
-    private int getBlocksAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        return getDataAddress(zoneIdx, 8) & 0xFFFFFF;
+    private int getBlocksAddr(ZoneAct zoneAct) throws IOException {
+        return getDataAddress(zoneAct.zone(), 8) & 0xFFFFFF;
     }
 
-    private int getChunksAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        return getDataAddress(zoneIdx, 4) & 0xFFFFFF;
+    private int getChunksAddr(ZoneAct zoneAct) throws IOException {
+        return getDataAddress(zoneAct.zone(), 4) & 0xFFFFFF;
     }
 
-    private int getPatternsAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        return getDataAddress(zoneIdx, 0) & 0xFFFFFF;
+    private int getPatternsAddr(ZoneAct zoneAct) throws IOException {
+        return getDataAddress(zoneAct.zone(), 0) & 0xFFFFFF;
     }
 
     /*
         FIXME: Level Layout, not 'tiles'
      */
-    private int getTilesAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
-
+    private int getTilesAddr(ZoneAct zoneAct) throws IOException {
         // The address at LEVEL_LAYOUT_DIR_ADDR_LOC points to another pointer table.
         // We read this base address first.
         int levelLayoutDirAddr = rom.read32BitAddr(LEVEL_LAYOUT_DIR_ADDR_LOC);
 
         // Then, we use the zone and act to find an offset within that table.
         // The table is structured with 4 bytes per zone, and 2 bytes per act.
-        int levelOffsetAddr = levelLayoutDirAddr + (zoneIdx * 4) + (actIdx * 2);
+        int levelOffsetAddr = levelLayoutDirAddr + (zoneAct.zone() * 4) + (zoneAct.act() * 2);
 
         // The value at this address is a 16-bit offset relative to the start of the table.
         int levelOffset = rom.read16BitAddr(levelOffsetAddr);
@@ -346,38 +365,20 @@ public class Sonic2 extends Game {
         return levelLayoutDirAddr + levelOffset;
     }
 
-    private int getCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + zoneIdx * 4;
+    private int getCollisionMapAddr(ZoneAct zoneAct) throws IOException {
+        int zoneIdxLoc = COLLISION_LAYOUT_DIR_ADDR + zoneAct.zone() * 4;
         return rom.read32BitAddr(zoneIdxLoc);
     }
 
-    private int getAltCollisionMapAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + zoneIdx * 4;
+    private int getAltCollisionMapAddr(ZoneAct zoneAct) throws IOException {
+        int zoneIdxLoc = ALT_COLLISION_LAYOUT_DIR_ADDR + zoneAct.zone() * 4;
         return rom.read32BitAddr(zoneIdxLoc);
     }
 
-    private int getObjectLayoutAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
-
-        int objectLayoutDirAddr = OBJECT_LAYOUT_DIR_ADDR;
-        // Object Layout table has stride 8 (4 acts per zone), though Sonic 2 usually uses 2 acts.
-        int objectOffsetAddr = objectLayoutDirAddr + (zoneIdx * 8) + (actIdx * 2);
-
-        int objectOffset = rom.read16BitAddr(objectOffsetAddr);
-
-        return objectLayoutDirAddr + objectOffset;
-    }
-
-    private int getLevelBoundariesAddr(int levelIdx) throws IOException {
-        int zoneIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2) & 0xFF;
-        int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
-
+    private int getLevelBoundariesAddr(ZoneAct zoneAct) {
         // 8 bytes per entry. 2 entries per zone (usually 2 acts, sometimes 1).
         // It seems standard Sonic 2 stride is based on 2 acts per zone for this table.
         // Or it's a linear table indexed by (Zone * 2 + Act).
-        return LEVEL_BOUNDARIES_ADDR + ((zoneIdx * 2) + actIdx) * 8;
+        return LEVEL_BOUNDARIES_ADDR + ((zoneAct.zone() * 2) + zoneAct.act()) * 8;
     }
 }

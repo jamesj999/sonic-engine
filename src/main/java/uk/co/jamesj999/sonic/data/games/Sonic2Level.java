@@ -4,6 +4,8 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.*;
 import uk.co.jamesj999.sonic.tools.KosinskiReader;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -24,7 +26,8 @@ public class Sonic2Level implements Level {
     private Block[] blocks;
     private SolidTile[] solidTiles;
     private Map map;
-    private List<LevelObject> objects;
+    private List<ObjectSpawn> objects;
+    private List<RingSpawn> rings;
 
     private int patternCount;
     private int chunkCount;
@@ -51,7 +54,8 @@ public class Sonic2Level implements Level {
                        int solidTileHeightsAddr,
                        int solidTileWidthsAddr,
                        int solidTilesAngleAddr,
-                       int objectsAddr,
+                       List<ObjectSpawn> objectSpawns,
+                       List<RingSpawn> ringSpawns,
                        int levelBoundariesAddr) throws IOException {
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
@@ -59,7 +63,8 @@ public class Sonic2Level implements Level {
         loadChunks(rom, chunksAddr, collisionsAddr, altCollisionsAddr);
         loadBlocks(rom, blocksAddr);
         loadMap(rom, mapAddr);
-        loadObjects(rom, objectsAddr);
+        this.objects = List.copyOf(objectSpawns);
+        this.rings = List.copyOf(ringSpawns);
         loadBoundaries(rom, levelBoundariesAddr);
     }
 
@@ -129,8 +134,13 @@ public class Sonic2Level implements Level {
     }
 
     @Override
-    public List<LevelObject> getObjects() {
+    public List<ObjectSpawn> getObjects() {
         return objects;
+    }
+
+    @Override
+    public List<RingSpawn> getRings() {
+        return rings;
     }
 
     @Override
@@ -340,31 +350,6 @@ public class Sonic2Level implements Level {
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
         System.out.println("Map loaded successfully. Byte count: " + buffer.length);
-    }
-
-    private void loadObjects(Rom rom, int objectsAddr) throws IOException {
-        objects = new ArrayList<>();
-        int currentAddr = objectsAddr;
-
-        while (true) {
-            int x = rom.read16BitAddr(currentAddr);
-            if (x == 0xFFFF) {
-                break;
-            }
-            // Sonic 2 object layout:
-            // x (2 bytes)
-            // y (2 bytes) - top 4 bits are flags usually (render flags / status)
-            // id (1 byte)
-            // subtype (1 byte)
-            int y = rom.read16BitAddr(currentAddr + 2);
-            int id = Byte.toUnsignedInt(rom.readByte(currentAddr + 4));
-            int subtype = Byte.toUnsignedInt(rom.readByte(currentAddr + 5));
-
-            objects.add(new LevelObject(x, y, id, subtype));
-
-            currentAddr += 6;
-        }
-        LOG.info("Loaded " + objects.size() + " objects.");
     }
 
     private void loadBoundaries(Rom rom, int levelBoundariesAddr) throws IOException {

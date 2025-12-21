@@ -146,6 +146,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		timerManager.update();
 		spriteCollisionManager.update(inputHandler);
 		camera.updatePosition();
+		levelManager.update();
 
 		if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
 			try {

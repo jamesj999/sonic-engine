@@ -1,6 +1,8 @@
 package uk.co.jamesj999.sonic.level;
 
 import java.util.List;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 
 /**
  * Abstract class representing a Level, containing palettes, patterns, chunks, and blocks.
@@ -38,7 +40,9 @@ public interface Level {
     // Abstract method to get the map associated with the level
     public Map getMap();
 
-    public List<LevelObject> getObjects();
+    public List<ObjectSpawn> getObjects();
+
+    public List<RingSpawn> getRings();
 
     int getMinX();
     int getMaxX();

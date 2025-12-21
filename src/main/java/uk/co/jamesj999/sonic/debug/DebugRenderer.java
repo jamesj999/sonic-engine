@@ -4,6 +4,8 @@ import com.jogamp.opengl.util.awt.TextRenderer;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
@@ -17,9 +19,11 @@ public class DebugRenderer {
 	// private final GraphicsManager graphicsManager = GraphicsManager
 	// .getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
+	private final LevelManager levelManager = LevelManager.getInstance();
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
 	private TextRenderer renderer;
+	private TextRenderer objectRenderer;
 
 	private int width = configService
 			.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
@@ -33,6 +37,11 @@ public class DebugRenderer {
 		if (renderer == null) {
 			renderer = new TextRenderer(new Font(
 					"SansSerif", Font.PLAIN, 6));
+		}
+		if (objectRenderer == null) {
+			objectRenderer = new TextRenderer(new Font(
+					"SansSerif", Font.PLAIN, 6));
+			objectRenderer.setColor(Color.MAGENTA);
 		}
 
 		renderer.beginRendering(width, height);
@@ -112,6 +121,44 @@ public class DebugRenderer {
 			}
 			sensorRenderer.endRendering();
 		}
+
+		renderObjectLabels();
+	}
+
+	private void renderObjectLabels() {
+		if (objectRenderer == null) {
+			return;
+		}
+		java.util.Collection<ObjectSpawn> spawns = levelManager.getActiveObjectSpawns();
+		if (spawns.isEmpty()) {
+			return;
+		}
+		Camera camera = Camera.getInstance();
+
+		objectRenderer.beginRendering(width, height);
+		for (ObjectSpawn spawn : spawns) {
+			int screenX = spawn.x() - camera.getX();
+			int screenY = spawn.y() - camera.getY();
+
+			if (screenX < -8 || screenX > width + 8) {
+				continue;
+			}
+			if (screenY < -8 || screenY > height + 8) {
+				continue;
+			}
+
+			StringBuilder label = new StringBuilder(String.format("%02X:%02X",
+					spawn.objectId(), spawn.subtype()));
+			if (spawn.renderFlags() != 0) {
+				label.append(" F").append(Integer.toHexString(spawn.renderFlags()).toUpperCase());
+			}
+			if (spawn.respawnTracked()) {
+				label.append(" R");
+			}
+
+			objectRenderer.draw(label.toString(), screenX + 2, height - screenY + 2);
+		}
+		objectRenderer.endRendering();
 	}
 
 	public static synchronized DebugRenderer getInstance() {
