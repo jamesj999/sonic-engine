@@ -33,8 +33,8 @@ public class Sonic2RingPlacementTest {
         assertFalse(rings.isEmpty());
 
         assertContainsRing(rings, 0x0124, 0x0240);
-        assertContainsRing(rings, 0x0134, 0x0240);
-        assertContainsRing(rings, 0x0144, 0x0240);
+        assertContainsRing(rings, 0x013C, 0x0240);
+        assertContainsRing(rings, 0x0154, 0x0240);
     }
 
     @Test

@@ -48,7 +48,9 @@ public class DebugRenderer {
 
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
+			int ringCount = 0;
 			if (sprite instanceof AbstractPlayableSprite) {
+				ringCount = ((AbstractPlayableSprite) sprite).getRingCount();
 				renderer.draw("SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, height-10);
 				renderer.draw("Dir: " + ((AbstractPlayableSprite) sprite).getDirection(), 2, height-20);
 				renderer.draw(
@@ -97,6 +99,11 @@ public class DebugRenderer {
 
 			renderer.draw(xString, 2, 25);
 			renderer.draw(yString, 2, 12);
+
+			String ringText = String.format("RINGS: %03d", ringCount);
+			int ringTextWidth = (int) Math.ceil(renderer.getBounds(ringText).getWidth());
+			int ringX = Math.max(2, width - ringTextWidth - 4);
+			renderer.draw(ringText, ringX, 6);
 
 			renderer.endRendering();
 
