@@ -1,48 +1,28 @@
 package uk.co.jamesj999.sonic.level.rings;
 
-import java.util.ArrayList;
+import uk.co.jamesj999.sonic.level.spawn.AbstractPlacementManager;
+
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
  * Minimal runtime manager that exposes rings within a camera window.
  */
-public class RingPlacementManager {
+public class RingPlacementManager extends AbstractPlacementManager<RingSpawn> {
     private static final int LOAD_AHEAD = 0x280;
     private static final int UNLOAD_BEHIND = 0x300;
     private static final int NO_SPARKLE = -1;
 
-    private final List<RingSpawn> spawns;
-    private final Set<RingSpawn> active = new LinkedHashSet<>();
-    private final Map<RingSpawn, Integer> spawnIndexMap = new IdentityHashMap<>();
     private final BitSet collected = new BitSet();
     private final int[] sparkleStartFrames;
 
     public RingPlacementManager(List<RingSpawn> spawns) {
-        ArrayList<RingSpawn> sorted = new ArrayList<>(spawns);
-        sorted.sort(Comparator.comparingInt(RingSpawn::x));
-        this.spawns = Collections.unmodifiableList(sorted);
+        super(spawns, LOAD_AHEAD, UNLOAD_BEHIND);
         this.sparkleStartFrames = new int[this.spawns.size()];
         Arrays.fill(this.sparkleStartFrames, NO_SPARKLE);
-        for (int i = 0; i < this.spawns.size(); i++) {
-            spawnIndexMap.put(this.spawns.get(i), i);
-        }
-    }
-
-    public List<RingSpawn> getAllSpawns() {
-        return spawns;
-    }
-
-    public Collection<RingSpawn> getActiveSpawns() {
-        return Collections.unmodifiableCollection(active);
     }
 
     public void reset(int cameraX) {
@@ -50,11 +30,6 @@ public class RingPlacementManager {
         collected.clear();
         Arrays.fill(sparkleStartFrames, NO_SPARKLE);
         update(cameraX);
-    }
-
-    public int getSpawnIndex(RingSpawn spawn) {
-        Integer index = spawnIndexMap.get(spawn);
-        return index != null ? index : -1;
     }
 
     public boolean isCollected(int index) {
@@ -89,8 +64,8 @@ public class RingPlacementManager {
     }
 
     public void update(int cameraX) {
-        int windowStart = Math.max(0, cameraX - UNLOAD_BEHIND);
-        int windowEnd = cameraX + LOAD_AHEAD;
+        int windowStart = getWindowStart(cameraX);
+        int windowEnd = getWindowEnd(cameraX);
 
         int start = lowerBound(windowStart);
         int end = upperBound(windowEnd);
@@ -102,33 +77,5 @@ public class RingPlacementManager {
 
         active.retainAll(window);
         active.addAll(window);
-    }
-
-    private int lowerBound(int value) {
-        int low = 0;
-        int high = spawns.size();
-        while (low < high) {
-            int mid = (low + high) >>> 1;
-            if (spawns.get(mid).x() < value) {
-                low = mid + 1;
-            } else {
-                high = mid;
-            }
-        }
-        return low;
-    }
-
-    private int upperBound(int value) {
-        int low = 0;
-        int high = spawns.size();
-        while (low < high) {
-            int mid = (low + high) >>> 1;
-            if (spawns.get(mid).x() <= value) {
-                low = mid + 1;
-            } else {
-                high = mid;
-            }
-        }
-        return low;
     }
 }

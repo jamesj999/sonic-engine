@@ -2,13 +2,14 @@ package uk.co.jamesj999.sonic.level.rings;
 
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Pattern;
+import uk.co.jamesj999.sonic.level.render.SpriteSheet;
 
 import java.util.List;
 
 /**
  * Holds ring patterns and frame mappings.
  */
-public class RingSpriteSheet {
+public class RingSpriteSheet implements SpriteSheet<RingFrame> {
     private final Pattern[] patterns;
     private final List<RingFrame> frames;
     private final int paletteIndex;

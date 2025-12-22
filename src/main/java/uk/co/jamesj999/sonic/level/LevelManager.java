@@ -22,6 +22,7 @@ import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -291,7 +292,7 @@ public class LevelManager {
                     }
                     graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
                 } else {
-                    RingRenderManager.RingFrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
+                    PatternSpriteRenderer.FrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
                     List<GLCommand> boxCommands = new ArrayList<>();
                     List<GLCommand> centerCommands = new ArrayList<>();
                     int crossHalf = 2;

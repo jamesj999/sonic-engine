@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.level.rings;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.Collection;
@@ -16,7 +17,7 @@ public class RingManager {
     private final int sparkleStartIndex;
     private final int sparkleFrameCount;
     private final int frameDelay;
-    private RingRenderManager.RingFrameBounds spinBounds;
+    private PatternSpriteRenderer.FrameBounds spinBounds;
 
     public RingManager(RingPlacementManager placementManager, RingRenderManager renderManager) {
         this.placementManager = placementManager;
@@ -44,7 +45,7 @@ public class RingManager {
             return;
         }
 
-        RingRenderManager.RingFrameBounds bounds = getSpinBounds();
+        PatternSpriteRenderer.FrameBounds bounds = getSpinBounds();
         if (bounds.width() <= 0 || bounds.height() <= 0) {
             return;
         }
@@ -149,11 +150,11 @@ public class RingManager {
         return true;
     }
 
-    public RingRenderManager.RingFrameBounds getSpinBounds() {
+    public PatternSpriteRenderer.FrameBounds getSpinBounds() {
         if (spinBounds == null && renderManager != null) {
             spinBounds = renderManager.getSpinBounds();
         }
-        return spinBounds != null ? spinBounds : new RingRenderManager.RingFrameBounds(0, 0, 0, 0);
+        return spinBounds != null ? spinBounds : new PatternSpriteRenderer.FrameBounds(0, 0, 0, 0);
     }
 
     public Collection<RingSpawn> getActiveSpawns() {

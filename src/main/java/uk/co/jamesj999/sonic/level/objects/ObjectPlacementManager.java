@@ -1,47 +1,25 @@
 package uk.co.jamesj999.sonic.level.objects;
 
-import java.util.ArrayList;
+import uk.co.jamesj999.sonic.level.spawn.AbstractPlacementManager;
+
 import java.util.BitSet;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Minimal runtime manager that spawns/despawns objects in a camera window.
  * Uses the original Sonic 2 window distances as a starting point.
  */
-public class ObjectPlacementManager {
+public class ObjectPlacementManager extends AbstractPlacementManager<ObjectSpawn> {
     private static final int LOAD_AHEAD = 0x280;   // see addi.w #$280,d6 in ObjectsManager_GoingForward (s2.asm)
     private static final int UNLOAD_BEHIND = 0x300; // see addi.w #$300,d6 when trimming right-side objects
 
-    private final List<ObjectSpawn> spawns;
-    private final Map<ObjectSpawn, Integer> spawnIndexMap = new IdentityHashMap<>();
     private final BitSet remembered = new BitSet();
-    private final Set<ObjectSpawn> active = new LinkedHashSet<>();
     private int cursorIndex = 0;
     private int lastCameraX = Integer.MIN_VALUE;
 
     public ObjectPlacementManager(List<ObjectSpawn> spawns) {
-        ArrayList<ObjectSpawn> sorted = new ArrayList<>(spawns);
-        sorted.sort(Comparator.comparingInt(ObjectSpawn::x));
-        this.spawns = Collections.unmodifiableList(sorted);
-        for (int i = 0; i < this.spawns.size(); i++) {
-            spawnIndexMap.put(this.spawns.get(i), i);
-        }
-    }
-
-    public List<ObjectSpawn> getAllSpawns() {
-        return spawns;
-    }
-
-    public Collection<ObjectSpawn> getActiveSpawns() {
-        return Collections.unmodifiableCollection(active);
+        super(spawns, LOAD_AHEAD, UNLOAD_BEHIND);
     }
 
     public void reset(int cameraX) {
@@ -62,7 +40,7 @@ public class ObjectPlacementManager {
         }
 
         int delta = cameraX - lastCameraX;
-        if (delta < 0 || delta > (LOAD_AHEAD + UNLOAD_BEHIND)) {
+        if (delta < 0 || delta > (getLoadAhead() + getUnloadBehind())) {
             refreshWindow(cameraX);
         } else {
             spawnForward(cameraX);
@@ -76,8 +54,8 @@ public class ObjectPlacementManager {
         if (!spawn.respawnTracked()) {
             return;
         }
-        Integer index = spawnIndexMap.get(spawn);
-        if (index == null) {
+        int index = getSpawnIndex(spawn);
+        if (index < 0) {
             return;
         }
         remembered.set(index);
@@ -85,11 +63,8 @@ public class ObjectPlacementManager {
     }
 
     public boolean isRemembered(ObjectSpawn spawn) {
-        Integer index = spawnIndexMap.get(spawn);
-        if (index == null) {
-            return false;
-        }
-        return remembered.get(index);
+        int index = getSpawnIndex(spawn);
+        return index >= 0 && remembered.get(index);
     }
 
     public void clearRemembered() {
@@ -97,7 +72,7 @@ public class ObjectPlacementManager {
     }
 
     private void spawnForward(int cameraX) {
-        int spawnLimit = cameraX + LOAD_AHEAD;
+        int spawnLimit = cameraX + getLoadAhead();
         while (cursorIndex < spawns.size() && spawns.get(cursorIndex).x() <= spawnLimit) {
             trySpawn(cursorIndex);
             cursorIndex++;
@@ -105,8 +80,8 @@ public class ObjectPlacementManager {
     }
 
     private void trimActive(int cameraX) {
-        int windowStart = Math.max(0, cameraX - UNLOAD_BEHIND);
-        int windowEnd = cameraX + LOAD_AHEAD;
+        int windowStart = getWindowStart(cameraX);
+        int windowEnd = getWindowEnd(cameraX);
         Iterator<ObjectSpawn> iterator = active.iterator();
         while (iterator.hasNext()) {
             ObjectSpawn spawn = iterator.next();
@@ -117,8 +92,8 @@ public class ObjectPlacementManager {
     }
 
     private void refreshWindow(int cameraX) {
-        int windowStart = Math.max(0, cameraX - UNLOAD_BEHIND);
-        int windowEnd = cameraX + LOAD_AHEAD;
+        int windowStart = getWindowStart(cameraX);
+        int windowEnd = getWindowEnd(cameraX);
         int start = lowerBound(windowStart);
         int end = upperBound(windowEnd);
         cursorIndex = end;
@@ -134,33 +109,5 @@ public class ObjectPlacementManager {
             return;
         }
         active.add(spawn);
-    }
-
-    private int lowerBound(int value) {
-        int low = 0;
-        int high = spawns.size();
-        while (low < high) {
-            int mid = (low + high) >>> 1;
-            if (spawns.get(mid).x() < value) {
-                low = mid + 1;
-            } else {
-                high = mid;
-            }
-        }
-        return low;
-    }
-
-    private int upperBound(int value) {
-        int low = 0;
-        int high = spawns.size();
-        while (low < high) {
-            int mid = (low + high) >>> 1;
-            if (spawns.get(mid).x() <= value) {
-                low = mid + 1;
-            } else {
-                high = mid;
-            }
-        }
-        return low;
     }
 }
