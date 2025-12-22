@@ -270,16 +270,71 @@ public class LevelManager {
         }
 
         if (ringPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
-            List<GLCommand> ringCommands = new ArrayList<>();
-            for (RingSpawn ring : ringPlacementManager.getActiveSpawns()) {
-                ringCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
-                        -1,
-                        GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-                        1f, 0.85f, 0.1f,
-                        ring.x(), ring.y(), 0, 0));
-            }
-            if (!ringCommands.isEmpty()) {
-                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
+            Collection<RingSpawn> rings = ringPlacementManager.getActiveSpawns();
+            if (!rings.isEmpty()) {
+                if (ringRenderManager == null) {
+                    List<GLCommand> ringCommands = new ArrayList<>();
+                    for (RingSpawn ring : rings) {
+                        ringCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                                -1,
+                                GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                                1f, 0.85f, 0.1f,
+                                ring.x(), ring.y(), 0, 0));
+                    }
+                    graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
+                } else {
+                    RingRenderManager.RingFrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
+                    List<GLCommand> boxCommands = new ArrayList<>();
+                    List<GLCommand> centerCommands = new ArrayList<>();
+                    int crossHalf = 2;
+
+                    for (RingSpawn ring : rings) {
+                        int centerX = ring.x();
+                        int centerY = ring.y();
+                        int left = centerX + bounds.minX();
+                        int right = centerX + bounds.maxX();
+                        int top = centerY + bounds.minY();
+                        int bottom = centerY + bounds.maxY();
+
+                        // Bounding box (4 line segments)
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, top, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, top, 0, 0));
+
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, top, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, bottom, 0, 0));
+
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, bottom, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, bottom, 0, 0));
+
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, bottom, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, top, 0, 0));
+
+                        // Center cross
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX - crossHalf, centerY, 0, 0));
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX + crossHalf, centerY, 0, 0));
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX, centerY - crossHalf, 0, 0));
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX, centerY + crossHalf, 0, 0));
+                    }
+
+                    if (!boxCommands.isEmpty()) {
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
+                    }
+                    if (!centerCommands.isEmpty()) {
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
+                    }
+                }
             }
         }
     }

@@ -16,7 +16,7 @@ public class Sonic2RingPlacement {
     private static final int ACTS_PER_ZONE = 2;
     private static final int RECORD_SIZE = 4;
     private static final int TERMINATOR = 0xFFFF;
-    private static final int RING_SPACING = 0x10;
+    private static final int RING_SPACING = 0x18;
 
     private final RomByteReader rom;
 
