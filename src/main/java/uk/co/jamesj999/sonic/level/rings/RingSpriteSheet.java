@@ -13,12 +13,20 @@ public class RingSpriteSheet {
     private final List<RingFrame> frames;
     private final int paletteIndex;
     private final int frameDelay;
+    private final int spinFrameCount;
+    private final int sparkleFrameCount;
 
-    public RingSpriteSheet(Pattern[] patterns, List<RingFrame> frames, int paletteIndex, int frameDelay) {
+    public RingSpriteSheet(Pattern[] patterns, List<RingFrame> frames, int paletteIndex, int frameDelay,
+                           int spinFrameCount, int sparkleFrameCount) {
         this.patterns = patterns;
         this.frames = frames;
         this.paletteIndex = paletteIndex;
         this.frameDelay = frameDelay;
+        int totalFrames = frames != null ? frames.size() : 0;
+        int safeSpin = Math.max(0, Math.min(spinFrameCount, totalFrames));
+        int safeSparkle = Math.max(0, Math.min(sparkleFrameCount, totalFrames - safeSpin));
+        this.spinFrameCount = safeSpin;
+        this.sparkleFrameCount = safeSparkle;
     }
 
     public Pattern[] getPatterns() {
@@ -27,6 +35,18 @@ public class RingSpriteSheet {
 
     public int getFrameCount() {
         return frames.size();
+    }
+
+    public int getSpinFrameCount() {
+        return spinFrameCount;
+    }
+
+    public int getSparkleFrameCount() {
+        return sparkleFrameCount;
+    }
+
+    public int getSparkleStartIndex() {
+        return spinFrameCount;
     }
 
     public RingFrame getFrame(int index) {

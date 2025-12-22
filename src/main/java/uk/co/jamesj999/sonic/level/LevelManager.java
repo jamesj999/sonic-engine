@@ -17,6 +17,7 @@ import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
@@ -52,6 +53,7 @@ public class LevelManager {
     private ObjectPlacementManager objectPlacementManager;
     private RingPlacementManager ringPlacementManager;
     private RingRenderManager ringRenderManager;
+    private RingManager ringManager;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
@@ -100,6 +102,7 @@ public class LevelManager {
             } else {
                 ringRenderManager = null;
             }
+            ringManager = new RingManager(ringPlacementManager, ringRenderManager);
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -113,8 +116,10 @@ public class LevelManager {
         if (objectPlacementManager != null) {
             objectPlacementManager.update(Camera.getInstance().getX());
         }
-        if (ringPlacementManager != null) {
-            ringPlacementManager.update(Camera.getInstance().getX());
+        if (ringManager != null) {
+            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
+            ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
         }
     }
 
@@ -251,8 +256,8 @@ public class LevelManager {
         // Register all collected drawing commands with the graphics manager
         graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
 
-        if (ringRenderManager != null && ringPlacementManager != null) {
-            ringRenderManager.draw(ringPlacementManager.getActiveSpawns(), frameCounter);
+        if (ringManager != null) {
+            ringManager.draw(frameCounter);
         }
 
         if (objectPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
@@ -269,12 +274,15 @@ public class LevelManager {
             }
         }
 
-        if (ringPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
-            Collection<RingSpawn> rings = ringPlacementManager.getActiveSpawns();
+        if (ringManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+            Collection<RingSpawn> rings = ringManager.getActiveSpawns();
             if (!rings.isEmpty()) {
                 if (ringRenderManager == null) {
                     List<GLCommand> ringCommands = new ArrayList<>();
                     for (RingSpawn ring : rings) {
+                        if (!ringManager.isRenderable(ring, frameCounter)) {
+                            continue;
+                        }
                         ringCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                                 -1,
                                 GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
@@ -289,6 +297,9 @@ public class LevelManager {
                     int crossHalf = 2;
 
                     for (RingSpawn ring : rings) {
+                        if (!ringManager.isRenderable(ring, frameCounter)) {
+                            continue;
+                        }
                         int centerX = ring.x();
                         int centerY = ring.y();
                         int left = centerX + bounds.minX();

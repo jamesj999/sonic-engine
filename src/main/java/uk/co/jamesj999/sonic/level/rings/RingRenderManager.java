@@ -14,6 +14,7 @@ public class RingRenderManager {
     private int patternBase = -1;
     private final RingFrameBounds[] frameBoundsCache;
     private final PatternBounds[] patternBoundsCache;
+    private RingFrameBounds spinBoundsCache;
 
     public RingRenderManager(RingSpriteSheet spriteSheet) {
         this.spriteSheet = spriteSheet;
@@ -33,7 +34,7 @@ public class RingRenderManager {
         if (rings == null || rings.isEmpty() || patternBase < 0) {
             return;
         }
-        int frameIndex = getFrameIndex(frameCounter);
+        int frameIndex = getSpinFrameIndex(frameCounter);
         RingFrame frame = spriteSheet.getFrame(frameIndex);
         for (RingSpawn ring : rings) {
             drawFrame(frame, ring.x(), ring.y());
@@ -41,11 +42,23 @@ public class RingRenderManager {
     }
 
     public int getFrameIndex(int frameCounter) {
-        return (frameCounter / spriteSheet.getFrameDelay()) % spriteSheet.getFrameCount();
+        return getSpinFrameIndex(frameCounter);
+    }
+
+    public int getSpinFrameIndex(int frameCounter) {
+        int frameCount = spriteSheet.getSpinFrameCount();
+        if (frameCount <= 0) {
+            frameCount = spriteSheet.getFrameCount();
+        }
+        if (frameCount <= 0) {
+            return 0;
+        }
+        int delay = Math.max(1, spriteSheet.getFrameDelay());
+        return (frameCounter / delay) % frameCount;
     }
 
     public RingFrameBounds getFrameBounds(int frameCounter) {
-        return getFrameBoundsForIndex(getFrameIndex(frameCounter));
+        return getFrameBoundsForIndex(getSpinFrameIndex(frameCounter));
     }
 
     public RingFrameBounds getFrameBoundsForIndex(int frameIndex) {
@@ -60,6 +73,65 @@ public class RingRenderManager {
         RingFrameBounds bounds = computeFrameBounds(frame);
         frameBoundsCache[frameIndex] = bounds;
         return bounds;
+    }
+
+    public RingFrameBounds getSpinBounds() {
+        if (spinBoundsCache != null) {
+            return spinBoundsCache;
+        }
+        int spinCount = spriteSheet.getSpinFrameCount();
+        if (spinCount <= 0) {
+            spinCount = spriteSheet.getFrameCount();
+        }
+        if (spinCount <= 0) {
+            spinBoundsCache = new RingFrameBounds(0, 0, 0, 0);
+            return spinBoundsCache;
+        }
+        boolean first = true;
+        int minX = 0;
+        int minY = 0;
+        int maxX = 0;
+        int maxY = 0;
+        for (int i = 0; i < spinCount; i++) {
+            RingFrameBounds bounds = getFrameBoundsForIndex(i);
+            if (bounds.width() <= 0 || bounds.height() <= 0) {
+                continue;
+            }
+            if (first) {
+                minX = bounds.minX();
+                minY = bounds.minY();
+                maxX = bounds.maxX();
+                maxY = bounds.maxY();
+                first = false;
+            } else {
+                minX = Math.min(minX, bounds.minX());
+                minY = Math.min(minY, bounds.minY());
+                maxX = Math.max(maxX, bounds.maxX());
+                maxY = Math.max(maxY, bounds.maxY());
+            }
+        }
+        spinBoundsCache = first ? new RingFrameBounds(0, 0, 0, 0) : new RingFrameBounds(minX, minY, maxX, maxY);
+        return spinBoundsCache;
+    }
+
+    public void drawFrameIndex(int frameIndex, int originX, int originY) {
+        if (frameIndex < 0 || frameIndex >= spriteSheet.getFrameCount() || patternBase < 0) {
+            return;
+        }
+        RingFrame frame = spriteSheet.getFrame(frameIndex);
+        drawFrame(frame, originX, originY);
+    }
+
+    public int getSparkleStartIndex() {
+        return spriteSheet.getSparkleStartIndex();
+    }
+
+    public int getSparkleFrameCount() {
+        return spriteSheet.getSparkleFrameCount();
+    }
+
+    public int getFrameDelay() {
+        return spriteSheet.getFrameDelay();
     }
 
     private void drawFrame(RingFrame frame, int originX, int originY) {

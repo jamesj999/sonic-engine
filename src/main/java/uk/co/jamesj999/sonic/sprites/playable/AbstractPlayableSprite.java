@@ -58,9 +58,27 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
     /**
      * Whether or not this sprite is preparing for a spindash.
      */
-    protected boolean spindash = false;
+	protected boolean spindash = false;
 
     protected float spindashConstant = 0f;
+
+    protected int ringCount = 0;
+
+    public int getRingCount() {
+        return ringCount;
+    }
+
+    public void setRingCount(int ringCount) {
+        this.ringCount = Math.max(0, ringCount);
+    }
+
+    public void addRings(int delta) {
+        if (delta == 0) {
+            return;
+        }
+        int next = ringCount + delta;
+        ringCount = Math.max(0, next);
+    }
 
 	public boolean getAir() {
 		return air;

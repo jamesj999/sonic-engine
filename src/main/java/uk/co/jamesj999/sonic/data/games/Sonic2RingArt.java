@@ -39,9 +39,10 @@ public class Sonic2RingArt {
         }
 
         Pattern[] patterns = loadRingPatterns();
-        List<RingFrame> frames = loadRingFrames();
+        RingFrameSet frameSet = loadRingFrames();
 
-        cached = new RingSpriteSheet(patterns, frames, RING_PALETTE_INDEX, RING_FRAME_DELAY);
+        cached = new RingSpriteSheet(patterns, frameSet.frames(), RING_PALETTE_INDEX, RING_FRAME_DELAY,
+                frameSet.spinFrameCount(), frameSet.sparkleFrameCount());
         return cached;
     }
 
@@ -65,7 +66,7 @@ public class Sonic2RingArt {
         return patterns;
     }
 
-    private List<RingFrame> loadRingFrames() {
+    private RingFrameSet loadRingFrames() {
         List<Integer> offsets = new ArrayList<>();
         int lastOffset = -1;
 
@@ -78,13 +79,15 @@ public class Sonic2RingArt {
             lastOffset = offset;
         }
 
-        if (offsets.size() < 2) {
-            return List.of();
+        int totalFrames = Math.max(0, offsets.size() - 1);
+        if (totalFrames <= 0) {
+            return new RingFrameSet(List.of(), 0, 0);
         }
 
-        int frameCount = Math.min(RING_ANIMATION_FRAME_COUNT, Math.max(0, offsets.size() - 1));
-        List<RingFrame> frames = new ArrayList<>(frameCount);
-        for (int i = 0; i < frameCount; i++) {
+        int spinFrameCount = Math.min(RING_ANIMATION_FRAME_COUNT, totalFrames);
+        int sparkleFrameCount = Math.max(0, totalFrames - spinFrameCount);
+        List<RingFrame> frames = new ArrayList<>(totalFrames);
+        for (int i = 0; i < totalFrames; i++) {
             int frameAddr = RING_MAPPING_BASE_ADDR + offsets.get(i);
             int pieceCount = reader.readU16BE(frameAddr);
             frameAddr += 2;
@@ -116,6 +119,9 @@ public class Sonic2RingArt {
             frames.add(new RingFrame(pieces));
         }
 
-        return frames;
+        return new RingFrameSet(frames, spinFrameCount, sparkleFrameCount);
+    }
+
+    private record RingFrameSet(List<RingFrame> frames, int spinFrameCount, int sparkleFrameCount) {
     }
 }

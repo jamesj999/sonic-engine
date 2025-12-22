@@ -42,6 +42,9 @@ public class RingMonitor extends AbstractMonitor {
     public boolean onCollide(AbstractSprite sprite) {
         // Add rings here:
         AudioManager.getInstance().playSfx(GameSound.RING);
+        if (sprite instanceof uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite playable) {
+            playable.addRings(noOfRings);
+        }
 
         // Call standard method for monitor collision:
         return super.onCollide(sprite);
