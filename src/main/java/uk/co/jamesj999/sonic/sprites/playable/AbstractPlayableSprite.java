@@ -6,8 +6,12 @@ import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.managers.DebugSpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
+import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteAnimationManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
 
 /**
  * Movement speeds are in subpixels (256 subpixels per pixel...).
@@ -17,6 +21,7 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
  */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
 	protected final SpriteMovementManager movementManager;
+	protected final PlayableSpriteAnimationManager animationManager;
 
 	protected GroundMode runningMode = GroundMode.GROUND;
 
@@ -63,6 +68,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
     protected float spindashConstant = 0f;
 
     protected int ringCount = 0;
+	private PlayerSpriteRenderer spriteRenderer;
+	private int mappingFrame = 0;
+	private int animationFrameCount = 0;
+	private SpriteAnimationProfile animationProfile;
+	private SpriteAnimationSet animationSet;
+	private int animationId = 0;
+	private int animationFrameIndex = 0;
+	private int animationTick = 0;
 
     public int getRingCount() {
         return ringCount;
@@ -79,6 +92,70 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         int next = ringCount + delta;
         ringCount = Math.max(0, next);
     }
+
+	public PlayerSpriteRenderer getSpriteRenderer() {
+		return spriteRenderer;
+	}
+
+	public void setSpriteRenderer(PlayerSpriteRenderer spriteRenderer) {
+		this.spriteRenderer = spriteRenderer;
+	}
+
+	public int getMappingFrame() {
+		return mappingFrame;
+	}
+
+	public void setMappingFrame(int mappingFrame) {
+		this.mappingFrame = Math.max(0, mappingFrame);
+	}
+
+	public int getAnimationFrameCount() {
+		return animationFrameCount;
+	}
+
+	public void setAnimationFrameCount(int animationFrameCount) {
+		this.animationFrameCount = Math.max(0, animationFrameCount);
+	}
+
+	public SpriteAnimationProfile getAnimationProfile() {
+		return animationProfile;
+	}
+
+	public void setAnimationProfile(SpriteAnimationProfile animationProfile) {
+		this.animationProfile = animationProfile;
+	}
+
+	public SpriteAnimationSet getAnimationSet() {
+		return animationSet;
+	}
+
+	public void setAnimationSet(SpriteAnimationSet animationSet) {
+		this.animationSet = animationSet;
+	}
+
+	public int getAnimationId() {
+		return animationId;
+	}
+
+	public void setAnimationId(int animationId) {
+		this.animationId = Math.max(0, animationId);
+	}
+
+	public int getAnimationFrameIndex() {
+		return animationFrameIndex;
+	}
+
+	public void setAnimationFrameIndex(int animationFrameIndex) {
+		this.animationFrameIndex = Math.max(0, animationFrameIndex);
+	}
+
+	public int getAnimationTick() {
+		return animationTick;
+	}
+
+	public void setAnimationTick(int animationTick) {
+		this.animationTick = Math.max(0, animationTick);
+	}
 
 	public boolean getAir() {
 		return air;
@@ -209,6 +286,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		} else {
 			movementManager = new PlayableSpriteMovementManager(this);
 		}
+		animationManager = new PlayableSpriteAnimationManager(this);
 	}
 
 	public short getGSpeed() {
@@ -307,6 +385,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
 	public SpriteMovementManager getMovementManager() {
 		return movementManager;
+	}
+
+	public PlayableSpriteAnimationManager getAnimationManager() {
+		return animationManager;
 	}
 
 	protected abstract void defineSpeeds();

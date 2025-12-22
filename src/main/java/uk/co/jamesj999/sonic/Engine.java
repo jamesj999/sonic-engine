@@ -16,7 +16,9 @@ import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
+import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 
 import com.jogamp.opengl.GL2;
@@ -100,14 +102,18 @@ public class Engine extends GLCanvas implements GLEventListener {
 			AudioManager.getInstance().setBackend(new JOALAudioBackend());
 		}
 
-		Sonic sonic = new Sonic(
-				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 100, (short) 624, debugModeEnabled);
-		spriteManager.addSprite(sonic);
+		String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+		AbstractPlayableSprite mainSprite;
+		if ("tails".equalsIgnoreCase(mainCode)) {
+			mainSprite = new Tails(mainCode, (short) 100, (short) 624, debugModeEnabled);
+		} else {
+			mainSprite = new Sonic(mainCode, (short) 100, (short) 624, debugModeEnabled);
+		}
+		spriteManager.addSprite(mainSprite);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
 		// later since it'll be used in the first update loop anyway
-		camera.setFocusedSprite(sonic);
+		camera.setFocusedSprite(mainSprite);
 		camera.updatePosition(true);
 
 		//levelManager.setLevel(new TestOldLevel());

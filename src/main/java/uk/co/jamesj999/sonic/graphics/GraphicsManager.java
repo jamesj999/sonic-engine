@@ -24,6 +24,7 @@ public class GraphicsManager {
 
 	private final Map<String, Integer> patternTextureMap = new HashMap<>(); // Map for pattern textures
 	private final Map<String, Integer> paletteTextureMap = new HashMap<>();  // Map for palette textures
+	private Integer combinedPaletteTextureId;
 
 	private final Camera camera = Camera.getInstance();
 	private GL2 graphics;
@@ -94,13 +95,43 @@ public class GraphicsManager {
 		patternTextureMap.put("pattern_" + patternId, textureId);
 	}
 
+	public void updatePatternTexture(Pattern pattern, int patternId) {
+		if (graphics == null) {
+			return;
+		}
+		Integer textureId = patternTextureMap.get("pattern_" + patternId);
+		if (textureId == null) {
+			cachePatternTexture(pattern, patternId);
+			return;
+		}
+
+		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
+		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
+			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
+				byte colorIndex = pattern.getPixel(row, col);
+				patternBuffer.put(colorIndex);
+			}
+		}
+		patternBuffer.flip();
+
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
+		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, 0, 8, 8, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+	}
+
 
 	public void cachePaletteTexture(Palette palette, int paletteId) {
-		int textureId = glGenTexture();
+		if (combinedPaletteTextureId == null) {
+			combinedPaletteTextureId = glGenTexture();
+			ByteBuffer emptyBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4 * 4);
+			graphics.glBindTexture(GL2.GL_TEXTURE_2D, combinedPaletteTextureId);
+			graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 4, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, emptyBuffer);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
+		}
 
-		// Create a buffer to store the palette (16 colors, each RGBA component as an unsigned byte)
-		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4); // 16 colors, each RGBA (4 bytes)
-
+		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4);
 		for (int i = 0; i < COLORS_PER_PALETTE; i++) {
 			Palette.Color color = palette.getColor(i);
 			paletteBuffer.put((byte) Byte.toUnsignedInt(color.r));
@@ -114,16 +145,10 @@ public class GraphicsManager {
 		}
 		paletteBuffer.flip();
 
-		// Upload the palette to the GPU as a 1x16 texture using GL_UNSIGNED_BYTE
-		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 1, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, paletteBuffer);
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, combinedPaletteTextureId);
+		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, paletteId, 16, 1, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, paletteBuffer);
 
-		// Set texture parameters
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
-
-		paletteTextureMap.put("palette_" + paletteId, textureId);
+		paletteTextureMap.put("palette_" + paletteId, combinedPaletteTextureId);
 	}
 
 
@@ -153,7 +178,7 @@ public class GraphicsManager {
 			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
 		}
 		// Delete palette textures
-		for (int textureId : paletteTextureMap.values()) {
+		for (int textureId : new java.util.HashSet<>(paletteTextureMap.values())) {
 			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
 		}
 		// Cleanup shader program

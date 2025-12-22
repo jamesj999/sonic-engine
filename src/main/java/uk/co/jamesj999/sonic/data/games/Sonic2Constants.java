@@ -21,6 +21,20 @@ public class Sonic2Constants {
     public static final int LEVEL_BOUNDARIES_ADDR = 0xC054;
     public static final int MUSIC_PLAYLIST_ADDR = 0x3EA0;
 
+    // Player sprite art (Rev01, no header)
+    public static final int ART_UNC_SONIC_ADDR = 0x50000;
+    public static final int ART_UNC_SONIC_SIZE = 0x14320;
+    public static final int ART_UNC_TAILS_ADDR = 0x64320;
+    public static final int ART_UNC_TAILS_SIZE = 0x0B8C0;
+    public static final int MAP_UNC_SONIC_ADDR = 0x6FBE0;
+    public static final int MAP_R_UNC_SONIC_ADDR = 0x714E0;
+    public static final int MAP_UNC_TAILS_ADDR = 0x739E2;
+    public static final int MAP_R_UNC_TAILS_ADDR = 0x7446C;
+    public static final int ART_TILE_SONIC = 0x0780;
+    public static final int ART_TILE_TAILS = 0x07A0;
+    public static final int SONIC_ANIM_DATA_ADDR = 0x01B618;
+    public static final int SONIC_ANIM_SCRIPT_COUNT = 0x22;
+
     // Audio Constants
     public static final int SFX_JUMP = 0xA0;
     public static final int SFX_RING_LEFT = 0xCE;

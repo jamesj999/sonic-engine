@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.debug.DebugOption;
@@ -24,9 +25,10 @@ import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
-import uk.co.jamesj999.sonic.sprites.playable.Sonic;
+import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -104,6 +106,7 @@ public class LevelManager {
                 ringRenderManager = null;
             }
             ringManager = new RingManager(ringPlacementManager, ringRenderManager);
+            initPlayerSpriteArt();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -121,6 +124,35 @@ public class LevelManager {
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
             AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
+        }
+    }
+
+    private void initPlayerSpriteArt() {
+        if (!(game instanceof PlayerSpriteArtProvider provider)) {
+            return;
+        }
+        Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+        if (!(player instanceof AbstractPlayableSprite playable)) {
+            return;
+        }
+        try {
+            SpriteArtSet artSet = provider.loadPlayerSpriteArt(playable.getCode());
+            if (artSet == null || artSet.bankSize() <= 0 || artSet.mappingFrames().isEmpty() || artSet.dplcFrames().isEmpty()) {
+                playable.setSpriteRenderer(null);
+                return;
+            }
+            PlayerSpriteRenderer renderer = new PlayerSpriteRenderer(artSet);
+            renderer.ensureCached(graphicsManager);
+            playable.setSpriteRenderer(renderer);
+            playable.setMappingFrame(0);
+            playable.setAnimationFrameCount(artSet.mappingFrames().size());
+            playable.setAnimationProfile(artSet.animationProfile());
+            playable.setAnimationSet(artSet.animationSet());
+            playable.setAnimationId(0);
+            playable.setAnimationFrameIndex(0);
+            playable.setAnimationTick(0);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load player sprite art.", e);
         }
     }
 

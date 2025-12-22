@@ -2,11 +2,13 @@ package uk.co.jamesj999.sonic.data.games;
 
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
+import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -15,13 +17,14 @@ import java.util.Map;
 
 import static uk.co.jamesj999.sonic.data.games.Sonic2Constants.*;
 
-public class Sonic2 extends Game {
+public class Sonic2 extends Game implements PlayerSpriteArtProvider {
 
     private final Rom rom;
     private RomByteReader romReader;
     private Sonic2ObjectPlacement objectPlacement;
     private Sonic2RingPlacement ringPlacement;
     private Sonic2RingArt ringArt;
+    private Sonic2PlayerArt playerArt;
     private static final int BG_SCROLL_TABLE_ADDR = 0x00C296;
 
     public Sonic2(Rom rom) {
@@ -261,6 +264,15 @@ public class Sonic2 extends Game {
         }
     }
 
+    @Override
+    public SpriteArtSet loadPlayerSpriteArt(String characterCode) throws IOException {
+        ensurePlacementHelpers();
+        if (playerArt == null) {
+            return null;
+        }
+        return playerArt.loadForCharacter(characterCode);
+    }
+
     private int getSolidTileHeightsAddr() {
         return SOLID_TILE_VERTICAL_MAP_ADDR;
     }
@@ -311,6 +323,9 @@ public class Sonic2 extends Game {
         }
         if (ringArt == null) {
             ringArt = new Sonic2RingArt(rom, romReader);
+        }
+        if (playerArt == null) {
+            playerArt = new Sonic2PlayerArt(romReader);
         }
     }
 

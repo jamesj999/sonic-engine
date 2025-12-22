@@ -26,6 +26,7 @@ public class SpriteCollisionManager {
         private int rightKey;
         private int jumpKey;
         private int testKey;
+        private int frameCounter;
 
         private SpriteCollisionManager() {
                 upKey = configService.getInt(SonicConfiguration.UP);
@@ -40,6 +41,7 @@ public class SpriteCollisionManager {
          * Calls all sprites to recalculate their positions.
          */
         public void update(InputHandler handler) {
+                frameCounter++;
                 Collection<Sprite> sprites = spriteManager.getAllSprites();
                 // Firstly calculate key presses:
                 boolean up = handler.isKeyDown(upKey);
@@ -63,6 +65,7 @@ public class SpriteCollisionManager {
                                  * tick.
                                  * Update: lol, we never did that.
                                  */
+                                ((AbstractPlayableSprite) sprite).getAnimationManager().update(frameCounter);
                                 ((AbstractPlayableSprite) sprite).endOfTick();
                         }
                 }

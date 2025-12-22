@@ -87,6 +87,9 @@ public class PatternRenderCommand implements GLCommandable {
         int indexedColorTextureLocation = gl.glGetUniformLocation(shaderProgram.getProgramId(), "IndexedColorTexture");
         gl.glUniform1i(indexedColorTextureLocation, 1); // Texture unit 1
 
+        int paletteLineLocation = gl.glGetUniformLocation(shaderProgram.getProgramId(), "PaletteLine");
+        gl.glUniform1f(paletteLineLocation, (float) desc.getPaletteIndex());
+
         // Bind the vertex data
         gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
         gl.glVertexPointer(2, GL2.GL_FLOAT, 0, VERTEX_BUFFER);
