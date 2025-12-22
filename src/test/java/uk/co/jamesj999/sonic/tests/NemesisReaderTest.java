@@ -59,8 +59,7 @@ public class NemesisReaderTest {
         out.write((header >> 8) & 0xFF);
         out.write(header & 0xFF);
 
-        out.write(0x00); // palette index (ignored for inline-only data)
-        out.write(0xFF); // end of code table
+        out.write(0xFF); // end of code table (inline-only data)
 
         BitPacker packer = new BitPacker(out);
         int rows = patternCount * 8;

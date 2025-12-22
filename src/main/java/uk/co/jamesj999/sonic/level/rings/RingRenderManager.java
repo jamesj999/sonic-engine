@@ -48,7 +48,7 @@ public class RingRenderManager {
                 for (int tx = 0; tx < widthTiles; tx++) {
                     int srcX = piece.hFlip() ? (widthTiles - 1 - tx) : tx;
                     int srcY = piece.vFlip() ? (heightTiles - 1 - ty) : ty;
-                    int tileOffset = (ty * widthTiles) + tx;
+                    int tileOffset = (tx * heightTiles) + ty;
                     int patternIndex = patternBase + piece.tileIndex() + tileOffset;
 
                     int drawX = pieceX + (srcX * Pattern.PATTERN_WIDTH);

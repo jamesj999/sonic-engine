@@ -50,22 +50,9 @@ public class NemesisReader {
         buildCodeTable(reader, codeLengths, codeEntries);
 
         BitReader bitReader = new BitReader(reader);
-        int totalRows = patternCount * 8;
         byte[] output = new byte[patternCount * PATTERN_SIZE];
-        byte[] prevRow = new byte[4];
 
-        int outPos = 0;
-        for (int row = 0; row < totalRows; row++) {
-            byte[] rowBytes = decodeRow(bitReader, codeLengths, codeEntries);
-            if (xorMode) {
-                for (int i = 0; i < 4; i++) {
-                    rowBytes[i] = (byte) (rowBytes[i] ^ prevRow[i]);
-                    prevRow[i] = rowBytes[i];
-                }
-            }
-            System.arraycopy(rowBytes, 0, output, outPos, rowBytes.length);
-            outPos += rowBytes.length;
-        }
+        decodeStream(bitReader, codeLengths, codeEntries, xorMode, patternCount, output);
 
         if (printDebugInformation) {
             System.err.printf("Nemesis: patterns=%d xor=%s bytes=%d%n", patternCount, xorMode, output.length);
@@ -75,15 +62,13 @@ public class NemesisReader {
     }
 
     private static void buildCodeTable(ByteReader reader, int[] codeLengths, int[] codeEntries) throws IOException {
-        int paletteIndex = reader.read() & 0x0F;
+        int paletteIndex = 0;
+        int control = reader.read();
 
-        while (true) {
-            int control = reader.read();
-            if (control == 0xFF) {
-                return;
-            }
+        while (control != 0xFF) {
             if ((control & 0x80) != 0) {
                 paletteIndex = control & 0x0F;
+                control = reader.read();
                 continue;
             }
 
@@ -91,32 +76,36 @@ public class NemesisReader {
             int codeLength = control & 0x0F;
             int code = reader.read();
 
-            if (codeLength == 0) {
-                continue;
-            }
-
-            int entry = (repeatCount << 4) | paletteIndex;
-            if (codeLength == 8) {
-                codeLengths[code] = codeLength;
-                codeEntries[code] = entry;
-            } else {
-                int shift = 8 - codeLength;
-                int base = (code << shift) & 0xFF;
-                int count = 1 << shift;
-                for (int i = 0; i < count; i++) {
-                    int index = (base + i) & 0xFF;
-                    codeLengths[index] = codeLength;
-                    codeEntries[index] = entry;
+            if (codeLength > 0 && codeLength <= 8) {
+                int entry = (repeatCount << 4) | paletteIndex;
+                if (codeLength == 8) {
+                    codeLengths[code] = codeLength;
+                    codeEntries[code] = entry;
+                } else {
+                    int shift = 8 - codeLength;
+                    int base = (code << shift) & 0xFF;
+                    int count = 1 << shift;
+                    for (int i = 0; i < count; i++) {
+                        int index = (base + i) & 0xFF;
+                        codeLengths[index] = codeLength;
+                        codeEntries[index] = entry;
+                    }
                 }
             }
+
+            control = reader.read();
         }
     }
 
-    private static byte[] decodeRow(BitReader bitReader, int[] codeLengths, int[] codeEntries) throws IOException {
-        byte[] row = new byte[4];
-        int nibbleIndex = 0;
+    private static void decodeStream(BitReader bitReader, int[] codeLengths, int[] codeEntries,
+                                     boolean xorMode, int patternCount, byte[] output) throws IOException {
+        int nybblesRemaining = patternCount * 8 * 8;
+        byte[] rowBytes = new byte[4];
+        byte[] prevRow = new byte[4];
+        int rowNibbleIndex = 0;
+        int outPos = 0;
 
-        while (nibbleIndex < 8) {
+        while (nybblesRemaining > 0) {
             int prefix = bitReader.peekBits(8);
             int palette;
             int repeat;
@@ -138,18 +127,41 @@ public class NemesisReader {
             }
 
             int run = repeat + 1;
-            for (int i = 0; i < run && nibbleIndex < 8; i++) {
-                int byteIndex = nibbleIndex / 2;
-                if ((nibbleIndex & 1) == 0) {
-                    row[byteIndex] = (byte) (palette << 4);
+            if (run > nybblesRemaining) {
+                throw new IOException("Nemesis decode error: run exceeds remaining data");
+            }
+
+            for (int i = 0; i < run; i++) {
+                int byteIndex = rowNibbleIndex >> 1;
+                if ((rowNibbleIndex & 1) == 0) {
+                    rowBytes[byteIndex] = (byte) (palette << 4);
                 } else {
-                    row[byteIndex] |= (byte) palette;
+                    rowBytes[byteIndex] |= (byte) palette;
                 }
-                nibbleIndex++;
+                rowNibbleIndex++;
+                nybblesRemaining--;
+
+                if (rowNibbleIndex == 8) {
+                    if (xorMode) {
+                        for (int j = 0; j < 4; j++) {
+                            rowBytes[j] = (byte) (rowBytes[j] ^ prevRow[j]);
+                            prevRow[j] = rowBytes[j];
+                        }
+                    }
+                    System.arraycopy(rowBytes, 0, output, outPos, rowBytes.length);
+                    outPos += rowBytes.length;
+                    rowNibbleIndex = 0;
+                    rowBytes[0] = 0;
+                    rowBytes[1] = 0;
+                    rowBytes[2] = 0;
+                    rowBytes[3] = 0;
+                }
             }
         }
 
-        return row;
+        if (rowNibbleIndex != 0) {
+            throw new IOException("Nemesis decode error: stream ended mid-row");
+        }
     }
 
     private static final class ByteReader {

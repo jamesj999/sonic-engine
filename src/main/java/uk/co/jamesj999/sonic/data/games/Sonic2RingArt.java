@@ -21,7 +21,8 @@ public class Sonic2RingArt {
     private static final int RING_ART_ADDR = 0x7945C;
     private static final int RING_MAPPING_BASE_ADDR = 0x12382;
     private static final int RING_PALETTE_INDEX = 1;
-    private static final int RING_FRAME_DELAY = 4;
+    private static final int RING_FRAME_DELAY = 8;
+    private static final int RING_ANIMATION_FRAME_COUNT = 4; // Excludes pickup sparkle frames.
 
     private final Rom rom;
     private final RomByteReader reader;
@@ -81,8 +82,9 @@ public class Sonic2RingArt {
             return List.of();
         }
 
-        List<RingFrame> frames = new ArrayList<>();
-        for (int i = 0; i < offsets.size() - 1; i++) {
+        int frameCount = Math.min(RING_ANIMATION_FRAME_COUNT, Math.max(0, offsets.size() - 1));
+        List<RingFrame> frames = new ArrayList<>(frameCount);
+        for (int i = 0; i < frameCount; i++) {
             int frameAddr = RING_MAPPING_BASE_ADDR + offsets.get(i);
             int pieceCount = reader.readU16BE(frameAddr);
             frameAddr += 2;
