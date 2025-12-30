@@ -64,6 +64,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
      * Whether or not this sprite is preparing for a spindash.
      */
 	protected boolean spindash = false;
+	/**
+	 * Whether or not this sprite is crouching.
+	 */
+	protected boolean crouching = false;
 
     protected float spindashConstant = 0f;
 
@@ -181,6 +185,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
     public void setSpindash(boolean spindash) {
         this.spindash = spindash;
     }
+
+	public boolean getCrouching() {
+		return crouching;
+	}
+
+	public void setCrouching(boolean crouching) {
+		this.crouching = crouching;
+	}
 
     public float getSpindashConstant() {
         return spindashConstant;

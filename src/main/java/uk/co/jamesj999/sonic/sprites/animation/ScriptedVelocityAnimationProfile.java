@@ -12,6 +12,8 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     private final int rollAnimId;
     private final int roll2AnimId;
     private final int pushAnimId;
+    private final int duckAnimId;
+    private final int spindashAnimId;
     private final int airAnimId;
     private final int runSpeedThreshold;
     private final int walkSpeedThreshold;
@@ -27,7 +29,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int runSpeedThreshold,
             int fallbackFrame
     ) {
-        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, rollAnimId, -1, airAnimId, walkSpeedThreshold,
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, rollAnimId, -1, -1, -1, airAnimId, walkSpeedThreshold,
                 runSpeedThreshold, fallbackFrame);
     }
 
@@ -43,12 +45,32 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int runSpeedThreshold,
             int fallbackFrame
     ) {
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, -1, -1, airAnimId,
+                walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
+    }
+
+    public ScriptedVelocityAnimationProfile(
+            int idleAnimId,
+            int walkAnimId,
+            int runAnimId,
+            int rollAnimId,
+            int roll2AnimId,
+            int pushAnimId,
+            int duckAnimId,
+            int spindashAnimId,
+            int airAnimId,
+            int walkSpeedThreshold,
+            int runSpeedThreshold,
+            int fallbackFrame
+    ) {
         this.idleAnimId = Math.max(0, idleAnimId);
         this.walkAnimId = Math.max(0, walkAnimId);
         this.runAnimId = Math.max(0, runAnimId);
         this.rollAnimId = Math.max(0, rollAnimId);
         this.roll2AnimId = Math.max(-1, roll2AnimId);
         this.pushAnimId = Math.max(-1, pushAnimId);
+        this.duckAnimId = Math.max(-1, duckAnimId);
+        this.spindashAnimId = Math.max(-1, spindashAnimId);
         this.airAnimId = Math.max(0, airAnimId);
         this.walkSpeedThreshold = Math.max(0, walkSpeedThreshold);
         this.runSpeedThreshold = Math.max(0, runSpeedThreshold);
@@ -59,6 +81,12 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     public Integer resolveAnimationId(AbstractPlayableSprite sprite, int frameCounter, int scriptCount) {
         if (sprite.getAir()) {
             return airAnimId;
+        }
+        if (sprite.getSpindash() && spindashAnimId >= 0) {
+            return spindashAnimId;
+        }
+        if (sprite.getCrouching() && duckAnimId >= 0) {
+            return duckAnimId;
         }
         if (sprite.getRolling()) {
             return rollAnimId;
@@ -103,6 +131,14 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     public int getPushAnimId() {
         return pushAnimId;
+    }
+
+    public int getDuckAnimId() {
+        return duckAnimId;
+    }
+
+    public int getSpindashAnimId() {
+        return spindashAnimId;
     }
 
     public int getAirAnimId() {

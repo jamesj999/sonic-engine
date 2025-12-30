@@ -6,6 +6,8 @@ import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.sprites.animation.ScriptedVelocityAnimationProfile;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
@@ -78,6 +80,7 @@ public class PlayableSpriteMovementManager extends
 
 		short originalX = sprite.getX();
 		short originalY = sprite.getY();
+		sprite.setCrouching(false);
 
 		// First thing to do is run this additional method to find out if the jump button has been released recently
 		// in order to shorten the jump.
@@ -86,6 +89,7 @@ public class PlayableSpriteMovementManager extends
 		}
 
 		if(sprite.getSpindash()) {
+			sprite.setCrouching(false);
 			//A little bit of logic to make sure holding jump doesn't accelerate the spindash on each frame.
 			if(jumpHeld && jump) {
 				jump = false;
@@ -165,6 +169,7 @@ public class PlayableSpriteMovementManager extends
 		// (Only applicable if not in the air)
 		if (!sprite.getAir()) {
 			calculateRoll(sprite, down);
+			updateCrouchState(sprite, down, left, right);
 		}
 
 		// Store some attributes in case we need to 'reset' the terrain collision:
@@ -446,6 +451,9 @@ public class PlayableSpriteMovementManager extends
 
 	private void releaseSpindash(AbstractPlayableSprite sprite) {
 		sprite.setSpindash(false);
+		sprite.setCrouching(false);
+		sprite.setRolling(true);
+		forceRollAnimation(sprite);
         audioManager.playSfx(GameSound.SPINDASH_RELEASE);
 		short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
 		if(Direction.LEFT.equals(sprite.getDirection())) {
@@ -457,6 +465,16 @@ public class PlayableSpriteMovementManager extends
 		TimerManager.getInstance().registerTimer(new SpindashCameraTimer("spindash", (32 - (int) sprite.getSpindashConstant())));
 
 		sprite.setSpindashConstant(0f);
+	}
+
+	private void forceRollAnimation(AbstractPlayableSprite sprite) {
+		SpriteAnimationProfile profile = sprite.getAnimationProfile();
+		if (profile instanceof ScriptedVelocityAnimationProfile velocityProfile) {
+			int rollId = velocityProfile.getRollAnimId();
+			sprite.setAnimationId(rollId);
+			sprite.setAnimationFrameIndex(0);
+			sprite.setAnimationTick(0);
+		}
 	}
 
 	private void spindashCooldown(AbstractPlayableSprite sprite) {
@@ -514,7 +532,7 @@ public class PlayableSpriteMovementManager extends
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
-                if(gSpeed >= 4 * 256 && !skidding) {
+                if(!sprite.getRolling() && gSpeed >= 4 * 256 && !skidding) {
                     audioManager.playSfx(GameSound.SKID);
                     skidding = true;
                 }
@@ -530,7 +548,7 @@ public class PlayableSpriteMovementManager extends
 		if (right) {
 			if (gSpeed < 0) {
 				gSpeed += decel;
-                if(gSpeed <= -4 * 256 && !skidding) {
+                if(!sprite.getRolling() && gSpeed <= -4 * 256 && !skidding) {
                     audioManager.playSfx(GameSound.SKID);
                     skidding = true;
                 }
@@ -686,6 +704,17 @@ public class PlayableSpriteMovementManager extends
 				&& ((gSpeed < minRollSpeed && gSpeed >= 0) || (gSpeed > -minRollSpeed && gSpeed <= 0))) {
 			sprite.setRolling(false);
 		}
+	}
+
+	private void updateCrouchState(AbstractPlayableSprite sprite, boolean down, boolean left, boolean right) {
+		boolean crouching = down
+				&& !left
+				&& !right
+				&& !sprite.getAir()
+				&& !sprite.getRolling()
+				&& !sprite.getSpindash()
+				&& sprite.getGSpeed() == 0;
+		sprite.setCrouching(crouching);
 	}
 
 	/**
