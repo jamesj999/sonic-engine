@@ -92,9 +92,11 @@ public class Sonic2PlayerArt {
                 Sonic2AnimationIds.WALK,
                 Sonic2AnimationIds.RUN,
                 Sonic2AnimationIds.ROLL,
+                Sonic2AnimationIds.ROLL2,
+                Sonic2AnimationIds.PUSH,
                 Sonic2AnimationIds.ROLL,
                 0x40,
-                0x100,
+                0x600,
                 0
         );
 
@@ -194,29 +196,35 @@ public class Sonic2PlayerArt {
 
             List<Integer> frames = new ArrayList<>();
             SpriteAnimationEndAction endAction = SpriteAnimationEndAction.LOOP;
-            int nextAnimId = i;
+            int endParam = 0;
 
             while (true) {
                 int value = reader.readU8(scriptAddr);
                 scriptAddr += 1;
-                if (value == 0xFF) {
-                    endAction = SpriteAnimationEndAction.LOOP;
-                    break;
-                }
-                if (value == 0xFE) {
+                if (value >= 0xF0) {
+                    if (value == 0xFF) {
+                        endAction = SpriteAnimationEndAction.LOOP;
+                        break;
+                    }
+                    if (value == 0xFE) {
+                        endAction = SpriteAnimationEndAction.LOOP_BACK;
+                        endParam = reader.readU8(scriptAddr);
+                        scriptAddr += 1;
+                        break;
+                    }
+                    if (value == 0xFD) {
+                        endAction = SpriteAnimationEndAction.SWITCH;
+                        endParam = reader.readU8(scriptAddr);
+                        scriptAddr += 1;
+                        break;
+                    }
                     endAction = SpriteAnimationEndAction.HOLD;
-                    break;
-                }
-                if (value == 0xFD) {
-                    endAction = SpriteAnimationEndAction.SWITCH;
-                    nextAnimId = reader.readU8(scriptAddr);
-                    scriptAddr += 1;
                     break;
                 }
                 frames.add(value);
             }
 
-            set.addScript(i, new SpriteAnimationScript(delay, frames, endAction, nextAnimId));
+            set.addScript(i, new SpriteAnimationScript(delay, frames, endAction, endParam));
         }
         return set;
     }
@@ -249,6 +257,8 @@ public class Sonic2PlayerArt {
         private static final int WALK = 0x00;
         private static final int RUN = 0x01;
         private static final int ROLL = 0x02;
+        private static final int ROLL2 = 0x03;
+        private static final int PUSH = 0x04;
         private static final int WAIT = 0x05;
     }
 }
