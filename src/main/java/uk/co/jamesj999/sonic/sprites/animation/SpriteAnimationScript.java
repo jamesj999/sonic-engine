@@ -6,6 +6,6 @@ public record SpriteAnimationScript(
         int delay,
         List<Integer> frames,
         SpriteAnimationEndAction endAction,
-        int nextAnimationId
+        int endParam
 ) {
 }

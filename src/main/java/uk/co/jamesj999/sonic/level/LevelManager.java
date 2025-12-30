@@ -15,6 +15,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
+import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
@@ -24,6 +25,7 @@ import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
+import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
@@ -381,6 +383,13 @@ public class LevelManager {
                 }
             }
         }
+
+        if (configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            if (player instanceof AbstractPlayableSprite playable) {
+                drawPlayableSpriteBounds(playable);
+            }
+        }
     }
 
     private void drawLayer(List<GLCommand> commands, int layerIndex, Camera camera, float parallaxX, float parallaxY) {
@@ -651,6 +660,69 @@ public class LevelManager {
         if (shaderProgramId != 0) {
             commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, shaderProgramId));
         }
+    }
+
+    private void drawPlayableSpriteBounds(AbstractPlayableSprite sprite) {
+        PlayerSpriteRenderer renderer = sprite.getSpriteRenderer();
+        if (renderer == null) {
+            return;
+        }
+
+        boolean hFlip = Direction.LEFT.equals(sprite.getDirection());
+        SpritePieceRenderer.FrameBounds mappingBounds = renderer.getFrameBounds(sprite.getMappingFrame(), hFlip, false);
+
+        int centerX = sprite.getCentreX();
+        int centerY = sprite.getCentreY();
+        List<GLCommand> commands = new ArrayList<>();
+
+        if (mappingBounds.width() > 0 && mappingBounds.height() > 0) {
+            int mapLeft = centerX + mappingBounds.minX();
+            int mapRight = centerX + mappingBounds.maxX();
+            int mapTop = centerY + mappingBounds.minY();
+            int mapBottom = centerY + mappingBounds.maxY();
+            appendBox(commands, mapLeft, mapTop, mapRight, mapBottom, 0.1f, 0.85f, 1f);
+        }
+
+        int hitLeft = centerX - (sprite.getWidth() / 2);
+        int hitRight = centerX + (sprite.getWidth() / 2);
+        int hitTop = centerY - (sprite.getHeight() / 2);
+        int hitBottom = centerY + (sprite.getHeight() / 2);
+        appendBox(commands, hitLeft, hitTop, hitRight, hitBottom, 1f, 0.8f, 0.1f);
+
+        if (!commands.isEmpty()) {
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        }
+    }
+
+    private void appendBox(
+            List<GLCommand> commands,
+            int left,
+            int top,
+            int right,
+            int bottom,
+            float r,
+            float g,
+            float b
+    ) {
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, top, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, top, 0, 0));
+
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, top, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, bottom, 0, 0));
+
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, bottom, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, bottom, 0, 0));
+
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, bottom, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, top, 0, 0));
     }
 
     /**

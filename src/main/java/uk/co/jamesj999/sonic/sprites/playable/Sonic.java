@@ -18,7 +18,7 @@ public class Sonic extends AbstractPlayableSprite {
 
 	public void draw() {
 		if (getSpriteRenderer() != null) {
-			getSpriteRenderer().drawFrame(getMappingFrame(), xPixel, yPixel,
+			getSpriteRenderer().drawFrame(getMappingFrame(), getCentreX(), getCentreY(),
 					Direction.LEFT.equals(direction), false);
 			return;
 		}

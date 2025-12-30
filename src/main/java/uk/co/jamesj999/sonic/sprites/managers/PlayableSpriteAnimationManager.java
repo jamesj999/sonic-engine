@@ -1,13 +1,18 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
+import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.sprites.animation.ScriptedVelocityAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationScript;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 /**
  * Updates a playable sprite's mapping frame based on its animation profile.
  */
 public class PlayableSpriteAnimationManager {
+    private static final int DEFAULT_RUN_SPEED_THRESHOLD = 0x600;
     private final AbstractPlayableSprite sprite;
+    private int lastAnimationId = -1;
 
     public PlayableSpriteAnimationManager(AbstractPlayableSprite sprite) {
         this.sprite = sprite;
@@ -25,8 +30,7 @@ public class PlayableSpriteAnimationManager {
                     : null;
             if (desiredAnimId != null && desiredAnimId != sprite.getAnimationId()) {
                 sprite.setAnimationId(desiredAnimId);
-                sprite.setAnimationFrameIndex(0);
-                sprite.setAnimationTick(0);
+                resetScriptState();
             }
             updateScriptedAnimation(frameCounter);
             return;
@@ -48,48 +52,194 @@ public class PlayableSpriteAnimationManager {
         if (animationSet == null) {
             return;
         }
+        if (sprite.getAnimationId() != lastAnimationId) {
+            resetScriptState();
+        }
         var script = animationSet.getScript(sprite.getAnimationId());
         if (script == null || script.frames().isEmpty()) {
             return;
         }
 
-        int delay = resolveDelay(script.delay(), sprite, frameCounter);
-        int tick = sprite.getAnimationTick() + 1;
-        if (tick >= delay) {
-            tick = 0;
-            int frameIndex = sprite.getAnimationFrameIndex() + 1;
-            if (frameIndex >= script.frames().size()) {
-                switch (script.endAction()) {
-                    case HOLD -> frameIndex = script.frames().size() - 1;
-                    case SWITCH -> {
-                        sprite.setAnimationId(script.nextAnimationId());
-                        sprite.setAnimationFrameIndex(0);
-                        sprite.setAnimationTick(0);
-                        updateScriptedAnimation(frameCounter);
-                        return;
-                    }
-                    case LOOP -> frameIndex = 0;
-                    default -> frameIndex = 0;
-                }
-            }
-            sprite.setAnimationFrameIndex(frameIndex);
+        int delayOrFlag = script.delay() & 0xFF;
+        if (delayOrFlag >= 0x80) {
+            updateSpecialScript(delayOrFlag, script);
+            return;
         }
-        sprite.setAnimationTick(tick);
+
+        updateScriptWithDelay(script, delayOrFlag, 0);
+    }
+
+    private void updateSpecialScript(int startFlag, SpriteAnimationScript script) {
+        switch (startFlag & 0xFF) {
+            case 0xFF -> updateWalkRun(script);
+            case 0xFE -> updateRoll(script);
+            case 0xFD -> updatePush(script);
+            default -> updateScriptWithDelay(script, 0, 0);
+        }
+    }
+
+    private void updateWalkRun(SpriteAnimationScript baseScript) {
+        int speed = Math.abs(sprite.getGSpeed());
+        ScriptedVelocityAnimationProfile profile = resolveVelocityProfile();
+        int runThreshold = resolveRunThreshold(profile);
+
+        SpriteAnimationScript walkScript = resolveScript(profile != null ? profile.getWalkAnimId() : -1, baseScript);
+        SpriteAnimationScript runScript = resolveScript(profile != null ? profile.getRunAnimId() : -1, baseScript);
+        SpriteAnimationScript active = speed >= runThreshold ? runScript : walkScript;
+        if (active == null) {
+            active = baseScript;
+        }
+
+        int slopeOffset = resolveSlopeOffset(speed >= runThreshold);
+        int delay = computeSpeedDelay(speed, 0x800, 8);
+        updateScriptWithDelay(active, delay, slopeOffset);
+    }
+
+    private void updateRoll(SpriteAnimationScript baseScript) {
+        int speed = Math.abs(sprite.getGSpeed());
+        ScriptedVelocityAnimationProfile profile = resolveVelocityProfile();
+        int runThreshold = resolveRunThreshold(profile);
+
+        int rollId = profile != null ? profile.getRollAnimId() : -1;
+        int roll2Id = profile != null ? profile.getRoll2AnimId() : -1;
+        int activeId = (speed >= runThreshold && roll2Id >= 0) ? roll2Id : rollId;
+        SpriteAnimationScript active = resolveScript(activeId, baseScript);
+        if (active == null) {
+            active = baseScript;
+        }
+
+        int delay = computeSpeedDelay(speed, 0x400, 8);
+        updateScriptWithDelay(active, delay, 0);
+    }
+
+    private void updatePush(SpriteAnimationScript baseScript) {
+        int speed = Math.abs(sprite.getGSpeed());
+        ScriptedVelocityAnimationProfile profile = resolveVelocityProfile();
+
+        int pushId = profile != null ? profile.getPushAnimId() : -1;
+        SpriteAnimationScript active = resolveScript(pushId, baseScript);
+        if (active == null) {
+            active = baseScript;
+        }
+
+        int delay = computeSpeedDelay(speed, 0x800, 6);
+        updateScriptWithDelay(active, delay, 0);
+    }
+
+    private void updateScriptWithDelay(
+            SpriteAnimationScript script,
+            int delay,
+            int frameOffset
+    ) {
+        if (script == null || script.frames().isEmpty()) {
+            return;
+        }
+
+        int duration = sprite.getAnimationTick() - 1;
+        boolean advanceFrame = duration < 0;
+        if (advanceFrame) {
+            duration = delay;
+        }
+        sprite.setAnimationTick(duration);
 
         int frameIndex = sprite.getAnimationFrameIndex();
         if (frameIndex < 0 || frameIndex >= script.frames().size()) {
             frameIndex = 0;
+            sprite.setAnimationFrameIndex(0);
         }
-        sprite.setMappingFrame(script.frames().get(frameIndex));
+        int mappingFrame = script.frames().get(frameIndex) + frameOffset;
+        sprite.setMappingFrame(mappingFrame);
+
+        if (advanceFrame) {
+            advanceFrameIndex(script);
+        }
     }
 
-    private int resolveDelay(int rawDelay, AbstractPlayableSprite sprite, int frameCounter) {
-        if (rawDelay <= 0) {
-            return 1;
+    private void advanceFrameIndex(SpriteAnimationScript script) {
+        int frameIndex = sprite.getAnimationFrameIndex() + 1;
+        if (frameIndex < script.frames().size()) {
+            sprite.setAnimationFrameIndex(frameIndex);
+            return;
         }
-        if (rawDelay >= 0xFD) {
-            return 1;
+        switch (script.endAction()) {
+            case HOLD -> sprite.setAnimationFrameIndex(script.frames().size() - 1);
+            case LOOP_BACK -> sprite.setAnimationFrameIndex(resolveLoopBackIndex(script));
+            case SWITCH -> {
+                int nextAnimId = script.endParam();
+                if (nextAnimId == sprite.getAnimationId()) {
+                    sprite.setAnimationFrameIndex(0);
+                    return;
+                }
+                sprite.setAnimationId(nextAnimId);
+                resetScriptState();
+                return;
+            }
+            case LOOP -> sprite.setAnimationFrameIndex(0);
+            default -> sprite.setAnimationFrameIndex(0);
         }
-        return rawDelay;
+    }
+
+    private int computeSpeedDelay(int speedSubpixels, int base, int shift) {
+        int value = base - speedSubpixels;
+        if (value < 0) {
+            value = 0;
+        }
+        return value >> shift;
+    }
+
+    private ScriptedVelocityAnimationProfile resolveVelocityProfile() {
+        SpriteAnimationProfile profile = sprite.getAnimationProfile();
+        if (profile instanceof ScriptedVelocityAnimationProfile velocityProfile) {
+            return velocityProfile;
+        }
+        return null;
+    }
+
+    private int resolveRunThreshold(ScriptedVelocityAnimationProfile profile) {
+        if (profile == null) {
+            return DEFAULT_RUN_SPEED_THRESHOLD;
+        }
+        int threshold = profile.getRunSpeedThreshold();
+        return threshold > 0 ? threshold : DEFAULT_RUN_SPEED_THRESHOLD;
+    }
+
+    private SpriteAnimationScript resolveScript(int scriptId, SpriteAnimationScript fallback) {
+        if (scriptId < 0 || sprite.getAnimationSet() == null) {
+            return fallback;
+        }
+        SpriteAnimationScript script = sprite.getAnimationSet().getScript(scriptId);
+        return script != null ? script : fallback;
+    }
+
+    private int resolveSlopeOffset(boolean running) {
+        int angle = (byte) sprite.getAngle();
+        int d0 = angle;
+        if (d0 > 0) {
+            d0 -= 1;
+        }
+        if (!Direction.LEFT.equals(sprite.getDirection())) {
+            d0 = ~d0;
+        }
+        d0 = (d0 + 0x10) & 0xFF;
+        d0 = (d0 >> 4) & 0x6;
+        return running ? d0 * 2 : d0 * 4;
+    }
+
+    private int resolveLoopBackIndex(SpriteAnimationScript script) {
+        int loopBack = script.endParam();
+        if (loopBack <= 0) {
+            return 0;
+        }
+        int target = script.frames().size() - loopBack;
+        if (target < 0) {
+            return 0;
+        }
+        return target;
+    }
+
+    private void resetScriptState() {
+        sprite.setAnimationFrameIndex(0);
+        sprite.setAnimationTick(0);
+        lastAnimationId = sprite.getAnimationId();
     }
 }

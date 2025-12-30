@@ -1,12 +1,11 @@
 package uk.co.jamesj999.sonic.sprites.render;
 
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 import uk.co.jamesj999.sonic.level.render.DynamicPatternBank;
+import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.render.SpriteDplcFrame;
 import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
-import uk.co.jamesj999.sonic.level.render.SpriteMappingPiece;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 
 /**
@@ -39,41 +38,15 @@ public class PlayerSpriteRenderer {
         }
 
         SpriteMappingFrame frame = artSet.mappingFrames().get(frameIndex);
-        for (SpriteMappingPiece piece : frame.pieces()) {
-            int widthTiles = piece.widthTiles();
-            int heightTiles = piece.heightTiles();
-            int widthPixels = widthTiles * Pattern.PATTERN_WIDTH;
-            int heightPixels = heightTiles * Pattern.PATTERN_HEIGHT;
-
-            int pieceXOffset = piece.xOffset();
-            int pieceYOffset = piece.yOffset();
-            boolean pieceHFlip = piece.hFlip();
-            boolean pieceVFlip = piece.vFlip();
-
-            if (hFlip) {
-                pieceXOffset = -pieceXOffset - widthPixels;
-                pieceHFlip = !pieceHFlip;
-            }
-            if (vFlip) {
-                pieceYOffset = -pieceYOffset - heightPixels;
-                pieceVFlip = !pieceVFlip;
-            }
-
-            int pieceX = originX + pieceXOffset;
-            // PatternRenderCommand treats drawY as the bottom of a tile; mapping offsets are top-based.
-            int pieceY = originY + pieceYOffset + Pattern.PATTERN_HEIGHT;
-            int paletteIndex = piece.paletteIndex() != 0 ? piece.paletteIndex() : artSet.paletteIndex();
-
-            for (int ty = 0; ty < heightTiles; ty++) {
-                for (int tx = 0; tx < widthTiles; tx++) {
-                    int srcX = pieceHFlip ? (widthTiles - 1 - tx) : tx;
-                    int srcY = pieceVFlip ? (heightTiles - 1 - ty) : ty;
-                    int tileOffset = (tx * heightTiles) + ty;
-                    int patternIndex = patternBank.getBasePatternIndex() + piece.tileIndex() + tileOffset;
-
-                    int drawX = pieceX + (srcX * Pattern.PATTERN_WIDTH);
-                    int drawY = pieceY + (srcY * Pattern.PATTERN_HEIGHT);
-
+        SpritePieceRenderer.renderPieces(
+                frame.pieces(),
+                originX,
+                originY,
+                patternBank.getBasePatternIndex(),
+                artSet.paletteIndex(),
+                hFlip,
+                vFlip,
+                (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
                     int descIndex = patternIndex & 0x7FF;
                     if (pieceHFlip) {
                         descIndex |= 0x800;
@@ -86,8 +59,15 @@ public class PlayerSpriteRenderer {
                     PatternDesc desc = new PatternDesc(descIndex);
                     graphicsManager.renderPattern(desc, drawX, drawY);
                 }
-            }
+        );
+    }
+
+    public SpritePieceRenderer.FrameBounds getFrameBounds(int frameIndex, boolean hFlip, boolean vFlip) {
+        if (frameIndex < 0 || frameIndex >= artSet.mappingFrames().size()) {
+            return new SpritePieceRenderer.FrameBounds(0, 0, -1, -1);
         }
+        SpriteMappingFrame frame = artSet.mappingFrames().get(frameIndex);
+        return SpritePieceRenderer.computeFrameBounds(frame.pieces(), hFlip, vFlip);
     }
 
     private void applyDplc(int frameIndex) {

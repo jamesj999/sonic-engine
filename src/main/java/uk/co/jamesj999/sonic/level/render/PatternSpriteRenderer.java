@@ -64,38 +64,27 @@ public class PatternSpriteRenderer {
     }
 
     private void drawFrame(SpriteFrame<? extends SpriteFramePiece> frame, int originX, int originY) {
-        for (SpriteFramePiece piece : frame.pieces()) {
-            int widthTiles = piece.widthTiles();
-            int heightTiles = piece.heightTiles();
-            int pieceX = originX + piece.xOffset();
-            // PatternRenderCommand treats drawY as the bottom of a tile; mapping offsets are top-based.
-            int pieceY = originY + piece.yOffset() + Pattern.PATTERN_HEIGHT;
-            int paletteIndex = piece.paletteIndex() != 0 ? piece.paletteIndex() : spriteSheet.getPaletteIndex();
-
-            for (int ty = 0; ty < heightTiles; ty++) {
-                for (int tx = 0; tx < widthTiles; tx++) {
-                    int srcX = piece.hFlip() ? (widthTiles - 1 - tx) : tx;
-                    int srcY = piece.vFlip() ? (heightTiles - 1 - ty) : ty;
-                    int tileOffset = (tx * heightTiles) + ty;
-                    int patternIndex = patternBase + piece.tileIndex() + tileOffset;
-
-                    int drawX = pieceX + (srcX * Pattern.PATTERN_WIDTH);
-                    int drawY = pieceY + (srcY * Pattern.PATTERN_HEIGHT);
-
+        SpritePieceRenderer.renderPieces(
+                frame.pieces(),
+                originX,
+                originY,
+                patternBase,
+                spriteSheet.getPaletteIndex(),
+                false,
+                false,
+                (patternIndex, hFlip, vFlip, paletteIndex, drawX, drawY) -> {
                     int descIndex = patternIndex & 0x7FF;
-                    if (piece.hFlip()) {
+                    if (hFlip) {
                         descIndex |= 0x800;
                     }
-                    if (piece.vFlip()) {
+                    if (vFlip) {
                         descIndex |= 0x1000;
                     }
                     descIndex |= (paletteIndex & 0x3) << 13;
-
                     PatternDesc desc = new PatternDesc(descIndex);
                     GraphicsManager.getInstance().renderPattern(desc, drawX, drawY);
                 }
-            }
-        }
+        );
     }
 
     private FrameBounds computeFrameBounds(SpriteFrame<? extends SpriteFramePiece> frame) {
