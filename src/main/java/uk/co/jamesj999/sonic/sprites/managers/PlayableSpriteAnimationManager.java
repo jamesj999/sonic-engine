@@ -24,6 +24,9 @@ public class PlayableSpriteAnimationManager {
         }
         boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
         sprite.setRenderFlips(facingLeft, false);
+        if (sprite.getSpindashDustManager() != null) {
+            sprite.getSpindashDustManager().update();
+        }
 
         SpriteAnimationProfile profile = sprite.getAnimationProfile();
         if (sprite.getAnimationSet() != null && !sprite.getAnimationSet().getAllScripts().isEmpty()) {

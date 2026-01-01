@@ -32,6 +32,12 @@ public class Sonic2Constants {
     public static final int MAP_R_UNC_TAILS_ADDR = 0x7446C;
     public static final int ART_TILE_SONIC = 0x0780;
     public static final int ART_TILE_TAILS = 0x07A0;
+    public static final int ART_UNC_SPLASH_DUST_ADDR = 0x71FFC;
+    public static final int ART_UNC_SPLASH_DUST_SIZE = 0x1940;
+    public static final int MAP_UNC_OBJ08_ADDR = 0x1DF5E;
+    public static final int MAP_R_UNC_OBJ08_ADDR = 0x1E074;
+    public static final int ART_TILE_SONIC_DUST = 0x049C;
+    public static final int ART_TILE_TAILS_DUST = 0x048C;
     public static final int SONIC_ANIM_DATA_ADDR = 0x01B618;
     public static final int SONIC_ANIM_SCRIPT_COUNT = 0x22;
 

@@ -12,6 +12,7 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
+import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
 
 /**
  * Movement speeds are in subpixels (256 subpixels per pixel...).
@@ -75,13 +76,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	private PlayerSpriteRenderer spriteRenderer;
 	private int mappingFrame = 0;
 	private int animationFrameCount = 0;
-	private SpriteAnimationProfile animationProfile;
-	private SpriteAnimationSet animationSet;
+        private SpriteAnimationProfile animationProfile;
+        private SpriteAnimationSet animationSet;
         private int animationId = 0;
         private int animationFrameIndex = 0;
         private int animationTick = 0;
         private boolean renderHFlip = false;
         private boolean renderVFlip = false;
+        private SpindashDustManager spindashDustManager;
 
     public int getRingCount() {
         return ringCount;
@@ -161,6 +163,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setAnimationTick(int animationTick) {
                 this.animationTick = Math.max(0, animationTick);
+        }
+
+        public SpindashDustManager getSpindashDustManager() {
+                return spindashDustManager;
+        }
+
+        public void setSpindashDustManager(SpindashDustManager spindashDustManager) {
+                this.spindashDustManager = spindashDustManager;
         }
 
         public boolean getRenderHFlip() {

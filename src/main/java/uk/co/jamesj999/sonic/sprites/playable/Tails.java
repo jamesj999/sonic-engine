@@ -17,6 +17,9 @@ public class Tails extends AbstractPlayableSprite {
 
 	public void draw() {
         if (getSpriteRenderer() != null) {
+                if (getSpindashDustManager() != null) {
+                        getSpindashDustManager().draw();
+                }
                 getSpriteRenderer().drawFrame(
                                 getMappingFrame(),
                                 getCentreX(),

@@ -7,6 +7,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
+import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.debug.DebugOption;
@@ -28,6 +29,7 @@ import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
+import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
@@ -153,8 +155,30 @@ public class LevelManager {
             playable.setAnimationId(0);
             playable.setAnimationFrameIndex(0);
             playable.setAnimationTick(0);
+            initSpindashDust(playable);
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load player sprite art.", e);
+        }
+    }
+
+    private void initSpindashDust(AbstractPlayableSprite playable) {
+        if (!(game instanceof SpindashDustArtProvider dustProvider)) {
+            playable.setSpindashDustManager(null);
+            return;
+        }
+        try {
+            SpriteArtSet dustArt = dustProvider.loadSpindashDustArt(playable.getCode());
+            if (dustArt == null || dustArt.bankSize() <= 0 || dustArt.mappingFrames().isEmpty()
+                    || dustArt.dplcFrames().isEmpty()) {
+                playable.setSpindashDustManager(null);
+                return;
+            }
+            PlayerSpriteRenderer dustRenderer = new PlayerSpriteRenderer(dustArt);
+            dustRenderer.ensureCached(graphicsManager);
+            playable.setSpindashDustManager(new SpindashDustManager(playable, dustRenderer));
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load spindash dust art.", e);
+            playable.setSpindashDustManager(null);
         }
     }
 
