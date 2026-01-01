@@ -26,7 +26,8 @@ public class GroundSensor extends Sensor {
             return null;
         }
 
-        byte layer = sprite.getLayer();
+        byte collisionLayer = sprite.getLayer();
+        byte mapLayer = 0;
         SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), direction);
         boolean vertical = sensorConfiguration.vertical();
         Direction globalDirection = sensorConfiguration.direction();
@@ -59,8 +60,8 @@ public class GroundSensor extends Sensor {
         short currentY = originalY;
 
         // 1. Check Initial Tile
-        ChunkDesc initialChunkDesc = levelManager.getChunkDescAt(layer, currentX, currentY);
-        SolidTile initialTile = getSolidTile(initialChunkDesc, layer, globalDirection);
+        ChunkDesc initialChunkDesc = levelManager.getChunkDescAt(mapLayer, currentX, currentY);
+        SolidTile initialTile = getSolidTile(initialChunkDesc, collisionLayer, globalDirection);
         byte initialHeight = getMetric(initialTile, initialChunkDesc, currentX, currentY, vertical);
 
         if (initialHeight == 16) {
@@ -73,8 +74,8 @@ public class GroundSensor extends Sensor {
                 prevX = calculateNextTile(globalDirection.opposite(), currentX);
             }
 
-            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(layer, prevX, prevY);
-            SolidTile prevTile = getSolidTile(prevChunkDesc, layer, globalDirection);
+            ChunkDesc prevChunkDesc = levelManager.getChunkDescAt(mapLayer, prevX, prevY);
+            SolidTile prevTile = getSolidTile(prevChunkDesc, collisionLayer, globalDirection);
             byte prevHeight = getMetric(prevTile, prevChunkDesc, prevX, prevY, vertical);
 
             if (prevHeight > 0) {
@@ -95,8 +96,8 @@ public class GroundSensor extends Sensor {
                 nextX = calculateNextTile(globalDirection, currentX);
             }
 
-            ChunkDesc nextChunkDesc = levelManager.getChunkDescAt(layer, nextX, nextY);
-            SolidTile nextTile = getSolidTile(nextChunkDesc, layer, globalDirection);
+            ChunkDesc nextChunkDesc = levelManager.getChunkDescAt(mapLayer, nextX, nextY);
+            SolidTile nextTile = getSolidTile(nextChunkDesc, collisionLayer, globalDirection);
             byte nextHeight = getMetric(nextTile, nextChunkDesc, nextX, nextY, vertical);
 
             if (nextHeight > 0) {

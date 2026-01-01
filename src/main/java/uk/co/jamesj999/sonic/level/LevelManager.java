@@ -20,6 +20,7 @@ import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
 import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
@@ -47,6 +48,11 @@ import static java.util.logging.Level.SEVERE;
  */
 public class LevelManager {
     private static final Logger LOGGER = Logger.getLogger(LevelManager.class.getName());
+    private static final float SWITCHER_DEBUG_R = 1.0f;
+    private static final float SWITCHER_DEBUG_G = 0.55f;
+    private static final float SWITCHER_DEBUG_B = 0.1f;
+    private static final float SWITCHER_DEBUG_ALPHA = 0.25f;
+    private static final int SWITCHER_DEBUG_HALF_THICKNESS = 1;
     private static LevelManager levelManager;
     private Level level;
     private Game game;
@@ -58,6 +64,7 @@ public class LevelManager {
     private int currentZone = 0;
     private int frameCounter = 0;
     private ObjectPlacementManager objectPlacementManager;
+    private PlaneSwitcherManager planeSwitcherManager;
     private RingPlacementManager ringPlacementManager;
     private RingRenderManager ringRenderManager;
     private RingManager ringManager;
@@ -100,6 +107,7 @@ public class LevelManager {
             level = game.loadLevel(levelIndex);
             objectPlacementManager = new ObjectPlacementManager(level.getObjects());
             objectPlacementManager.reset(Camera.getInstance().getX());
+            planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager);
             ringPlacementManager = new RingPlacementManager(level.getRings());
             ringPlacementManager.reset(Camera.getInstance().getX());
             RingSpriteSheet ringSpriteSheet = level.getRingSpriteSheet();
@@ -129,6 +137,13 @@ public class LevelManager {
             AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
         }
+    }
+
+    public void applyPlaneSwitchers(AbstractPlayableSprite player) {
+        if (planeSwitcherManager == null || player == null) {
+            return;
+        }
+        planeSwitcherManager.update(player);
     }
 
     private void initPlayerSpriteArt() {
@@ -321,12 +336,23 @@ public class LevelManager {
 
         if (objectPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             List<GLCommand> objectCommands = new ArrayList<>();
+            List<GLCommand> switcherLineCommands = new ArrayList<>();
+            List<GLCommand> switcherAreaCommands = new ArrayList<>();
             for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
                 objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                         -1,
                         GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                         1f, 0f, 1f,
                         spawn.x(), spawn.y(), 0, 0));
+                appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands);
+            }
+            if (!switcherAreaCommands.isEmpty()) {
+                for (GLCommand command : switcherAreaCommands) {
+                    graphicsManager.registerCommand(command);
+                }
+            }
+            if (!switcherLineCommands.isEmpty()) {
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, switcherLineCommands));
             }
             if (!objectCommands.isEmpty()) {
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
@@ -718,6 +744,45 @@ public class LevelManager {
         }
     }
 
+    private void appendPlaneSwitcherDebug(ObjectSpawn spawn,
+                                          List<GLCommand> lineCommands,
+                                          List<GLCommand> areaCommands) {
+        if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
+            return;
+        }
+        int subtype = spawn.subtype();
+        int halfSpan = PlaneSwitcherManager.decodeHalfSpan(subtype);
+        boolean horizontal = PlaneSwitcherManager.isHorizontal(subtype);
+        int x = spawn.x();
+        int y = spawn.y();
+
+        if (horizontal) {
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x - halfSpan, y, 0, 0));
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x + halfSpan, y, 0, 0));
+
+            areaCommands.add(new GLCommand(GLCommand.CommandType.RECTI, -1, GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
+                    x - halfSpan, y - SWITCHER_DEBUG_HALF_THICKNESS,
+                    x + halfSpan, y + SWITCHER_DEBUG_HALF_THICKNESS));
+        } else {
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x, y - halfSpan, 0, 0));
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x, y + halfSpan, 0, 0));
+
+            areaCommands.add(new GLCommand(GLCommand.CommandType.RECTI, -1, GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
+                    x - SWITCHER_DEBUG_HALF_THICKNESS, y - halfSpan,
+                    x + SWITCHER_DEBUG_HALF_THICKNESS, y + halfSpan));
+        }
+    }
+
     private void appendBox(
             List<GLCommand> commands,
             int left,
@@ -891,6 +956,8 @@ public class LevelManager {
                 ((AbstractPlayableSprite) player).setGSpeed((short) 0);
                 ((AbstractPlayableSprite) player).setAir(false);
                 ((AbstractPlayableSprite) player).setRolling(false);
+                player.setLayer((byte) 0);
+                ((AbstractPlayableSprite) player).setHighPriority(false);
                 Camera camera = Camera.getInstance();
                 camera.setFocusedSprite((AbstractPlayableSprite) player);
                 Level currentLevel = getCurrentLevel();

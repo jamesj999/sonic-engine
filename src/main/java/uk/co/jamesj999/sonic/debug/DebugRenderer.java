@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
@@ -22,8 +23,9 @@ public class DebugRenderer {
 	private final LevelManager levelManager = LevelManager.getInstance();
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
-	private TextRenderer renderer;
-	private TextRenderer objectRenderer;
+        private TextRenderer renderer;
+        private TextRenderer objectRenderer;
+        private TextRenderer planeSwitcherRenderer;
 
 	private int width = configService
 			.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
@@ -38,11 +40,16 @@ public class DebugRenderer {
 			renderer = new TextRenderer(new Font(
 					"SansSerif", Font.PLAIN, 6));
 		}
-		if (objectRenderer == null) {
-			objectRenderer = new TextRenderer(new Font(
-					"SansSerif", Font.PLAIN, 6));
-			objectRenderer.setColor(Color.MAGENTA);
-		}
+                if (objectRenderer == null) {
+                        objectRenderer = new TextRenderer(new Font(
+                                        "SansSerif", Font.PLAIN, 6));
+                        objectRenderer.setColor(Color.MAGENTA);
+                }
+                if (planeSwitcherRenderer == null) {
+                        planeSwitcherRenderer = new TextRenderer(new Font(
+                                        "SansSerif", Font.PLAIN, 6));
+                        planeSwitcherRenderer.setColor(new Color(255, 140, 0));
+                }
 
 		renderer.beginRendering(width, height);
 
@@ -95,7 +102,13 @@ public class DebugRenderer {
 			}
 			renderer.draw("pX: " + xString, 2, height-95);
 			renderer.draw("pY: " + yString, 2, height-105);
-			renderer.draw("Layer: " + sprite.getLayer(), 2, height-115);
+                        if (sprite instanceof AbstractPlayableSprite playable) {
+                                String layerLabel = String.valueOf(formatLayer(playable.getLayer()));
+                                String priorityLabel = String.valueOf(formatPriority(playable.isHighPriority()));
+                                renderer.draw("Layer: " + layerLabel + " Prio: " + priorityLabel, 2, height-115);
+                        } else {
+                                renderer.draw("Layer: " + sprite.getLayer(), 2, height-115);
+                        }
 
 			renderer.draw(xString, 2, 25);
 			renderer.draw(yString, 2, 12);
@@ -129,23 +142,24 @@ public class DebugRenderer {
 			sensorRenderer.endRendering();
 		}
 
-		renderObjectLabels();
-	}
+                renderObjectLabels();
+                renderPlayerPlaneState();
+        }
 
-	private void renderObjectLabels() {
-		if (objectRenderer == null) {
-			return;
-		}
-		java.util.Collection<ObjectSpawn> spawns = levelManager.getActiveObjectSpawns();
-		if (spawns.isEmpty()) {
-			return;
-		}
-		Camera camera = Camera.getInstance();
+        private void renderObjectLabels() {
+                if (objectRenderer == null) {
+                        return;
+                }
+                java.util.Collection<ObjectSpawn> spawns = levelManager.getActiveObjectSpawns();
+                if (spawns.isEmpty()) {
+                        return;
+                }
+                Camera camera = Camera.getInstance();
 
-		objectRenderer.beginRendering(width, height);
-		for (ObjectSpawn spawn : spawns) {
-			int screenX = spawn.x() - camera.getX();
-			int screenY = spawn.y() - camera.getY();
+                objectRenderer.beginRendering(width, height);
+                for (ObjectSpawn spawn : spawns) {
+                        int screenX = spawn.x() - camera.getX();
+                        int screenY = spawn.y() - camera.getY();
 
 			if (screenX < -8 || screenX > width + 8) {
 				continue;
@@ -159,14 +173,91 @@ public class DebugRenderer {
 			if (spawn.renderFlags() != 0) {
 				label.append(" F").append(Integer.toHexString(spawn.renderFlags()).toUpperCase());
 			}
-			if (spawn.respawnTracked()) {
-				label.append(" R");
-			}
+                        if (spawn.respawnTracked()) {
+                                label.append(" R");
+                        }
 
-			objectRenderer.draw(label.toString(), screenX + 2, height - screenY + 2);
-		}
-		objectRenderer.endRendering();
-	}
+                        objectRenderer.draw(label.toString(), screenX + 2, height - screenY + 2);
+                }
+                objectRenderer.endRendering();
+
+                if (planeSwitcherRenderer == null) {
+                        return;
+                }
+                planeSwitcherRenderer.beginRendering(width, height);
+                for (ObjectSpawn spawn : spawns) {
+                        if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
+                                continue;
+                        }
+                        int screenX = spawn.x() - camera.getX();
+                        int screenY = spawn.y() - camera.getY();
+                        if (screenX < -8 || screenX > width + 8) {
+                                continue;
+                        }
+                        if (screenY < -8 || screenY > height + 8) {
+                                continue;
+                        }
+
+                        drawPlaneSwitcherLabels(spawn, screenX, screenY);
+                }
+                planeSwitcherRenderer.endRendering();
+        }
+
+        private void drawPlaneSwitcherLabels(ObjectSpawn spawn, int screenX, int screenY) {
+                int subtype = spawn.subtype();
+                boolean horizontal = PlaneSwitcherManager.isHorizontal(subtype);
+                String side0 = formatPlaneSwitcherSide(subtype, 0);
+                String side1 = formatPlaneSwitcherSide(subtype, 1);
+
+                if (horizontal) {
+                        int aboveY = screenY - 6;
+                        int belowY = screenY + 6;
+                        planeSwitcherRenderer.draw(side0, screenX + 2, height - aboveY);
+                        planeSwitcherRenderer.draw(side1, screenX + 2, height - belowY);
+                } else {
+                        int leftX = screenX - 16;
+                        int rightX = screenX + 6;
+                        planeSwitcherRenderer.draw(side0, leftX, height - screenY);
+                        planeSwitcherRenderer.draw(side1, rightX, height - screenY);
+                }
+        }
+
+        private void renderPlayerPlaneState() {
+                if (planeSwitcherRenderer == null) {
+                        return;
+                }
+                Sprite sprite = spriteManager.getSprite(sonicCode);
+                if (!(sprite instanceof AbstractPlayableSprite playable)) {
+                        return;
+                }
+                Camera camera = Camera.getInstance();
+                int screenX = playable.getCentreX() - camera.getX();
+                int screenY = playable.getY() - camera.getY();
+                if (screenX < -16 || screenX > width + 16) {
+                        return;
+                }
+                if (screenY < -16 || screenY > height + 16) {
+                        return;
+                }
+                String label = formatLayer(playable.getLayer()) + " " + formatPriority(playable.isHighPriority());
+                planeSwitcherRenderer.beginRendering(width, height);
+                planeSwitcherRenderer.draw(label, screenX - 6, height - (screenY - 8));
+                planeSwitcherRenderer.endRendering();
+        }
+
+        private String formatPlaneSwitcherSide(int subtype, int side) {
+                int path = PlaneSwitcherManager.decodePath(subtype, side);
+                boolean highPriority = PlaneSwitcherManager.decodePriority(subtype, side);
+                return formatLayer((byte) path) + " " + formatPriority(highPriority);
+        }
+
+        private char formatLayer(byte layer) {
+                return PlaneSwitcherManager.formatLayer(layer);
+        }
+
+        private char formatPriority(boolean highPriority) {
+                return PlaneSwitcherManager.formatPriority(highPriority);
+        }
 
 	public static synchronized DebugRenderer getInstance() {
 		if (debugRenderer == null) {

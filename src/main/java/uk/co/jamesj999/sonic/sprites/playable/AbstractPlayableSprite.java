@@ -83,6 +83,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private int animationTick = 0;
         private boolean renderHFlip = false;
         private boolean renderVFlip = false;
+        private boolean highPriority = false;
         private SpindashDustManager spindashDustManager;
 
     public int getRingCount() {
@@ -186,9 +187,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.renderVFlip = vFlip;
         }
 
-	public boolean getAir() {
-		return air;
-	}
+        public boolean isHighPriority() {
+                return highPriority;
+        }
+
+        public void setHighPriority(boolean highPriority) {
+                this.highPriority = highPriority;
+        }
+
+        public boolean getAir() {
+                return air;
+        }
 
 	public void setAir(boolean air) {
 		//TODO Update ground sensors here

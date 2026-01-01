@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.sprites.managers;
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -19,6 +20,7 @@ public class SpriteCollisionManager {
 
         SonicConfigurationService configService = SonicConfigurationService.getInstance();
         SpriteManager spriteManager = SpriteManager.getInstance();
+        LevelManager levelManager = LevelManager.getInstance();
 
         private int upKey;
         private int downKey;
@@ -55,6 +57,7 @@ public class SpriteCollisionManager {
                 for (Sprite sprite : sprites) {
                         // Check we're dealing with a playable sprite:
                         if (sprite instanceof AbstractPlayableSprite) {
+                                levelManager.applyPlaneSwitchers((AbstractPlayableSprite) sprite);
                                 ((AbstractPlayableSprite) sprite).getMovementManager()
                                                 .handleMovement(up, down, left, right, space, testButton);
                                 /*
