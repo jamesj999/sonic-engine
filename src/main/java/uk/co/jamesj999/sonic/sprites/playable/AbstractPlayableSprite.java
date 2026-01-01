@@ -77,9 +77,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	private int animationFrameCount = 0;
 	private SpriteAnimationProfile animationProfile;
 	private SpriteAnimationSet animationSet;
-	private int animationId = 0;
-	private int animationFrameIndex = 0;
-	private int animationTick = 0;
+        private int animationId = 0;
+        private int animationFrameIndex = 0;
+        private int animationTick = 0;
+        private boolean renderHFlip = false;
+        private boolean renderVFlip = false;
 
     public int getRingCount() {
         return ringCount;
@@ -153,13 +155,26 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		this.animationFrameIndex = Math.max(0, animationFrameIndex);
 	}
 
-	public int getAnimationTick() {
-		return animationTick;
-	}
+        public int getAnimationTick() {
+                return animationTick;
+        }
 
-	public void setAnimationTick(int animationTick) {
-		this.animationTick = Math.max(0, animationTick);
-	}
+        public void setAnimationTick(int animationTick) {
+                this.animationTick = Math.max(0, animationTick);
+        }
+
+        public boolean getRenderHFlip() {
+                return renderHFlip;
+        }
+
+        public boolean getRenderVFlip() {
+                return renderVFlip;
+        }
+
+        public void setRenderFlips(boolean hFlip, boolean vFlip) {
+                this.renderHFlip = hFlip;
+                this.renderVFlip = vFlip;
+        }
 
 	public boolean getAir() {
 		return air;

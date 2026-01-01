@@ -22,6 +22,8 @@ public class PlayableSpriteAnimationManager {
         if (sprite == null) {
             return;
         }
+        boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
+        sprite.setRenderFlips(facingLeft, false);
 
         SpriteAnimationProfile profile = sprite.getAnimationProfile();
         if (sprite.getAnimationSet() != null && !sprite.getAnimationSet().getAllScripts().isEmpty()) {
@@ -217,10 +219,16 @@ public class PlayableSpriteAnimationManager {
         if (d0 > 0) {
             d0 -= 1;
         }
-        if (!Direction.LEFT.equals(sprite.getDirection())) {
+        boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
+        if (!facingLeft) {
             d0 = ~d0;
         }
         d0 = (d0 + 0x10) & 0xFF;
+        if ((d0 & 0x80) != 0) {
+            sprite.setRenderFlips(!facingLeft, true);
+        } else {
+            sprite.setRenderFlips(facingLeft, false);
+        }
         d0 = (d0 >> 4) & 0x6;
         return running ? d0 * 2 : d0 * 4;
     }

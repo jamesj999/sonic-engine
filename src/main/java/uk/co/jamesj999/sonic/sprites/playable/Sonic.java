@@ -17,11 +17,16 @@ public class Sonic extends AbstractPlayableSprite {
 	}
 
 	public void draw() {
-		if (getSpriteRenderer() != null) {
-			getSpriteRenderer().drawFrame(getMappingFrame(), getCentreX(), getCentreY(),
-					Direction.LEFT.equals(direction), false);
-			return;
-		}
+        if (getSpriteRenderer() != null) {
+                getSpriteRenderer().drawFrame(
+                                getMappingFrame(),
+                                getCentreX(),
+                                getCentreY(),
+                                getRenderHFlip(),
+                                getRenderVFlip()
+                );
+                return;
+        }
 		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.RECTI,
 				GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
 						+ height));
