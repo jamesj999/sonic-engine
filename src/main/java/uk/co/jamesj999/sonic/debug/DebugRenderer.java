@@ -36,22 +36,21 @@ public class DebugRenderer {
 			.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
 
 	public void renderDebugInfo() {
-		if (renderer == null) {
-			renderer = new TextRenderer(new Font(
-					"SansSerif", Font.PLAIN, 6));
-		}
+                if (renderer == null) {
+                        renderer = new TextRenderer(new Font(
+                                        "SansSerif", Font.PLAIN, 6));
+                }
                 if (objectRenderer == null) {
                         objectRenderer = new TextRenderer(new Font(
                                         "SansSerif", Font.PLAIN, 6));
-                        objectRenderer.setColor(Color.MAGENTA);
                 }
                 if (planeSwitcherRenderer == null) {
                         planeSwitcherRenderer = new TextRenderer(new Font(
                                         "SansSerif", Font.PLAIN, 6));
-                        planeSwitcherRenderer.setColor(new Color(255, 140, 0));
                 }
 
-		renderer.beginRendering(width, height);
+                renderer.setColor(Color.WHITE);
+                renderer.beginRendering(width, height);
 
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
@@ -116,14 +115,14 @@ public class DebugRenderer {
 			String ringText = String.format("RINGS: %03d", ringCount);
 			int ringTextWidth = (int) Math.ceil(renderer.getBounds(ringText).getWidth());
 			int ringX = Math.max(2, width - ringTextWidth - 4);
-			renderer.draw(ringText, ringX, 6);
+                        renderer.draw(ringText, ringX, 6);
 
-			renderer.endRendering();
+                        renderer.endRendering();
 
-			TextRenderer sensorRenderer = new TextRenderer(new Font(
-					"SansSerif", Font.PLAIN, 4));
-			sensorRenderer.setColor(Color.RED);
-			sensorRenderer.beginRendering(width, height);
+                        TextRenderer sensorRenderer = new TextRenderer(new Font(
+                                        "SansSerif", Font.PLAIN, 4));
+                        sensorRenderer.beginRendering(width, height);
+                        sensorRenderer.setColor(Color.RED);
 
 			AbstractPlayableSprite abstractPlayableSprite = (AbstractPlayableSprite) sprite;
 
@@ -157,6 +156,7 @@ public class DebugRenderer {
                 Camera camera = Camera.getInstance();
 
                 objectRenderer.beginRendering(width, height);
+                objectRenderer.setColor(Color.MAGENTA);
                 for (ObjectSpawn spawn : spawns) {
                         int screenX = spawn.x() - camera.getX();
                         int screenY = spawn.y() - camera.getY();
@@ -185,6 +185,7 @@ public class DebugRenderer {
                         return;
                 }
                 planeSwitcherRenderer.beginRendering(width, height);
+                planeSwitcherRenderer.setColor(new Color(255, 140, 0));
                 for (ObjectSpawn spawn : spawns) {
                         if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
                                 continue;
@@ -241,6 +242,7 @@ public class DebugRenderer {
                 }
                 String label = formatLayer(playable.getLayer()) + " " + formatPriority(playable.isHighPriority());
                 planeSwitcherRenderer.beginRendering(width, height);
+                planeSwitcherRenderer.setColor(new Color(255, 140, 0));
                 planeSwitcherRenderer.draw(label, screenX - 6, height - (screenY - 8));
                 planeSwitcherRenderer.endRendering();
         }

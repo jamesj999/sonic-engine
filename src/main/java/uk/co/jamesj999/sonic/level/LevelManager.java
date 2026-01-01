@@ -51,8 +51,8 @@ public class LevelManager {
     private static final float SWITCHER_DEBUG_R = 1.0f;
     private static final float SWITCHER_DEBUG_G = 0.55f;
     private static final float SWITCHER_DEBUG_B = 0.1f;
-    private static final float SWITCHER_DEBUG_ALPHA = 0.25f;
-    private static final int SWITCHER_DEBUG_HALF_THICKNESS = 1;
+    private static final float SWITCHER_DEBUG_ALPHA = 0.35f;
+    private static final int SWITCHER_DEBUG_HALF_THICKNESS = 4;
     private static LevelManager levelManager;
     private Level level;
     private Game game;
