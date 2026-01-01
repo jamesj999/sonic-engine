@@ -334,6 +334,11 @@ public class LevelManager {
             ringManager.draw(frameCounter);
         }
 
+        boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
+        if (debugViewEnabled) {
+            beginDebugOverlay();
+        }
+
         if (objectPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             List<GLCommand> objectCommands = new ArrayList<>();
             List<GLCommand> switcherLineCommands = new ArrayList<>();
@@ -359,7 +364,7 @@ public class LevelManager {
             }
         }
 
-        if (ringManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+        if (ringManager != null && debugViewEnabled) {
             Collection<RingSpawn> rings = ringManager.getActiveSpawns();
             if (!rings.isEmpty()) {
                 if (ringRenderManager == null) {
@@ -434,11 +439,15 @@ public class LevelManager {
             }
         }
 
-        if (configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+        if (debugViewEnabled) {
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
             if (player instanceof AbstractPlayableSprite playable) {
                 drawPlayableSpriteBounds(playable);
             }
+        }
+
+        if (debugViewEnabled) {
+            endDebugOverlay();
         }
     }
 
@@ -780,6 +789,22 @@ public class LevelManager {
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
                     x - SWITCHER_DEBUG_HALF_THICKNESS, y - halfSpan,
                     x + SWITCHER_DEBUG_HALF_THICKNESS, y + halfSpan));
+        }
+    }
+
+    private void beginDebugOverlay() {
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+    }
+
+    private void endDebugOverlay() {
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+        ShaderProgram shaderProgram = graphicsManager.getShaderProgram();
+        if (shaderProgram != null) {
+            int shaderProgramId = shaderProgram.getProgramId();
+            if (shaderProgramId != 0) {
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, shaderProgramId));
+            }
         }
     }
 
