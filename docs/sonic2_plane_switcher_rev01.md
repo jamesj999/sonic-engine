@@ -47,6 +47,11 @@ The object also maintains a per-player “which side am I on” state so it only
 
 Collision layers (A/B, or path 0/1) are independent from visual priority (L/H). Either side of the switcher has its own target collision layer and its own target priority. Some switchers only change priority (see render_flags bit 0 / "priority only") and leave collision unchanged.
 
+Rendering expectations for priority:
+
+- Low priority (L): sprites are drawn between low-priority tiles and high-priority tiles, so high-priority tiles can occlude the player.
+- High priority (H): sprites are drawn after high-priority tiles, so the player appears in front of them.
+
 For terminology used in some guides:
 - `layer_1` refers to the left or top side.
 - `layer_2` refers to the right or bottom side.

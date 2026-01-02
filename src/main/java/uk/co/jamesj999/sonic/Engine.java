@@ -175,19 +175,18 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 
 
-	public void draw() {
-		if (!debugViewEnabled) {
-			levelManager.draw();
-			spriteRenderManager.draw();
-		} else {
-			switch (debugState) {
-				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
-				case CHUNKS_VIEW -> levelManager.drawAllChunks();
-				case BLOCKS_VIEW -> levelManager.draw();
-				case null, default -> { levelManager.draw(); spriteRenderManager.draw(); }
-			}
-		}
-	}
+        public void draw() {
+                if (!debugViewEnabled) {
+                        levelManager.drawWithSpritePriority(spriteRenderManager);
+                } else {
+                        switch (debugState) {
+                                case PATTERNS_VIEW -> levelManager.drawAllPatterns();
+                                case CHUNKS_VIEW -> levelManager.drawAllChunks();
+                                case BLOCKS_VIEW -> levelManager.draw();
+                                case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
+                        }
+                }
+        }
 
 	public static void main(String[] args) {
 		// Run the GUI codes in the event-dispatching thread for thread safety

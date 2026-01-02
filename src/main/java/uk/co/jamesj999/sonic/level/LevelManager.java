@@ -16,6 +16,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
+import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
@@ -69,6 +70,12 @@ public class LevelManager {
     private RingManager ringManager;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
+
+    private enum TilePriorityPass {
+        ALL,
+        LOW_ONLY,
+        HIGH_ONLY
+    }
 
     /**
      * Private constructor for Singleton pattern.
@@ -302,6 +309,10 @@ public class LevelManager {
      * This is currently for debugging purposes to visualize collision areas.
      */
     public void draw() {
+        drawWithSpritePriority(null);
+    }
+
+    public void drawWithSpritePriority(SpriteRenderManager spriteRenderManager) {
         if (level == null) {
             LOGGER.warning("No level loaded to draw.");
             return;
@@ -321,16 +332,28 @@ public class LevelManager {
         List<GLCommand> commands = new ArrayList<>();
 
         // Draw Background (Layer 1)
-        drawLayer(commands, 1, camera, 0.5f, 0.1f);
+        drawLayer(commands, 1, camera, 0.5f, 0.1f, TilePriorityPass.ALL, false);
 
-        // Draw Foreground (Layer 0)
-        drawLayer(commands, 0, camera, 1.0f, 1.0f);
+        // Draw Foreground (Layer 0) low-priority pass
+        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true);
 
-        // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        if (!commands.isEmpty()) {
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        }
 
         if (ringManager != null) {
             ringManager.draw(frameCounter);
+        }
+
+        if (spriteRenderManager != null) {
+            spriteRenderManager.drawLowPriority();
+        }
+
+        // Draw Foreground (Layer 0) high-priority pass
+        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
+
+        if (spriteRenderManager != null) {
+            spriteRenderManager.drawHighPriority();
         }
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
@@ -454,7 +477,13 @@ public class LevelManager {
         }
     }
 
-    private void drawLayer(List<GLCommand> commands, int layerIndex, Camera camera, float parallaxX, float parallaxY) {
+    private void drawLayer(List<GLCommand> commands,
+                           int layerIndex,
+                           Camera camera,
+                           float parallaxX,
+                           float parallaxY,
+                           TilePriorityPass priorityPass,
+                           boolean drawCollision) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
@@ -545,7 +574,7 @@ public class LevelManager {
                     int renderY = screenY + cameraY;
 
                     // Draw collision only for foreground (Layer 0)
-                    drawChunk(commands, chunkDesc, renderX, renderY, layerIndex == 0, hScroll, screenY, bgCameraX);
+                    drawChunk(commands, chunkDesc, renderX, renderY, drawCollision, hScroll, screenY, bgCameraX, priorityPass);
                 }
             }
         }
@@ -561,10 +590,18 @@ public class LevelManager {
      * @param drawCollision whether to draw collision debug info
      */
     private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
-        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0);
+        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0, TilePriorityPass.ALL);
     }
 
-    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision, int[] hScroll, int screenY, int baseBgCameraX) {
+    private void drawChunk(List<GLCommand> commands,
+                           ChunkDesc chunkDesc,
+                           int x,
+                           int y,
+                           boolean drawCollision,
+                           int[] hScroll,
+                           int screenY,
+                           int baseBgCameraX,
+                           TilePriorityPass priorityPass) {
         int chunkIndex = chunkDesc.getChunkIndex();
         if (chunkIndex >= level.getChunkCount()) {
             LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
@@ -606,6 +643,14 @@ public class LevelManager {
 
                     short scroll = (short) (hScroll[line] & 0xFFFF);
                     drawX = drawX + scroll + baseBgCameraX;
+                }
+
+                boolean isHighPriority = newPatternDesc.getPriority();
+                if (priorityPass == TilePriorityPass.LOW_ONLY && isHighPriority) {
+                    continue;
+                }
+                if (priorityPass == TilePriorityPass.HIGH_ONLY && !isHighPriority) {
+                    continue;
                 }
 
                 graphicsManager.renderPattern(newPatternDesc, drawX, drawY);

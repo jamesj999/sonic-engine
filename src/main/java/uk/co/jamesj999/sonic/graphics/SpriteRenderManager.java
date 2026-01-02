@@ -21,6 +21,29 @@ public class SpriteRenderManager {
         }
     }
 
+    public void drawLowPriority() {
+        drawWithPriority(false);
+    }
+
+    public void drawHighPriority() {
+        drawWithPriority(true);
+    }
+
+    private void drawWithPriority(boolean highPriority) {
+        Collection<Sprite> sprites = spriteManager.getAllSprites();
+        for (Sprite sprite : sprites) {
+            if (sprite instanceof AbstractPlayableSprite playable) {
+                if (playable.isHighPriority() == highPriority) {
+                    sprite.draw();
+                }
+                continue;
+            }
+            if (highPriority) {
+                sprite.draw();
+            }
+        }
+    }
+
     public static synchronized SpriteRenderManager getInstance() {
         if(spriteRenderManager == null) {
             spriteRenderManager = new SpriteRenderManager();
