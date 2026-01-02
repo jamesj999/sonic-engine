@@ -7,9 +7,11 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
+import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -27,10 +29,14 @@ public class DebugRenderer {
         private TextRenderer objectRenderer;
         private TextRenderer planeSwitcherRenderer;
 
-	private int width = configService
-			.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
-	private int height = configService
-			.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+        private final int baseWidth = configService
+                        .getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
+        private final int baseHeight = configService
+                        .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+        private int viewportWidth = baseWidth;
+        private int viewportHeight = baseHeight;
+        private double scaleX = 1.0;
+        private double scaleY = 1.0;
 
 	private String sonicCode = configService
 			.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
@@ -38,52 +44,61 @@ public class DebugRenderer {
 	public void renderDebugInfo() {
                 if (renderer == null) {
                         renderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 6));
+                                        "SansSerif", Font.PLAIN, 14), true, true);
                 }
                 if (objectRenderer == null) {
                         objectRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 6));
+                                        "SansSerif", Font.PLAIN, 12), true, true);
                 }
                 if (planeSwitcherRenderer == null) {
                         planeSwitcherRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 6));
+                                        "SansSerif", Font.PLAIN, 12), true, true);
                 }
 
-                renderer.setColor(Color.WHITE);
-                renderer.beginRendering(width, height);
+                renderer.beginRendering(viewportWidth, viewportHeight);
 
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
 			int ringCount = 0;
 			if (sprite instanceof AbstractPlayableSprite) {
 				ringCount = ((AbstractPlayableSprite) sprite).getRingCount();
-				renderer.draw("SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(), 2, height-10);
-				renderer.draw("Dir: " + ((AbstractPlayableSprite) sprite).getDirection(), 2, height-20);
-				renderer.draw(
-						"Mode: "
-								+ ((AbstractPlayableSprite) sprite)
-								.getGroundMode(), 2, 103);
-				if (((AbstractPlayableSprite) sprite).getAir()) {
-					renderer.draw("Air", 24, height-40);
-				}
-				if (((AbstractPlayableSprite) sprite).getRolling()) {
-					renderer.draw("Roll", 24, height-40);
-				}
-				if (((AbstractPlayableSprite) sprite).getSpindash()) {
-					renderer.draw("Spdash", 24, height-40);
-				}
-				renderer.draw(
-						"gS:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
-						2, height-50);
-				renderer.draw(
-						"xS:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
-						2, height-60);
-				renderer.draw(
-						"yS:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
-						2, height-70);
-				// DECIMAL VERSION:
-				renderer.draw("Deg:" + (((AbstractPlayableSprite) sprite).getAngle()), 2, height-80);
-			}
+                                drawOutlined(renderer,
+                                                "SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(),
+                                                uiX(2), uiY(baseHeight - 10), Color.WHITE);
+                                drawOutlined(renderer,
+                                                "Dir: " + ((AbstractPlayableSprite) sprite).getDirection(),
+                                                uiX(2), uiY(baseHeight - 20), Color.WHITE);
+                                drawOutlined(renderer,
+                                                "Mode: "
+                                                                + ((AbstractPlayableSprite) sprite)
+                                                                .getGroundMode(),
+                                                uiX(2), uiY(103), Color.WHITE);
+                                if (((AbstractPlayableSprite) sprite).getAir()) {
+                                        drawOutlined(renderer, "Air",
+                                                        uiX(24), uiY(baseHeight - 40), Color.WHITE);
+                                }
+                                if (((AbstractPlayableSprite) sprite).getRolling()) {
+                                        drawOutlined(renderer, "Roll",
+                                                        uiX(24), uiY(baseHeight - 40), Color.WHITE);
+                                }
+                                if (((AbstractPlayableSprite) sprite).getSpindash()) {
+                                        drawOutlined(renderer, "Spdash",
+                                                        uiX(24), uiY(baseHeight - 40), Color.WHITE);
+                                }
+                                drawOutlined(renderer,
+                                                "gS:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
+                                                uiX(2), uiY(baseHeight - 50), Color.WHITE);
+                                drawOutlined(renderer,
+                                                "xS:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
+                                                uiX(2), uiY(baseHeight - 60), Color.WHITE);
+                                drawOutlined(renderer,
+                                                "yS:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
+                                                uiX(2), uiY(baseHeight - 70), Color.WHITE);
+                                // DECIMAL VERSION:
+                                drawOutlined(renderer,
+                                                "Deg:" + (((AbstractPlayableSprite) sprite).getAngle()),
+                                                uiX(2), uiY(baseHeight - 80), Color.WHITE);
+                        }
             // HEX VERSION:
 //			renderer.draw(
 //					"Angle:" + Integer.toHexString(((AbstractPlayableSprite) sprite).getAngle()), 2,
@@ -99,46 +114,72 @@ public class DebugRenderer {
 			while (yString.length() < 6) {
 				yString.insert(0, "0");
 			}
-			renderer.draw("pX: " + xString, 2, height-95);
-			renderer.draw("pY: " + yString, 2, height-105);
+                        drawOutlined(renderer, "pX: " + xString, uiX(2), uiY(baseHeight - 95), Color.WHITE);
+                        drawOutlined(renderer, "pY: " + yString, uiX(2), uiY(baseHeight - 105), Color.WHITE);
                         if (sprite instanceof AbstractPlayableSprite playable) {
                                 String layerLabel = String.valueOf(formatLayer(playable.getLayer()));
                                 String priorityLabel = String.valueOf(formatPriority(playable.isHighPriority()));
-                                renderer.draw("Layer: " + layerLabel + " Prio: " + priorityLabel, 2, height-115);
+                                drawOutlined(renderer, "Layer: " + layerLabel + " Prio: " + priorityLabel,
+                                                uiX(2), uiY(baseHeight - 115), Color.WHITE);
                         } else {
-                                renderer.draw("Layer: " + sprite.getLayer(), 2, height-115);
+                                drawOutlined(renderer, "Layer: " + sprite.getLayer(),
+                                                uiX(2), uiY(baseHeight - 115), Color.WHITE);
                         }
 
-			renderer.draw(xString, 2, 25);
-			renderer.draw(yString, 2, 12);
+                        drawOutlined(renderer, xString.toString(), uiX(2), uiY(25), Color.WHITE);
+                        drawOutlined(renderer, yString.toString(), uiX(2), uiY(12), Color.WHITE);
 
 			String ringText = String.format("RINGS: %03d", ringCount);
 			int ringTextWidth = (int) Math.ceil(renderer.getBounds(ringText).getWidth());
-			int ringX = Math.max(2, width - ringTextWidth - 4);
-                        renderer.draw(ringText, ringX, 6);
+                        int ringX = Math.max(2, viewportWidth - ringTextWidth - 4);
+                        drawOutlined(renderer, ringText, ringX, uiY(6), Color.WHITE);
 
                         renderer.endRendering();
 
                         TextRenderer sensorRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 4));
-                        sensorRenderer.beginRendering(width, height);
-                        sensorRenderer.setColor(Color.RED);
+                                        "SansSerif", Font.PLAIN, 11), true, true);
+                        sensorRenderer.beginRendering(viewportWidth, viewportHeight);
+                        AbstractPlayableSprite abstractPlayableSprite = (AbstractPlayableSprite) sprite;
 
-			AbstractPlayableSprite abstractPlayableSprite = (AbstractPlayableSprite) sprite;
+                        for(Sensor sensor : abstractPlayableSprite.getAllSensors()) {
+                                SensorResult result = sensor.getCurrentResult();
+                                if (sensor.isActive() && result != null) {
+                                        Camera camera = Camera.getInstance();
 
-			for(Sensor sensor : abstractPlayableSprite.getAllSensors()) {
-				SensorResult result = sensor.getCurrentResult();
-				if (sensor.isActive() && result != null) {
-					Camera camera = Camera.getInstance();
+                                        SensorConfiguration sensorConfiguration = SpriteManager
+                                                        .getSensorConfigurationForGroundModeAndDirection(
+                                                                        abstractPlayableSprite.getGroundMode(),
+                                                                        sensor.getDirection());
+                                        Direction globalDirection = sensorConfiguration.direction();
+                                        short[] rotatedOffset = sensor.getRotatedOffset();
 
-					short xAdjusted = (short) (sprite.getCentreX() - camera.getX());
-					short yAdjusted = (short) (sprite.getCentreY() - camera.getY());
-					xAdjusted += sensor.getX();
-					yAdjusted += sensor.getY();
-					sensorRenderer.draw(String.valueOf(result.distance()), xAdjusted, height - yAdjusted);
-				}
-			}
-			sensorRenderer.endRendering();
+                                        short worldX = (short) (sprite.getCentreX() + rotatedOffset[0]);
+                                        short worldY = (short) (sprite.getCentreY() + rotatedOffset[1]);
+                                        short xAdjusted = (short) (worldX - camera.getX());
+                                        short yAdjusted = (short) (worldY - camera.getY());
+
+                                        byte solidityBit = (globalDirection == Direction.DOWN || globalDirection == Direction.UP)
+                                                        ? abstractPlayableSprite.getTopSolidBit()
+                                                        : abstractPlayableSprite.getLrbSolidBit();
+                                        char tableLabel = (solidityBit >= 0x0E) ? 'S' : 'P';
+
+                                        String angleHex = String.format("%02X", result.angle() & 0xFF);
+                                        String label = String.format("%s d:%d a:%s b:%02X %c",
+                                                        globalDirection.name().substring(0, 1),
+                                                        result.distance(),
+                                                        angleHex,
+                                                        solidityBit & 0xFF,
+                                                        tableLabel);
+                                        String coords = String.format("x:%d y:%d", (int) worldX, (int) worldY);
+
+                                        Color sensorColor = getSensorColor(globalDirection);
+                                        int screenX = toScreenX(xAdjusted);
+                                        int screenY = toScreenYFromWorld(yAdjusted);
+                                        drawOutlined(sensorRenderer, label, screenX, screenY, sensorColor);
+                                        drawOutlined(sensorRenderer, coords, screenX, screenY - uiY(6), sensorColor);
+                                }
+                        }
+                        sensorRenderer.endRendering();
 		}
 
                 renderObjectLabels();
@@ -146,27 +187,26 @@ public class DebugRenderer {
         }
 
         private void renderObjectLabels() {
-                if (objectRenderer == null) {
-                        return;
-                }
+            if (objectRenderer == null) {
+                return;
+            }
                 java.util.Collection<ObjectSpawn> spawns = levelManager.getActiveObjectSpawns();
                 if (spawns.isEmpty()) {
                         return;
                 }
                 Camera camera = Camera.getInstance();
 
-                objectRenderer.beginRendering(width, height);
-                objectRenderer.setColor(Color.MAGENTA);
+                objectRenderer.beginRendering(viewportWidth, viewportHeight);
                 for (ObjectSpawn spawn : spawns) {
                         int screenX = spawn.x() - camera.getX();
                         int screenY = spawn.y() - camera.getY();
 
-			if (screenX < -8 || screenX > width + 8) {
-				continue;
-			}
-			if (screenY < -8 || screenY > height + 8) {
-				continue;
-			}
+                        if (screenX < -8 || screenX > baseWidth + 8) {
+                                continue;
+                        }
+                        if (screenY < -8 || screenY > baseHeight + 8) {
+                                continue;
+                        }
 
 			StringBuilder label = new StringBuilder(String.format("%02X:%02X",
 					spawn.objectId(), spawn.subtype()));
@@ -177,31 +217,42 @@ public class DebugRenderer {
                                 label.append(" R");
                         }
 
-                        objectRenderer.draw(label.toString(), screenX + 2, height - screenY + 2);
+                        drawOutlined(objectRenderer, label.toString(),
+                                        toScreenX(screenX + 2),
+                                        toScreenYFromWorld(screenY) + uiY(2),
+                                        Color.MAGENTA);
                 }
                 objectRenderer.endRendering();
 
                 if (planeSwitcherRenderer == null) {
                         return;
                 }
-                planeSwitcherRenderer.beginRendering(width, height);
-                planeSwitcherRenderer.setColor(new Color(255, 140, 0));
+                planeSwitcherRenderer.beginRendering(viewportWidth, viewportHeight);
                 for (ObjectSpawn spawn : spawns) {
                         if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
                                 continue;
                         }
                         int screenX = spawn.x() - camera.getX();
                         int screenY = spawn.y() - camera.getY();
-                        if (screenX < -8 || screenX > width + 8) {
+                        if (screenX < -8 || screenX > baseWidth + 8) {
                                 continue;
                         }
-                        if (screenY < -8 || screenY > height + 8) {
+                        if (screenY < -8 || screenY > baseHeight + 8) {
                                 continue;
                         }
 
                         drawPlaneSwitcherLabels(spawn, screenX, screenY);
                 }
                 planeSwitcherRenderer.endRendering();
+        }
+
+        private Color getSensorColor(Direction direction) {
+                return switch (direction) {
+                        case DOWN -> new Color(0, 220, 0);
+                        case UP -> new Color(0, 200, 255);
+                        case LEFT -> new Color(255, 200, 0);
+                        case RIGHT -> new Color(255, 120, 0);
+                };
         }
 
         private void drawPlaneSwitcherLabels(ObjectSpawn spawn, int screenX, int screenY) {
@@ -213,13 +264,23 @@ public class DebugRenderer {
                 if (horizontal) {
                         int aboveY = screenY - 6;
                         int belowY = screenY + 6;
-                        planeSwitcherRenderer.draw(side0, screenX + 2, height - aboveY);
-                        planeSwitcherRenderer.draw(side1, screenX + 2, height - belowY);
+                        drawOutlined(planeSwitcherRenderer, side0,
+                                        toScreenX(screenX + 2),
+                                        toScreenYFromWorld(aboveY),
+                                        new Color(255, 140, 0));
+                        drawOutlined(planeSwitcherRenderer, side1,
+                                        toScreenX(screenX + 2),
+                                        toScreenYFromWorld(belowY),
+                                        new Color(255, 140, 0));
                 } else {
                         int leftX = screenX - 16;
                         int rightX = screenX + 6;
-                        planeSwitcherRenderer.draw(side0, leftX, height - screenY);
-                        planeSwitcherRenderer.draw(side1, rightX, height - screenY);
+                        drawOutlined(planeSwitcherRenderer, side0,
+                                        toScreenX(leftX), toScreenYFromWorld(screenY),
+                                        new Color(255, 140, 0));
+                        drawOutlined(planeSwitcherRenderer, side1,
+                                        toScreenX(rightX), toScreenYFromWorld(screenY),
+                                        new Color(255, 140, 0));
                 }
         }
 
@@ -234,16 +295,18 @@ public class DebugRenderer {
                 Camera camera = Camera.getInstance();
                 int screenX = playable.getCentreX() - camera.getX();
                 int screenY = playable.getY() - camera.getY();
-                if (screenX < -16 || screenX > width + 16) {
+                if (screenX < -16 || screenX > baseWidth + 16) {
                         return;
                 }
-                if (screenY < -16 || screenY > height + 16) {
+                if (screenY < -16 || screenY > baseHeight + 16) {
                         return;
                 }
                 String label = formatLayer(playable.getLayer()) + " " + formatPriority(playable.isHighPriority());
-                planeSwitcherRenderer.beginRendering(width, height);
-                planeSwitcherRenderer.setColor(new Color(255, 140, 0));
-                planeSwitcherRenderer.draw(label, screenX - 6, height - (screenY - 8));
+                planeSwitcherRenderer.beginRendering(viewportWidth, viewportHeight);
+                drawOutlined(planeSwitcherRenderer, label,
+                                toScreenX(screenX - 6),
+                                toScreenYFromWorld(screenY) + uiY(8),
+                                new Color(255, 140, 0));
                 planeSwitcherRenderer.endRendering();
         }
 
@@ -261,10 +324,54 @@ public class DebugRenderer {
                 return PlaneSwitcherManager.formatPriority(highPriority);
         }
 
-	public static synchronized DebugRenderer getInstance() {
-		if (debugRenderer == null) {
-			debugRenderer = new DebugRenderer();
-		}
-		return debugRenderer;
-	}
+        private void drawOutlined(TextRenderer textRenderer, String text, int x, int y, Color color) {
+                textRenderer.setColor(Color.BLACK);
+                textRenderer.draw(text, x - 1, y);
+                textRenderer.draw(text, x + 1, y);
+                textRenderer.draw(text, x, y - 1);
+                textRenderer.draw(text, x, y + 1);
+                textRenderer.draw(text, x - 1, y - 1);
+                textRenderer.draw(text, x + 1, y - 1);
+                textRenderer.draw(text, x - 1, y + 1);
+                textRenderer.draw(text, x + 1, y + 1);
+                textRenderer.setColor(color);
+                textRenderer.draw(text, x, y);
+        }
+
+        public static synchronized DebugRenderer getInstance() {
+                if (debugRenderer == null) {
+                        debugRenderer = new DebugRenderer();
+                }
+                return debugRenderer;
+        }
+
+        public void updateViewport(int viewportWidth, int viewportHeight) {
+                if (viewportWidth <= 0 || viewportHeight <= 0) {
+                        return;
+                }
+                this.viewportWidth = viewportWidth;
+                this.viewportHeight = viewportHeight;
+                this.scaleX = viewportWidth / (double) baseWidth;
+                this.scaleY = viewportHeight / (double) baseHeight;
+        }
+
+        private int uiX(int gameX) {
+                return toScreenX(gameX);
+        }
+
+        private int uiY(int gameY) {
+                return toScreenY(gameY);
+        }
+
+        private int toScreenX(int gameX) {
+                return (int) Math.round(gameX * scaleX);
+        }
+
+        private int toScreenY(int gameY) {
+                return (int) Math.round(gameY * scaleY);
+        }
+
+        private int toScreenYFromWorld(int worldY) {
+                return viewportHeight - toScreenY(worldY);
+        }
 }

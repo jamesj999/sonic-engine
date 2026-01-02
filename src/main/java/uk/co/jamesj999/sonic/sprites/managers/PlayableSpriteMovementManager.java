@@ -363,26 +363,19 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		} else {
-			// Check if we are still on the ground:
-			// Work out the speeds required to consider us still on the ground
-			short speed = (short) Math.abs(sprite.getXSpeed());
-			if (sprite.getGroundMode() == GroundMode.LEFTWALL || sprite.getGroundMode() == GroundMode.RIGHTWALL) {
-				speed = (short) Math.abs(sprite.getYSpeed());
-			}
-			short requiredSpeed = (short) Math.min(speed + 4, 14);
-
-			if(lowestResult.distance() < requiredSpeed) {
-				moveForSensorResult(sprite, lowestResult);
-				if (lowestResult.angle() == (byte) 0xFF) {
-					sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
-				} else {
-					sprite.setAngle(lowestResult.angle());
-				}
-				updateGroundMode(sprite);
-			} else {
-				sprite.setAir(true);
-			}
-		}
+                        // AnglePos-style grounded glue: use fixed 0x0E cutoff.
+                        if (lowestResult == null || lowestResult.distance() >= 14) {
+                                sprite.setAir(true);
+                                return;
+                        }
+                        moveForSensorResult(sprite, lowestResult);
+                        if (lowestResult.angle() == (byte) 0xFF) {
+                                sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
+                        } else {
+                                sprite.setAngle(lowestResult.angle());
+                        }
+                        updateGroundMode(sprite);
+                }
 //
 //
 //

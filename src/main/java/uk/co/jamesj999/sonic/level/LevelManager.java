@@ -29,7 +29,10 @@ import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.Sensor;
+import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
@@ -378,14 +381,17 @@ public class LevelManager {
                 appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands, playable);
             }
             if (!switcherAreaCommands.isEmpty()) {
+                enqueueDebugLineState();
                 for (GLCommand command : switcherAreaCommands) {
                     graphicsManager.registerCommand(command);
                 }
             }
             if (!switcherLineCommands.isEmpty()) {
+                enqueueDebugLineState();
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, switcherLineCommands));
             }
             if (!objectCommands.isEmpty()) {
+                enqueueDebugLineState();
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
             }
         }
@@ -405,6 +411,7 @@ public class LevelManager {
                                 1f, 0.85f, 0.1f,
                                 ring.x(), ring.y(), 0, 0));
                     }
+                    enqueueDebugLineState();
                     graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
                 } else {
                     PatternSpriteRenderer.FrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
@@ -456,9 +463,11 @@ public class LevelManager {
                     }
 
                     if (!boxCommands.isEmpty()) {
+                        enqueueDebugLineState();
                         graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
                     }
                     if (!centerCommands.isEmpty()) {
+                        enqueueDebugLineState();
                         graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
                     }
                 }
@@ -686,10 +695,10 @@ public class LevelManager {
             return;
         }
 
-        CollisionMode collisionMode = isPrimary
-                ? chunkDesc.getPrimaryCollisionMode()
-                : chunkDesc.getSecondaryCollisionMode();
-        if (collisionMode == CollisionMode.NO_COLLISION) {
+        boolean hasSolidity = isPrimary
+                ? chunkDesc.hasPrimarySolidity()
+                : chunkDesc.hasSecondarySolidity();
+        if (!hasSolidity) {
             return;
         }
 
@@ -778,27 +787,110 @@ public class LevelManager {
         boolean hFlip = Direction.LEFT.equals(sprite.getDirection());
         SpritePieceRenderer.FrameBounds mappingBounds = renderer.getFrameBounds(sprite.getMappingFrame(), hFlip, false);
 
-        int centerX = sprite.getCentreX();
-        int centerY = sprite.getCentreY();
+        int collisionCenterX = sprite.getCentreX();
+        int collisionCenterY = sprite.getCentreY();
+        int renderCenterX = sprite.getRenderCentreX();
+        int renderCenterY = sprite.getRenderCentreY();
         List<GLCommand> commands = new ArrayList<>();
 
         if (mappingBounds.width() > 0 && mappingBounds.height() > 0) {
-            int mapLeft = centerX + mappingBounds.minX();
-            int mapRight = centerX + mappingBounds.maxX();
-            int mapTop = centerY + mappingBounds.minY();
-            int mapBottom = centerY + mappingBounds.maxY();
+            int mapLeft = renderCenterX + mappingBounds.minX();
+            int mapRight = renderCenterX + mappingBounds.maxX();
+            int mapTop = renderCenterY + mappingBounds.minY();
+            int mapBottom = renderCenterY + mappingBounds.maxY();
             appendBox(commands, mapLeft, mapTop, mapRight, mapBottom, 0.1f, 0.85f, 1f);
         }
 
-        int hitLeft = centerX - (sprite.getWidth() / 2);
-        int hitRight = centerX + (sprite.getWidth() / 2);
-        int hitTop = centerY - (sprite.getHeight() / 2);
-        int hitBottom = centerY + (sprite.getHeight() / 2);
-        appendBox(commands, hitLeft, hitTop, hitRight, hitBottom, 1f, 0.8f, 0.1f);
+        int radiusLeft = collisionCenterX - sprite.getXRadius();
+        int radiusRight = collisionCenterX + sprite.getXRadius();
+        int radiusTop = collisionCenterY - sprite.getYRadius();
+        int radiusBottom = collisionCenterY + sprite.getYRadius();
+        appendBox(commands, radiusLeft, radiusTop, radiusRight, radiusBottom, 1f, 0.8f, 0.1f);
+
+        appendCross(commands, collisionCenterX, collisionCenterY, 2, 1f, 0.8f, 0.1f);
+        appendCross(commands, renderCenterX, renderCenterY, 2, 0.1f, 0.85f, 1f);
+
+        for (Sensor sensor : sprite.getAllSensors()) {
+            short[] rotatedOffset = sensor.getRotatedOffset();
+            int originX = collisionCenterX + rotatedOffset[0];
+            int originY = collisionCenterY + rotatedOffset[1];
+
+            float[] color = getSensorColor(sensor, sprite);
+            appendCross(commands, originX, originY, 1, color[0], color[1], color[2]);
+
+            if (!sensor.isActive()) {
+                continue;
+            }
+            SensorResult result = sensor.getCurrentResult();
+            if (result == null) {
+                continue;
+            }
+
+            SensorConfiguration sensorConfiguration = SpriteManager
+                    .getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), sensor.getDirection());
+            Direction globalDirection = sensorConfiguration.direction();
+
+            int dist = result.distance();
+            int endX = originX;
+            int endY = originY;
+            switch (globalDirection) {
+                case DOWN -> endY = originY + dist;
+                case UP -> endY = originY - dist;
+                case LEFT -> endX = originX - dist;
+                case RIGHT -> endX = originX + dist;
+            }
+
+            appendLine(commands, originX, originY, endX, endY, color[0], color[1], color[2]);
+        }
 
         if (!commands.isEmpty()) {
+            enqueueDebugLineState();
             graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
         }
+    }
+
+    private void appendLine(
+            List<GLCommand> commands,
+            int x1,
+            int y1,
+            int x2,
+            int y2,
+            float r,
+            float g,
+            float b
+    ) {
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, x1, y1, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, x2, y2, 0, 0));
+    }
+
+    private void appendCross(
+            List<GLCommand> commands,
+            int centerX,
+            int centerY,
+            int halfSpan,
+            float r,
+            float g,
+            float b
+    ) {
+        appendLine(commands, centerX - halfSpan, centerY, centerX + halfSpan, centerY, r, g, b);
+        appendLine(commands, centerX, centerY - halfSpan, centerX, centerY + halfSpan, r, g, b);
+    }
+
+    private float[] getSensorColor(Sensor sensor, AbstractPlayableSprite sprite) {
+        SensorConfiguration sensorConfiguration = SpriteManager
+                .getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), sensor.getDirection());
+        Direction globalDirection = sensorConfiguration.direction();
+        if (!sensor.isActive()) {
+            return new float[] { 0.5f, 0.5f, 0.5f };
+        }
+        return switch (globalDirection) {
+            case DOWN -> new float[] { 0f, 0.86f, 0f };
+            case UP -> new float[] { 0f, 0.78f, 1f };
+            case LEFT -> new float[] { 1f, 0.78f, 0f };
+            case RIGHT -> new float[] { 1f, 0.47f, 0f };
+        };
     }
 
     private void appendPlaneSwitcherDebug(ObjectSpawn spawn,
@@ -856,8 +948,17 @@ public class LevelManager {
     }
 
     private void beginDebugOverlay() {
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
+        enqueueDebugLineState();
+    }
+
+    private void enqueueDebugLineState() {
+        ShaderProgram debugShader = graphicsManager.getDebugShaderProgram();
+        int programId = debugShader != null ? debugShader.getProgramId() : 0;
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_LIGHTING));
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_COLOR_MATERIAL));
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
     }
 
     private void endDebugOverlay() {
@@ -972,19 +1073,12 @@ public class LevelManager {
         return chunkDesc;
     }
 
-    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, int solidityBitIndex) {
         try {
             if (chunkDesc == null) {
                 return null;
             }
-            CollisionMode collisionMode;
-            if (layer == 0) {
-                collisionMode = chunkDesc.getPrimaryCollisionMode();
-            } else {
-                collisionMode = chunkDesc.getSecondaryCollisionMode();
-            }
-
-            if (CollisionMode.NO_COLLISION.equals(collisionMode)) {
+            if (!chunkDesc.isSolidityBitSet(solidityBitIndex)) {
                 return null;
             }
 
@@ -992,7 +1086,7 @@ public class LevelManager {
             if (chunk == null) {
                 return null;
             }
-            if (layer == 0) {
+            if (solidityBitIndex < 0x0E) {
                 return level.getSolidTile(chunk.getSolidTileIndex());
             } else {
                 return level.getSolidTile(chunk.getSolidTileAltIndex());
@@ -1010,6 +1104,11 @@ public class LevelManager {
     // GroundSensor calls it. I should update GroundSensor.
     // But I can't leave this here without updating GroundSensor first or it won't compile?
     // Wait, I can overload.
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
+        int solidityBitIndex = (layer == 0) ? 0x0C : 0x0E;
+        return getSolidTileForChunkDesc(chunkDesc, solidityBitIndex);
+    }
+
     public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
         return getSolidTileForChunkDesc(chunkDesc, (byte) 0);
     }

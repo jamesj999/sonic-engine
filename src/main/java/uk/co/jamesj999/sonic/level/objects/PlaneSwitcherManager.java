@@ -67,6 +67,13 @@ public class PlaneSwitcherManager {
                 if (!skipCollisionChange) {
                     int path = decodePath(subtype, sideNow);
                     player.setLayer((byte) path);
+                    if (path == 0) {
+                        player.setTopSolidBit((byte) 0x0C);
+                        player.setLrbSolidBit((byte) 0x0D);
+                    } else {
+                        player.setTopSolidBit((byte) 0x0E);
+                        player.setLrbSolidBit((byte) 0x0F);
+                    }
                 }
 
                 boolean highPriority = decodePriority(subtype, sideNow);

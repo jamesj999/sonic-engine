@@ -269,28 +269,41 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear color
 																// and depth
 																// buffers
-		gl.glLoadIdentity(); // reset the model-view matrix
-		update();
+                gl.glLoadIdentity(); // reset the model-view matrix
+                gl.glDisable(GL2.GL_LIGHTING);
+                gl.glDisable(GL2.GL_COLOR_MATERIAL);
+                gl.glColorMask(true, true, true, true);
+                update();
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
-		if (debugViewEnabled) {
-			// Reset OpenGL state for JOGL's TextRenderer
-			gl.glActiveTexture(GL2.GL_TEXTURE0);
-			gl.glUseProgram(0);
-			// Reset matrices for 2D rendering
-			gl.glMatrixMode(GL_PROJECTION);
-			gl.glLoadIdentity();
-			glu.gluOrtho2D(0, realWidth, 0, realHeight);
-			gl.glMatrixMode(GL_MODELVIEW);
-			gl.glLoadIdentity();
+                if (debugViewEnabled) {
+                        // Reset OpenGL state for JOGL's TextRenderer
+                        gl.glActiveTexture(GL2.GL_TEXTURE0);
+                        gl.glUseProgram(0);
+                        gl.glDisable(GL2.GL_LIGHTING);
+                        gl.glDisable(GL2.GL_COLOR_MATERIAL);
+                        gl.glDisable(GL2.GL_DEPTH_TEST);
+                        gl.glColor4f(1f, 1f, 1f, 1f);
+                        gl.glEnable(GL2.GL_TEXTURE_2D);
+                        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+                        gl.glActiveTexture(GL2.GL_TEXTURE1);
+                        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+                        gl.glActiveTexture(GL2.GL_TEXTURE0);
+                        // Reset matrices for 2D rendering
+                        gl.glMatrixMode(GL_PROJECTION);
+                        gl.glLoadIdentity();
+                        glu.gluOrtho2D(0, realWidth, 0, realHeight);
+                        gl.glMatrixMode(GL_MODELVIEW);
+                        gl.glLoadIdentity();
 
 			// Re-enable blending for the TextRenderer
-			gl.glEnable(GL2.GL_BLEND);
-			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+                        gl.glEnable(GL2.GL_BLEND);
+                        gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
 
-			debugRenderer.renderDebugInfo();
-		}
+                        debugRenderer.updateViewport(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+                        debugRenderer.renderDebugInfo();
+                }
 	}
 
 	/**

@@ -28,7 +28,9 @@ public class GraphicsManager {
 
 	private final Camera camera = Camera.getInstance();
 	private GL2 graphics;
-	private ShaderProgram shaderProgram;
+        private ShaderProgram shaderProgram;
+        private ShaderProgram debugShaderProgram;
+        private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
 
 	public void registerCommand(GLCommandable command) {
 		commands.add(command);
@@ -37,10 +39,11 @@ public class GraphicsManager {
 	/**
 	 * Initialize the GraphicsManager with shader loading.
 	 */
-	public void init(GL2 gl, String pixelShaderPath) throws IOException {
-		this.graphics = gl;
-		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath);  // Load shaders
-	}
+public void init(GL2 gl, String pixelShaderPath) throws IOException {
+        this.graphics = gl;
+        this.shaderProgram = new ShaderProgram(gl, pixelShaderPath);  // Load shaders
+        this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
+}
 
 	/**
 	 * Set the current GL2 context (in case it needs resetting).
@@ -181,10 +184,13 @@ public class GraphicsManager {
 		for (int textureId : new java.util.HashSet<>(paletteTextureMap.values())) {
 			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
 		}
-		// Cleanup shader program
-		if (shaderProgram != null) {
-			shaderProgram.cleanup(graphics);
-		}
+        // Cleanup shader program
+        if (shaderProgram != null) {
+                shaderProgram.cleanup(graphics);
+        }
+        if (debugShaderProgram != null) {
+                debugShaderProgram.cleanup(graphics);
+        }
 	}
 
 	/**
@@ -206,9 +212,13 @@ public class GraphicsManager {
 		return graphicsManager;
 	}
 
-	public ShaderProgram getShaderProgram() {
-		return shaderProgram;
-	}
+public ShaderProgram getShaderProgram() {
+        return shaderProgram;
+}
+
+public ShaderProgram getDebugShaderProgram() {
+        return debugShaderProgram;
+}
 
 	public GL2 getGraphics() {
 		return graphics;

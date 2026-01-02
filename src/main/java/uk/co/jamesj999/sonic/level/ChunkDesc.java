@@ -69,6 +69,21 @@ public final class ChunkDesc {
         return yFlip;
     }
 
+    public boolean isSolidityBitSet(int bitIndex) {
+        if (bitIndex < 0 || bitIndex > 15) {
+            return false;
+        }
+        return (index & (1 << bitIndex)) != 0;
+    }
+
+    public boolean hasPrimarySolidity() {
+        return isSolidityBitSet(12) || isSolidityBitSet(13);
+    }
+
+    public boolean hasSecondarySolidity() {
+        return isSolidityBitSet(14) || isSolidityBitSet(15);
+    }
+
     // Update all cached fields from index
     private void updateFields() {
 

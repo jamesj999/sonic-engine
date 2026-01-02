@@ -9,12 +9,13 @@ import com.jogamp.opengl.GL2;
 
 public class Sonic extends AbstractPlayableSprite {
 
-	public Sonic(String code, short x, short y, boolean debug) {
-		super(code, x, y, debug);
-		// width in pixels
-		setWidth(20);
-		setHeight(40);
-	}
+public Sonic(String code, short x, short y, boolean debug) {
+        super(code, x, y, debug);
+        // width in pixels
+        setWidth(20);
+        setHeight(runHeight);
+        setRenderOffsets((short) 0, (short) -8);
+}
 
 	public void draw() {
         if (getSpriteRenderer() != null) {
@@ -23,8 +24,8 @@ public class Sonic extends AbstractPlayableSprite {
                 }
                 getSpriteRenderer().drawFrame(
                                 getMappingFrame(),
-                                getCentreX(),
-                                getCentreY(),
+                                getRenderCentreX(),
+                                getRenderCentreY(),
                                 getRenderHFlip(),
                                 getRenderVFlip()
                 );
@@ -48,13 +49,17 @@ public class Sonic extends AbstractPlayableSprite {
 		slopeRunning = 32;
 		slopeRollingDown = 20;
 		slopeRollingUp = 80;
-		rollDecel = 32;
-		minStartRollSpeed = 264;
-		minRollSpeed = 128;
-		maxRoll = 4096;
-		rollHeight = 30;
-		runHeight = 40;
-	}
+                rollDecel = 32;
+                minStartRollSpeed = 264;
+                minRollSpeed = 128;
+                maxRoll = 4096;
+                rollHeight = 28;
+                runHeight = 38;
+                standXRadius = 9;
+                standYRadius = 19;
+                rollXRadius = 7;
+                rollYRadius = 14;
+        }
 
 	@Override
 	protected void createSensorLines() {

@@ -33,10 +33,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected short gSpeed = 0;
 
-	/**
-	 * Current angle of the terrain this sprite is on.
-	 */
-	protected byte angle;
+        /**
+         * Current angle of the terrain this sprite is on.
+         */
+        protected byte angle;
+
+        /**
+         * Chunk entry solidity bit indices (REV01 defaults).
+         */
+        protected byte topSolidBit = 0x0C;
+        protected byte lrbSolidBit = 0x0D;
 
 	/**
 	 * Speed (in subpixels) at which this sprite walks
@@ -199,14 +205,30 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 return air;
         }
 
-	public void setAir(boolean air) {
-		//TODO Update ground sensors here
-		this.air = air;
-		if (air) {
-			setGroundMode(GroundMode.GROUND);
-			setAngle((byte) 0);
-		}
-	}
+        public void setAir(boolean air) {
+                //TODO Update ground sensors here
+                this.air = air;
+                if (air) {
+                        setGroundMode(GroundMode.GROUND);
+                        setAngle((byte) 0);
+                }
+        }
+
+        public byte getTopSolidBit() {
+                return topSolidBit;
+        }
+
+        public void setTopSolidBit(byte topSolidBit) {
+                this.topSolidBit = topSolidBit;
+        }
+
+        public byte getLrbSolidBit() {
+                return lrbSolidBit;
+        }
+
+        public void setLrbSolidBit(byte lrbSolidBit) {
+                this.lrbSolidBit = lrbSolidBit;
+        }
 
 	public short getJump() {
 		return jump;
@@ -305,24 +327,43 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected short minRollSpeed;
 
-	/**
-	 * Height when rolling
-	 */
-	protected short rollHeight;
+        /**
+         * Height when rolling
+         */
+        protected short rollHeight;
 
-	/**
-	 * Height when running
-	 */
-	protected short runHeight;
+        /**
+         * Height when running
+         */
+        protected short runHeight;
+
+        /**
+         * Collision radii (standing/rolling) used for sensor placement.
+         */
+        protected short standXRadius = 9;
+        protected short standYRadius = 19;
+        protected short rollXRadius = 7;
+        protected short rollYRadius = 14;
+
+        protected short xRadius = standXRadius;
+        protected short yRadius = standYRadius;
+
+        /**
+         * Visual render offsets (do not affect collision).
+         */
+        protected short renderXOffset = 0;
+        protected short renderYOffset = 0;
 
 	protected AbstractPlayableSprite(String code, short x, short y, boolean debug) {
 		super(code, x, y);
-		// Must define speeds before creating Manager (it will read speeds upon
-		// instantiation).
-		defineSpeeds();
+                // Must define speeds before creating Manager (it will read speeds upon
+                // instantiation).
+                defineSpeeds();
 
-		// Set our entire history for x and y to be the starting position so if
-		// the player spindashes immediately the camera effect won't be b0rked.
+                applyStandingRadii(false);
+
+                // Set our entire history for x and y to be the starting position so if
+                // the player spindashes immediately the camera effect won't be b0rked.
 		for (short i = 0; i < 32; i++) {
 			xHistory[i] = x;
 			yHistory[i] = y;
@@ -391,22 +432,43 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return rolling;
 	}
 
-	public void setRolling(boolean rolling) {
-        if(GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
+        public void setRolling(boolean rolling) {
+            if (this.rolling == rolling) {
+                return;
+            }
+
+            if (GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
+                int oldHeight = getHeight();
+                int newHeight = rolling ? rollHeight : runHeight;
+                if (oldHeight != newHeight) {
+                    int delta = (oldHeight - newHeight) / 2;
+                    yPixel = (short) (yPixel + delta);
+                    setHeight(newHeight);
+                }
+            } else {
+                int oldWidth = getWidth();
+                int newWidth = rolling ? rollHeight : runHeight;
+                if (oldWidth != newWidth) {
+                    int delta = (oldWidth - newWidth) / 2;
+                    xPixel = (short) (xPixel + delta);
+                    setWidth(newWidth);
+                }
+            }
+
             if (rolling) {
-                setHeight(rollHeight);
+                applyRollingRadii(false);
             } else {
-                setHeight(runHeight);
+                applyStandingRadii(false);
             }
-        } else {
-            if(rolling) {
-                setWidth(rollHeight);
-            } else {
-                setWidth(runHeight);
+
+            byte delta = 5;
+            if (!rolling) {
+                delta = (byte) -delta;
             }
+            moveForGroundModeAndDirection(delta, Direction.DOWN);
+
+            this.rolling = rolling;
         }
-		this.rolling = rolling;
-	}
 
 	@Override
 	public void setHeight(int height) {
@@ -425,9 +487,50 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return minStartRollSpeed;
 	}
 
-	public short getMinRollSpeed() {
-		return minRollSpeed;
-	}
+        public short getMinRollSpeed() {
+                return minRollSpeed;
+        }
+
+        public short getXRadius() {
+                return xRadius;
+        }
+
+        public short getYRadius() {
+                return yRadius;
+        }
+
+        protected void applyStandingRadii(boolean adjustY) {
+                setCollisionRadii(standXRadius, standYRadius, adjustY);
+        }
+
+        protected void applyRollingRadii(boolean adjustY) {
+                setCollisionRadii(rollXRadius, rollYRadius, adjustY);
+        }
+
+        protected void setCollisionRadii(short newXRadius, short newYRadius, boolean adjustY) {
+                this.xRadius = newXRadius;
+                this.yRadius = newYRadius;
+                updateSensorOffsetsFromRadii();
+        }
+
+        private void updateSensorOffsetsFromRadii() {
+                if (groundSensors == null || ceilingSensors == null || pushSensors == null) {
+                        return;
+                }
+
+                byte xRad = (byte) xRadius;
+                byte yRad = (byte) yRadius;
+                byte push = (byte) (xRadius + 1);
+
+                groundSensors[0].setOffset((byte) -xRad, yRad);
+                groundSensors[1].setOffset(xRad, yRad);
+
+                ceilingSensors[0].setOffset((byte) -xRad, (byte) -yRad);
+                ceilingSensors[1].setOffset(xRad, (byte) -yRad);
+
+                pushSensors[0].setOffset((byte) -push, (byte) 0);
+                pushSensors[1].setOffset(push, (byte) 0);
+        }
 
 	public SpriteMovementManager getMovementManager() {
 		return movementManager;
@@ -474,7 +577,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		}
 	}
 
-	public final short getCentreX(int framesBehind) {
+        public final short getCentreX(int framesBehind) {
 		int desired = historyPos - framesBehind;
 		if (desired < 0) {
 			desired += xHistory.length;
@@ -482,7 +585,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return (short) (xHistory[desired] + (width / 2));
 	}
 
-	public final short getCentreY(int framesBehind) {
+        public final short getCentreY(int framesBehind) {
 		int desired = historyPos - framesBehind;
 		if (desired < 0) {
 			desired += yHistory.length;
@@ -490,7 +593,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return (short) (yHistory[desired] + (height / 2));
 	}
 
-	public void updateSensors(short originalX, short originalY) {
+        public void updateSensors(short originalX, short originalY) {
 		Sensor[] sensorsToActivate;
 		Sensor[] sensorsToDeactivate;
 
@@ -568,7 +671,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return sensors;
 	}
 
-	public void moveForGroundModeAndDirection(byte distance, Direction direction) {
+        public void moveForGroundModeAndDirection(byte distance, Direction direction) {
 		SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(getGroundMode(), direction);
 		switch (sensorConfiguration.direction()) {
 			case DOWN -> {
@@ -590,13 +693,26 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 * Causes the sprite to update its position history as we are now at the end
 	 * of the tick so all movement calculations have been performed.
 	 */
-	public void endOfTick() {
-		if (historyPos == 31) {
-			historyPos = 0;
-		} else {
-			historyPos++;
-		}
-		xHistory[historyPos] = xPixel;
-		yHistory[historyPos] = yPixel;
-	}
+        public void endOfTick() {
+                if (historyPos == 31) {
+                        historyPos = 0;
+                } else {
+                        historyPos++;
+                }
+                xHistory[historyPos] = xPixel;
+                yHistory[historyPos] = yPixel;
+        }
+
+        public short getRenderCentreX() {
+                return (short) (getCentreX() + renderXOffset);
+        }
+
+        public short getRenderCentreY() {
+                return (short) (getCentreY() + renderYOffset);
+        }
+
+        public void setRenderOffsets(short xOffset, short yOffset) {
+                this.renderXOffset = xOffset;
+                this.renderYOffset = yOffset;
+        }
 }

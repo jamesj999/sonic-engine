@@ -56,8 +56,8 @@ public class SpindashDustManager {
         if (!isActive() || renderer == null) {
             return;
         }
-        int originX = sprite.getCentreX();
-        int originY = sprite.getCentreY();
+        int originX = sprite.getRenderCentreX();
+        int originY = sprite.getRenderCentreY();
         if (sprite instanceof Tails) {
             originY += TAILS_Y_OFFSET;
         }

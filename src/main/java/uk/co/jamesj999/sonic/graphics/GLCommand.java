@@ -107,26 +107,25 @@ public class GLCommand implements GLCommandable {
 				return;
 		}
 
-		boolean single = drawMethod != -1;
-		if (single) {
-			gl.glBegin(drawMethod);
-		}
-
-		if (blendMode == BlendType.SOLID) {
-			gl.glDisable(GL2.GL_BLEND);
-		}
-		if (blendMode == BlendType.ONE_MINUS_SRC_ALPHA) {
-			gl.glEnable(GL2.GL_BLEND);
-			gl.glBlendFunc(GL2.GL_SRC_ALPHA,GL2.GL_ONE_MINUS_SRC_ALPHA);
-		}
+                boolean single = drawMethod != -1;
+                if (single) {
+                        if (blendMode == BlendType.SOLID) {
+                                gl.glDisable(GL2.GL_BLEND);
+                        }
+                        if (blendMode == BlendType.ONE_MINUS_SRC_ALPHA) {
+                                gl.glEnable(GL2.GL_BLEND);
+                                gl.glBlendFunc(GL2.GL_SRC_ALPHA,GL2.GL_ONE_MINUS_SRC_ALPHA);
+                        }
+                        gl.glBegin(drawMethod);
+                }
                 gl.glColor4f(colour1, colour2, colour3, alpha);
-		if (CommandType.RECTI.equals(glCmdCommandType)) {
-			gl.glRecti(x1 - cameraX, y1 + cameraY, x2 - cameraX, y2 + cameraY);
-		} else if (CommandType.VERTEX2I.equals(glCmdCommandType)) {
-			gl.glVertex2i(x1 - cameraX, y1 + cameraY);
-		}
-		if (single) {
-			gl.glEnd();
-		}
+                if (CommandType.RECTI.equals(glCmdCommandType)) {
+                        gl.glRecti(x1 - cameraX, y1 + cameraY, x2 - cameraX, y2 + cameraY);
+                } else if (CommandType.VERTEX2I.equals(glCmdCommandType)) {
+                        gl.glVertex2i(x1 - cameraX, y1 + cameraY);
+                }
+                if (single) {
+                        gl.glEnd();
+                }
 	}
 }
