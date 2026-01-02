@@ -48,43 +48,32 @@ public class PlaneSwitcherManager {
                     s -> new PlaneSwitcherState(decodeHalfSpan(s.subtype())));
 
             boolean horizontal = isHorizontal(subtype);
+            int sideNow = horizontal
+                    ? (playerY >= spawn.y() ? 1 : 0)
+                    : (playerX >= spawn.x() ? 1 : 0);
             if (!state.seeded) {
-                state.sideState = (byte) (horizontal
-                        ? (playerY >= spawn.y() ? 1 : 0)
-                        : (playerX >= spawn.x() ? 1 : 0));
+                state.sideState = (byte) sideNow;
                 state.seeded = true;
-            }
-
-            if (onlySwitchWhenGrounded(subtype) && player.getAir()) {
-                continue;
             }
 
             int half = state.halfSpanPixels;
             boolean inSpan = horizontal
                     ? (playerX >= spawn.x() - half && playerX < spawn.x() + half)
                     : (playerY >= spawn.y() - half && playerY < spawn.y() + half);
+            boolean groundedGate = onlySwitchWhenGrounded(subtype) && player.getAir();
 
-            if (!inSpan) {
-                continue;
+            if (inSpan && !groundedGate && sideNow != state.sideState) {
+                boolean skipCollisionChange = (spawn.renderFlags() & 0x1) != 0;
+                if (!skipCollisionChange) {
+                    int path = decodePath(subtype, sideNow);
+                    player.setLayer((byte) path);
+                }
+
+                boolean highPriority = decodePriority(subtype, sideNow);
+                player.setHighPriority(highPriority);
             }
 
-            int sideNow = horizontal
-                    ? (playerY >= spawn.y() ? 1 : 0)
-                    : (playerX >= spawn.x() ? 1 : 0);
-
-            if (sideNow == state.sideState) {
-                continue;
-            }
             state.sideState = (byte) sideNow;
-
-            boolean skipCollisionChange = (spawn.renderFlags() & 0x1) != 0;
-            if (!skipCollisionChange) {
-                int path = decodePath(subtype, sideNow);
-                player.setLayer((byte) path);
-            }
-
-            boolean highPriority = decodePriority(subtype, sideNow);
-            player.setHighPriority(highPriority);
         }
 
         states.keySet().removeIf(spawn -> spawn.objectId() == OBJECT_ID && !active.contains(spawn));
@@ -118,6 +107,14 @@ public class PlaneSwitcherManager {
 
     public static char formatPriority(boolean highPriority) {
         return highPriority ? 'H' : 'L';
+    }
+
+    public int getSideState(ObjectSpawn spawn) {
+        PlaneSwitcherState state = states.get(spawn);
+        if (state == null || !state.seeded) {
+            return -1;
+        }
+        return state.sideState;
     }
 
     private static final class PlaneSwitcherState {

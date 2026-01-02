@@ -52,7 +52,6 @@ public class LevelManager {
     private static final float SWITCHER_DEBUG_G = 0.55f;
     private static final float SWITCHER_DEBUG_B = 0.1f;
     private static final float SWITCHER_DEBUG_ALPHA = 0.35f;
-    private static final int SWITCHER_DEBUG_HALF_THICKNESS = 4;
     private static LevelManager levelManager;
     private Level level;
     private Game game;
@@ -343,13 +342,17 @@ public class LevelManager {
             List<GLCommand> objectCommands = new ArrayList<>();
             List<GLCommand> switcherLineCommands = new ArrayList<>();
             List<GLCommand> switcherAreaCommands = new ArrayList<>();
+            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite
+                    ? (AbstractPlayableSprite) player
+                    : null;
             for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
                 objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                         -1,
                         GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                         1f, 0f, 1f,
                         spawn.x(), spawn.y(), 0, 0));
-                appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands);
+                appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands, playable);
             }
             if (!switcherAreaCommands.isEmpty()) {
                 for (GLCommand command : switcherAreaCommands) {
@@ -755,7 +758,8 @@ public class LevelManager {
 
     private void appendPlaneSwitcherDebug(ObjectSpawn spawn,
                                           List<GLCommand> lineCommands,
-                                          List<GLCommand> areaCommands) {
+                                          List<GLCommand> areaCommands,
+                                          AbstractPlayableSprite player) {
         if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
             return;
         }
@@ -764,7 +768,17 @@ public class LevelManager {
         boolean horizontal = PlaneSwitcherManager.isHorizontal(subtype);
         int x = spawn.x();
         int y = spawn.y();
+        int sideState = planeSwitcherManager != null ? planeSwitcherManager.getSideState(spawn) : -1;
+        if (sideState < 0 && player != null) {
+            sideState = horizontal
+                    ? (player.getCentreY() >= y ? 1 : 0)
+                    : (player.getCentreX() >= x ? 1 : 0);
+        }
+        if (sideState < 0) {
+            sideState = 0;
+        }
 
+        int extent = halfSpan;
         if (horizontal) {
             lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
@@ -773,10 +787,12 @@ public class LevelManager {
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
                     x + halfSpan, y, 0, 0));
 
+            int top = sideState == 0 ? y - extent : y;
+            int bottom = sideState == 0 ? y : y + extent;
             areaCommands.add(new GLCommand(GLCommand.CommandType.RECTI, -1, GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
-                    x - halfSpan, y - SWITCHER_DEBUG_HALF_THICKNESS,
-                    x + halfSpan, y + SWITCHER_DEBUG_HALF_THICKNESS));
+                    x - halfSpan, top,
+                    x + halfSpan, bottom));
         } else {
             lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
@@ -785,10 +801,12 @@ public class LevelManager {
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
                     x, y + halfSpan, 0, 0));
 
+            int left = sideState == 0 ? x - extent : x;
+            int right = sideState == 0 ? x : x + extent;
             areaCommands.add(new GLCommand(GLCommand.CommandType.RECTI, -1, GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
-                    x - SWITCHER_DEBUG_HALF_THICKNESS, y - halfSpan,
-                    x + SWITCHER_DEBUG_HALF_THICKNESS, y + halfSpan));
+                    left, y - halfSpan,
+                    right, y + halfSpan));
         }
     }
 
