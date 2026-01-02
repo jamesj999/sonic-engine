@@ -188,12 +188,19 @@ public class PlayableSpriteMovementManager extends
 		doTerrainCollision(sprite, groundResult);
 		doCeilingCollision(sprite, ceilingResult);
 
-		// This won't work when graphics are involved...
-		if(sprite.getX() > originalX) {
-			sprite.setDirection(Direction.RIGHT);
-		} else if(sprite.getX() < originalX) {
-			sprite.setDirection(Direction.LEFT);
-		}
+                if (left && !right) {
+                        if (!sprite.getAir() && sprite.getGSpeed() > 0) {
+                                sprite.setDirection(Direction.RIGHT);
+                        } else {
+                                sprite.setDirection(Direction.LEFT);
+                        }
+                } else if (right && !left) {
+                        if (!sprite.getAir() && sprite.getGSpeed() < 0) {
+                                sprite.setDirection(Direction.LEFT);
+                        } else {
+                                sprite.setDirection(Direction.RIGHT);
+                        }
+                }
 
 		// Temporary 'death' detection - just resets X/Y of sprite.
 		// TODO - This no longer works. y <= 0 would put sonic above the viewport. Needs to work based on level height once merged.

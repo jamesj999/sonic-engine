@@ -70,6 +70,12 @@ Size encoding:
 - widthTiles = ((size >> 2) & 0x3) + 1
 - heightTiles = (size & 0x3) + 1
 
+### Facing + slope flips (Sonic_Animate parity)
+
+- `status.player.x_flip` drives base facing (left/right) and should be set by the movement logic (Sonic_MoveLeft/Right), not by raw x-velocity.
+- For walk/run on slopes, the original `Sonic_Animate` computes an angle-based flip: when the "upside-down" bit is set, both X and Y render flips are enabled, and the X flip is effectively inverted relative to facing.
+- Mirror this by letting the animation manager adjust render flips from `angle` + `status.player.x_flip`, instead of re-deriving facing from screen-space movement.
+
 ### DPLCs (MapRUnc_*)
 
 Per character:
