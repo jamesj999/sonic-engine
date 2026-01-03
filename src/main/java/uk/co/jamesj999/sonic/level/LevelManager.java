@@ -477,6 +477,7 @@ public class LevelManager {
         if (debugViewEnabled) {
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
             if (player instanceof AbstractPlayableSprite playable) {
+                drawCameraBounds();
                 drawPlayableSpriteBounds(playable);
             }
         }
@@ -841,6 +842,32 @@ public class LevelManager {
             }
 
             appendLine(commands, originX, originY, endX, endY, color[0], color[1], color[2]);
+        }
+
+        if (!commands.isEmpty()) {
+            enqueueDebugLineState();
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        }
+    }
+
+    private void drawCameraBounds() {
+        Camera camera = Camera.getInstance();
+        List<GLCommand> commands = new ArrayList<>();
+
+        int camX = camera.getX();
+        int camY = camera.getY();
+        int camW = camera.getWidth();
+        int camH = camera.getHeight();
+
+        appendBox(commands, camX, camY, camX + camW, camY + camH, 0.85f, 0.9f, 1f);
+        appendCross(commands, camX + (camW / 2), camY + (camH / 2), 4, 0.85f, 0.9f, 1f);
+
+        int minX = camera.getMinX();
+        int minY = camera.getMinY();
+        int maxX = camera.getMaxX();
+        int maxY = camera.getMaxY();
+        if (maxX > minX || maxY > minY) {
+            appendBox(commands, minX, minY, maxX + camW, maxY + camH, 0.2f, 0.9f, 0.9f);
         }
 
         if (!commands.isEmpty()) {

@@ -16,6 +16,8 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DebugRenderer {
 	private static DebugRenderer debugRenderer;
@@ -28,6 +30,7 @@ public class DebugRenderer {
         private TextRenderer renderer;
         private TextRenderer objectRenderer;
         private TextRenderer planeSwitcherRenderer;
+        private static final String[] SENSOR_LABELS = {"A", "B", "C", "D", "E", "F"};
 
         private final int baseWidth = configService
                         .getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
@@ -44,111 +47,49 @@ public class DebugRenderer {
 	public void renderDebugInfo() {
                 if (renderer == null) {
                         renderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 14), true, true);
+                                        "SansSerif", Font.PLAIN, 12), true, true);
                 }
                 if (objectRenderer == null) {
                         objectRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 12), true, true);
+                                        "SansSerif", Font.PLAIN, 11), true, true);
                 }
                 if (planeSwitcherRenderer == null) {
                         planeSwitcherRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 12), true, true);
+                                        "SansSerif", Font.PLAIN, 11), true, true);
                 }
 
                 renderer.beginRendering(viewportWidth, viewportHeight);
 
 		Sprite sprite = spriteManager.getSprite(sonicCode);
 		if (sprite != null) {
-			int ringCount = 0;
-			if (sprite instanceof AbstractPlayableSprite) {
-				ringCount = ((AbstractPlayableSprite) sprite).getRingCount();
-                                drawOutlined(renderer,
-                                                "SpdshConst: " + ((AbstractPlayableSprite) sprite).getSpindashConstant(),
-                                                uiX(2), uiY(baseHeight - 10), Color.WHITE);
-                                drawOutlined(renderer,
-                                                "Dir: " + ((AbstractPlayableSprite) sprite).getDirection(),
-                                                uiX(2), uiY(baseHeight - 20), Color.WHITE);
-                                drawOutlined(renderer,
-                                                "Mode: "
-                                                                + ((AbstractPlayableSprite) sprite)
-                                                                .getGroundMode(),
-                                                uiX(2), uiY(103), Color.WHITE);
-                                if (((AbstractPlayableSprite) sprite).getAir()) {
-                                        drawOutlined(renderer, "Air",
-                                                        uiX(24), uiY(baseHeight - 40), Color.WHITE);
-                                }
-                                if (((AbstractPlayableSprite) sprite).getRolling()) {
-                                        drawOutlined(renderer, "Roll",
-                                                        uiX(24), uiY(baseHeight - 40), Color.WHITE);
-                                }
-                                if (((AbstractPlayableSprite) sprite).getSpindash()) {
-                                        drawOutlined(renderer, "Spdash",
-                                                        uiX(24), uiY(baseHeight - 40), Color.WHITE);
-                                }
-                                drawOutlined(renderer,
-                                                "gS:" + ((AbstractPlayableSprite) sprite).getGSpeed(),
-                                                uiX(2), uiY(baseHeight - 50), Color.WHITE);
-                                drawOutlined(renderer,
-                                                "xS:" + ((AbstractPlayableSprite) sprite).getXSpeed(),
-                                                uiX(2), uiY(baseHeight - 60), Color.WHITE);
-                                drawOutlined(renderer,
-                                                "yS:" + ((AbstractPlayableSprite) sprite).getYSpeed(),
-                                                uiX(2), uiY(baseHeight - 70), Color.WHITE);
-                                // DECIMAL VERSION:
-                                drawOutlined(renderer,
-                                                "Deg:" + (((AbstractPlayableSprite) sprite).getAngle()),
-                                                uiX(2), uiY(baseHeight - 80), Color.WHITE);
-                        }
-            // HEX VERSION:
-//			renderer.draw(
-//					"Angle:" + Integer.toHexString(((AbstractPlayableSprite) sprite).getAngle()), 2,
-//					38);
+				int ringCount = 0;
+				AbstractPlayableSprite playable = null;
+				if (sprite instanceof AbstractPlayableSprite casted) {
+						playable = casted;
+						ringCount = casted.getRingCount();
+						renderPlayerStatusPanel(casted, ringCount);
+				}
 
-			StringBuilder xString = new StringBuilder(Integer.toHexString(
-					sprite.getX()).toUpperCase());
-			StringBuilder yString = new StringBuilder(Integer.toHexString(
-					sprite.getY()).toUpperCase());
-			while (xString.length() < 6) {
-				xString.insert(0, "0");
-			}
-			while (yString.length() < 6) {
-				yString.insert(0, "0");
-			}
-                        drawOutlined(renderer, "pX: " + xString, uiX(2), uiY(baseHeight - 95), Color.WHITE);
-                        drawOutlined(renderer, "pY: " + yString, uiX(2), uiY(baseHeight - 105), Color.WHITE);
-                        if (sprite instanceof AbstractPlayableSprite playable) {
-                                String layerLabel = String.valueOf(formatLayer(playable.getLayer()));
-                                String priorityLabel = String.valueOf(formatPriority(playable.isHighPriority()));
-                                drawOutlined(renderer, "Layer: " + layerLabel + " Prio: " + priorityLabel,
-                                                uiX(2), uiY(baseHeight - 115), Color.WHITE);
-                        } else {
-                                drawOutlined(renderer, "Layer: " + sprite.getLayer(),
-                                                uiX(2), uiY(baseHeight - 115), Color.WHITE);
-                        }
+				renderer.endRendering();
 
-                        drawOutlined(renderer, xString.toString(), uiX(2), uiY(25), Color.WHITE);
-                        drawOutlined(renderer, yString.toString(), uiX(2), uiY(12), Color.WHITE);
-
-			String ringText = String.format("RINGS: %03d", ringCount);
-			int ringTextWidth = (int) Math.ceil(renderer.getBounds(ringText).getWidth());
-                        int ringX = Math.max(2, viewportWidth - ringTextWidth - 4);
-                        drawOutlined(renderer, ringText, ringX, uiY(6), Color.WHITE);
-
-                        renderer.endRendering();
+				if (playable != null) {
 
                         TextRenderer sensorRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 11), true, true);
+                                        "SansSerif", Font.PLAIN, 10), true, true);
                         sensorRenderer.beginRendering(viewportWidth, viewportHeight);
-                        AbstractPlayableSprite abstractPlayableSprite = (AbstractPlayableSprite) sprite;
-
-                        for(Sensor sensor : abstractPlayableSprite.getAllSensors()) {
+                        Sensor[] sensors = playable.getAllSensors();
+                        for (int i = 0; i < sensors.length && i < SENSOR_LABELS.length; i++) {
+                                Sensor sensor = sensors[i];
+                                if (sensor == null) {
+                                        continue;
+                                }
                                 SensorResult result = sensor.getCurrentResult();
                                 if (sensor.isActive() && result != null) {
                                         Camera camera = Camera.getInstance();
 
                                         SensorConfiguration sensorConfiguration = SpriteManager
                                                         .getSensorConfigurationForGroundModeAndDirection(
-                                                                        abstractPlayableSprite.getGroundMode(),
+                                                                        playable.getGroundMode(),
                                                                         sensor.getDirection());
                                         Direction globalDirection = sensorConfiguration.direction();
                                         short[] rotatedOffset = sensor.getRotatedOffset();
@@ -159,31 +100,47 @@ public class DebugRenderer {
                                         short yAdjusted = (short) (worldY - camera.getY());
 
                                         byte solidityBit = (globalDirection == Direction.DOWN || globalDirection == Direction.UP)
-                                                        ? abstractPlayableSprite.getTopSolidBit()
-                                                        : abstractPlayableSprite.getLrbSolidBit();
+                                                        ? playable.getTopSolidBit()
+                                                        : playable.getLrbSolidBit();
                                         char tableLabel = (solidityBit >= 0x0E) ? 'S' : 'P';
 
                                         String angleHex = String.format("%02X", result.angle() & 0xFF);
-                                        String label = String.format("%s d:%d a:%s b:%02X %c",
+                                        String label = String.format("%s %s d:%d a:%s",
+                                                        SENSOR_LABELS[i],
                                                         globalDirection.name().substring(0, 1),
                                                         result.distance(),
-                                                        angleHex,
-                                                        solidityBit & 0xFF,
-                                                        tableLabel);
-                                        String coords = String.format("x:%d y:%d", (int) worldX, (int) worldY);
+                                                        angleHex);
 
                                         Color sensorColor = getSensorColor(globalDirection);
                                         int screenX = toScreenX(xAdjusted);
                                         int screenY = toScreenYFromWorld(yAdjusted);
-                                        drawOutlined(sensorRenderer, label, screenX, screenY, sensorColor);
-                                        drawOutlined(sensorRenderer, coords, screenX, screenY - uiY(6), sensorColor);
+                                        int offsetX = 0;
+                                        int offsetY = 0;
+                                        int stackOffset = (i % 2 == 0) ? 0 : uiY(6);
+                                        switch (globalDirection) {
+                                                case DOWN -> offsetY = uiY(10) + stackOffset;
+                                                case UP -> offsetY = -uiY(10) - stackOffset;
+                                                case LEFT -> {
+                                                        offsetX = -uiX(28);
+                                                        offsetY = stackOffset;
+                                                }
+                                                case RIGHT -> {
+                                                        offsetX = uiX(6);
+                                                        offsetY = stackOffset;
+                                                }
+                                        }
+                                        drawOutlined(sensorRenderer, label, screenX + offsetX, screenY + offsetY, sensorColor);
                                 }
                         }
                         sensorRenderer.endRendering();
-		}
+                }
 
-                renderObjectLabels();
-                renderPlayerPlaneState();
+        } else {
+                renderer.endRendering();
+        }
+
+        renderObjectLabels();
+        renderPlayerPlaneState();
         }
 
         private void renderObjectLabels() {
@@ -308,6 +265,97 @@ public class DebugRenderer {
                                 toScreenYFromWorld(screenY) + uiY(8),
                                 new Color(255, 140, 0));
                 planeSwitcherRenderer.endRendering();
+        }
+
+        private void renderPlayerStatusPanel(AbstractPlayableSprite sprite, int ringCount) {
+                List<String> lines = new ArrayList<>();
+                int angleByte = sprite.getAngle() & 0xFF;
+                float angleDeg = ((256 - angleByte) * 360f / 256f) % 360f;
+
+                lines.add("== PLAYER ==");
+                lines.add(String.format("Pos: %d.%02X  %d.%02X",
+                                (int) sprite.getX(), sprite.getXSubpixel() & 0xFF,
+                                (int) sprite.getY(), sprite.getYSubpixel() & 0xFF));
+                lines.add(String.format("Spd: X %d (%.2f)",
+                                sprite.getXSpeed(), sprite.getXSpeed() / 256f));
+                lines.add(String.format("Spd: Y %d (%.2f)",
+                                sprite.getYSpeed(), sprite.getYSpeed() / 256f));
+                lines.add(String.format("GSpd: %d (%.2f)",
+                                sprite.getGSpeed(), sprite.getGSpeed() / 256f));
+                lines.add(String.format("Angle: %02X (%.1f°)", angleByte, angleDeg));
+                lines.add("Mode: " + sprite.getGroundMode());
+                lines.add("Dir: " + sprite.getDirection());
+                lines.add("State: " + formatStateFlags(sprite));
+                lines.add(String.format("Layer: %c  Prio: %c",
+                                formatLayer(sprite.getLayer()),
+                                formatPriority(sprite.isHighPriority())));
+                lines.add(String.format("Solidity: top %02X lrb %02X",
+                                sprite.getTopSolidBit() & 0xFF,
+                                sprite.getLrbSolidBit() & 0xFF));
+                lines.add(String.format("Radii: x %d y %d", sprite.getXRadius(), sprite.getYRadius()));
+                lines.add(String.format("Anim: id %d frame %d/%d tick %d",
+                                sprite.getAnimationId(),
+                                sprite.getAnimationFrameIndex(),
+                                sprite.getAnimationFrameCount(),
+                                sprite.getAnimationTick()));
+                lines.add(String.format("MapFrame: %d", sprite.getMappingFrame()));
+                lines.add(String.format("Rings: %d", ringCount));
+                lines.add("== SENSORS ==");
+
+                Sensor[] sensors = sprite.getAllSensors();
+                for (int i = 0; i < sensors.length && i < SENSOR_LABELS.length; i++) {
+                        Sensor sensor = sensors[i];
+                        if (sensor == null) {
+                                lines.add(SENSOR_LABELS[i] + ": --");
+                                continue;
+                        }
+                        SensorConfiguration sensorConfiguration = SpriteManager
+                                        .getSensorConfigurationForGroundModeAndDirection(
+                                                        sprite.getGroundMode(), sensor.getDirection());
+                        String dir = sensorConfiguration.direction().name().substring(0, 1);
+                        String prefix = SENSOR_LABELS[i] + "(" + dir + "): ";
+                        if (!sensor.isActive()) {
+                                lines.add(prefix + "--");
+                                continue;
+                        }
+                        SensorResult result = sensor.getCurrentResult();
+                        if (result == null) {
+                                lines.add(prefix + "??");
+                                continue;
+                        }
+                        lines.add(String.format("%sd:%d a:%02X", prefix, result.distance(), result.angle() & 0xFF));
+                }
+
+                int startX = uiX(6);
+                int startY = uiY(baseHeight - 6);
+                int lineHeight = Math.max(8, uiY(9));
+                int y = startY;
+                for (String line : lines) {
+                        drawOutlined(renderer, line, startX, y, Color.WHITE);
+                        y -= lineHeight;
+                }
+        }
+
+        private String formatStateFlags(AbstractPlayableSprite sprite) {
+                StringBuilder flags = new StringBuilder();
+                if (sprite.getAir()) {
+                        flags.append("Air ");
+                } else {
+                        flags.append("Ground ");
+                }
+                if (sprite.getRolling()) {
+                        flags.append("Roll ");
+                }
+                if (sprite.getSpindash()) {
+                        flags.append("Spindash ");
+                }
+                if (sprite.getCrouching()) {
+                        flags.append("Crouch ");
+                }
+                if (flags.length() == 0) {
+                        return "None";
+                }
+                return flags.toString().trim();
         }
 
         private String formatPlaneSwitcherSide(int subtype, int side) {

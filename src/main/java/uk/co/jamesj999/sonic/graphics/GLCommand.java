@@ -5,14 +5,27 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
 public class GLCommand implements GLCommandable {
+        private static final ThreadLocal<Boolean> IN_GROUP = ThreadLocal.withInitial(() -> Boolean.FALSE);
 	private final int screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT);
 	public enum CommandType {
 		RECTI, VERTEX2I, USE_PROGRAM, ENABLE, DISABLE;
 	}
 
-	public enum BlendType {
-		SOLID, ONE_MINUS_SRC_ALPHA
-	}
+public enum BlendType {
+        SOLID, ONE_MINUS_SRC_ALPHA
+}
+
+public static void setInGroup(boolean inGroup) {
+        IN_GROUP.set(inGroup);
+}
+
+public static boolean isInGroup() {
+        return IN_GROUP.get();
+}
+
+public BlendType getBlendMode() {
+        return blendMode;
+}
 
 	private final BlendType defaultBlendMode = BlendType.SOLID;
 
@@ -108,7 +121,7 @@ public class GLCommand implements GLCommandable {
 		}
 
                 boolean single = drawMethod != -1;
-                if (single) {
+                if (!isInGroup()) {
                         if (blendMode == BlendType.SOLID) {
                                 gl.glDisable(GL2.GL_BLEND);
                         }
@@ -116,6 +129,8 @@ public class GLCommand implements GLCommandable {
                                 gl.glEnable(GL2.GL_BLEND);
                                 gl.glBlendFunc(GL2.GL_SRC_ALPHA,GL2.GL_ONE_MINUS_SRC_ALPHA);
                         }
+                }
+                if (single) {
                         gl.glBegin(drawMethod);
                 }
                 gl.glColor4f(colour1, colour2, colour3, alpha);
