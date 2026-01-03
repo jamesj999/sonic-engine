@@ -371,6 +371,41 @@ Set collision_flags to $46 and implement the monitor solidity wrapper (parameter
 - Spikes hurt logic is driven by SolidObject contact masks, not by collision_flags.
 - Springs trigger when standing is reported by SolidObject or SlopedSolid, and they use fixed constants for collision parameters.
 
+## Current implementation alignment (2026-01-03)
+
+This section summarizes how the Java engine currently aligns to REV01 and what remains.
+
+Aligned / close:
+- TouchResponse sizes are loaded from ROM Touch_Sizes (0x3F600) and treated as radii.
+- TouchResponse uses the ROM origin offsets (x_pos-8, y_pos-8-(y_radius-3)) and the crouch special case (y + 12, height = 20).
+- TouchResponse overlap test now mirrors the ROM asymmetric width/height checks (including the 0x10 width threshold).
+- Spikes (Obj36) use Obj36_InitData tables and SolidObject params d1=width+0x0B, d2=y_radius, d3=y_radius+1.
+- Springs (Obj41) use SolidObject params d1=0x1B, d2=8, d3=0x10.
+- Monitors (Obj26) use collision_flags 0x46 plus SolidObject params d1=0x1A, d2=0x0F, d3=0x10.
+- SolidObject uses the vertical offset (+4), the 0x10 landing threshold, and the 4px near-edge side rule.
+- SlopedSolid is implemented for diagonal springs using the Obj41 slope tables.
+- Spring interactions now apply the ROM-style position nudges (+8/-8 and +/-6) and trigger the spring animation state.
+- TouchResponse routing now applies hurt logic and post-hit invulnerability frames for HURT and ENEMY categories.
+- TouchResponse enemy kills use invincible/roll/spindash checks and ROM-style bounce behavior.
+- Ringless hurt now triggers death state (KillCharacter) with ROM velocities and death animation ID (0x18).
+- Hurt now spawns Obj37-style lost rings with ROM velocity/offset rules, CalcSine table output, and bounce/gravity timings.
+- Pushing is tracked on the player when side contact is resolved while grounded.
+- On-object carry is implemented: when standing on a solid, the player is moved by the solid's delta (MvSonicOnPtfm analogue).
+
+Still divergent / missing:
+- Sloped solids are still partial: diagonal springs use slope tables, but other sloped solids are not wired yet.
+- SolidObject does not set per-object status bits or d6 contact masks; objects do not read those flags.
+- No special-case landing threshold for the launcher spring (0x14).
+- TouchResponse routing is partial: hurt/invulnerability are implemented, but boss logic and enemy kill handling are still placeholder.
+- Ring scatter is implemented, but invincibility-powered enemy kills remain incomplete.
+- No p2/Tails solid-object handling; only main character is evaluated.
+- Object positions are still mostly static (platform motion and moving solids are not implemented yet).
+
+Recommended next steps:
+1) Add object status flags and d6-style contact masks for object-specific behaviours (spikes, monitors, and similar).
+2) Wire invincibility-powered enemy kills and proper enemy HP/score handling.
+3) Expand TouchResponse categories (boss logic, special-case routing) beyond hurt/enemy.
+
 ## Source anchors
 
 Disassembly sources used for offsets and behaviour.
