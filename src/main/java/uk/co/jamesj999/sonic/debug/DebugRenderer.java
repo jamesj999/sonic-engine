@@ -25,11 +25,13 @@ public class DebugRenderer {
 	// .getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
 	private final LevelManager levelManager = LevelManager.getInstance();
-	private final SonicConfigurationService configService = SonicConfigurationService
-			.getInstance();
+        private final SonicConfigurationService configService = SonicConfigurationService
+                        .getInstance();
+        private final DebugOverlayManager overlayManager = DebugOverlayManager.getInstance();
         private TextRenderer renderer;
         private TextRenderer objectRenderer;
         private TextRenderer planeSwitcherRenderer;
+        private TextRenderer sensorRenderer;
         private static final String[] SENSOR_LABELS = {"A", "B", "C", "D", "E", "F"};
 
         private final int baseWidth = configService
@@ -57,25 +59,48 @@ public class DebugRenderer {
                         planeSwitcherRenderer = new TextRenderer(new Font(
                                         "SansSerif", Font.PLAIN, 11), true, true);
                 }
+                if (sensorRenderer == null) {
+                        sensorRenderer = new TextRenderer(new Font(
+                                        "SansSerif", Font.PLAIN, 10), true, true);
+                }
 
                 renderer.beginRendering(viewportWidth, viewportHeight);
 
-		Sprite sprite = spriteManager.getSprite(sonicCode);
-		if (sprite != null) {
-				int ringCount = 0;
-				AbstractPlayableSprite playable = null;
-				if (sprite instanceof AbstractPlayableSprite casted) {
-						playable = casted;
-						ringCount = casted.getRingCount();
-						renderPlayerStatusPanel(casted, ringCount);
-				}
+                boolean showOverlay = overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);
+                boolean showShortcuts = overlayManager.isEnabled(DebugOverlayToggle.SHORTCUTS);
 
-				renderer.endRendering();
+                if (!showOverlay) {
+                        if (showShortcuts) {
+                                renderOverlayShortcuts(renderer, true);
+                        } else {
+                                drawOutlined(renderer,
+                                                "Overlay Off (" + DebugOverlayToggle.OVERLAY.shortcutLabel() + ")",
+                                                uiX(6), uiY(baseHeight - 6), Color.WHITE);
+                        }
+                        renderer.endRendering();
+                        return;
+                }
 
-				if (playable != null) {
+                if (showShortcuts) {
+                        renderOverlayShortcuts(renderer, false);
+                }
 
-                        TextRenderer sensorRenderer = new TextRenderer(new Font(
-                                        "SansSerif", Font.PLAIN, 10), true, true);
+                Sprite sprite = spriteManager.getSprite(sonicCode);
+                AbstractPlayableSprite playable = null;
+                if (sprite != null) {
+                        int ringCount = 0;
+                        if (sprite instanceof AbstractPlayableSprite casted) {
+                                playable = casted;
+                                ringCount = casted.getRingCount();
+                                if (overlayManager.isEnabled(DebugOverlayToggle.PLAYER_PANEL)) {
+                                        renderPlayerStatusPanel(casted, ringCount);
+                                }
+                        }
+                }
+
+                renderer.endRendering();
+
+                if (playable != null && overlayManager.isEnabled(DebugOverlayToggle.SENSOR_LABELS)) {
                         sensorRenderer.beginRendering(viewportWidth, viewportHeight);
                         Sensor[] sensors = playable.getAllSensors();
                         for (int i = 0; i < sensors.length && i < SENSOR_LABELS.length; i++) {
@@ -94,24 +119,19 @@ public class DebugRenderer {
                                         Direction globalDirection = sensorConfiguration.direction();
                                         short[] rotatedOffset = sensor.getRotatedOffset();
 
-                                        short worldX = (short) (sprite.getCentreX() + rotatedOffset[0]);
-                                        short worldY = (short) (sprite.getCentreY() + rotatedOffset[1]);
+                                        short worldX = (short) (playable.getCentreX() + rotatedOffset[0]);
+                                        short worldY = (short) (playable.getCentreY() + rotatedOffset[1]);
                                         short xAdjusted = (short) (worldX - camera.getX());
                                         short yAdjusted = (short) (worldY - camera.getY());
 
-                                        byte solidityBit = (globalDirection == Direction.DOWN || globalDirection == Direction.UP)
-                                                        ? playable.getTopSolidBit()
-                                                        : playable.getLrbSolidBit();
-                                        char tableLabel = (solidityBit >= 0x0E) ? 'S' : 'P';
-
                                         String angleHex = String.format("%02X", result.angle() & 0xFF);
-                                        String label = String.format("%s %s d:%d a:%s",
+                                        String label = String.format("%s(%s) d:%d a:%s",
                                                         SENSOR_LABELS[i],
                                                         globalDirection.name().substring(0, 1),
                                                         result.distance(),
                                                         angleHex);
 
-                                        Color sensorColor = getSensorColor(globalDirection);
+                                        Color sensorColor = DebugOverlayPalette.sensorLabelColor(i, true);
                                         int screenX = toScreenX(xAdjusted);
                                         int screenY = toScreenYFromWorld(yAdjusted);
                                         int offsetX = 0;
@@ -121,7 +141,7 @@ public class DebugRenderer {
                                                 case DOWN -> offsetY = uiY(10) + stackOffset;
                                                 case UP -> offsetY = -uiY(10) - stackOffset;
                                                 case LEFT -> {
-                                                        offsetX = -uiX(28);
+                                                        offsetX = -uiX(32);
                                                         offsetY = stackOffset;
                                                 }
                                                 case RIGHT -> {
@@ -135,12 +155,12 @@ public class DebugRenderer {
                         sensorRenderer.endRendering();
                 }
 
-        } else {
-                renderer.endRendering();
-        }
-
-        renderObjectLabels();
-        renderPlayerPlaneState();
+                if (overlayManager.isEnabled(DebugOverlayToggle.OBJECT_LABELS)) {
+                        renderObjectLabels();
+                }
+                if (overlayManager.isEnabled(DebugOverlayToggle.PLANE_SWITCHERS)) {
+                        renderPlayerPlaneState();
+                }
         }
 
         private void renderObjectLabels() {
@@ -165,22 +185,32 @@ public class DebugRenderer {
                                 continue;
                         }
 
-			StringBuilder label = new StringBuilder(String.format("%02X:%02X",
-					spawn.objectId(), spawn.subtype()));
-			if (spawn.renderFlags() != 0) {
-				label.append(" F").append(Integer.toHexString(spawn.renderFlags()).toUpperCase());
-			}
-                        if (spawn.respawnTracked()) {
-                                label.append(" R");
+                        String line1 = String.format("%02X:%02X",
+                                        spawn.objectId(), spawn.subtype());
+                        if (spawn.renderFlags() != 0) {
+                                line1 += " F" + Integer.toHexString(spawn.renderFlags()).toUpperCase();
                         }
+                        if (spawn.respawnTracked()) {
+                                line1 += " R";
+                        }
+                        int rawFlags = spawn.rawFlags() >> 12;
+                        String line2 = rawFlags != 0
+                                        ? ("YF:" + Integer.toHexString(rawFlags).toUpperCase())
+                                        : null;
 
-                        drawOutlined(objectRenderer, label.toString(),
-                                        toScreenX(screenX + 2),
-                                        toScreenYFromWorld(screenY) + uiY(2),
-                                        Color.MAGENTA);
+                        int labelX = toScreenX(screenX + 2);
+                        int labelY = toScreenYFromWorld(screenY) + uiY(2);
+                        drawOutlined(objectRenderer, line1, labelX, labelY, Color.MAGENTA);
+                        if (line2 != null) {
+                                drawOutlined(objectRenderer, line2, labelX, labelY + uiY(10),
+                                                new Color(255, 180, 255));
+                        }
                 }
                 objectRenderer.endRendering();
 
+                if (!overlayManager.isEnabled(DebugOverlayToggle.PLANE_SWITCHERS)) {
+                        return;
+                }
                 if (planeSwitcherRenderer == null) {
                         return;
                 }
@@ -203,13 +233,19 @@ public class DebugRenderer {
                 planeSwitcherRenderer.endRendering();
         }
 
-        private Color getSensorColor(Direction direction) {
-                return switch (direction) {
-                        case DOWN -> new Color(0, 220, 0);
-                        case UP -> new Color(0, 200, 255);
-                        case LEFT -> new Color(255, 200, 0);
-                        case RIGHT -> new Color(255, 120, 0);
-                };
+        private void renderOverlayShortcuts(TextRenderer textRenderer, boolean overlayOff) {
+                List<String> lines = overlayManager.buildShortcutLines();
+                if (overlayOff) {
+                        lines.add(0, "Overlay Off (" + DebugOverlayToggle.OVERLAY.shortcutLabel() + ")");
+                }
+                int startX = uiX(baseWidth - 150);
+                int startY = uiY(baseHeight - 6);
+                int lineHeight = Math.max(8, uiY(9));
+                int y = startY;
+                for (String line : lines) {
+                        drawOutlined(textRenderer, line, startX, y, Color.WHITE);
+                        y -= lineHeight;
+                }
         }
 
         private void drawPlaneSwitcherLabels(ObjectSpawn spawn, int screenX, int screenY) {

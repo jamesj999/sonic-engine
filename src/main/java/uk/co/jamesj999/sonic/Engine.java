@@ -8,6 +8,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
+import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugState;
@@ -147,12 +148,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glLoadIdentity(); // reset
 	}
 
-	public void update() {
-		AudioManager.getInstance().update();
-		timerManager.update();
-		spriteCollisionManager.update(inputHandler);
-		camera.updatePosition();
-		levelManager.update();
+        public void update() {
+                AudioManager.getInstance().update();
+                timerManager.update();
+                spriteCollisionManager.update(inputHandler);
+                camera.updatePosition();
+                levelManager.update();
 
 		if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
 			try {
@@ -170,8 +171,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 			}
 		}
 
-		inputHandler.update();
-	}
+                DebugOverlayManager.getInstance().updateInput(inputHandler);
+                inputHandler.update();
+        }
 
 
 

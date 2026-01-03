@@ -11,6 +11,9 @@ import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.debug.DebugOption;
+import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
+import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
+import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
@@ -62,6 +65,7 @@ public class LevelManager {
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final DebugOverlayManager overlayManager = DebugOverlayManager.getInstance();
     private final List<List<LevelData>> levels = new ArrayList<>();
     private int currentAct = 0;
     private int currentZone = 0;
@@ -360,11 +364,14 @@ public class LevelManager {
         }
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
-        if (debugViewEnabled) {
+        boolean overlayEnabled = debugViewEnabled && overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);
+        if (overlayEnabled) {
             beginDebugOverlay();
         }
 
-        if (objectPlacementManager != null && configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+        if (objectPlacementManager != null && overlayEnabled) {
+            boolean showObjectPoints = overlayManager.isEnabled(DebugOverlayToggle.OBJECT_POINTS);
+            boolean showPlaneSwitchers = overlayManager.isEnabled(DebugOverlayToggle.PLANE_SWITCHERS);
             List<GLCommand> objectCommands = new ArrayList<>();
             List<GLCommand> switcherLineCommands = new ArrayList<>();
             List<GLCommand> switcherAreaCommands = new ArrayList<>();
@@ -373,30 +380,35 @@ public class LevelManager {
                     ? (AbstractPlayableSprite) player
                     : null;
             for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
-                objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
-                        -1,
-                        GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-                        1f, 0f, 1f,
-                        spawn.x(), spawn.y(), 0, 0));
-                appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands, playable);
+                if (showObjectPoints) {
+                    objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                            -1,
+                            GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                            1f, 0f, 1f,
+                            spawn.x(), spawn.y(), 0, 0));
+                }
+                if (showPlaneSwitchers) {
+                    appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands, playable);
+                }
             }
-            if (!switcherAreaCommands.isEmpty()) {
+            if (showPlaneSwitchers && !switcherAreaCommands.isEmpty()) {
                 enqueueDebugLineState();
                 for (GLCommand command : switcherAreaCommands) {
                     graphicsManager.registerCommand(command);
                 }
             }
-            if (!switcherLineCommands.isEmpty()) {
+            if (showPlaneSwitchers && !switcherLineCommands.isEmpty()) {
                 enqueueDebugLineState();
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, switcherLineCommands));
             }
-            if (!objectCommands.isEmpty()) {
+            if (showObjectPoints && !objectCommands.isEmpty()) {
                 enqueueDebugLineState();
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
             }
         }
 
-        if (ringManager != null && debugViewEnabled) {
+        if (ringManager != null && overlayEnabled
+                && overlayManager.isEnabled(DebugOverlayToggle.RING_BOUNDS)) {
             Collection<RingSpawn> rings = ringManager.getActiveSpawns();
             if (!rings.isEmpty()) {
                 if (ringRenderManager == null) {
@@ -474,15 +486,19 @@ public class LevelManager {
             }
         }
 
-        if (debugViewEnabled) {
+        if (overlayEnabled) {
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
             if (player instanceof AbstractPlayableSprite playable) {
-                drawCameraBounds();
-                drawPlayableSpriteBounds(playable);
+                if (overlayManager.isEnabled(DebugOverlayToggle.CAMERA_BOUNDS)) {
+                    drawCameraBounds();
+                }
+                if (overlayManager.isEnabled(DebugOverlayToggle.PLAYER_BOUNDS)) {
+                    drawPlayableSpriteBounds(playable);
+                }
             }
         }
 
-        if (debugViewEnabled) {
+        if (overlayEnabled) {
             endDebugOverlay();
         }
     }
@@ -811,12 +827,17 @@ public class LevelManager {
         appendCross(commands, collisionCenterX, collisionCenterY, 2, 1f, 0.8f, 0.1f);
         appendCross(commands, renderCenterX, renderCenterY, 2, 0.1f, 0.85f, 1f);
 
-        for (Sensor sensor : sprite.getAllSensors()) {
+        Sensor[] sensors = sprite.getAllSensors();
+        for (int i = 0; i < sensors.length; i++) {
+            Sensor sensor = sensors[i];
+            if (sensor == null) {
+                continue;
+            }
             short[] rotatedOffset = sensor.getRotatedOffset();
             int originX = collisionCenterX + rotatedOffset[0];
             int originY = collisionCenterY + rotatedOffset[1];
 
-            float[] color = getSensorColor(sensor, sprite);
+            float[] color = DebugOverlayPalette.sensorLineColor(i, sensor.isActive());
             appendCross(commands, originX, originY, 1, color[0], color[1], color[2]);
 
             if (!sensor.isActive()) {
@@ -903,21 +924,6 @@ public class LevelManager {
     ) {
         appendLine(commands, centerX - halfSpan, centerY, centerX + halfSpan, centerY, r, g, b);
         appendLine(commands, centerX, centerY - halfSpan, centerX, centerY + halfSpan, r, g, b);
-    }
-
-    private float[] getSensorColor(Sensor sensor, AbstractPlayableSprite sprite) {
-        SensorConfiguration sensorConfiguration = SpriteManager
-                .getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), sensor.getDirection());
-        Direction globalDirection = sensorConfiguration.direction();
-        if (!sensor.isActive()) {
-            return new float[] { 0.5f, 0.5f, 0.5f };
-        }
-        return switch (globalDirection) {
-            case DOWN -> new float[] { 0f, 0.86f, 0f };
-            case UP -> new float[] { 0f, 0.78f, 1f };
-            case LEFT -> new float[] { 1f, 0.78f, 0f };
-            case RIGHT -> new float[] { 1f, 0.47f, 0f };
-        };
     }
 
     private void appendPlaneSwitcherDebug(ObjectSpawn spawn,
