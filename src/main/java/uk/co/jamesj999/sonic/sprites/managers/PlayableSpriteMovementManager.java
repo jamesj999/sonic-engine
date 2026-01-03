@@ -329,17 +329,11 @@ public class PlayableSpriteMovementManager extends
 				// We haven't landed, no more to do here since no terrain collision has occurred.
 				return;
 			} else {
-				// Work out the ySpeed required to make us collide.
-				// TODO - this is as per the SPG but seems to make sonic fall through surfaces if he's moving faster on X than Y and is in the air...
-				short requiredSpeed;
-				short positiveXSpeed = (short) Math.abs(sprite.getXSpeed());
-				if(positiveXSpeed < sprite.getYSpeed()) {
-					// sonic is *mostly* moving down (convert ySpeed from subpixels)
-					requiredSpeed = (short) (-((sprite.getYSpeed() / 256)+ 8));
-				} else {
-					// sonic is *mostly* moving left or right
-					requiredSpeed = 0;
-				}
+                        // Work out the ySpeed threshold required to land.
+                        // REV01 uses the *pixel* y-speed (high byte) with a +8 buffer,
+                        // then negates it to compare against the signed floor distance.
+                        short ySpeedPixels = (short) (sprite.getYSpeed() / 256);
+                        short requiredSpeed = (short) (-(ySpeedPixels + 8));
 				// Check whether
 				if(results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
 					// sonic has collided with the ground. Work out which ground mode we are in to work out how to move Sonic.
