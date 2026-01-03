@@ -220,7 +220,28 @@ public ShaderProgram getDebugShaderProgram() {
         return debugShaderProgram;
 }
 
-	public GL2 getGraphics() {
-		return graphics;
-	}
+        public GL2 getGraphics() {
+                return graphics;
+        }
+
+        public void enqueueDebugLineState() {
+                ShaderProgram debugShader = getDebugShaderProgram();
+                int programId = debugShader != null ? debugShader.getProgramId() : 0;
+                registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
+                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_LIGHTING));
+                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_COLOR_MATERIAL));
+                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
+        }
+
+        public void enqueueDefaultShaderState() {
+                registerCommand(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+                ShaderProgram shader = getShaderProgram();
+                if (shader != null) {
+                        int programId = shader.getProgramId();
+                        if (programId != 0) {
+                                registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
+                        }
+                }
+        }
 }

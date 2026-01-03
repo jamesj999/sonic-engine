@@ -22,6 +22,7 @@ import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
@@ -72,6 +73,7 @@ public class LevelManager {
     private int frameCounter = 0;
     private ObjectPlacementManager objectPlacementManager;
     private PlaneSwitcherManager planeSwitcherManager;
+    private ObjectManager objectManager;
     private RingPlacementManager ringPlacementManager;
     private RingRenderManager ringRenderManager;
     private RingManager ringManager;
@@ -119,8 +121,9 @@ public class LevelManager {
             AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
             objectPlacementManager = new ObjectPlacementManager(level.getObjects());
-            objectPlacementManager.reset(Camera.getInstance().getX());
             planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager);
+            objectManager = new ObjectManager(objectPlacementManager);
+            objectManager.reset(Camera.getInstance().getX(), level.getObjects());
             ringPlacementManager = new RingPlacementManager(level.getRings());
             ringPlacementManager.reset(Camera.getInstance().getX());
             RingSpriteSheet ringSpriteSheet = level.getRingSpriteSheet();
@@ -142,12 +145,19 @@ public class LevelManager {
     }
 
     public void update() {
-        if (objectPlacementManager != null) {
+        Sprite player = null;
+        AbstractPlayableSprite playable = null;
+        boolean needsPlayer = objectManager != null || ringManager != null;
+        if (needsPlayer) {
+            player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
+        }
+        if (objectManager != null) {
+            objectManager.update(Camera.getInstance().getX(), playable);
+        } else if (objectPlacementManager != null) {
             objectPlacementManager.update(Camera.getInstance().getX());
         }
         if (ringManager != null) {
-            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
-            AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
         }
     }
@@ -352,12 +362,20 @@ public class LevelManager {
             ringManager.draw(frameCounter);
         }
 
+        if (objectManager != null) {
+            objectManager.drawLowPriority();
+        }
+
         if (spriteRenderManager != null) {
             spriteRenderManager.drawLowPriority();
         }
 
         // Draw Foreground (Layer 0) high-priority pass
         drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
+
+        if (objectManager != null) {
+            objectManager.drawHighPriority();
+        }
 
         if (spriteRenderManager != null) {
             spriteRenderManager.drawHighPriority();
@@ -366,7 +384,7 @@ public class LevelManager {
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
         boolean overlayEnabled = debugViewEnabled && overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);
         if (overlayEnabled) {
-            beginDebugOverlay();
+            graphicsManager.enqueueDebugLineState();
         }
 
         if (objectPlacementManager != null && overlayEnabled) {
@@ -392,17 +410,17 @@ public class LevelManager {
                 }
             }
             if (showPlaneSwitchers && !switcherAreaCommands.isEmpty()) {
-                enqueueDebugLineState();
+                graphicsManager.enqueueDebugLineState();
                 for (GLCommand command : switcherAreaCommands) {
                     graphicsManager.registerCommand(command);
                 }
             }
             if (showPlaneSwitchers && !switcherLineCommands.isEmpty()) {
-                enqueueDebugLineState();
+                graphicsManager.enqueueDebugLineState();
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, switcherLineCommands));
             }
             if (showObjectPoints && !objectCommands.isEmpty()) {
-                enqueueDebugLineState();
+                graphicsManager.enqueueDebugLineState();
                 graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
             }
         }
@@ -423,7 +441,7 @@ public class LevelManager {
                                 1f, 0.85f, 0.1f,
                                 ring.x(), ring.y(), 0, 0));
                     }
-                    enqueueDebugLineState();
+                    graphicsManager.enqueueDebugLineState();
                     graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
                 } else {
                     PatternSpriteRenderer.FrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
@@ -474,14 +492,14 @@ public class LevelManager {
                                 1f, 0.85f, 0.1f, centerX, centerY + crossHalf, 0, 0));
                     }
 
-                    if (!boxCommands.isEmpty()) {
-                        enqueueDebugLineState();
-                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
-                    }
-                    if (!centerCommands.isEmpty()) {
-                        enqueueDebugLineState();
-                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
-                    }
+                        if (!boxCommands.isEmpty()) {
+                            graphicsManager.enqueueDebugLineState();
+                            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
+                        }
+                        if (!centerCommands.isEmpty()) {
+                            graphicsManager.enqueueDebugLineState();
+                            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
+                        }
                 }
             }
         }
@@ -499,7 +517,7 @@ public class LevelManager {
         }
 
         if (overlayEnabled) {
-            endDebugOverlay();
+            graphicsManager.enqueueDefaultShaderState();
         }
     }
 
@@ -866,10 +884,10 @@ public class LevelManager {
             appendLine(commands, originX, originY, endX, endY, color[0], color[1], color[2]);
         }
 
-        if (!commands.isEmpty()) {
-            enqueueDebugLineState();
-            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
-        }
+            if (!commands.isEmpty()) {
+                graphicsManager.enqueueDebugLineState();
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+            }
     }
 
     private void drawCameraBounds() {
@@ -892,10 +910,10 @@ public class LevelManager {
             appendBox(commands, minX, minY, maxX + camW, maxY + camH, 0.2f, 0.9f, 0.9f);
         }
 
-        if (!commands.isEmpty()) {
-            enqueueDebugLineState();
-            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
-        }
+            if (!commands.isEmpty()) {
+                graphicsManager.enqueueDebugLineState();
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+            }
     }
 
     private void appendLine(
@@ -978,31 +996,6 @@ public class LevelManager {
                     SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
                     left, y - halfSpan,
                     right, y + halfSpan));
-        }
-    }
-
-    private void beginDebugOverlay() {
-        enqueueDebugLineState();
-    }
-
-    private void enqueueDebugLineState() {
-        ShaderProgram debugShader = graphicsManager.getDebugShaderProgram();
-        int programId = debugShader != null ? debugShader.getProgramId() : 0;
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_LIGHTING));
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_COLOR_MATERIAL));
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
-    }
-
-    private void endDebugOverlay() {
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
-        ShaderProgram shaderProgram = graphicsManager.getShaderProgram();
-        if (shaderProgram != null) {
-            int shaderProgramId = shaderProgram.getProgramId();
-            if (shaderProgramId != 0) {
-                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, shaderProgramId));
-            }
         }
     }
 
