@@ -6,7 +6,11 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.objects.ObjectRegistry;
 import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseDebugHit;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseDebugState;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
@@ -95,6 +99,9 @@ public class DebugRenderer {
                                 if (overlayManager.isEnabled(DebugOverlayToggle.PLAYER_PANEL)) {
                                         renderPlayerStatusPanel(casted, ringCount);
                                 }
+                                if (overlayManager.isEnabled(DebugOverlayToggle.TOUCH_RESPONSE)) {
+                                        renderTouchResponsePanel(casted);
+                                }
                         }
                 }
 
@@ -167,6 +174,7 @@ public class DebugRenderer {
             if (objectRenderer == null) {
                 return;
             }
+                ObjectRegistry registry = ObjectRegistry.getInstance();
                 java.util.Collection<ObjectSpawn> spawns = levelManager.getActiveObjectSpawns();
                 if (spawns.isEmpty()) {
                         return;
@@ -185,6 +193,7 @@ public class DebugRenderer {
                                 continue;
                         }
 
+                        String name = registry.getPrimaryName(spawn.objectId());
                         String line1 = String.format("%02X:%02X",
                                         spawn.objectId(), spawn.subtype());
                         if (spawn.renderFlags() != 0) {
@@ -200,6 +209,8 @@ public class DebugRenderer {
 
                         int labelX = toScreenX(screenX + 2);
                         int labelY = toScreenYFromWorld(screenY) + uiY(2);
+                        int lineHeight = uiY(10);
+                        drawOutlined(objectRenderer, name, labelX, labelY - lineHeight, Color.WHITE);
                         drawOutlined(objectRenderer, line1, labelX, labelY, Color.MAGENTA);
                         if (line2 != null) {
                                 drawOutlined(objectRenderer, line2, labelX, labelY + uiY(10),
@@ -372,6 +383,62 @@ public class DebugRenderer {
                 }
         }
 
+        private void renderTouchResponsePanel(AbstractPlayableSprite sprite) {
+                TouchResponseManager manager = levelManager.getTouchResponseManager();
+                if (manager == null || renderer == null) {
+                        return;
+                }
+                TouchResponseDebugState state = manager.getDebugState();
+                if (state == null) {
+                        return;
+                }
+
+                List<TouchResponseDebugHit> hits = state.getHits();
+                int hitCount = 0;
+                for (TouchResponseDebugHit hit : hits) {
+                        if (hit.overlapping()) {
+                                hitCount++;
+                        }
+                }
+
+                List<String> lines = new ArrayList<>();
+                lines.add("== TOUCH RESP ==");
+                String crouch = state.isCrouching() ? "C" : "-";
+                lines.add(String.format("Player: x %d y %d h %d yR %d %s",
+                                state.getPlayerX(), state.getPlayerY(),
+                                state.getPlayerHeight(), state.getPlayerYRadius(), crouch));
+                lines.add(String.format("Objects: %d Hits: %d", hits.size(), hitCount));
+
+                ObjectRegistry registry = ObjectRegistry.getInstance();
+                int maxLines = 12;
+                int shown = 0;
+                for (TouchResponseDebugHit hit : hits) {
+                        if (shown >= maxLines) {
+                                break;
+                        }
+                        ObjectSpawn spawn = hit.spawn();
+                        String name = registry.getPrimaryName(spawn.objectId());
+                        if (name.length() > 12) {
+                                name = name.substring(0, 12);
+                        }
+                        String status = hit.overlapping() ? "HIT" : "--";
+                        String category = formatTouchCategory(hit.category());
+                        lines.add(String.format("%02X:%02X %s %s %02X %2d,%2d %s",
+                                        spawn.objectId(), spawn.subtype(), status, category,
+                                        hit.sizeIndex(), hit.width(), hit.height(), name));
+                        shown++;
+                }
+
+                int startX = uiX(baseWidth - 240);
+                int startY = uiY(baseHeight - 140);
+                int lineHeight = Math.max(8, uiY(9));
+                int y = startY;
+                for (String line : lines) {
+                        drawOutlined(renderer, line, startX, y, new Color(180, 255, 180));
+                        y -= lineHeight;
+                }
+        }
+
         private String formatStateFlags(AbstractPlayableSprite sprite) {
                 StringBuilder flags = new StringBuilder();
                 if (sprite.getAir()) {
@@ -387,6 +454,9 @@ public class DebugRenderer {
                 }
                 if (sprite.getCrouching()) {
                         flags.append("Crouch ");
+                }
+                if (sprite.getPushing()) {
+                        flags.append("Push ");
                 }
                 if (flags.length() == 0) {
                         return "None";
@@ -406,6 +476,18 @@ public class DebugRenderer {
 
         private char formatPriority(boolean highPriority) {
                 return PlaneSwitcherManager.formatPriority(highPriority);
+        }
+
+        private String formatTouchCategory(uk.co.jamesj999.sonic.level.objects.TouchCategory category) {
+                if (category == null) {
+                        return "?";
+                }
+                return switch (category) {
+                        case ENEMY -> "E";
+                        case SPECIAL -> "S";
+                        case HURT -> "H";
+                        case BOSS -> "B";
+                };
         }
 
         private void drawOutlined(TextRenderer textRenderer, String text, int x, int y, Color color) {

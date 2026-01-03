@@ -33,10 +33,10 @@ public class BoxObjectInstance extends AbstractObjectInstance {
         int centerX = spawn.x();
         int centerY = spawn.y();
 
-        int left = centerX - halfWidth;
-        int right = centerX + halfWidth;
-        int top = centerY - halfHeight;
-        int bottom = centerY + halfHeight;
+        int left = centerX - getHalfWidth();
+        int right = centerX + getHalfWidth();
+        int top = centerY - getHalfHeight();
+        int bottom = centerY + getHalfHeight();
 
         appendLine(commands, left, top, right, top);
         appendLine(commands, right, top, right, bottom);
@@ -55,5 +55,13 @@ public class BoxObjectInstance extends AbstractObjectInstance {
                 r, g, b, x1, y1, 0, 0));
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                 r, g, b, x2, y2, 0, 0));
+    }
+
+    protected int getHalfWidth() {
+        return halfWidth;
+    }
+
+    protected int getHalfHeight() {
+        return halfHeight;
     }
 }

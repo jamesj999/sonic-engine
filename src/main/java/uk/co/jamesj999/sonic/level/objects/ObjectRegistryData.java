@@ -1,4 +1,4 @@
-﻿package uk.co.jamesj999.sonic.level.objects;
+package uk.co.jamesj999.sonic.level.objects;
 
 import java.util.Collections;
 import java.util.HashMap;

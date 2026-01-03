@@ -9,6 +9,7 @@ import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.data.games.Sonic2;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
@@ -26,6 +27,9 @@ import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
+import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
 import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
@@ -74,6 +78,8 @@ public class LevelManager {
     private ObjectPlacementManager objectPlacementManager;
     private PlaneSwitcherManager planeSwitcherManager;
     private ObjectManager objectManager;
+    private SolidObjectManager solidObjectManager;
+    private TouchResponseManager touchResponseManager;
     private RingPlacementManager ringPlacementManager;
     private RingRenderManager ringRenderManager;
     private RingManager ringManager;
@@ -120,10 +126,16 @@ public class LevelManager {
             AudioManager.getInstance().resetRingSound();
             AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
+            RomByteReader romReader = RomByteReader.fromRom(rom);
             objectPlacementManager = new ObjectPlacementManager(level.getObjects());
             planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager);
             objectManager = new ObjectManager(objectPlacementManager);
             objectManager.reset(Camera.getInstance().getX(), level.getObjects());
+            solidObjectManager = new SolidObjectManager(objectManager);
+            solidObjectManager.reset();
+            TouchResponseTable touchResponseTable = new TouchResponseTable(romReader);
+            touchResponseManager = new TouchResponseManager(objectManager, touchResponseTable);
+            touchResponseManager.reset();
             ringPlacementManager = new RingPlacementManager(level.getRings());
             ringPlacementManager.reset(Camera.getInstance().getX());
             RingSpriteSheet ringSpriteSheet = level.getRingSpriteSheet();
@@ -156,6 +168,12 @@ public class LevelManager {
             objectManager.update(Camera.getInstance().getX(), playable);
         } else if (objectPlacementManager != null) {
             objectPlacementManager.update(Camera.getInstance().getX());
+        }
+        if (solidObjectManager != null) {
+            solidObjectManager.update(playable);
+        }
+        if (touchResponseManager != null) {
+            touchResponseManager.update(playable);
         }
         if (ringManager != null) {
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
@@ -1154,6 +1172,10 @@ public class LevelManager {
             return List.of();
         }
         return objectPlacementManager.getActiveSpawns();
+    }
+
+    public TouchResponseManager getTouchResponseManager() {
+        return touchResponseManager;
     }
 
     public void loadCurrentLevel() {

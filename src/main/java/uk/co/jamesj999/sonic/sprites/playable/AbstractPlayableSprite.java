@@ -62,10 +62,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 	 */
 	protected boolean rolling = false;
 
-	/**
-	 * Whether or not this sprite is in the air
-	 */
-	protected boolean air = false;
+        /**
+         * Whether or not this sprite is in the air
+         */
+        protected boolean air = false;
+
+        /**
+         * Whether or not this sprite is pushing a solid object.
+         */
+        protected boolean pushing = false;
 
     /**
      * Whether or not this sprite is preparing for a spindash.
@@ -246,9 +251,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 		return crouching;
 	}
 
-	public void setCrouching(boolean crouching) {
-		this.crouching = crouching;
-	}
+        public void setCrouching(boolean crouching) {
+                this.crouching = crouching;
+        }
+
+        public boolean getPushing() {
+                return pushing;
+        }
+
+        public void setPushing(boolean pushing) {
+                this.pushing = pushing;
+        }
 
     public float getSpindashConstant() {
         return spindashConstant;
