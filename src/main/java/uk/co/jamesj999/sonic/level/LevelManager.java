@@ -252,7 +252,7 @@ public class LevelManager {
                     PatternDesc pDesc = new PatternDesc();
                     pDesc.setPaletteIndex(Engine.debugOption.ordinal());
                     pDesc.setPatternIndex(count);
-                    graphicsManager.renderPattern(pDesc, x, y);
+                    graphicsManager.renderPattern(pDesc, x, y + Pattern.PATTERN_HEIGHT);
                     count++;
                 }
             }
@@ -660,7 +660,8 @@ public class LevelManager {
                 PatternDesc newPatternDesc = new PatternDesc(newIndex);
 
                 int drawX = x + (cX * Pattern.PATTERN_WIDTH);
-                int drawY = y + (cY * Pattern.PATTERN_HEIGHT);
+                // PatternRenderCommand treats drawY as the bottom of a tile.
+                int drawY = y + (cY * Pattern.PATTERN_HEIGHT) + Pattern.PATTERN_HEIGHT;
 
                 if (hScroll != null) {
                     int line = screenY + (cY * Pattern.PATTERN_HEIGHT);

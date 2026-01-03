@@ -14,7 +14,7 @@ public Sonic(String code, short x, short y, boolean debug) {
         // width in pixels
         setWidth(20);
         setHeight(runHeight);
-        setRenderOffsets((short) 0, (short) -8);
+        setRenderOffsets((short) 0, (short) 0);
 }
 
 	public void draw() {

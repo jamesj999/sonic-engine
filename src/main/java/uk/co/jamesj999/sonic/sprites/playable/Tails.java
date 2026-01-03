@@ -13,7 +13,7 @@ public Tails(String code, short x, short y, boolean debug) {
         super(code, x, y, debug);
         setWidth(20);
         setHeight(runHeight);
-        setRenderOffsets((short) 0, (short) -8);
+        setRenderOffsets((short) 0, (short) 0);
 }
 
 	public void draw() {
