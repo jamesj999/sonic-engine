@@ -1,6 +1,11 @@
 package uk.co.jamesj999.sonic.level.objects;
 
+import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+
+import java.util.List;
+import uk.co.jamesj999.sonic.graphics.GLCommand;
 
 public class SpikeObjectInstance extends BoxObjectInstance implements SolidObjectProvider, SolidObjectListener {
     private static final int[] WIDTH_PIXELS = {
@@ -24,10 +29,11 @@ public class SpikeObjectInstance extends BoxObjectInstance implements SolidObjec
         if (!shouldHurt(contact)) {
             return;
         }
-        // Placeholder: minimal knockback. TODO: replace with full hurt/invincibility handling.
-        player.setAir(true);
-        player.setGSpeed((short) 0);
-        player.setYSpeed((short) -0x200);
+        boolean hadRings = player.getRingCount() > 0;
+        if (hadRings) {
+            LevelManager.getInstance().spawnLostRings(player);
+        }
+        player.applyHurtOrDeath(spawn.x(), true, hadRings);
     }
 
     @Override
@@ -78,5 +84,31 @@ public class SpikeObjectInstance extends BoxObjectInstance implements SolidObjec
 
     private boolean isUpsideDown() {
         return (spawn.renderFlags() & 0x2) != 0;
+    }
+
+    @Override
+    public void appendRenderCommands(List<GLCommand> commands) {
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        if (renderManager == null) {
+            super.appendRenderCommands(commands);
+            return;
+        }
+        int frameIndex = (spawn.subtype() >> 4) & 0xF;
+        if (frameIndex < 0) {
+            frameIndex = 0;
+        }
+        if (frameIndex > 7) {
+            frameIndex = 7;
+        }
+        boolean sideways = frameIndex >= 4;
+        boolean hFlip = (spawn.renderFlags() & 0x1) != 0;
+        boolean vFlip = (spawn.renderFlags() & 0x2) != 0;
+
+        PatternSpriteRenderer renderer = renderManager.getSpikeRenderer(sideways);
+        if (renderer == null || !renderer.isReady()) {
+            super.appendRenderCommands(commands);
+            return;
+        }
+        renderer.drawFrameIndex(frameIndex, spawn.x(), spawn.y(), hFlip, vFlip);
     }
 }

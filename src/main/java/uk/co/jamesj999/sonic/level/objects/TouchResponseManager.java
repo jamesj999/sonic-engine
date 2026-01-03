@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.level.objects;
 
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.Collection;
@@ -26,7 +27,7 @@ public class TouchResponseManager {
 
     public void update(AbstractPlayableSprite player) {
         frameCounter++;
-        if (player == null || objectManager == null) {
+        if (player == null || objectManager == null || player.getDead()) {
             overlapping.clear();
             debugState.clear();
             return;
@@ -63,9 +64,10 @@ public class TouchResponseManager {
             }
 
             current.add(instance);
-            if (!overlapping.contains(instance) && instance instanceof TouchResponseListener listener) {
+            if (!overlapping.contains(instance)) {
                 TouchResponseResult result = new TouchResponseResult(sizeIndex, width, height, category);
-                listener.onTouchResponse(player, result, frameCounter);
+                TouchResponseListener listener = instance instanceof TouchResponseListener casted ? casted : null;
+                handleTouchResponse(player, instance, listener, result);
             }
         }
 
@@ -106,6 +108,68 @@ public class TouchResponseManager {
             case 0x80 -> TouchCategory.HURT;
             default -> TouchCategory.BOSS;
         };
+    }
+
+    private void handleTouchResponse(AbstractPlayableSprite player, ObjectInstance instance,
+                                     TouchResponseListener listener, TouchResponseResult result) {
+        if (player == null) {
+            return;
+        }
+        if (listener != null) {
+            listener.onTouchResponse(player, result, frameCounter);
+        }
+
+        switch (result.category()) {
+            case HURT -> applyHurt(player, instance);
+            case ENEMY -> {
+                if (isPlayerAttacking(player)) {
+                    if (instance instanceof TouchResponseAttackable attackable) {
+                        attackable.onPlayerAttack(player, result);
+                    }
+                    applyEnemyBounce(player, instance);
+                } else {
+                    applyHurt(player, instance);
+                }
+            }
+            case SPECIAL, BOSS -> {
+                // Listener handles object-specific logic.
+            }
+        }
+    }
+
+    private boolean isPlayerAttacking(AbstractPlayableSprite player) {
+        return player.getInvincibleFrames() > 0
+                || player.getRolling()
+                || player.getSpindash();
+    }
+
+    private void applyEnemyBounce(AbstractPlayableSprite player, ObjectInstance instance) {
+        player.setAir(true);
+        short ySpeed = player.getYSpeed();
+        if (ySpeed < 0) {
+            player.setYSpeed((short) (ySpeed + 0x100));
+            return;
+        }
+        int playerY = player.getY();
+        int enemyY = instance != null ? instance.getY() : playerY;
+        if (playerY < enemyY) {
+            player.setYSpeed((short) -ySpeed);
+        } else {
+            player.setYSpeed((short) (ySpeed - 0x100));
+        }
+    }
+
+    private void applyHurt(AbstractPlayableSprite player, ObjectInstance instance) {
+        if (player.getInvulnerable()) {
+            return;
+        }
+        int sourceX = instance != null ? instance.getX() : player.getCentreX();
+        boolean spikeHit = instance != null && instance.getSpawn().objectId() == 0x36;
+        boolean hadRings = player.getRingCount() > 0;
+        if (hadRings) {
+            LevelManager.getInstance().spawnLostRings(player);
+        }
+        player.applyHurtOrDeath(sourceX, spikeHit, hadRings);
     }
 
     public TouchResponseDebugState getDebugState() {

@@ -80,6 +80,12 @@ public class PlayableSpriteMovementManager extends
 
 		short originalX = sprite.getX();
 		short originalY = sprite.getY();
+		if (sprite.getDead()) {
+			applyDeathMovement(sprite);
+			sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
+			sprite.updateSensors(originalX, originalY);
+			return;
+		}
 		sprite.setCrouching(false);
 
 		// First thing to do is run this additional method to find out if the jump button has been released recently
@@ -631,6 +637,17 @@ public class PlayableSpriteMovementManager extends
 			ySpeed = 4096;
 		}
 		sprite.setXSpeed(xSpeed);
+		sprite.setYSpeed(ySpeed);
+	}
+
+	private void applyDeathMovement(AbstractPlayableSprite sprite) {
+		short ySpeed = sprite.getYSpeed();
+		ySpeed += sprite.getGravity();
+		if (ySpeed > 4096) {
+			ySpeed = 4096;
+		}
+		sprite.setGSpeed((short) 0);
+		sprite.setXSpeed((short) 0);
 		sprite.setYSpeed(ySpeed);
 	}
 

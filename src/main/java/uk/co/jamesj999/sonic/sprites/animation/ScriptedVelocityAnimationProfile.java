@@ -14,6 +14,8 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     private final int pushAnimId;
     private final int duckAnimId;
     private final int spindashAnimId;
+    private final int springAnimId;
+    private final int deathAnimId;
     private final int airAnimId;
     private final int runSpeedThreshold;
     private final int walkSpeedThreshold;
@@ -29,7 +31,8 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int runSpeedThreshold,
             int fallbackFrame
     ) {
-        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, rollAnimId, -1, -1, -1, airAnimId, walkSpeedThreshold,
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, rollAnimId, -1, -1, -1, -1, airAnimId,
+                walkSpeedThreshold,
                 runSpeedThreshold, fallbackFrame);
     }
 
@@ -45,7 +48,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int runSpeedThreshold,
             int fallbackFrame
     ) {
-        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, -1, -1, airAnimId,
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, -1, -1, -1, airAnimId,
                 walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
     }
 
@@ -58,6 +61,27 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int pushAnimId,
             int duckAnimId,
             int spindashAnimId,
+            int springAnimId,
+            int airAnimId,
+            int walkSpeedThreshold,
+            int runSpeedThreshold,
+            int fallbackFrame
+    ) {
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, duckAnimId, spindashAnimId,
+                springAnimId, -1, airAnimId, walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
+    }
+
+    public ScriptedVelocityAnimationProfile(
+            int idleAnimId,
+            int walkAnimId,
+            int runAnimId,
+            int rollAnimId,
+            int roll2AnimId,
+            int pushAnimId,
+            int duckAnimId,
+            int spindashAnimId,
+            int springAnimId,
+            int deathAnimId,
             int airAnimId,
             int walkSpeedThreshold,
             int runSpeedThreshold,
@@ -71,6 +95,8 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         this.pushAnimId = Math.max(-1, pushAnimId);
         this.duckAnimId = Math.max(-1, duckAnimId);
         this.spindashAnimId = Math.max(-1, spindashAnimId);
+        this.springAnimId = Math.max(-1, springAnimId);
+        this.deathAnimId = Math.max(-1, deathAnimId);
         this.airAnimId = Math.max(0, airAnimId);
         this.walkSpeedThreshold = Math.max(0, walkSpeedThreshold);
         this.runSpeedThreshold = Math.max(0, runSpeedThreshold);
@@ -79,6 +105,12 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     @Override
     public Integer resolveAnimationId(AbstractPlayableSprite sprite, int frameCounter, int scriptCount) {
+        if (sprite.getDead() && deathAnimId >= 0) {
+            return deathAnimId;
+        }
+        if (sprite.getSpringing() && springAnimId >= 0) {
+            return springAnimId;
+        }
         if (sprite.getAir()) {
             return airAnimId;
         }
@@ -139,6 +171,14 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     public int getSpindashAnimId() {
         return spindashAnimId;
+    }
+
+    public int getSpringAnimId() {
+        return springAnimId;
+    }
+
+    public int getDeathAnimId() {
+        return deathAnimId;
     }
 
     public int getAirAnimId() {

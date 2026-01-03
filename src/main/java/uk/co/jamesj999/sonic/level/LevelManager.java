@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.ObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -25,6 +26,7 @@ import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
 import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
@@ -35,6 +37,7 @@ import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
+import uk.co.jamesj999.sonic.level.rings.LostRingManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
@@ -83,6 +86,8 @@ public class LevelManager {
     private RingPlacementManager ringPlacementManager;
     private RingRenderManager ringRenderManager;
     private RingManager ringManager;
+    private LostRingManager lostRingManager;
+    private ObjectRenderManager objectRenderManager;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
@@ -146,6 +151,8 @@ public class LevelManager {
                 ringRenderManager = null;
             }
             ringManager = new RingManager(ringPlacementManager, ringRenderManager);
+            lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
+            initObjectArt();
             initPlayerSpriteArt();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
@@ -177,6 +184,9 @@ public class LevelManager {
         }
         if (ringManager != null) {
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
+        }
+        if (lostRingManager != null) {
+            lostRingManager.update(playable, frameCounter + 1);
         }
     }
 
@@ -235,6 +245,30 @@ public class LevelManager {
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load spindash dust art.", e);
             playable.setSpindashDustManager(null);
+        }
+    }
+
+    private void initObjectArt() {
+        if (!(game instanceof ObjectArtProvider provider)) {
+            objectRenderManager = null;
+            return;
+        }
+        try {
+            var artData = provider.loadObjectArt();
+            if (artData == null) {
+                objectRenderManager = null;
+                return;
+            }
+            objectRenderManager = new ObjectRenderManager(artData);
+            int baseIndex = level != null ? level.getPatternCount() : 0;
+            RingSpriteSheet ringSpriteSheet = level != null ? level.getRingSpriteSheet() : null;
+            if (ringSpriteSheet != null) {
+                baseIndex += ringSpriteSheet.getPatterns().length;
+            }
+            objectRenderManager.ensurePatternsCached(graphicsManager, baseIndex);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load object art.", e);
+            objectRenderManager = null;
         }
     }
 
@@ -378,6 +412,9 @@ public class LevelManager {
 
         if (ringManager != null) {
             ringManager.draw(frameCounter);
+        }
+        if (lostRingManager != null) {
+            lostRingManager.draw(frameCounter);
         }
 
         if (objectManager != null) {
@@ -1176,6 +1213,21 @@ public class LevelManager {
 
     public TouchResponseManager getTouchResponseManager() {
         return touchResponseManager;
+    }
+
+    public ObjectRenderManager getObjectRenderManager() {
+        return objectRenderManager;
+    }
+
+    public void spawnLostRings(AbstractPlayableSprite player) {
+        if (lostRingManager == null || player == null) {
+            return;
+        }
+        int count = player.getRingCount();
+        if (count <= 0) {
+            return;
+        }
+        lostRingManager.spawnLostRings(player, count);
     }
 
     public void loadCurrentLevel() {

@@ -69,6 +69,7 @@ public class SpriteCollisionManager {
                                  * Update: lol, we never did that.
                                  */
                                 ((AbstractPlayableSprite) sprite).getAnimationManager().update(frameCounter);
+                                ((AbstractPlayableSprite) sprite).tickStatus();
                                 ((AbstractPlayableSprite) sprite).endOfTick();
                         }
                 }

@@ -7,6 +7,9 @@ import java.util.Collection;
 public class SolidObjectManager {
     private final ObjectManager objectManager;
     private int frameCounter;
+    private ObjectInstance ridingObject;
+    private int ridingX;
+    private int ridingY;
 
     public SolidObjectManager(ObjectManager objectManager) {
         this.objectManager = objectManager;
@@ -14,34 +17,66 @@ public class SolidObjectManager {
 
     public void reset() {
         frameCounter = 0;
+        ridingObject = null;
     }
 
     public void update(AbstractPlayableSprite player) {
         frameCounter++;
-        if (player == null || objectManager == null) {
+        if (player == null || objectManager == null || player.getDead()) {
+            ridingObject = null;
             return;
         }
         player.setPushing(false);
 
         Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
+        if (ridingObject != null) {
+            int currentX = ridingObject.getX();
+            int currentY = ridingObject.getY();
+            int deltaX = currentX - ridingX;
+            int deltaY = currentY - ridingY;
+            if (deltaX != 0) {
+                player.setX((short) (player.getX() + deltaX));
+            }
+            if (deltaY != 0) {
+                player.setY((short) (player.getY() + deltaY));
+            }
+        }
+
+        ObjectInstance nextRidingObject = null;
+        int nextRidingX = 0;
+        int nextRidingY = 0;
         for (ObjectInstance instance : activeObjects) {
             if (!(instance instanceof SolidObjectProvider provider)) {
                 continue;
             }
             SolidObjectParams params = provider.getSolidParams();
             int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
-            SolidContact contact = resolveContact(player,
-                    instance.getSpawn(), params.halfWidth(), halfHeight);
+            SolidContact contact;
+            if (instance instanceof SlopedSolidProvider sloped) {
+                int slopeHalfHeight = params.groundHalfHeight();
+                contact = resolveSlopedContact(player, instance.getSpawn(), params.halfWidth(), slopeHalfHeight,
+                        sloped.getSlopeData(), sloped.isSlopeFlipped());
+            } else {
+                contact = resolveContact(player, instance.getSpawn(), params.halfWidth(), halfHeight);
+            }
             if (contact == null) {
                 continue;
             }
             if (contact.pushing()) {
                 player.setPushing(true);
             }
+            if (contact.standing()) {
+                nextRidingObject = instance;
+                nextRidingX = instance.getX();
+                nextRidingY = instance.getY();
+            }
             if (instance instanceof SolidObjectListener listener) {
                 listener.onSolidContact(player, contact, frameCounter);
             }
         }
+        ridingObject = nextRidingObject;
+        ridingX = nextRidingX;
+        ridingY = nextRidingY;
     }
 
     private SolidContact resolveContact(AbstractPlayableSprite player,
@@ -61,6 +96,50 @@ public class SolidObjectManager {
             return null;
         }
 
+        return resolveContactInternal(player, relX, relY, halfWidth, maxTop, playerCenterX, playerCenterY);
+    }
+
+    private SolidContact resolveSlopedContact(AbstractPlayableSprite player, ObjectSpawn spawn, int halfWidth,
+                                              int halfHeight, byte[] slopeData, boolean xFlip) {
+        if (slopeData == null || slopeData.length == 0) {
+            return null;
+        }
+        int playerCenterX = player.getCentreX();
+        int playerCenterY = player.getCentreY();
+
+        int relX = playerCenterX - spawn.x() + halfWidth;
+        int width2 = halfWidth * 2;
+        if (relX < 0 || relX > width2) {
+            return null;
+        }
+
+        int sampleX = relX & 0xFFFF;
+        if (xFlip) {
+            sampleX = (~sampleX) & 0xFFFF;
+            sampleX = (sampleX + width2) & 0xFFFF;
+        }
+        sampleX = (sampleX >> 1) & 0xFFFF;
+        if (sampleX < 0 || sampleX >= slopeData.length) {
+            return null;
+        }
+
+        int slopeSample = (byte) slopeData[sampleX];
+        int slopeBase = (byte) slopeData[0];
+        int slopeOffset = slopeSample - slopeBase;
+        int baseY = spawn.y() - slopeOffset;
+
+        int playerYRadius = player.getYRadius();
+        int maxTop = halfHeight + playerYRadius;
+        int relY = playerCenterY - baseY + 4 + maxTop;
+        if (relY < 0 || relY >= maxTop * 2) {
+            return null;
+        }
+
+        return resolveContactInternal(player, relX, relY, halfWidth, maxTop, playerCenterX, playerCenterY);
+    }
+
+    private SolidContact resolveContactInternal(AbstractPlayableSprite player, int relX, int relY, int halfWidth,
+                                                int maxTop, int playerCenterX, int playerCenterY) {
         int distX;
         int absDistX;
         if (relX >= halfWidth) {

@@ -2,11 +2,13 @@ package uk.co.jamesj999.sonic.data.games;
 
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.ObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.level.Level;
+import uk.co.jamesj999.sonic.level.objects.ObjectArtData;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
@@ -18,7 +20,7 @@ import java.util.Map;
 
 import static uk.co.jamesj999.sonic.data.games.Sonic2Constants.*;
 
-public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDustArtProvider {
+public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDustArtProvider, ObjectArtProvider {
 
     private final Rom rom;
     private RomByteReader romReader;
@@ -27,6 +29,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
     private Sonic2RingArt ringArt;
     private Sonic2PlayerArt playerArt;
     private Sonic2DustArt dustArt;
+    private Sonic2ObjectArt objectArt;
     private static final int BG_SCROLL_TABLE_ADDR = 0x00C296;
 
     public Sonic2(Rom rom) {
@@ -111,13 +114,15 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         map.put(GameSound.JUMP, SFX_JUMP);
         map.put(GameSound.RING_LEFT, SFX_RING_LEFT);
         map.put(GameSound.RING_RIGHT, SFX_RING_RIGHT);
+        map.put(GameSound.RING_SPILL, SFX_RING_SPILL);
         map.put(GameSound.SPINDASH_CHARGE, SFX_SPINDASH_CHARGE);
         map.put(GameSound.SPINDASH_RELEASE, SFX_SPINDASH_RELEASE);
         map.put(GameSound.SKID, SFX_SKID);
-        map.put(GameSound.DEATH, SFX_DEATH);
+        map.put(GameSound.HURT, SFX_HURT);
+        map.put(GameSound.HURT_SPIKE, SFX_SPIKE_HIT);
+        map.put(GameSound.DROWN, SFX_DROWN);
         map.put(GameSound.BADNIK_HIT, SFX_BADNIK_HIT);
         map.put(GameSound.CHECKPOINT, SFX_CHECKPOINT);
-        map.put(GameSound.SPIKE_HIT, SFX_SPIKE_HIT);
         map.put(GameSound.SPRING, SFX_SPRING);
         map.put(GameSound.ROLLING, SFX_ROLLING);
         return map;
@@ -284,6 +289,15 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         return dustArt.loadForCharacter(characterCode);
     }
 
+    @Override
+    public ObjectArtData loadObjectArt() throws IOException {
+        ensurePlacementHelpers();
+        if (objectArt == null) {
+            return null;
+        }
+        return objectArt.load();
+    }
+
     private int getSolidTileHeightsAddr() {
         return SOLID_TILE_VERTICAL_MAP_ADDR;
     }
@@ -340,6 +354,9 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         }
         if (dustArt == null) {
             dustArt = new Sonic2DustArt(romReader);
+        }
+        if (objectArt == null) {
+            objectArt = new Sonic2ObjectArt(rom, romReader);
         }
     }
 

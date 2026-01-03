@@ -38,6 +38,21 @@ public class Sonic2Constants {
     public static final int MAP_R_UNC_OBJ08_ADDR = 0x1E074;
     public static final int ART_TILE_SONIC_DUST = 0x049C;
     public static final int ART_TILE_TAILS_DUST = 0x048C;
+    // Object art (Nemesis) + mappings
+    public static final int ART_NEM_MONITOR_ADDR = 0x79550;
+    public static final int ART_NEM_SPIKES_ADDR = 0x7995C;
+    public static final int ART_NEM_SPIKES_SIDE_ADDR = 0x7AC9A;
+    public static final int ART_NEM_SPRING_VERTICAL_ADDR = 0x78E84;
+    public static final int ART_NEM_SPRING_HORIZONTAL_ADDR = 0x78FA0;
+    public static final int ART_NEM_SPRING_DIAGONAL_ADDR = 0x7906A;
+    public static final int MAP_UNC_MONITOR_ADDR = 0x12D36;
+    public static final int MAP_UNC_SPIKES_ADDR = 0x15B68;
+    public static final int MAP_UNC_SPRING_ADDR = 0x1901C;
+    public static final int MAP_UNC_SPRING_RED_ADDR = 0x19032;
+    public static final int ANI_OBJ26_ADDR = 0x12CCE;
+    public static final int ANI_OBJ26_SCRIPT_COUNT = 0x0B;
+    public static final int ANI_OBJ41_ADDR = 0x18FE2;
+    public static final int ANI_OBJ41_SCRIPT_COUNT = 0x06;
     public static final int SONIC_ANIM_DATA_ADDR = 0x01B618;
     public static final int SONIC_ANIM_SCRIPT_COUNT = 0x22;
 
@@ -45,13 +60,16 @@ public class Sonic2Constants {
     public static final int SFX_JUMP = 0xA0;
     public static final int SFX_RING_LEFT = 0xCE;
     public static final int SFX_RING_RIGHT = 0xB5;
+    public static final int SFX_RING_SPILL = 0xC6;
     public static final int SFX_SPINDASH_CHARGE = 0xE0;
     public static final int SFX_SPINDASH_RELEASE = 0xBC;
     public static final int SFX_SKID = 0xA4;
-    public static final int SFX_DEATH = 0xA3;
+    public static final int SFX_HURT = 0xA3;
+    public static final int SFX_DEATH = SFX_HURT;
     public static final int SFX_BADNIK_HIT = 0xC1;
     public static final int SFX_CHECKPOINT = 0xA1;
     public static final int SFX_SPIKE_HIT = 0xA6;
+    public static final int SFX_DROWN = 0xB2;
     public static final int SFX_SPRING = 0xCC;
     public static final int SFX_ROLLING = 0xBE;
 

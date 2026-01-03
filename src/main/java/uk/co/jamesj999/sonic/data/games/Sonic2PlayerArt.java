@@ -96,6 +96,8 @@ public class Sonic2PlayerArt {
                 Sonic2AnimationIds.PUSH,
                 Sonic2AnimationIds.DUCK,
                 Sonic2AnimationIds.SPINDASH,
+                Sonic2AnimationIds.SPRING,
+                Sonic2AnimationIds.DEATH,
                 Sonic2AnimationIds.ROLL,
                 0x40,
                 0x600,
@@ -264,5 +266,7 @@ public class Sonic2PlayerArt {
         private static final int WAIT = 0x05;
         private static final int DUCK = 0x08;
         private static final int SPINDASH = 0x09;
+        private static final int SPRING = 0x10;
+        private static final int DEATH = 0x18;
     }
 }

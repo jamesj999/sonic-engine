@@ -1,6 +1,10 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
+import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
+import uk.co.jamesj999.sonic.level.render.SpriteMappingPiece;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -8,25 +12,50 @@ import java.util.List;
 public class MonitorObjectInstance extends BoxObjectInstance implements TouchResponseProvider, TouchResponseListener,
         SolidObjectProvider, SolidObjectListener {
     private static final int HALF_RADIUS = 0x0E;
-    private static final int CONTENT_RISE_FRAMES = 48;
-    private static final int CONTENT_RISE_HEIGHT = 16;
-    private static final int CONTENT_HALF_SIZE = 6;
+    private static final int ICON_INITIAL_VELOCITY = -0x300;
+    private static final int ICON_RISE_ACCEL = 0x18;
+    private static final int ICON_WAIT_FRAMES = 0x1D;
+    private static final int BROKEN_FRAME = 0x0B;
+    private static final int ICON_FRAME_OFFSET = 1;
     private static final int RING_MONITOR_REWARD = 10;
 
     private final MonitorType type;
+    private final ObjectAnimationState animationState;
     private boolean broken;
-    private int breakFrame = -1;
-    private int lastFrameCounter;
+    private int mappingFrame;
+    private boolean iconActive;
+    private int iconSubY;
+    private int iconVelY;
+    private int iconWaitFrames;
+    private boolean effectApplied;
+    private AbstractPlayableSprite effectTarget;
 
     public MonitorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, HALF_RADIUS, HALF_RADIUS, 0.4f, 0.9f, 1.0f, false);
         this.type = MonitorType.fromSubtype(spawn.subtype());
         this.broken = this.type == MonitorType.BROKEN;
+        int initialAnim = type.id;
+        int initialFrame = broken ? BROKEN_FRAME : 0;
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        this.animationState = new ObjectAnimationState(
+                renderManager != null ? renderManager.getMonitorAnimations() : null,
+                initialAnim,
+                initialFrame
+        );
+        this.mappingFrame = initialFrame;
+        if (broken) {
+            effectApplied = true;
+        }
     }
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        this.lastFrameCounter = frameCounter;
+        if (!broken) {
+            animationState.update();
+            mappingFrame = animationState.getMappingFrame();
+            return;
+        }
+        updateIcon();
     }
 
     @Override
@@ -38,52 +67,41 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             return;
         }
         broken = true;
-        breakFrame = frameCounter;
-        applyMonitorEffect(player);
+        mappingFrame = BROKEN_FRAME;
+        iconActive = true;
+        iconSubY = spawn.y() << 8;
+        iconVelY = ICON_INITIAL_VELOCITY;
+        iconWaitFrames = 0;
+        effectApplied = false;
+        effectTarget = player;
     }
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        int centerX = spawn.x();
-        int centerY = spawn.y();
-
-        int left = centerX - getHalfWidth();
-        int right = centerX + getHalfWidth();
-        int top = centerY - getHalfHeight();
-        int bottom = centerY + getHalfHeight();
-
-        float r = broken ? 0.6f : 0.4f;
-        float g = broken ? 0.6f : 0.9f;
-        float b = broken ? 0.6f : 1.0f;
-
-        appendLine(commands, left, top, right, top, r, g, b);
-        appendLine(commands, right, top, right, bottom, r, g, b);
-        appendLine(commands, right, bottom, left, bottom, r, g, b);
-        appendLine(commands, left, bottom, left, top, r, g, b);
-
-        if (!broken) {
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        if (renderManager == null) {
+            super.appendRenderCommands(commands);
             return;
         }
-
-        if (breakFrame < 0) {
+        PatternSpriteRenderer renderer = renderManager.getMonitorRenderer();
+        if (renderer == null || !renderer.isReady()) {
+            super.appendRenderCommands(commands);
             return;
         }
+        int frameIndex = broken ? BROKEN_FRAME : mappingFrame;
+        renderer.drawFrameIndex(frameIndex, spawn.x(), spawn.y(), false, false);
 
-        int elapsed = lastFrameCounter - breakFrame;
-        if (elapsed < 0 || elapsed > CONTENT_RISE_FRAMES) {
-            return;
+        if (iconActive) {
+            int iconFrame = resolveIconFrame();
+            ObjectSpriteSheet sheet = renderManager.getMonitorSheet();
+            if (iconFrame >= 0 && sheet != null && iconFrame < sheet.getFrameCount()) {
+                SpriteMappingFrame mappingFrame = sheet.getFrame(iconFrame);
+                if (mappingFrame != null && !mappingFrame.pieces().isEmpty()) {
+                    SpriteMappingPiece iconPiece = mappingFrame.pieces().get(0);
+                    renderer.drawPieces(List.of(iconPiece), spawn.x(), iconSubY >> 8, false, false);
+                }
+            }
         }
-        int rise = Math.min(CONTENT_RISE_HEIGHT, elapsed / 2);
-        int contentCenterY = centerY - getHalfHeight() - rise;
-        int contentLeft = centerX - CONTENT_HALF_SIZE;
-        int contentRight = centerX + CONTENT_HALF_SIZE;
-        int contentTop = contentCenterY - CONTENT_HALF_SIZE;
-        int contentBottom = contentCenterY + CONTENT_HALF_SIZE;
-
-        appendLine(commands, contentLeft, contentTop, contentRight, contentTop, 1.0f, 0.85f, 0.1f);
-        appendLine(commands, contentRight, contentTop, contentRight, contentBottom, 1.0f, 0.85f, 0.1f);
-        appendLine(commands, contentRight, contentBottom, contentLeft, contentBottom, 1.0f, 0.85f, 0.1f);
-        appendLine(commands, contentLeft, contentBottom, contentLeft, contentTop, 1.0f, 0.85f, 0.1f);
     }
 
     @Override
@@ -116,14 +134,6 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         // Solid contact used for standing/edge checks in ROM; no behavior yet.
     }
 
-    private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2,
-                            float r, float g, float b) {
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x1, y1, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x2, y2, 0, 0));
-    }
-
     private void applyMonitorEffect(AbstractPlayableSprite player) {
         switch (type) {
             case RINGS -> player.addRings(RING_MONITOR_REWARD);
@@ -131,6 +141,39 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
                 // TODO: implement remaining monitor effects.
             }
         }
+    }
+
+    private void updateIcon() {
+        if (!iconActive) {
+            return;
+        }
+        if (iconVelY < 0) {
+            iconSubY += iconVelY;
+            iconVelY += ICON_RISE_ACCEL;
+            if (iconVelY >= 0) {
+                iconVelY = 0;
+                iconWaitFrames = ICON_WAIT_FRAMES;
+                if (!effectApplied && effectTarget != null) {
+                    applyMonitorEffect(effectTarget);
+                    effectApplied = true;
+                    effectTarget = null;
+                }
+            }
+            return;
+        }
+
+        if (iconWaitFrames > 0) {
+            iconWaitFrames--;
+            return;
+        }
+        iconActive = false;
+    }
+
+    private int resolveIconFrame() {
+        if (type == MonitorType.BROKEN) {
+            return -1;
+        }
+        return type.id + ICON_FRAME_OFFSET;
     }
 
     private enum MonitorType {

@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
@@ -71,6 +73,37 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * Whether or not this sprite is pushing a solid object.
          */
         protected boolean pushing = false;
+
+        /**
+         * Frames remaining for post-hit invulnerability.
+         */
+        protected int invulnerableFrames = 0;
+
+        /**
+         * Frames remaining for invincibility power-up.
+         */
+        protected int invincibleFrames = 0;
+
+        /**
+         * Whether or not this sprite is in the spring animation state.
+         */
+        protected boolean springing = false;
+
+        /**
+         * Frames remaining for springing state.
+         */
+        protected int springingFrames = 0;
+
+        /**
+         * Whether or not this sprite is dead.
+         */
+        protected boolean dead = false;
+
+        public enum DamageCause {
+                NORMAL,
+                SPIKE,
+                DROWN
+        }
 
     /**
      * Whether or not this sprite is preparing for a spindash.
@@ -261,6 +294,134 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setPushing(boolean pushing) {
                 this.pushing = pushing;
+        }
+
+        public boolean getInvulnerable() {
+                return invulnerableFrames > 0 || invincibleFrames > 0;
+        }
+
+        public int getInvulnerableFrames() {
+                return invulnerableFrames;
+        }
+
+        public void setInvulnerableFrames(int frames) {
+                invulnerableFrames = Math.max(0, frames);
+        }
+
+        public int getInvincibleFrames() {
+                return invincibleFrames;
+        }
+
+        public void setInvincibleFrames(int frames) {
+                invincibleFrames = Math.max(0, frames);
+        }
+
+        public boolean getSpringing() {
+                return springing;
+        }
+
+        public boolean getDead() {
+                return dead;
+        }
+
+        public void setSpringing(int frames) {
+                if (frames <= 0) {
+                        springing = false;
+                        springingFrames = 0;
+                        return;
+                }
+                springing = true;
+                springingFrames = frames;
+        }
+
+        public void tickStatus() {
+                if (invulnerableFrames > 0) {
+                        invulnerableFrames--;
+                }
+                if (invincibleFrames > 0) {
+                        invincibleFrames--;
+                }
+                if (springingFrames > 0) {
+                        springingFrames--;
+                        if (springingFrames == 0) {
+                                springing = false;
+                        }
+                }
+        }
+
+        public boolean applyHurt(int sourceX) {
+                return applyHurt(sourceX, false);
+        }
+
+        public boolean applyHurt(int sourceX, boolean spikeHit) {
+                DamageCause cause = spikeHit ? DamageCause.SPIKE : DamageCause.NORMAL;
+                return applyHurt(sourceX, cause);
+        }
+
+        public boolean applyHurt(int sourceX, DamageCause cause) {
+                if (getInvulnerable()) {
+                        return false;
+                }
+                setInvulnerableFrames(0x78);
+                setSpringing(0);
+                setSpindash(false);
+                setRolling(false);
+                setCrouching(false);
+                setAir(true);
+                setGSpeed((short) 0);
+                int dir = (getCentreX() >= sourceX) ? 1 : -1;
+                setXSpeed((short) (0x200 * dir));
+                setYSpeed((short) -0x400);
+                AudioManager.getInstance().playSfx(resolveDamageSound(cause));
+                return true;
+        }
+
+        public boolean applyHurtOrDeath(int sourceX, boolean spikeHit, boolean hadRings) {
+                DamageCause cause = spikeHit ? DamageCause.SPIKE : DamageCause.NORMAL;
+                return applyHurtOrDeath(sourceX, cause, hadRings);
+        }
+
+        public boolean applyHurtOrDeath(int sourceX, DamageCause cause, boolean hadRings) {
+                if (getInvulnerable()) {
+                        return false;
+                }
+                if (!hadRings) {
+                        return applyDeath(cause);
+                }
+                return applyHurt(sourceX, cause);
+        }
+
+        public boolean applyDrownDeath() {
+                return applyDeath(DamageCause.DROWN);
+        }
+
+        private boolean applyDeath(DamageCause cause) {
+                if (dead) {
+                        return false;
+                }
+                dead = true;
+                setInvulnerableFrames(0);
+                setInvincibleFrames(0);
+                setSpringing(0);
+                setSpindash(false);
+                setRolling(false);
+                setCrouching(false);
+                setPushing(false);
+                setAir(true);
+                setGSpeed((short) 0);
+                setXSpeed((short) 0);
+                setYSpeed((short) -0x700);
+                setHighPriority(true);
+                AudioManager.getInstance().playSfx(resolveDamageSound(cause));
+                return true;
+        }
+
+        private GameSound resolveDamageSound(DamageCause cause) {
+                return switch (cause) {
+                        case SPIKE -> GameSound.HURT_SPIKE;
+                        case DROWN -> GameSound.DROWN;
+                        default -> GameSound.HURT;
+                };
         }
 
     public float getSpindashConstant() {

@@ -4,6 +4,8 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 
+import java.util.List;
+
 /**
  * Renders sprite sheets built from level patterns and caches frame bounds.
  */
@@ -46,11 +48,26 @@ public class PatternSpriteRenderer {
     }
 
     public void drawFrameIndex(int frameIndex, int originX, int originY) {
+        drawFrameIndex(frameIndex, originX, originY, false, false);
+    }
+
+    public void drawFrameIndex(int frameIndex, int originX, int originY, boolean hFlip, boolean vFlip) {
         if (frameIndex < 0 || frameIndex >= spriteSheet.getFrameCount() || patternBase < 0) {
             return;
         }
         SpriteFrame<? extends SpriteFramePiece> frame = spriteSheet.getFrame(frameIndex);
-        drawFrame(frame, originX, originY);
+        drawFrame(frame, originX, originY, hFlip, vFlip);
+    }
+
+    public void drawPieces(List<? extends SpriteFramePiece> pieces,
+                           int originX,
+                           int originY,
+                           boolean hFlip,
+                           boolean vFlip) {
+        if (pieces == null || patternBase < 0) {
+            return;
+        }
+        drawFramePieces(pieces, originX, originY, hFlip, vFlip);
     }
 
     private void cachePatterns(GraphicsManager graphicsManager, int basePatternIndex) {
@@ -63,21 +80,33 @@ public class PatternSpriteRenderer {
         }
     }
 
-    private void drawFrame(SpriteFrame<? extends SpriteFramePiece> frame, int originX, int originY) {
+    private void drawFrame(SpriteFrame<? extends SpriteFramePiece> frame,
+                           int originX,
+                           int originY,
+                           boolean hFlip,
+                           boolean vFlip) {
+        drawFramePieces(frame.pieces(), originX, originY, hFlip, vFlip);
+    }
+
+    private void drawFramePieces(List<? extends SpriteFramePiece> pieces,
+                                 int originX,
+                                 int originY,
+                                 boolean hFlip,
+                                 boolean vFlip) {
         SpritePieceRenderer.renderPieces(
-                frame.pieces(),
+                pieces,
                 originX,
                 originY,
                 patternBase,
                 spriteSheet.getPaletteIndex(),
-                false,
-                false,
-                (patternIndex, hFlip, vFlip, paletteIndex, drawX, drawY) -> {
+                hFlip,
+                vFlip,
+                (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
                     int descIndex = patternIndex & 0x7FF;
-                    if (hFlip) {
+                    if (pieceHFlip) {
                         descIndex |= 0x800;
                     }
-                    if (vFlip) {
+                    if (pieceVFlip) {
                         descIndex |= 0x1000;
                     }
                     descIndex |= (paletteIndex & 0x3) << 13;
