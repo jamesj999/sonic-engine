@@ -1,5 +1,9 @@
-# Object Placement Progress (2025-12-21)
-## What’s done
+# Object Placement Progress (2026-01-03)
+## Status
+- Placement + ring loading pipeline is stable; current work focuses on object behavior and rendering.
+- See `docs/object-implementation-plan.md` for object visuals/behavior and `docs/sonic2_rev01_object_collision_boxes.md` for collision parity.
+
+## What's done
 - Reviewed `docs/sonic2_rev01_objects_plan.md` and Rev01 disassembly for ground-truth data.
 - Confirmed `Off_Objects` pointer table starts at ROM `0x0E6800` (Rev01). The table is built with stride 2 (acts per zone) even for zones with 1 or 3 acts; extra entries are padded with Null/duplicate lists.
 - Parsed record format from `ChkLoadObj` in `s2.asm`:
@@ -20,6 +24,10 @@
   - `RingRenderManager` to render animated ring sprites
   - Debug overlay labels for object ID/subtype/flags in `DebugRenderer`
   - Tests: reader unit tests; placement snapshots for EHZ1/HTZ1/MCZ1/OOZ1/MTZ2/SCZ/DEZ; act-clamp tests for MTZ3 and single-act zones; pointer table offset check; ring placement snapshot + single-act fallback
+
+## Related updates (since placement milestone)
+- ROM-backed object art/mappings/animation scripts are wired for springs (0x41), spikes (0x36), and monitors (0x26).
+- Monitor break flow now uses ROM animation and applies the effect after the icon rise (Obj2E-style timing).
 
 ## Outstanding / Next options
 1) Respawn-bit fidelity: map placements to the respawn table and wire consume/remember events when objects are collected/destroyed.

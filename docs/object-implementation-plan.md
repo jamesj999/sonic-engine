@@ -12,7 +12,7 @@ This plan tracks object implementation progress across sessions. The goal is to 
 - **Placement:** `ObjectPlacementManager` windows spawns based on camera position.
 - **Runtime:** `ObjectManager` instantiates objects from active spawns and owns their lifecycle.
 - **Registry:** `ObjectRegistryData` provides built-in `id -> name` lookup; `ObjectRegistry` assigns factories.
-- **Render (now):** object instances append GL line commands; high/low priority passes handled by `ObjectManager`.
+- **Render (now):** `ObjectRenderManager` builds ROM-backed sprite sheets and draws mapping pieces; debug boxes remain as fallback for objects without art.
 - **Collision:** `SolidObjectManager` and `TouchResponseManager` handle object interactions (Touch_Sizes read from ROM).
 
 ## Wave Roadmap
@@ -28,7 +28,8 @@ Scope:
 - Platforms (0x11/0x15/0x18/0x19)
 
 Deliverables:
-- Render-only object classes with distinct colors and approximate sizes (debug-only).
+- ROM-backed art + mappings + animation for the most common EHZ objects.
+- Debug-only render fallbacks for remaining objects in the wave.
 - Factory wiring in `ObjectRegistry` for the IDs above.
 - Coverage logging for active object IDs per level.
 
@@ -37,6 +38,8 @@ Progress:
 - [x] Built-in object registry data (`ObjectRegistryData`).
 - [x] Render-only factories for wave 1 objects.
 - [x] Object name labels in debug overlay (optional but useful).
+- [x] ROM art + mappings + animation scripts for springs (0x41), spikes (0x36), monitors (0x26).
+- [x] Monitor break flow now uses ROM animation + Obj2E-style icon rise timing before applying effects.
 
 ### Wave 2 -- Collision Scaffolding
 Goal: introduce object interaction without altering core physics.
@@ -78,14 +81,15 @@ Progress:
 - **Behavior:** compare object response to ROM (speed, angle, animation timing).
 
 ## Known Gaps / Risks
-- SolidObject manager now snaps and clears velocities for top/side/bottom contact, but remains a simplified solver (no slope handling or moving-platform carry).
+- SolidObject manager now snaps and clears velocities for top/side/bottom contact, but remains a simplified solver (single-character only, limited sloped solids, and no platform motion logic yet).
 - TouchResponse now mirrors the ROM overlap test (player offsets, crouch special case, and asymmetric width/height checks).
 - Spring and platform collision parameters still rely on inferred values; verify against ROM data.
 - Placement `renderFlags` are not equivalent to sprite flip flags.
-- Runtime object art is not yet loaded; boxes are placeholders only.
+- ROM art is wired for springs/spikes/monitors only; checkpoints/platforms still render as debug boxes.
+- Monitor effects beyond rings are incomplete (shoes/shield/invincibility/1up + sound mapping).
 
 ## Next Up (default)
-1) Implement remaining monitor effects (shoes/shield/invincibility/1up).
-2) Refine spring orientation handling and strength values.
-3) Replace platform/bridge sizes with verified ROM hitboxes.
+1) Implement remaining monitor effects (shoes/shield/invincibility/1up) + sound mapping.
+2) Add ROM art/mappings/animations for checkpoints and platform families.
+3) Replace platform/bridge sizes with verified ROM hitboxes and add moving-platform carry logic.
 
