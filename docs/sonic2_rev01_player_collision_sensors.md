@@ -81,8 +81,8 @@ The player’s radii are also stored per-object and drive sensor placement:
 
 | Field | Offset | Typical standing value |
 |---|---:|---:|
-| `x_radius` | `$16` | 9 |
-| `y_radius` | `$17` | `$13` (19) |
+| `x_radius` | `$17` | 9 |
+| `y_radius` | `$16` | `$13` (19) |
 
 
 

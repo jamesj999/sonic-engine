@@ -203,6 +203,26 @@ Special case handling for a few object IDs (for example a different “top colli
 
 SlopedSolid is a companion routine for collisions with a slope height profile, used by diagonal springs and similar sloped solids.
 
+## Diagnostics and common pitfalls (symptoms to likely engine mismatches)
+
+### Springs
+If spring "push" feels inconsistent, or right-facing springs never work:
+- Check velocity units: Sonic 2 uses 16-bit signed velocities in 8.8 fixed point (`$1000` = 16px/frame).
+- Horizontal springs: Ensure you gate activation by approach direction and flip `x_vel` sign based on the spring's X-flip flag.
+- Orientation: Ensure `Obj41` subtype bits 4-6 are correctly decoded.
+
+### Spikes
+If spikes trigger repeatedly with no cooldown (and ring loss becomes chaotic):
+- Check `invulnerable_time`: The hurt routine MUST set this (typically to 120 frames) and the spike content check MUST respect it.
+- "Already hurt" guard: Only trigger hurt if the player is not already in the hurt routine.
+- Contact type: Spikes only hurt if the SolidObject call reports the correct contact type (standing for upright, side touch for sideways).
+
+### Item monitors
+If Sonic "floats rolling" above monitors instead of breaking them:
+- **Bug:** You are likely treating monitors as solid for rolling players.
+- **Fix:** `SolidObject_Monitor` explicitly returns early (not solid) if Sonic is rolling/spinning. This allows the player to overlap the monitor and trigger the `TouchResponse` break logic.
+- **Order:** Ensure SolidObject logic runs before TouchResponse (or that they interact correctly regarding position updates).
+
 ## Case studies (spikes, springs, monitors)
 
 These examples show that object hitboxes are often implied by the helper routine parameters and not by a standalone “collision box struct”.
@@ -257,6 +277,10 @@ The initialization routine is at ROM **$188A8** (comment `loc_188A8` before `Obj
 
 Springs choose their orientation from subtype bits and use different mapping frames and art tiles accordingly. They store a strength (vertical or horizontal velocity applied to the player) in `objoff_30`, selected from `Obj41_Strengths`.
 
+Typical strength values (stored as signed words):
+- `-$1000` (Red spring, strong): 16 px/frame (8.8 fixed).
+- `-$0A00` (Yellow spring, weak): 10 px/frame (8.8 fixed).
+
 Collision and interaction is done via the solid object system, not via collision_flags.
 
 For the upward spring (routine `Obj41_Up`, comment `loc_18980`), the object performs a SolidObject check against each character using `SolidObject_Always_SingleCharacter` at ROM $1978E, with fixed parameters.
@@ -295,7 +319,8 @@ The monitor uses:
 - d3 = $10
 - d4 = x_pos
 
-It calls SolidObject for each character and then runs some extra logic (for example special casing Sonic rolling).
+It calls SolidObject for each character. **Crucially**, it checks if the character is in a rolling/spinning state. If so, it treats the monitor as non-solid (returns early) so that the player can pass through/overlap and trigger the `TouchResponse` break logic.
+
 
 Important takeaway.
 
