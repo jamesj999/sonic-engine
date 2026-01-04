@@ -371,7 +371,7 @@ Set collision_flags to $46 and implement the monitor solidity wrapper (parameter
 - Spikes hurt logic is driven by SolidObject contact masks, not by collision_flags.
 - Springs trigger when standing is reported by SolidObject or SlopedSolid, and they use fixed constants for collision parameters.
 
-## Current implementation alignment (2026-01-03)
+## Current implementation alignment (2026-01-04)
 
 This section summarizes how the Java engine currently aligns to REV01 and what remains.
 
@@ -390,11 +390,13 @@ Aligned / close:
 - Ringless hurt now triggers death state (KillCharacter) with ROM velocities and death animation ID (0x18).
 - Hurt now spawns Obj37-style lost rings with ROM velocity/offset rules, CalcSine table output, and bounce/gravity timings.
 - Pushing is tracked on the player when side contact is resolved while grounded.
+- SolidObject contact results are surfaced via SolidContact (standing/touch side/bottom/top) for object-specific logic.
 - On-object carry is implemented: when standing on a solid, the player is moved by the solid's delta (MvSonicOnPtfm analogue).
+- Object visuals now use ROM art/mappings/animations for spikes/springs/monitors; monitor icon rise timing matches Obj2E (effect after rise).
 
 Still divergent / missing:
 - Sloped solids are still partial: diagonal springs use slope tables, but other sloped solids are not wired yet.
-- SolidObject does not set per-object status bits or d6 contact masks; objects do not read those flags.
+- SolidObject does not set per-object status bits or d6 contact masks; objects rely on SolidContact instead, but some routines still expect status-style flags.
 - No special-case landing threshold for the launcher spring (0x14).
 - TouchResponse routing is partial: hurt/invulnerability are implemented, but boss logic and enemy kill handling are still placeholder.
 - Ring scatter is implemented, but invincibility-powered enemy kills remain incomplete.
@@ -402,9 +404,9 @@ Still divergent / missing:
 - Object positions are still mostly static (platform motion and moving solids are not implemented yet).
 
 Recommended next steps:
-1) Add object status flags and d6-style contact masks for object-specific behaviours (spikes, monitors, and similar).
+1) Add object status flags and d6-style contact masks (or an equivalent mapping) for object-specific behaviours (spikes, monitors, and similar).
 2) Wire invincibility-powered enemy kills and proper enemy HP/score handling.
-3) Expand TouchResponse categories (boss logic, special-case routing) beyond hurt/enemy.
+3) Expand TouchResponse categories (boss logic, special-case routing) beyond hurt/enemy, and wire monitor effects that depend on special routing.
 
 ## Source anchors
 

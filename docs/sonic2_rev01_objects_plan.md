@@ -2,6 +2,11 @@
 
 This document is meant to be handed to an AI coding agent (Codex, etc.) so it can add accurate Sonic 2 Rev01 object placement loading to a custom engine. The immediate goal is to load a level and spawn objects at the correct world coordinates. Behaviour and interaction comes later.
 
+## Status (2026-01-04)
+- Placement loader + ring placement are implemented and stable.
+- Object visuals/behavior tracking now lives in `docs/object-implementation-plan.md` and `docs/sonic2_rev01_object_collision_boxes.md`.
+- This document remains the source for placement format, pointers, and spawn window behavior.
+
 ## Scope and success criteria
 
 The first milestone is achieved when the engine can, for any supported Zone and Act, read object placement data from a Rev01 ROM and instantiate placeholder objects at the correct positions with the correct object ID and subtype.

@@ -1,4 +1,4 @@
-# Object Placement Progress (2026-01-03)
+# Object Placement Progress (2026-01-04)
 ## Status
 - Placement + ring loading pipeline is stable; current work focuses on object behavior and rendering.
 - See `docs/object-implementation-plan.md` for object visuals/behavior and `docs/sonic2_rev01_object_collision_boxes.md` for collision parity.
