@@ -534,8 +534,9 @@ public class PlayableSpriteMovementManager extends
                 skidding = false;
 				if (gSpeed > -maxSpeed) {
 					gSpeed -= accel;
-				} else {
-					gSpeed = (short) -maxSpeed;
+					if (gSpeed < -maxSpeed) {
+						gSpeed = (short) -maxSpeed;
+					}
 				}
 			}
 		}
@@ -550,8 +551,9 @@ public class PlayableSpriteMovementManager extends
                 skidding = false;
 				if (gSpeed < maxSpeed) {
 					gSpeed = (short) (gSpeed + accel);
-				} else {
-					gSpeed = maxSpeed;
+					if (gSpeed > maxSpeed) {
+						gSpeed = maxSpeed;
+					}
 				}
 			}
 		}
