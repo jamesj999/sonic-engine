@@ -20,7 +20,13 @@ public class TestPlayableSpriteMovementManager {
     @Before
     public void setUp() {
         mockSprite = new AbstractPlayableSprite("sonic", (short)0, (short)0, false) {
-            @Override protected void defineSpeeds() { }
+            @Override protected void defineSpeeds() {
+                this.max = 1536; // 6 pixels * 256
+                this.runAccel = 12; // 0.046875 * 256
+                this.runDecel = 128; // 0.5 * 256
+                this.slopeRunning = 32; // 0.125 * 256
+                this.friction = 12; // 0.046875 * 256
+            }
             @Override protected void createSensorLines() { }
             @Override public void draw() { }
         };
@@ -131,5 +137,77 @@ public class TestPlayableSpriteMovementManager {
 
         assertEquals("Angle should be reset to 0x00 when landing from Air on flat ground, ignoring stale angle.",
                 (byte) 0x00, mockSprite.getAngle());
+    }
+
+    @Test
+    public void testSlopeMomentumUncapped() throws Exception {
+        // Initial speed at max (1536)
+        mockSprite.setGSpeed((short) 1536);
+        // Angle 0x20 (32). Slope \. This causes acceleration downhill (positive gSpeed).
+        // 32 * 1.40625 = 45 deg. Sin(45) ~ 0.707.
+        // slopeRunning = 32. Accel = 32 * 0.707 = ~22.
+        mockSprite.setAngle((byte) 0x20);
+
+        Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed", AbstractPlayableSprite.class, boolean.class, boolean.class);
+        method.setAccessible(true);
+
+        // Act: Run RIGHT (left=false, right=true)
+        method.invoke(manager, mockSprite, false, true);
+
+        // Assert: gSpeed should be > 1536 (approx 1536 + 22 = 1558).
+        // Original code would clamp this to 1536.
+        short newSpeed = mockSprite.getGSpeed();
+        assertTrue("gSpeed should exceed max (1536) when accelerating down slope, but was " + newSpeed, newSpeed > 1536);
+    }
+
+    @Test
+    public void testRightInputMaintainHighSpeed() throws Exception {
+        // Setup: Running super fast (3000), holding Right. Flat ground.
+        mockSprite.setGSpeed((short) 3000);
+        mockSprite.setAngle((byte) 0x00);
+
+        Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed", AbstractPlayableSprite.class, boolean.class, boolean.class);
+        method.setAccessible(true);
+
+        // Act: Hold Right
+        method.invoke(manager, mockSprite, false, true);
+
+        // Assert: Speed should NOT drop to max (1536).
+        // It should stay at 3000 (no slope gravity, no friction because pressing right).
+        // Acceleration should NOT be applied because 3000 > max.
+        assertEquals("gSpeed should be maintained when > max", (short) 3000, mockSprite.getGSpeed());
+    }
+
+    @Test
+    public void testRightInputAccelerateBelowMax() throws Exception {
+        // Setup: Running below max (1000). Holding Right. Flat ground.
+        mockSprite.setGSpeed((short) 1000);
+        mockSprite.setAngle((byte) 0x00);
+
+        Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed", AbstractPlayableSprite.class, boolean.class, boolean.class);
+        method.setAccessible(true);
+
+        // Act: Hold Right
+        method.invoke(manager, mockSprite, false, true);
+
+        // Assert: Speed should increase by runAccel (12).
+        // 1000 + 12 = 1012.
+        assertEquals("gSpeed should increase by accel when < max", (short) 1012, mockSprite.getGSpeed());
+    }
+
+    @Test
+    public void testLeftInputMaintainHighSpeed() throws Exception {
+        // Setup: Running super fast LEFT (-3000), holding Left. Flat ground.
+        mockSprite.setGSpeed((short) -3000);
+        mockSprite.setAngle((byte) 0x00);
+
+        Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed", AbstractPlayableSprite.class, boolean.class, boolean.class);
+        method.setAccessible(true);
+
+        // Act: Hold Left
+        method.invoke(manager, mockSprite, true, false);
+
+        // Assert: Speed should NOT clamp to -max (-1536).
+        assertEquals("gSpeed should be maintained when < -max", (short) -3000, mockSprite.getGSpeed());
     }
 }
