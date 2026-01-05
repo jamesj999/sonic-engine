@@ -130,6 +130,14 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     }
 
     @Override
+    public boolean isSolidFor(AbstractPlayableSprite player) {
+        if (player == null) {
+            return true;
+        }
+        return !player.getRolling();
+    }
+
+    @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
         // Solid contact used for standing/edge checks in ROM; no behavior yet.
     }

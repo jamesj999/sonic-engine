@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.level.objects;
 
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
@@ -8,9 +10,17 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 
-public class SpringObjectInstance extends BoxObjectInstance implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
-    private static final int HALF_SIZE_VERTICAL = 0x10;
-    private static final int HALF_SIZE_HORIZONTAL = 0x08;
+public class SpringObjectInstance extends BoxObjectInstance
+        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
+
+    // Subtype constants (shifted >> 3 & 0xE) - matches ROM Obj41_Index
+    private static final int TYPE_UP = 0;
+    private static final int TYPE_HORIZONTAL = 2;
+    private static final int TYPE_DOWN = 4;
+    private static final int TYPE_DIAGONAL_UP = 6;
+    private static final int TYPE_DIAGONAL_DOWN = 8;
+
+    // Diagonal slope data
     private static final byte[] SLOPE_DIAG_UP = {
             0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
             0x10, 0x10, 0x10, 0x10, 0x0E, 0x0C, 0x0A, 0x08,
@@ -42,7 +52,8 @@ public class SpringObjectInstance extends BoxObjectInstance implements SolidObje
 
     public SpringObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, 8, 8, 1.0f, 0.85f, 0.1f, false);
-        this.redSpring = (spawn.subtype() & 0x02) != 0;
+        // ROM: bit 1 of subtype selects strength (0=red/-$1000, 2=yellow/-$A00)
+        this.redSpring = (spawn.subtype() & 0x02) == 0;
         this.idleAnimId = resolveIdleAnimId();
         this.triggeredAnimId = resolveTriggeredAnimId();
         this.mappingFrame = resolveIdleMappingFrame();
@@ -51,8 +62,7 @@ public class SpringObjectInstance extends BoxObjectInstance implements SolidObje
         this.animationState = new ObjectAnimationState(
                 renderManager != null ? renderManager.getSpringAnimations() : null,
                 idleAnimId,
-                mappingFrame
-        );
+                mappingFrame);
     }
 
     @Override
@@ -60,128 +70,239 @@ public class SpringObjectInstance extends BoxObjectInstance implements SolidObje
         if (player == null) {
             return;
         }
-        if (isDiagonalUp()) {
+
+        // Prevent infinite re-triggering: if player is already springing, don't trigger
+        // again
+        if (player.getSpringing()) {
+            return;
+        }
+
+        int type = getType();
+
+        if (type == TYPE_DIAGONAL_UP) {
             if (!contact.standing()) {
                 return;
             }
             applyDiagonalSpring(player, true);
             return;
         }
-        if (isDiagonalDown()) {
+
+        if (type == TYPE_DIAGONAL_DOWN) {
             if (!contact.touchBottom()) {
                 return;
             }
             applyDiagonalSpring(player, false);
             return;
         }
-        if (isHorizontal()) {
-            if (!contact.touchSide()) {
+
+        if (type == TYPE_HORIZONTAL) {
+            // ROM: checks pushing_bit, which maps to our pushing/touchSide
+            if (!contact.pushing()) {
                 return;
             }
-            int strength = getStrength();
-            if (isFlippedHorizontal()) {
-                strength = -strength;
-            }
-            int xOffset = isFlippedHorizontal() ? 8 : -8;
-            player.setX((short) (player.getX() + xOffset));
-            player.setAir(true);
-            player.setGSpeed((short) 0);
-            player.setXSpeed((short) strength);
-            player.setSpringing(16);
-            player.setDirection(strength < 0 ? Direction.LEFT : Direction.RIGHT);
-            animationState.setAnimId(triggeredAnimId);
+            applyHorizontalSpring(player);
             return;
         }
-        if (isDown()) {
+
+        if (type == TYPE_DOWN) {
             if (!contact.touchBottom()) {
                 return;
             }
-            player.setY((short) (player.getY() - 8));
-            player.setAir(true);
-            player.setGSpeed((short) 0);
-            player.setYSpeed((short) Math.abs(getStrength()));
-            player.setSpringing(16);
-            animationState.setAnimId(triggeredAnimId);
+            applyDownSpring(player);
             return;
         }
+
+        // Default: Up spring
         if (!contact.standing()) {
             return;
         }
-        player.setY((short) (player.getY() + 8));
+        applyUpSpring(player);
+    }
+
+    /**
+     * ROM: Obj41_Up (loc_189CA)
+     * - addq.w #8,y_pos(a1)
+     * - move.w objoff_30(a0),y_vel(a1) [negative = up]
+     * - bset #status.player.in_air
+     */
+    /**
+     * ROM: Obj41_Up (loc_189CA)
+     * - addq.w #8,y_pos(a1) -> In ROM, Y increases downward, so this pushes player
+     * down
+     * - In our engine, Y increases upward, so we SUBTRACT to push down (away from
+     * spring face)
+     */
+    private void applyUpSpring(AbstractPlayableSprite player) {
+        // Don't adjust Y position - SolidObjectManager already handles collision
+        // positioning
+
+        // ROM: y_vel = negative value (negative = up in Y-down coordinate system)
+        player.setYSpeed((short) getStrength()); // Negative = up
+
         player.setAir(true);
         player.setGSpeed((short) 0);
-        player.setYSpeed((short) -Math.abs(getStrength()));
-        player.setSpringing(16);
+        player.setSpringing(15);
+        trigger(player);
+    }
+
+    /**
+     * ROM: Obj41_Down - same as Up but flipped
+     * - subq.w #8,y_pos(a1)
+     * - move.w objoff_30(a0),y_vel(a1) then neg.w
+     */
+    private void applyDownSpring(AbstractPlayableSprite player) {
+        // ROM: subq.w #8,y_pos (pushes player up in Y-down coordinate system)
+        // Java engine also has Y-down, so we SUBTRACT to push up (away from spring)
+        player.setY((short) (player.getY() - 8));
+
+        // ROM negates the strength for down springs (positive = down in Y-down system)
+        player.setYSpeed((short) -getStrength()); // Negated = positive = down
+
+        player.setAir(true);
+        player.setGSpeed((short) 0);
+        player.setSpringing(15);
+        trigger(player);
+    }
+
+    /**
+     * ROM: Obj41_Horizontal (loc_18AEE)
+     * - move.w objoff_30(a0),x_vel(a1) [starts negative]
+     * - addq.w #8,x_pos(a1)
+     * - bset player facing right
+     * - btst spring.x_flip
+     * - bne skip_adjustment (if flipped, keep +8 and negative velocity)
+     * - bclr player facing (now left)
+     * - subi.w #$10,x_pos(a1) [net: -8]
+     * - neg.w x_vel(a1) [now positive = right]
+     */
+    private void applyHorizontalSpring(AbstractPlayableSprite player) {
+        int strength = getStrength(); // starts negative
+        boolean flipped = isFlippedHorizontal();
+
+        // Always add 8 first
+        int newX = player.getX() + 8;
+        Direction dir = Direction.RIGHT;
+
+        if (!flipped) {
+            // Unflipped spring: subtract 16 (net -8), negate velocity
+            newX -= 16;
+            strength = -strength; // now positive (right)
+        } else {
+            // Flipped spring: keep +8, keep negative velocity (left)
+            dir = Direction.LEFT;
+        }
+
+        player.setX((short) newX);
+        player.setXSpeed((short) strength);
+        player.setDirection(dir);
+
+        // ROM: Horizontal springs do NOT set in_air!
+        // They set inertia (gSpeed) = x_vel and keep player grounded
+        // Line 33810: move.w x_vel(a1),inertia(a1)
+        player.setGSpeed((short) strength);
+
+        // ROM Line 33818: bpl.s -> move.w #0,y_vel(a1) (if subtype bit 7 set, clear Y
+        // velocity)
+        if ((spawn.subtype() & 0x80) != 0) {
+            player.setYSpeed((short) 0);
+        }
+
+        // ROM: Horizontal springs use move_lock ($F) but ideally shouldn't trigger
+        // spring animation
+        // However, our engine uses setSpringing which also locks controls
+        // TODO: Fix animation profile to not show spring animation when grounded
+        player.setSpringing(15);
+
+        trigger(player);
+    }
+
+    /**
+     * ROM: Diagonal springs apply both X and Y velocity
+     */
+    private void applyDiagonalSpring(AbstractPlayableSprite player, boolean up) {
+        int strength = getStrength(); // negative base
+        boolean flipped = isFlippedHorizontal();
+
+        int xStrength = flipped ? strength : -strength;
+        int yStrength = up ? strength : -strength;
+
+        player.setXSpeed((short) xStrength);
+        player.setYSpeed((short) yStrength);
+        player.setDirection(xStrength < 0 ? Direction.LEFT : Direction.RIGHT);
+        player.setAir(true);
+        player.setGSpeed((short) 0);
+        player.setSpringing(15);
+
+        trigger(player);
+    }
+
+    private void trigger(AbstractPlayableSprite player) {
         animationState.setAnimId(triggeredAnimId);
+        try {
+            if (AudioManager.getInstance() != null) {
+                AudioManager.getInstance().playSfx(GameSound.SPRING);
+            }
+        } catch (Exception e) {
+            // Prevent audio failure from breaking game logic
+        }
     }
 
-    @Override
-    protected int getHalfWidth() {
-        return isHorizontal() ? HALF_SIZE_HORIZONTAL : HALF_SIZE_VERTICAL;
-    }
-
-    @Override
-    protected int getHalfHeight() {
-        return isHorizontal() ? HALF_SIZE_HORIZONTAL : HALF_SIZE_VERTICAL;
-    }
-
-    private boolean isHorizontal() {
-        int subtypeGroup = (spawn.subtype() >> 3) & 0xE;
-        return subtypeGroup == 0x2;
-    }
-
-    private boolean isDiagonalUp() {
-        int subtypeGroup = (spawn.subtype() >> 3) & 0xE;
-        return subtypeGroup == 0x6;
-    }
-
-    private boolean isDiagonalDown() {
-        int subtypeGroup = (spawn.subtype() >> 3) & 0xE;
-        return subtypeGroup == 0x8;
-    }
-
-    private boolean isDown() {
-        int subtypeGroup = (spawn.subtype() >> 3) & 0xE;
-        return subtypeGroup == 0x4 || subtypeGroup == 0x8;
-    }
-
+    /**
+     * ROM: getStrength returns NEGATIVE values
+     * Obj41_Strengths: dc.w -$1000, -$A00
+     * Bit 1 of subtype: 0=red(-$1000), 2=yellow(-$A00)
+     */
     private int getStrength() {
-        return (spawn.subtype() & 0x02) != 0 ? 0x0A00 : 0x1000;
+        // ROM: bit 1 of subtype: 0=red(-$1000), 1=yellow(-$A00)
+        // Visual rendering and strength must match
+        // NOTE: Inverted ternary to match visual display behavior
+        return redSpring ? -0x1000 : -0x0A00;
+    }
+
+    private int getType() {
+        // ROM: lsr.w #3,d0 then andi.w #$E,d0
+        return (spawn.subtype() >> 3) & 0xE;
     }
 
     private boolean isFlippedHorizontal() {
         return (spawn.renderFlags() & 0x1) != 0;
     }
 
-    private void applyDiagonalSpring(AbstractPlayableSprite player, boolean up) {
-        int strength = Math.abs(getStrength());
-        boolean flipped = isFlippedHorizontal();
-        int xSpeed = flipped ? -strength : strength;
-        int ySpeed = up ? -strength : strength;
-        int xOffset = flipped ? 6 : -6;
-        int yOffset = up ? 6 : -6;
-        player.setX((short) (player.getX() + xOffset));
-        player.setY((short) (player.getY() + yOffset));
-        player.setAir(true);
-        player.setGSpeed((short) 0);
-        player.setXSpeed((short) xSpeed);
-        player.setYSpeed((short) ySpeed);
-        player.setSpringing(16);
-        player.setDirection(xSpeed < 0 ? Direction.LEFT : Direction.RIGHT);
-        animationState.setAnimId(triggeredAnimId);
+    /**
+     * Make spring non-solid when player is already springing.
+     * This prevents ceiling collision from zeroing Y velocity immediately after
+     * launch.
+     */
+    @Override
+    public boolean isSolidFor(AbstractPlayableSprite player) {
+        if (player != null && player.getSpringing()) {
+            return false; // Player passes through spring when springing
+        }
+        return true;
     }
 
+    /**
+     * ROM collision params vary by type:
+     * Up/Down: D1=$1B (27), D2=8, D3=$10 (16)
+     * Horizontal: D1=$13 (19), D2=$E (14), D3=$F (15)
+     */
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(0x1B, 0x08, 0x10);
+        int type = getType();
+        if (type == TYPE_HORIZONTAL) {
+            return new SolidObjectParams(19, 14, 15);
+        }
+        // Up, Down, Diagonal use standard vertical params
+        return new SolidObjectParams(27, 8, 16);
     }
 
     @Override
     public byte[] getSlopeData() {
-        if (isDiagonalUp()) {
+        int type = getType();
+        if (type == TYPE_DIAGONAL_UP) {
             return SLOPE_DIAG_UP;
         }
-        if (isDiagonalDown()) {
+        if (type == TYPE_DIAGONAL_DOWN) {
             return SLOPE_DIAG_DOWN;
         }
         return null;
@@ -206,9 +327,12 @@ public class SpringObjectInstance extends BoxObjectInstance implements SolidObje
             return;
         }
         ObjectRenderManager.SpringVariant variant = resolveVariant();
-        PatternSpriteRenderer renderer = renderManager.getSpringRenderer(variant, redSpring);
+        // NOTE: Renderer naming is inverted - "RedRenderer" variants are yellow,
+        // default are red
+        // So we pass !redSpring to get correct visual color
+        PatternSpriteRenderer renderer = renderManager.getSpringRenderer(variant, !redSpring);
         boolean hFlip = isFlippedHorizontal();
-        boolean vFlip = isDown() || (spawn.renderFlags() & 0x2) != 0;
+        boolean vFlip = getType() == TYPE_DOWN || (spawn.renderFlags() & 0x2) != 0;
         if (renderer == null || !renderer.isReady()) {
             super.appendRenderCommands(commands);
             return;
@@ -217,40 +341,44 @@ public class SpringObjectInstance extends BoxObjectInstance implements SolidObje
     }
 
     private ObjectRenderManager.SpringVariant resolveVariant() {
-        if (isHorizontal()) {
+        int type = getType();
+        if (type == TYPE_HORIZONTAL) {
             return ObjectRenderManager.SpringVariant.HORIZONTAL;
         }
-        if (isDiagonalUp() || isDiagonalDown()) {
+        if (type == TYPE_DIAGONAL_UP || type == TYPE_DIAGONAL_DOWN) {
             return ObjectRenderManager.SpringVariant.DIAGONAL;
         }
         return ObjectRenderManager.SpringVariant.VERTICAL;
     }
 
     private int resolveIdleAnimId() {
-        if (isHorizontal()) {
+        int type = getType();
+        if (type == TYPE_HORIZONTAL) {
             return ANIM_HORIZONTAL_IDLE;
         }
-        if (isDiagonalUp() || isDiagonalDown()) {
+        if (type == TYPE_DIAGONAL_UP || type == TYPE_DIAGONAL_DOWN) {
             return ANIM_DIAGONAL_IDLE;
         }
         return ANIM_VERTICAL_IDLE;
     }
 
     private int resolveTriggeredAnimId() {
-        if (isHorizontal()) {
+        int type = getType();
+        if (type == TYPE_HORIZONTAL) {
             return ANIM_HORIZONTAL_TRIGGER;
         }
-        if (isDiagonalUp() || isDiagonalDown()) {
+        if (type == TYPE_DIAGONAL_UP || type == TYPE_DIAGONAL_DOWN) {
             return ANIM_DIAGONAL_TRIGGER;
         }
         return ANIM_VERTICAL_TRIGGER;
     }
 
     private int resolveIdleMappingFrame() {
-        if (isHorizontal()) {
+        int type = getType();
+        if (type == TYPE_HORIZONTAL) {
             return 3;
         }
-        if (isDiagonalUp() || isDiagonalDown()) {
+        if (type == TYPE_DIAGONAL_UP || type == TYPE_DIAGONAL_DOWN) {
             return 7;
         }
         return 0;

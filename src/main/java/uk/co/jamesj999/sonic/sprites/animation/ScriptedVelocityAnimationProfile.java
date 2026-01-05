@@ -29,8 +29,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int airAnimId,
             int walkSpeedThreshold,
             int runSpeedThreshold,
-            int fallbackFrame
-    ) {
+            int fallbackFrame) {
         this(idleAnimId, walkAnimId, runAnimId, rollAnimId, rollAnimId, -1, -1, -1, -1, airAnimId,
                 walkSpeedThreshold,
                 runSpeedThreshold, fallbackFrame);
@@ -46,8 +45,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int airAnimId,
             int walkSpeedThreshold,
             int runSpeedThreshold,
-            int fallbackFrame
-    ) {
+            int fallbackFrame) {
         this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, -1, -1, -1, airAnimId,
                 walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
     }
@@ -65,8 +63,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int airAnimId,
             int walkSpeedThreshold,
             int runSpeedThreshold,
-            int fallbackFrame
-    ) {
+            int fallbackFrame) {
         this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, duckAnimId, spindashAnimId,
                 springAnimId, -1, airAnimId, walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
     }
@@ -85,8 +82,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int airAnimId,
             int walkSpeedThreshold,
             int runSpeedThreshold,
-            int fallbackFrame
-    ) {
+            int fallbackFrame) {
         this.idleAnimId = Math.max(0, idleAnimId);
         this.walkAnimId = Math.max(0, walkAnimId);
         this.runAnimId = Math.max(0, runAnimId);
@@ -108,7 +104,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         if (sprite.getDead() && deathAnimId >= 0) {
             return deathAnimId;
         }
-        if (sprite.getSpringing() && springAnimId >= 0) {
+        if (sprite.getSpringing() && sprite.getAir() && springAnimId >= 0) {
             return springAnimId;
         }
         if (sprite.getAir()) {

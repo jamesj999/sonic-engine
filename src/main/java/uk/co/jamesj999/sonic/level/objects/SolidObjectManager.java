@@ -49,13 +49,21 @@ public class SolidObjectManager {
             if (!(instance instanceof SolidObjectProvider provider)) {
                 continue;
             }
+            if (!provider.isSolidFor(player)) {
+                continue;
+            }
             SolidObjectParams params = provider.getSolidParams();
             int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
             SolidContact contact;
+            byte[] slopeData = null;
             if (instance instanceof SlopedSolidProvider sloped) {
+                slopeData = sloped.getSlopeData();
+            }
+
+            if (slopeData != null && instance instanceof SlopedSolidProvider sloped) {
                 int slopeHalfHeight = params.groundHalfHeight();
                 contact = resolveSlopedContact(player, instance.getSpawn(), params.halfWidth(), slopeHalfHeight,
-                        sloped.getSlopeData(), sloped.isSlopeFlipped());
+                        slopeData, sloped.isSlopeFlipped());
             } else {
                 contact = resolveContact(player, instance.getSpawn(), params.halfWidth(), halfHeight);
             }
@@ -80,7 +88,7 @@ public class SolidObjectManager {
     }
 
     private SolidContact resolveContact(AbstractPlayableSprite player,
-                                        ObjectSpawn spawn, int halfWidth, int halfHeight) {
+            ObjectSpawn spawn, int halfWidth, int halfHeight) {
         int playerCenterX = player.getCentreX();
         int playerCenterY = player.getCentreY();
 
@@ -100,7 +108,7 @@ public class SolidObjectManager {
     }
 
     private SolidContact resolveSlopedContact(AbstractPlayableSprite player, ObjectSpawn spawn, int halfWidth,
-                                              int halfHeight, byte[] slopeData, boolean xFlip) {
+            int halfHeight, byte[] slopeData, boolean xFlip) {
         if (slopeData == null || slopeData.length == 0) {
             return null;
         }
@@ -139,7 +147,7 @@ public class SolidObjectManager {
     }
 
     private SolidContact resolveContactInternal(AbstractPlayableSprite player, int relX, int relY, int halfWidth,
-                                                int maxTop, int playerCenterX, int playerCenterY) {
+            int maxTop, int playerCenterX, int playerCenterY) {
         int distX;
         int absDistX;
         if (relX >= halfWidth) {
