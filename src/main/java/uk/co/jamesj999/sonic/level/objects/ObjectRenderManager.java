@@ -28,6 +28,7 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet springDiagonalRedSheet;
     private final ObjectSpriteSheet explosionSheet;
     private final ObjectSpriteSheet shieldSheet;
+    private final ObjectSpriteSheet invincibilityStarsSheet;
     private final ObjectSpriteSheet bridgeSheet;
     private final SpriteAnimationSet monitorAnimations;
     private final SpriteAnimationSet springAnimations;
@@ -43,6 +44,7 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer springDiagonalRedRenderer;
     private final PatternSpriteRenderer explosionRenderer;
     private final PatternSpriteRenderer shieldRenderer;
+    private final PatternSpriteRenderer invincibilityStarsRenderer;
     private final PatternSpriteRenderer bridgeRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
@@ -60,6 +62,7 @@ public class ObjectRenderManager {
         this.springDiagonalRedSheet = artData.springDiagonalRedSheet();
         this.explosionSheet = artData.explosionSheet();
         this.shieldSheet = artData.shieldSheet();
+        this.invincibilityStarsSheet = artData.invincibilityStarsSheet();
         this.bridgeSheet = artData.bridgeSheet();
         this.monitorAnimations = artData.monitorAnimations();
         this.springAnimations = artData.springAnimations();
@@ -87,6 +90,8 @@ public class ObjectRenderManager {
         register(explosionSheet, explosionRenderer);
         this.shieldRenderer = new PatternSpriteRenderer(shieldSheet);
         register(shieldSheet, shieldRenderer);
+        this.invincibilityStarsRenderer = new PatternSpriteRenderer(invincibilityStarsSheet);
+        register(invincibilityStarsSheet, invincibilityStarsRenderer);
         this.bridgeRenderer = new PatternSpriteRenderer(bridgeSheet);
         register(bridgeSheet, bridgeRenderer);
     }
@@ -159,6 +164,10 @@ public class ObjectRenderManager {
 
     public PatternSpriteRenderer getShieldRenderer() {
         return shieldRenderer;
+    }
+
+    public PatternSpriteRenderer getInvincibilityStarsRenderer() {
+        return invincibilityStarsRenderer;
     }
 
     public PatternSpriteRenderer getBridgeRenderer() {

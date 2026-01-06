@@ -236,7 +236,11 @@ public class SolidObjectManager {
             if (player.getYSpeed() > 0) {
                 player.setYSpeed((short) 0);
             }
-            player.setAir(false);
+            if (player.getAir()) {
+                player.setGSpeed(player.getXSpeed());
+                player.setAir(false);
+                player.setRolling(false);
+            }
             return new SolidContact(true, false, false, true, false);
         }
 

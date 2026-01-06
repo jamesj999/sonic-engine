@@ -15,12 +15,12 @@ public class ShieldObjectInstance extends AbstractObjectInstance {
 
     private int currentFrame = 0;
     private boolean destroyed = false;
+    private boolean visible = true;
 
     public ShieldObjectInstance(AbstractPlayableSprite player) {
         super(null, "Shield");
         this.player = player;
-
-        // Use renderer from ObjectRenderManager
+        // ... (lines 24-32 omitted for brevity in prompt match, targeting field area)
         ObjectRenderManager renderManager = null;
         if (LevelManager.getInstance() != null) {
             renderManager = LevelManager.getInstance().getObjectRenderManager();
@@ -30,6 +30,10 @@ public class ShieldObjectInstance extends AbstractObjectInstance {
         } else {
             this.renderer = null;
         }
+    }
+
+    public void setVisible(boolean visible) {
+        this.visible = visible;
     }
 
     @Override
@@ -48,7 +52,7 @@ public class ShieldObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (destroyed || renderer == null) {
+        if (destroyed || !visible || renderer == null) {
             return;
         }
 

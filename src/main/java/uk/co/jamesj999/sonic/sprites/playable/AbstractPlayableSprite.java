@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
 import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.objects.InvincibilityStarsObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ShieldObjectInstance;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
@@ -148,6 +149,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         protected boolean shield = false;
         private ShieldObjectInstance shieldObject;
+        private InvincibilityStarsObjectInstance invincibilityObject;
         protected boolean speedShoes = false;
         protected int speedShoesFrames = 0;
 
@@ -156,6 +158,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (this.shieldObject != null) {
                         this.shieldObject.destroy();
                         this.shieldObject = null;
+                }
+                if (this.invincibilityObject != null) {
+                        this.invincibilityObject.destroy();
+                        this.invincibilityObject = null;
                 }
                 this.speedShoes = false;
                 this.speedShoesFrames = 0;
@@ -203,6 +209,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void giveInvincibility() {
                 setInvincibleFrames(1200); // 20 seconds @ 60fps
+                if (shieldObject != null) {
+                        shieldObject.setVisible(false);
+                }
+                if (invincibilityObject == null) {
+                        invincibilityObject = new InvincibilityStarsObjectInstance(this);
+                        LevelManager.getInstance().getObjectManager().addDynamicObject(invincibilityObject);
+                }
         }
 
         public boolean hasShield() {
@@ -471,6 +484,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
                 if (invincibleFrames > 0) {
                         invincibleFrames--;
+                        if (invincibleFrames == 0) {
+                                if (invincibilityObject != null) {
+                                        invincibilityObject.destroy();
+                                        invincibilityObject = null;
+                                }
+                                if (shieldObject != null) {
+                                        shieldObject.setVisible(true);
+                                }
+                                AudioManager.getInstance().getBackend().restoreMusic();
+                        }
                 }
                 if (springingFrames > 0) {
                         springingFrames--;
@@ -484,7 +507,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                                 speedShoes = false;
                                 defineSpeeds();
                                 AudioManager.getInstance().playMusic(
-                                                uk.co.jamesj999.sonic.data.games.Sonic2Constants.CMD_SLOW_DOWN);
+                                                Sonic2Constants.CMD_SLOW_DOWN);
                         }
                 }
         }

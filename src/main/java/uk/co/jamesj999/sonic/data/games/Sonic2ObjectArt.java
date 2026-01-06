@@ -110,6 +110,12 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> bridgeMappings = createBridgeMappings();
         ObjectSpriteSheet bridgeSheet = new ObjectSpriteSheet(bridgePatterns, bridgeMappings, 2, 1);
 
+        Pattern[] invincibilityStarsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR);
+        List<SpriteMappingFrame> invincibilityStarsMappings = loadMappingFrames(
+                Sonic2Constants.MAP_UNC_INVINCIBILITY_STARS_ADDR);
+        ObjectSpriteSheet invincibilityStarsSheet = new ObjectSpriteSheet(invincibilityStarsPatterns,
+                invincibilityStarsMappings, 0, 1);
+
         SpriteAnimationSet monitorAnimations = loadAnimationSet(
                 Sonic2Constants.ANI_OBJ26_ADDR,
                 Sonic2Constants.ANI_OBJ26_SCRIPT_COUNT);
@@ -130,6 +136,7 @@ public class Sonic2ObjectArt {
                 springDiagonalRedSheet,
                 explosionSheet,
                 shieldSheet,
+                invincibilityStarsSheet,
                 bridgeSheet,
                 monitorAnimations,
                 springAnimations);
