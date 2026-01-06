@@ -36,14 +36,16 @@ public class ObjectAnimationState {
         if (animationSet == null) {
             return;
         }
-        if (animId != lastAnimId) {
-            frameIndex = 0;
-            frameTick = 0;
-            lastAnimId = animId;
-        }
+
         SpriteAnimationScript script = animationSet.getScript(animId);
         if (script == null || script.frames().isEmpty()) {
             return;
+        }
+
+        if (animId != lastAnimId) {
+            frameIndex = 0;
+            frameTick = script.delay() & 0xFF;
+            lastAnimId = animId;
         }
 
         int delay = script.delay() & 0xFF;

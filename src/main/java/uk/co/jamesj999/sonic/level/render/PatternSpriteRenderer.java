@@ -60,10 +60,10 @@ public class PatternSpriteRenderer {
     }
 
     public void drawPieces(List<? extends SpriteFramePiece> pieces,
-                           int originX,
-                           int originY,
-                           boolean hFlip,
-                           boolean vFlip) {
+            int originX,
+            int originY,
+            boolean hFlip,
+            boolean vFlip) {
         if (pieces == null || patternBase < 0) {
             return;
         }
@@ -81,39 +81,45 @@ public class PatternSpriteRenderer {
     }
 
     private void drawFrame(SpriteFrame<? extends SpriteFramePiece> frame,
-                           int originX,
-                           int originY,
-                           boolean hFlip,
-                           boolean vFlip) {
+            int originX,
+            int originY,
+            boolean hFlip,
+            boolean vFlip) {
         drawFramePieces(frame.pieces(), originX, originY, hFlip, vFlip);
     }
 
     private void drawFramePieces(List<? extends SpriteFramePiece> pieces,
-                                 int originX,
-                                 int originY,
-                                 boolean hFlip,
-                                 boolean vFlip) {
-        SpritePieceRenderer.renderPieces(
-                pieces,
-                originX,
-                originY,
-                patternBase,
-                spriteSheet.getPaletteIndex(),
-                hFlip,
-                vFlip,
-                (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
-                    int descIndex = patternIndex & 0x7FF;
-                    if (pieceHFlip) {
-                        descIndex |= 0x800;
-                    }
-                    if (pieceVFlip) {
-                        descIndex |= 0x1000;
-                    }
-                    descIndex |= (paletteIndex & 0x3) << 13;
-                    PatternDesc desc = new PatternDesc(descIndex);
-                    GraphicsManager.getInstance().renderPattern(desc, drawX, drawY);
-                }
-        );
+            int originX,
+            int originY,
+            boolean hFlip,
+            boolean vFlip) {
+        // Draw in reverse order (Painter's Algorithm) so that the first piece in the
+        // list (index 0)
+        // is drawn LAST, appearing on top. This matches Genesis behavior where lower
+        // sprite index = higher priority.
+        for (int i = pieces.size() - 1; i >= 0; i--) {
+            SpriteFramePiece piece = pieces.get(i);
+            SpritePieceRenderer.renderPieces(
+                    List.of(piece),
+                    originX,
+                    originY,
+                    patternBase,
+                    spriteSheet.getPaletteIndex(),
+                    hFlip,
+                    vFlip,
+                    (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
+                        int descIndex = patternIndex & 0x7FF;
+                        if (pieceHFlip) {
+                            descIndex |= 0x800;
+                        }
+                        if (pieceVFlip) {
+                            descIndex |= 0x1000;
+                        }
+                        descIndex |= (paletteIndex & 0x3) << 13;
+                        PatternDesc desc = new PatternDesc(descIndex);
+                        GraphicsManager.getInstance().renderPattern(desc, drawX, drawY);
+                    });
+        }
     }
 
     private FrameBounds computeFrameBounds(SpriteFrame<? extends SpriteFramePiece> frame) {
@@ -205,10 +211,14 @@ public class PatternSpriteRenderer {
         for (int y = 0; y < Pattern.PATTERN_HEIGHT; y++) {
             for (int x = 0; x < Pattern.PATTERN_WIDTH; x++) {
                 if ((pattern.getPixel(x, y) & 0xFF) != 0) {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
+                    if (x < minX)
+                        minX = x;
+                    if (x > maxX)
+                        maxX = x;
+                    if (y < minY)
+                        minY = y;
+                    if (y > maxY)
+                        maxY = y;
                 }
             }
         }

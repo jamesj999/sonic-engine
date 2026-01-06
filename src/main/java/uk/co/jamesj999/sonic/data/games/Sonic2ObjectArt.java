@@ -66,6 +66,10 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> explosionMappings = createExplosionMappings();
         ObjectSpriteSheet explosionSheet = new ObjectSpriteSheet(explosionPatterns, explosionMappings, 0, 1);
 
+        Pattern[] shieldPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SHIELD_ADDR);
+        List<SpriteMappingFrame> shieldMappings = createShieldMappings();
+        ObjectSpriteSheet shieldSheet = new ObjectSpriteSheet(shieldPatterns, shieldMappings, 0, 1);
+
         SpriteAnimationSet monitorAnimations = loadAnimationSet(
                 Sonic2Constants.ANI_OBJ26_ADDR,
                 Sonic2Constants.ANI_OBJ26_SCRIPT_COUNT);
@@ -85,6 +89,7 @@ public class Sonic2ObjectArt {
 
                 springDiagonalRedSheet,
                 explosionSheet,
+                shieldSheet,
                 monitorAnimations,
                 springAnimations);
         return cached;
@@ -201,6 +206,45 @@ public class Sonic2ObjectArt {
         // Frame 4: -16, -16, 4x4, tile 52 (0x34)
         frames.add(createSimpleFrame(-16, -16, 4, 4, 52));
         return frames;
+    }
+
+    private List<SpriteMappingFrame> createShieldMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj38_000C (0 tiles offset)
+        frames.add(create2x2Frame(0));
+        // Frame 1: Map_obj38_002E (4 tiles offset)
+        frames.add(create2x2Frame(4));
+        // Frame 2: Map_obj38_0050 (8 tiles offset)
+        frames.add(create2x2Frame(8));
+        // Frame 3: Map_obj38_0072 (12 tiles offset)
+        frames.add(create2x2Frame(12));
+        // Frame 4: Map_obj38_0094 (16 tiles offset)
+        frames.add(create2x2Frame(16));
+
+        // Frame 5: Map_obj38_00B6 (20 tiles offset) - Larger frame
+        List<SpriteMappingPiece> pieces5 = new ArrayList<>();
+        // Note: Palette index 0 assumed.
+        // pieces: xOffset, yOffset, w, h, tileIndex, hFlip, vFlip, palIndex
+        // obj38.asm: spritePiece -$18, -$20, 3, 4, $14... (3 tiles wide, 4 tiles high)
+        pieces5.add(new SpriteMappingPiece(-24, -32, 3, 4, 20, false, false, 0));
+        pieces5.add(new SpriteMappingPiece(0, -32, 3, 4, 20, true, false, 0));
+        pieces5.add(new SpriteMappingPiece(-24, 0, 3, 4, 20, false, true, 0));
+        pieces5.add(new SpriteMappingPiece(0, 0, 3, 4, 20, true, true, 0));
+
+        frames.add(new SpriteMappingFrame(pieces5));
+
+        return frames;
+    }
+
+    private SpriteMappingFrame create2x2Frame(int startTile) {
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
+        // 2x2 tiles (16x16 pixels). w=2, h=2.
+        pieces.add(new SpriteMappingPiece(-16, -16, 2, 2, startTile, false, false, 0));
+        pieces.add(new SpriteMappingPiece(0, -16, 2, 2, startTile, true, false, 0));
+        pieces.add(new SpriteMappingPiece(-16, 0, 2, 2, startTile, false, true, 0));
+        pieces.add(new SpriteMappingPiece(0, 0, 2, 2, startTile, true, true, 0));
+        return new SpriteMappingFrame(pieces);
     }
 
     private SpriteMappingFrame createSimpleFrame(int x, int y, int wTiles, int hTiles, int tileIndex) {

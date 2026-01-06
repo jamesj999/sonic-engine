@@ -6,6 +6,9 @@ import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
 import uk.co.jamesj999.sonic.level.render.SpriteMappingPiece;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
 
 import java.util.List;
 
@@ -52,6 +55,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         if (!broken) {
             animationState.update();
             mappingFrame = animationState.getMappingFrame();
+            // Log 10 frames every second to see progression and break aliasing
             return;
         }
         updateIcon();
@@ -91,6 +95,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             LevelManager.getInstance().getObjectManager().addDynamicObject(
                     new ExplosionObjectInstance(0x27, spawn.x(), spawn.y(), renderManager));
         }
+        AudioManager.getInstance().playSfx(Sonic2Constants.SFX_EXPLOSION);
     }
 
     @Override
@@ -164,8 +169,27 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
 
     private void applyMonitorEffect(AbstractPlayableSprite player) {
         switch (type) {
-            case RINGS -> player.addRings(RING_MONITOR_REWARD);
-            case SHOES, SHIELD, INVINCIBILITY, SONIC, TAILS, EGGMAN, TELEPORT, RANDOM, STATIC, BROKEN -> {
+            case RINGS -> {
+                player.addRings(RING_MONITOR_REWARD);
+                AudioManager.getInstance().playSfx(GameSound.RING);
+            }
+            case SHIELD -> {
+                player.giveShield();
+                AudioManager.getInstance().playSfx(Sonic2Constants.SFX_SHIELD);
+            }
+            case SHOES -> {
+                player.giveSpeedShoes();
+                AudioManager.getInstance().playMusic(Sonic2Constants.CMD_SPEED_UP);
+            }
+            case INVINCIBILITY -> {
+                player.giveInvincibility();
+                AudioManager.getInstance().playMusic(Sonic2Constants.MUS_INVINCIBILITY);
+            }
+            case SONIC, TAILS -> {
+                AudioManager.getInstance().playMusic(Sonic2Constants.MUS_EXTRA_LIFE);
+                // TODO: Increment lives
+            }
+            default -> {
                 // TODO: implement remaining monitor effects.
             }
         }

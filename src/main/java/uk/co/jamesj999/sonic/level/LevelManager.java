@@ -70,6 +70,11 @@ public class LevelManager {
     private static LevelManager levelManager;
     private Level level;
     private Game game;
+
+    public Game getGame() {
+        return game;
+    }
+
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
@@ -154,6 +159,7 @@ public class LevelManager {
             lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
             initObjectArt();
             initPlayerSpriteArt();
+            resetPlayerState();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -225,6 +231,13 @@ public class LevelManager {
             initSpindashDust(playable);
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load player sprite art.", e);
+        }
+    }
+
+    private void resetPlayerState() {
+        Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+        if (player instanceof AbstractPlayableSprite playable) {
+            playable.resetState();
         }
     }
 
@@ -429,12 +442,12 @@ public class LevelManager {
         // Draw Foreground (Layer 0) high-priority pass
         drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
 
-        if (objectManager != null) {
-            objectManager.drawHighPriority();
-        }
-
         if (spriteRenderManager != null) {
             spriteRenderManager.drawHighPriority();
+        }
+
+        if (objectManager != null) {
+            objectManager.drawHighPriority();
         }
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);

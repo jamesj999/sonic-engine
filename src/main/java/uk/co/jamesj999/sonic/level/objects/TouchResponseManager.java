@@ -167,7 +167,7 @@ public class TouchResponseManager {
         int sourceX = instance != null ? instance.getX() : player.getCentreX();
         boolean spikeHit = instance != null && instance.getSpawn().objectId() == 0x36;
         boolean hadRings = player.getRingCount() > 0;
-        if (hadRings) {
+        if (hadRings && !player.hasShield()) {
             LevelManager.getInstance().spawnLostRings(player, frameCounter);
         }
         player.applyHurtOrDeath(sourceX, spikeHit, hadRings);

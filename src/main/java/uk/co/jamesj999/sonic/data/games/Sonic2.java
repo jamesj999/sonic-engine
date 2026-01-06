@@ -37,6 +37,11 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
     }
 
     @Override
+    public Rom getRom() {
+        return rom;
+    }
+
+    @Override
     public boolean isCompatible() {
         try {
             String name = rom.readDomesticName();
@@ -63,8 +68,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
                 "Oil Ocean Zone - Act 1", "Oil Ocean Zone - Act 2",
                 "Metropolis Zone - Act 1", "Metropolis Zone - Act 2", "Metropolis Zone - Act 3",
                 "Sky Chase Zone - Act 1", "Wing Fortress Zone - Act 1",
-                "Death Egg Zone - Act 1"
-        );
+                "Death Egg Zone - Act 1");
     }
 
     @Override
@@ -165,7 +169,8 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr, chunksAddr,
+        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr,
+                chunksAddr,
                 blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr,
                 solidTileAngleAddr, objectSpawns, ringSpawns, ringSpriteSheet, levelBoundariesAddr);
     }
@@ -177,7 +182,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
             int actIdx = rom.readByte(LEVEL_SELECT_ADDR + levelIdx * 2 + 1) & 0xFF;
 
             if (zoneIdx > 16) {
-                return new int[]{0, 0};
+                return new int[] { 0, 0 };
             }
 
             int offset = rom.read16BitAddr(BG_SCROLL_TABLE_ADDR + zoneIdx * 2);
@@ -265,9 +270,9 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
                     break;
             }
 
-            return new int[]{ ee0c, ee08 };
+            return new int[] { ee0c, ee08 };
         } catch (IOException e) {
-            return new int[]{0, 0};
+            return new int[] { 0, 0 };
         }
     }
 
@@ -384,7 +389,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         int countMinus1 = rom.read16BitAddr(entryAddr + 6);
         int size = (countMinus1 + 1) * 4;
 
-        return new int[]{address, size};
+        return new int[] { address, size };
     }
 
     private int getBlocksAddr(ZoneAct zoneAct) throws IOException {
@@ -400,7 +405,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
     }
 
     /*
-        FIXME: Level Layout, not 'tiles'
+     * FIXME: Level Layout, not 'tiles'
      */
     private int getTilesAddr(ZoneAct zoneAct) throws IOException {
         // The address at LEVEL_LAYOUT_DIR_ADDR_LOC points to another pointer table.
@@ -411,7 +416,8 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         // The table is structured with 4 bytes per zone, and 2 bytes per act.
         int levelOffsetAddr = levelLayoutDirAddr + (zoneAct.zone() * 4) + (zoneAct.act() * 2);
 
-        // The value at this address is a 16-bit offset relative to the start of the table.
+        // The value at this address is a 16-bit offset relative to the start of the
+        // table.
         int levelOffset = rom.read16BitAddr(levelOffsetAddr);
 
         // The final address is the base address of the table plus the offset.

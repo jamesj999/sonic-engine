@@ -34,9 +34,11 @@ public abstract class Game {
      * This mimics the game's background initialization/deformation routines.
      *
      * @param levelIdx The level index.
-     * @param cameraX The current camera X position.
-     * @param cameraY The current camera Y position.
+     * @param cameraX  The current camera X position.
+     * @param cameraY  The current camera Y position.
      * @return An array containing [bgScrollX, bgScrollY].
      */
+    public abstract Rom getRom();
+
     public abstract int[] getBackgroundScroll(int levelIdx, int cameraX, int cameraY);
 }

@@ -74,6 +74,14 @@ public class Sonic2Constants {
     public static final int SFX_DROWN = 0xB2;
     public static final int SFX_SPRING = 0xCC;
     public static final int SFX_ROLLING = 0xBE;
+    public static final int SFX_SHIELD = 0xAF;
+    public static final int SFX_EXPLOSION = 0xC1;
+    public static final int ART_NEM_SHIELD_ADDR = 0x71D8E;
+
+    public static final int MUS_INVINCIBILITY = 0x97;
+    public static final int MUS_EXTRA_LIFE = 0x98;
+    public static final int CMD_SPEED_UP = 0xFB;
+    public static final int CMD_SLOW_DOWN = 0xFC;
 
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)

@@ -35,7 +35,7 @@ public class SpikeObjectInstance extends BoxObjectInstance implements SolidObjec
             return;
         }
         boolean hadRings = player.getRingCount() > 0;
-        if (hadRings) {
+        if (hadRings && !player.hasShield()) {
             LevelManager.getInstance().spawnLostRings(player, frameCounter);
         }
         player.applyHurtOrDeath(spawn.x(), true, hadRings);

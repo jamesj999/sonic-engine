@@ -2,6 +2,9 @@ package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
+import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.objects.ShieldObjectInstance;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
@@ -142,6 +145,73 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private boolean renderVFlip = false;
         private boolean highPriority = false;
         private SpindashDustManager spindashDustManager;
+
+        protected boolean shield = false;
+        private ShieldObjectInstance shieldObject;
+        protected boolean speedShoes = false;
+        protected int speedShoesFrames = 0;
+
+        public void resetState() {
+                this.shield = false;
+                if (this.shieldObject != null) {
+                        this.shieldObject.destroy();
+                        this.shieldObject = null;
+                }
+                this.speedShoes = false;
+                this.speedShoesFrames = 0;
+                this.invincibleFrames = 0;
+                this.invulnerableFrames = 0;
+                this.ringCount = 0;
+                this.dead = false;
+                this.hurt = false;
+                this.deathCountdown = 0;
+                this.air = false;
+                this.springing = false;
+                this.springingFrames = 0;
+                this.rolling = false;
+                this.spindash = false;
+                this.pushing = false;
+                this.crouching = false;
+                defineSpeeds(); // Reset speeds to default
+        }
+
+        public void giveShield() {
+                System.out.println("DEBUG: giveShield() called. Current shield state: " + shield);
+                if (hasShield()) {
+                        System.out.println("DEBUG: Player already has shield. Returning.");
+                        return;
+                }
+                this.shield = true;
+                System.out.println("DEBUG: Shield flag set to true.");
+                try {
+                        this.shieldObject = new ShieldObjectInstance(this);
+                        System.out.println("DEBUG: ShieldObjectInstance created successfully: " + shieldObject);
+                        LevelManager.getInstance().getObjectManager().addDynamicObject(shieldObject);
+                        System.out.println("DEBUG: ShieldObjectInstance added to ObjectManager.");
+                } catch (Exception e) {
+                        System.out.println("DEBUG: Failed to create/add ShieldObjectInstance: " + e.getMessage());
+                        e.printStackTrace();
+                        throw e;
+                }
+        }
+
+        public void giveSpeedShoes() {
+                this.speedShoes = true;
+                this.speedShoesFrames = 1200; // 20 seconds @ 60fps
+                defineSpeeds(); // Recalculate speeds
+        }
+
+        public void giveInvincibility() {
+                setInvincibleFrames(1200); // 20 seconds @ 60fps
+        }
+
+        public boolean hasShield() {
+                return shield;
+        }
+
+        public boolean hasSpeedShoes() {
+                return speedShoes;
+        }
 
         public int getRingCount() {
                 return ringCount;
@@ -408,6 +478,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                                 springing = false;
                         }
                 }
+                if (speedShoesFrames > 0) {
+                        speedShoesFrames--;
+                        if (speedShoesFrames == 0) {
+                                speedShoes = false;
+                                defineSpeeds();
+                                AudioManager.getInstance().playMusic(
+                                                uk.co.jamesj999.sonic.data.games.Sonic2Constants.CMD_SLOW_DOWN);
+                        }
+                }
         }
 
         public boolean applyHurt(int sourceX) {
@@ -423,6 +502,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (getInvulnerable()) {
                         return false;
                 }
+
+                if (shield) {
+                        System.out.println("DEBUG: applyHurt called. removing shield.");
+                        shield = false;
+                        if (shieldObject != null) {
+                                shieldObject.destroy();
+                                shieldObject = null;
+                        }
+                        // Shield loss sound overrides generic hurt sound if desired, but often it's
+                        // just HURT.
+                        // However, we MUST prevent death logic if we had no rings.
+                        // Handled in applyHurtOrDeath.
+                } else {
+                        System.out.println("DEBUG: applyHurt called. No shield.");
+                }
+
                 hurt = true; // Set hurt state - invulnerability is applied on landing (ROM behavior)
                 setSpringing(0);
                 setSpindash(false);
@@ -446,7 +541,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (getInvulnerable()) {
                         return false;
                 }
-                if (!hadRings) {
+                if (!hadRings && !shield) {
                         return applyDeath(cause);
                 }
                 return applyHurt(sourceX, cause);
