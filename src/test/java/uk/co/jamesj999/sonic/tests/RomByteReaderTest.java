@@ -1,3 +1,5 @@
+package uk.co.jamesj999.sonic.tests;
+
 import org.junit.Test;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 
@@ -8,7 +10,7 @@ public class RomByteReaderTest {
 
     @Test
     public void readsUnsignedBigEndianWords() {
-        byte[] data = {0x01, (byte) 0xFF, 0x10, 0x20, 0x30};
+        byte[] data = { 0x01, (byte) 0xFF, 0x10, 0x20, 0x30 };
         RomByteReader reader = new RomByteReader(data);
 
         assertEquals(0x01, reader.readU8(0));
@@ -20,9 +22,9 @@ public class RomByteReaderTest {
 
     @Test
     public void slicesDefensively() {
-        byte[] data = {0x00, 0x11, 0x22, 0x33};
+        byte[] data = { 0x00, 0x11, 0x22, 0x33 };
         RomByteReader reader = new RomByteReader(data);
-        assertArrayEquals(new byte[]{0x11, 0x22}, reader.slice(1, 2));
+        assertArrayEquals(new byte[] { 0x11, 0x22 }, reader.slice(1, 2));
     }
 
     @Test

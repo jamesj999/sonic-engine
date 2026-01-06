@@ -1,3 +1,5 @@
+package uk.co.jamesj999.sonic.tests;
+
 import org.junit.Assume;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.data.RomByteReader;

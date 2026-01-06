@@ -854,14 +854,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 byte yRad = (byte) yRadius;
                 byte push = (byte) (xRadius + 1);
 
-                groundSensors[0].setOffset((byte) -xRad, yRad);
-                groundSensors[1].setOffset(xRad, yRad);
+                if (groundSensors != null && groundSensors.length >= 2) {
+                        groundSensors[0].setOffset((byte) -xRad, yRad);
+                        groundSensors[1].setOffset(xRad, yRad);
+                }
 
-                ceilingSensors[0].setOffset((byte) -xRad, (byte) -yRad);
-                ceilingSensors[1].setOffset(xRad, (byte) -yRad);
+                if (ceilingSensors != null && ceilingSensors.length >= 2) {
+                        ceilingSensors[0].setOffset((byte) -xRad, (byte) -yRad);
+                        ceilingSensors[1].setOffset(xRad, (byte) -yRad);
+                }
 
-                pushSensors[0].setOffset((byte) -push, (byte) 0);
-                pushSensors[1].setOffset(push, (byte) 0);
+                if (pushSensors != null && pushSensors.length >= 2) {
+                        pushSensors[0].setOffset((byte) -push, (byte) 0);
+                        pushSensors[1].setOffset(push, (byte) 0);
+                }
         }
 
         public SpriteMovementManager getMovementManager() {

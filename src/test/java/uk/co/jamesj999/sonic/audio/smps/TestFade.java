@@ -12,15 +12,32 @@ import static org.junit.Assert.assertTrue;
 public class TestFade {
 
     private static class MockSynthesizer implements Synthesizer {
-        public void setDacData(DacData data) {}
-        public void playDac(Object source, int note) {}
-        public void stopDac(Object source) {}
-        public void writeFm(Object source, int port, int reg, int val) {}
-        public void writePsg(Object source, int val) {}
-        public void setInstrument(Object source, int channelId, byte[] voice) {}
-        public void setFmMute(int channel, boolean mute) {}
-        public void setPsgMute(int channel, boolean mute) {}
-        public void setDacInterpolate(boolean interpolate) {}
+        public void setDacData(DacData data) {
+        }
+
+        public void playDac(Object source, int note) {
+        }
+
+        public void stopDac(Object source) {
+        }
+
+        public void writeFm(Object source, int port, int reg, int val) {
+        }
+
+        public void writePsg(Object source, int val) {
+        }
+
+        public void setInstrument(Object source, int channelId, byte[] voice) {
+        }
+
+        public void setFmMute(int channel, boolean mute) {
+        }
+
+        public void setPsgMute(int channel, boolean mute) {
+        }
+
+        public void setDacInterpolate(boolean interpolate) {
+        }
     }
 
     @Test
@@ -31,7 +48,7 @@ public class TestFade {
         byte[] fullData = new byte[200];
         fullData[2] = 2; // 2 Channels (DAC + FM1) to hit FM1 at index 1
         fullData[4] = 1; // Div
-        fullData[5] = (byte)0xFF; // Tempo (Fast, so it ticks every frame)
+        fullData[5] = (byte) 0xFF; // Tempo (Fast, so it ticks every frame)
         // FM1 Ptr at 0x0A. 0x0A + 4 = 0x0E (Header end).
         // Track starts at 0x10.
         fullData[0x0A] = 0x10;
@@ -39,13 +56,17 @@ public class TestFade {
 
         // Track data at 0x10
         int pos = 0x10;
-        fullData[pos++] = (byte)0x81; fullData[pos++] = 0x01; // Note 1 tick
-        fullData[pos++] = (byte)0xE4; // Fade Out
+        fullData[pos++] = (byte) 0x81;
+        fullData[pos++] = 0x01; // Note 1 tick
+        fullData[pos++] = (byte) 0xFD; // Fade Out
+        fullData[pos++] = 0x28; // 40 steps
+        fullData[pos++] = 0x03; // 3 delay
         // Default fade: 40 steps, delay 3. Total 120 frames (approx 2 sec).
-        for(int i=0; i<60; i++) {
-            fullData[pos++] = (byte)0x81; fullData[pos++] = 0x03; // Note 3 ticks
+        for (int i = 0; i < 60; i++) {
+            fullData[pos++] = (byte) 0x81;
+            fullData[pos++] = 0x03; // Note 3 ticks
         }
-        fullData[pos++] = (byte)0xF2;
+        fullData[pos++] = (byte) 0xF2;
 
         Sonic2SmpsData sData = new Sonic2SmpsData(fullData);
         // Use MockSynthesizer to avoid slow emulation

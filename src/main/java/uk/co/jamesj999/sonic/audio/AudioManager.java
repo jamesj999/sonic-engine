@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.audio;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
 import uk.co.jamesj999.sonic.data.Rom;
 
 import java.util.Map;
@@ -27,6 +28,10 @@ public class AudioManager {
             instance = new AudioManager();
         }
         return instance;
+    }
+
+    public AudioBackend getBackend() {
+        return backend;
     }
 
     public void setBackend(AudioBackend backend) {
@@ -58,6 +63,14 @@ public class AudioManager {
     }
 
     public void playMusic(int musicId) {
+        if (musicId == Sonic2Constants.CMD_SPEED_UP) {
+            backend.setSpeedShoes(true);
+            return;
+        } else if (musicId == Sonic2Constants.CMD_SLOW_DOWN) {
+            backend.setSpeedShoes(false);
+            return;
+        }
+
         if (smpsLoader != null) {
             AbstractSmpsData data = smpsLoader.loadMusic(musicId);
             if (data != null) {
