@@ -111,8 +111,10 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet bridgeSheet = new ObjectSpriteSheet(bridgePatterns, bridgeMappings, 2, 1);
 
         Pattern[] invincibilityStarsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR);
-        List<SpriteMappingFrame> invincibilityStarsMappings = loadMappingFrames(
+        List<SpriteMappingFrame> rawInvincibilityStarsMappings = loadMappingFrames(
                 Sonic2Constants.MAP_UNC_INVINCIBILITY_STARS_ADDR);
+        List<SpriteMappingFrame> invincibilityStarsMappings = normalizeMappings(rawInvincibilityStarsMappings);
+
         ObjectSpriteSheet invincibilityStarsSheet = new ObjectSpriteSheet(invincibilityStarsPatterns,
                 invincibilityStarsMappings, 0, 1);
 
@@ -312,5 +314,36 @@ public class Sonic2ObjectArt {
     private SpriteMappingFrame createSimpleFrame(int x, int y, int wTiles, int hTiles, int tileIndex) {
         SpriteMappingPiece piece = new SpriteMappingPiece(x, y, wTiles, hTiles, tileIndex, false, false, 0);
         return new SpriteMappingFrame(List.of(piece));
+    }
+
+    private List<SpriteMappingFrame> normalizeMappings(List<SpriteMappingFrame> originalFrames) {
+        int minTileIndex = Integer.MAX_VALUE;
+
+        // Pass 1: Find minimum tile index
+        for (SpriteMappingFrame frame : originalFrames) {
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                minTileIndex = Math.min(minTileIndex, piece.tileIndex());
+            }
+        }
+
+        // Pass 2: Create new frames with shifted indices
+        List<SpriteMappingFrame> newFrames = new ArrayList<>(originalFrames.size());
+        for (SpriteMappingFrame frame : originalFrames) {
+            List<SpriteMappingPiece> newPieces = new ArrayList<>(frame.pieces().size());
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                newPieces.add(new SpriteMappingPiece(
+                        piece.xOffset(),
+                        piece.yOffset(),
+                        piece.widthTiles(),
+                        piece.heightTiles(),
+                        piece.tileIndex() - minTileIndex,
+                        piece.hFlip(),
+                        piece.vFlip(),
+                        piece.paletteIndex()));
+            }
+            newFrames.add(new SpriteMappingFrame(newPieces));
+        }
+
+        return newFrames;
     }
 }

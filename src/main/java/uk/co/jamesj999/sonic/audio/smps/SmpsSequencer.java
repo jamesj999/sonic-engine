@@ -1593,10 +1593,28 @@ public class SmpsSequencer implements AudioStream {
         fadeState.active = true;
         fadeState.fadeOut = false; // Fade IN
 
-        // Initialize volumes to silent for the fade-in
+        // Add steps to existing volumeOffset (attenuate by 'steps'), then fade
+        // decreases it.
         for (Track track : tracks) {
-            track.volumeOffset = steps; // Volume is 0x00-0x7F, higher is quieter.
+            track.volumeOffset += steps;
             refreshVolume(track);
+        }
+    }
+
+    /**
+     * Refresh all FM voice settings after being paused/restored.
+     * This reloads instruments and pan/ams/fms settings to the hardware.
+     */
+    public void refreshAllVoices() {
+        for (Track t : tracks) {
+            if (!t.active)
+                continue;
+            if (t.type == TrackType.FM) {
+                refreshInstrument(t);
+                applyFmPanAmsFms(t);
+            } else if (t.type == TrackType.PSG) {
+                refreshVolume(t);
+            }
         }
     }
 

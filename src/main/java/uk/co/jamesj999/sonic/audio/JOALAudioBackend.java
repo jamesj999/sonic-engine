@@ -290,7 +290,23 @@ public class JOALAudioBackend implements AudioBackend {
     @Override
     public void restoreMusic() {
         if (savedMusicStream != null) {
-            stopStream();
+            // Stop the current (invincibility/extra-life) music stream
+            // but do NOT call stopStream() as that calls smpsDriver.stopAll()
+            // which would clear OUR saved driver's sequencers.
+            al.alSourceStop(musicSource);
+            int[] processed = new int[1];
+            al.alGetSourcei(musicSource, AL.AL_BUFFERS_PROCESSED, processed, 0);
+            while (processed[0] > 0) {
+                int[] buffers = new int[1];
+                al.alSourceUnqueueBuffers(musicSource, 1, buffers, 0);
+                processed[0]--;
+            }
+            // Stop the current (non-saved) smps driver
+            if (smpsDriver != null && smpsDriver != savedSmpsDriver) {
+                smpsDriver.stopAll();
+            }
+
+            // Restore saved state
             currentStream = savedMusicStream;
             currentSmps = savedSmps;
             smpsDriver = savedSmpsDriver;
@@ -300,6 +316,7 @@ public class JOALAudioBackend implements AudioBackend {
             savedSmpsDriver = null;
 
             if (currentSmps != null) {
+                currentSmps.refreshAllVoices();
                 currentSmps.triggerFadeIn(0x28, 2);
             }
 

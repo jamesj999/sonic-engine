@@ -194,6 +194,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         System.out.println("DEBUG: ShieldObjectInstance created successfully: " + shieldObject);
                         LevelManager.getInstance().getObjectManager().addDynamicObject(shieldObject);
                         System.out.println("DEBUG: ShieldObjectInstance added to ObjectManager.");
+                        // If picked up while invincible, hide shield until invincibility ends
+                        if (invincibleFrames > 0) {
+                                shieldObject.setVisible(false);
+                        }
                 } catch (Exception e) {
                         System.out.println("DEBUG: Failed to create/add ShieldObjectInstance: " + e.getMessage());
                         e.printStackTrace();

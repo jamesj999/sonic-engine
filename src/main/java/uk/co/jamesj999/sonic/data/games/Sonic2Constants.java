@@ -83,7 +83,7 @@ public class Sonic2Constants {
     public static final int ART_NEM_BRIDGE_ADDR = 0xF052A;
 
     public static final int ART_NEM_INVINCIBILITY_STARS_ADDR = 0x71F14;
-    public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x19D00;
+    public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x1DCBC;
     public static final int ART_TILE_INVINCIBILITY_STARS = 0x05C0;
 
     public static final int MUS_INVINCIBILITY = 0x99;

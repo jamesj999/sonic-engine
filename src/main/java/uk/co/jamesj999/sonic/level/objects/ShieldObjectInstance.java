@@ -10,10 +10,12 @@ import java.util.List;
 public class ShieldObjectInstance extends AbstractObjectInstance {
     private final AbstractPlayableSprite player;
     private final PatternSpriteRenderer renderer;
-    private static final int ANIMATION_SPEED = 2; // frames per frame
-    private static final int FRAME_COUNT = 6;
+    // Animation sequence from disassembly (Ani_obj38): 5, 0, 5, 1, 5, 2, 5, 3, 5, 4
+    // Alternates between expanded frame (5) and smaller frames (0-4)
+    private static final int[] ANIMATION_SEQUENCE = { 5, 0, 5, 1, 5, 2, 5, 3, 5, 4 };
+    private static final int ANIMATION_SPEED = 1; // frames per step (disassembly uses delay 0)
 
-    private int currentFrame = 0;
+    private int sequenceIndex = 0;
     private boolean destroyed = false;
     private boolean visible = true;
 
@@ -41,11 +43,11 @@ public class ShieldObjectInstance extends AbstractObjectInstance {
         if (destroyed) {
             return;
         }
-        // Simple animation loop
+        // Animation sequence from disassembly - step through the sequence
         if (frameCounter % ANIMATION_SPEED == 0) {
-            currentFrame++;
-            if (currentFrame >= FRAME_COUNT) {
-                currentFrame = 0;
+            sequenceIndex++;
+            if (sequenceIndex >= ANIMATION_SEQUENCE.length) {
+                sequenceIndex = 0;
             }
         }
     }
@@ -56,6 +58,7 @@ public class ShieldObjectInstance extends AbstractObjectInstance {
             return;
         }
 
+        int currentFrame = ANIMATION_SEQUENCE[sequenceIndex];
         renderer.drawFrameIndex(currentFrame, player.getCentreX(), player.getCentreY(), false, false);
     }
 
