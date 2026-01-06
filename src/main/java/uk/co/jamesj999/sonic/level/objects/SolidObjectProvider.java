@@ -8,4 +8,8 @@ public interface SolidObjectProvider {
     default boolean isSolidFor(AbstractPlayableSprite player) {
         return true;
     }
+
+    default boolean isTopSolidOnly() {
+        return false;
+    }
 }

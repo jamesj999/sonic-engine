@@ -18,8 +18,8 @@ public class ObjectRegistry {
     private final Set<Integer> unknownIds = new HashSet<>();
     private boolean loaded;
 
-    private final ObjectFactory defaultFactory = (spawn, registry) ->
-            new PlaceholderObjectInstance(spawn, registry.getPrimaryName(spawn.objectId()));
+    private final ObjectFactory defaultFactory = (spawn, registry) -> new PlaceholderObjectInstance(spawn,
+            registry.getPrimaryName(spawn.objectId()));
 
     private ObjectRegistry() {
     }
@@ -106,18 +106,21 @@ public class ObjectRegistry {
     }
 
     private void registerDefaultFactories() {
-        registerFactory(ObjectIds.SPRING, (spawn, registry) ->
-                new SpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
-        registerFactory(ObjectIds.SPIKES, (spawn, registry) ->
-                new SpikeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
-        registerFactory(ObjectIds.MONITOR, (spawn, registry) ->
-                new MonitorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
-        registerFactory(ObjectIds.CHECKPOINT, (spawn, registry) ->
-                new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(ObjectIds.SPRING,
+                (spawn, registry) -> new SpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(ObjectIds.SPIKES,
+                (spawn, registry) -> new SpikeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(ObjectIds.MONITOR,
+                (spawn, registry) -> new MonitorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(ObjectIds.CHECKPOINT,
+                (spawn, registry) -> new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
-        ObjectFactory platformFactory = (spawn, registry) ->
-                new PlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId()));
-        registerFactory(ObjectIds.BRIDGE, platformFactory);
+        ObjectFactory platformFactory = (spawn, registry) -> new PlatformObjectInstance(spawn,
+                registry.getPrimaryName(spawn.objectId()));
+        registerFactory(ObjectIds.BRIDGE,
+                (spawn, registry) -> new BridgeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(ObjectIds.BRIDGE_STAKE,
+                (spawn, registry) -> new BridgeStakeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(ObjectIds.SWINGING_PLATFORM, platformFactory);
         registerFactory(ObjectIds.GENERIC_PLATFORM_A, platformFactory);
         registerFactory(ObjectIds.GENERIC_PLATFORM_B, platformFactory);

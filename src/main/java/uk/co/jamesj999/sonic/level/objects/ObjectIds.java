@@ -9,6 +9,7 @@ public final class ObjectIds {
     public static final int SWINGING_PLATFORM = 0x15;
     public static final int GENERIC_PLATFORM_A = 0x18;
     public static final int GENERIC_PLATFORM_B = 0x19;
+    public static final int BRIDGE_STAKE = 0x1C;
 
     private ObjectIds() {
     }

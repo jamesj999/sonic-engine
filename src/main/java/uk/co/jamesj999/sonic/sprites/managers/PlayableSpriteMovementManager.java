@@ -389,7 +389,15 @@ public class PlayableSpriteMovementManager extends
 			}
 		} else {
 			// AnglePos-style grounded glue: use fixed 0x0E cutoff.
+			// BUT: if player is standing on a solid object (bridge, platform),
+			// don't set to air based on terrain alone.
 			if (lowestResult == null || lowestResult.distance() >= 14) {
+				// Check if player is standing on a solid object before setting to air
+				var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
+				if (solidManager != null && solidManager.isRidingObject()) {
+					// Player is on an object, don't detach based on terrain
+					return;
+				}
 				sprite.setAir(true);
 				return;
 			}

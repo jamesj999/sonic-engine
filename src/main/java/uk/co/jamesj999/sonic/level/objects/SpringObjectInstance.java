@@ -290,10 +290,13 @@ public class SpringObjectInstance extends BoxObjectInstance
     public SolidObjectParams getSolidParams() {
         int type = getType();
         if (type == TYPE_HORIZONTAL) {
-            return new SolidObjectParams(19, 14, 15);
+            // Reduce height to 8 (16px total) to avoid blocking player when walking over it
+            return new SolidObjectParams(19, 8, 8);
         }
         // Up, Down, Diagonal use standard vertical params
-        return new SolidObjectParams(27, 8, 16);
+        // Fix height: Air=8, Ground=8 (matches 16px visual height, prevents
+        // oscillation)
+        return new SolidObjectParams(27, 8, 8);
     }
 
     @Override

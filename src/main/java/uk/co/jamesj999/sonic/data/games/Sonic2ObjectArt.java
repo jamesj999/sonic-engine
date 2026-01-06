@@ -106,6 +106,10 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> shieldMappings = createShieldMappings();
         ObjectSpriteSheet shieldSheet = new ObjectSpriteSheet(shieldPatterns, shieldMappings, 0, 1);
 
+        Pattern[] bridgePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_BRIDGE_ADDR);
+        List<SpriteMappingFrame> bridgeMappings = createBridgeMappings();
+        ObjectSpriteSheet bridgeSheet = new ObjectSpriteSheet(bridgePatterns, bridgeMappings, 2, 1);
+
         SpriteAnimationSet monitorAnimations = loadAnimationSet(
                 Sonic2Constants.ANI_OBJ26_ADDR,
                 Sonic2Constants.ANI_OBJ26_SCRIPT_COUNT);
@@ -126,6 +130,7 @@ public class Sonic2ObjectArt {
                 springDiagonalRedSheet,
                 explosionSheet,
                 shieldSheet,
+                bridgeSheet,
                 monitorAnimations,
                 springAnimations);
         return cached;
@@ -270,6 +275,20 @@ public class Sonic2ObjectArt {
 
         frames.add(new SpriteMappingFrame(pieces5));
 
+        return frames;
+    }
+
+    /**
+     * Creates bridge mappings based on obj11_b.asm:
+     * Frame 0: 2x2 tiles at tile index 4 (log segment 1)
+     * Frame 1: 2x2 tiles at tile index 0 (log segment 2 / stake)
+     */
+    private List<SpriteMappingFrame> createBridgeMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: -8, -8, 2x2, tile 4
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 4));
+        // Frame 1: -8, -8, 2x2, tile 0
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
         return frames;
     }
 

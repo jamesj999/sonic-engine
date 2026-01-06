@@ -28,6 +28,7 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet springDiagonalRedSheet;
     private final ObjectSpriteSheet explosionSheet;
     private final ObjectSpriteSheet shieldSheet;
+    private final ObjectSpriteSheet bridgeSheet;
     private final SpriteAnimationSet monitorAnimations;
     private final SpriteAnimationSet springAnimations;
 
@@ -42,6 +43,7 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer springDiagonalRedRenderer;
     private final PatternSpriteRenderer explosionRenderer;
     private final PatternSpriteRenderer shieldRenderer;
+    private final PatternSpriteRenderer bridgeRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
     private final List<PatternSpriteRenderer> rendererOrder = new ArrayList<>();
@@ -58,6 +60,7 @@ public class ObjectRenderManager {
         this.springDiagonalRedSheet = artData.springDiagonalRedSheet();
         this.explosionSheet = artData.explosionSheet();
         this.shieldSheet = artData.shieldSheet();
+        this.bridgeSheet = artData.bridgeSheet();
         this.monitorAnimations = artData.monitorAnimations();
         this.springAnimations = artData.springAnimations();
 
@@ -84,6 +87,8 @@ public class ObjectRenderManager {
         register(explosionSheet, explosionRenderer);
         this.shieldRenderer = new PatternSpriteRenderer(shieldSheet);
         register(shieldSheet, shieldRenderer);
+        this.bridgeRenderer = new PatternSpriteRenderer(bridgeSheet);
+        register(bridgeSheet, bridgeRenderer);
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -154,5 +159,13 @@ public class ObjectRenderManager {
 
     public PatternSpriteRenderer getShieldRenderer() {
         return shieldRenderer;
+    }
+
+    public PatternSpriteRenderer getBridgeRenderer() {
+        return bridgeRenderer;
+    }
+
+    public ObjectSpriteSheet getBridgeSheet() {
+        return bridgeSheet;
     }
 }

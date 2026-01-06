@@ -79,6 +79,8 @@ public class Sonic2Constants {
     public static final int SFX_SHIELD = 0xAF;
     public static final int SFX_EXPLOSION = 0xC1;
     public static final int ART_NEM_SHIELD_ADDR = 0x71D8E;
+    // Bridge art (EHZ wooden bridge - 8 blocks)
+    public static final int ART_NEM_BRIDGE_ADDR = 0xF052A;
 
     public static final int MUS_INVINCIBILITY = 0x97;
     public static final int MUS_EXTRA_LIFE = 0x98;

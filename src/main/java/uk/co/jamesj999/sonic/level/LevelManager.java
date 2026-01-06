@@ -23,7 +23,7 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
-import uk.co.jamesj999.sonic.level.ParallaxManager;
+// import uk.co.jamesj999.sonic.level.ParallaxManager; -> Removed unused
 import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
@@ -1324,6 +1324,10 @@ public class LevelManager {
         currentZone = zone;
         currentAct = 0;
         loadCurrentLevel();
+    }
+
+    public SolidObjectManager getSolidObjectManager() {
+        return solidObjectManager;
     }
 
     /**
