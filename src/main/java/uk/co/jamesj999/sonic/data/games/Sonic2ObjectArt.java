@@ -36,8 +36,44 @@ public class Sonic2ObjectArt {
             return cached;
         }
 
-        Pattern[] monitorPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR);
+        // Load Monitor Art (base art)
+        Pattern[] monitorBasePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR);
+        // Load Tails Life Art (used for Tails Monitor icon, requests tile 340)
+        Pattern[] tailsLifePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_TAILS_LIFE_ADDR);
+
         List<SpriteMappingFrame> monitorMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_MONITOR_ADDR);
+
+        // Calculate max requested tile index
+        int maxTileIndex = 0;
+        for (SpriteMappingFrame frame : monitorMappings) {
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                maxTileIndex = Math.max(maxTileIndex, piece.tileIndex());
+            }
+        }
+
+        // Extend monitor patterns to cover the max requested index
+        int requiredSize = maxTileIndex + 1;
+        // Ensure we have enough space for Tails Life Art starting at 340 (0x154 * 32
+        // bytes = 10880 offset)
+        int lifeArtOffset = 340;
+        requiredSize = Math.max(requiredSize, lifeArtOffset + tailsLifePatterns.length);
+
+        Pattern[] monitorPatterns = new Pattern[requiredSize];
+        // Copy base patterns
+        System.arraycopy(monitorBasePatterns, 0, monitorPatterns, 0, monitorBasePatterns.length);
+        // Copy Tails Life patterns at offset 340
+        if (lifeArtOffset < monitorPatterns.length) {
+            System.arraycopy(tailsLifePatterns, 0, monitorPatterns, lifeArtOffset,
+                    Math.min(tailsLifePatterns.length, monitorPatterns.length - lifeArtOffset));
+        }
+
+        // Fill gaps with empty patterns to prevent NPEs
+        for (int i = 0; i < monitorPatterns.length; i++) {
+            if (monitorPatterns[i] == null) {
+                monitorPatterns[i] = new Pattern();
+            }
+        }
+
         ObjectSpriteSheet monitorSheet = new ObjectSpriteSheet(monitorPatterns, monitorMappings, 0, 1);
 
         Pattern[] spikePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_ADDR);

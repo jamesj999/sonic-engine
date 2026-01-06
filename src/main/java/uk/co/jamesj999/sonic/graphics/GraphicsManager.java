@@ -11,7 +11,6 @@ import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.util.GLBuffers;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,14 +22,14 @@ public class GraphicsManager {
 	List<GLCommandable> commands = new ArrayList<>();
 
 	private final Map<String, Integer> patternTextureMap = new HashMap<>(); // Map for pattern textures
-	private final Map<String, Integer> paletteTextureMap = new HashMap<>();  // Map for palette textures
+	private final Map<String, Integer> paletteTextureMap = new HashMap<>(); // Map for palette textures
 	private Integer combinedPaletteTextureId;
 
 	private final Camera camera = Camera.getInstance();
 	private GL2 graphics;
-        private ShaderProgram shaderProgram;
-        private ShaderProgram debugShaderProgram;
-        private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
+	private ShaderProgram shaderProgram;
+	private ShaderProgram debugShaderProgram;
+	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
 
 	public void registerCommand(GLCommandable command) {
 		commands.add(command);
@@ -39,11 +38,11 @@ public class GraphicsManager {
 	/**
 	 * Initialize the GraphicsManager with shader loading.
 	 */
-public void init(GL2 gl, String pixelShaderPath) throws IOException {
-        this.graphics = gl;
-        this.shaderProgram = new ShaderProgram(gl, pixelShaderPath);  // Load shaders
-        this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
-}
+	public void init(GL2 gl, String pixelShaderPath) throws IOException {
+		this.graphics = gl;
+		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load shaders
+		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
+	}
 
 	/**
 	 * Set the current GL2 context (in case it needs resetting).
@@ -87,7 +86,8 @@ public void init(GL2 gl, String pixelShaderPath) throws IOException {
 
 		// Upload the pattern buffer to the GPU as a 2D texture
 		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE,
+				patternBuffer);
 
 		// Set texture parameters (wrapping and filtering)
 		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
@@ -121,13 +121,13 @@ public void init(GL2 gl, String pixelShaderPath) throws IOException {
 		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, 0, 8, 8, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
 	}
 
-
 	public void cachePaletteTexture(Palette palette, int paletteId) {
 		if (combinedPaletteTextureId == null) {
 			combinedPaletteTextureId = glGenTexture();
 			ByteBuffer emptyBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4 * 4);
 			graphics.glBindTexture(GL2.GL_TEXTURE_2D, combinedPaletteTextureId);
-			graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 4, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, emptyBuffer);
+			graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 4, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE,
+					emptyBuffer);
 			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
 			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
 			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
@@ -149,26 +149,29 @@ public void init(GL2 gl, String pixelShaderPath) throws IOException {
 		paletteBuffer.flip();
 
 		graphics.glBindTexture(GL2.GL_TEXTURE_2D, combinedPaletteTextureId);
-		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, paletteId, 16, 1, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, paletteBuffer);
+		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, paletteId, 16, 1, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE,
+				paletteBuffer);
 
 		paletteTextureMap.put("palette_" + paletteId, combinedPaletteTextureId);
 	}
 
-
 	/**
-	 * Render a pre-cached pattern at the given coordinates using the specified palette.
+	 * Render a pre-cached pattern at the given coordinates using the specified
+	 * palette.
 	 */
 	public void renderPattern(PatternDesc desc, int x, int y) {
 		Integer patternTextureId = patternTextureMap.get("pattern_" + desc.getPatternIndex());
 		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
 
 		if (patternTextureId == null || paletteTextureId == null) {
-			System.err.println("Pattern or Palette not cached.");
+			System.err.println("Pattern or Palette not cached. Pattern: " + desc.getPatternIndex() + ", Palette: "
+					+ desc.getPaletteIndex());
 			return;
 		}
 
 		// Register a PatternRenderCommand instead of directly rendering
 		PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
+
 		registerCommand(command);
 	}
 
@@ -178,19 +181,19 @@ public void init(GL2 gl, String pixelShaderPath) throws IOException {
 	public void cleanup() {
 		// Delete pattern textures
 		for (int textureId : patternTextureMap.values()) {
-			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
+			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
 		}
 		// Delete palette textures
 		for (int textureId : new java.util.HashSet<>(paletteTextureMap.values())) {
-			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
+			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
 		}
-        // Cleanup shader program
-        if (shaderProgram != null) {
-                shaderProgram.cleanup(graphics);
-        }
-        if (debugShaderProgram != null) {
-                debugShaderProgram.cleanup(graphics);
-        }
+		// Cleanup shader program
+		if (shaderProgram != null) {
+			shaderProgram.cleanup(graphics);
+		}
+		if (debugShaderProgram != null) {
+			debugShaderProgram.cleanup(graphics);
+		}
 	}
 
 	/**
@@ -212,36 +215,36 @@ public void init(GL2 gl, String pixelShaderPath) throws IOException {
 		return graphicsManager;
 	}
 
-public ShaderProgram getShaderProgram() {
-        return shaderProgram;
-}
+	public ShaderProgram getShaderProgram() {
+		return shaderProgram;
+	}
 
-public ShaderProgram getDebugShaderProgram() {
-        return debugShaderProgram;
-}
+	public ShaderProgram getDebugShaderProgram() {
+		return debugShaderProgram;
+	}
 
-        public GL2 getGraphics() {
-                return graphics;
-        }
+	public GL2 getGraphics() {
+		return graphics;
+	}
 
-        public void enqueueDebugLineState() {
-                ShaderProgram debugShader = getDebugShaderProgram();
-                int programId = debugShader != null ? debugShader.getProgramId() : 0;
-                registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
-                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
-                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_LIGHTING));
-                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_COLOR_MATERIAL));
-                registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
-        }
+	public void enqueueDebugLineState() {
+		ShaderProgram debugShader = getDebugShaderProgram();
+		int programId = debugShader != null ? debugShader.getProgramId() : 0;
+		registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_LIGHTING));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_COLOR_MATERIAL));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
+	}
 
-        public void enqueueDefaultShaderState() {
-                registerCommand(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
-                ShaderProgram shader = getShaderProgram();
-                if (shader != null) {
-                        int programId = shader.getProgramId();
-                        if (programId != 0) {
-                                registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
-                        }
-                }
-        }
+	public void enqueueDefaultShaderState() {
+		registerCommand(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+		ShaderProgram shader = getShaderProgram();
+		if (shader != null) {
+			int programId = shader.getProgramId();
+			if (programId != 0) {
+				registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
+			}
+		}
+	}
 }

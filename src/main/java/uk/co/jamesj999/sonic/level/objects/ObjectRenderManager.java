@@ -96,8 +96,9 @@ public class ObjectRenderManager {
         for (int i = 0; i < rendererOrder.size(); i++) {
             ObjectSpriteSheet sheet = sheetOrder.get(i);
             PatternSpriteRenderer renderer = rendererOrder.get(i);
+            int count = sheet.getPatterns().length;
             renderer.ensurePatternsCached(graphicsManager, next);
-            next += sheet.getPatterns().length;
+            next += count;
         }
     }
 

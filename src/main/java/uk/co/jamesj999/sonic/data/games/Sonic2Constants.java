@@ -40,6 +40,8 @@ public class Sonic2Constants {
     public static final int ART_TILE_TAILS_DUST = 0x048C;
     // Object art (Nemesis) + mappings
     public static final int ART_NEM_MONITOR_ADDR = 0x79550;
+    public static final int ART_NEM_SONIC_LIFE_ADDR = 0x79346;
+    public static final int ART_NEM_TAILS_LIFE_ADDR = 0x7C20C;
     public static final int ART_NEM_EXPLOSION_ADDR = 0x7B592;
     public static final int ART_TILE_EXPLOSION = 0x05A4;
     public static final int ART_NEM_SPIKES_ADDR = 0x7995C;
