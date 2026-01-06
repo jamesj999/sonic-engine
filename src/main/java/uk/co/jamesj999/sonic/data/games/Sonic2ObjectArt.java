@@ -54,18 +54,24 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet springVerticalSheet = new ObjectSpriteSheet(springVerticalPatterns, springMappings, 0, 1);
         ObjectSpriteSheet springHorizontalSheet = new ObjectSpriteSheet(springHorizontalPatterns, springMappings, 0, 1);
         ObjectSpriteSheet springDiagonalSheet = new ObjectSpriteSheet(springDiagonalPatterns, springMappings, 0, 1);
-        ObjectSpriteSheet springVerticalRedSheet = new ObjectSpriteSheet(springVerticalPatterns, springMappingsRed, 1, 1);
-        ObjectSpriteSheet springHorizontalRedSheet = new ObjectSpriteSheet(springHorizontalPatterns, springMappingsRed, 1, 1);
-        ObjectSpriteSheet springDiagonalRedSheet = new ObjectSpriteSheet(springDiagonalPatterns, springMappingsRed, 1, 1);
+        ObjectSpriteSheet springVerticalRedSheet = new ObjectSpriteSheet(springVerticalPatterns, springMappingsRed, 1,
+                1);
+        ObjectSpriteSheet springHorizontalRedSheet = new ObjectSpriteSheet(springHorizontalPatterns, springMappingsRed,
+                1, 1);
+
+        ObjectSpriteSheet springDiagonalRedSheet = new ObjectSpriteSheet(springDiagonalPatterns, springMappingsRed, 1,
+                1);
+
+        Pattern[] explosionPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_EXPLOSION_ADDR);
+        List<SpriteMappingFrame> explosionMappings = createExplosionMappings();
+        ObjectSpriteSheet explosionSheet = new ObjectSpriteSheet(explosionPatterns, explosionMappings, 0, 1);
 
         SpriteAnimationSet monitorAnimations = loadAnimationSet(
                 Sonic2Constants.ANI_OBJ26_ADDR,
-                Sonic2Constants.ANI_OBJ26_SCRIPT_COUNT
-        );
+                Sonic2Constants.ANI_OBJ26_SCRIPT_COUNT);
         SpriteAnimationSet springAnimations = loadAnimationSet(
                 Sonic2Constants.ANI_OBJ41_ADDR,
-                Sonic2Constants.ANI_OBJ41_SCRIPT_COUNT
-        );
+                Sonic2Constants.ANI_OBJ41_SCRIPT_COUNT);
 
         cached = new ObjectArtData(
                 monitorSheet,
@@ -76,10 +82,11 @@ public class Sonic2ObjectArt {
                 springDiagonalSheet,
                 springVerticalRedSheet,
                 springHorizontalRedSheet,
+
                 springDiagonalRedSheet,
+                explosionSheet,
                 monitorAnimations,
-                springAnimations
-        );
+                springAnimations);
         return cached;
     }
 
@@ -179,5 +186,25 @@ public class Sonic2ObjectArt {
             set.addScript(i, new SpriteAnimationScript(delay, frames, endAction, endParam));
         }
         return set;
+    }
+
+    private List<SpriteMappingFrame> createExplosionMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: -8, -8, 2x2, tile 0 (16x16 pixels)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        // Frame 1: -16, -16, 4x4, tile 4 (32x32 pixels)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 4));
+        // Frame 2: -16, -16, 4x4, tile 20 (0x14)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 20));
+        // Frame 3: -16, -16, 4x4, tile 36 (0x24)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 36));
+        // Frame 4: -16, -16, 4x4, tile 52 (0x34)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 52));
+        return frames;
+    }
+
+    private SpriteMappingFrame createSimpleFrame(int x, int y, int wTiles, int hTiles, int tileIndex) {
+        SpriteMappingPiece piece = new SpriteMappingPiece(x, y, wTiles, hTiles, tileIndex, false, false, 0);
+        return new SpriteMappingFrame(List.of(piece));
     }
 }

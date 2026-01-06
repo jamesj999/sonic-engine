@@ -1,7 +1,7 @@
 package uk.co.jamesj999.sonic.data.games;
 
 public class Sonic2Constants {
-    public static final int DEFAULT_ROM_SIZE = 0x100000;  // 1MB
+    public static final int DEFAULT_ROM_SIZE = 0x100000; // 1MB
     public static final int DEFAULT_LEVEL_LAYOUT_DIR_ADDR = 0x045A80;
     public static final int LEVEL_LAYOUT_DIR_ADDR_LOC = 0xE46E;
     public static final int LEVEL_LAYOUT_DIR_SIZE = 68;
@@ -40,6 +40,8 @@ public class Sonic2Constants {
     public static final int ART_TILE_TAILS_DUST = 0x048C;
     // Object art (Nemesis) + mappings
     public static final int ART_NEM_MONITOR_ADDR = 0x79550;
+    public static final int ART_NEM_EXPLOSION_ADDR = 0x7B592;
+    public static final int ART_TILE_EXPLOSION = 0x05A4;
     public static final int ART_NEM_SPIKES_ADDR = 0x7995C;
     public static final int ART_NEM_SPIKES_SIDE_ADDR = 0x7AC9A;
     public static final int ART_NEM_SPRING_VERTICAL_ADDR = 0x78E84;
@@ -74,32 +76,32 @@ public class Sonic2Constants {
     public static final int SFX_ROLLING = 0xBE;
 
     public static final int[][] START_POSITIONS = {
-            {0x0060, 0x028F}, // 0 Emerald Hill 1   (EHZ_1.bin)
-            {0x0060, 0x02AF}, // 1 Emerald Hill 2   (EHZ_2.bin)
-            {0x0000, 0x0000}, // 2 Unused           (e.g. HPZ / WZ / etc. – not wired in final game)
-            {0x0000, 0x0000}, // 3 Unused
-            {0x0060, 0x01EC}, // 4 Chemical Plant 1 (CPZ_1.bin)
-            {0x0000, 0x0000}, // 5 Chemical Plant 2 (CPZ_2.bin – not fetched)
-            {0x0000, 0x0000}, // 6 Aquatic Ruin 1   (ARZ_1.bin – not fetched)
-            {0x0000, 0x0000}, // 7 Aquatic Ruin 2   (ARZ_2.bin – not fetched)
-            {0x0000, 0x0000}, // 8 Casino Night 1   (CNZ_1.bin – not fetched)
-            {0x0000, 0x0000}, // 9 Casino Night 2   (CNZ_2.bin – not fetched)
-            {0x0060, 0x03EF}, // 10 Hill Top 1      (HTZ_1.bin)
-            {0x0000, 0x0000}, // 11 Hill Top 2      (HTZ_2.bin – not fetched)
-            {0x0060, 0x06AC}, // 12 Mystic Cave 1   (MCZ_1.bin)
-            {0x0000, 0x0000}, // 13 Mystic Cave 2   (MCZ_2.bin – not fetched)
-            {0x0060, 0x06AC}, // 14 Oil Ocean 1     (OOZ_1.bin)
-            {0x0000, 0x0000}, // 15 Oil Ocean 2     (OOZ_2.bin – not fetched)
-            {0x0060, 0x028C}, // 16 Metropolis 1    (MTZ_1.bin)
-            {0x0000, 0x0000}, // 17 Metropolis 2    (MTZ_2.bin – not fetched)
-            {0x0000, 0x0000}, // 18 Metropolis 3    (MTZ_3.bin – not fetched)
-            {0x0000, 0x0000}, // 19 Unused
-            {0x0120, 0x0070}, // 20 Sky Chase 1     (SCZ.bin)
-            {0x0000, 0x0000}, // 21 Unused
-            {0x0060, 0x04CC}, // 22 Wing Fortress 1 (WFZ_1.bin)
-            {0x0000, 0x0000}, // 23 Unused
-            {0x0060, 0x012D}, // 24 Death Egg 1     (DEZ_1.bin)
-            {0x0000, 0x0000}, // 25 Unused
-            {0x0000, 0x0000}, // 26 Special Stage
+            { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)
+            { 0x0060, 0x02AF }, // 1 Emerald Hill 2 (EHZ_2.bin)
+            { 0x0000, 0x0000 }, // 2 Unused (e.g. HPZ / WZ / etc. – not wired in final game)
+            { 0x0000, 0x0000 }, // 3 Unused
+            { 0x0060, 0x01EC }, // 4 Chemical Plant 1 (CPZ_1.bin)
+            { 0x0000, 0x0000 }, // 5 Chemical Plant 2 (CPZ_2.bin – not fetched)
+            { 0x0000, 0x0000 }, // 6 Aquatic Ruin 1 (ARZ_1.bin – not fetched)
+            { 0x0000, 0x0000 }, // 7 Aquatic Ruin 2 (ARZ_2.bin – not fetched)
+            { 0x0000, 0x0000 }, // 8 Casino Night 1 (CNZ_1.bin – not fetched)
+            { 0x0000, 0x0000 }, // 9 Casino Night 2 (CNZ_2.bin – not fetched)
+            { 0x0060, 0x03EF }, // 10 Hill Top 1 (HTZ_1.bin)
+            { 0x0000, 0x0000 }, // 11 Hill Top 2 (HTZ_2.bin – not fetched)
+            { 0x0060, 0x06AC }, // 12 Mystic Cave 1 (MCZ_1.bin)
+            { 0x0000, 0x0000 }, // 13 Mystic Cave 2 (MCZ_2.bin – not fetched)
+            { 0x0060, 0x06AC }, // 14 Oil Ocean 1 (OOZ_1.bin)
+            { 0x0000, 0x0000 }, // 15 Oil Ocean 2 (OOZ_2.bin – not fetched)
+            { 0x0060, 0x028C }, // 16 Metropolis 1 (MTZ_1.bin)
+            { 0x0000, 0x0000 }, // 17 Metropolis 2 (MTZ_2.bin – not fetched)
+            { 0x0000, 0x0000 }, // 18 Metropolis 3 (MTZ_3.bin – not fetched)
+            { 0x0000, 0x0000 }, // 19 Unused
+            { 0x0120, 0x0070 }, // 20 Sky Chase 1 (SCZ.bin)
+            { 0x0000, 0x0000 }, // 21 Unused
+            { 0x0060, 0x04CC }, // 22 Wing Fortress 1 (WFZ_1.bin)
+            { 0x0000, 0x0000 }, // 23 Unused
+            { 0x0060, 0x012D }, // 24 Death Egg 1 (DEZ_1.bin)
+            { 0x0000, 0x0000 }, // 25 Unused
+            { 0x0000, 0x0000 }, // 26 Special Stage
     };
 }

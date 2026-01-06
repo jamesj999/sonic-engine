@@ -18,6 +18,7 @@ public class ObjectManager {
     private final ObjectRegistry registry;
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final Map<ObjectSpawn, ObjectInstance> activeObjects = new IdentityHashMap<>();
+    private final List<ObjectInstance> dynamicObjects = new ArrayList<>();
     private int frameCounter;
 
     public ObjectManager(ObjectPlacementManager placementManager) {
@@ -31,6 +32,7 @@ public class ObjectManager {
 
     public void reset(int cameraX, List<ObjectSpawn> allSpawns) {
         activeObjects.clear();
+        dynamicObjects.clear();
         frameCounter = 0;
         placementManager.reset(cameraX);
         registry.reportCoverage(allSpawns);
@@ -40,6 +42,15 @@ public class ObjectManager {
         placementManager.update(cameraX);
         frameCounter++;
         syncActiveSpawns();
+
+        Iterator<ObjectInstance> dynamicIterator = dynamicObjects.iterator();
+        while (dynamicIterator.hasNext()) {
+            ObjectInstance instance = dynamicIterator.next();
+            instance.update(frameCounter, player);
+            if (instance.isDestroyed()) {
+                dynamicIterator.remove();
+            }
+        }
 
         Iterator<Map.Entry<ObjectSpawn, ObjectInstance>> iterator = activeObjects.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -72,6 +83,12 @@ public class ObjectManager {
             }
             instance.appendRenderCommands(commands);
         }
+        for (ObjectInstance instance : dynamicObjects) {
+            if (instance.isHighPriority() != highPriority) {
+                continue;
+            }
+            instance.appendRenderCommands(commands);
+        }
 
         if (commands.isEmpty()) {
             return;
@@ -82,7 +99,13 @@ public class ObjectManager {
     }
 
     public Collection<ObjectInstance> getActiveObjects() {
-        return List.copyOf(activeObjects.values());
+        List<ObjectInstance> all = new ArrayList<>(activeObjects.values());
+        all.addAll(dynamicObjects);
+        return all;
+    }
+
+    public void addDynamicObject(ObjectInstance object) {
+        dynamicObjects.add(object);
     }
 
     private void syncActiveSpawns() {

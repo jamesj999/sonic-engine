@@ -6,16 +6,16 @@ import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
  * Bundles object art and animations loaded from ROM.
  */
 public record ObjectArtData(
-        ObjectSpriteSheet monitorSheet,
-        ObjectSpriteSheet spikeSheet,
-        ObjectSpriteSheet spikeSideSheet,
-        ObjectSpriteSheet springVerticalSheet,
-        ObjectSpriteSheet springHorizontalSheet,
-        ObjectSpriteSheet springDiagonalSheet,
-        ObjectSpriteSheet springVerticalRedSheet,
-        ObjectSpriteSheet springHorizontalRedSheet,
-        ObjectSpriteSheet springDiagonalRedSheet,
-        SpriteAnimationSet monitorAnimations,
-        SpriteAnimationSet springAnimations
-) {
+                ObjectSpriteSheet monitorSheet,
+                ObjectSpriteSheet spikeSheet,
+                ObjectSpriteSheet spikeSideSheet,
+                ObjectSpriteSheet springVerticalSheet,
+                ObjectSpriteSheet springHorizontalSheet,
+                ObjectSpriteSheet springDiagonalSheet,
+                ObjectSpriteSheet springVerticalRedSheet,
+                ObjectSpriteSheet springHorizontalRedSheet,
+                ObjectSpriteSheet springDiagonalRedSheet,
+                ObjectSpriteSheet explosionSheet,
+                SpriteAnimationSet monitorAnimations,
+                SpriteAnimationSet springAnimations) {
 }

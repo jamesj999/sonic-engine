@@ -23,17 +23,17 @@ import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
  * 
  */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
-	protected final SpriteMovementManager movementManager;
-	protected final PlayableSpriteAnimationManager animationManager;
+        protected final SpriteMovementManager movementManager;
+        protected final PlayableSpriteAnimationManager animationManager;
 
-	protected GroundMode runningMode = GroundMode.GROUND;
+        protected GroundMode runningMode = GroundMode.GROUND;
 
-	/**
-	 * gSpeed is the speed this sprite is moving across the 'ground'.
-	 * Calculations will be performed against this and 'angle' to calculate new
-	 * x/y values for each step.
-	 */
-	protected short gSpeed = 0;
+        /**
+         * gSpeed is the speed this sprite is moving across the 'ground'.
+         * Calculations will be performed against this and 'angle' to calculate new
+         * x/y values for each step.
+         */
+        protected short gSpeed = 0;
 
         /**
          * Current angle of the terrain this sprite is on.
@@ -46,23 +46,23 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected byte topSolidBit = 0x0C;
         protected byte lrbSolidBit = 0x0D;
 
-	/**
-	 * Speed (in subpixels) at which this sprite walks
-	 */
-	protected short jump = 0;
+        /**
+         * Speed (in subpixels) at which this sprite walks
+         */
+        protected short jump = 0;
 
-	protected short xSpeed = 0;
-	protected short ySpeed = 0;
+        protected short xSpeed = 0;
+        protected short ySpeed = 0;
 
-	private short[] xHistory = new short[32];
-	private short[] yHistory = new short[32];
+        private short[] xHistory = new short[32];
+        private short[] yHistory = new short[32];
 
-	private byte historyPos = 0;
+        private byte historyPos = 0;
 
-	/**
-	 * Whether or not this sprite is rolling
-	 */
-	protected boolean rolling = false;
+        /**
+         * Whether or not this sprite is rolling
+         */
+        protected boolean rolling = false;
 
         /**
          * Whether or not this sprite is in the air
@@ -99,27 +99,40 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean dead = false;
 
+        /**
+         * Whether or not this sprite is in the hurt/knockback state.
+         * Mirrors ROM routine=4 check. Invulnerability is set when landing from hurt.
+         */
+        protected boolean hurt = false;
+
+        /**
+         * Countdown frames before level reload after death.
+         * Set to 60 when player falls off screen, decrements each frame.
+         * When it reaches 0, triggers level reload.
+         */
+        protected int deathCountdown = 0;
+
         public enum DamageCause {
                 NORMAL,
                 SPIKE,
                 DROWN
         }
 
-    /**
-     * Whether or not this sprite is preparing for a spindash.
-     */
-	protected boolean spindash = false;
-	/**
-	 * Whether or not this sprite is crouching.
-	 */
-	protected boolean crouching = false;
+        /**
+         * Whether or not this sprite is preparing for a spindash.
+         */
+        protected boolean spindash = false;
+        /**
+         * Whether or not this sprite is crouching.
+         */
+        protected boolean crouching = false;
 
-    protected float spindashConstant = 0f;
+        protected float spindashConstant = 0f;
 
-    protected int ringCount = 0;
-	private PlayerSpriteRenderer spriteRenderer;
-	private int mappingFrame = 0;
-	private int animationFrameCount = 0;
+        protected int ringCount = 0;
+        private PlayerSpriteRenderer spriteRenderer;
+        private int mappingFrame = 0;
+        private int animationFrameCount = 0;
         private SpriteAnimationProfile animationProfile;
         private SpriteAnimationSet animationSet;
         private int animationId = 0;
@@ -130,77 +143,77 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private boolean highPriority = false;
         private SpindashDustManager spindashDustManager;
 
-    public int getRingCount() {
-        return ringCount;
-    }
-
-    public void setRingCount(int ringCount) {
-        this.ringCount = Math.max(0, ringCount);
-    }
-
-    public void addRings(int delta) {
-        if (delta == 0) {
-            return;
+        public int getRingCount() {
+                return ringCount;
         }
-        int next = ringCount + delta;
-        ringCount = Math.max(0, next);
-    }
 
-	public PlayerSpriteRenderer getSpriteRenderer() {
-		return spriteRenderer;
-	}
+        public void setRingCount(int ringCount) {
+                this.ringCount = Math.max(0, ringCount);
+        }
 
-	public void setSpriteRenderer(PlayerSpriteRenderer spriteRenderer) {
-		this.spriteRenderer = spriteRenderer;
-	}
+        public void addRings(int delta) {
+                if (delta == 0) {
+                        return;
+                }
+                int next = ringCount + delta;
+                ringCount = Math.max(0, next);
+        }
 
-	public int getMappingFrame() {
-		return mappingFrame;
-	}
+        public PlayerSpriteRenderer getSpriteRenderer() {
+                return spriteRenderer;
+        }
 
-	public void setMappingFrame(int mappingFrame) {
-		this.mappingFrame = Math.max(0, mappingFrame);
-	}
+        public void setSpriteRenderer(PlayerSpriteRenderer spriteRenderer) {
+                this.spriteRenderer = spriteRenderer;
+        }
 
-	public int getAnimationFrameCount() {
-		return animationFrameCount;
-	}
+        public int getMappingFrame() {
+                return mappingFrame;
+        }
 
-	public void setAnimationFrameCount(int animationFrameCount) {
-		this.animationFrameCount = Math.max(0, animationFrameCount);
-	}
+        public void setMappingFrame(int mappingFrame) {
+                this.mappingFrame = Math.max(0, mappingFrame);
+        }
 
-	public SpriteAnimationProfile getAnimationProfile() {
-		return animationProfile;
-	}
+        public int getAnimationFrameCount() {
+                return animationFrameCount;
+        }
 
-	public void setAnimationProfile(SpriteAnimationProfile animationProfile) {
-		this.animationProfile = animationProfile;
-	}
+        public void setAnimationFrameCount(int animationFrameCount) {
+                this.animationFrameCount = Math.max(0, animationFrameCount);
+        }
 
-	public SpriteAnimationSet getAnimationSet() {
-		return animationSet;
-	}
+        public SpriteAnimationProfile getAnimationProfile() {
+                return animationProfile;
+        }
 
-	public void setAnimationSet(SpriteAnimationSet animationSet) {
-		this.animationSet = animationSet;
-	}
+        public void setAnimationProfile(SpriteAnimationProfile animationProfile) {
+                this.animationProfile = animationProfile;
+        }
 
-	public int getAnimationId() {
-		return animationId;
-	}
+        public SpriteAnimationSet getAnimationSet() {
+                return animationSet;
+        }
 
-	public void setAnimationId(int animationId) {
-		this.animationId = Math.max(0, animationId);
-	}
+        public void setAnimationSet(SpriteAnimationSet animationSet) {
+                this.animationSet = animationSet;
+        }
 
-	public int getAnimationFrameIndex() {
-		return animationFrameIndex;
-	}
+        public int getAnimationId() {
+                return animationId;
+        }
 
-	public void setAnimationFrameIndex(int animationFrameIndex) {
-		this.animationFrameIndex = Math.max(0, animationFrameIndex);
-	}
+        public void setAnimationId(int animationId) {
+                this.animationId = Math.max(0, animationId);
+        }
+
+        public int getAnimationFrameIndex() {
+                return animationFrameIndex;
+        }
+
+        public void setAnimationFrameIndex(int animationFrameIndex) {
+                this.animationFrameIndex = Math.max(0, animationFrameIndex);
+        }
 
         public int getAnimationTick() {
                 return animationTick;
@@ -244,7 +257,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public void setAir(boolean air) {
-                //TODO Update ground sensors here
+                // If landing from hurt state, set invulnerability and clear hurt
+                if (!air && this.air && hurt) {
+                        hurt = false;
+                        setInvulnerableFrames(0x78); // 120 frames invulnerability on landing
+                }
+                // TODO Update ground sensors here
                 this.air = air;
                 if (air) {
                         setGroundMode(GroundMode.GROUND);
@@ -268,21 +286,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.lrbSolidBit = lrbSolidBit;
         }
 
-	public short getJump() {
-		return jump;
-	}
+        public short getJump() {
+                return jump;
+        }
 
-    public boolean getSpindash() {
-        return spindash;
-    }
+        public boolean getSpindash() {
+                return spindash;
+        }
 
-    public void setSpindash(boolean spindash) {
-        this.spindash = spindash;
-    }
+        public void setSpindash(boolean spindash) {
+                this.spindash = spindash;
+        }
 
-	public boolean getCrouching() {
-		return crouching;
-	}
+        public boolean getCrouching() {
+                return crouching;
+        }
 
         public void setCrouching(boolean crouching) {
                 this.crouching = crouching;
@@ -297,7 +315,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public boolean getInvulnerable() {
-                return invulnerableFrames > 0 || invincibleFrames > 0;
+                return invulnerableFrames > 0 || invincibleFrames > 0 || hurt;
         }
 
         public int getInvulnerableFrames() {
@@ -322,6 +340,49 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public boolean getDead() {
                 return dead;
+        }
+
+        public void setDead(boolean dead) {
+                this.dead = dead;
+        }
+
+        public boolean isHurt() {
+                return hurt;
+        }
+
+        public void setHurt(boolean hurt) {
+                this.hurt = hurt;
+        }
+
+        public int getDeathCountdown() {
+                return deathCountdown;
+        }
+
+        public void setDeathCountdown(int frames) {
+                this.deathCountdown = Math.max(0, frames);
+        }
+
+        /**
+         * Starts the death sequence countdown (60 frames).
+         * Called when player falls below the level boundaries.
+         */
+        public void startDeathCountdown() {
+                if (deathCountdown == 0 && dead) {
+                        deathCountdown = 60;
+                }
+        }
+
+        /**
+         * Decrements death countdown and returns true if level should reload.
+         */
+        public boolean tickDeathCountdown() {
+                if (deathCountdown > 0) {
+                        deathCountdown--;
+                        if (deathCountdown == 0) {
+                                return true; // Time to reload level
+                        }
+                }
+                return false;
         }
 
         public void setSpringing(int frames) {
@@ -362,7 +423,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (getInvulnerable()) {
                         return false;
                 }
-                setInvulnerableFrames(0x78);
+                hurt = true; // Set hurt state - invulnerability is applied on landing (ROM behavior)
                 setSpringing(0);
                 setSpindash(false);
                 setRolling(false);
@@ -400,6 +461,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         return false;
                 }
                 dead = true;
+                // Lock camera when dying - prevent following the falling corpse
+                uk.co.jamesj999.sonic.camera.Camera.getInstance().setFrozen(true);
                 setInvulnerableFrames(0);
                 setInvincibleFrames(0);
                 setSpringing(0);
@@ -424,82 +487,82 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 };
         }
 
-    public float getSpindashConstant() {
-        return spindashConstant;
-    }
+        public float getSpindashConstant() {
+                return spindashConstant;
+        }
 
-    public void setSpindashConstant(float spindashConstant) {
-        this.spindashConstant = spindashConstant;
-    }
+        public void setSpindashConstant(float spindashConstant) {
+                this.spindashConstant = spindashConstant;
+        }
 
-	public short getXSpeed() {
-		return xSpeed;
-	}
+        public short getXSpeed() {
+                return xSpeed;
+        }
 
-	public void setXSpeed(short xSpeed) {
-		this.xSpeed = xSpeed;
-	}
+        public void setXSpeed(short xSpeed) {
+                this.xSpeed = xSpeed;
+        }
 
-	public short getYSpeed() {
-		return ySpeed;
-	}
+        public short getYSpeed() {
+                return ySpeed;
+        }
 
-	public void setYSpeed(short ySpeed) {
-		this.ySpeed = ySpeed;
-	}
+        public void setYSpeed(short ySpeed) {
+                this.ySpeed = ySpeed;
+        }
 
-	/**
-	 * The amount this sprite's speed is effected by when running down/up a
-	 * slope.
-	 */
-	protected short slopeRunning;
-	/**
-	 * The amount this sprite's speed is effected by when rolling up a slope.
-	 */
-	protected short slopeRollingUp;
-	/**
-	 * The amount this sprite's speed is effected by when rolling down a slope.
-	 */
-	protected short slopeRollingDown;
-	/**
-	 * The speed at which this sprite accelerates when running.
-	 */
+        /**
+         * The amount this sprite's speed is effected by when running down/up a
+         * slope.
+         */
+        protected short slopeRunning;
+        /**
+         * The amount this sprite's speed is effected by when rolling up a slope.
+         */
+        protected short slopeRollingUp;
+        /**
+         * The amount this sprite's speed is effected by when rolling down a slope.
+         */
+        protected short slopeRollingDown;
+        /**
+         * The speed at which this sprite accelerates when running.
+         */
 
-	protected short runAccel;
-	/**
-	 * The speed at which this sprite decelerates when the opposite direction is
-	 * pressed.
-	 */
-	protected short runDecel;
-	/**
-	 * The speed at which this sprite slows down while running with no
-	 * directional keys pressed.
-	 */
-	protected short friction;
-	/**
-	 * Maximum rolling speed of this Sprite per step.
-	 */
-	protected short maxRoll;
-	/**
-	 * Maximum running speed of this Sprite per step.
-	 */
-	protected short max;
+        protected short runAccel;
+        /**
+         * The speed at which this sprite decelerates when the opposite direction is
+         * pressed.
+         */
+        protected short runDecel;
+        /**
+         * The speed at which this sprite slows down while running with no
+         * directional keys pressed.
+         */
+        protected short friction;
+        /**
+         * Maximum rolling speed of this Sprite per step.
+         */
+        protected short maxRoll;
+        /**
+         * Maximum running speed of this Sprite per step.
+         */
+        protected short max;
 
-	/**
-	 * The speed at which this sprite slows down while rolling with no
-	 * directional keys pressed.
-	 */
-	protected short rollDecel;
+        /**
+         * The speed at which this sprite slows down while rolling with no
+         * directional keys pressed.
+         */
+        protected short rollDecel;
 
-	/**
-	 * Minimum speed required to start rolling.
-	 */
-	protected short minStartRollSpeed;
+        /**
+         * Minimum speed required to start rolling.
+         */
+        protected short minStartRollSpeed;
 
-	/**
-	 * Speed at which to stop rolling
-	 */
-	protected short minRollSpeed;
+        /**
+         * Speed at which to stop rolling
+         */
+        protected short minRollSpeed;
 
         /**
          * Height when rolling
@@ -528,8 +591,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected short renderXOffset = 0;
         protected short renderYOffset = 0;
 
-	protected AbstractPlayableSprite(String code, short x, short y, boolean debug) {
-		super(code, x, y);
+        protected AbstractPlayableSprite(String code, short x, short y, boolean debug) {
+                super(code, x, y);
                 // Must define speeds before creating Manager (it will read speeds upon
                 // instantiation).
                 defineSpeeds();
@@ -538,128 +601,128 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
                 // Set our entire history for x and y to be the starting position so if
                 // the player spindashes immediately the camera effect won't be b0rked.
-		for (short i = 0; i < 32; i++) {
-			xHistory[i] = x;
-			yHistory[i] = y;
-		}
-		if(debug) {
-			movementManager = new DebugSpriteMovementManager(this);
-		} else {
-			movementManager = new PlayableSpriteMovementManager(this);
-		}
-		animationManager = new PlayableSpriteAnimationManager(this);
-	}
-
-	public short getGSpeed() {
-		return gSpeed;
-	}
-
-	public void setGSpeed(short gSpeed) {
-		this.gSpeed = gSpeed;
-	}
-
-	public short getRunAccel() {
-		return runAccel;
-	}
-
-	public short getRunDecel() {
-		return runDecel;
-	}
-
-	public short getSlopeRunning() {
-		return slopeRunning;
-	}
-
-	public short getSlopeRollingUp() {
-		return slopeRollingUp;
-	}
-
-	public short getSlopeRollingDown() {
-		return slopeRollingDown;
-	}
-
-	public short getFriction() {
-		return friction;
-	}
-
-	public short getMax() {
-		return max;
-	}
-
-	public byte getAngle() {
-		return angle;
-	}
-
-	public void setAngle(byte angle) {
-		this.angle = angle;
-	}
-
-	public short[] getXHistory() {
-		return xHistory;
-	}
-
-	public short[] getYHistory() {
-		return yHistory;
-	}
-
-	public boolean getRolling() {
-		return rolling;
-	}
-
-        public void setRolling(boolean rolling) {
-            if (this.rolling == rolling) {
-                return;
-            }
-
-            if (GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
-                int oldHeight = getHeight();
-                int newHeight = rolling ? rollHeight : runHeight;
-                if (oldHeight != newHeight) {
-                    int delta = (oldHeight - newHeight) / 2;
-                    yPixel = (short) (yPixel + delta);
-                    setHeight(newHeight);
+                for (short i = 0; i < 32; i++) {
+                        xHistory[i] = x;
+                        yHistory[i] = y;
                 }
-            } else {
-                int oldWidth = getWidth();
-                int newWidth = rolling ? rollHeight : runHeight;
-                if (oldWidth != newWidth) {
-                    int delta = (oldWidth - newWidth) / 2;
-                    xPixel = (short) (xPixel + delta);
-                    setWidth(newWidth);
+                if (debug) {
+                        movementManager = new DebugSpriteMovementManager(this);
+                } else {
+                        movementManager = new PlayableSpriteMovementManager(this);
                 }
-            }
-
-            if (rolling) {
-                applyRollingRadii(false);
-            } else {
-                applyStandingRadii(false);
-            }
-
-            byte delta = 5;
-            if (!rolling) {
-                delta = (byte) -delta;
-            }
-            moveForGroundModeAndDirection(delta, Direction.DOWN);
-
-            this.rolling = rolling;
+                animationManager = new PlayableSpriteAnimationManager(this);
         }
 
-	@Override
-	public void setHeight(int height) {
-		super.setHeight(height);
-	}
+        public short getGSpeed() {
+                return gSpeed;
+        }
 
-	public short getRollDecel() {
-		return rollDecel;
-	}
+        public void setGSpeed(short gSpeed) {
+                this.gSpeed = gSpeed;
+        }
 
-	public short getMaxRoll() {
-		return maxRoll;
-	}
+        public short getRunAccel() {
+                return runAccel;
+        }
 
-	public short getMinStartRollSpeed() {
-		return minStartRollSpeed;
-	}
+        public short getRunDecel() {
+                return runDecel;
+        }
+
+        public short getSlopeRunning() {
+                return slopeRunning;
+        }
+
+        public short getSlopeRollingUp() {
+                return slopeRollingUp;
+        }
+
+        public short getSlopeRollingDown() {
+                return slopeRollingDown;
+        }
+
+        public short getFriction() {
+                return friction;
+        }
+
+        public short getMax() {
+                return max;
+        }
+
+        public byte getAngle() {
+                return angle;
+        }
+
+        public void setAngle(byte angle) {
+                this.angle = angle;
+        }
+
+        public short[] getXHistory() {
+                return xHistory;
+        }
+
+        public short[] getYHistory() {
+                return yHistory;
+        }
+
+        public boolean getRolling() {
+                return rolling;
+        }
+
+        public void setRolling(boolean rolling) {
+                if (this.rolling == rolling) {
+                        return;
+                }
+
+                if (GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
+                        int oldHeight = getHeight();
+                        int newHeight = rolling ? rollHeight : runHeight;
+                        if (oldHeight != newHeight) {
+                                int delta = (oldHeight - newHeight) / 2;
+                                yPixel = (short) (yPixel + delta);
+                                setHeight(newHeight);
+                        }
+                } else {
+                        int oldWidth = getWidth();
+                        int newWidth = rolling ? rollHeight : runHeight;
+                        if (oldWidth != newWidth) {
+                                int delta = (oldWidth - newWidth) / 2;
+                                xPixel = (short) (xPixel + delta);
+                                setWidth(newWidth);
+                        }
+                }
+
+                if (rolling) {
+                        applyRollingRadii(false);
+                } else {
+                        applyStandingRadii(false);
+                }
+
+                byte delta = 5;
+                if (!rolling) {
+                        delta = (byte) -delta;
+                }
+                moveForGroundModeAndDirection(delta, Direction.DOWN);
+
+                this.rolling = rolling;
+        }
+
+        @Override
+        public void setHeight(int height) {
+                super.setHeight(height);
+        }
+
+        public short getRollDecel() {
+                return rollDecel;
+        }
+
+        public short getMaxRoll() {
+                return maxRoll;
+        }
+
+        public short getMinStartRollSpeed() {
+                return minStartRollSpeed;
+        }
 
         public short getMinRollSpeed() {
                 return minRollSpeed;
@@ -706,167 +769,174 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 pushSensors[1].setOffset(push, (byte) 0);
         }
 
-	public SpriteMovementManager getMovementManager() {
-		return movementManager;
-	}
+        public SpriteMovementManager getMovementManager() {
+                return movementManager;
+        }
 
-	public PlayableSpriteAnimationManager getAnimationManager() {
-		return animationManager;
-	}
+        public PlayableSpriteAnimationManager getAnimationManager() {
+                return animationManager;
+        }
 
-	protected abstract void defineSpeeds();
+        protected abstract void defineSpeeds();
 
-	public final void move() {
-		move(xSpeed, ySpeed);
-	}
+        public final void move() {
+                move(xSpeed, ySpeed);
+        }
 
-	public GroundMode getGroundMode() {
-		return runningMode;
-	}
+        public GroundMode getGroundMode() {
+                return runningMode;
+        }
 
-	public void setGroundMode(GroundMode groundMode) {
-		if(this.runningMode != groundMode) {
-			updateSpriteShapeForRunningMode(groundMode, this.runningMode);
-			this.runningMode = groundMode;
-		}
-	}
+        public void setGroundMode(GroundMode groundMode) {
+                if (this.runningMode != groundMode) {
+                        updateSpriteShapeForRunningMode(groundMode, this.runningMode);
+                        this.runningMode = groundMode;
+                }
+        }
 
-	protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {
-		// Best if statement ever...
-		if(((GroundMode.CEILING.equals(newRunningMode) || GroundMode.GROUND.equals(newRunningMode)) &&
-				(GroundMode.LEFTWALL.equals(oldRunningMode) || GroundMode.RIGHTWALL.equals(oldRunningMode))) ||
-				((GroundMode.RIGHTWALL.equals(newRunningMode) || GroundMode.LEFTWALL.equals(newRunningMode)) &&
-						((GroundMode.CEILING.equals(oldRunningMode) || GroundMode.GROUND.equals(oldRunningMode))))) {
-			int oldHeight = getHeight();
-			int oldWidth = getWidth();
+        protected void updateSpriteShapeForRunningMode(GroundMode newRunningMode, GroundMode oldRunningMode) {
+                // Best if statement ever...
+                if (((GroundMode.CEILING.equals(newRunningMode) || GroundMode.GROUND.equals(newRunningMode)) &&
+                                (GroundMode.LEFTWALL.equals(oldRunningMode)
+                                                || GroundMode.RIGHTWALL.equals(oldRunningMode)))
+                                ||
+                                ((GroundMode.RIGHTWALL.equals(newRunningMode)
+                                                || GroundMode.LEFTWALL.equals(newRunningMode)) &&
+                                                ((GroundMode.CEILING.equals(oldRunningMode)
+                                                                || GroundMode.GROUND.equals(oldRunningMode))))) {
+                        int oldHeight = getHeight();
+                        int oldWidth = getWidth();
 
-			short oldCentreX = getCentreX();
-			short oldCentreY = getCentreY();
+                        short oldCentreX = getCentreX();
+                        short oldCentreY = getCentreY();
 
-			setHeight(oldWidth);
-			setWidth(oldHeight);
+                        setHeight(oldWidth);
+                        setWidth(oldHeight);
 
-			setX((short) (oldCentreX - (getWidth() / 2)));
-			setY((short) (oldCentreY - (getHeight() / 2)));
-		}
-	}
+                        setX((short) (oldCentreX - (getWidth() / 2)));
+                        setY((short) (oldCentreY - (getHeight() / 2)));
+                }
+        }
 
         public final short getCentreX(int framesBehind) {
-		int desired = historyPos - framesBehind;
-		if (desired < 0) {
-			desired += xHistory.length;
-		}
-		return (short) (xHistory[desired] + (width / 2));
-	}
+                int desired = historyPos - framesBehind;
+                if (desired < 0) {
+                        desired += xHistory.length;
+                }
+                return (short) (xHistory[desired] + (width / 2));
+        }
 
         public final short getCentreY(int framesBehind) {
-		int desired = historyPos - framesBehind;
-		if (desired < 0) {
-			desired += yHistory.length;
-		}
-		return (short) (yHistory[desired] + (height / 2));
-	}
+                int desired = historyPos - framesBehind;
+                if (desired < 0) {
+                        desired += yHistory.length;
+                }
+                return (short) (yHistory[desired] + (height / 2));
+        }
 
         public void updateSensors(short originalX, short originalY) {
-		Sensor[] sensorsToActivate;
-		Sensor[] sensorsToDeactivate;
+                Sensor[] sensorsToActivate;
+                Sensor[] sensorsToDeactivate;
 
-		Sensor groundA = groundSensors[0];
-		Sensor groundB = groundSensors[1];
+                Sensor groundA = groundSensors[0];
+                Sensor groundB = groundSensors[1];
 
-		Sensor ceilingC = ceilingSensors[0];
-		Sensor ceilingD = ceilingSensors[1];
+                Sensor ceilingC = ceilingSensors[0];
+                Sensor ceilingD = ceilingSensors[1];
 
-		Sensor pushE = pushSensors[0];
-		Sensor pushF = pushSensors[1];
+                Sensor pushE = pushSensors[0];
+                Sensor pushF = pushSensors[1];
 
-		if (getAir()) {
-			short xSpeedPositive = (short) Math.abs(xSpeed);
-			short ySpeedPositive = (short) Math.abs(ySpeed);
+                if (getAir()) {
+                        short xSpeedPositive = (short) Math.abs(xSpeed);
+                        short ySpeedPositive = (short) Math.abs(ySpeed);
 
-			if(xSpeedPositive > ySpeedPositive) {
-				if (xSpeed > 0) {
-					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
-					sensorsToDeactivate = new Sensor[] { pushE };
-				} else {
-					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
-					sensorsToDeactivate = new Sensor[] { pushF };
-				}
-			} else {
-				if(ySpeed > 0) {
-					sensorsToActivate = new Sensor[] { groundA, groundB, pushE, pushF };
-					sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD };
-				} else {
-					sensorsToActivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
-					sensorsToDeactivate = new Sensor[] { groundA, groundB };
-				}
-			}
-		}  else {
-			boolean pushActive = Math.abs(angle) <= 64;
-			if (xSpeed > 0) {
-				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF};
-				sensorsToDeactivate = new Sensor[] { pushE };
-				if(!pushActive) {
-					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
-					sensorsToDeactivate = new Sensor[] { pushE, pushF };
-				}
-			} else if (xSpeed < 0) {
-				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE};
-				sensorsToDeactivate = new Sensor[] { pushF };
-				if(!pushActive) {
-					sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
-					sensorsToDeactivate = new Sensor[] { pushE, pushF };
-				}
-			} else {
-				sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD};
-				sensorsToDeactivate = new Sensor[] { pushE, pushF };
-			}
-		}
+                        if (xSpeedPositive > ySpeedPositive) {
+                                if (xSpeed > 0) {
+                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD,
+                                                        pushF };
+                                        sensorsToDeactivate = new Sensor[] { pushE };
+                                } else {
+                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD,
+                                                        pushE };
+                                        sensorsToDeactivate = new Sensor[] { pushF };
+                                }
+                        } else {
+                                if (ySpeed > 0) {
+                                        sensorsToActivate = new Sensor[] { groundA, groundB, pushE, pushF };
+                                        sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD };
+                                } else {
+                                        sensorsToActivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
+                                        sensorsToDeactivate = new Sensor[] { groundA, groundB };
+                                }
+                        }
+                } else {
+                        boolean pushActive = Math.abs(angle) <= 64;
+                        if (xSpeed > 0) {
+                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
+                                sensorsToDeactivate = new Sensor[] { pushE };
+                                if (!pushActive) {
+                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+                                        sensorsToDeactivate = new Sensor[] { pushE, pushF };
+                                }
+                        } else if (xSpeed < 0) {
+                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
+                                sensorsToDeactivate = new Sensor[] { pushF };
+                                if (!pushActive) {
+                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+                                        sensorsToDeactivate = new Sensor[] { pushE, pushF };
+                                }
+                        } else {
+                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
+                                sensorsToDeactivate = new Sensor[] { pushE, pushF };
+                        }
+                }
 
-		setSensorActive(sensorsToActivate, true);
-		setSensorActive(sensorsToDeactivate, false);
-	}
+                setSensorActive(sensorsToActivate, true);
+                setSensorActive(sensorsToDeactivate, false);
+        }
 
-	private void setSensorActive(Sensor[] sensors, boolean active) {
-		for(Sensor sensor : sensors) {
-			sensor.setActive(active);
-		}
-	}
+        private void setSensorActive(Sensor[] sensors, boolean active) {
+                for (Sensor sensor : sensors) {
+                        sensor.setActive(active);
+                }
+        }
 
-	public Sensor[] getAllSensors() {
-		Sensor[] sensors = new Sensor[6];
-		sensors[0] = groundSensors[0];
-		sensors[1] = groundSensors[1];
-		sensors[2] = ceilingSensors[0];
-		sensors[3] = ceilingSensors[1];
-		sensors[4] = pushSensors[0];
-		sensors[5] = pushSensors[1];
+        public Sensor[] getAllSensors() {
+                Sensor[] sensors = new Sensor[6];
+                sensors[0] = groundSensors[0];
+                sensors[1] = groundSensors[1];
+                sensors[2] = ceilingSensors[0];
+                sensors[3] = ceilingSensors[1];
+                sensors[4] = pushSensors[0];
+                sensors[5] = pushSensors[1];
 
-		return sensors;
-	}
+                return sensors;
+        }
 
         public void moveForGroundModeAndDirection(byte distance, Direction direction) {
-		SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(getGroundMode(), direction);
-		switch (sensorConfiguration.direction()) {
-			case DOWN -> {
-				yPixel = (short) (yPixel + distance);
-			}
-			case RIGHT -> {
-				xPixel = (short) (xPixel + distance);
-			}
-			case UP -> {
-				yPixel = (short) (yPixel - distance);
-			}
-			case LEFT -> {
-				xPixel = (short) (xPixel - distance);
-			}
-		}
-	}
+                SensorConfiguration sensorConfiguration = SpriteManager
+                                .getSensorConfigurationForGroundModeAndDirection(getGroundMode(), direction);
+                switch (sensorConfiguration.direction()) {
+                        case DOWN -> {
+                                yPixel = (short) (yPixel + distance);
+                        }
+                        case RIGHT -> {
+                                xPixel = (short) (xPixel + distance);
+                        }
+                        case UP -> {
+                                yPixel = (short) (yPixel - distance);
+                        }
+                        case LEFT -> {
+                                xPixel = (short) (xPixel - distance);
+                        }
+                }
+        }
 
-	/**
-	 * Causes the sprite to update its position history as we are now at the end
-	 * of the tick so all movement calculations have been performed.
-	 */
+        /**
+         * Causes the sprite to update its position history as we are now at the end
+         * of the tick so all movement calculations have been performed.
+         */
         public void endOfTick() {
                 if (historyPos == 31) {
                         historyPos = 0;

@@ -51,8 +51,7 @@ public class Sonic2PlayerArt {
                 Sonic2Constants.ART_UNC_SONIC_SIZE,
                 Sonic2Constants.MAP_UNC_SONIC_ADDR,
                 Sonic2Constants.MAP_R_UNC_SONIC_ADDR,
-                Sonic2Constants.ART_TILE_SONIC
-        );
+                Sonic2Constants.ART_TILE_SONIC);
         return cachedSonic;
     }
 
@@ -65,8 +64,7 @@ public class Sonic2PlayerArt {
                 Sonic2Constants.ART_UNC_TAILS_SIZE,
                 Sonic2Constants.MAP_UNC_TAILS_ADDR,
                 Sonic2Constants.MAP_R_UNC_TAILS_ADDR,
-                Sonic2Constants.ART_TILE_TAILS
-        );
+                Sonic2Constants.ART_TILE_TAILS);
         return cachedTails;
     }
 
@@ -75,8 +73,7 @@ public class Sonic2PlayerArt {
             int artSize,
             int mappingAddr,
             int dplcAddr,
-            int basePatternIndex
-    ) throws IOException {
+            int basePatternIndex) throws IOException {
         Pattern[] artTiles = loadArtTiles(artAddr, artSize);
         List<SpriteMappingFrame> mappingFrames = loadMappingFrames(mappingAddr);
         List<SpriteDplcFrame> dplcFrames = loadDplcFrames(dplcAddr);
@@ -98,11 +95,11 @@ public class Sonic2PlayerArt {
                 Sonic2AnimationIds.SPINDASH,
                 Sonic2AnimationIds.SPRING,
                 Sonic2AnimationIds.DEATH,
+                Sonic2AnimationIds.HURT,
                 Sonic2AnimationIds.ROLL,
                 0x40,
                 0x600,
-                0
-        );
+                0);
 
         return new SpriteArtSet(
                 artTiles,
@@ -113,8 +110,7 @@ public class Sonic2PlayerArt {
                 frameDelay,
                 bankSize,
                 animationProfile,
-                animationSet
-        );
+                animationSet);
     }
 
     private Pattern[] loadArtTiles(int artAddr, int artSize) throws IOException {
@@ -268,5 +264,6 @@ public class Sonic2PlayerArt {
         private static final int SPINDASH = 0x09;
         private static final int SPRING = 0x10;
         private static final int DEATH = 0x18;
+        private static final int HURT = 0x19;
     }
 }

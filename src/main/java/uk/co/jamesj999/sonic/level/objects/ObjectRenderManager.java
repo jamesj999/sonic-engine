@@ -26,6 +26,7 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet springVerticalRedSheet;
     private final ObjectSpriteSheet springHorizontalRedSheet;
     private final ObjectSpriteSheet springDiagonalRedSheet;
+    private final ObjectSpriteSheet explosionSheet;
     private final SpriteAnimationSet monitorAnimations;
     private final SpriteAnimationSet springAnimations;
 
@@ -38,6 +39,7 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer springVerticalRedRenderer;
     private final PatternSpriteRenderer springHorizontalRedRenderer;
     private final PatternSpriteRenderer springDiagonalRedRenderer;
+    private final PatternSpriteRenderer explosionRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
     private final List<PatternSpriteRenderer> rendererOrder = new ArrayList<>();
@@ -52,6 +54,7 @@ public class ObjectRenderManager {
         this.springVerticalRedSheet = artData.springVerticalRedSheet();
         this.springHorizontalRedSheet = artData.springHorizontalRedSheet();
         this.springDiagonalRedSheet = artData.springDiagonalRedSheet();
+        this.explosionSheet = artData.explosionSheet();
         this.monitorAnimations = artData.monitorAnimations();
         this.springAnimations = artData.springAnimations();
 
@@ -64,6 +67,7 @@ public class ObjectRenderManager {
         this.springVerticalRedRenderer = new PatternSpriteRenderer(springVerticalRedSheet);
         this.springHorizontalRedRenderer = new PatternSpriteRenderer(springHorizontalRedSheet);
         this.springDiagonalRedRenderer = new PatternSpriteRenderer(springDiagonalRedSheet);
+        this.explosionRenderer = new PatternSpriteRenderer(explosionSheet);
 
         register(monitorSheet, monitorRenderer);
         register(spikeSheet, spikeRenderer);
@@ -74,6 +78,7 @@ public class ObjectRenderManager {
         register(springVerticalRedSheet, springVerticalRedRenderer);
         register(springHorizontalRedSheet, springHorizontalRedRenderer);
         register(springDiagonalRedSheet, springDiagonalRedRenderer);
+        register(explosionSheet, explosionRenderer);
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -135,5 +140,9 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getSpringAnimations() {
         return springAnimations;
+    }
+
+    public PatternSpriteRenderer getExplosionRenderer() {
+        return explosionRenderer;
     }
 }

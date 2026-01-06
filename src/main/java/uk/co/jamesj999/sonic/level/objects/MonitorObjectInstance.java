@@ -40,8 +40,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         this.animationState = new ObjectAnimationState(
                 renderManager != null ? renderManager.getMonitorAnimations() : null,
                 initialAnim,
-                initialFrame
-        );
+                initialFrame);
         this.mappingFrame = initialFrame;
         if (broken) {
             effectApplied = true;
@@ -63,10 +62,22 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         if (broken || player == null) {
             return;
         }
-        if (!player.getRolling() && !player.getAir()) {
+
+        // Hitting from below (Moving Up)
+        if (player.getYSpeed() < 0) {
+            // Bounce player down, but DO NOT break monitor
+            player.setYSpeed((short) -player.getYSpeed());
             return;
         }
+
+        // Hitting from above (Moving Down or Stationary)
+        if (!player.getRolling()) {
+            return;
+        }
+
+        // Break Monitor and Bounce Player Up
         broken = true;
+        player.setYSpeed((short) -player.getYSpeed());
         mappingFrame = BROKEN_FRAME;
         iconActive = true;
         iconSubY = spawn.y() << 8;
@@ -74,6 +85,12 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         iconWaitFrames = 0;
         effectApplied = false;
         effectTarget = player;
+
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        if (renderManager != null) {
+            LevelManager.getInstance().getObjectManager().addDynamicObject(
+                    new ExplosionObjectInstance(0x27, spawn.x(), spawn.y(), renderManager));
+        }
     }
 
     @Override
@@ -131,6 +148,9 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
 
     @Override
     public boolean isSolidFor(AbstractPlayableSprite player) {
+        if (broken) {
+            return false;
+        }
         if (player == null) {
             return true;
         }

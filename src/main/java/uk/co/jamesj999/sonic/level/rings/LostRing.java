@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.level.rings;
 
 public class LostRing {
+    private static final int COLLECTION_DELAY_FRAMES = 64;
     private int xSubpixel;
     private int ySubpixel;
     private int xVel;
@@ -9,14 +10,25 @@ public class LostRing {
     private boolean collected;
     private int sparkleStartFrame = -1;
     private final int id;
+    private final int spawnFrame;
 
-    public LostRing(int id, int x, int y, int xVel, int yVel, int lifetime) {
+    public LostRing(int id, int x, int y, int xVel, int yVel, int lifetime, int spawnFrame) {
         this.id = id;
         this.xSubpixel = x << 8;
         this.ySubpixel = y << 8;
         this.xVel = xVel;
         this.yVel = yVel;
         this.lifetime = lifetime;
+        this.spawnFrame = spawnFrame;
+    }
+
+    /**
+     * Returns true if enough frames have passed since spawning for the ring to be
+     * collected.
+     * This prevents immediate recollection after being hurt.
+     */
+    public boolean canBeCollected(int currentFrame) {
+        return (currentFrame - spawnFrame) >= COLLECTION_DELAY_FRAMES;
     }
 
     public int getId() {

@@ -21,26 +21,26 @@ public class LostRingManager {
     private static final int RING_TOUCH_SIZE_INDEX = 0x07;
     private static final int SOLIDITY_TOP = 0x0C;
     private static final short[] SINE_TABLE = {
-        0, 6, 12, 18, 25, 31, 37, 43, 49, 56, 62, 68, 74, 80, 86, 92,
-        97, 103, 109, 115, 120, 126, 131, 136, 142, 147, 152, 157, 162, 167, 171, 176,
-        181, 185, 189, 193, 197, 201, 205, 209, 212, 216, 219, 222, 225, 228, 231, 234,
-        236, 238, 241, 243, 244, 246, 248, 249, 251, 252, 253, 254, 254, 255, 255, 255,
-        256, 255, 255, 255, 254, 254, 253, 252, 251, 249, 248, 246, 244, 243, 241, 238,
-        236, 234, 231, 228, 225, 222, 219, 216, 212, 209, 205, 201, 197, 193, 189, 185,
-        181, 176, 171, 167, 162, 157, 152, 147, 142, 136, 131, 126, 120, 115, 109, 103,
-        97, 92, 86, 80, 74, 68, 62, 56, 49, 43, 37, 31, 25, 18, 12, 6,
-        0, -6, -12, -18, -25, -31, -37, -43, -49, -56, -62, -68, -74, -80, -86, -92,
-        -97, -103, -109, -117, -120, -126, -131, -136, -142, -147, -152, -157, -162, -167, -171, -176,
-        -181, -185, -189, -193, -197, -201, -205, -209, -212, -216, -219, -222, -225, -228, -231, -234,
-        -236, -238, -241, -243, -244, -246, -248, -249, -251, -252, -253, -254, -254, -255, -255, -255,
-        -256, -255, -255, -255, -254, -254, -253, -252, -251, -249, -248, -246, -244, -243, -241, -238,
-        -236, -234, -231, -228, -225, -222, -219, -216, -212, -209, -205, -201, -197, -193, -189, -185,
-        -181, -176, -171, -167, -162, -157, -152, -147, -142, -136, -131, -126, -120, -117, -109, -103,
-        -97, -92, -86, -80, -74, -68, -62, -56, -49, -43, -37, -31, -25, -18, -12, -6,
-        0, 6, 12, 18, 25, 31, 37, 43, 49, 56, 62, 68, 74, 80, 86, 92,
-        97, 103, 109, 115, 120, 126, 131, 136, 142, 147, 152, 157, 162, 167, 171, 176,
-        181, 185, 189, 193, 197, 201, 205, 209, 212, 216, 219, 222, 225, 228, 231, 234,
-        236, 238, 241, 243, 244, 246, 248, 249, 251, 252, 253, 254, 254, 255, 255, 255
+            0, 6, 12, 18, 25, 31, 37, 43, 49, 56, 62, 68, 74, 80, 86, 92,
+            97, 103, 109, 115, 120, 126, 131, 136, 142, 147, 152, 157, 162, 167, 171, 176,
+            181, 185, 189, 193, 197, 201, 205, 209, 212, 216, 219, 222, 225, 228, 231, 234,
+            236, 238, 241, 243, 244, 246, 248, 249, 251, 252, 253, 254, 254, 255, 255, 255,
+            256, 255, 255, 255, 254, 254, 253, 252, 251, 249, 248, 246, 244, 243, 241, 238,
+            236, 234, 231, 228, 225, 222, 219, 216, 212, 209, 205, 201, 197, 193, 189, 185,
+            181, 176, 171, 167, 162, 157, 152, 147, 142, 136, 131, 126, 120, 115, 109, 103,
+            97, 92, 86, 80, 74, 68, 62, 56, 49, 43, 37, 31, 25, 18, 12, 6,
+            0, -6, -12, -18, -25, -31, -37, -43, -49, -56, -62, -68, -74, -80, -86, -92,
+            -97, -103, -109, -117, -120, -126, -131, -136, -142, -147, -152, -157, -162, -167, -171, -176,
+            -181, -185, -189, -193, -197, -201, -205, -209, -212, -216, -219, -222, -225, -228, -231, -234,
+            -236, -238, -241, -243, -244, -246, -248, -249, -251, -252, -253, -254, -254, -255, -255, -255,
+            -256, -255, -255, -255, -254, -254, -253, -252, -251, -249, -248, -246, -244, -243, -241, -238,
+            -236, -234, -231, -228, -225, -222, -219, -216, -212, -209, -205, -201, -197, -193, -189, -185,
+            -181, -176, -171, -167, -162, -157, -152, -147, -142, -136, -131, -126, -120, -117, -109, -103,
+            -97, -92, -86, -80, -74, -68, -62, -56, -49, -43, -37, -31, -25, -18, -12, -6,
+            0, 6, 12, 18, 25, 31, 37, 43, 49, 56, 62, 68, 74, 80, 86, 92,
+            97, 103, 109, 115, 120, 126, 131, 136, 142, 147, 152, 157, 162, 167, 171, 176,
+            181, 185, 189, 193, 197, 201, 205, 209, 212, 216, 219, 222, 225, 228, 231, 234,
+            236, 238, 241, 243, 244, 246, 248, 249, 251, 252, 253, 254, 254, 255, 255, 255
     };
 
     private final LevelManager levelManager;
@@ -52,7 +52,8 @@ public class LostRingManager {
     private final List<LostRing> rings = new ArrayList<>();
     private int nextId;
 
-    public LostRingManager(LevelManager levelManager, RingRenderManager renderManager, TouchResponseTable touchResponseTable) {
+    public LostRingManager(LevelManager levelManager, RingRenderManager renderManager,
+            TouchResponseTable touchResponseTable) {
         this.levelManager = levelManager;
         this.renderManager = renderManager;
         this.touchResponseTable = touchResponseTable;
@@ -67,7 +68,7 @@ public class LostRingManager {
         }
     }
 
-    public void spawnLostRings(AbstractPlayableSprite player, int ringCount) {
+    public void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter) {
         if (player == null || renderManager == null) {
             return;
         }
@@ -95,7 +96,8 @@ public class LostRingManager {
                 }
             }
 
-            rings.add(new LostRing(nextId++, player.getCentreX(), player.getCentreY(), xVel, yVel, LIFETIME_FRAMES));
+            rings.add(new LostRing(nextId++, player.getCentreX(), player.getCentreY(), xVel, yVel, LIFETIME_FRAMES,
+                    frameCounter));
             xVel = -xVel;
             angle = -angle;
         }
@@ -147,7 +149,8 @@ public class LostRingManager {
                     }
                 }
 
-                if (player != null && ringOverlapsPlayer(playerX, playerY, playerHeight, ring)) {
+                if (player != null && ring.canBeCollected(frameCounter)
+                        && ringOverlapsPlayer(playerX, playerY, playerHeight, ring)) {
                     ring.markCollected(frameCounter);
                     player.addRings(1);
                     AudioManager.getInstance().playSfx(GameSound.RING);
@@ -177,6 +180,10 @@ public class LostRingManager {
         while (iterator.hasNext()) {
             LostRing ring = iterator.next();
             if (!ring.isCollected()) {
+                // Blink when lifetime < 64 frames (skip render on odd frames)
+                if (ring.getLifetime() < 64 && (ring.getLifetime() & 1) != 0) {
+                    continue; // Skip rendering this ring this frame (blink)
+                }
                 renderManager.drawFrameIndex(spinFrameIndex, ring.getX(), ring.getY());
                 continue;
             }

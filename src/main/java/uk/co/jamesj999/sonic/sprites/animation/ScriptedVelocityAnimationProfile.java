@@ -16,6 +16,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     private final int spindashAnimId;
     private final int springAnimId;
     private final int deathAnimId;
+    private final int hurtAnimId;
     private final int airAnimId;
     private final int runSpeedThreshold;
     private final int walkSpeedThreshold;
@@ -83,6 +84,26 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int walkSpeedThreshold,
             int runSpeedThreshold,
             int fallbackFrame) {
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, duckAnimId, spindashAnimId,
+                springAnimId, deathAnimId, -1, airAnimId, walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
+    }
+
+    public ScriptedVelocityAnimationProfile(
+            int idleAnimId,
+            int walkAnimId,
+            int runAnimId,
+            int rollAnimId,
+            int roll2AnimId,
+            int pushAnimId,
+            int duckAnimId,
+            int spindashAnimId,
+            int springAnimId,
+            int deathAnimId,
+            int hurtAnimId,
+            int airAnimId,
+            int walkSpeedThreshold,
+            int runSpeedThreshold,
+            int fallbackFrame) {
         this.idleAnimId = Math.max(0, idleAnimId);
         this.walkAnimId = Math.max(0, walkAnimId);
         this.runAnimId = Math.max(0, runAnimId);
@@ -93,6 +114,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         this.spindashAnimId = Math.max(-1, spindashAnimId);
         this.springAnimId = Math.max(-1, springAnimId);
         this.deathAnimId = Math.max(-1, deathAnimId);
+        this.hurtAnimId = Math.max(-1, hurtAnimId);
         this.airAnimId = Math.max(0, airAnimId);
         this.walkSpeedThreshold = Math.max(0, walkSpeedThreshold);
         this.runSpeedThreshold = Math.max(0, runSpeedThreshold);
@@ -103,6 +125,10 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     public Integer resolveAnimationId(AbstractPlayableSprite sprite, int frameCounter, int scriptCount) {
         if (sprite.getDead() && deathAnimId >= 0) {
             return deathAnimId;
+        }
+        // Hurt state uses separate hurt animation (animation 0x19)
+        if (sprite.isHurt() && hurtAnimId >= 0) {
+            return hurtAnimId;
         }
         if (sprite.getSpringing() && sprite.getAir() && springAnimId >= 0) {
             return springAnimId;

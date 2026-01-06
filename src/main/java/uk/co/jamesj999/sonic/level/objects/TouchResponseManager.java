@@ -58,7 +58,8 @@ public class TouchResponseManager {
             TouchCategory category = decodeCategory(flags);
 
             boolean overlap = isOverlapping(playerX, playerY, playerHeight, instance.getSpawn(), width, height);
-            debugState.addHit(new TouchResponseDebugHit(instance.getSpawn(), flags, sizeIndex, width, height, category, overlap));
+            debugState.addHit(
+                    new TouchResponseDebugHit(instance.getSpawn(), flags, sizeIndex, width, height, category, overlap));
             if (!overlap) {
                 continue;
             }
@@ -76,7 +77,7 @@ public class TouchResponseManager {
     }
 
     private boolean isOverlapping(int playerX, int playerY, int playerHeight,
-                                  ObjectSpawn spawn, int objectWidth, int objectHeight) {
+            ObjectSpawn spawn, int objectWidth, int objectHeight) {
         int dx = spawn.x() - objectWidth - playerX;
         if (dx < 0) {
             int sum = (dx & 0xFFFF) + ((objectWidth * 2) & 0xFFFF);
@@ -111,7 +112,7 @@ public class TouchResponseManager {
     }
 
     private void handleTouchResponse(AbstractPlayableSprite player, ObjectInstance instance,
-                                     TouchResponseListener listener, TouchResponseResult result) {
+            TouchResponseListener listener, TouchResponseResult result) {
         if (player == null) {
             return;
         }
@@ -167,7 +168,7 @@ public class TouchResponseManager {
         boolean spikeHit = instance != null && instance.getSpawn().objectId() == 0x36;
         boolean hadRings = player.getRingCount() > 0;
         if (hadRings) {
-            LevelManager.getInstance().spawnLostRings(player);
+            LevelManager.getInstance().spawnLostRings(player, frameCounter);
         }
         player.applyHurtOrDeath(sourceX, spikeHit, hadRings);
     }

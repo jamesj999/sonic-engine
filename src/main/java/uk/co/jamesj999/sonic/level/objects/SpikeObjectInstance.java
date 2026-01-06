@@ -29,9 +29,14 @@ public class SpikeObjectInstance extends BoxObjectInstance implements SolidObjec
         if (!shouldHurt(contact)) {
             return;
         }
+        // Check invulnerability BEFORE doing anything - allows walking on spikes when
+        // invulnerable
+        if (player.getInvulnerable()) {
+            return;
+        }
         boolean hadRings = player.getRingCount() > 0;
         if (hadRings) {
-            LevelManager.getInstance().spawnLostRings(player);
+            LevelManager.getInstance().spawnLostRings(player, frameCounter);
         }
         player.applyHurtOrDeath(spawn.x(), true, hadRings);
     }

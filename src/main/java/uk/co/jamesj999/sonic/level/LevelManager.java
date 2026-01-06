@@ -207,7 +207,8 @@ public class LevelManager {
         }
         try {
             SpriteArtSet artSet = provider.loadPlayerSpriteArt(playable.getCode());
-            if (artSet == null || artSet.bankSize() <= 0 || artSet.mappingFrames().isEmpty() || artSet.dplcFrames().isEmpty()) {
+            if (artSet == null || artSet.bankSize() <= 0 || artSet.mappingFrames().isEmpty()
+                    || artSet.dplcFrames().isEmpty()) {
                 playable.setSpriteRenderer(null);
                 return;
             }
@@ -547,14 +548,14 @@ public class LevelManager {
                                 1f, 0.85f, 0.1f, centerX, centerY + crossHalf, 0, 0));
                     }
 
-                        if (!boxCommands.isEmpty()) {
-                            graphicsManager.enqueueDebugLineState();
-                            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
-                        }
-                        if (!centerCommands.isEmpty()) {
-                            graphicsManager.enqueueDebugLineState();
-                            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
-                        }
+                    if (!boxCommands.isEmpty()) {
+                        graphicsManager.enqueueDebugLineState();
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
+                    }
+                    if (!centerCommands.isEmpty()) {
+                        graphicsManager.enqueueDebugLineState();
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
+                    }
                 }
             }
         }
@@ -577,12 +578,12 @@ public class LevelManager {
     }
 
     private void drawLayer(List<GLCommand> commands,
-                           int layerIndex,
-                           Camera camera,
-                           float parallaxX,
-                           float parallaxY,
-                           TilePriorityPass priorityPass,
-                           boolean drawCollision) {
+            int layerIndex,
+            Camera camera,
+            float parallaxX,
+            float parallaxY,
+            TilePriorityPass priorityPass,
+            boolean drawCollision) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
@@ -623,19 +624,24 @@ public class LevelManager {
                 // Check scroll values for the scanlines covered by this chunk row
                 for (int i = 0; i < LevelConstants.CHUNK_HEIGHT; i++) {
                     int line = screenY + i;
-                    if (line < 0) line = 0;
-                    if (line >= ParallaxManager.VISIBLE_LINES) line = ParallaxManager.VISIBLE_LINES - 1;
+                    if (line < 0)
+                        line = 0;
+                    if (line >= ParallaxManager.VISIBLE_LINES)
+                        line = ParallaxManager.VISIBLE_LINES - 1;
 
-                    short val = (short)(hScroll[line] & 0xFFFF);
-                    if (val < localMin) localMin = val;
-                    if (val > localMax) localMax = val;
+                    short val = (short) (hScroll[line] & 0xFFFF);
+                    if (val < localMin)
+                        localMin = val;
+                    if (val > localMax)
+                        localMax = val;
                 }
 
                 rowXStart = -localMax;
                 rowXEnd = cameraWidth - localMin;
 
                 // Align to chunk boundary
-                rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH) % LevelConstants.CHUNK_WIDTH;
+                rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH)
+                        % LevelConstants.CHUNK_WIDTH;
 
                 // Add buffer
                 rowXStart -= LevelConstants.CHUNK_WIDTH;
@@ -654,7 +660,8 @@ public class LevelManager {
                     wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
                 } else {
                     // Foreground Clamps
-                    if (wrappedY < 0 || wrappedY >= levelHeight) continue;
+                    if (wrappedY < 0 || wrappedY >= levelHeight)
+                        continue;
                 }
 
                 Block block = getBlockAtPosition((byte) layerIndex, wrappedX, wrappedY);
@@ -668,12 +675,14 @@ public class LevelManager {
                     int screenX = x - bgCameraX;
                     int screenY = y - bgCameraY;
 
-                    // Convert to absolute coordinates expected by renderPattern (which subtracts cameraX/Y)
+                    // Convert to absolute coordinates expected by renderPattern (which subtracts
+                    // cameraX/Y)
                     int renderX = screenX + cameraX;
                     int renderY = screenY + cameraY;
 
                     // Draw collision only for foreground (Layer 0)
-                    drawChunk(commands, chunkDesc, renderX, renderY, drawCollision, hScroll, screenY, bgCameraX, priorityPass);
+                    drawChunk(commands, chunkDesc, renderX, renderY, drawCollision, hScroll, screenY, bgCameraX,
+                            priorityPass);
                 }
             }
         }
@@ -682,10 +691,10 @@ public class LevelManager {
     /**
      * Draws a chunk of the level based on the provided chunk description.
      *
-     * @param commands  the list of GLCommands to add to
-     * @param chunkDesc the description of the chunk to draw
-     * @param x         the x-coordinate to draw the chunk at
-     * @param y         the y-coordinate to draw the chunk at
+     * @param commands      the list of GLCommands to add to
+     * @param chunkDesc     the description of the chunk to draw
+     * @param x             the x-coordinate to draw the chunk at
+     * @param y             the y-coordinate to draw the chunk at
      * @param drawCollision whether to draw collision debug info
      */
     private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
@@ -693,14 +702,14 @@ public class LevelManager {
     }
 
     private void drawChunk(List<GLCommand> commands,
-                           ChunkDesc chunkDesc,
-                           int x,
-                           int y,
-                           boolean drawCollision,
-                           int[] hScroll,
-                           int screenY,
-                           int baseBgCameraX,
-                           TilePriorityPass priorityPass) {
+            ChunkDesc chunkDesc,
+            int x,
+            int y,
+            boolean drawCollision,
+            int[] hScroll,
+            int screenY,
+            int baseBgCameraX,
+            TilePriorityPass priorityPass) {
         int chunkIndex = chunkDesc.getChunkIndex();
         if (chunkIndex >= level.getChunkCount()) {
             LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
@@ -738,8 +747,10 @@ public class LevelManager {
 
                 if (hScroll != null) {
                     int line = screenY + (cY * Pattern.PATTERN_HEIGHT);
-                    if (line < 0) line = 0;
-                    if (line >= ParallaxManager.VISIBLE_LINES) line = ParallaxManager.VISIBLE_LINES - 1;
+                    if (line < 0)
+                        line = 0;
+                    if (line >= ParallaxManager.VISIBLE_LINES)
+                        line = ParallaxManager.VISIBLE_LINES - 1;
 
                     short scroll = (short) (hScroll[line] & 0xFFFF);
                     drawX = drawX + scroll + baseBgCameraX;
@@ -780,8 +791,7 @@ public class LevelManager {
             Chunk chunk,
             boolean isPrimary,
             int x,
-            int y
-    ) {
+            int y) {
         if (!configService.getBoolean(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED)) {
             return;
         }
@@ -858,8 +868,7 @@ public class LevelManager {
                         drawStartX,
                         drawEndY,
                         drawEndX,
-                        drawStartY
-                ));
+                        drawStartY));
             }
         }
         // Re-enable texturing and shader for subsequent rendering
@@ -939,10 +948,10 @@ public class LevelManager {
             appendLine(commands, originX, originY, endX, endY, color[0], color[1], color[2]);
         }
 
-            if (!commands.isEmpty()) {
-                graphicsManager.enqueueDebugLineState();
-                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
-            }
+        if (!commands.isEmpty()) {
+            graphicsManager.enqueueDebugLineState();
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        }
     }
 
     private void drawCameraBounds() {
@@ -965,10 +974,10 @@ public class LevelManager {
             appendBox(commands, minX, minY, maxX + camW, maxY + camH, 0.2f, 0.9f, 0.9f);
         }
 
-            if (!commands.isEmpty()) {
-                graphicsManager.enqueueDebugLineState();
-                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
-            }
+        if (!commands.isEmpty()) {
+            graphicsManager.enqueueDebugLineState();
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        }
     }
 
     private void appendLine(
@@ -979,8 +988,7 @@ public class LevelManager {
             int y2,
             float r,
             float g,
-            float b
-    ) {
+            float b) {
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                 r, g, b, x1, y1, 0, 0));
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
@@ -994,16 +1002,15 @@ public class LevelManager {
             int halfSpan,
             float r,
             float g,
-            float b
-    ) {
+            float b) {
         appendLine(commands, centerX - halfSpan, centerY, centerX + halfSpan, centerY, r, g, b);
         appendLine(commands, centerX, centerY - halfSpan, centerX, centerY + halfSpan, r, g, b);
     }
 
     private void appendPlaneSwitcherDebug(ObjectSpawn spawn,
-                                          List<GLCommand> lineCommands,
-                                          List<GLCommand> areaCommands,
-                                          AbstractPlayableSprite player) {
+            List<GLCommand> lineCommands,
+            List<GLCommand> areaCommands,
+            AbstractPlayableSprite player) {
         if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
             return;
         }
@@ -1062,8 +1069,7 @@ public class LevelManager {
             int bottom,
             float r,
             float g,
-            float b
-    ) {
+            float b) {
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                 r, g, b, left, top, 0, 0));
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
@@ -1099,25 +1105,26 @@ public class LevelManager {
             return null;
         }
 
-		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-		int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-		// Handle wrapping for X
-		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
+        // Handle wrapping for X
+        int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
 
-		// Handle wrapping for Y
-		int wrappedY = y;
-		if (layer == 1) {
-			// Background loops vertically
-			wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
-		} else {
-			// Foreground Clamps
-			if (wrappedY < 0 || wrappedY >= levelHeight) return null;
-		}
+        // Handle wrapping for Y
+        int wrappedY = y;
+        if (layer == 1) {
+            // Background loops vertically
+            wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
+        } else {
+            // Foreground Clamps
+            if (wrappedY < 0 || wrappedY >= levelHeight)
+                return null;
+        }
 
         Map map = level.getMap();
-		int mapX = wrappedX / LevelConstants.BLOCK_WIDTH;
-		int mapY = wrappedY / LevelConstants.BLOCK_HEIGHT;
+        int mapX = wrappedX / LevelConstants.BLOCK_WIDTH;
+        int mapY = wrappedY / LevelConstants.BLOCK_HEIGHT;
 
         byte value = map.getValue(layer, mapX, mapY);
 
@@ -1137,21 +1144,22 @@ public class LevelManager {
     }
 
     public ChunkDesc getChunkDescAt(byte layer, int x, int y) {
-        Block block = getBlockAtPosition(layer, x ,y);
-        if(block == null) {
+        Block block = getBlockAtPosition(layer, x, y);
+        if (block == null) {
             return null;
         }
 
-		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
-		int wrappedY = y;
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
+        int wrappedY = y;
 
-		if (layer == 1) {
-			int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
-			wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
-		}
+        if (layer == 1) {
+            int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+            wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
+        }
 
-        ChunkDesc chunkDesc = block.getChunkDesc((wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
+        ChunkDesc chunkDesc = block.getChunkDesc((wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,
+                (wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
         return chunkDesc;
     }
 
@@ -1184,7 +1192,8 @@ public class LevelManager {
     // or we can force update. GroundSensor is the main one.
     // I'll leave a deprecated one just in case, or remove it.
     // GroundSensor calls it. I should update GroundSensor.
-    // But I can't leave this here without updating GroundSensor first or it won't compile?
+    // But I can't leave this here without updating GroundSensor first or it won't
+    // compile?
     // Wait, I can overload.
     public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
         int solidityBitIndex = (layer == 0) ? 0x0C : 0x0E;
@@ -1219,7 +1228,11 @@ public class LevelManager {
         return objectRenderManager;
     }
 
-    public void spawnLostRings(AbstractPlayableSprite player) {
+    public ObjectManager getObjectManager() {
+        return objectManager;
+    }
+
+    public void spawnLostRings(AbstractPlayableSprite player, int frameCounter) {
         if (lostRingManager == null || player == null) {
             return;
         }
@@ -1227,7 +1240,7 @@ public class LevelManager {
         if (count <= 0) {
             return;
         }
-        lostRingManager.spawnLostRings(player, count);
+        lostRingManager.spawnLostRings(player, count, frameCounter);
     }
 
     public void loadCurrentLevel() {
@@ -1239,15 +1252,24 @@ public class LevelManager {
             player.setX((short) levelData.getStartXPos());
             player.setY((short) levelData.getStartYPos());
             if (player instanceof AbstractPlayableSprite) {
-                ((AbstractPlayableSprite) player).setXSpeed((short) 0);
-                ((AbstractPlayableSprite) player).setYSpeed((short) 0);
-                ((AbstractPlayableSprite) player).setGSpeed((short) 0);
-                ((AbstractPlayableSprite) player).setAir(false);
-                ((AbstractPlayableSprite) player).setRolling(false);
+                AbstractPlayableSprite playable = (AbstractPlayableSprite) player;
+                playable.setXSpeed((short) 0);
+                playable.setYSpeed((short) 0);
+                playable.setGSpeed((short) 0);
+                playable.setAir(false);
+                playable.setRolling(false);
+                playable.setDead(false);
+                playable.setHurt(false);
+                playable.setDeathCountdown(0);
+                playable.setInvulnerableFrames(0);
+                playable.setInvincibleFrames(0);
+                playable.setDirection(uk.co.jamesj999.sonic.physics.Direction.RIGHT);
+                playable.setAngle((byte) 0);
                 player.setLayer((byte) 0);
-                ((AbstractPlayableSprite) player).setHighPriority(false);
+                playable.setHighPriority(false);
                 Camera camera = Camera.getInstance();
-                camera.setFocusedSprite((AbstractPlayableSprite) player);
+                camera.setFrozen(false); // Unlock camera after death
+                camera.setFocusedSprite(playable);
                 Level currentLevel = getCurrentLevel();
                 if (currentLevel != null) {
                     camera.setMinX((short) currentLevel.getMinX());
@@ -1262,7 +1284,7 @@ public class LevelManager {
         }
     }
 
-    public void nextAct() throws IOException  {
+    public void nextAct() throws IOException {
         currentAct++;
         if (currentAct >= levels.get(currentZone).size()) {
             currentAct = 0;
@@ -1276,7 +1298,7 @@ public class LevelManager {
         loadCurrentLevel();
     }
 
-    public void nextZone() throws IOException  {
+    public void nextZone() throws IOException {
         currentZone++;
         if (currentZone >= levels.size()) {
             currentZone = 0;

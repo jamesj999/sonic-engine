@@ -9,27 +9,35 @@ import com.jogamp.opengl.GL2;
 
 public class Tails extends AbstractPlayableSprite {
 
-public Tails(String code, short x, short y, boolean debug) {
-        super(code, x, y, debug);
-        setWidth(20);
-        setHeight(runHeight);
-        setRenderOffsets((short) 0, (short) 0);
-}
+	public Tails(String code, short x, short y, boolean debug) {
+		super(code, x, y, debug);
+		setWidth(20);
+		setHeight(runHeight);
+		setRenderOffsets((short) 0, (short) 0);
+	}
 
 	public void draw() {
-        if (getSpriteRenderer() != null) {
-                if (getSpindashDustManager() != null) {
-                        getSpindashDustManager().draw();
-                }
-                getSpriteRenderer().drawFrame(
-                                getMappingFrame(),
-                                getRenderCentreX(),
-                                getRenderCentreY(),
-                                getRenderHFlip(),
-                                getRenderVFlip()
-                );
-                return;
-        }
+		// Skip rendering on certain frames during invulnerability (blink effect)
+		// Pattern: (frames & 0x04) creates ~8-frame on/off cycle
+		if (getInvulnerableFrames() > 0 && (getInvulnerableFrames() & 0x04) != 0) {
+			// Still draw spindash dust even when blinking
+			if (getSpindashDustManager() != null) {
+				getSpindashDustManager().draw();
+			}
+			return; // Invisible this frame
+		}
+		if (getSpriteRenderer() != null) {
+			if (getSpindashDustManager() != null) {
+				getSpindashDustManager().draw();
+			}
+			getSpriteRenderer().drawFrame(
+					getMappingFrame(),
+					getRenderCentreX(),
+					getRenderCentreY(),
+					getRenderHFlip(),
+					getRenderVFlip());
+			return;
+		}
 		graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.RECTI,
 				GL2.GL_2D, 1, 1, 1, xPixel, yPixel, xPixel + width, yPixel
 						+ height));
@@ -48,17 +56,17 @@ public Tails(String code, short x, short y, boolean debug) {
 		slopeRunning = 32;
 		slopeRollingDown = 20;
 		slopeRollingUp = 80;
-                rollDecel = 32;
-                minStartRollSpeed = 264;
-                minRollSpeed = 128;
-                maxRoll = 4096;
-                rollHeight = 28;
-                runHeight = 38;
-                standXRadius = 9;
-                standYRadius = 19;
-                rollXRadius = 7;
-                rollYRadius = 14;
-        }
+		rollDecel = 32;
+		minStartRollSpeed = 264;
+		minRollSpeed = 128;
+		maxRoll = 4096;
+		rollHeight = 28;
+		runHeight = 38;
+		standXRadius = 9;
+		standYRadius = 19;
+		rollXRadius = 7;
+		rollYRadius = 14;
+	}
 
 	@Override
 	protected void createSensorLines() {

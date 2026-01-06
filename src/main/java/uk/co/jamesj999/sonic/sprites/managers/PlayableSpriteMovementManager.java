@@ -680,6 +680,17 @@ public class PlayableSpriteMovementManager extends
 		sprite.setGSpeed((short) 0);
 		sprite.setXSpeed((short) 0);
 		sprite.setYSpeed(ySpeed);
+
+		// Check if player has fallen below camera + 256 pixels to start death countdown
+		Camera camera = Camera.getInstance();
+		if (camera != null && sprite.getY() > camera.getMaxY() + 256) {
+			sprite.startDeathCountdown();
+		}
+
+		// Tick death countdown and trigger level reload when it reaches 0
+		if (sprite.tickDeathCountdown()) {
+			uk.co.jamesj999.sonic.level.LevelManager.getInstance().loadCurrentLevel();
+		}
 	}
 
 	/**

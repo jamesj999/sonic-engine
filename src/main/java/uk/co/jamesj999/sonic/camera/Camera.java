@@ -42,12 +42,15 @@ public class Camera {
 			return;
 		}
 		if (frozen) {
-			framesBehind++;
+			// Clamp framesBehind to prevent exceeding history array length (32)
+			if (framesBehind < 31) {
+				framesBehind++;
+			}
 			return;
 		}
 		short focusedSpriteRealX;
 		short focusedSpriteRealY;
-		if(framesBehind > 0) {
+		if (framesBehind > 0) {
 			focusedSpriteRealX = (short) (focusedSprite.getCentreX(framesBehind) - x);
 			focusedSpriteRealY = (short) (focusedSprite.getCentreY(framesBehind) - y);
 		} else {
@@ -139,6 +142,10 @@ public class Camera {
 
 	public void setFrozen(boolean frozen) {
 		this.frozen = frozen;
+		// Reset framesBehind when unfreezing to prevent stale history access
+		if (!frozen) {
+			framesBehind = 0;
+		}
 	}
 
 	public boolean getFrozen() {
@@ -173,11 +180,11 @@ public class Camera {
 	public short getY() {
 		return y;
 	}
-	
+
 	public short getWidth() {
 		return width;
 	}
-	
+
 	public short getHeight() {
 		return height;
 	}
