@@ -126,7 +126,7 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSmps(AbstractSmpsData data, DacData dacData) {
-        if (data.getId() == 0x98 || data.getId() == 0x99) { // MUS_EXTRA_LIFE or MUS_INVINCIBILITY
+        if (data.getId() == 0xB5 || data.getId() == 0x99) { // MUS_EXTRA_LIFE or MUS_INVINCIBILITY
             savedMusicStream = currentStream;
             savedSmps = currentSmps;
             savedSmpsDriver = smpsDriver;

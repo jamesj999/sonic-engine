@@ -87,7 +87,7 @@ public class Sonic2Constants {
     public static final int ART_TILE_INVINCIBILITY_STARS = 0x05C0;
 
     public static final int MUS_INVINCIBILITY = 0x99;
-    public static final int MUS_EXTRA_LIFE = 0x98;
+    public static final int MUS_EXTRA_LIFE = 0xB5;
     public static final int CMD_SPEED_UP = 0xFB;
     public static final int CMD_SLOW_DOWN = 0xFC;
 

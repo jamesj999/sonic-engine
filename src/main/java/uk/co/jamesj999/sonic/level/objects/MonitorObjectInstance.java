@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
 import uk.co.jamesj999.sonic.level.render.SpriteMappingPiece;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
@@ -114,7 +115,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         renderer.drawFrameIndex(frameIndex, spawn.x(), spawn.y(), false, false);
 
         if (iconActive) {
-            int iconFrame = resolveIconFrame();
+            int iconFrame = resolveIconFrame(effectTarget);
             ObjectSpriteSheet sheet = renderManager.getMonitorSheet();
             if (iconFrame >= 0 && sheet != null && iconFrame < sheet.getFrameCount()) {
                 SpriteMappingFrame mappingFrame = sheet.getFrame(iconFrame);
@@ -221,9 +222,17 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         iconActive = false;
     }
 
-    private int resolveIconFrame() {
+    private int resolveIconFrame(AbstractPlayableSprite player) {
         if (type == MonitorType.BROKEN) {
             return -1;
+        }
+        // For 1-up monitors, show the correct character face
+        if (type == MonitorType.SONIC || type == MonitorType.TAILS) {
+            // Show Tails icon if player is Tails, otherwise Sonic
+            if (player instanceof Tails) {
+                return MonitorType.TAILS.id + ICON_FRAME_OFFSET;
+            }
+            return MonitorType.SONIC.id + ICON_FRAME_OFFSET;
         }
         return type.id + ICON_FRAME_OFFSET;
     }
