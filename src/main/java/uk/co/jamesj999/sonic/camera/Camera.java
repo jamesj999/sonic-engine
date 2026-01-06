@@ -15,6 +15,9 @@ public class Camera {
 	private short maxX;
 	private short maxY;
 
+	private short bgX;
+	private short bgY;
+
 	private int framesBehind = 0;
 
 	private boolean frozen = false;
@@ -172,6 +175,22 @@ public class Camera {
 
 	public short getY() {
 		return y;
+	}
+
+	public short getBgX() {
+		return bgX;
+	}
+
+	public void setBgX(short bgX) {
+		this.bgX = bgX;
+	}
+
+	public short getBgY() {
+		return bgY;
+	}
+
+	public void setBgY(short bgY) {
+		this.bgY = bgY;
 	}
 	
 	public short getWidth() {

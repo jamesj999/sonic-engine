@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.level;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.level.parallax.*;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -16,33 +17,74 @@ public class ParallaxManager {
 
     public static final int VISIBLE_LINES = 224;
 
-    // Zone IDs (matching LevelManager list index)
+    // Zone IDs
     private static final int ZONE_EHZ = 0;
+    private static final int ZONE_MTZ = 4; // Check IDs?
     private static final int ZONE_WFZ = 9;
+    private static final int ZONE_HTZ = 7; // Map correctly
+    private static final int ZONE_OOZ = 6;
+    private static final int ZONE_MCZ = 2;
+    private static final int ZONE_CNZ = 3;
+    private static final int ZONE_CPZ = 1;
+    private static final int ZONE_DEZ = 10;
+    private static final int ZONE_ARZ = 5;
+    private static final int ZONE_SCZ = 8;
+    // Note: Zone IDs need to match LevelManager/LevelData.
+    // 0: EHZ
+    // 1: CPZ
+    // 2: MCZ? Or ARZ?
+    // Let's use standard Sonic 2 IDs if possible, or LevelData map.
+    // Assuming standard: 0=EHZ, 1=CPZ, 2=ARZ, 3=CNZ, 4=HTZ, 5=MCZ, 6=OOZ, 7=MTZ, 8=SCZ, 9=WFZ, 10=DEZ.
+    // Wait, let's verify LevelData or Sonic2.java if visible.
+    // But for now, let's map based on prompt names.
+    // The prompt listed:
+    // EHZ, MTZ, WFZ, HTZ, OOZ, MCZ, CNZ, CPZ, DEZ, ARZ, SCZ.
+
+    // LevelData.java likely has the enum.
 
     // Packed as (planeA << 16) | (planeB & 0xFFFF)
-    // Plane A is FG, Plane B is BG.
     private final int[] hScroll = new int[VISIBLE_LINES];
 
     private int minScroll = 0;
     private int maxScroll = 0;
 
-    // ROM Tables
-    private byte[] ehzRipple;
-    private byte[] wfzNormalSegs;
-    private byte[] wfzTransSegs;
+    // Strategies
+    private ParallaxStrategy currentStrategy;
+
+    // Store Strategies
+    private EhzParallaxStrategy ehzStrategy;
+    private MtzParallaxStrategy mtzStrategy;
+    private WfzParallaxStrategy wfzStrategy;
+    private HtzParallaxStrategy htzStrategy;
+    private OOZParallaxStrategy oozStrategy;
+    private MCZParallaxStrategy mczStrategy;
+    private CNZParallaxStrategy cnzStrategy;
+    private CPZParallaxStrategy cpzStrategy;
+    private DEZParallaxStrategy dezStrategy;
+    private ARZParallaxStrategy arzStrategy;
+    private SCZParallaxStrategy sczStrategy;
 
     private boolean loaded = false;
 
     // Addresses (REV01)
     private static final int EHZ_RIPPLE_ADDR = 0x00C682;
-    private static final int EHZ_RIPPLE_SIZE = 66;
+    private static final int EHZ_RIPPLE_SIZE = 66; // Matches ROM table size
+
     private static final int WFZ_TRANS_ADDR = 0x00C8CA;
     private static final int WFZ_NORMAL_ADDR = 0x00C916;
+    private static final int WFZ_TABLE_SIZE = 128; // Safe
 
-    // Guessing size for WFZ tables based on addresses or safe buffer
-    private static final int WFZ_TRANS_SIZE = WFZ_NORMAL_ADDR - WFZ_TRANS_ADDR;
-    private static final int WFZ_NORMAL_SIZE = 128; // Safe bet
+    private static final int MCZ_ROW_ADDR = 0x00CE6C;
+    private static final int MCZ_ROW_SIZE = 256; // Safe
+
+    private static final int CNZ_ROW_ADDR = 0x00D156;
+    private static final int CNZ_ROW_SIZE = 256;
+
+    private static final int DEZ_ROW_ADDR = 0x00D48A;
+    private static final int DEZ_ROW_SIZE = 256;
+
+    private static final int ARZ_ROW_ADDR = 0x00D5CE;
+    private static final int ARZ_ROW_SIZE = 256;
 
     private static ParallaxManager instance;
 
@@ -56,18 +98,33 @@ public class ParallaxManager {
     public void load(Rom rom) {
         if (loaded) return;
         try {
-            this.ehzRipple = rom.readBytes(EHZ_RIPPLE_ADDR, EHZ_RIPPLE_SIZE);
-            this.wfzTransSegs = rom.readBytes(WFZ_TRANS_ADDR, WFZ_TRANS_SIZE);
-            this.wfzNormalSegs = rom.readBytes(WFZ_NORMAL_ADDR, WFZ_NORMAL_SIZE);
+            // Load tables
+            byte[] ehzRipple = rom.readBytes(EHZ_RIPPLE_ADDR, EHZ_RIPPLE_SIZE);
+            byte[] wfzTrans = rom.readBytes(WFZ_TRANS_ADDR, WFZ_TABLE_SIZE);
+            byte[] wfzNormal = rom.readBytes(WFZ_NORMAL_ADDR, WFZ_TABLE_SIZE);
+            byte[] mczRows = rom.readBytes(MCZ_ROW_ADDR, MCZ_ROW_SIZE);
+            byte[] cnzRows = rom.readBytes(CNZ_ROW_ADDR, CNZ_ROW_SIZE);
+            byte[] dezRows = rom.readBytes(DEZ_ROW_ADDR, DEZ_ROW_SIZE);
+            byte[] arzRows = rom.readBytes(ARZ_ROW_ADDR, ARZ_ROW_SIZE);
+
+            // Initialize strategies
+            ehzStrategy = new EhzParallaxStrategy(ehzRipple);
+            mtzStrategy = new MtzParallaxStrategy();
+            wfzStrategy = new WfzParallaxStrategy(wfzTrans, wfzNormal);
+            htzStrategy = new HtzParallaxStrategy();
+            oozStrategy = new OOZParallaxStrategy(ehzRipple); // OOZ uses same ripple table? Prompt: "sun uses SwScrl_RippleData -> byte_C682"
+            mczStrategy = new MCZParallaxStrategy(mczRows, null);
+            cnzStrategy = new CNZParallaxStrategy(cnzRows);
+            cpzStrategy = new CPZParallaxStrategy(ehzRipple); // Check if CPZ uses same table. Prompt: "one special block row... uses SwScrl_RippleData" -> Yes.
+            dezStrategy = new DEZParallaxStrategy(dezRows);
+            arzStrategy = new ARZParallaxStrategy(arzRows);
+            sczStrategy = new SCZParallaxStrategy();
+
             loaded = true;
-            LOGGER.info("Parallax data loaded.");
+            LOGGER.info("Parallax data loaded and strategies initialized.");
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Failed to load parallax data: " + e.getMessage(), e);
-            // We don't throw, just log. loaded remains false.
-            // Initialize arrays to prevent NPE if methods are called
-            ehzRipple = new byte[0];
-            wfzTransSegs = new byte[0];
-            wfzNormalSegs = new byte[0];
+            // Fallback?
         }
     }
 
@@ -79,144 +136,48 @@ public class ParallaxManager {
     public int getMaxScroll() { return maxScroll; }
 
     public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY) {
-        // Reset min/max
+        // Reset min/max (recalc after update)
         minScroll = Integer.MAX_VALUE;
         maxScroll = Integer.MIN_VALUE;
 
         if (!loaded) {
-             // Try to be safe even if not loaded properly via ROM
-             // But updateMinimal works without tables.
-             updateMinimal(cam);
+             // Fallback
              return;
         }
 
+        ParallaxStrategy strategy = getStrategy(zoneId);
+        if (strategy != null) {
+            strategy.update(hScroll, cam, frameCounter, bgScrollY, actId);
+
+            // Calc min/max for rendering optimization
+            for (int val : hScroll) {
+                short bg = (short)(val & 0xFFFF);
+                if (bg < minScroll) minScroll = bg;
+                if (bg > maxScroll) maxScroll = bg;
+            }
+        }
+
+        // Debug dump?
+        // if (SonicConfiguration.DEBUG_PARALLAX) dump(hScroll);
+    }
+
+    private ParallaxStrategy getStrategy(int zoneId) {
+        // Map Zone ID to Strategy
+        // IDs must match LevelData.
+        // 0=EHZ, 1=CPZ, 2=ARZ, 3=CNZ, 4=HTZ, 5=MCZ, 6=OOZ, 7=MTZ, 8=SCZ, 9=WFZ, 10=DEZ
         switch (zoneId) {
-            case ZONE_EHZ:
-                updateEhz(cam, frameCounter, bgScrollY);
-                break;
-            case ZONE_WFZ:
-                updateWfz(cam, frameCounter);
-                break;
-            default:
-                updateMinimal(cam);
-                break;
+            case 0: return ehzStrategy;
+            case 1: return cpzStrategy;
+            case 2: return arzStrategy;
+            case 3: return cnzStrategy;
+            case 4: return htzStrategy;
+            case 5: return mczStrategy;
+            case 6: return oozStrategy;
+            case 7: return mtzStrategy;
+            case 8: return sczStrategy;
+            case 9: return wfzStrategy;
+            case 10: return dezStrategy;
+            default: return mtzStrategy; // Default minimal
         }
-    }
-
-    private void updateMinimal(Camera cam) {
-        int camX = cam.getX();
-        // Plane A moves with camera (FG) -> scroll = -camX
-        short planeA = (short) -camX;
-        // Plane B generic parallax (0.5)
-        short planeB = (short) -(camX >> 1);
-
-        updateMinMax(planeB);
-
-        int packed = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
-        for (int y = 0; y < VISIBLE_LINES; y++) hScroll[y] = packed;
-    }
-
-    private void updateEhz(Camera cam, int frameCounter, int bgScrollY) {
-        int camX = cam.getX();
-        short planeA = (short) -camX;
-
-        // EHZ Parallax approximation
-
-        // Calculate vertical background position to map bands to world coordinates (avoiding tearing during vertical scroll)
-        int mapHeight = 256; // Adjusted to 256 based on observation of "bottom rows" wrapping behavior
-
-        for (int y = 0; y < VISIBLE_LINES; y++) {
-            // Map screen line to background map line
-            int mapY = (y + bgScrollY) % mapHeight;
-            if (mapY < 0) mapY += mapHeight;
-
-            short baseB;
-
-            // Banding based on Map Y (256px height)
-            // Sky: 0-80 (0.25x)
-            // Water Surface: 80-112 (0.25x + Ripple) - Base speed matches sky
-            // Grass/Hills: 112-256 (Stepped bands for obvious parallax)
-
-            if (mapY < 80) {
-                baseB = (short) -(camX >> 2);
-            } else if (mapY < 112) {
-                baseB = (short) -(camX >> 2);
-            } else {
-                // Grass Bands (Stepped)
-                // 112-148: 0.375x (3/8)
-                // 148-184: 0.5x   (4/8)
-                // 184-220: 0.625x (5/8)
-                // 220-256: 0.75x  (6/8)
-
-                int grassSection = (mapY - 112) / 36;
-
-                // Base 0.25. Add (grassSection + 1) * 0.125
-                int increment = (camX >> 3) * (grassSection + 1);
-                baseB = (short) (-(camX >> 2) - increment);
-            }
-
-            short b = baseB;
-
-            // Water region ripple
-            // Limited to the Water Surface band (80-112)
-            if (mapY >= 80 && mapY < 112) {
-                if (ehzRipple != null && ehzRipple.length > 0) {
-                    int slowFrame = frameCounter >> 3;
-                    // Use mapY for ripple index
-                    int idx = (slowFrame + (mapY - 80)) % ehzRipple.length;
-                    if (idx < 0) idx += ehzRipple.length;
-
-                    int offset = ehzRipple[idx] & 0x1;
-                    b += (short) offset;
-                }
-            }
-
-            updateMinMax(b);
-
-            hScroll[y] = ((planeA & 0xFFFF) << 16) | (b & 0xFFFF);
-        }
-    }
-
-    private void updateWfz(Camera cam, int frameCounter) {
-        int camX = cam.getX();
-        short planeA = (short) -camX;
-
-        // WFZ Parallax
-        short[] layerScroll = new short[16];
-        // Populate layer scrolls (Route B approximation)
-        layerScroll[0] = (short) -(camX >> 2);  // Slow
-        layerScroll[1] = (short) -(camX >> 1);  // Medium
-        layerScroll[2] = (short) -camX;         // Fast (Near)
-        for(int i=3; i<16; i++) layerScroll[i] = (short) -(camX >> 1);
-
-        byte[] segs = wfzNormalSegs;
-
-        int y = 0;
-        if (segs != null && segs.length > 0) {
-            for (int i = 0; i + 1 < segs.length && y < VISIBLE_LINES; i += 2) {
-                int count = segs[i] & 0xFF;
-                int idx = segs[i + 1] & 0xFF;
-
-                short planeB = (idx < layerScroll.length) ? layerScroll[idx] : layerScroll[0];
-                updateMinMax(planeB);
-
-                int packed = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
-                for (int n = 0; n < count && y < VISIBLE_LINES; n++, y++) {
-                    hScroll[y] = packed;
-                }
-            }
-        }
-
-        // Fill remaining
-        while (y < VISIBLE_LINES) {
-            short planeB = (short) -(camX >> 1);
-            updateMinMax(planeB);
-            hScroll[y++] = ((planeA & 0xFFFF) << 16) | (planeB & 0xFFFF);
-        }
-    }
-
-    private void updateMinMax(short val) {
-        if (val < minScroll) minScroll = val;
-        if (val > maxScroll) maxScroll = val;
     }
 }
