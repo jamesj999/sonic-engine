@@ -79,17 +79,17 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     @Override
     public Integer resolveAnimationId(AbstractPlayableSprite sprite, int frameCounter, int scriptCount) {
-        if (sprite.getAir()) {
-            return airAnimId;
-        }
         if (sprite.getSpindash() && spindashAnimId >= 0) {
             return spindashAnimId;
         }
-        if (sprite.getCrouching() && duckAnimId >= 0) {
-            return duckAnimId;
-        }
         if (sprite.getRolling()) {
             return rollAnimId;
+        }
+        if (sprite.getAir()) {
+            return airAnimId;
+        }
+        if (sprite.getCrouching() && duckAnimId >= 0) {
+            return duckAnimId;
         }
         int speed = Math.abs(sprite.getGSpeed());
         if (speed >= runSpeedThreshold) {
