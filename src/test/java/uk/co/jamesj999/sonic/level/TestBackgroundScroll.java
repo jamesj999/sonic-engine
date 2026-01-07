@@ -2,7 +2,7 @@ package uk.co.jamesj999.sonic.level;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.data.Rom;
-import uk.co.jamesj999.sonic.data.games.Sonic2;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2;
 
 import java.io.IOException;
 import static org.junit.Assert.*;

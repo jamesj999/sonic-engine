@@ -4,8 +4,8 @@ import org.junit.Assume;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.data.RomByteReader;
-import uk.co.jamesj999.sonic.data.games.Sonic2RingPlacement;
-import uk.co.jamesj999.sonic.data.games.ZoneAct;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2RingPlacement;
+import uk.co.jamesj999.sonic.game.sonic2.ZoneAct;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 
 import java.nio.file.Files;

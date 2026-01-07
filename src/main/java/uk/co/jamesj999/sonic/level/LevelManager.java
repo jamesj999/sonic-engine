@@ -11,7 +11,8 @@ import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
-import uk.co.jamesj999.sonic.data.games.Sonic2;
+import uk.co.jamesj999.sonic.game.GameModule;
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
@@ -70,9 +71,14 @@ public class LevelManager {
     private static LevelManager levelManager;
     private Level level;
     private Game game;
+    private GameModule gameModule;
 
     public Game getGame() {
         return game;
+    }
+
+    public GameModule getGameModule() {
+        return gameModule;
     }
 
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
@@ -130,20 +136,25 @@ public class LevelManager {
             Rom rom = new Rom();
             rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
             parallaxManager.load(rom);
-            game = new Sonic2(rom);
-            AudioManager.getInstance().setRom(rom);
-            AudioManager.getInstance().setSoundMap(game.getSoundMap());
-            AudioManager.getInstance().resetRingSound();
-            AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
+            gameModule = GameModuleRegistry.getCurrent();
+            game = gameModule.createGame(rom);
+            AudioManager audioManager = AudioManager.getInstance();
+            audioManager.setAudioProfile(gameModule.getAudioProfile());
+            audioManager.setRom(rom);
+            audioManager.setSoundMap(game.getSoundMap());
+            audioManager.resetRingSound();
+            audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
             RomByteReader romReader = RomByteReader.fromRom(rom);
             objectPlacementManager = new ObjectPlacementManager(level.getObjects());
-            planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager);
-            objectManager = new ObjectManager(objectPlacementManager);
+            planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager,
+                    gameModule.getPlaneSwitcherObjectId(),
+                    gameModule.getPlaneSwitcherConfig());
+            objectManager = new ObjectManager(objectPlacementManager, gameModule.createObjectRegistry());
             objectManager.reset(Camera.getInstance().getX(), level.getObjects());
             solidObjectManager = new SolidObjectManager(objectManager);
             solidObjectManager.reset();
-            TouchResponseTable touchResponseTable = new TouchResponseTable(romReader);
+            TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
             touchResponseManager = new TouchResponseManager(objectManager, touchResponseTable);
             touchResponseManager.reset();
             ringPlacementManager = new RingPlacementManager(level.getRings());
@@ -1024,7 +1035,7 @@ public class LevelManager {
             List<GLCommand> lineCommands,
             List<GLCommand> areaCommands,
             AbstractPlayableSprite player) {
-        if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
+        if (gameModule == null || spawn.objectId() != gameModule.getPlaneSwitcherObjectId()) {
             return;
         }
         int subtype = spawn.subtype();

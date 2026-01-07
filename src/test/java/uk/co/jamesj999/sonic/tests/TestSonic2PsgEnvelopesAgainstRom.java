@@ -3,8 +3,8 @@ package uk.co.jamesj999.sonic.tests;
 import org.junit.Before;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2PsgEnvelopes;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2PsgEnvelopes;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.data.Rom;
 
 import java.io.File;

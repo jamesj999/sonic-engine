@@ -3,8 +3,8 @@ package uk.co.jamesj999.sonic.tests;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
-import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
-import uk.co.jamesj999.sonic.data.games.Sonic2PlayerArt;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2PlayerArt;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 

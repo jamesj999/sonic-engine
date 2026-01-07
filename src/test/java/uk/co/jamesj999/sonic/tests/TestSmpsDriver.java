@@ -1,9 +1,10 @@
 package uk.co.jamesj999.sonic.tests;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 
@@ -79,8 +80,8 @@ public class TestSmpsDriver {
         DacData dummyDac = new DacData(new HashMap<>(), new HashMap<>());
 
         // Create two sequencers (SFX)
-        SmpsSequencer sfx1 = new SmpsSequencer(dummyData, dummyDac, driver);
-        SmpsSequencer sfx2 = new SmpsSequencer(dummyData, dummyDac, driver);
+        SmpsSequencer sfx1 = new SmpsSequencer(dummyData, dummyDac, driver, Sonic2SmpsSequencerConfig.CONFIG);
+        SmpsSequencer sfx2 = new SmpsSequencer(dummyData, dummyDac, driver, Sonic2SmpsSequencerConfig.CONFIG);
 
         driver.addSequencer(sfx1, true);
         driver.addSequencer(sfx2, true);

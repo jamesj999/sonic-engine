@@ -6,7 +6,7 @@ import uk.co.jamesj999.sonic.audio.JOALAudioBackend;
 import uk.co.jamesj999.sonic.audio.NullAudioBackend;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;

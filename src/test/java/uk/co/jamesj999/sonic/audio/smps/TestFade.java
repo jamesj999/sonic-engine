@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.audio.smps;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
@@ -71,7 +72,7 @@ public class TestFade {
         Sonic2SmpsData sData = new Sonic2SmpsData(fullData);
         // Use MockSynthesizer to avoid slow emulation
         Synthesizer synth = new MockSynthesizer();
-        SmpsSequencer seq = new SmpsSequencer(sData, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(sData, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // We use seq.read() directly.
 

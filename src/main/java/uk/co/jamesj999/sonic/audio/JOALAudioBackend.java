@@ -11,9 +11,9 @@ import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
+import uk.co.jamesj999.sonic.audio.smps.SmpsSequencerConfig;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
-import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;
@@ -73,6 +73,8 @@ public class JOALAudioBackend implements AudioBackend {
     private final boolean[] psgUserSolos = new boolean[4];
 
     private boolean speedShoesEnabled = false;
+    private GameAudioProfile audioProfile;
+    private SmpsSequencerConfig smpsConfig;
 
     public JOALAudioBackend() {
         // Initialize fallback mappings
@@ -81,6 +83,12 @@ public class JOALAudioBackend implements AudioBackend {
         sfxFallback.put("RING", "sfx/ring.wav");
         sfxFallback.put("SPINDASH", "sfx/spindash.wav");
         sfxFallback.put("SKID", "sfx/skid.wav");
+    }
+
+    @Override
+    public void setAudioProfile(GameAudioProfile profile) {
+        this.audioProfile = profile;
+        this.smpsConfig = profile != null ? profile.getSequencerConfig() : null;
     }
 
     @Override
@@ -144,8 +152,7 @@ public class JOALAudioBackend implements AudioBackend {
     @Override
     public void playSmps(AbstractSmpsData data, DacData dacData) {
         int musicId = data.getId();
-        boolean isOverride = musicId == Sonic2Constants.MUS_EXTRA_LIFE
-                || musicId == Sonic2Constants.MUS_INVINCIBILITY;
+        boolean isOverride = audioProfile != null && audioProfile.isMusicOverride(musicId);
         if (isOverride) {
             pushCurrentState();
 
@@ -178,7 +185,7 @@ public class JOALAudioBackend implements AudioBackend {
 
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
-        SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+        SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
         seq.setSpeedShoes(speedShoesEnabled);
         seq.setFm6DacOff(fm6DacOff);
         // Music is the primary voice source for SFX fallback
@@ -206,7 +213,7 @@ public class JOALAudioBackend implements AudioBackend {
             // Mix into current driver
             // Note: DAC interpolation is global on the driver/synth.
             // FM6 DAC Off is per-sequencer.
-            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -224,7 +231,7 @@ public class JOALAudioBackend implements AudioBackend {
                 sfxDriver.setDacInterpolate(dacInterpolate);
                 sfxStream = sfxDriver;
             }
-            SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver, requireSmpsConfig());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -535,6 +542,13 @@ public class JOALAudioBackend implements AudioBackend {
                 muted = true;
             synth.setPsgMute(i, muted);
         }
+    }
+
+    private SmpsSequencerConfig requireSmpsConfig() {
+        if (smpsConfig == null) {
+            throw new IllegalStateException("SMPS sequencer config not set");
+        }
+        return smpsConfig;
     }
 
     private int getAvailableSource() {

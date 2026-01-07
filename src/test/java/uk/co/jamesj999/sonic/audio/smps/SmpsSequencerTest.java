@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.audio.smps;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.synth.Synthesizer;
@@ -64,7 +65,7 @@ public class SmpsSequencerTest {
         data[0x12] = (byte) 0xF2; // Stop
 
         Sonic2SmpsData smpsData = new Sonic2SmpsData(data, 0); // S2 is Little Endian
-        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
+        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer(), Sonic2SmpsSequencerConfig.CONFIG);
 
         // First call primes the sequencer
         sequencer.read(new short[1]);
@@ -98,7 +99,7 @@ public class SmpsSequencerTest {
         data[0x22] = (byte) 0xF2;
 
         Sonic2SmpsData smpsData = new Sonic2SmpsData(data, 0);
-        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
+        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer(), Sonic2SmpsSequencerConfig.CONFIG);
 
         sequencer.read(new short[1]);
 
@@ -129,7 +130,7 @@ public class SmpsSequencerTest {
         data[0x22] = (byte) 0xF2;
 
         Sonic1SmpsData smpsData = new Sonic1SmpsData(data, 0);
-        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
+        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer(), Sonic2SmpsSequencerConfig.CONFIG);
 
         sequencer.read(new short[1]);
 
@@ -171,7 +172,7 @@ public class SmpsSequencerTest {
 
         Sonic2SmpsData smpsData = new Sonic2SmpsData(data, 0);
         MockSynthesizer synth = new MockSynthesizer();
-        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, synth);
+        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[735];
         sequencer.read(buf);

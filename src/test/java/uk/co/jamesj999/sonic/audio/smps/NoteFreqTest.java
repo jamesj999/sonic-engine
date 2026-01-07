@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.audio.smps;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -53,7 +54,7 @@ public class NoteFreqTest {
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(Collections.emptyMap(), Collections.emptyMap());
 
-        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[2000];
         seq.read(buf);

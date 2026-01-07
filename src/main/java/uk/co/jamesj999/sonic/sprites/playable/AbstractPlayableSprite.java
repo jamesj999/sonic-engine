@@ -1,11 +1,11 @@
 package uk.co.jamesj999.sonic.sprites.playable;
+import uk.co.jamesj999.sonic.audio.GameAudioProfile;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
-import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.level.objects.InvincibilityStarsObjectInstance;
-import uk.co.jamesj999.sonic.level.objects.ShieldObjectInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.InvincibilityStarsObjectInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.ShieldObjectInstance;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
@@ -488,17 +488,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
                 if (invincibleFrames > 0) {
                         invincibleFrames--;
-                        if (invincibleFrames == 0) {
-                                if (invincibilityObject != null) {
-                                        invincibilityObject.destroy();
-                                        invincibilityObject = null;
-                                }
-                                if (shieldObject != null) {
-                                        shieldObject.setVisible(true);
-                                }
-                                AudioManager.getInstance()
-                                                .endMusicOverride(Sonic2Constants.MUS_INVINCIBILITY);
+                if (invincibleFrames == 0) {
+                        if (invincibilityObject != null) {
+                                invincibilityObject.destroy();
+                                invincibilityObject = null;
                         }
+                        if (shieldObject != null) {
+                                shieldObject.setVisible(true);
+                        }
+                        AudioManager audioManager = AudioManager.getInstance();
+                        GameAudioProfile audioProfile = audioManager.getAudioProfile();
+                        if (audioProfile != null) {
+                                audioManager.endMusicOverride(audioProfile.getInvincibilityMusicId());
+                        }
+                }
                 }
                 if (springingFrames > 0) {
                         springingFrames--;
@@ -508,12 +511,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
                 if (speedShoesFrames > 0) {
                         speedShoesFrames--;
-                        if (speedShoesFrames == 0) {
-                                speedShoes = false;
-                                defineSpeeds();
-                                AudioManager.getInstance().playMusic(
-                                                Sonic2Constants.CMD_SLOW_DOWN);
+                if (speedShoesFrames == 0) {
+                        speedShoes = false;
+                        defineSpeeds();
+                        AudioManager audioManager = AudioManager.getInstance();
+                        GameAudioProfile audioProfile = audioManager.getAudioProfile();
+                        if (audioProfile != null) {
+                                audioManager.playMusic(audioProfile.getSpeedShoesOffCommandId());
                         }
+                }
                 }
         }
 

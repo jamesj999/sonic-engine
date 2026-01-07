@@ -9,6 +9,10 @@ public class NullAudioBackend implements AudioBackend {
     }
 
     @Override
+    public void setAudioProfile(GameAudioProfile profile) {
+    }
+
+    @Override
     public void playMusic(int musicId) {
     }
 

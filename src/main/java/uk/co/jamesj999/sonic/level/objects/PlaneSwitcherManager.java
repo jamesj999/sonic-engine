@@ -7,29 +7,33 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Handles Sonic 2 plane switcher (Obj03) logic against active object spawns.
+ * Handles plane switcher logic against active object spawns.
  */
 public class PlaneSwitcherManager {
-    public static final int OBJECT_ID = 0x03;
-
     private static final int[] HALF_SPANS = new int[]{0x20, 0x40, 0x80, 0x100};
+    private static final int MASK_SIZE = 0x03;
+    private static final int MASK_HORIZONTAL = 0x04;
+    private static final int MASK_PATH_SIDE1 = 0x08;
+    private static final int MASK_PATH_SIDE0 = 0x10;
+    private static final int MASK_PRIORITY_SIDE1 = 0x20;
+    private static final int MASK_PRIORITY_SIDE0 = 0x40;
+    private static final int MASK_GROUNDED_ONLY = 0x80;
 
     private final ObjectPlacementManager placementManager;
+    private final int objectId;
+    private final PlaneSwitcherConfig config;
     private final Map<ObjectSpawn, PlaneSwitcherState> states = new HashMap<>();
 
-    public PlaneSwitcherManager(ObjectPlacementManager placementManager) {
+    public PlaneSwitcherManager(ObjectPlacementManager placementManager, int objectId, PlaneSwitcherConfig config) {
         this.placementManager = placementManager;
-    }
-
-    public void reset() {
-        states.clear();
+        this.objectId = objectId & 0xFF;
+        this.config = config;
     }
 
     public void update(AbstractPlayableSprite player) {
-        if (placementManager == null || player == null) {
+        if (placementManager == null || player == null || config == null) {
             return;
         }
-
         Collection<ObjectSpawn> active = placementManager.getActiveSpawns();
         if (active.isEmpty()) {
             return;
@@ -39,13 +43,13 @@ public class PlaneSwitcherManager {
         int playerY = player.getCentreY();
 
         for (ObjectSpawn spawn : active) {
-            if (spawn.objectId() != OBJECT_ID) {
+            if (spawn.objectId() != objectId) {
                 continue;
             }
 
             int subtype = spawn.subtype();
             PlaneSwitcherState state = states.computeIfAbsent(spawn,
-                    s -> new PlaneSwitcherState(decodeHalfSpan(s.subtype())));
+                    key -> new PlaneSwitcherState(decodeHalfSpan(subtype)));
 
             boolean horizontal = isHorizontal(subtype);
             int sideNow = horizontal
@@ -68,14 +72,13 @@ public class PlaneSwitcherManager {
                     int path = decodePath(subtype, sideNow);
                     player.setLayer((byte) path);
                     if (path == 0) {
-                        player.setTopSolidBit((byte) 0x0C);
-                        player.setLrbSolidBit((byte) 0x0D);
+                        player.setTopSolidBit(config.getPath0TopSolidBit());
+                        player.setLrbSolidBit(config.getPath0LrbSolidBit());
                     } else {
-                        player.setTopSolidBit((byte) 0x0E);
-                        player.setLrbSolidBit((byte) 0x0F);
+                        player.setTopSolidBit(config.getPath1TopSolidBit());
+                        player.setLrbSolidBit(config.getPath1LrbSolidBit());
                     }
                 }
-
                 boolean highPriority = decodePriority(subtype, sideNow);
                 player.setHighPriority(highPriority);
             }
@@ -83,37 +86,7 @@ public class PlaneSwitcherManager {
             state.sideState = (byte) sideNow;
         }
 
-        states.keySet().removeIf(spawn -> spawn.objectId() == OBJECT_ID && !active.contains(spawn));
-    }
-
-    public static int decodeHalfSpan(int subtype) {
-        return HALF_SPANS[subtype & 0x3];
-    }
-
-    public static boolean isHorizontal(int subtype) {
-        return (subtype & 0x04) != 0;
-    }
-
-    public static int decodePath(int subtype, int side) {
-        int bit = (side == 1) ? 0x08 : 0x10;
-        return (subtype & bit) != 0 ? 1 : 0;
-    }
-
-    public static boolean decodePriority(int subtype, int side) {
-        int bit = (side == 1) ? 0x20 : 0x40;
-        return (subtype & bit) != 0;
-    }
-
-    public static boolean onlySwitchWhenGrounded(int subtype) {
-        return (subtype & 0x80) != 0;
-    }
-
-    public static char formatLayer(int path) {
-        return path == 0 ? 'A' : 'B';
-    }
-
-    public static char formatPriority(boolean highPriority) {
-        return highPriority ? 'H' : 'L';
+        states.keySet().removeIf(spawn -> spawn.objectId() == objectId && !active.contains(spawn));
     }
 
     public int getSideState(ObjectSpawn spawn) {
@@ -122,6 +95,40 @@ public class PlaneSwitcherManager {
             return -1;
         }
         return state.sideState;
+    }
+
+    public static int decodeHalfSpan(int subtype) {
+        int index = subtype & MASK_SIZE;
+        if (index < 0 || index >= HALF_SPANS.length) {
+            index = 0;
+        }
+        return HALF_SPANS[index];
+    }
+
+    public static boolean isHorizontal(int subtype) {
+        return (subtype & MASK_HORIZONTAL) != 0;
+    }
+
+    public static int decodePath(int subtype, int side) {
+        int mask = side == 1 ? MASK_PATH_SIDE1 : MASK_PATH_SIDE0;
+        return (subtype & mask) != 0 ? 1 : 0;
+    }
+
+    public static boolean decodePriority(int subtype, int side) {
+        int mask = side == 1 ? MASK_PRIORITY_SIDE1 : MASK_PRIORITY_SIDE0;
+        return (subtype & mask) != 0;
+    }
+
+    public static boolean onlySwitchWhenGrounded(int subtype) {
+        return (subtype & MASK_GROUNDED_ONLY) != 0;
+    }
+
+    public static char formatLayer(byte layer) {
+        return layer == 0 ? 'A' : 'B';
+    }
+
+    public static char formatPriority(boolean highPriority) {
+        return highPriority ? 'H' : 'L';
     }
 
     private static final class PlaneSwitcherState {

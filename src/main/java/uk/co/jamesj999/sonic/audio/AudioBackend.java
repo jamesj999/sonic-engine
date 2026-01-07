@@ -6,6 +6,8 @@ import uk.co.jamesj999.sonic.audio.smps.DacData;
 public interface AudioBackend {
     void init();
 
+    void setAudioProfile(GameAudioProfile profile);
+
     /**
      * Plays music by ID (potentially loading from ROM or fallback map).
      * 

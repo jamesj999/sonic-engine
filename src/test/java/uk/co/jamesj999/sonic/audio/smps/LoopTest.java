@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.audio.smps;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -45,7 +46,7 @@ public class LoopTest {
         data[pos++] = (byte) 0xF2;
 
         AbstractSmpsData smpsData = new Sonic2SmpsData(data, 0);
-        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
+        SmpsSequencer sequencer = new SmpsSequencer(smpsData, null, new VirtualSynthesizer(), Sonic2SmpsSequencerConfig.CONFIG);
 
         // Prime
         sequencer.read(new short[1]);

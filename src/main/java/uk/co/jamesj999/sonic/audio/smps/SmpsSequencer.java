@@ -6,15 +6,16 @@ import uk.co.jamesj999.sonic.audio.synth.Synthesizer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 
 public class SmpsSequencer implements AudioStream {
     private final AbstractSmpsData smpsData;
     private AbstractSmpsData fallbackVoiceData;
     private final byte[] data;
     private final Synthesizer synth;
+    private final SmpsSequencerConfig config;
+    private final int tempoModBase;
     private final List<Track> tracks = new ArrayList<>();
     private final int z80Base;
     private static final boolean DEBUG_FM_LOG = false;
@@ -56,9 +57,7 @@ public class SmpsSequencer implements AudioStream {
     private final FadeState fadeState = new FadeState();
 
     private static final double SAMPLE_RATE = 44100.0;
-    // Sonic 2 main tempo duty cycle (Equivalent to SMPSPlay TEMPO_OVERFLOW2 mode:
-    // 0x100)
-    private static final int TEMPO_MOD_BASE = 256;
+    // Base tempo weight is game/driver-specific (configured externally).
     private double samplesPerFrame = 44100.0 / 60.0;
     private int tempoWeight;
     private int tempoAccumulator;
@@ -66,44 +65,7 @@ public class SmpsSequencer implements AudioStream {
     private double sampleCounter = 0;
     private boolean primed;
 
-    // Speed Up Tempos (Loader ID -> Fast Tempo)
-    private static final Map<Integer, Integer> SPEED_UP_TEMPOS = new HashMap<>();
-    static {
-        SPEED_UP_TEMPOS.put(0x92, 0x68); // 2P Results
-        SPEED_UP_TEMPOS.put(0x81, 0xBE); // Emerald Hill
-        SPEED_UP_TEMPOS.put(0x85, 0xFF); // Mystic Cave 2P
-        SPEED_UP_TEMPOS.put(0x8F, 0xF0); // Oil Ocean
-        SPEED_UP_TEMPOS.put(0x82, 0xFF); // Metropolis
-        SPEED_UP_TEMPOS.put(0x94, 0xDE); // Hill Top
-        SPEED_UP_TEMPOS.put(0x86, 0xFF); // Aquatic Ruin
-        SPEED_UP_TEMPOS.put(0x80, 0xDD); // Casino Night 2P
-        SPEED_UP_TEMPOS.put(0x83, 0x68); // Casino Night
-        SPEED_UP_TEMPOS.put(0x87, 0x80); // Death Egg
-        SPEED_UP_TEMPOS.put(0x84, 0xD6); // Mystic Cave
-        SPEED_UP_TEMPOS.put(0x91, 0x7B); // Emerald Hill 2P
-        SPEED_UP_TEMPOS.put(0x8E, 0x7B); // Sky Chase
-        SPEED_UP_TEMPOS.put(0x8C, 0xFF); // Chemical Plant
-        SPEED_UP_TEMPOS.put(0x90, 0xA8); // Wing Fortress
-        SPEED_UP_TEMPOS.put(0x9B, 0xFF); // Hidden Palace
-        SPEED_UP_TEMPOS.put(0x89, 0x87); // Options
-        SPEED_UP_TEMPOS.put(0x88, 0xFF); // Special Stage
-        SPEED_UP_TEMPOS.put(0x8D, 0xFF); // Boss
-        SPEED_UP_TEMPOS.put(0x8B, 0xC9); // Final Boss
-        SPEED_UP_TEMPOS.put(0x8A, 0x97); // Ending
-        SPEED_UP_TEMPOS.put(0x93, 0xFF); // Super Sonic
-        SPEED_UP_TEMPOS.put(0x99, 0xFF); // Invincibility
-        SPEED_UP_TEMPOS.put(0xB5, 0xCD); // 1-Up
-        SPEED_UP_TEMPOS.put(0x96, 0xCD); // Title
-        SPEED_UP_TEMPOS.put(0x97, 0xAA); // Act Clear
-        SPEED_UP_TEMPOS.put(0xB8, 0xF2); // Game Over
-        SPEED_UP_TEMPOS.put(0x00, 0xDB); // Continue
-        SPEED_UP_TEMPOS.put(0xBA, 0xD5); // Chaos Emerald
-        SPEED_UP_TEMPOS.put(0xBD, 0xF0); // Credits
-    }
-
-    // Default Sonic 2 Channel Order
-    private static final int[] FM_CHN_ORDER = { 0x16, 0, 1, 2, 4, 5, 6 };
-    private static final int[] PSG_CHN_ORDER = { 0x80, 0xA0, 0xC0 };
+    // Speed-up tempos and channel orders are game/driver-specific (configurable).
 
     // F-Num table for Octave 4
     private static final int[] FNUM_TABLE = {
@@ -190,15 +152,18 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
-    public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData) {
-        this(smpsData, dacData, new VirtualSynthesizer());
+    public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData, SmpsSequencerConfig config) {
+        this(smpsData, dacData, new VirtualSynthesizer(), config);
     }
 
-    public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData, Synthesizer synth) {
+    public SmpsSequencer(AbstractSmpsData smpsData, DacData dacData, Synthesizer synth,
+            SmpsSequencerConfig config) {
         this.smpsData = smpsData;
-        this.isSfx = smpsData instanceof Sonic2SfxData;
+        this.isSfx = smpsData instanceof SmpsSfxData;
         this.data = smpsData.getData();
         this.synth = synth;
+        this.config = Objects.requireNonNull(config, "config");
+        this.tempoModBase = this.config.getTempoModBase();
         this.z80Base = smpsData.getZ80StartAddress();
         this.synth.setDacData(dacData);
 
@@ -216,8 +181,8 @@ public class SmpsSequencer implements AudioStream {
 
         int z80Start = smpsData.getZ80StartAddress();
 
-        if (smpsData instanceof Sonic2SfxData) {
-            initSfxTracks((Sonic2SfxData) smpsData, z80Start);
+        if (smpsData instanceof SmpsSfxData sfxData) {
+            initSfxTracks(sfxData, z80Start);
             setSfxMode(true);
             return;
         }
@@ -226,8 +191,11 @@ public class SmpsSequencer implements AudioStream {
         int[] psgPointers = smpsData.getPsgPointers();
 
         // FM tracks mapping
+        int[] fmOrder = config.getFmChannelOrder();
+        int[] psgOrder = config.getPsgChannelOrder();
+
         for (int i = 0; i < fmPointers.length; i++) {
-            int chnVal = (i < FM_CHN_ORDER.length) ? FM_CHN_ORDER[i] : -1;
+            int chnVal = (i < fmOrder.length) ? fmOrder[i] : -1;
 
             // 0x16 or 0x10 is DAC
             if (chnVal == 0x16 || chnVal == 0x10) {
@@ -270,7 +238,7 @@ public class SmpsSequencer implements AudioStream {
                 continue;
             }
 
-            int chnVal = (i < PSG_CHN_ORDER.length) ? PSG_CHN_ORDER[i] : -1;
+            int chnVal = (i < psgOrder.length) ? psgOrder[i] : -1;
             int linearCh = mapPsgChannel(chnVal);
             if (linearCh < 0) {
                 // Fallback for extra channels (like Noise if mapped linearly)
@@ -354,8 +322,8 @@ public class SmpsSequencer implements AudioStream {
     public void setSfxMode(boolean active) {
         this.sfxMode = active;
         int div = smpsData.getDividingTiming();
-        if (smpsData instanceof Sonic2SfxData) {
-            div = ((Sonic2SfxData) smpsData).getTickMultiplier();
+        if (smpsData instanceof SmpsSfxData sfxData) {
+            div = sfxData.getTickMultiplier();
         }
         if (div == 0) {
             div = 1;
@@ -470,14 +438,14 @@ public class SmpsSequencer implements AudioStream {
 
     private void calculateTempo() {
         if (sfxMode) {
-            this.tempoWeight = TEMPO_MOD_BASE; // 0x100: Tick every frame
+            this.tempoWeight = config.getTempoModBase(); // 0x100: Tick every frame
             return;
         }
 
         int base = normalTempo;
 
         if (speedShoes) {
-            base = SPEED_UP_TEMPOS.getOrDefault(smpsData.getId(), base);
+            base = config.getSpeedUpTempos().getOrDefault(smpsData.getId(), base);
         }
 
         double multiplier = 1.0;
@@ -524,20 +492,20 @@ public class SmpsSequencer implements AudioStream {
         }
     }
 
-    private void initSfxTracks(Sonic2SfxData sfxData, int z80Start) {
+    private void initSfxTracks(SmpsSfxData sfxData, int z80Start) {
         int tickMult = sfxData.getTickMultiplier();
         if (tickMult <= 0) {
             tickMult = 1;
         }
         updateDividingTiming(tickMult);
 
-        for (Sonic2SfxData.TrackEntry entry : sfxData.getTrackEntries()) {
-            int ptr = relocate(entry.pointer, z80Start);
+        for (SmpsSfxData.SmpsSfxTrack entry : sfxData.getTrackEntries()) {
+            int ptr = relocate(entry.pointer(), z80Start);
             if (ptr < 0 || ptr >= data.length) {
                 continue;
             }
 
-            int chnVal = entry.channelMask;
+            int chnVal = entry.channelMask();
             TrackType type;
             int linearCh;
 
@@ -560,8 +528,8 @@ public class SmpsSequencer implements AudioStream {
             }
 
             Track t = new Track(ptr, type, linearCh);
-            t.keyOffset = (byte) entry.transpose;
-            t.volumeOffset = entry.volume;
+            t.keyOffset = (byte) entry.transpose();
+            t.volumeOffset = entry.volume();
             t.dividingTiming = tickMult;
             if (type == TrackType.FM) {
                 // SFX should not inherit music state; center pan/AMS/FMS and preload voice 0 if
@@ -707,8 +675,8 @@ public class SmpsSequencer implements AudioStream {
             return;
         }
         tempoAccumulator += tempoWeight;
-        if (tempoAccumulator >= TEMPO_MOD_BASE) {
-            tempoAccumulator &= 0xFF;
+        if (tempoAccumulator >= tempoModBase) {
+            tempoAccumulator -= tempoModBase;
             processFade();
             tick();
             if (sfxMode) {

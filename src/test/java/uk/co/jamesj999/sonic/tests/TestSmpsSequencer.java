@@ -1,13 +1,14 @@
 package uk.co.jamesj999.sonic.tests;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SfxData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SfxData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 import uk.co.jamesj999.sonic.audio.synth.Synthesizer;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.data.Rom;
 
@@ -75,7 +76,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Increase buffer to ensure at least one tick at 0x80 tempo (~2 frames)
         short[] buf = new short[2000];
@@ -120,7 +121,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[4000];
         seq.read(buf);
@@ -158,7 +159,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Enough samples for ~16 frames. Without resetting the accumulator, the leftover fast-tempo ticks
         // would advance to the second note (takes ~10 frames), but with a reset the slow tempo (takes ~17 frames)
@@ -203,7 +204,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[12000];
         seq.read(buf); // should execute both notes
@@ -233,7 +234,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[5000];
         seq.read(buf);
@@ -266,7 +267,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[100];
         seq.read(buf);
@@ -296,7 +297,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Read small buffer. Track should still be active and playing the note.
         short[] buf = new short[2000];
@@ -344,7 +345,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[735]; // ~1 frame
 
@@ -405,7 +406,7 @@ public class TestSmpsSequencer {
         smps.setPsgEnvelopes(envs);
 
         MockPsgSynth synth = new MockPsgSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Prime sequencer (runs initial tick) without advancing tempo frames
         seq.read(new short[2]);
@@ -449,7 +450,7 @@ public class TestSmpsSequencer {
         Sonic2SfxData smps = new Sonic2SfxData(data, 0x8000, 0, 0);
 
         MockPsgSynth synth = new MockPsgSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Prime sequencer (runs initial tick)
         seq.read(new short[2]);
@@ -489,7 +490,7 @@ public class TestSmpsSequencer {
 
         DacData dacData = loader.loadDacData();
         MockFmSynth synth = new MockFmSynth();
-        SmpsSequencer seq = new SmpsSequencer(sfx, dacData, synth);
+        SmpsSequencer seq = new SmpsSequencer(sfx, dacData, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Prime and run a few ticks
         seq.read(new short[2]);

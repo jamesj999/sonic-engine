@@ -1,9 +1,10 @@
 package uk.co.jamesj999.sonic.tests;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 
@@ -82,7 +83,7 @@ public class TestSmpsFrequencyWrap {
         AbstractSmpsData smps = new Sonic2SmpsData(data, 0);
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(new HashMap<>(), new HashMap<>());
-        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[2000];
         seq.read(buf);

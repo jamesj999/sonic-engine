@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.audio.smps;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -8,7 +9,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsData;
 
 public class VoiceLoadingTest {
 
@@ -67,7 +68,7 @@ public class VoiceLoadingTest {
         MockSynthesizer synth = new MockSynthesizer();
         DacData dacData = new DacData(Collections.emptyMap(), Collections.emptyMap());
 
-        SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth);
+        SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Expected reordered data
         byte[] expected = new byte[25];
@@ -138,7 +139,7 @@ public class VoiceLoadingTest {
         MockSynthesizer synth = new MockSynthesizer();
         DacData dacData = new DacData(Collections.emptyMap(), Collections.emptyMap());
 
-        SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth);
+        SmpsSequencer seq = new SmpsSequencer(smpsData, dacData, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Expected SMPS slot-order data (Op1, Op3, Op2, Op4) with TL adjusted for carriers by refreshInstrument.
         byte[] expected = new byte[25];

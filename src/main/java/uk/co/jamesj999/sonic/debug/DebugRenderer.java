@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.debug;
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 
 import com.jogamp.opengl.util.awt.TextRenderer;
 import uk.co.jamesj999.sonic.camera.Camera;
@@ -174,7 +175,7 @@ public class DebugRenderer {
             if (objectRenderer == null) {
                 return;
             }
-                ObjectRegistry registry = ObjectRegistry.getInstance();
+                ObjectRegistry registry = GameModuleRegistry.getCurrent().createObjectRegistry();
                 java.util.Collection<ObjectSpawn> spawns = levelManager.getActiveObjectSpawns();
                 if (spawns.isEmpty()) {
                         return;
@@ -226,8 +227,12 @@ public class DebugRenderer {
                         return;
                 }
                 planeSwitcherRenderer.beginRendering(viewportWidth, viewportHeight);
+                int planeSwitcherObjectId = GameModuleRegistry.getCurrent().getPlaneSwitcherObjectId();
+                if (levelManager.getGameModule() != null) {
+                        planeSwitcherObjectId = levelManager.getGameModule().getPlaneSwitcherObjectId();
+                }
                 for (ObjectSpawn spawn : spawns) {
-                        if (spawn.objectId() != PlaneSwitcherManager.OBJECT_ID) {
+                        if (spawn.objectId() != planeSwitcherObjectId) {
                                 continue;
                         }
                         int screenX = spawn.x() - camera.getX();
@@ -409,7 +414,7 @@ public class DebugRenderer {
                                 state.getPlayerHeight(), state.getPlayerYRadius(), crouch));
                 lines.add(String.format("Objects: %d Hits: %d", hits.size(), hitCount));
 
-                ObjectRegistry registry = ObjectRegistry.getInstance();
+                ObjectRegistry registry = GameModuleRegistry.getCurrent().createObjectRegistry();
                 int maxLines = 12;
                 int shown = 0;
                 for (TouchResponseDebugHit hit : hits) {

@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.audio.smps;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -28,7 +29,7 @@ public class TimingTempoTest {
         smpsData.setId(musicId);
         smpsData.setPalSpeedupDisabled(palDisabled);
 
-        return new SmpsSequencer(smpsData, null, new VirtualSynthesizer());
+        return new SmpsSequencer(smpsData, null, new VirtualSynthesizer(), Sonic2SmpsSequencerConfig.CONFIG);
     }
 
     private int runSimulation(SmpsSequencer sequencer, double seconds) {

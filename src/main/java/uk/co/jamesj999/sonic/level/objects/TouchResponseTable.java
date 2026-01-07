@@ -3,15 +3,15 @@ package uk.co.jamesj999.sonic.level.objects;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 
 public class TouchResponseTable {
-    public static final int TOUCH_SIZES_ADDR = 0x3F600;
-    public static final int ENTRY_COUNT = 0x33;
+    private final int[] widths;
+    private final int[] heights;
 
-    private final int[] widths = new int[ENTRY_COUNT];
-    private final int[] heights = new int[ENTRY_COUNT];
-
-    public TouchResponseTable(RomByteReader rom) {
-        for (int i = 0; i < ENTRY_COUNT; i++) {
-            int addr = TOUCH_SIZES_ADDR + i * 2;
+    public TouchResponseTable(RomByteReader rom, int touchSizesAddr, int entryCount) {
+        int count = Math.max(1, entryCount);
+        this.widths = new int[count];
+        this.heights = new int[count];
+        for (int i = 0; i < count; i++) {
+            int addr = touchSizesAddr + i * 2;
             widths[i] = rom.readU8(addr);
             heights[i] = rom.readU8(addr + 1);
         }

@@ -21,10 +21,6 @@ public class ObjectManager {
     private final List<ObjectInstance> dynamicObjects = new ArrayList<>();
     private int frameCounter;
 
-    public ObjectManager(ObjectPlacementManager placementManager) {
-        this(placementManager, ObjectRegistry.getInstance());
-    }
-
     public ObjectManager(ObjectPlacementManager placementManager, ObjectRegistry registry) {
         this.placementManager = placementManager;
         this.registry = registry;
