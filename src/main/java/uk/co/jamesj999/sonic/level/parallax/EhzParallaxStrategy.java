@@ -82,9 +82,13 @@ public class EhzParallaxStrategy implements ParallaxStrategy {
         for (int i = 0; i < 21 && line < 224; i++) {
             int val = 0;
             if (rippleData != null && rippleData.length > 0) {
-                 // Use modulo to wrap index safely within the loaded table size
-                 int idx = (rippleOffset + i) % rippleData.length;
-                 val = rippleData[idx]; // move.b -> ext.w (signed byte to int)
+                 // Mask index to power-of-2 (typically 64 for Sonic 2 ripple tables).
+                 // Using 0x3F (64) ensures we stay within the valid loaded data range (which is around 66 bytes).
+                 // Previous usage of 0x7F read garbage data, causing "jigging".
+                 int idx = (rippleOffset + i) & 0x3F;
+                 if (idx < rippleData.length) {
+                     val = rippleData[idx];
+                 }
             }
             d1 = baseRipple + val;
             writeLine(hScroll, line++, d0, d1);
