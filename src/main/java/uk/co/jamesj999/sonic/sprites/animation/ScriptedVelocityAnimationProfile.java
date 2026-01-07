@@ -133,9 +133,6 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         if (sprite.getSpringing() && sprite.getAir() && springAnimId >= 0) {
             return springAnimId;
         }
-        if (sprite.getAir()) {
-            return airAnimId;
-        }
         if (sprite.getSpindash() && spindashAnimId >= 0) {
             return spindashAnimId;
         }

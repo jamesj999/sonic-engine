@@ -98,7 +98,7 @@ public class Sonic2PlayerArt {
                 Sonic2AnimationIds.SPRING,
                 Sonic2AnimationIds.DEATH,
                 Sonic2AnimationIds.HURT,
-                Sonic2AnimationIds.ROLL,
+                Sonic2AnimationIds.WALK,
                 0x40,
                 0x600,
                 0);
