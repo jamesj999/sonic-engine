@@ -180,6 +180,8 @@ public class SmpsSequencer implements AudioStream {
         boolean envHold;
         boolean envAtRest;
         boolean forceRefresh;
+        // DAC mute state for fade-in
+        boolean dacMuted;
 
         Track(int pos, TrackType type, int channelId) {
             this.pos = pos;
@@ -659,8 +661,21 @@ public class SmpsSequencer implements AudioStream {
 
                 int cmd = data[t.pos++] & 0xFF;
 
+                // 0x00 is not a valid SMPS command/note - likely reading garbage
+                if (cmd == 0x00) {
+                    t.active = false;
+                    break;
+                }
+
                 if (cmd >= 0xE0) {
                     handleFlag(t, cmd);
+                    // Re-check bounds after handleFlag as it may have modified t.pos
+                    if (t.pos < 0 || t.pos >= data.length) {
+                        if (t.active) { // Only stop if still supposedly active
+                            t.active = false;
+                        }
+                        break;
+                    }
                 } else if (cmd >= 0x80) {
                     t.note = cmd;
                     if (t.pos < data.length) {
@@ -729,7 +744,12 @@ public class SmpsSequencer implements AudioStream {
                     stopNote(t);
                 }
             } else {
-                // Fade In complete
+                // Fade In complete - unmute DAC tracks
+                for (Track t : tracks) {
+                    if (t.type == TrackType.DAC) {
+                        t.dacMuted = false;
+                    }
+                }
             }
             fadeState.active = false;
             return;
@@ -739,6 +759,9 @@ public class SmpsSequencer implements AudioStream {
 
         for (Track t : tracks) {
             if (!t.active)
+                continue;
+            // Skip DAC tracks - they don't have volume control
+            if (t.type == TrackType.DAC)
                 continue;
 
             int add = (t.type == TrackType.PSG) ? fadeState.addPsg : fadeState.addFm;
@@ -1129,7 +1152,10 @@ public class SmpsSequencer implements AudioStream {
         }
 
         if (t.type == TrackType.DAC) {
-            synth.playDac(this, t.note);
+            // Skip DAC playback if muted during fade-in
+            if (!t.dacMuted) {
+                synth.playDac(this, t.note);
+            }
             return;
         }
 
@@ -1580,6 +1606,12 @@ public class SmpsSequencer implements AudioStream {
     private void handleFadeIn(Track t) {
         // E4 is "Fade in to previous song" in Sonic 2.
         // It's used at the end of the 1-up jingle.
+        // This command should stop ALL tracks in this sequence and restore the previous
+        // music.
+        for (Track track : tracks) {
+            track.active = false;
+            stopNote(track);
+        }
         AudioManager.getInstance().getBackend().restoreMusic();
     }
 
@@ -1596,6 +1628,12 @@ public class SmpsSequencer implements AudioStream {
         // Add steps to existing volumeOffset (attenuate by 'steps'), then fade
         // decreases it.
         for (Track track : tracks) {
+            // For DAC, mute during fade-in (no volume control available)
+            if (track.type == TrackType.DAC) {
+                track.dacMuted = true;
+                stopNote(track);
+                continue;
+            }
             track.volumeOffset += steps;
             refreshVolume(track);
         }

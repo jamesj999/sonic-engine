@@ -33,6 +33,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     private int iconWaitFrames;
     private boolean effectApplied;
     private AbstractPlayableSprite effectTarget;
+    private AbstractPlayableSprite iconPlayer; // Preserved for rendering (effectTarget gets nulled)
 
     public MonitorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, HALF_RADIUS, HALF_RADIUS, 0.4f, 0.9f, 1.0f, false);
@@ -90,6 +91,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         iconWaitFrames = 0;
         effectApplied = false;
         effectTarget = player;
+        iconPlayer = player; // Preserve player reference for rendering
 
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
         if (renderManager != null) {
@@ -115,7 +117,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         renderer.drawFrameIndex(frameIndex, spawn.x(), spawn.y(), false, false);
 
         if (iconActive) {
-            int iconFrame = resolveIconFrame(effectTarget);
+            int iconFrame = resolveIconFrame(iconPlayer);
             ObjectSpriteSheet sheet = renderManager.getMonitorSheet();
             if (iconFrame >= 0 && sheet != null && iconFrame < sheet.getFrameCount()) {
                 SpriteMappingFrame mappingFrame = sheet.getFrame(iconFrame);
@@ -220,6 +222,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             return;
         }
         iconActive = false;
+        iconPlayer = null; // Clear player reference when icon is done
     }
 
     private int resolveIconFrame(AbstractPlayableSprite player) {

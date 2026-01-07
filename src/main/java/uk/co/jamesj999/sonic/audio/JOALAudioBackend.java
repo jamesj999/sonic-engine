@@ -46,6 +46,7 @@ public class JOALAudioBackend implements AudioBackend {
     private AudioStream savedMusicStream;
     private SmpsSequencer savedSmps;
     private SmpsDriver savedSmpsDriver;
+    private volatile boolean pendingRestore = false;
 
     // Fallback mappings
     private final Map<Integer, String> musicFallback = new HashMap<>();
@@ -258,6 +259,13 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void updateStream() {
+        // Check for pending music restoration (deferred from E4 handler)
+        if (pendingRestore) {
+            pendingRestore = false;
+            doRestoreMusic();
+            return;
+        }
+
         if (currentStream != null || sfxStream != null) {
             // Only update if playing via SMPS. If playing WAV, musicSource handles it.
             // But musicSource is used for streaming.
@@ -289,39 +297,51 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void restoreMusic() {
+        // Defer actual restoration to next updateStream cycle to avoid
+        // modifying buffers while they're being rendered
         if (savedMusicStream != null) {
-            // Stop the current (invincibility/extra-life) music stream
-            // but do NOT call stopStream() as that calls smpsDriver.stopAll()
-            // which would clear OUR saved driver's sequencers.
-            al.alSourceStop(musicSource);
-            int[] processed = new int[1];
-            al.alGetSourcei(musicSource, AL.AL_BUFFERS_PROCESSED, processed, 0);
-            while (processed[0] > 0) {
-                int[] buffers = new int[1];
-                al.alSourceUnqueueBuffers(musicSource, 1, buffers, 0);
-                processed[0]--;
-            }
-            // Stop the current (non-saved) smps driver
-            if (smpsDriver != null && smpsDriver != savedSmpsDriver) {
-                smpsDriver.stopAll();
-            }
-
-            // Restore saved state
-            currentStream = savedMusicStream;
-            currentSmps = savedSmps;
-            smpsDriver = savedSmpsDriver;
-
-            savedMusicStream = null;
-            savedSmps = null;
-            savedSmpsDriver = null;
-
-            if (currentSmps != null) {
-                currentSmps.refreshAllVoices();
-                currentSmps.triggerFadeIn(0x28, 2);
-            }
-
-            startStream();
+            pendingRestore = true;
         }
+    }
+
+    private void doRestoreMusic() {
+        if (savedMusicStream == null) {
+            return;
+        }
+
+        // Stop the current (invincibility/extra-life) music stream
+        al.alSourceStop(musicSource);
+
+        // Unqueue ALL buffers (both processed and queued) to avoid OpenAL errors
+        int[] queued = new int[1];
+        al.alGetSourcei(musicSource, AL.AL_BUFFERS_QUEUED, queued, 0);
+        for (int i = 0; i < queued[0]; i++) {
+            int[] buffers = new int[1];
+            al.alSourceUnqueueBuffers(musicSource, 1, buffers, 0);
+        }
+
+        // Stop the current (non-saved) smps driver
+        if (smpsDriver != null && smpsDriver != savedSmpsDriver) {
+            smpsDriver.stopAll();
+        }
+
+        // Restore saved state
+        currentStream = savedMusicStream;
+        currentSmps = savedSmps;
+        smpsDriver = savedSmpsDriver;
+
+        savedMusicStream = null;
+        savedSmps = null;
+        savedSmpsDriver = null;
+
+        if (currentSmps != null) {
+            // Restore speed shoes state to the saved sequencer
+            currentSmps.setSpeedShoes(speedShoesEnabled);
+            currentSmps.refreshAllVoices();
+            currentSmps.triggerFadeIn(0x28, 2);
+        }
+
+        startStream();
     }
 
     private void fillBuffer(int bufferId) {

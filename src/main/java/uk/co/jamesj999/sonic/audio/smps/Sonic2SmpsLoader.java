@@ -24,6 +24,8 @@ public class Sonic2SmpsLoader {
         populateSfxNames();
         cacheAllSfx();
         // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
+        // These ROM addresses were discovered empirically and are correct.
+        // The IDs here are what the game uses when requesting music.
         musicMap.put(0x00, 0x0F0002); // Continue
         musicMap.put(0x80, 0x0F84F6); // Casino Night 2P
         musicMap.put(0x81, 0x0F88C4); // Emerald Hill
@@ -36,7 +38,7 @@ public class Sonic2SmpsLoader {
         musicMap.put(0x88, 0x0FA6ED); // Special Stage
         musicMap.put(0x89, 0x0FAAC4); // Options
         musicMap.put(0x8A, 0x0FAC3C); // Ending
-        musicMap.put(0x8B, 0x0FB124); // Final battle
+        musicMap.put(0x8B, 0x0FB124); // Final Battle
         musicMap.put(0x8C, 0x0FB3F7); // Chemical Plant
         musicMap.put(0x8D, 0x0FB81E); // Boss
         musicMap.put(0x8E, 0x0FBA6F); // Sky Chase
@@ -50,7 +52,7 @@ public class Sonic2SmpsLoader {
         musicMap.put(0x97, 0x0FD35E); // Stage Clear
         musicMap.put(0x99, 0x0F8359); // Invincibility
         musicMap.put(0x9B, 0x0F803C); // Hidden Palace
-        musicMap.put(0xB5, 0x0FD48D); // 1-Up
+        musicMap.put(0xB5, 0x0FD48D); // 1-Up (MUS_EXTRA_LIFE)
         musicMap.put(0xB8, 0x0FD57A); // Game Over
         musicMap.put(0xBA, 0x0FD6C9); // Got an Emerald
         musicMap.put(0xBD, 0x0FD797); // Credits
@@ -175,28 +177,40 @@ public class Sonic2SmpsLoader {
             LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map/flags.");
             return null;
         }
-        // Sonic 2 music loaded at Z80 0x1380
-        AbstractSmpsData data = loadSmps(offset, 0x1380);
+
+        // The music ID itself contains flags (per Sonic Retro documentation):
+        // bit 5 (0x20): Compression - 0=Saxman compressed, 0x20=uncompressed
+        boolean uncompressed = (musicId & 0x20) != 0;
+
+        AbstractSmpsData data;
+        if (uncompressed) {
+            // For uncompressed data, the Z80 address is the low 16 bits of the ROM offset.
+            // Per Sonic Retro: Z80 pointers in uncompressed data are bank-relative.
+            // Example: 1-Up at ROM 0xFD48D has Z80 pointer 0xD48D
+            int z80Addr = offset & 0xFFFF;
+            LOGGER.info("Loading uncompressed SMPS at " + Integer.toHexString(offset)
+                    + " for music ID " + Integer.toHexString(musicId)
+                    + " (Z80 base: " + Integer.toHexString(z80Addr) + ")");
+            data = loadSmpsUncompressed(offset, z80Addr);
+        } else {
+            // Compressed music is decompressed and loaded at Z80 0x1380
+            data = loadSmps(offset, 0x1380);
+        }
+
         if (data instanceof Sonic2SmpsData) {
             ((Sonic2SmpsData) data).setPsgEnvelopes(loadPsgEnvelopes());
         }
         if (data != null) {
             data.setId(musicId);
-            if (musicId >= 0x81) {
-                try {
-                    int flagsAddr = 0x0ECF36 + (musicId - 0x81);
-                    int flags = rom.readByte(flagsAddr) & 0xFF;
-                    data.setPalSpeedupDisabled((flags & 0x40) != 0);
-                } catch (Exception e) {
-                    LOGGER.fine("Failed to read flags for music ID " + Integer.toHexString(musicId));
-                }
-            }
+            // bit 6 (0x40): disable PAL music speed fix
+            data.setPalSpeedupDisabled((musicId & 0x40) != 0);
         }
         return data;
     }
 
     /**
-     * Returns the ROM offset for a given music ID using the hard map first, then the flag table.
+     * Returns the ROM offset for a given music ID using the hard map first, then
+     * the flag table.
      * Exposed for debug tools (sound test).
      */
     public int findMusicOffset(int musicId) {
@@ -215,7 +229,8 @@ public class Sonic2SmpsLoader {
             if (id >= 0xA0 && id <= 0xF0) {
                 return loadSfx(id);
             }
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException ignored) {
+        }
         return null;
     }
 
@@ -234,7 +249,8 @@ public class Sonic2SmpsLoader {
         // SFX Pointer Table at 0xFEE91.
         // IDs start at 0xA0.
         // Pointers are 2 bytes (LE), relative to bank start 0xF8000 (Z80 0x8000).
-        if (sfxId < 0xA0) return null;
+        if (sfxId < 0xA0)
+            return null;
 
         try {
             int index = sfxId - 0xA0;
@@ -245,12 +261,14 @@ public class Sonic2SmpsLoader {
             int hi = rom.readByte(entryAddr + 1) & 0xFF;
             int ptr = lo | (hi << 8); // Z80 pointer (e.g. 0x8xxx)
 
-            if (ptr == 0) return null;
+            if (ptr == 0)
+                return null;
 
             // Map Z80 0x8000-0xFFFF to ROM 0xF8000-0xFFFFF
             int romOffset = 0xF8000 + (ptr & 0x7FFF);
 
-            // SFX are stored uncompressed in Sonic 2. Read raw bytes until next pointer/bank end.
+            // SFX are stored uncompressed in Sonic 2. Read raw bytes until next
+            // pointer/bank end.
             int bankBase = 0xF8000;
             int headerOffset = romOffset - bankBase;
             int sfxLength = computeRawSfxLength(index, romOffset);
@@ -258,7 +276,8 @@ public class Sonic2SmpsLoader {
             // Extend buffer if the voice table sits past the next pointer.
             int voicePtr = (rom.readByte(romOffset) & 0xFF) | ((rom.readByte(romOffset + 1) & 0xFF) << 8);
             int minLength = headerOffset + sfxLength;
-            // Reserve up to 0x100 bytes past the voice table start (25 bytes per voice, rounded up)
+            // Reserve up to 0x100 bytes past the voice table start (25 bytes per voice,
+            // rounded up)
             int voiceOffset = voicePtr == 0 ? -1 : (voicePtr & 0x7FFF);
             int voiceReach = voiceOffset < 0 ? 0 : voiceOffset + 0x100;
             int readLength = Math.max(minLength, voiceReach);
@@ -267,7 +286,8 @@ public class Sonic2SmpsLoader {
                 readLength = bankLimit;
             }
 
-            // Read from bankBase up to end of this SFX (bounded by next pointer/bank end/voice table)
+            // Read from bankBase up to end of this SFX (bounded by next pointer/bank
+            // end/voice table)
             byte[] raw = rom.readBytes(bankBase, readLength);
 
             Sonic2SfxData sfx = new Sonic2SfxData(raw, 0x8000, 0, headerOffset);
@@ -292,25 +312,31 @@ public class Sonic2SmpsLoader {
         // FM: 0-6, PSG: 0-4
         int fm = data.getChannels();
         int psg = data.getPsgChannels();
-        if (fm > 7 || psg > 4) return false;
+        if (fm > 7 || psg > 4)
+            return false;
         // Also checks if header was parsed at all
-        if (fm == 0 && psg == 0 && data.getVoicePtr() == 0) return false;
+        if (fm == 0 && psg == 0 && data.getVoicePtr() == 0)
+            return false;
 
         // Check pointers
         int z80Start = data.getZ80StartAddress();
         int dataLen = data.getData().length;
 
-        if (!isValidPointer(data.getVoicePtr(), z80Start, dataLen)) return false;
-        if (data.getDacPointer() != 0 && !isValidPointer(data.getDacPointer(), z80Start, dataLen)) return false;
+        if (!isValidPointer(data.getVoicePtr(), z80Start, dataLen))
+            return false;
+        if (data.getDacPointer() != 0 && !isValidPointer(data.getDacPointer(), z80Start, dataLen))
+            return false;
 
         if (data.getFmPointers() != null) {
             for (int ptr : data.getFmPointers()) {
-                if (ptr != 0 && !isValidPointer(ptr, z80Start, dataLen)) return false;
+                if (ptr != 0 && !isValidPointer(ptr, z80Start, dataLen))
+                    return false;
             }
         }
         if (data.getPsgPointers() != null) {
             for (int ptr : data.getPsgPointers()) {
-                if (ptr != 0 && !isValidPointer(ptr, z80Start, dataLen)) return false;
+                if (ptr != 0 && !isValidPointer(ptr, z80Start, dataLen))
+                    return false;
             }
         }
 
@@ -318,11 +344,13 @@ public class Sonic2SmpsLoader {
     }
 
     private boolean isValidPointer(int ptr, int start, int len) {
-        if (ptr == 0) return true;
+        if (ptr == 0)
+            return true;
         int offset = ptr;
         if (start > 0) {
             // If pointers are absolute Z80 addresses, they must map to our buffer
-            if (ptr < start) return false;
+            if (ptr < start)
+                return false;
             offset = ptr - start;
         }
         return offset >= 0 && offset < len;
@@ -330,22 +358,26 @@ public class Sonic2SmpsLoader {
 
     /**
      * Sonic 2 final: music flags list at 0xECF36, pointer banks at 0xF0000/0xF8000.
-     * Flag bits: 0-4 = pointer index, bit5 = uncompressed (1=uncompressed), bit7 = bank (0=0xF0000,1=0xF8000).
+     * Flag bits: 0-4 = pointer index, bit5 = uncompressed (1=uncompressed), bit7 =
+     * bank (0=0xF0000,1=0xF8000).
      */
     private int resolveMusicOffset(int musicId) {
         // Prefer deriving from ROM.
         int romOffset = resolveMusicOffsetFromRom(musicId);
-        if (romOffset != -1) return romOffset;
+        if (romOffset != -1)
+            return romOffset;
 
         // Fallback to legacy map
         Integer mapped = musicMap.get(musicId);
-        if (mapped != null) return mapped;
+        if (mapped != null)
+            return mapped;
         return -1;
     }
 
     private int resolveMusicOffsetFromRom(int musicId) {
         // Known music IDs start at 0x81; map ID to flag index by subtracting 0x81.
-        if (musicId < 0x81) return -1;
+        if (musicId < 0x81)
+            return -1;
         int flagIndex = musicId - 0x81;
         int flagsAddr = 0x0ECF36 + flagIndex;
         try {
@@ -353,20 +385,24 @@ public class Sonic2SmpsLoader {
             int ptrId = flags & 0x1F;
             boolean uncompressed = (flags & 0x20) != 0;
             int bankBase = ((flags & 0x80) != 0) ? 0x0F8000 : 0x0F0000;
-            // Pointer-to-pointer table at 0x0EC810 (driver relocates this in RAM); treat as ROM address here.
+            // Pointer-to-pointer table at 0x0EC810 (driver relocates this in RAM); treat as
+            // ROM address here.
             int ptrToPtrLo = rom.readByte(0x0EC810) & 0xFF;
             int ptrToPtrHi = rom.readByte(0x0EC810 + 1) & 0xFF;
             int ptrTableBase = (ptrToPtrLo << 8) | ptrToPtrHi;
-            if (ptrTableBase == 0) return -1;
+            if (ptrTableBase == 0)
+                return -1;
             int ptrTableEntry = ptrTableBase + (ptrId * 2);
             int lo = rom.readByte(ptrTableEntry) & 0xFF;
             int hi = rom.readByte(ptrTableEntry + 1) & 0xFF;
             int ptr = (lo << 8) | hi;
             int offset = bankBase + ptr;
-            if (ptr == 0) return -1;
+            if (ptr == 0)
+                return -1;
             if (uncompressed) {
                 // We assume compressed; fallback to hard map if needed
-                LOGGER.fine("Music " + Integer.toHexString(musicId) + " flagged uncompressed; using raw offset " + Integer.toHexString(offset));
+                LOGGER.fine("Music " + Integer.toHexString(musicId) + " flagged uncompressed; using raw offset "
+                        + Integer.toHexString(offset));
             }
             return offset;
         } catch (Exception e) {
@@ -405,6 +441,74 @@ public class Sonic2SmpsLoader {
             LOGGER.severe("Failed to load SMPS at " + Integer.toHexString(offset));
             e.printStackTrace();
             return null;
+        }
+    }
+
+    /**
+     * Load uncompressed SMPS data directly from ROM.
+     * Used for tracks with bit 5 set in their music ID (0x20 mask).
+     * These include: 1-Up (0xB5), Game Over (0xB8), Got an Emerald (0xBA), Credits
+     * (0xBD).
+     */
+    private AbstractSmpsData loadSmpsUncompressed(int offset, int z80Addr) {
+        try {
+            // Calculate size by finding the next music pointer after this offset
+            int size = calculateUncompressedSize(offset);
+            int available = (int) Math.max(0L, rom.getSize() - offset);
+            int readLen = Math.min(size, available);
+
+            if (readLen <= 0) {
+                LOGGER.severe("No data available at offset " + Integer.toHexString(offset));
+                return null;
+            }
+
+            byte[] raw = rom.readBytes(offset, readLen);
+            LOGGER.info("Loaded uncompressed SMPS at " + Integer.toHexString(offset)
+                    + ". Size: " + raw.length + " bytes (0x" + Integer.toHexString(raw.length) + ")");
+            return new Sonic2SmpsData(raw, z80Addr);
+        } catch (Exception e) {
+            LOGGER.severe("Failed to load uncompressed SMPS at " + Integer.toHexString(offset));
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Calculate the size of uncompressed music data.
+     * Uses explicit sizes for known uncompressed tracks based on ROM analysis.
+     * Per Sonic Retro, the uncompressed tracks are: 1-Up, Game Over, Emerald,
+     * Credits.
+     */
+    private int calculateUncompressedSize(int offset) {
+        // Explicit sizes for uncompressed tracks (calculated from Sonic Retro ROM
+        // pointer table)
+        // These are the exact distances between consecutive uncompressed song pointers
+        switch (offset) {
+            case 0x0FD48D: // 1-Up → Game Over (0xFD57A - 0xFD48D)
+                return 0xED; // 237 bytes
+            case 0x0FD57A: // Game Over → Emerald (0xFD6C9 - 0xFD57A)
+                return 0x14F; // 335 bytes
+            case 0x0FD6C9: // Emerald → Credits (0xFD797 - 0xFD6C9)
+                return 0xCE; // 206 bytes
+            case 0x0FD797: // Credits (massive medley song, ~37 voices + 9 tracks)
+                // Estimated actual size: ~5-6KB based on 925 bytes of voices + ~4-5KB of track
+                // data
+                return 0x2000; // 8KB buffer - safe upper bound
+            default:
+                // Fallback: find next offset or use reasonable max
+                int nextOffset = Integer.MAX_VALUE;
+                for (int romOffset : musicMap.values()) {
+                    if (romOffset > offset && romOffset < nextOffset) {
+                        nextOffset = romOffset;
+                    }
+                }
+                if (nextOffset != Integer.MAX_VALUE) {
+                    int size = nextOffset - offset;
+                    LOGGER.fine("Calculated uncompressed size: " + size + " bytes (next offset: "
+                            + Integer.toHexString(nextOffset) + ")");
+                    return size;
+                }
+                return 0x200; // 512 bytes fallback
         }
     }
 
@@ -462,14 +566,17 @@ public class Sonic2SmpsLoader {
             length = bankEnd - romOffset;
         }
         // safety floor
-        if (length < 16) length = 16;
+        if (length < 16)
+            length = 16;
         return length;
     }
 
     private byte[] readCompressed(int offset, int sizeHeader, int maxAvail) {
-        if (sizeHeader <= 0) return null;
+        if (sizeHeader <= 0)
+            return null;
         int size = Math.min(sizeHeader, maxAvail);
-        if (size <= 0) return null;
+        if (size <= 0)
+            return null;
         try {
             return rom.readBytes(offset, size + 2);
         } catch (IOException e) {
@@ -492,7 +599,8 @@ public class Sonic2SmpsLoader {
                 int p2 = rom.readByte(ptrAddr + 1) & 0xFF;
                 int ptr = p1 | (p2 << 8);
 
-                if (ptr == 0) continue;
+                if (ptr == 0)
+                    continue;
 
                 // Map Z80 0x8000-0xFFFF to ROM
                 int offset = ptr & 0x7FFF;
@@ -513,19 +621,25 @@ public class Sonic2SmpsLoader {
                         b = rom.readByte(romAddr + i) & 0xFF;
                         buffer[i] = (byte) b;
                         len++;
-                        if (buffer[i - 1] == (byte) 0x82) break;
+                        if (buffer[i - 1] == (byte) 0x82)
+                            break;
                     }
                 }
 
                 byte[] env = new byte[len];
                 System.arraycopy(buffer, 0, env, 0, len);
-                // Validate envelope bytes against expected Sonic 2 PSG semantics before accepting.
+                // Validate envelope bytes against expected Sonic 2 PSG semantics before
+                // accepting.
                 boolean valid = true;
                 for (byte v : env) {
                     int val = v & 0xFF;
                     if (val < 0x80) {
-                        // Data byte (attenuation). Sonic 2 uses 0-0x0F, but keep it lenient to preserve raw ROM data.
-                        if (val > 0x7F) { valid = false; break; }
+                        // Data byte (attenuation). Sonic 2 uses 0-0x0F, but keep it lenient to preserve
+                        // raw ROM data.
+                        if (val > 0x7F) {
+                            valid = false;
+                            break;
+                        }
                     } else {
                         if (val != 0x80 && val != 0x81 && val != 0x82 && val != 0x83 && val != 0x84) {
                             valid = false;
@@ -553,7 +667,8 @@ public class Sonic2SmpsLoader {
             int bankStart = 0xE0000;
 
             // 1. Load Samples from Pointer Table (81-87)
-            // Pointers at 0xECF7C. Format: 4 bytes (Ptr LE, Len LE). If next byte is FF, skip it.
+            // Pointers at 0xECF7C. Format: 4 bytes (Ptr LE, Len LE). If next byte is FF,
+            // skip it.
             int ptrTable = 0xECF7C;
             int offset = ptrTable;
 
@@ -575,7 +690,8 @@ public class Sonic2SmpsLoader {
                     offset++;
                 }
 
-                if (ptr == 0 || len == 0) continue;
+                if (ptr == 0 || len == 0)
+                    continue;
 
                 // Read compressed
                 int romAddr = bankStart + ptr;
@@ -587,7 +703,8 @@ public class Sonic2SmpsLoader {
             }
 
             // 2. Load Mapping from Master List (81-91)
-            // Starts at 0xECF9C. Format: 2 bytes (SampleID, Rate). If next byte is FF, skip it.
+            // Starts at 0xECF9C. Format: 2 bytes (SampleID, Rate). If next byte is FF, skip
+            // it.
             int mapAddr = 0xECF9C;
             offset = mapAddr;
 
@@ -604,7 +721,8 @@ public class Sonic2SmpsLoader {
                     offset++;
                 }
 
-                if (sampleId == 0xFF) continue;
+                if (sampleId == 0xFF)
+                    continue;
 
                 int noteId = 0x81 + i;
                 mapping.put(noteId, new DacData.DacEntry(sampleId, rate));

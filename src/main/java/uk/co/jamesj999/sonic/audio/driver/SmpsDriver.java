@@ -37,8 +37,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     public void stopAll() {
         sequencers.clear();
         sfxSequencers.clear();
-        for (int i=0; i<6; i++) fmLocks[i] = null;
-        for (int i=0; i<4; i++) psgLocks[i] = null;
+        for (int i = 0; i < 6; i++)
+            fmLocks[i] = null;
+        for (int i = 0; i < 4; i++)
+            psgLocks[i] = null;
         psgLatches.clear();
     }
 
@@ -49,18 +51,19 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         short[] frameBuf = new short[2];
 
         for (int i = 0; i < frames; i++) {
-            // Tick all sequencers
-            for (int s = 0; s < sequencers.size(); s++) {
-                SmpsSequencer seq = sequencers.get(s);
+            // Make a defensive copy to handle concurrent modification
+            // (e.g., E4 handler calling restoreMusic which calls stopAll)
+            List<SmpsSequencer> seqCopy = new ArrayList<>(sequencers);
+            for (SmpsSequencer seq : seqCopy) {
                 seq.advance(1.0);
                 if (seq.isComplete()) {
-                    sequencers.remove(s);
-                    s--;
+                    sequencers.remove(seq);
                     releaseLocks(seq);
-                    if (isSfx(seq)) sfxSequencers.remove(seq);
+                    if (isSfx(seq))
+                        sfxSequencers.remove(seq);
                 }
             }
-            
+
             // Render Synth (Stereo Frame)
             super.render(frameBuf);
             buffer[i * 2] = frameBuf[0];
@@ -68,12 +71,12 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         }
         return buffer.length;
     }
-    
+
     @Override
     public boolean isComplete() {
         return sequencers.isEmpty();
     }
-    
+
     private boolean isSfx(Object source) {
         return sfxSequencers.contains(source);
     }
@@ -114,7 +117,7 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     public void writeFm(Object source, int port, int reg, int val) {
         int ch = -1;
         int rawReg = reg & 0xFF;
-        
+
         // Map Register to Channel
         if (rawReg >= 0x30 && rawReg <= 0x9E) {
             ch = (rawReg & 0x03) + (port * 3);
@@ -134,10 +137,11 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             // So Ch 0,1,2 -> 0,1,2. Ch 4,5,6 -> 3,4,5.
             // We need linear channel 0-5.
             int c = val & 0x07;
-            if (c >= 4) c -= 1;
+            if (c >= 4)
+                c -= 1;
             ch = c;
         }
-        
+
         if (ch >= 0 && ch < 6) {
             if (isSfx(source)) {
                 if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
@@ -165,7 +169,7 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             // Latch
             int ch = (val >> 5) & 0x03;
             psgLatches.put(source, ch);
-            
+
             if (isSfx(source)) {
                 if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
                     psgLocks[ch] = (SmpsSequencer) source;
@@ -206,8 +210,9 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             }
         }
     }
-    
-    // Override other methods if needed (setInstrument calls writeFm, so it's covered)
+
+    // Override other methods if needed (setInstrument calls writeFm, so it's
+    // covered)
     @Override
     public void setInstrument(Object source, int channelId, byte[] voice) {
         // Channel ID is passed explicitly.
@@ -228,7 +233,7 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             }
         }
     }
-    
+
     @Override
     public void playDac(Object source, int note) {
         // DAC is on Channel 5 (FM6)
@@ -248,11 +253,14 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             }
         }
     }
-    
+
     private boolean shouldStealLock(SmpsSequencer currentLock, SmpsSequencer challenger) {
-        if (currentLock == null) return true;
-        if (currentLock == challenger) return true;
-        if (!isSfx(currentLock)) return true; // Challenger is SFX, current is Music -> Steal
+        if (currentLock == null)
+            return true;
+        if (currentLock == challenger)
+            return true;
+        if (!isSfx(currentLock))
+            return true; // Challenger is SFX, current is Music -> Steal
 
         // Both are SFX. Priority: Newer wins.
         // Index in list: higher is newer.

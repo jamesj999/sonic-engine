@@ -40,16 +40,16 @@ import java.util.TreeSet;
 /**
  * Lightweight console-driven sound test runner for SMPS tracks.
  * Controls (stdin):
- *  - n / p : next / previous song ID
- *  - r     : restart current song
- *  - hex or decimal number (e.g., 0x8C or 140) to jump to a specific ID
- *  - q     : quit
+ * - n / p : next / previous song ID
+ * - r : restart current song
+ * - hex or decimal number (e.g., 0x8C or 140) to jump to a specific ID
+ * - q : quit
  *
  * If no args are provided, a simple interactive window opens:
- *  - Up/Down arrows: change song ID
- *  - Enter: play/restart current song
- *  - Space: stop (silences by restarting with no data)
- *  - Esc: quit
+ * - Up/Down arrows: change song ID
+ * - Enter: play/restart current song
+ * - Space: stop (silences by restarting with no data)
+ * - Esc: quit
  */
 public final class SoundTestApp {
 
@@ -82,7 +82,8 @@ public final class SoundTestApp {
         }
     }
 
-    private static void runInteractiveWindow(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
+    private static void runInteractiveWindow(Options options, Sonic2SmpsLoader loader, DacData dacData,
+            AudioBackend backend) throws Exception {
         InteractiveState state = new InteractiveState(options.songId, loader, dacData, backend);
         SwingUtilities.invokeAndWait(() -> state.show(options.nullAudio, options.romPath));
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
@@ -92,7 +93,8 @@ public final class SoundTestApp {
         backend.destroy();
     }
 
-    private static void runConsole(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend) throws Exception {
+    private static void runConsole(Options options, Sonic2SmpsLoader loader, DacData dacData, AudioBackend backend)
+            throws Exception {
         System.out.println("Sound test ready.");
         System.out.println("ROM: " + options.romPath);
         System.out.println("Backend: " + backend.getClass().getSimpleName() + (options.nullAudio ? " (silent)" : ""));
@@ -169,7 +171,8 @@ public final class SoundTestApp {
             System.out.println(String.format("Playing song %s", toHex(songId)));
         }
         if (offset >= 0) {
-            System.out.println(String.format("ROM offset: %s (Z80 base: %s)", toHex(offset), toHex(data.getZ80StartAddress())));
+            System.out.println(
+                    String.format("ROM offset: %s (Z80 base: %s)", toHex(offset), toHex(data.getZ80StartAddress())));
         }
         System.out.println(String.format("Header: voicePtr=%s dacPtr=%s fm=%d psg=%d tempo=%d divide=%d",
                 toHex(data.getVoicePtr()), toHex(data.getDacPointer()),
@@ -179,7 +182,9 @@ public final class SoundTestApp {
     }
 
     private static void printControls(int currentSong) {
-        System.out.println(String.format("Controls: n/p next-prev | r restart | s Speed Shoes | hex/dec number to jump | q quit | current=%s", toHex(currentSong)));
+        System.out.println(String.format(
+                "Controls: n/p next-prev | r restart | s Speed Shoes | hex/dec number to jump | q quit | current=%s",
+                toHex(currentSong)));
     }
 
     private static int parseSongId(String token) {
@@ -225,7 +230,8 @@ public final class SoundTestApp {
             this.dacData = dacData;
             this.backend = backend;
             this.sfxNames = loader.getSfxList();
-            // Use available SFX IDs from cache to ensure we only list what we successfully loaded
+            // Use available SFX IDs from cache to ensure we only list what we successfully
+            // loaded
             this.validSfx = new TreeSet<>(loader.getAvailableSfxIds());
             if (!validSfx.isEmpty()) {
                 this.sfxId = validSfx.first();
@@ -256,7 +262,8 @@ public final class SoundTestApp {
             heading.setAlignmentX(JLabel.LEFT_ALIGNMENT);
             tracksPanel.add(heading);
             frame.getContentPane().add(tracksPanel, BorderLayout.CENTER);
-            JLabel info = new JLabel(String.format("ROM: %s | Backend: %s%s | Tab: Music/SFX | Up/Down change | Enter play | S Speed Shoes | Esc quit",
+            JLabel info = new JLabel(String.format(
+                    "ROM: %s | Backend: %s%s | Tab: Music/SFX | Up/Down change | Enter play | S Speed Shoes | Esc quit",
                     romPath, backend.getClass().getSimpleName(), nullAudio ? " (silent)" : ""), SwingConstants.CENTER);
             info.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             frame.getContentPane().add(info, BorderLayout.SOUTH);
@@ -270,16 +277,20 @@ public final class SoundTestApp {
                     // F1-F5: FM0 - FM4
                     if (code >= KeyEvent.VK_F1 && code <= KeyEvent.VK_F5) {
                         int ch = code - KeyEvent.VK_F1;
-                        if (shift) backend.toggleSolo(ChannelType.FM, ch);
-                        else backend.toggleMute(ChannelType.FM, ch);
+                        if (shift)
+                            backend.toggleSolo(ChannelType.FM, ch);
+                        else
+                            backend.toggleMute(ChannelType.FM, ch);
                         return;
                     }
 
                     // 1-4: PSG0 - PSG3
                     if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_4) {
                         int ch = code - KeyEvent.VK_1;
-                        if (shift) backend.toggleSolo(ChannelType.PSG, ch);
-                        else backend.toggleMute(ChannelType.PSG, ch);
+                        if (shift)
+                            backend.toggleSolo(ChannelType.PSG, ch);
+                        else
+                            backend.toggleMute(ChannelType.PSG, ch);
                         return;
                     }
 
@@ -324,8 +335,10 @@ public final class SoundTestApp {
                             break;
                         case KeyEvent.VK_D:
                             // DAC (FM5 / Channel 5)
-                            if (shift) backend.toggleSolo(ChannelType.DAC, 5);
-                            else backend.toggleMute(ChannelType.DAC, 5);
+                            if (shift)
+                                backend.toggleSolo(ChannelType.DAC, 5);
+                            else
+                                backend.toggleMute(ChannelType.DAC, 5);
                             break;
                         case KeyEvent.VK_S:
                             speedShoes = !speedShoes;
@@ -395,7 +408,8 @@ public final class SoundTestApp {
                 String playingTxt = "";
                 if (playing && playingSongId != null) {
                     String playingTitle = lookupTitle(playingSongId);
-                    playingTxt = String.format("Playing Music: '%s' (%s)", playingTitle != null ? playingTitle : "Unknown", toHex(playingSongId));
+                    playingTxt = String.format("Playing Music: '%s' (%s)",
+                            playingTitle != null ? playingTitle : "Unknown", toHex(playingSongId));
                 } else {
                     playingTxt = "Music Stopped";
                 }
@@ -421,13 +435,15 @@ public final class SoundTestApp {
             String selectedTitle = lookupTitle(songId);
             if (playing && playingSongId != null) {
                 String playingTitle = lookupTitle(playingSongId);
-                String txt = String.format("Playing: '%s' (%s)", playingTitle != null ? playingTitle : "Unknown Track", toHex(playingSongId));
+                String txt = String.format("Playing: '%s' (%s)", playingTitle != null ? playingTitle : "Unknown Track",
+                        toHex(playingSongId));
                 if (speedShoes) {
                     txt += " [SPEED SHOES]";
                 }
                 titleLabel.setText(txt);
             } else {
-                String txt = String.format("Stopped. Selected: '%s' (%s)", selectedTitle != null ? selectedTitle : "Unknown Track", toHex(songId));
+                String txt = String.format("Stopped. Selected: '%s' (%s)",
+                        selectedTitle != null ? selectedTitle : "Unknown Track", toHex(songId));
                 if (speedShoes) {
                     txt += " [SPEED SHOES]";
                 }
@@ -453,7 +469,8 @@ public final class SoundTestApp {
         }
 
         private void updateDetails() {
-            if (tracksPanel == null) return;
+            if (tracksPanel == null)
+                return;
             if (backend instanceof uk.co.jamesj999.sonic.audio.JOALAudioBackend joal) {
                 var dbg = joal.getDebugState();
                 Set<String> touched = new HashSet<>();
@@ -479,14 +496,18 @@ public final class SoundTestApp {
                         boolean soloed = backend.isSoloed(ct, t.channelId);
 
                         // If type is DAC, channelId is 5, but logic handles it.
-                        // However, if SMPS says type=FM ch=5, we treat it as FM in UI label, but backend uses index 5.
+                        // However, if SMPS says type=FM ch=5, we treat it as FM in UI label, but
+                        // backend uses index 5.
                         // Backend isMuted(FM, 5) works because FM case handles 0-6.
 
                         String statusMarker = "";
-                        if (muted) statusMarker += "[M]";
-                        if (soloed) statusMarker += "[S]";
+                        if (muted)
+                            statusMarker += "[M]";
+                        if (soloed)
+                            statusMarker += "[S]";
 
-                        String txt = String.format("%-4s%s %-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
+                        String txt = String.format(
+                                "%-4s%s %-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
                                 statusMarker,
                                 "", // spacer
                                 t.type, t.channelId + 1,
