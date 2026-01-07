@@ -68,7 +68,7 @@ public class ParallaxManager {
 
     // Addresses (REV01)
     private static final int EHZ_RIPPLE_ADDR = 0x00C682;
-    private static final int EHZ_RIPPLE_SIZE = 66; // Matches ROM table size
+    private static final int EHZ_RIPPLE_SIZE = 256; // Safe buffer for 0x7F masking
 
     private static final int WFZ_TRANS_ADDR = 0x00C8CA;
     private static final int WFZ_NORMAL_ADDR = 0x00C916;
