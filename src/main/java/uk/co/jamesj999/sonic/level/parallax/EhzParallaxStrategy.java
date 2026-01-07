@@ -82,11 +82,7 @@ public class EhzParallaxStrategy implements ParallaxStrategy {
         for (int i = 0; i < 21 && line < 224; i++) {
             int val = 0;
             if (rippleData != null && rippleData.length > 0) {
-                 // The index wraps over the table size?
-                 // Standard Sonic 2 SwScrl_RippleData is 66 bytes? Or 256?
-                 // 0xC682. Prompt says load it.
-                 // We'll assume modulo access if not specified, but asm usually does AND.
-                 // Let's safe-guard with modulo.
+                 // Use modulo to wrap index safely within the loaded table size
                  int idx = (rippleOffset + i) % rippleData.length;
                  val = rippleData[idx]; // move.b -> ext.w (signed byte to int)
             }
@@ -200,8 +196,10 @@ public class EhzParallaxStrategy implements ParallaxStrategy {
         int startVal = d2 >> 2;
         int diff = startVal - d2; // d3 = (d2>>2) - d2
         // ext.l d3 (sign extend 16 to 32) -> Java int is 32.
-        // asl.l #8, d3
-        int scaledDiff = diff << 8;
+        // asl.l #8, d3 (This was likely a typo in prompt or misunderstanding of ASM flow which usually implies << 16 for fixed point)
+        // If we use << 8, the increment is too small for 16.16 accumulator (result: thick bands).
+        // Using << 16 ensures smooth gradient over 48 lines.
+        int scaledDiff = diff << 16;
         // divs.w #$30
         int increment = scaledDiff / 0x30;
 
