@@ -47,10 +47,12 @@ public class SolidObjectManager {
             int deltaX = currentX - ridingX;
             int deltaY = currentY - ridingY;
             if (deltaX != 0) {
-                player.setX((short) (player.getX() + deltaX));
+                int baseX = player.getCentreX() - (player.getWidth() / 2);
+                player.setX((short) (baseX + deltaX));
             }
             if (deltaY != 0) {
-                player.setY((short) (player.getY() + deltaY));
+                int baseY = player.getCentreY() - (player.getHeight() / 2);
+                player.setY((short) (baseY + deltaY));
             }
         }
 

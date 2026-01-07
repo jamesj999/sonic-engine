@@ -129,7 +129,8 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.BRIDGE_STAKE,
                 (spawn, registry) -> new BridgeStakeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.SWINGING_PLATFORM, platformFactory);
-        registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_A, platformFactory);
+        registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_A,
+                (spawn, registry) -> new ARZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_B, platformFactory);
     }
 }

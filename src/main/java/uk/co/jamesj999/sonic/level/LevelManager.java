@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
+import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
@@ -145,6 +146,7 @@ public class LevelManager {
             audioManager.resetRingSound();
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
+            OscillationManager.reset();
             RomByteReader romReader = RomByteReader.fromRom(rom);
             objectPlacementManager = new ObjectPlacementManager(level.getObjects());
             planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager,
@@ -1235,6 +1237,14 @@ public class LevelManager {
      */
     public Level getCurrentLevel() {
         return level;
+    }
+
+    public int getCurrentZone() {
+        return currentZone;
+    }
+
+    public int getCurrentAct() {
+        return currentAct;
     }
 
     public Collection<ObjectSpawn> getActiveObjectSpawns() {

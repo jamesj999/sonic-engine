@@ -68,6 +68,11 @@ public class Sonic2Constants {
     public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x1DCBC;
     public static final int ART_TILE_INVINCIBILITY_STARS = 0x05C0;
 
+    public static final int MAP_UNC_OBJ18_A_ADDR = 0x107F6;
+    public static final int MAP_UNC_OBJ18_B_ADDR = 0x1084E;
+
+    public static final int ZONE_AQUATIC_RUIN = 2;
+
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)
             { 0x0060, 0x02AF }, // 1 Emerald Hill 2 (EHZ_2.bin)
