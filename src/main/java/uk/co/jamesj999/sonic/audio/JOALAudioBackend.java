@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.data.games.Sonic2Constants;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;
@@ -43,9 +44,22 @@ public class JOALAudioBackend implements AudioBackend {
     private SmpsSequencer currentSmps;
     private SmpsDriver smpsDriver;
 
-    private AudioStream savedMusicStream;
-    private SmpsSequencer savedSmps;
-    private SmpsDriver savedSmpsDriver;
+    private static class MusicState {
+        final AudioStream stream;
+        final SmpsSequencer smps;
+        final SmpsDriver driver;
+        final int musicId;
+
+        MusicState(AudioStream stream, SmpsSequencer smps, SmpsDriver driver, int musicId) {
+            this.stream = stream;
+            this.smps = smps;
+            this.driver = driver;
+            this.musicId = musicId;
+        }
+    }
+
+    private final Deque<MusicState> musicStack = new ArrayDeque<>();
+    private int currentMusicId = -1;
     private volatile boolean pendingRestore = false;
 
     // Fallback mappings
@@ -114,6 +128,8 @@ public class JOALAudioBackend implements AudioBackend {
     public void playMusic(int musicId) {
         LOGGER.info("Requesting Music ID: " + Integer.toHexString(musicId));
         stopStream(); // Stop any running stream
+        clearMusicStack();
+        currentMusicId = -1;
 
         // Try fallback map first
         String filename = musicFallback.get(musicId);
@@ -127,10 +143,11 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSmps(AbstractSmpsData data, DacData dacData) {
-        if (data.getId() == 0xB5 || data.getId() == 0x99) { // MUS_EXTRA_LIFE or MUS_INVINCIBILITY
-            savedMusicStream = currentStream;
-            savedSmps = currentSmps;
-            savedSmpsDriver = smpsDriver;
+        int musicId = data.getId();
+        boolean isOverride = musicId == Sonic2Constants.MUS_EXTRA_LIFE
+                || musicId == Sonic2Constants.MUS_INVINCIBILITY;
+        if (isOverride) {
+            pushCurrentState();
 
             // Just disconnect the current driver from the source without stopping/clearing
             // it.
@@ -143,6 +160,7 @@ public class JOALAudioBackend implements AudioBackend {
             stopStream();
             // Stop music source if playing wav
             al.alSourceStop(musicSource);
+            clearMusicStack();
         }
 
         smpsDriver = new SmpsDriver();
@@ -167,6 +185,7 @@ public class JOALAudioBackend implements AudioBackend {
         seq.setFallbackVoiceData(data);
         smpsDriver.addSequencer(seq, false);
         currentSmps = seq;
+        currentMusicId = musicId;
 
         updateSynthesizerConfig();
         currentStream = smpsDriver;
@@ -255,6 +274,7 @@ public class JOALAudioBackend implements AudioBackend {
                 smpsDriver.stopAll();
                 smpsDriver = null;
             }
+            currentMusicId = -1;
         }
     }
 
@@ -299,13 +319,15 @@ public class JOALAudioBackend implements AudioBackend {
     public void restoreMusic() {
         // Defer actual restoration to next updateStream cycle to avoid
         // modifying buffers while they're being rendered
-        if (savedMusicStream != null) {
+        if (!musicStack.isEmpty()) {
             pendingRestore = true;
         }
     }
 
     private void doRestoreMusic() {
-        if (savedMusicStream == null) {
+        MusicState savedState = musicStack.pollFirst();
+        if (savedState == null || savedState.stream == null || savedState.smps == null
+                || savedState.driver == null) {
             return;
         }
 
@@ -321,18 +343,15 @@ public class JOALAudioBackend implements AudioBackend {
         }
 
         // Stop the current (non-saved) smps driver
-        if (smpsDriver != null && smpsDriver != savedSmpsDriver) {
+        if (smpsDriver != null && smpsDriver != savedState.driver) {
             smpsDriver.stopAll();
         }
 
         // Restore saved state
-        currentStream = savedMusicStream;
-        currentSmps = savedSmps;
-        smpsDriver = savedSmpsDriver;
-
-        savedMusicStream = null;
-        savedSmps = null;
-        savedSmpsDriver = null;
+        currentStream = savedState.stream;
+        currentSmps = savedState.smps;
+        smpsDriver = savedState.driver;
+        currentMusicId = savedState.musicId;
 
         if (currentSmps != null) {
             // Restore speed shoes state to the saved sequencer
@@ -407,6 +426,17 @@ public class JOALAudioBackend implements AudioBackend {
         al.alSourcei(musicSource, AL.AL_BUFFER, 0);
         currentStream = null;
         currentSmps = null;
+        currentMusicId = -1;
+        clearMusicStack();
+    }
+
+    @Override
+    public void endMusicOverride(int musicId) {
+        if (currentSmps != null && currentMusicId == musicId) {
+            restoreMusic();
+            return;
+        }
+        removeSavedOverride(musicId);
     }
 
     @Override
@@ -511,6 +541,32 @@ public class JOALAudioBackend implements AudioBackend {
         int[] src = new int[1];
         al.alGenSources(1, src, 0);
         return src[0];
+    }
+
+    private void pushCurrentState() {
+        if (currentStream == null || currentSmps == null || smpsDriver == null) {
+            return;
+        }
+        musicStack.push(new MusicState(currentStream, currentSmps, smpsDriver, currentMusicId));
+    }
+
+    private void clearMusicStack() {
+        musicStack.clear();
+        pendingRestore = false;
+    }
+
+    private boolean removeSavedOverride(int musicId) {
+        if (musicStack.isEmpty()) {
+            return false;
+        }
+        for (Iterator<MusicState> iterator = musicStack.iterator(); iterator.hasNext();) {
+            MusicState state = iterator.next();
+            if (state.musicId == musicId) {
+                iterator.remove();
+                return true;
+            }
+        }
+        return false;
     }
 
     private void playWav(String resourcePath, int source, boolean loop) {

@@ -63,6 +63,10 @@ public class NullAudioBackend implements AudioBackend {
     }
 
     @Override
+    public void endMusicOverride(int musicId) {
+    }
+
+    @Override
     public void update() {
     }
 

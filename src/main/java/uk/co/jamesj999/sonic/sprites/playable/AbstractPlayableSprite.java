@@ -496,7 +496,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                                 if (shieldObject != null) {
                                         shieldObject.setVisible(true);
                                 }
-                                AudioManager.getInstance().getBackend().restoreMusic();
+                                AudioManager.getInstance()
+                                                .endMusicOverride(Sonic2Constants.MUS_INVINCIBILITY);
                         }
                 }
                 if (springingFrames > 0) {

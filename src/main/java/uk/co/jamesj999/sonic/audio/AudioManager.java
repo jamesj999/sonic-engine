@@ -135,6 +135,10 @@ public class AudioManager {
         backend.update();
     }
 
+    public void endMusicOverride(int musicId) {
+        backend.endMusicOverride(musicId);
+    }
+
     public void destroy() {
         if (backend != null) {
             backend.destroy();

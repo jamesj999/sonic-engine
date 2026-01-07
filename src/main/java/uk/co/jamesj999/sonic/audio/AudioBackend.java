@@ -45,6 +45,15 @@ public interface AudioBackend {
 
     void restoreMusic();
 
+    /**
+     * Ends a temporary music override (e.g., invincibility). If the override is
+     * currently playing, it should restore the previous track. If it is queued
+     * beneath another override, it should be removed so it does not resume.
+     *
+     * @param musicId The music ID to end.
+     */
+    void endMusicOverride(int musicId);
+
     void update();
 
     void destroy();
