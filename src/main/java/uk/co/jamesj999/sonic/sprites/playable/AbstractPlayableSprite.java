@@ -16,6 +16,7 @@ import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteAnimationManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
 import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
@@ -145,6 +146,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private boolean renderHFlip = false;
         private boolean renderVFlip = false;
         private boolean highPriority = false;
+        private int priorityBucket = RenderPriority.PLAYER_DEFAULT;
         private SpindashDustManager spindashDustManager;
 
         protected boolean shield = false;
@@ -178,6 +180,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.spindash = false;
                 this.pushing = false;
                 this.crouching = false;
+                this.highPriority = false;
+                this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 defineSpeeds(); // Reset speeds to default
         }
 
@@ -337,6 +341,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setHighPriority(boolean highPriority) {
                 this.highPriority = highPriority;
+        }
+
+        public int getPriorityBucket() {
+                return priorityBucket;
+        }
+
+        public void setPriorityBucket(int bucket) {
+                this.priorityBucket = RenderPriority.clamp(bucket);
         }
 
         public boolean getAir() {

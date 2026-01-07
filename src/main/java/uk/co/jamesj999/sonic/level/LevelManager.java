@@ -6,6 +6,8 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.AnimatedPaletteProvider;
+import uk.co.jamesj999.sonic.data.AnimatedPatternProvider;
 import uk.co.jamesj999.sonic.data.ObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
@@ -24,6 +26,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 // import uk.co.jamesj999.sonic.level.ParallaxManager; -> Removed unused
@@ -42,6 +45,8 @@ import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.level.rings.LostRingManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
+import uk.co.jamesj999.sonic.level.animation.AnimatedPaletteManager;
+import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
@@ -101,6 +106,8 @@ public class LevelManager {
     private RingManager ringManager;
     private LostRingManager lostRingManager;
     private ObjectRenderManager objectRenderManager;
+    private AnimatedPatternManager animatedPatternManager;
+    private AnimatedPaletteManager animatedPaletteManager;
     private CheckpointState checkpointState;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
@@ -174,6 +181,8 @@ public class LevelManager {
             lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
             initObjectArt();
             initPlayerSpriteArt();
+            initAnimatedPatterns();
+            initAnimatedPalettes();
             resetPlayerState();
             // Initialize checkpoint state for new level
             if (checkpointState == null) {
@@ -306,6 +315,32 @@ public class LevelManager {
         }
     }
 
+    private void initAnimatedPatterns() {
+        animatedPatternManager = null;
+        if (!(game instanceof AnimatedPatternProvider provider)) {
+            return;
+        }
+        try {
+            animatedPatternManager = provider.loadAnimatedPatternManager(level, currentZone);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load animated patterns.", e);
+            animatedPatternManager = null;
+        }
+    }
+
+    private void initAnimatedPalettes() {
+        animatedPaletteManager = null;
+        if (!(game instanceof AnimatedPaletteProvider provider)) {
+            return;
+        }
+        try {
+            animatedPaletteManager = provider.loadAnimatedPaletteManager(level, currentZone);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load animated palettes.", e);
+            animatedPaletteManager = null;
+        }
+    }
+
     /**
      * Debug Functionality to print each pattern to the screen.
      */
@@ -422,6 +457,12 @@ public class LevelManager {
         }
 
         frameCounter++;
+        if (animatedPatternManager != null) {
+            animatedPatternManager.update();
+        }
+        if (animatedPaletteManager != null) {
+            animatedPaletteManager.update();
+        }
         Camera camera = Camera.getInstance();
 
         int bgScrollY = (int) (camera.getY() * 0.1f);
@@ -451,23 +492,25 @@ public class LevelManager {
             lostRingManager.draw(frameCounter);
         }
 
-        if (objectManager != null) {
-            objectManager.drawLowPriority();
-        }
-
-        if (spriteRenderManager != null) {
-            spriteRenderManager.drawLowPriority();
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            if (spriteRenderManager != null) {
+                spriteRenderManager.drawPriorityBucket(bucket, false);
+            }
+            if (objectManager != null) {
+                objectManager.drawPriorityBucket(bucket, false);
+            }
         }
 
         // Draw Foreground (Layer 0) high-priority pass
         drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
 
-        if (spriteRenderManager != null) {
-            spriteRenderManager.drawHighPriority();
-        }
-
-        if (objectManager != null) {
-            objectManager.drawHighPriority();
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            if (spriteRenderManager != null) {
+                spriteRenderManager.drawPriorityBucket(bucket, true);
+            }
+            if (objectManager != null) {
+                objectManager.drawPriorityBucket(bucket, true);
+            }
         }
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
@@ -1331,6 +1374,7 @@ public class LevelManager {
                 playable.setAngle((byte) 0);
                 player.setLayer((byte) 0);
                 playable.setHighPriority(false);
+                playable.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
 
                 // Clear rings on respawn (ROM behavior)
                 playable.setRingCount(0);

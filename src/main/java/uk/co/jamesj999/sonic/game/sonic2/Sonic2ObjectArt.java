@@ -114,6 +114,17 @@ public class Sonic2ObjectArt {
 
         Pattern[] waterfallPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_EHZ_WATERFALL_ADDR);
         List<SpriteMappingFrame> waterfallMappings = createEHZWaterfallMappings();
+        int waterfallMaxTile = computeMaxTileIndex(waterfallMappings);
+        if (waterfallMaxTile >= waterfallPatterns.length) {
+            Pattern[] extended = new Pattern[waterfallMaxTile + 1];
+            System.arraycopy(waterfallPatterns, 0, extended, 0, waterfallPatterns.length);
+            for (int i = 0; i < extended.length; i++) {
+                if (extended[i] == null) {
+                    extended[i] = new Pattern();
+                }
+            }
+            waterfallPatterns = extended;
+        }
         ObjectSpriteSheet waterfallSheet = new ObjectSpriteSheet(waterfallPatterns, waterfallMappings, 1, 1);
 
         Pattern[] invincibilityStarsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR);
@@ -486,5 +497,23 @@ public class Sonic2ObjectArt {
         }
 
         return newFrames;
+    }
+
+    private int computeMaxTileIndex(List<SpriteMappingFrame> frames) {
+        int max = -1;
+        if (frames == null) {
+            return max;
+        }
+        for (SpriteMappingFrame frame : frames) {
+            if (frame == null || frame.pieces() == null) {
+                continue;
+            }
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                int tiles = piece.widthTiles() * piece.heightTiles();
+                int end = piece.tileIndex() + Math.max(tiles, 1) - 1;
+                max = Math.max(max, end);
+            }
+        }
+        return max;
     }
 }

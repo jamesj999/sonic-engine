@@ -189,10 +189,9 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         // We do NOT set air=false because that causes the ground sensor check to fail
         // and reset state.
         player.setAir(true);
-        // We set Y speed to negative gravity to counteract the frame's gravity
-        // application,
-        // resulting in net zero vertical movement from physics engine.
-        player.setYSpeed((short) -player.getGravity());
+        // Match RideObject_SetRide behavior: zero vertical speed and keep inertia.
+        player.setYSpeed((short) 0);
+        player.setGSpeed(player.getXSpeed());
         LOGGER.info("Spiral Activated: Player engaged at dx=" + (player.getCentreX() - spawn.x()));
     }
 
@@ -244,7 +243,7 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         targetCenterY -= radiusOffset;
         int targetTopY = targetCenterY - (player.getHeight() / 2);
         player.setY((short) targetTopY);
-        player.setYSpeed((short) -player.getGravity());
+        player.setYSpeed((short) 0);
         player.setAir(true); // Ensure engine doesn't try to "land" us on non-existent ground
 
         // Flip Angle Logic

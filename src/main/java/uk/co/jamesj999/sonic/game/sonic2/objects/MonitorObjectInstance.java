@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.level.objects.*;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
@@ -239,6 +240,11 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             return MonitorType.SONIC.id + ICON_FRAME_OFFSET;
         }
         return type.id + ICON_FRAME_OFFSET;
+    }
+
+    @Override
+    public int getPriorityBucket() {
+        return RenderPriority.clamp(3);
     }
 
     private enum MonitorType {

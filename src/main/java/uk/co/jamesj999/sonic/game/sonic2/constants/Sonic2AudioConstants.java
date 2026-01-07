@@ -13,6 +13,7 @@ public final class Sonic2AudioConstants {
     public static final int SFX_BADNIK_HIT = 0xC1;
     public static final int SFX_CHECKPOINT = 0xA1;
     public static final int SFX_SPIKE_HIT = 0xA6;
+    public static final int SFX_SPIKES_MOVE = 0xB6;
     public static final int SFX_DROWN = 0xB2;
     public static final int SFX_SPRING = 0xCC;
     public static final int SFX_ROLLING = 0xBE;

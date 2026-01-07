@@ -67,6 +67,9 @@ public class Sonic2Constants {
     // Waterfall art (EHZ waterfall)
     public static final int ART_NEM_EHZ_WATERFALL_ADDR = 0xF02D6;
     public static final int ART_TILE_EHZ_WATERFALL = 0x39E;
+    // Palette cycling (EHZ/ARZ water)
+    public static final int CYCLING_PAL_EHZ_ARZ_WATER_ADDR = 0x001E7A;
+    public static final int CYCLING_PAL_EHZ_ARZ_WATER_LEN = 0x20;
 
     public static final int ART_NEM_INVINCIBILITY_STARS_ADDR = 0x71F14;
     public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x1DCBC;

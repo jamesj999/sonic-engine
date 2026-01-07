@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.game.sonic2;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.data.AnimatedPaletteProvider;
+import uk.co.jamesj999.sonic.data.AnimatedPatternProvider;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.ObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
@@ -9,6 +11,8 @@ import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.level.Level;
+import uk.co.jamesj999.sonic.level.animation.AnimatedPaletteManager;
+import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectArtData;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
@@ -22,7 +26,8 @@ import java.util.Map;
 import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants.*;
 import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants.*;
 
-public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDustArtProvider, ObjectArtProvider {
+public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDustArtProvider,
+        ObjectArtProvider, AnimatedPatternProvider, AnimatedPaletteProvider {
 
     private final Rom rom;
     private RomByteReader romReader;
@@ -303,6 +308,22 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
             return null;
         }
         return objectArt.load();
+    }
+
+    @Override
+    public AnimatedPatternManager loadAnimatedPatternManager(Level level, int zoneIndex) throws IOException {
+        if (level == null) {
+            return null;
+        }
+        return new Sonic2AnimatedPatternManager(rom, level, zoneIndex);
+    }
+
+    @Override
+    public AnimatedPaletteManager loadAnimatedPaletteManager(Level level, int zoneIndex) throws IOException {
+        if (level == null) {
+            return null;
+        }
+        return new Sonic2PaletteCycleManager(rom, level, zoneIndex);
     }
 
     private int getSolidTileHeightsAddr() {

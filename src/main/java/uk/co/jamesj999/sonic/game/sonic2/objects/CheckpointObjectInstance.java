@@ -6,6 +6,7 @@ import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -243,5 +244,10 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
 
     public int getCenterY() {
         return spawn.y();
+    }
+
+    @Override
+    public int getPriorityBucket() {
+        return RenderPriority.clamp(5);
     }
 }

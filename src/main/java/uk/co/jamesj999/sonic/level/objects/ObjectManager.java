@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -61,26 +62,37 @@ public class ObjectManager {
     }
 
     public void drawLowPriority() {
-        draw(false);
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            drawPriorityBucket(bucket, false);
+        }
     }
 
     public void drawHighPriority() {
-        draw(true);
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            drawPriorityBucket(bucket, true);
+        }
     }
 
-    private void draw(boolean highPriority) {
-        if (activeObjects.isEmpty()) {
+    public void drawPriorityBucket(int bucket, boolean highPriority) {
+        if (activeObjects.isEmpty() && dynamicObjects.isEmpty()) {
             return;
         }
         List<GLCommand> commands = new ArrayList<>();
+        int targetBucket = RenderPriority.clamp(bucket);
         for (ObjectInstance instance : activeObjects.values()) {
             if (instance.isHighPriority() != highPriority) {
+                continue;
+            }
+            if (RenderPriority.clamp(instance.getPriorityBucket()) != targetBucket) {
                 continue;
             }
             instance.appendRenderCommands(commands);
         }
         for (ObjectInstance instance : dynamicObjects) {
             if (instance.isHighPriority() != highPriority) {
+                continue;
+            }
+            if (RenderPriority.clamp(instance.getPriorityBucket()) != targetBucket) {
                 continue;
             }
             instance.appendRenderCommands(commands);

@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.level.objects.*;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -65,7 +66,12 @@ public class ShieldObjectInstance extends AbstractObjectInstance {
 
     @Override
     public boolean isHighPriority() {
-        return true;
+        return player != null && player.isHighPriority();
+    }
+
+    @Override
+    public int getPriorityBucket() {
+        return RenderPriority.clamp(1);
     }
 
     public void destroy() {

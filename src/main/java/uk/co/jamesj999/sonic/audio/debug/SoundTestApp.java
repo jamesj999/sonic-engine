@@ -7,6 +7,7 @@ import uk.co.jamesj999.sonic.audio.NullAudioBackend;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2AudioProfile;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -73,6 +74,7 @@ public final class SoundTestApp {
         DacData dacData = loader.loadDacData();
         AudioBackend backend = options.nullAudio ? new NullAudioBackend() : new JOALAudioBackend();
         backend.init();
+        backend.setAudioProfile(new Sonic2AudioProfile());
         Runtime.getRuntime().addShutdownHook(new Thread(backend::destroy));
 
         if (options.interactiveWindow) {

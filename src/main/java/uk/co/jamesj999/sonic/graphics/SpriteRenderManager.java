@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.graphics;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 
 import java.util.Collection;
 
@@ -22,23 +23,29 @@ public class SpriteRenderManager {
     }
 
     public void drawLowPriority() {
-        drawWithPriority(false);
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            drawPriorityBucket(bucket, false);
+        }
     }
 
     public void drawHighPriority() {
-        drawWithPriority(true);
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            drawPriorityBucket(bucket, true);
+        }
     }
 
-    private void drawWithPriority(boolean highPriority) {
+    public void drawPriorityBucket(int bucket, boolean highPriority) {
         Collection<Sprite> sprites = spriteManager.getAllSprites();
+        int targetBucket = RenderPriority.clamp(bucket);
         for (Sprite sprite : sprites) {
             if (sprite instanceof AbstractPlayableSprite playable) {
-                if (playable.isHighPriority() == highPriority) {
+                int spriteBucket = RenderPriority.clamp(playable.getPriorityBucket());
+                if (playable.isHighPriority() == highPriority && spriteBucket == targetBucket) {
                     sprite.draw();
                 }
                 continue;
             }
-            if (highPriority) {
+            if (highPriority && targetBucket == RenderPriority.MIN) {
                 sprite.draw();
             }
         }

@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
@@ -99,5 +100,10 @@ public class CheckpointDongleInstance extends AbstractObjectInstance {
             return;
         }
         renderer.drawFrameIndex(DONGLE_FRAME, currentX, currentY, false, false);
+    }
+
+    @Override
+    public int getPriorityBucket() {
+        return RenderPriority.clamp(5);
     }
 }
