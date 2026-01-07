@@ -64,6 +64,10 @@ public class Sonic2Constants {
     // Bridge art (EHZ wooden bridge - 8 blocks)
     public static final int ART_NEM_BRIDGE_ADDR = 0xF052A;
 
+    // Waterfall art (EHZ waterfall)
+    public static final int ART_NEM_EHZ_WATERFALL_ADDR = 0xF02D6;
+    public static final int ART_TILE_EHZ_WATERFALL = 0x39E;
+
     public static final int ART_NEM_INVINCIBILITY_STARS_ADDR = 0x71F14;
     public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x1DCBC;
     public static final int ART_TILE_INVINCIBILITY_STARS = 0x05C0;
@@ -72,6 +76,14 @@ public class Sonic2Constants {
     public static final int MAP_UNC_OBJ18_B_ADDR = 0x1084E;
 
     public static final int ZONE_AQUATIC_RUIN = 2;
+
+    // Checkpoint/Starpost (Object $79)
+    public static final int ART_NEM_CHECKPOINT_ADDR = 0x79A86; // Star pole.nem
+    public static final int MAP_UNC_CHECKPOINT_ADDR = 0x1F424; // obj79_a.asm (pole+dongle)
+    public static final int MAP_UNC_CHECKPOINT_STAR_ADDR = 0x1F4A0; // obj79_b.asm (special stage stars)
+    public static final int ANI_OBJ79_ADDR = 0x1F0C2; // Ani_obj79
+    public static final int ANI_OBJ79_SCRIPT_COUNT = 3;
+    public static final int ART_TILE_CHECKPOINT = 0x047C;
 
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)

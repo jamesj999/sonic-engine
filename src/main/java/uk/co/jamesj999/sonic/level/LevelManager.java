@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
+import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
@@ -100,6 +101,7 @@ public class LevelManager {
     private RingManager ringManager;
     private LostRingManager lostRingManager;
     private ObjectRenderManager objectRenderManager;
+    private CheckpointState checkpointState;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
@@ -173,6 +175,11 @@ public class LevelManager {
             initObjectArt();
             initPlayerSpriteArt();
             resetPlayerState();
+            // Initialize checkpoint state for new level
+            if (checkpointState == null) {
+                checkpointState = new CheckpointState();
+            }
+            checkpointState.clear();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -1280,11 +1287,34 @@ public class LevelManager {
     public void loadCurrentLevel() {
         try {
             LevelData levelData = levels.get(currentZone).get(currentAct);
+
+            // Check if we have an active checkpoint BEFORE reloading
+            // (loadLevel clears checkpointState, so we need to save the values first)
+            boolean hasCheckpoint = checkpointState != null && checkpointState.isActive();
+            int checkpointX = hasCheckpoint ? checkpointState.getSavedX() : 0;
+            int checkpointY = hasCheckpoint ? checkpointState.getSavedY() : 0;
+            int checkpointIndex = hasCheckpoint ? checkpointState.getLastCheckpointIndex() : -1;
+
             loadLevel(levelData.getLevelIndex());
+
+            // Restore checkpoint state if we had an active checkpoint
+            // (loadLevel clears it, but we need it for subsequent respawns)
+            if (hasCheckpoint && checkpointState != null) {
+                checkpointState.restoreFromSaved(checkpointX, checkpointY, checkpointIndex);
+            }
+
             frameCounter = 0;
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
-            player.setX((short) levelData.getStartXPos());
-            player.setY((short) levelData.getStartYPos());
+
+            // Use checkpoint position if available, otherwise level start
+            if (hasCheckpoint) {
+                player.setX((short) checkpointX);
+                player.setY((short) checkpointY);
+            } else {
+                player.setX((short) levelData.getStartXPos());
+                player.setY((short) levelData.getStartYPos());
+            }
+
             if (player instanceof AbstractPlayableSprite) {
                 AbstractPlayableSprite playable = (AbstractPlayableSprite) player;
                 playable.setXSpeed((short) 0);
@@ -1301,9 +1331,20 @@ public class LevelManager {
                 playable.setAngle((byte) 0);
                 player.setLayer((byte) 0);
                 playable.setHighPriority(false);
+
+                // Clear rings on respawn (ROM behavior)
+                playable.setRingCount(0);
+
+                // Reset speed shoes effect and music tempo
+                // Note: resetState is already called which clears speedShoes, but we also need
+                // to reset audio
+                uk.co.jamesj999.sonic.audio.AudioManager.getInstance().getBackend().setSpeedShoes(false);
+
                 Camera camera = Camera.getInstance();
                 camera.setFrozen(false); // Unlock camera after death
                 camera.setFocusedSprite(playable);
+                camera.updatePosition(true); // Force camera to player position
+
                 Level currentLevel = getCurrentLevel();
                 if (currentLevel != null) {
                     camera.setMinX((short) currentLevel.getMinX());
@@ -1323,12 +1364,20 @@ public class LevelManager {
         if (currentAct >= levels.get(currentZone).size()) {
             currentAct = 0;
         }
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
     }
 
     public void loadZoneAndAct(int zone, int act) throws IOException {
         currentAct = act;
         currentZone = zone;
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
     }
 
@@ -1338,17 +1387,29 @@ public class LevelManager {
             currentZone = 0;
         }
         currentAct = 0;
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
     }
 
     public void loadZone(int zone) throws IOException {
         currentZone = zone;
         currentAct = 0;
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
     }
 
     public SolidObjectManager getSolidObjectManager() {
         return solidObjectManager;
+    }
+
+    public CheckpointState getCheckpointState() {
+        return checkpointState;
     }
 
     /**

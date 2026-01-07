@@ -19,6 +19,10 @@ public record ObjectArtData(
         ObjectSpriteSheet shieldSheet,
         ObjectSpriteSheet invincibilityStarsSheet,
         ObjectSpriteSheet bridgeSheet,
+        ObjectSpriteSheet waterfallSheet,
+        ObjectSpriteSheet checkpointSheet,
+        ObjectSpriteSheet checkpointStarSheet,
         SpriteAnimationSet monitorAnimations,
-        SpriteAnimationSet springAnimations) {
+        SpriteAnimationSet springAnimations,
+        SpriteAnimationSet checkpointAnimations) {
 }

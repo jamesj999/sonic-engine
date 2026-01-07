@@ -11,6 +11,8 @@ public final class Sonic2ObjectIds {
     public static final int GENERIC_PLATFORM_A = 0x18;
     public static final int GENERIC_PLATFORM_B = 0x19;
     public static final int BRIDGE_STAKE = 0x1C;
+    public static final int SPIRAL = 0x06;
+    public static final int EHZ_WATERFALL = 0x49;
 
     private Sonic2ObjectIds() {
     }

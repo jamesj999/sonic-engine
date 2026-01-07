@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.game.sonic2;
+
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 
 import uk.co.jamesj999.sonic.data.Rom;
@@ -111,6 +112,10 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> bridgeMappings = createBridgeMappings();
         ObjectSpriteSheet bridgeSheet = new ObjectSpriteSheet(bridgePatterns, bridgeMappings, 2, 1);
 
+        Pattern[] waterfallPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_EHZ_WATERFALL_ADDR);
+        List<SpriteMappingFrame> waterfallMappings = createEHZWaterfallMappings();
+        ObjectSpriteSheet waterfallSheet = new ObjectSpriteSheet(waterfallPatterns, waterfallMappings, 1, 1);
+
         Pattern[] invincibilityStarsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR);
         List<SpriteMappingFrame> rawInvincibilityStarsMappings = loadMappingFrames(
                 Sonic2Constants.MAP_UNC_INVINCIBILITY_STARS_ADDR);
@@ -126,6 +131,17 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.ANI_OBJ41_ADDR,
                 Sonic2Constants.ANI_OBJ41_SCRIPT_COUNT);
 
+        // Checkpoint/Starpost art
+        Pattern[] checkpointPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_CHECKPOINT_ADDR);
+        List<SpriteMappingFrame> checkpointMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_CHECKPOINT_ADDR);
+        List<SpriteMappingFrame> checkpointStarMappings = loadMappingFrames(
+                Sonic2Constants.MAP_UNC_CHECKPOINT_STAR_ADDR);
+        ObjectSpriteSheet checkpointSheet = new ObjectSpriteSheet(checkpointPatterns, checkpointMappings, 0, 1);
+        ObjectSpriteSheet checkpointStarSheet = new ObjectSpriteSheet(checkpointPatterns, checkpointStarMappings, 0, 1);
+        SpriteAnimationSet checkpointAnimations = loadAnimationSet(
+                Sonic2Constants.ANI_OBJ79_ADDR,
+                Sonic2Constants.ANI_OBJ79_SCRIPT_COUNT);
+
         cached = new ObjectArtData(
                 monitorSheet,
                 spikeSheet,
@@ -135,14 +151,17 @@ public class Sonic2ObjectArt {
                 springDiagonalSheet,
                 springVerticalRedSheet,
                 springHorizontalRedSheet,
-
                 springDiagonalRedSheet,
                 explosionSheet,
                 shieldSheet,
                 invincibilityStarsSheet,
                 bridgeSheet,
+                waterfallSheet,
+                checkpointSheet,
+                checkpointStarSheet,
                 monitorAnimations,
-                springAnimations);
+                springAnimations,
+                checkpointAnimations);
         return cached;
     }
 
@@ -299,6 +318,127 @@ public class Sonic2ObjectArt {
         frames.add(createSimpleFrame(-8, -8, 2, 2, 4));
         // Frame 1: -8, -8, 2x2, tile 0
         frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        return frames;
+    }
+
+    private List<SpriteMappingFrame> createEHZWaterfallMappings() {
+        // Translating from obj49.asm
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj49_0010 (Small top/bottom piece)
+        // spritePiece -$20, -$80, 4, 2, 0, 0, 0, 0, 0
+        // spritePiece 0, -$80, 4, 2, 0, 0, 0, 0, 0
+        // Note: Y offset -128 (-$80) seems very high relative to object center, but
+        // matching ROM
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Map_obj49_0022 (Long waterfall section)
+        // Pieces at Y: -128, -96, -64, -32, 0, 32, 64, 96 (0x60)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        // Loop of body pieces
+        for (int y = -128; y <= 96; y += 32) {
+            // These are 4x4 tiles (32x32), tile index 8
+            if (y == -128)
+                continue; // Skip first which was handled via 4x2 pieces at tile 0
+            frame1.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame1.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Map_obj49_00B4 (Empty)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+
+        // Frame 3: Map_obj49_00B6 (Small section)
+        // Pieces at Y: -32, 0 (4x4 tile 8)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-32, -32, 4, 4, 8, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, -32, 4, 4, 8, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-32, 0, 4, 4, 8, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, 0, 4, 4, 8, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Map_obj49_00D8 (Medium section)
+        // Pieces at Y: -64, -32, 0, 32, 64
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        for (int y = -64; y <= 64; y += 32) {
+            frame4.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame4.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Same as Frame 2 (Empty) - in mappings table
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+
+        // Frame 6: Same as Frame 4
+        frames.add(frames.get(3)); // reuse frame 3 (Map_obj49_00D8 was referenced? No, wait)
+        // Correction: Table is:
+        // 0: Map_obj49_0010
+        // 1: Map_obj49_0022
+        // 2: Map_obj49_00B4 (Empty)
+        // 3: Map_obj49_00B6
+        // 4: Map_obj49_00B4 (Empty) - WAIT, mappingsTableEntry.w Map_obj49_00B4 is
+        // index 4?
+        // Let's re-read table:
+        // 0: Map_obj49_0010
+        // 1: Map_obj49_0022
+        // 2: Map_obj49_00B4
+        // 3: Map_obj49_00B6
+        // 4: Map_obj49_00B4
+        // 5: Map_obj49_00D8
+        // 6: Map_obj49_0010
+        // 7: Map_obj49_012A (Longer version of 1?)
+
+        // Let's restart frame list based directly on table indices:
+        frames.clear();
+        // 0: Map_obj49_0010
+        frames.add(new SpriteMappingFrame(frame0));
+        // 1: Map_obj49_0022
+        frames.add(new SpriteMappingFrame(frame1));
+        // 2: Map_obj49_00B4 (Empty)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+        // 3: Map_obj49_00B6
+        frames.add(new SpriteMappingFrame(frame3));
+        // 4: Map_obj49_00B4 (Empty)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+        // 5: Map_obj49_00D8
+        frames.add(new SpriteMappingFrame(frame4));
+        // 6: Map_obj49_0010
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // 7: Map_obj49_012A
+        List<SpriteMappingPiece> frame7 = new ArrayList<>();
+        frame7.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        for (int y = -128; y <= 32; y += 32) {
+            if (y == -128)
+                continue;
+            frame7.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame7.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        // Actually, frame 7 (012A) looks like: -80(2), -80(4), -60, -40, -20, 0, 20
+        // -80 (0x-50)?? No, disassembly says:
+        /*
+         * Map_obj49_012A:
+         * spritePiece -$20, -$80, 4, 2, 0...
+         * spritePiece 0, -$80, 4, 2, 0...
+         * spritePiece -$20, -$80, 4, 4, 8...
+         * spritePiece 0, -$80, 4, 4, 8...
+         * ... down to $20
+         */
+        frame7.clear();
+        frame7.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        for (int y = -128; y <= 32; y += 32) {
+            frame7.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame7.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        frames.add(new SpriteMappingFrame(frame7));
+
         return frames;
     }
 

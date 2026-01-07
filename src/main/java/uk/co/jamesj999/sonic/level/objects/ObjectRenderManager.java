@@ -30,8 +30,12 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet shieldSheet;
     private final ObjectSpriteSheet invincibilityStarsSheet;
     private final ObjectSpriteSheet bridgeSheet;
+    private final ObjectSpriteSheet waterfallSheet;
+    private final ObjectSpriteSheet checkpointSheet;
+    private final ObjectSpriteSheet checkpointStarSheet;
     private final SpriteAnimationSet monitorAnimations;
     private final SpriteAnimationSet springAnimations;
+    private final SpriteAnimationSet checkpointAnimations;
 
     private final PatternSpriteRenderer monitorRenderer;
     private final PatternSpriteRenderer spikeRenderer;
@@ -46,6 +50,9 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer shieldRenderer;
     private final PatternSpriteRenderer invincibilityStarsRenderer;
     private final PatternSpriteRenderer bridgeRenderer;
+    private final PatternSpriteRenderer waterfallRenderer;
+    private final PatternSpriteRenderer checkpointRenderer;
+    private final PatternSpriteRenderer checkpointStarRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
     private final List<PatternSpriteRenderer> rendererOrder = new ArrayList<>();
@@ -64,8 +71,12 @@ public class ObjectRenderManager {
         this.shieldSheet = artData.shieldSheet();
         this.invincibilityStarsSheet = artData.invincibilityStarsSheet();
         this.bridgeSheet = artData.bridgeSheet();
+        this.waterfallSheet = artData.waterfallSheet();
+        this.checkpointSheet = artData.checkpointSheet();
+        this.checkpointStarSheet = artData.checkpointStarSheet();
         this.monitorAnimations = artData.monitorAnimations();
         this.springAnimations = artData.springAnimations();
+        this.checkpointAnimations = artData.checkpointAnimations();
 
         this.monitorRenderer = new PatternSpriteRenderer(monitorSheet);
         this.spikeRenderer = new PatternSpriteRenderer(spikeSheet);
@@ -94,6 +105,12 @@ public class ObjectRenderManager {
         register(invincibilityStarsSheet, invincibilityStarsRenderer);
         this.bridgeRenderer = new PatternSpriteRenderer(bridgeSheet);
         register(bridgeSheet, bridgeRenderer);
+        this.waterfallRenderer = new PatternSpriteRenderer(waterfallSheet);
+        register(waterfallSheet, waterfallRenderer);
+        this.checkpointRenderer = new PatternSpriteRenderer(checkpointSheet);
+        register(checkpointSheet, checkpointRenderer);
+        this.checkpointStarRenderer = new PatternSpriteRenderer(checkpointStarSheet);
+        register(checkpointStarSheet, checkpointStarRenderer);
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -176,5 +193,33 @@ public class ObjectRenderManager {
 
     public ObjectSpriteSheet getBridgeSheet() {
         return bridgeSheet;
+    }
+
+    public PatternSpriteRenderer getWaterfallRenderer() {
+        return waterfallRenderer;
+    }
+
+    public ObjectSpriteSheet getWaterfallSheet() {
+        return waterfallSheet;
+    }
+
+    public PatternSpriteRenderer getCheckpointRenderer() {
+        return checkpointRenderer;
+    }
+
+    public PatternSpriteRenderer getCheckpointStarRenderer() {
+        return checkpointStarRenderer;
+    }
+
+    public ObjectSpriteSheet getCheckpointSheet() {
+        return checkpointSheet;
+    }
+
+    public ObjectSpriteSheet getCheckpointStarSheet() {
+        return checkpointStarSheet;
+    }
+
+    public SpriteAnimationSet getCheckpointAnimations() {
+        return checkpointAnimations;
     }
 }
