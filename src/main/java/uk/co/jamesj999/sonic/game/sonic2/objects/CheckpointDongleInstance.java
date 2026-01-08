@@ -69,15 +69,13 @@ public class CheckpointDongleInstance extends AbstractObjectInstance {
         double radians = calcAngle * Math.PI * 2 / 256.0;
         double sinVal = Math.sin(radians);
         double cosVal = Math.cos(radians);
-
-        // ROM: muls.w #$C00, d1 / swap d1 => cosine * 0xC00 / 65536
-        // ROM: muls.w #$C00, d0 / swap d0 => sine * 0xC00 / 65536
-        int xOffset = (int) (cosVal * SWING_RADIUS / 65536.0 * 65536); // Simplifies to cosVal * SWING_RADIUS >> 16
-        int yOffset = (int) (sinVal * SWING_RADIUS / 65536.0 * 65536);
-
         // The swap instruction effectively divides by 65536 (moves high word to low)
-        xOffset = (int) (cosVal * SWING_RADIUS) >> 16;
-        yOffset = (int) (sinVal * SWING_RADIUS) >> 16;
+        // However, we are multiplying a double (0..1) by SWING_RADIUS (12 * 256 =
+        // 3072).
+        // To get pixel coordinates (12), we need to divide by 256 (>> 8), not 65536 (>>
+        // 16).
+        int xOffset = (int) (cosVal * SWING_RADIUS) >> 8;
+        int yOffset = (int) (sinVal * SWING_RADIUS) >> 8;
 
         currentX = centerX + xOffset;
         currentY = centerY + yOffset;
