@@ -176,7 +176,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr,
+        return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr,
                 chunksAddr,
                 blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr,
                 solidTileAngleAddr, objectSpawns, ringSpawns, ringSpriteSheet, levelBoundariesAddr);

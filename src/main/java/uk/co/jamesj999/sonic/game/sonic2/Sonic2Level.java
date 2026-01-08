@@ -31,6 +31,7 @@ public class Sonic2Level implements Level {
     private List<ObjectSpawn> objects;
     private List<RingSpawn> rings;
     private RingSpriteSheet ringSpriteSheet;
+    private final int zoneIndex;
 
     private int patternCount;
     private int chunkCount;
@@ -45,6 +46,7 @@ public class Sonic2Level implements Level {
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
     public Sonic2Level(Rom rom,
+                       int zoneIndex,
                        int characterPaletteAddr,
                        int levelPalettesAddr,
                        int levelPalettesSize,
@@ -61,6 +63,7 @@ public class Sonic2Level implements Level {
                        List<RingSpawn> ringSpawns,
                        RingSpriteSheet ringSpriteSheet,
                        int levelBoundariesAddr) throws IOException {
+        this.zoneIndex = zoneIndex;
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
         loadSolidTiles(rom, solidTileHeightsAddr, solidTileWidthsAddr, solidTilesAngleAddr);
@@ -97,6 +100,23 @@ public class Sonic2Level implements Level {
             throw new IllegalArgumentException("Invalid pattern index");
         }
         return patterns[index];
+    }
+
+    @Override
+    public void ensurePatternCapacity(int minCount) {
+        if (minCount <= patternCount) {
+            return;
+        }
+        int newCount = Math.max(minCount, patternCount);
+        patterns = Arrays.copyOf(patterns, newCount);
+        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        for (int i = patternCount; i < newCount; i++) {
+            patterns[i] = new Pattern();
+            if (graphicsMan.getGraphics() != null) {
+                graphicsMan.cachePatternTexture(patterns[i], i);
+            }
+        }
+        patternCount = newCount;
     }
 
     @Override
@@ -252,6 +272,7 @@ public class Sonic2Level implements Level {
         channel.position(chunksAddr);
 
         byte[] chunkBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
+        chunkBuffer = applyAnimatedPatternMappings(rom, chunkBuffer);
 
         chunkCount = chunkBuffer.length / Chunk.CHUNK_SIZE_IN_ROM;
         if (chunkBuffer.length % Chunk.CHUNK_SIZE_IN_ROM != 0) {
@@ -283,6 +304,45 @@ public class Sonic2Level implements Level {
         }
 
         LOG.info("Chunk count: " + chunkCount + " (" + chunkBuffer.length + " bytes)");
+    }
+
+    private byte[] applyAnimatedPatternMappings(Rom rom, byte[] chunkBuffer) throws IOException {
+        if (chunkBuffer == null || chunkBuffer.length == 0) {
+            return chunkBuffer;
+        }
+        if (zoneIndex < 0 || zoneIndex >= 0x11) {
+            return chunkBuffer;
+        }
+        int tableAddr = Sonic2Constants.ANIM_PAT_MAPS_ADDR;
+        int offset = rom.read16BitAddr(tableAddr + zoneIndex * 2);
+        if (offset == 0) {
+            return chunkBuffer;
+        }
+        int listAddr = tableAddr + offset;
+        int destOffset = rom.read16BitAddr(listAddr);
+        if (destOffset == 0) {
+            return chunkBuffer;
+        }
+        int wordCount = rom.read16BitAddr(listAddr + 2);
+        int wordsToCopy = wordCount + 1; // bytesToWcnt(n) = n/2 - 1
+        int srcAddr = listAddr + 4;
+        int maxBytes = wordsToCopy * 2;
+        int requiredSize = destOffset + maxBytes;
+        if (requiredSize > chunkBuffer.length) {
+            chunkBuffer = Arrays.copyOf(chunkBuffer, requiredSize);
+        }
+        int available = Math.min(maxBytes, chunkBuffer.length - destOffset);
+        if (available <= 0) {
+            return chunkBuffer;
+        }
+        wordsToCopy = available / 2;
+        for (int i = 0; i < wordsToCopy; i++) {
+            int value = rom.read16BitAddr(srcAddr + i * 2L);
+            int dest = destOffset + i * 2;
+            chunkBuffer[dest] = (byte) ((value >> 8) & 0xFF);
+            chunkBuffer[dest + 1] = (byte) (value & 0xFF);
+        }
+        return chunkBuffer;
     }
 
     /**

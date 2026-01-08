@@ -106,7 +106,31 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
             lists.put(id, result.scripts());
             addr += result.length();
         }
-        return lists.getOrDefault(listId, List.of());
+        List<ScriptState> scripts = lists.getOrDefault(listId, List.of());
+        ensurePatternCapacity(scripts);
+        primeScripts(scripts);
+        return scripts;
+    }
+
+    private void ensurePatternCapacity(List<ScriptState> scripts) {
+        if (scripts == null || scripts.isEmpty()) {
+            return;
+        }
+        for (ScriptState script : scripts) {
+            int required = script.requiredPatternCount();
+            if (required > 0) {
+                level.ensurePatternCapacity(required);
+            }
+        }
+    }
+
+    private void primeScripts(List<ScriptState> scripts) {
+        if (scripts == null || scripts.isEmpty()) {
+            return;
+        }
+        for (ScriptState script : scripts) {
+            script.prime(level, graphicsManager);
+        }
     }
 
     private AnimatedListId resolveListId(int zoneIndex) {
@@ -257,6 +281,17 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
 
             int tileId = frameTileIds[currentFrame];
             applyFrame(level, graphicsManager, tileId);
+        }
+
+        private int requiredPatternCount() {
+            return destTileIndex + Math.max(tilesPerFrame, 1);
+        }
+
+        private void prime(Level level, GraphicsManager graphicsManager) {
+            if (frameTileIds.length == 0 || artPatterns.length == 0) {
+                return;
+            }
+            applyFrame(level, graphicsManager, frameTileIds[0]);
         }
 
         private void applyFrame(Level level, GraphicsManager graphicsManager, int tileId) {

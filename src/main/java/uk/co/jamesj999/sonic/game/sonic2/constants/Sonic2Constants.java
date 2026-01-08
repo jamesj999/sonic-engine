@@ -20,6 +20,7 @@ public class Sonic2Constants {
     public static final int SOLID_TILE_ANGLE_SIZE = 0x100;
     public static final int LEVEL_BOUNDARIES_ADDR = 0xC054;
     public static final int MUSIC_PLAYLIST_ADDR = 0x3EA0;
+    public static final int ANIM_PAT_MAPS_ADDR = 0x40350;
 
     // Player sprite art (Rev01, no header)
     public static final int ART_UNC_SONIC_ADDR = 0x50000;

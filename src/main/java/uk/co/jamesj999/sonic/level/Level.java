@@ -24,6 +24,13 @@ public interface Level {
     // Abstract method to get a specific pattern by index
     public Pattern getPattern(int index);
 
+    /**
+     * Ensure the pattern buffer can address at least {@code minCount} tiles.
+     * Default implementation is a no-op for immutable level implementations.
+     */
+    default void ensurePatternCapacity(int minCount) {
+    }
+
     // Abstract method to get the number of chunks
     public int getChunkCount();
 

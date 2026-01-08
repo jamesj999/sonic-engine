@@ -156,6 +156,8 @@ public class LevelManager {
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
             OscillationManager.reset();
+            initAnimatedPatterns();
+            initAnimatedPalettes();
             RomByteReader romReader = RomByteReader.fromRom(rom);
             objectPlacementManager = new ObjectPlacementManager(level.getObjects());
             planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager,
@@ -181,8 +183,6 @@ public class LevelManager {
             lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
             initObjectArt();
             initPlayerSpriteArt();
-            initAnimatedPatterns();
-            initAnimatedPalettes();
             resetPlayerState();
             // Initialize checkpoint state for new level
             if (checkpointState == null) {
