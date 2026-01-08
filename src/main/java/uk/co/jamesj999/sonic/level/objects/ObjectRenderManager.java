@@ -44,6 +44,10 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet animalSheet;
     private final ObjectSpriteSheet pointsSheet;
 
+    // Signpost
+    private final ObjectSpriteSheet signpostSheet;
+    private final SpriteAnimationSet signpostAnimations;
+
     private final PatternSpriteRenderer monitorRenderer;
     private final PatternSpriteRenderer spikeRenderer;
     private final PatternSpriteRenderer spikeSideRenderer;
@@ -67,6 +71,9 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer coconutsRenderer;
     private final PatternSpriteRenderer animalRenderer;
     private final PatternSpriteRenderer pointsRenderer;
+
+    // Signpost renderer
+    private final PatternSpriteRenderer signpostRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
     private final List<PatternSpriteRenderer> rendererOrder = new ArrayList<>();
@@ -98,6 +105,10 @@ public class ObjectRenderManager {
         this.coconutsSheet = artData.coconutsSheet();
         this.animalSheet = artData.animalSheet();
         this.pointsSheet = artData.pointsSheet();
+
+        // Signpost
+        this.signpostSheet = artData.signpostSheet();
+        this.signpostAnimations = artData.signpostAnimations();
 
         this.monitorRenderer = new PatternSpriteRenderer(monitorSheet);
         this.spikeRenderer = new PatternSpriteRenderer(spikeSheet);
@@ -144,6 +155,10 @@ public class ObjectRenderManager {
         register(animalSheet, animalRenderer);
         this.pointsRenderer = new PatternSpriteRenderer(pointsSheet);
         register(pointsSheet, pointsRenderer);
+
+        // Signpost renderer
+        this.signpostRenderer = new PatternSpriteRenderer(signpostSheet);
+        register(signpostSheet, signpostRenderer);
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -274,5 +289,17 @@ public class ObjectRenderManager {
 
     public PatternSpriteRenderer getPointsRenderer() {
         return pointsRenderer;
+    }
+
+    public PatternSpriteRenderer getSignpostRenderer() {
+        return signpostRenderer;
+    }
+
+    public ObjectSpriteSheet getSignpostSheet() {
+        return signpostSheet;
+    }
+
+    public SpriteAnimationSet getSignpostAnimations() {
+        return signpostAnimations;
     }
 }

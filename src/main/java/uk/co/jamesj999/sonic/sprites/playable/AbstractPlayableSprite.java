@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.sprites.playable;
+
 import uk.co.jamesj999.sonic.audio.GameAudioProfile;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
@@ -155,6 +156,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean speedShoes = false;
         protected int speedShoesFrames = 0;
 
+        /**
+         * When true, forces right input regardless of actual keyboard input.
+         * Used for end-of-act walk-off sequences (Control_Locked + button_right_mask in
+         * ROM).
+         */
+        protected boolean forceInputRight = false;
+        /**
+         * When true, user inputs are ignored (Control_Locked in ROM).
+         */
+        protected boolean controlLocked = false;
+
         public void resetState() {
                 this.shield = false;
                 if (this.shieldObject != null) {
@@ -182,6 +194,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.crouching = false;
                 this.highPriority = false;
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
+                this.forceInputRight = false;
+                this.controlLocked = false;
                 defineSpeeds(); // Reset speeds to default
         }
 
@@ -500,20 +514,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
                 if (invincibleFrames > 0) {
                         invincibleFrames--;
-                if (invincibleFrames == 0) {
-                        if (invincibilityObject != null) {
-                                invincibilityObject.destroy();
-                                invincibilityObject = null;
+                        if (invincibleFrames == 0) {
+                                if (invincibilityObject != null) {
+                                        invincibilityObject.destroy();
+                                        invincibilityObject = null;
+                                }
+                                if (shieldObject != null) {
+                                        shieldObject.setVisible(true);
+                                }
+                                AudioManager audioManager = AudioManager.getInstance();
+                                GameAudioProfile audioProfile = audioManager.getAudioProfile();
+                                if (audioProfile != null) {
+                                        audioManager.endMusicOverride(audioProfile.getInvincibilityMusicId());
+                                }
                         }
-                        if (shieldObject != null) {
-                                shieldObject.setVisible(true);
-                        }
-                        AudioManager audioManager = AudioManager.getInstance();
-                        GameAudioProfile audioProfile = audioManager.getAudioProfile();
-                        if (audioProfile != null) {
-                                audioManager.endMusicOverride(audioProfile.getInvincibilityMusicId());
-                        }
-                }
                 }
                 if (springingFrames > 0) {
                         springingFrames--;
@@ -523,15 +537,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
                 if (speedShoesFrames > 0) {
                         speedShoesFrames--;
-                if (speedShoesFrames == 0) {
-                        speedShoes = false;
-                        defineSpeeds();
-                        AudioManager audioManager = AudioManager.getInstance();
-                        GameAudioProfile audioProfile = audioManager.getAudioProfile();
-                        if (audioProfile != null) {
-                                audioManager.playMusic(audioProfile.getSpeedShoesOffCommandId());
+                        if (speedShoesFrames == 0) {
+                                speedShoes = false;
+                                defineSpeeds();
+                                AudioManager audioManager = AudioManager.getInstance();
+                                GameAudioProfile audioProfile = audioManager.getAudioProfile();
+                                if (audioProfile != null) {
+                                        audioManager.playMusic(audioProfile.getSpeedShoesOffCommandId());
+                                }
                         }
-                }
                 }
         }
 
@@ -634,6 +648,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setSpindashConstant(float spindashConstant) {
                 this.spindashConstant = spindashConstant;
+        }
+
+        public boolean isForceInputRight() {
+                return forceInputRight;
+        }
+
+        public void setForceInputRight(boolean forceInputRight) {
+                this.forceInputRight = forceInputRight;
+        }
+
+        public boolean isControlLocked() {
+                return controlLocked;
+        }
+
+        public void setControlLocked(boolean controlLocked) {
+                this.controlLocked = controlLocked;
         }
 
         public short getXSpeed() {

@@ -19,11 +19,15 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Loads common object art (monitors, spikes, springs) for Sonic 2 (REV01).
  */
 public class Sonic2ObjectArt {
+    private static final Logger LOGGER = Logger.getLogger(Sonic2ObjectArt.class.getName());
+
     private final Rom rom;
     private final RomByteReader reader;
     private ObjectArtData cached;
@@ -39,9 +43,9 @@ public class Sonic2ObjectArt {
         }
 
         // Load Monitor Art (base art)
-        Pattern[] monitorBasePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR);
+        Pattern[] monitorBasePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR, "Monitor");
         // Load Tails Life Art (used for Tails Monitor icon, requests tile 340)
-        Pattern[] tailsLifePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_TAILS_LIFE_ADDR);
+        Pattern[] tailsLifePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_TAILS_LIFE_ADDR, "TailsLife");
 
         List<SpriteMappingFrame> monitorMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_MONITOR_ADDR);
 
@@ -62,9 +66,11 @@ public class Sonic2ObjectArt {
 
         Pattern[] monitorPatterns = new Pattern[requiredSize];
         // Copy base patterns
-        System.arraycopy(monitorBasePatterns, 0, monitorPatterns, 0, monitorBasePatterns.length);
+        if (monitorBasePatterns.length > 0) {
+            System.arraycopy(monitorBasePatterns, 0, monitorPatterns, 0, monitorBasePatterns.length);
+        }
         // Copy Tails Life patterns at offset 340
-        if (lifeArtOffset < monitorPatterns.length) {
+        if (tailsLifePatterns.length > 0 && lifeArtOffset < monitorPatterns.length) {
             System.arraycopy(tailsLifePatterns, 0, monitorPatterns, lifeArtOffset,
                     Math.min(tailsLifePatterns.length, monitorPatterns.length - lifeArtOffset));
         }
@@ -78,15 +84,18 @@ public class Sonic2ObjectArt {
 
         ObjectSpriteSheet monitorSheet = new ObjectSpriteSheet(monitorPatterns, monitorMappings, 0, 1);
 
-        Pattern[] spikePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_ADDR);
-        Pattern[] spikeSidePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_SIDE_ADDR);
+        Pattern[] spikePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_ADDR, "Spikes");
+        Pattern[] spikeSidePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_SIDE_ADDR, "SpikesSide");
         List<SpriteMappingFrame> spikeMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_SPIKES_ADDR);
         ObjectSpriteSheet spikeSheet = new ObjectSpriteSheet(spikePatterns, spikeMappings, 1, 1);
         ObjectSpriteSheet spikeSideSheet = new ObjectSpriteSheet(spikeSidePatterns, spikeMappings, 1, 1);
 
-        Pattern[] springVerticalPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_VERTICAL_ADDR);
-        Pattern[] springHorizontalPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_HORIZONTAL_ADDR);
-        Pattern[] springDiagonalPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_DIAGONAL_ADDR);
+        Pattern[] springVerticalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_VERTICAL_ADDR,
+                "SpringVertical");
+        Pattern[] springHorizontalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_HORIZONTAL_ADDR,
+                "SpringHorizontal");
+        Pattern[] springDiagonalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_DIAGONAL_ADDR,
+                "SpringDiagonal");
         List<SpriteMappingFrame> springMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_SPRING_ADDR);
         List<SpriteMappingFrame> springMappingsRed = loadMappingFrames(Sonic2Constants.MAP_UNC_SPRING_RED_ADDR);
         ObjectSpriteSheet springVerticalSheet = new ObjectSpriteSheet(springVerticalPatterns, springMappings, 0, 1);
@@ -100,24 +109,27 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet springDiagonalRedSheet = new ObjectSpriteSheet(springDiagonalPatterns, springMappingsRed, 1,
                 1);
 
-        Pattern[] explosionPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_EXPLOSION_ADDR);
+        Pattern[] explosionPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_EXPLOSION_ADDR, "Explosion");
         List<SpriteMappingFrame> explosionMappings = createExplosionMappings();
         ObjectSpriteSheet explosionSheet = new ObjectSpriteSheet(explosionPatterns, explosionMappings, 0, 1);
 
-        Pattern[] shieldPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_SHIELD_ADDR);
+        Pattern[] shieldPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SHIELD_ADDR, "Shield");
         List<SpriteMappingFrame> shieldMappings = createShieldMappings();
         ObjectSpriteSheet shieldSheet = new ObjectSpriteSheet(shieldPatterns, shieldMappings, 0, 1);
 
-        Pattern[] bridgePatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_BRIDGE_ADDR);
+        Pattern[] bridgePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BRIDGE_ADDR, "Bridge");
         List<SpriteMappingFrame> bridgeMappings = createBridgeMappings();
         ObjectSpriteSheet bridgeSheet = new ObjectSpriteSheet(bridgePatterns, bridgeMappings, 2, 1);
 
-        Pattern[] waterfallPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_EHZ_WATERFALL_ADDR);
+        Pattern[] waterfallPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_EHZ_WATERFALL_ADDR,
+                "EHZWaterfall");
         List<SpriteMappingFrame> waterfallMappings = createEHZWaterfallMappings();
         int waterfallMaxTile = computeMaxTileIndex(waterfallMappings);
         if (waterfallMaxTile >= waterfallPatterns.length) {
             Pattern[] extended = new Pattern[waterfallMaxTile + 1];
-            System.arraycopy(waterfallPatterns, 0, extended, 0, waterfallPatterns.length);
+            if (waterfallPatterns.length > 0) {
+                System.arraycopy(waterfallPatterns, 0, extended, 0, waterfallPatterns.length);
+            }
             for (int i = 0; i < extended.length; i++) {
                 if (extended[i] == null) {
                     extended[i] = new Pattern();
@@ -127,7 +139,8 @@ public class Sonic2ObjectArt {
         }
         ObjectSpriteSheet waterfallSheet = new ObjectSpriteSheet(waterfallPatterns, waterfallMappings, 1, 1);
 
-        Pattern[] invincibilityStarsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR);
+        Pattern[] invincibilityStarsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR,
+                "InvincibilityStars");
         List<SpriteMappingFrame> rawInvincibilityStarsMappings = loadMappingFrames(
                 Sonic2Constants.MAP_UNC_INVINCIBILITY_STARS_ADDR);
         List<SpriteMappingFrame> invincibilityStarsMappings = normalizeMappings(rawInvincibilityStarsMappings);
@@ -143,7 +156,7 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.ANI_OBJ41_SCRIPT_COUNT);
 
         // Checkpoint/Starpost art
-        Pattern[] checkpointPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_CHECKPOINT_ADDR);
+        Pattern[] checkpointPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CHECKPOINT_ADDR, "Checkpoint");
         List<SpriteMappingFrame> checkpointMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_CHECKPOINT_ADDR);
         List<SpriteMappingFrame> checkpointStarMappings = loadMappingFrames(
                 Sonic2Constants.MAP_UNC_CHECKPOINT_STAR_ADDR);
@@ -154,26 +167,32 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.ANI_OBJ79_SCRIPT_COUNT);
 
         // Badnik art (Masher, Buzzer, Coconuts)
-        Pattern[] masherPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_MASHER_ADDR);
+        Pattern[] masherPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MASHER_ADDR, "Masher");
         List<SpriteMappingFrame> masherMappings = createMasherMappings();
         ObjectSpriteSheet masherSheet = new ObjectSpriteSheet(masherPatterns, masherMappings, 0, 1);
 
-        Pattern[] buzzerPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_BUZZER_ADDR);
+        Pattern[] buzzerPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUZZER_ADDR, "Buzzer");
         List<SpriteMappingFrame> buzzerMappings = createBuzzerMappings();
         ObjectSpriteSheet buzzerSheet = new ObjectSpriteSheet(buzzerPatterns, buzzerMappings, 0, 1);
 
-        Pattern[] coconutsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_COCONUTS_ADDR);
+        Pattern[] coconutsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_COCONUTS_ADDR, "Coconuts");
         List<SpriteMappingFrame> coconutsMappings = createCoconutsMappings();
         ObjectSpriteSheet coconutsSheet = new ObjectSpriteSheet(coconutsPatterns, coconutsMappings, 0, 1);
 
-        Pattern[] animalPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_ANIMAL_ADDR);
+        Pattern[] animalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ANIMAL_ADDR, "Animal");
         List<SpriteMappingFrame> animalMappings = createAnimalMappings();
         ObjectSpriteSheet animalSheet = new ObjectSpriteSheet(animalPatterns, animalMappings, 0, 1);
 
         // Load correct points art
-        Pattern[] pointsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_NUMBERS_ADDR);
+        Pattern[] pointsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_NUMBERS_ADDR, "Numbers");
         List<SpriteMappingFrame> pointsMappings = createPointsMappings();
         ObjectSpriteSheet pointsSheet = new ObjectSpriteSheet(pointsPatterns, pointsMappings, 0, 1);
+
+        // Signpost/Goal plate art
+        Pattern[] signpostPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SIGNPOST_ADDR, "Signpost");
+        List<SpriteMappingFrame> signpostMappings = createSignpostMappings();
+        ObjectSpriteSheet signpostSheet = new ObjectSpriteSheet(signpostPatterns, signpostMappings, 0, 1);
+        SpriteAnimationSet signpostAnimations = createSignpostAnimations();
 
         cached = new ObjectArtData(
                 monitorSheet,
@@ -197,9 +216,11 @@ public class Sonic2ObjectArt {
                 coconutsSheet,
                 animalSheet,
                 pointsSheet,
+                signpostSheet,
                 monitorAnimations,
                 springAnimations,
-                checkpointAnimations);
+                checkpointAnimations,
+                signpostAnimations);
 
         return cached;
     }
@@ -222,6 +243,24 @@ public class Sonic2ObjectArt {
             patterns[i].fromSegaFormat(subArray);
         }
         return patterns;
+    }
+
+    /**
+     * Safely loads Nemesis patterns, returning an empty array on failure.
+     * Logs full stack trace for diagnosis without blocking other art.
+     * 
+     * @param artAddr   ROM address of the Nemesis-compressed art
+     * @param assetName Human-readable name for error reporting
+     * @return Decompressed patterns, or empty array on failure
+     */
+    private Pattern[] safeLoadNemesisPatterns(int artAddr, String assetName) {
+        try {
+            return loadNemesisPatterns(artAddr);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,
+                    String.format("Failed to load art '%s' at 0x%06X", assetName, artAddr), e);
+            return new Pattern[0];
+        }
     }
 
     private List<SpriteMappingFrame> loadMappingFrames(int mappingAddr) {
@@ -698,5 +737,113 @@ public class Sonic2ObjectArt {
         frames.add(createSimpleFrame(-4, -8, 1, 2, 0));
 
         return frames;
+    }
+
+    /**
+     * Creates mappings for Signpost (Obj0D).
+     * Based on obj0D_a.asm with 6 frames for spinning.
+     * Frame order must match Ani_obj0D indices:
+     * 0=Sonic, 1=Tails, 2=Eggman, 3=Blank, 4=Edge, 5=Sonic (h-flip).
+     */
+    private List<SpriteMappingFrame> createSignpostMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Sonic face (full view)
+        // spritePiece -$10, -$10, 4, 4, $C, 0, 0, 0, 0
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> sonic = new ArrayList<>();
+        sonic.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x0C, false, false, 0));
+        sonic.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Side spinning (thin) - Tails face in original
+        // spritePiece -$18, -$10, 1, 4, $3A, 0, 0, 0, 0
+        // spritePiece -$10, -$10, 4, 4, $3E, 0, 0, 0, 0
+        // spritePiece $10, -$10, 1, 4, $3A, 1, 0, 0, 0 (hflipped)
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> tails = new ArrayList<>();
+        tails.add(new SpriteMappingPiece(-24, -16, 1, 4, 0x3A, false, false, 0));
+        tails.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x3E, false, false, 0));
+        tails.add(new SpriteMappingPiece(16, -16, 1, 4, 0x3A, true, false, 0));
+        tails.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Eggman face (wide view)
+        // spritePiece -$18, -$10, 3, 4, $22, 0, 0, 0, 0
+        // spritePiece 0, -$10, 3, 4, $2E, 0, 0, 0, 0
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> eggman = new ArrayList<>();
+        eggman.add(new SpriteMappingPiece(-24, -16, 3, 4, 0x22, false, false, 0));
+        eggman.add(new SpriteMappingPiece(0, -16, 3, 4, 0x2E, false, false, 0));
+        eggman.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Blank face (mid-spin)
+        // spritePiece -$18, -$10, 3, 4, 0, 0, 0, 0, 0
+        // spritePiece 0, -$10, 3, 4, 0, 1, 0, 0, 0 (hflipped)
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> blank = new ArrayList<>();
+        blank.add(new SpriteMappingPiece(-24, -16, 3, 4, 0, false, false, 0));
+        blank.add(new SpriteMappingPiece(0, -16, 3, 4, 0, true, false, 0));
+        blank.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Edge view (very thin)
+        // spritePiece -4, -$10, 1, 4, $1C, 0, 0, 0, 0
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> edge = new ArrayList<>();
+        edge.add(new SpriteMappingPiece(-4, -16, 1, 4, 0x1C, false, false, 0));
+        edge.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Sonic face flipped (for alternating direction spin)
+        // spritePiece -$10, -$10, 4, 4, $C, 1, 0, 0, 0 (hflipped)
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> sonicFlip = new ArrayList<>();
+        sonicFlip.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x0C, true, false, 0));
+        sonicFlip.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        frames.add(new SpriteMappingFrame(sonic));      // 0
+        frames.add(new SpriteMappingFrame(tails));      // 1
+        frames.add(new SpriteMappingFrame(eggman));     // 2
+        frames.add(new SpriteMappingFrame(blank));      // 3
+        frames.add(new SpriteMappingFrame(edge));       // 4
+        frames.add(new SpriteMappingFrame(sonicFlip));  // 5
+
+        return frames;
+    }
+
+    /**
+     * Creates animations for Signpost (Obj0D).
+     * Based on Ani_obj0D in s2.asm.
+     * 
+     * Animation scripts:
+     * 0: $0F, $02, $FF (hold frame 2 - Eggman face)
+     * 1: $01, $02, $03, $04, $05, $01, $03, $04, $05, $00, $03, $04, $05, $FF
+     * (spinning)
+     * 2: same as 1
+     * 3: $0F, $00, $FF (hold frame 0 - Sonic face)
+     * 4: $0F, $01, $FF (hold frame 1 - Tails face)
+     */
+    private SpriteAnimationSet createSignpostAnimations() {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+
+        // Anim 0: Hold Eggman face (frame 3 in current mapping order)
+        set.addScript(0, new SpriteAnimationScript(0x0F, List.of(3), SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 1: Spinning to Sonic (mapped to current frames)
+        // Eggman -> spin -> Tails -> spin -> Sonic
+        set.addScript(1, new SpriteAnimationScript(0x01,
+                List.of(3, 0, 4, 5, 1, 0, 4, 5, 2, 0, 4, 5),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 2: Same as 1 (used for 2P mode)
+        set.addScript(2, new SpriteAnimationScript(0x01,
+                List.of(3, 0, 4, 5, 1, 0, 4, 5, 2, 0, 4, 5),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 3: Hold Sonic face (frame 2 in current mapping order)
+        // From disasm: byte_195B7: dc.b $0F, $00, $FF - hold frame 0
+        set.addScript(3, new SpriteAnimationScript(0x0F, List.of(2), SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 4: Hold Tails face (frame 1 in current mapping order)
+        set.addScript(4, new SpriteAnimationScript(0x0F, List.of(1), SpriteAnimationEndAction.LOOP, 0));
+
+        return set;
     }
 }

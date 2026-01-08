@@ -89,6 +89,13 @@ public class Sonic2Constants {
     public static final int ANI_OBJ79_SCRIPT_COUNT = 3;
     public static final int ART_TILE_CHECKPOINT = 0x047C;
     public static final int SndID_Explosion = 0xC1;
+
+    // Signpost/Goal Plate (Object 0D)
+    public static final int ART_NEM_SIGNPOST_ADDR = 0x79BDE; // Signpost.nem (78 blocks)
+    public static final int ART_TILE_SIGNPOST = 0x0434;
+    public static final int SndID_Signpost = 0xCF;
+    public static final int MusID_StageClear = 0x97; // Stage clear / act complete jingle
+
     public static final int ART_NEM_NUMBERS_ADDR = 0x799AC; // Corrected address for Numbers (Points) art
 
     // EHZ Badnik Art (Nemesis compressed)

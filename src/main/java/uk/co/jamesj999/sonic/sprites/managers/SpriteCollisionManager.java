@@ -57,9 +57,21 @@ public class SpriteCollisionManager {
                 for (Sprite sprite : sprites) {
                         // Check we're dealing with a playable sprite:
                         if (sprite instanceof AbstractPlayableSprite) {
-                                levelManager.applyPlaneSwitchers((AbstractPlayableSprite) sprite);
-                                ((AbstractPlayableSprite) sprite).getMovementManager()
-                                                .handleMovement(up, down, left, right, space, testButton);
+                                AbstractPlayableSprite playable = (AbstractPlayableSprite) sprite;
+
+                                // Check if player is being forced to walk right (end-of-act)
+                                boolean controlLocked = playable.isControlLocked();
+                                boolean effectiveRight = right || playable.isForceInputRight() || controlLocked;
+                                boolean effectiveLeft = !controlLocked && left && !playable.isForceInputRight();
+                                boolean effectiveUp = controlLocked ? false : up;
+                                boolean effectiveDown = controlLocked ? false : down;
+                                boolean effectiveJump = controlLocked ? false : space;
+                                boolean effectiveTest = controlLocked ? false : testButton;
+
+                                levelManager.applyPlaneSwitchers(playable);
+                                playable.getMovementManager()
+                                                .handleMovement(effectiveUp, effectiveDown, effectiveLeft,
+                                                                effectiveRight, effectiveJump, effectiveTest);
                                 /*
                                  * Idea: We can put object collision handling here - although
                                  * the X and Y have been set for the sprite, we still have the
@@ -68,9 +80,9 @@ public class SpriteCollisionManager {
                                  * tick.
                                  * Update: lol, we never did that.
                                  */
-                                ((AbstractPlayableSprite) sprite).getAnimationManager().update(frameCounter);
-                                ((AbstractPlayableSprite) sprite).tickStatus();
-                                ((AbstractPlayableSprite) sprite).endOfTick();
+                                playable.getAnimationManager().update(frameCounter);
+                                playable.tickStatus();
+                                playable.endOfTick();
                         }
                 }
         }

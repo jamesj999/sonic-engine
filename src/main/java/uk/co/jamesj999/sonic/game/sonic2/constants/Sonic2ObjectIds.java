@@ -24,6 +24,9 @@ public final class Sonic2ObjectIds {
     public static final int ANIMAL = 0x28;
     public static final int POINTS = 0x29;
 
+    // Level completion
+    public static final int SIGNPOST = 0x0D; // End of level signpost
+
     private Sonic2ObjectIds() {
     }
 

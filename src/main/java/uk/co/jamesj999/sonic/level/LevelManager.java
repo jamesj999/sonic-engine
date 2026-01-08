@@ -17,6 +17,7 @@ import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
+import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
@@ -512,6 +513,8 @@ public class LevelManager {
                 objectManager.drawPriorityBucket(bucket, true);
             }
         }
+
+        DebugObjectArtViewer.getInstance().draw(objectRenderManager, camera);
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
         boolean overlayEnabled = debugViewEnabled && overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);

@@ -145,6 +145,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.COCONUTS,
                 (spawn, registry) -> new CoconutsBadnikInstance(spawn, LevelManager.getInstance()));
 
+        // Level completion objects
+        registerFactory(Sonic2ObjectIds.SIGNPOST,
+                (spawn, registry) -> new SignpostObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         registerFactory(Sonic2ObjectIds.SWINGING_PLATFORM, platformFactory);
 
         registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_A,

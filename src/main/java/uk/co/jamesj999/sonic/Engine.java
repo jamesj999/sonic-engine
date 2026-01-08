@@ -9,6 +9,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
+import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugState;
@@ -172,6 +173,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		}
 
                 DebugOverlayManager.getInstance().updateInput(inputHandler);
+                DebugObjectArtViewer.getInstance().updateInput(inputHandler);
                 inputHandler.update();
         }
 

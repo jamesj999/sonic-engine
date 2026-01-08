@@ -13,7 +13,8 @@ public enum DebugOverlayToggle {
     OBJECT_POINTS("Object Points", KeyEvent.VK_F8, true),
     RING_BOUNDS("Ring Bounds", KeyEvent.VK_F9, true),
     PLANE_SWITCHERS("Plane Switchers", KeyEvent.VK_F10, true),
-    TOUCH_RESPONSE("Touch Response", KeyEvent.VK_F11, false);
+    TOUCH_RESPONSE("Touch Response", KeyEvent.VK_F11, false),
+    OBJECT_ART_VIEWER("Art Viewer", KeyEvent.VK_F12, false);
 
     private final String label;
     private final int keyCode;

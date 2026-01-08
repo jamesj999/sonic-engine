@@ -105,6 +105,9 @@ public class DebugRenderer {
                                 }
                         }
                 }
+                if (overlayManager.isEnabled(DebugOverlayToggle.OBJECT_ART_VIEWER)) {
+                        renderObjectArtViewerPanel();
+                }
 
                 renderer.endRendering();
 
@@ -436,6 +439,32 @@ public class DebugRenderer {
 
                 int startX = uiX(baseWidth - 240);
                 int startY = uiY(baseHeight - 140);
+                int lineHeight = Math.max(8, uiY(9));
+                int y = startY;
+                for (String line : lines) {
+                        drawOutlined(renderer, line, startX, y, new Color(180, 255, 180));
+                        y -= lineHeight;
+                }
+        }
+
+        private void renderObjectArtViewerPanel() {
+                if (renderer == null) {
+                        return;
+                }
+                DebugObjectArtViewer viewer = DebugObjectArtViewer.getInstance();
+                List<String> lines = new ArrayList<>();
+                lines.add("== ART VIEWER ==");
+                lines.add("Target: Signpost");
+                int maxFrames = viewer.getMaxFrames();
+                if (maxFrames > 0) {
+                        lines.add(String.format("Frame: %d/%d", viewer.getFrameIndex(), maxFrames - 1));
+                } else {
+                        lines.add("Frame: --");
+                }
+                lines.add("Keys: Left/Right");
+
+                int startX = uiX(baseWidth - 160);
+                int startY = uiY(baseHeight - 120);
                 int lineHeight = Math.max(8, uiY(9));
                 int y = startY;
                 for (String line : lines) {
