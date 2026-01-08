@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.game.sonic2;
+
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 
 import uk.co.jamesj999.sonic.audio.GameSound;
@@ -176,7 +177,8 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
         System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
 
-        return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize, patternsAddr,
+        return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize,
+                patternsAddr,
                 chunksAddr,
                 blocksAddr, mapAddr, collisionAddr, altCollisionAddr, solidTileHeightsAddr, solidTileWidthsAddr,
                 solidTileAngleAddr, objectSpawns, ringSpawns, ringSpriteSheet, levelBoundariesAddr);
@@ -244,13 +246,14 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
                     ee0c = 0;
                     break;
 
-                case 0x00C372: // Multi-layer vertical bases
+                case 0x00C372: // CPZ - Multi-layer vertical bases
+                    // Camera_BG_X_pos = cameraX >> 2
                     d0 = (d0 >>> 2) & 0xFFFF;
                     ee0c = d0;
-                    d1 = (d1 >>> 1) & 0xFFFF;
-                    // EE10 = d1 (Ignored for now, using EE08 as primary)
-                    d1 = (d1 >>> 2) & 0xFFFF;
-                    ee08 = d1;
+                    // Camera_BG_Y_pos = cameraY >> 2 (NOT cameraY >> 3!)
+                    // Note: Original also sets Camera_BG2_X_pos = cameraY >> 1 (separate var, not
+                    // used here)
+                    ee08 = (d1 >>> 2) & 0xFFFF;
                     break;
 
                 case 0x00C3C6: // Clear primary bases
@@ -258,18 +261,19 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
                     ee0c = 0;
                     break;
 
-                case 0x00C38C: // Act-dependent plus MULU scale
+                case 0x00C38C: // ARZ - Act-dependent Y offset
+                    // Camera_BG_X_pos = (Camera_X_pos * $0119) >> 8
+                    long mulRes = (d0 & 0xFFFFL) * 0x0119L;
+                    ee0c = (int) ((mulRes >> 8) & 0xFFFF);
+
+                    // Camera_BG_Y_pos is act-dependent
                     if (actIdx != 0) {
-                        d0 = (d0 - 0x00E0) & 0xFFFF;
-                        d0 = (d0 >>> 1) & 0xFFFF;
-                        ee0c = d0;
+                        // Act 2: Camera_BG_Y_pos = (Camera_Y_pos - $E0) >> 1
+                        ee08 = ((d1 - 0x00E0) >>> 1) & 0xFFFF;
                     } else {
-                        d0 = (d0 - 0x0180) & 0xFFFF;
-                        ee0c = d0;
+                        // Act 1: Camera_BG_Y_pos = Camera_Y_pos - $180
+                        ee08 = (d1 - 0x0180) & 0xFFFF;
                     }
-                    long mulRes = (d1 & 0xFFFFL) * 0x0119L;
-                    d1 = (int) (mulRes >> 8);
-                    ee08 = d1 & 0xFFFF;
                     break;
 
                 default:
