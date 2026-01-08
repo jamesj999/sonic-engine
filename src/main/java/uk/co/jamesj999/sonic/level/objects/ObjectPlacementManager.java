@@ -11,7 +11,7 @@ import java.util.List;
  * Uses the original Sonic 2 window distances as a starting point.
  */
 public class ObjectPlacementManager extends AbstractPlacementManager<ObjectSpawn> {
-    private static final int LOAD_AHEAD = 0x280;   // see addi.w #$280,d6 in ObjectsManager_GoingForward (s2.asm)
+    private static final int LOAD_AHEAD = 0x280; // see addi.w #$280,d6 in ObjectsManager_GoingForward (s2.asm)
     private static final int UNLOAD_BEHIND = 0x300; // see addi.w #$300,d6 when trimming right-side objects
 
     private final BitSet remembered = new BitSet();
@@ -59,7 +59,10 @@ public class ObjectPlacementManager extends AbstractPlacementManager<ObjectSpawn
             return;
         }
         remembered.set(index);
-        active.remove(spawn);
+        // Fix: Do not remove Monitors (0x26) from active list!
+        if (spawn.objectId() != 0x26) {
+            active.remove(spawn);
+        }
     }
 
     public boolean isRemembered(ObjectSpawn spawn) {
@@ -106,7 +109,10 @@ public class ObjectPlacementManager extends AbstractPlacementManager<ObjectSpawn
     private void trySpawn(int index) {
         ObjectSpawn spawn = spawns.get(index);
         if (spawn.respawnTracked() && remembered.get(index)) {
-            return;
+            // Monitors (0x26) are an exception: they spawn in a broken state if remembered
+            if (spawn.objectId() != 0x26) {
+                return;
+            }
         }
         active.add(spawn);
     }
