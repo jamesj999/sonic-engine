@@ -646,8 +646,8 @@ public class Sonic2ObjectArt {
 
         // Frame 3: Coconut projectile (palette line 1 for orange)
         List<SpriteMappingPiece> frame3 = new ArrayList<>();
-        frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 36, false, false, 1));
-        frame3.add(new SpriteMappingPiece(0, -8, 1, 2, 36, true, false, 1));
+        frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 36, false, false, 2));
+        frame3.add(new SpriteMappingPiece(0, -8, 1, 2, 36, true, false, 2));
         frames.add(new SpriteMappingFrame(frame3));
 
         return frames;
