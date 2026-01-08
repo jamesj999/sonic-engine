@@ -14,6 +14,17 @@ public final class Sonic2ObjectIds {
     public static final int SPIRAL = 0x06;
     public static final int EHZ_WATERFALL = 0x49;
 
+    // EHZ Badniks
+    public static final int BUZZER = 0x4B;
+    public static final int MASHER = 0x5C;
+    public static final int COCONUTS = 0x9D;
+
+    // Supporting objects spawned by Badniks
+    public static final int EXPLOSION = 0x27;
+    public static final int ANIMAL = 0x28;
+    public static final int POINTS = 0x29;
+
     private Sonic2ObjectIds() {
     }
+
 }

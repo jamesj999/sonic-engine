@@ -37,6 +37,13 @@ public class ObjectRenderManager {
     private final SpriteAnimationSet springAnimations;
     private final SpriteAnimationSet checkpointAnimations;
 
+    // Badnik sheets
+    private final ObjectSpriteSheet masherSheet;
+    private final ObjectSpriteSheet buzzerSheet;
+    private final ObjectSpriteSheet coconutsSheet;
+    private final ObjectSpriteSheet animalSheet;
+    private final ObjectSpriteSheet pointsSheet;
+
     private final PatternSpriteRenderer monitorRenderer;
     private final PatternSpriteRenderer spikeRenderer;
     private final PatternSpriteRenderer spikeSideRenderer;
@@ -53,6 +60,13 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer waterfallRenderer;
     private final PatternSpriteRenderer checkpointRenderer;
     private final PatternSpriteRenderer checkpointStarRenderer;
+
+    // Badnik renderers
+    private final PatternSpriteRenderer masherRenderer;
+    private final PatternSpriteRenderer buzzerRenderer;
+    private final PatternSpriteRenderer coconutsRenderer;
+    private final PatternSpriteRenderer animalRenderer;
+    private final PatternSpriteRenderer pointsRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
     private final List<PatternSpriteRenderer> rendererOrder = new ArrayList<>();
@@ -77,6 +91,13 @@ public class ObjectRenderManager {
         this.monitorAnimations = artData.monitorAnimations();
         this.springAnimations = artData.springAnimations();
         this.checkpointAnimations = artData.checkpointAnimations();
+
+        // Badnik sheets
+        this.masherSheet = artData.masherSheet();
+        this.buzzerSheet = artData.buzzerSheet();
+        this.coconutsSheet = artData.coconutsSheet();
+        this.animalSheet = artData.animalSheet();
+        this.pointsSheet = artData.pointsSheet();
 
         this.monitorRenderer = new PatternSpriteRenderer(monitorSheet);
         this.spikeRenderer = new PatternSpriteRenderer(spikeSheet);
@@ -111,6 +132,18 @@ public class ObjectRenderManager {
         register(checkpointSheet, checkpointRenderer);
         this.checkpointStarRenderer = new PatternSpriteRenderer(checkpointStarSheet);
         register(checkpointStarSheet, checkpointStarRenderer);
+
+        // Badnik renderers
+        this.masherRenderer = new PatternSpriteRenderer(masherSheet);
+        register(masherSheet, masherRenderer);
+        this.buzzerRenderer = new PatternSpriteRenderer(buzzerSheet);
+        register(buzzerSheet, buzzerRenderer);
+        this.coconutsRenderer = new PatternSpriteRenderer(coconutsSheet);
+        register(coconutsSheet, coconutsRenderer);
+        this.animalRenderer = new PatternSpriteRenderer(animalSheet);
+        register(animalSheet, animalRenderer);
+        this.pointsRenderer = new PatternSpriteRenderer(pointsSheet);
+        register(pointsSheet, pointsRenderer);
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -221,5 +254,25 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getCheckpointAnimations() {
         return checkpointAnimations;
+    }
+
+    public PatternSpriteRenderer getMasherRenderer() {
+        return masherRenderer;
+    }
+
+    public PatternSpriteRenderer getBuzzerRenderer() {
+        return buzzerRenderer;
+    }
+
+    public PatternSpriteRenderer getCoconutsRenderer() {
+        return coconutsRenderer;
+    }
+
+    public PatternSpriteRenderer getAnimalRenderer() {
+        return animalRenderer;
+    }
+
+    public PatternSpriteRenderer getPointsRenderer() {
+        return pointsRenderer;
     }
 }

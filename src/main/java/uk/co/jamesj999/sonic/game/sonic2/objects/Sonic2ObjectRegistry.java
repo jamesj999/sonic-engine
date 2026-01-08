@@ -4,8 +4,12 @@ import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
 import uk.co.jamesj999.sonic.level.objects.ObjectFactory;
 import uk.co.jamesj999.sonic.level.objects.ObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectRegistry;
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.PlaceholderObjectInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.MasherBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.BuzzerBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.CoconutsBadnikInstance;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -133,7 +137,16 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.SPIRAL,
                 (spawn, registry) -> new SpiralObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // EHZ Badniks
+        registerFactory(Sonic2ObjectIds.MASHER,
+                (spawn, registry) -> new MasherBadnikInstance(spawn, LevelManager.getInstance()));
+        registerFactory(Sonic2ObjectIds.BUZZER,
+                (spawn, registry) -> new BuzzerBadnikInstance(spawn, LevelManager.getInstance()));
+        registerFactory(Sonic2ObjectIds.COCONUTS,
+                (spawn, registry) -> new CoconutsBadnikInstance(spawn, LevelManager.getInstance()));
+
         registerFactory(Sonic2ObjectIds.SWINGING_PLATFORM, platformFactory);
+
         registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_A,
                 (spawn, registry) -> new ARZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_B, platformFactory);

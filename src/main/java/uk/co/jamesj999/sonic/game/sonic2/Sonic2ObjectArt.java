@@ -153,6 +153,28 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.ANI_OBJ79_ADDR,
                 Sonic2Constants.ANI_OBJ79_SCRIPT_COUNT);
 
+        // Badnik art (Masher, Buzzer, Coconuts)
+        Pattern[] masherPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_MASHER_ADDR);
+        List<SpriteMappingFrame> masherMappings = createMasherMappings();
+        ObjectSpriteSheet masherSheet = new ObjectSpriteSheet(masherPatterns, masherMappings, 0, 1);
+
+        Pattern[] buzzerPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_BUZZER_ADDR);
+        List<SpriteMappingFrame> buzzerMappings = createBuzzerMappings();
+        ObjectSpriteSheet buzzerSheet = new ObjectSpriteSheet(buzzerPatterns, buzzerMappings, 0, 1);
+
+        Pattern[] coconutsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_COCONUTS_ADDR);
+        List<SpriteMappingFrame> coconutsMappings = createCoconutsMappings();
+        ObjectSpriteSheet coconutsSheet = new ObjectSpriteSheet(coconutsPatterns, coconutsMappings, 0, 1);
+
+        Pattern[] animalPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_ANIMAL_ADDR);
+        List<SpriteMappingFrame> animalMappings = createAnimalMappings();
+        ObjectSpriteSheet animalSheet = new ObjectSpriteSheet(animalPatterns, animalMappings, 0, 1);
+
+        // Load correct points art
+        Pattern[] pointsPatterns = loadNemesisPatterns(Sonic2Constants.ART_NEM_NUMBERS_ADDR);
+        List<SpriteMappingFrame> pointsMappings = createPointsMappings();
+        ObjectSpriteSheet pointsSheet = new ObjectSpriteSheet(pointsPatterns, pointsMappings, 0, 1);
+
         cached = new ObjectArtData(
                 monitorSheet,
                 spikeSheet,
@@ -170,9 +192,15 @@ public class Sonic2ObjectArt {
                 waterfallSheet,
                 checkpointSheet,
                 checkpointStarSheet,
+                masherSheet,
+                buzzerSheet,
+                coconutsSheet,
+                animalSheet,
+                pointsSheet,
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations);
+
         return cached;
     }
 
@@ -515,5 +543,160 @@ public class Sonic2ObjectArt {
             }
         }
         return max;
+    }
+
+    /**
+     * Creates mappings for Masher (Obj5C) - Leaping piranha badnik.
+     * Based on obj5C.asm with 2 frames.
+     */
+    private List<SpriteMappingFrame> createMasherMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Mouth closed
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-12, -16, 2, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(4, -16, 1, 2, 4, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, 0, 3, 2, 10, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Mouth open
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-12, -16, 2, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(2, -16, 2, 2, 6, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-12, 0, 3, 2, 16, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Buzzer (Obj4B) - Flying bee/wasp badnik.
+     * Based on obj4B.asm with 7 frames.
+     */
+    private List<SpriteMappingFrame> createBuzzerMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Body with wings extended
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-24, -8, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -8, 3, 2, 6, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Body with wings up
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-24, -8, 3, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -8, 2, 2, 12, false, false, 0));
+        frame1.add(new SpriteMappingPiece(2, 8, 2, 2, 16, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Similar to frame 1 with slightly different wing position
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-24, -8, 3, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0, -8, 2, 2, 12, false, false, 0));
+        frame2.add(new SpriteMappingPiece(2, 8, 2, 2, 20, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frames 3-6: Projectile frames
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(4, -16, 1, 2, 20, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(4, -16, 1, 2, 22, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-12, -8, 1, 2, 24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        List<SpriteMappingPiece> frame6 = new ArrayList<>();
+        frame6.add(new SpriteMappingPiece(-12, -8, 1, 2, 26, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame6));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Coconuts (Obj9D) - Monkey badnik.
+     * Based on obj9D.asm with 4 frames.
+     */
+    private List<SpriteMappingFrame> createCoconutsMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Climbing 1
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-2, 0, 2, 2, 26, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-4, -16, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, 0, 4, 2, 6, false, false, 0));
+        frame0.add(new SpriteMappingPiece(12, 16, 1, 2, 14, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Climbing 2
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-2, 0, 2, 2, 30, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-4, -16, 3, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-12, 0, 4, 2, 16, false, false, 0));
+        frame1.add(new SpriteMappingPiece(12, 16, 1, 2, 24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Throwing
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(7, -8, 1, 2, 34, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-4, -16, 3, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-12, 0, 4, 2, 16, false, false, 0));
+        frame2.add(new SpriteMappingPiece(12, 16, 1, 2, 24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: Coconut projectile (palette line 1 for orange)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 36, false, false, 1));
+        frame3.add(new SpriteMappingPiece(0, -8, 1, 2, 36, true, false, 1));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Animal (Obj28) - Rabbit (Pocky).
+     * Based on obj28_e.asm (Rabbit).
+     */
+    private List<SpriteMappingFrame> createAnimalMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj28_e_0010 (-8, -12, 2x3, tile 6)
+        frames.add(createSimpleFrame(-8, -12, 2, 3, 6));
+
+        // Frame 1: Map_obj28_e_001A (-8, -12, 2x3, tile 12 ($C))
+        frames.add(createSimpleFrame(-8, -12, 2, 3, 12));
+
+        // Frame 2: Map_obj28_e_0006 (-8, -12, 2x3, tile 0)
+        frames.add(createSimpleFrame(-8, -12, 2, 3, 0));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Points (Obj29).
+     * Based on obj29.asm.
+     */
+    private List<SpriteMappingFrame> createPointsMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: 100 points (-8, -8, 2x2, tile 2)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 2));
+
+        // Frame 1: 200 points (-8, -8, 2x2, tile 6)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 6));
+
+        // Frame 2: 500 points (-8, -8, 2x2, tile 10 ($A))
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 10));
+
+        // Frame 3: 1000 points
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, -8, 2, 2, 14, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: 10 points
+        frames.add(createSimpleFrame(-4, -8, 1, 2, 0));
+
+        return frames;
     }
 }
