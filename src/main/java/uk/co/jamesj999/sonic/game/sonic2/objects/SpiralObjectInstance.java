@@ -149,7 +149,7 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
 
         // Debug range
         if (Math.abs(dx) < 250 && frameCounter % 30 == 0) {
-            LOGGER.info("Spiral candidate: dx=" + dx + " vx=" + vx + " air=" + player.getAir());
+            LOGGER.fine("Spiral candidate: dx=" + dx + " vx=" + vx + " air=" + player.getAir());
         }
 
         // Ranges vary by approach direction:
@@ -192,7 +192,7 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         // Match RideObject_SetRide behavior: zero vertical speed and keep inertia.
         player.setYSpeed((short) 0);
         player.setGSpeed(player.getXSpeed());
-        LOGGER.info("Spiral Activated: Player engaged at dx=" + (player.getCentreX() - spawn.x()));
+        LOGGER.fine("Spiral Activated: Player engaged at dx=" + (player.getCentreX() - spawn.x()));
     }
 
     private void updateMovement(AbstractPlayableSprite player) {

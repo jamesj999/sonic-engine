@@ -54,13 +54,13 @@ public class EHZWaterfallObjectInstance extends AbstractObjectInstance {
             // In range: show active frame (1 + subtype)
             int newFrame = baseFrame + 1;
             if (newFrame != mappingFrame) {
-                LOGGER.info("Waterfall activated: frame " + newFrame + " (dx=" + dx + ")");
+                LOGGER.fine("Waterfall activated: frame " + newFrame + " (dx=" + dx + ")");
                 mappingFrame = newFrame;
             }
         } else {
             // Out of range: subtype frame
             if (mappingFrame != baseFrame) {
-                LOGGER.info("Waterfall deactivated: frame " + baseFrame + " (dx=" + dx + ")");
+                LOGGER.fine("Waterfall deactivated: frame " + baseFrame + " (dx=" + dx + ")");
                 mappingFrame = baseFrame;
             }
         }
