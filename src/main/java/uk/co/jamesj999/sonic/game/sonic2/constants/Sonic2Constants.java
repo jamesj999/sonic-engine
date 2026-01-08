@@ -88,6 +88,14 @@ public class Sonic2Constants {
     public static final int ANI_OBJ79_ADDR = 0x1F0C2; // Ani_obj79
     public static final int ANI_OBJ79_SCRIPT_COUNT = 3;
     public static final int ART_TILE_CHECKPOINT = 0x047C;
+    public static final int SndID_Explosion = 0xC1;
+    public static final int ART_NEM_NUMBERS_ADDR = 0x799AC; // Corrected address for Numbers (Points) art
+
+    // EHZ Badnik Art (Nemesis compressed)
+    public static final int ART_NEM_BUZZER_ADDR = 0x8316A; // 28 blocks
+    public static final int ART_NEM_MASHER_ADDR = 0x839EA; // 22 blocks
+    public static final int ART_NEM_COCONUTS_ADDR = 0x8A87A; // 38 blocks
+    public static final int ART_NEM_ANIMAL_ADDR = 0x7FDD2; // Rabbit (Pocky)
 
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)

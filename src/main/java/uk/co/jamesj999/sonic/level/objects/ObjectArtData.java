@@ -22,6 +22,11 @@ public record ObjectArtData(
         ObjectSpriteSheet waterfallSheet,
         ObjectSpriteSheet checkpointSheet,
         ObjectSpriteSheet checkpointStarSheet,
+        ObjectSpriteSheet masherSheet,
+        ObjectSpriteSheet buzzerSheet,
+        ObjectSpriteSheet coconutsSheet,
+        ObjectSpriteSheet animalSheet,
+        ObjectSpriteSheet pointsSheet,
         SpriteAnimationSet monitorAnimations,
         SpriteAnimationSet springAnimations,
         SpriteAnimationSet checkpointAnimations) {

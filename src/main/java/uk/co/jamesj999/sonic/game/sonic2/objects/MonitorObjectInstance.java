@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
+
 import uk.co.jamesj999.sonic.level.objects.*;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
@@ -40,7 +41,11 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     public MonitorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, HALF_RADIUS, HALF_RADIUS, 0.4f, 0.9f, 1.0f, false);
         this.type = MonitorType.fromSubtype(spawn.subtype());
-        this.broken = this.type == MonitorType.BROKEN;
+
+        // Check persistence: if remembered, spawn as broken
+        boolean previouslyBroken = LevelManager.getInstance().getObjectPlacementManager().isRemembered(spawn);
+        this.broken = this.type == MonitorType.BROKEN || previouslyBroken;
+
         int initialAnim = type.id;
         int initialFrame = broken ? BROKEN_FRAME : 0;
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
@@ -85,6 +90,10 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
 
         // Break Monitor and Bounce Player Up
         broken = true;
+
+        // Mark as broken in persistence table
+        LevelManager.getInstance().getObjectPlacementManager().markRemembered(spawn);
+
         player.setYSpeed((short) -player.getYSpeed());
         mappingFrame = BROKEN_FRAME;
         iconActive = true;

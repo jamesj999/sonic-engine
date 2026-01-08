@@ -1316,6 +1316,10 @@ public class LevelManager {
         return objectManager;
     }
 
+    public ObjectPlacementManager getObjectPlacementManager() {
+        return objectPlacementManager;
+    }
+
     public void spawnLostRings(AbstractPlayableSprite player, int frameCounter) {
         if (lostRingManager == null || player == null) {
             return;
