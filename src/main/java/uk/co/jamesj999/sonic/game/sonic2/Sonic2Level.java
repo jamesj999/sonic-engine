@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.game.sonic2;
+
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 
 import uk.co.jamesj999.sonic.data.Rom;
@@ -46,23 +47,23 @@ public class Sonic2Level implements Level {
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
 
     public Sonic2Level(Rom rom,
-                       int zoneIndex,
-                       int characterPaletteAddr,
-                       int levelPalettesAddr,
-                       int levelPalettesSize,
-                       int patternsAddr,
-                       int chunksAddr,
-                       int blocksAddr,
-                       int mapAddr,
-                       int collisionsAddr,
-                       int altCollisionsAddr,
-                       int solidTileHeightsAddr,
-                       int solidTileWidthsAddr,
-                       int solidTilesAngleAddr,
-                       List<ObjectSpawn> objectSpawns,
-                       List<RingSpawn> ringSpawns,
-                       RingSpriteSheet ringSpriteSheet,
-                       int levelBoundariesAddr) throws IOException {
+            int zoneIndex,
+            int characterPaletteAddr,
+            int levelPalettesAddr,
+            int levelPalettesSize,
+            int patternsAddr,
+            int chunksAddr,
+            int blocksAddr,
+            int mapAddr,
+            int collisionsAddr,
+            int altCollisionsAddr,
+            int solidTileHeightsAddr,
+            int solidTileWidthsAddr,
+            int solidTilesAngleAddr,
+            List<ObjectSpawn> objectSpawns,
+            List<RingSpawn> ringSpawns,
+            RingSpriteSheet ringSpriteSheet,
+            int levelBoundariesAddr) throws IOException {
         this.zoneIndex = zoneIndex;
         loadPalettes(rom, characterPaletteAddr, levelPalettesAddr, levelPalettesSize);
         loadPatterns(rom, patternsAddr);
@@ -193,7 +194,8 @@ public class Sonic2Level implements Level {
         return maxY;
     }
 
-    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize) throws IOException {
+    private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize)
+            throws IOException {
         palettes = new Palette[PALETTE_COUNT];
         GraphicsManager graphicsMan = GraphicsManager.getInstance();
 
@@ -210,7 +212,8 @@ public class Sonic2Level implements Level {
         // Calculate how many full palettes we have available in the data
         int loadedPalettes = levelPalettesSize / Palette.PALETTE_SIZE_IN_ROM;
 
-        // Mega Drive has 4 palettes total. Palette 0 is character palette (already loaded).
+        // Mega Drive has 4 palettes total. Palette 0 is character palette (already
+        // loaded).
         // Palettes 1, 2, 3 are level palettes.
         for (int i = 0; i < PALETTE_COUNT - 1; i++) {
             palettes[i + 1] = new Palette();
@@ -251,7 +254,8 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < patternCount; i++) {
             patterns[i] = new Pattern();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM, (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
+                    (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
 
             if (graphicsMan.getGraphics() != null) {
@@ -260,10 +264,10 @@ public class Sonic2Level implements Level {
 
         }
 
-        LOG.info("Pattern count: " + patternCount + " (" + result.length + " bytes)");
+        LOG.fine("Pattern count: " + patternCount + " (" + result.length + " bytes)");
     }
 
-    //TODO both collision addresses
+    // TODO both collision addresses
     private void loadChunks(Rom rom, int chunksAddr, int collisionAddr, int altCollisionAddr) throws IOException {
         final int CHUNK_BUFFER_SIZE = 0xFFFF; // 64KB
         final int SOLID_TILE_REF_BUFFER_LENGTH = 0x300;
@@ -291,7 +295,8 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < chunkCount; i++) {
             chunks[i] = new Chunk();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(chunkBuffer, i * Chunk.CHUNK_SIZE_IN_ROM, (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(chunkBuffer, i * Chunk.CHUNK_SIZE_IN_ROM,
+                    (i + 1) * Chunk.CHUNK_SIZE_IN_ROM);
             int solidTileIndex = 0;
             if (i < solidTileRefBuffer.length) {
                 solidTileIndex = Byte.toUnsignedInt(solidTileRefBuffer[i]);
@@ -303,7 +308,7 @@ public class Sonic2Level implements Level {
             chunks[i].fromSegaFormat(subArray, solidTileIndex, altSolidTileIndex);
         }
 
-        LOG.info("Chunk count: " + chunkCount + " (" + chunkBuffer.length + " bytes)");
+        LOG.fine("Chunk count: " + chunkCount + " (" + chunkBuffer.length + " bytes)");
     }
 
     private byte[] applyAnimatedPatternMappings(Rom rom, byte[] chunkBuffer) throws IOException {
@@ -354,7 +359,7 @@ public class Sonic2Level implements Level {
     private void loadSolidTiles(Rom rom, int tileHeightsAddr, int tileWidthsAddr, int anglesAddr) throws IOException {
 
         solidTileCount = (Sonic2Constants.SOLID_TILE_MAP_SIZE + 1) / SolidTile.TILE_SIZE_IN_ROM;
-        LOG.info("how many solid tiles fit?:" + solidTileCount);
+        LOG.fine("how many solid tiles fit?:" + solidTileCount);
 
         byte[] solidTileHeightsBuffer = rom.readBytes(tileHeightsAddr, Sonic2Constants.SOLID_TILE_MAP_SIZE);
         byte[] solidTileWidthsBuffer = rom.readBytes(tileWidthsAddr, Sonic2Constants.SOLID_TILE_MAP_SIZE);
@@ -366,13 +371,16 @@ public class Sonic2Level implements Level {
         solidTiles = new SolidTile[solidTileCount];
         for (int i = 0; i < solidTileCount; i++) {
             byte tileAngle = rom.readByte(anglesAddr + i);
-            byte[] totallyLegitimateHeightArraySir = Arrays.copyOfRange(solidTileHeightsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i + 1) * SolidTile.TILE_SIZE_IN_ROM);
-            byte[] totallyLegitimateWidthArraySir = Arrays.copyOfRange(solidTileWidthsBuffer, i * SolidTile.TILE_SIZE_IN_ROM, (i + 1) * SolidTile.TILE_SIZE_IN_ROM);
+            byte[] totallyLegitimateHeightArraySir = Arrays.copyOfRange(solidTileHeightsBuffer,
+                    i * SolidTile.TILE_SIZE_IN_ROM, (i + 1) * SolidTile.TILE_SIZE_IN_ROM);
+            byte[] totallyLegitimateWidthArraySir = Arrays.copyOfRange(solidTileWidthsBuffer,
+                    i * SolidTile.TILE_SIZE_IN_ROM, (i + 1) * SolidTile.TILE_SIZE_IN_ROM);
 
-            solidTiles[i] = new SolidTile(i, totallyLegitimateHeightArraySir, totallyLegitimateWidthArraySir, tileAngle);
+            solidTiles[i] = new SolidTile(i, totallyLegitimateHeightArraySir, totallyLegitimateWidthArraySir,
+                    tileAngle);
         }
 
-        LOG.info("SolidTiles loaded");
+        LOG.fine("SolidTiles loaded");
 
     }
 
@@ -385,7 +393,6 @@ public class Sonic2Level implements Level {
         channel.position(blocksAddr);
         byte[] blockBuffer = KosinskiReader.decompress(channel, KOS_DEBUG_LOG);
 
-
         blockCount = blockBuffer.length / LevelConstants.BLOCK_SIZE_IN_ROM;
         if (blockBuffer.length % LevelConstants.BLOCK_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent block data");
@@ -395,13 +402,14 @@ public class Sonic2Level implements Level {
         for (int i = 0; i < blockCount; i++) {
             blocks[i] = new Block();
             // Pass a sub-array (slice) using Arrays.copyOfRange
-            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * LevelConstants.BLOCK_SIZE_IN_ROM, (i + 1) * LevelConstants.BLOCK_SIZE_IN_ROM);
+            byte[] subArray = Arrays.copyOfRange(blockBuffer, i * LevelConstants.BLOCK_SIZE_IN_ROM,
+                    (i + 1) * LevelConstants.BLOCK_SIZE_IN_ROM);
 
             blocks[i].fromSegaFormat(subArray);
 
         }
 
-        LOG.info("Block count: " + blockCount + " (" + blockBuffer.length + " bytes)");
+        LOG.fine("Block count: " + blockCount + " (" + blockBuffer.length + " bytes)");
 
     }
 
@@ -419,7 +427,7 @@ public class Sonic2Level implements Level {
 
         map = new Map(MAP_LAYERS, MAP_WIDTH, MAP_HEIGHT, buffer);
 
-        System.out.println("Map loaded successfully. Byte count: " + buffer.length);
+        LOG.fine("Map loaded successfully. Byte count: " + buffer.length);
     }
 
     private void loadBoundaries(Rom rom, int levelBoundariesAddr) throws IOException {

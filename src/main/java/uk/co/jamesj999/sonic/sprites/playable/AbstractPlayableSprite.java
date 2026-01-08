@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.sprites.playable;
 
 import uk.co.jamesj999.sonic.audio.GameAudioProfile;
 
+import java.util.logging.Logger;
+
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -29,6 +31,8 @@ import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
  * 
  */
 public abstract class AbstractPlayableSprite extends AbstractSprite {
+        private static final Logger LOGGER = Logger.getLogger(AbstractPlayableSprite.class.getName());
+
         protected final SpriteMovementManager movementManager;
         protected final PlayableSpriteAnimationManager animationManager;
 
@@ -200,24 +204,24 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public void giveShield() {
-                System.out.println("DEBUG: giveShield() called. Current shield state: " + shield);
+                LOGGER.fine("DEBUG: giveShield() called. Current shield state: " + shield);
                 if (hasShield()) {
-                        System.out.println("DEBUG: Player already has shield. Returning.");
+                        LOGGER.fine("DEBUG: Player already has shield. Returning.");
                         return;
                 }
                 this.shield = true;
-                System.out.println("DEBUG: Shield flag set to true.");
+                LOGGER.fine("DEBUG: Shield flag set to true.");
                 try {
                         this.shieldObject = new ShieldObjectInstance(this);
-                        System.out.println("DEBUG: ShieldObjectInstance created successfully: " + shieldObject);
+                        LOGGER.fine("DEBUG: ShieldObjectInstance created successfully: " + shieldObject);
                         LevelManager.getInstance().getObjectManager().addDynamicObject(shieldObject);
-                        System.out.println("DEBUG: ShieldObjectInstance added to ObjectManager.");
+                        LOGGER.fine("DEBUG: ShieldObjectInstance added to ObjectManager.");
                         // If picked up while invincible, hide shield until invincibility ends
                         if (invincibleFrames > 0) {
                                 shieldObject.setVisible(false);
                         }
                 } catch (Exception e) {
-                        System.out.println("DEBUG: Failed to create/add ShieldObjectInstance: " + e.getMessage());
+                        LOGGER.fine("DEBUG: Failed to create/add ShieldObjectInstance: " + e.getMessage());
                         e.printStackTrace();
                         throw e;
                 }
@@ -564,7 +568,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
 
                 if (shield) {
-                        System.out.println("DEBUG: applyHurt called. removing shield.");
+                        LOGGER.fine("DEBUG: applyHurt called. removing shield.");
                         shield = false;
                         if (shieldObject != null) {
                                 shieldObject.destroy();
@@ -575,7 +579,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         // However, we MUST prevent death logic if we had no rings.
                         // Handled in applyHurtOrDeath.
                 } else {
-                        System.out.println("DEBUG: applyHurt called. No shield.");
+                        LOGGER.fine("DEBUG: applyHurt called. No shield.");
                 }
 
                 hurt = true; // Set hurt state - invulnerability is applied on landing (ROM behavior)

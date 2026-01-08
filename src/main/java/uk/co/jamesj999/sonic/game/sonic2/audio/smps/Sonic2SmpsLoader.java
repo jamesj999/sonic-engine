@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.game.sonic2.audio.smps;
+
 import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants.*;
 import static uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsConstants.*;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
@@ -12,8 +13,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
-
-
 
 public class Sonic2SmpsLoader implements SmpsLoader {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SmpsLoader.class.getName());
@@ -154,7 +153,7 @@ public class Sonic2SmpsLoader implements SmpsLoader {
 
     public void cacheAllSfx() {
         LOGGER.info("Caching all SFX...");
-        System.out.println("Scanning for SFX from SFX_ID_BASE to SFX_ID_MAX...");
+        LOGGER.fine("Scanning for SFX from SFX_ID_BASE to SFX_ID_MAX...");
         // Scan SFX_ID_BASE to SFX_ID_MAX
         for (int id = SFX_ID_BASE; id <= SFX_ID_MAX; id++) {
             AbstractSmpsData sfx = loadSfxInternal(id);
@@ -166,8 +165,7 @@ public class Sonic2SmpsLoader implements SmpsLoader {
             }
         }
         String msg = "Cached " + sfxCache.size() + " SFX.";
-        LOGGER.info(msg);
-        System.out.println(msg);
+        LOGGER.fine(msg);
     }
 
     public Map<Integer, String> getSfxList() {
@@ -255,7 +253,8 @@ public class Sonic2SmpsLoader implements SmpsLoader {
     private AbstractSmpsData loadSfxInternal(int sfxId) {
         // SFX Pointer Table at SFX_POINTER_TABLE_ADDR.
         // IDs start at SFX_ID_BASE.
-        // Pointers are 2 bytes (LE), relative to bank start SFX_BANK_BASE (Z80 Z80_BANK_BASE).
+        // Pointers are 2 bytes (LE), relative to bank start SFX_BANK_BASE (Z80
+        // Z80_BANK_BASE).
         if (sfxId < SFX_ID_BASE)
             return null;
 
@@ -283,7 +282,8 @@ public class Sonic2SmpsLoader implements SmpsLoader {
             // Extend buffer if the voice table sits past the next pointer.
             int voicePtr = (rom.readByte(romOffset) & 0xFF) | ((rom.readByte(romOffset + 1) & 0xFF) << 8);
             int minLength = headerOffset + sfxLength;
-            // Reserve up to SFX_VOICE_TABLE_PADDING bytes past the voice table start (25 bytes per voice,
+            // Reserve up to SFX_VOICE_TABLE_PADDING bytes past the voice table start (25
+            // bytes per voice,
             // rounded up)
             int voiceOffset = voicePtr == 0 ? -1 : (voicePtr & Z80_BANK_MASK);
             int voiceReach = voiceOffset < 0 ? 0 : voiceOffset + SFX_VOICE_TABLE_PADDING;
@@ -383,7 +383,8 @@ public class Sonic2SmpsLoader implements SmpsLoader {
     }
 
     private int resolveMusicOffsetFromRom(int musicId) {
-        // Known music IDs start at MUSIC_FLAGS_ID_BASE; map ID to flag index by subtracting it.
+        // Known music IDs start at MUSIC_FLAGS_ID_BASE; map ID to flag index by
+        // subtracting it.
         if (musicId < MUSIC_FLAGS_ID_BASE)
             return -1;
         int flagIndex = musicId - MUSIC_FLAGS_ID_BASE;
@@ -393,7 +394,8 @@ public class Sonic2SmpsLoader implements SmpsLoader {
             int ptrId = flags & 0x1F;
             boolean uncompressed = (flags & 0x20) != 0;
             int bankBase = ((flags & 0x80) != 0) ? MUSIC_PTR_BANK1 : MUSIC_PTR_BANK0;
-            // Pointer-to-pointer table at MUSIC_PTR_TABLE_ADDR (driver relocates this in RAM); treat as
+            // Pointer-to-pointer table at MUSIC_PTR_TABLE_ADDR (driver relocates this in
+            // RAM); treat as
             // ROM address here.
             int ptrToPtrLo = rom.readByte(MUSIC_PTR_TABLE_ADDR) & 0xFF;
             int ptrToPtrHi = rom.readByte(MUSIC_PTR_TABLE_ADDR + 1) & 0xFF;
@@ -675,7 +677,8 @@ public class Sonic2SmpsLoader implements SmpsLoader {
             int bankStart = PCM_BANK_START;
 
             // 1. Load Samples from Pointer Table (81-87)
-            // Pointers at PCM_SAMPLE_PTR_TABLE_ADDR. Format: 4 bytes (Ptr LE, Len LE). If next byte is FF,
+            // Pointers at PCM_SAMPLE_PTR_TABLE_ADDR. Format: 4 bytes (Ptr LE, Len LE). If
+            // next byte is FF,
             // skip it.
             int ptrTable = PCM_SAMPLE_PTR_TABLE_ADDR;
             int offset = ptrTable;
@@ -711,7 +714,8 @@ public class Sonic2SmpsLoader implements SmpsLoader {
             }
 
             // 2. Load Mapping from Master List (81-91)
-            // Starts at PCM_SAMPLE_MAP_ADDR. Format: 2 bytes (SampleID, Rate). If next byte is FF, skip it.
+            // Starts at PCM_SAMPLE_MAP_ADDR. Format: 2 bytes (SampleID, Rate). If next byte
+            // is FF, skip it.
             int mapAddr = PCM_SAMPLE_MAP_ADDR;
             offset = mapAddr;
 

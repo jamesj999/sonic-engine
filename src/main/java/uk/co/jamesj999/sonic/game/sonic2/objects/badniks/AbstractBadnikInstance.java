@@ -141,6 +141,11 @@ public abstract class AbstractBadnikInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean isHighPriority() {
+        return super.isHighPriority();
+    }
+
+    @Override
     public int getX() {
         return currentX;
     }
