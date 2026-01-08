@@ -152,7 +152,7 @@ public class BuzzerBadnikInstance extends AbstractBadnikInstance {
                 xVel,
                 yVel,
                 false, // No gravity for Buzzer stinger
-                facingLeft);
+                !facingLeft);
 
         LevelManager.getInstance().getObjectManager().addDynamicObject(projectile);
     }
