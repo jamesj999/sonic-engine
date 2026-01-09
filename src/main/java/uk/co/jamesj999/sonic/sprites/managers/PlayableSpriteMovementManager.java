@@ -667,11 +667,15 @@ public class PlayableSpriteMovementManager extends
 				xSpeed += (2 * runAccel);
 			}
 		}
-		// xSpeed = gSpeed;
-		if (ySpeed < 0 && ySpeed > -1024) {
-			if (Math.abs(xSpeed) >= 32) {
-				xSpeed *= 0.96875;
-			}
+		// Air drag: Sonic 2 applies drag only when ySpeed is in [-1024, 0)
+		// subpixels/frame
+		// (near jump apex, still moving up). Drag is NOT applied while falling or while
+		// hurt.
+		// Formula: xSpeed = xSpeed - (xSpeed / 32), using integer division (rounds
+		// toward zero).
+		// This naturally stops when abs(xSpeed) < 32 (since xSpeed/32 becomes 0).
+		if (ySpeed < 0 && ySpeed >= -1024 && !sprite.isHurt()) {
+			xSpeed = (short) (xSpeed - (xSpeed / 32));
 		}
 		ySpeed += sprite.getGravity();
 
