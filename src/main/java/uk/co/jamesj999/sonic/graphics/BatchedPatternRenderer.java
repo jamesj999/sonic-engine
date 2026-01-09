@@ -291,6 +291,10 @@ public class BatchedPatternRenderer {
             gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
             shader.stop(gl);
             gl.glDisable(GL2.GL_BLEND);
+
+            // Reset PatternRenderCommand state tracking so subsequent patterns
+            // will properly reinitialize GL state (since we just disabled everything)
+            PatternRenderCommand.resetFrameState();
         }
     }
 }

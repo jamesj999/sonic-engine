@@ -31,10 +31,8 @@ public class GraphicsManager {
 	private ShaderProgram debugShaderProgram;
 	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
 
-	// Batched rendering support - disabled for now due to sprite visibility issues
-	// The uniform caching optimization in ShaderProgram/PatternRenderCommand still
-	// provides benefit
-	private boolean batchingEnabled = false;
+	// Batched rendering support
+	private boolean batchingEnabled = true;
 	private BatchedPatternRenderer batchedRenderer;
 
 	public void registerCommand(GLCommandable command) {
@@ -217,7 +215,8 @@ public class GraphicsManager {
 	 * submitted. This queues the batch command for execution in the proper order.
 	 */
 	public void flushPatternBatch() {
-		if (batchedRenderer != null && !batchedRenderer.isEmpty()) {
+		if (batchedRenderer != null) {
+			// Always call endBatch to reset batchActive state, even if batch is empty
 			GLCommandable batchCommand = batchedRenderer.endBatch();
 			if (batchCommand != null) {
 				registerCommand(batchCommand);
