@@ -95,8 +95,22 @@ public class Sonic2Constants {
     public static final int ART_TILE_SIGNPOST = 0x0434;
     public static final int SndID_Signpost = 0xCF;
     public static final int MusID_StageClear = 0x97; // Stage clear / act complete jingle
+    public static final int SndID_Blip = 0xCD; // Tally tick sound
+    public static final int SndID_TallyEnd = 0xC5; // Tally complete sound
 
-    public static final int ART_NEM_NUMBERS_ADDR = 0x799AC; // Corrected address for Numbers (Points) art
+    // Results Screen Art (Obj3A)
+    public static final int ART_NEM_TITLE_CARD_ADDR = 0x7D22C; // Title card.nem
+    public static final int ART_NEM_RESULTS_TEXT_ADDR = 0x7E86A; // End of level results text.nem
+    public static final int ART_NEM_MINI_SONIC_ADDR = 0x7C0AA; // Sonic continue.nem (mini character)
+    public static final int ART_NEM_PERFECT_ADDR = 0x7EEBE; // Perfect text.nem
+    public static final int MAPPINGS_EOL_TITLE_CARDS_ADDR = 0x14CBC; // MapUnc_EOLTitleCards
+    public static final int VRAM_BASE_NUMBERS = 0x520; // ArtTile_HUD_Bonus_Score
+    public static final int VRAM_BASE_PERFECT = 0x540; // ArtTile_ArtNem_Perfect
+    public static final int VRAM_BASE_TITLE_CARD = 0x580; // ArtTile_ArtNem_TitleCard
+    public static final int VRAM_BASE_RESULTS_TEXT = 0x5B0; // ArtTile_ArtNem_ResultsText
+    public static final int VRAM_BASE_MINI_CHARACTER = 0x5F4; // ArtTile_ArtNem_MiniCharacter
+
+    public static final int ART_NEM_NUMBERS_ADDR = 0x799AC; // Numbers.nem (bonus score digits)
 
     // EHZ Badnik Art (Nemesis compressed)
     public static final int ART_NEM_BUZZER_ADDR = 0x8316A; // 28 blocks

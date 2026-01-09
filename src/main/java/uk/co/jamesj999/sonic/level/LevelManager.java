@@ -165,7 +165,12 @@ public class LevelManager {
                     gameModule.getPlaneSwitcherObjectId(),
                     gameModule.getPlaneSwitcherConfig());
             objectManager = new ObjectManager(objectPlacementManager, gameModule.createObjectRegistry());
-            objectManager.reset(Camera.getInstance().getX(), level.getObjects());
+            // Reset camera state from previous level (signpost may have locked it)
+            Camera camera = Camera.getInstance();
+            camera.setFrozen(false);
+            camera.setMinX((short) 0);
+            camera.setMaxX((short) (level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH));
+            objectManager.reset(camera.getX(), level.getObjects());
             solidObjectManager = new SolidObjectManager(objectManager);
             solidObjectManager.reset();
             TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
@@ -1321,6 +1326,14 @@ public class LevelManager {
         return objectRenderManager;
     }
 
+    public RingRenderManager getRingRenderManager() {
+        return ringRenderManager;
+    }
+
+    public boolean areAllRingsCollected() {
+        return ringPlacementManager != null && ringPlacementManager.areAllCollected();
+    }
+
     public ObjectManager getObjectManager() {
         return objectManager;
     }
@@ -1366,17 +1379,25 @@ public class LevelManager {
             if (hasCheckpoint) {
                 player.setX((short) checkpointX);
                 player.setY((short) checkpointY);
+                LOGGER.info("Set player position from checkpoint: X=" + checkpointX + ", Y=" + checkpointY);
             } else {
                 player.setX((short) levelData.getStartXPos());
                 player.setY((short) levelData.getStartYPos());
+                LOGGER.info("Set player position from levelData: X=" + levelData.getStartXPos() +
+                        ", Y=" + levelData.getStartYPos() + " (level: " + levelData.name() + ")");
             }
 
             if (player instanceof AbstractPlayableSprite) {
                 AbstractPlayableSprite playable = (AbstractPlayableSprite) player;
+                // Full state reset first
+                playable.resetState();
+                // Then set specific values
                 playable.setXSpeed((short) 0);
                 playable.setYSpeed((short) 0);
                 playable.setGSpeed((short) 0);
                 playable.setAir(false);
+                LOGGER.info("Player state after loadCurrentLevel: air=" + playable.getAir() +
+                        ", ySpeed=" + playable.getYSpeed() + ", layer=" + player.getLayer());
                 playable.setRolling(false);
                 playable.setDead(false);
                 playable.setHurt(false);
@@ -1422,6 +1443,30 @@ public class LevelManager {
             currentAct = 0;
         }
         // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
+        loadCurrentLevel();
+    }
+
+    /**
+     * Advance to the next level in progression order.
+     * Unlike nextAct() which wraps, this advances to next zone when acts are
+     * exhausted.
+     * Called by results screen after tally completes.
+     */
+    public void advanceToNextLevel() throws IOException {
+        currentAct++;
+        if (currentAct >= levels.get(currentZone).size()) {
+            // Move to next zone
+            currentZone++;
+            currentAct = 0;
+            if (currentZone >= levels.size()) {
+                LOGGER.info("All zones complete!");
+                currentZone = 0; // Loop back for now - TODO: end game sequence
+            }
+        }
+        // Clear checkpoint when advancing
         if (checkpointState != null) {
             checkpointState.clear();
         }

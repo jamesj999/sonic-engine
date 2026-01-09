@@ -194,6 +194,31 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet signpostSheet = new ObjectSpriteSheet(signpostPatterns, signpostMappings, 0, 1);
         SpriteAnimationSet signpostAnimations = createSignpostAnimations();
 
+        // Results screen art (Obj3A)
+        // ROM mappings expect fixed VRAM tile bases for each chunk:
+        // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
+        // ResultsText (0x5B0), MiniCharacter (0x5F4).
+        // We build a pattern array aligned to VRAM_BASE_NUMBERS so that
+        // mapping tile indices can be offset by -VRAM_BASE_NUMBERS.
+        Pattern[] numbersPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_NUMBERS_ADDR, "Numbers");
+        Pattern[] perfectPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_PERFECT_ADDR, "PerfectText");
+        Pattern[] titleCardPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_TITLE_CARD_ADDR, "TitleCard");
+        Pattern[] resultsTextPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_RESULTS_TEXT_ADDR,
+                "ResultsText");
+        Pattern[] miniSonicPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MINI_SONIC_ADDR, "MiniSonic");
+
+        Pattern[] resultsPatterns = createResultsVramPatterns(
+                numbersPatterns,
+                perfectPatterns,
+                titleCardPatterns,
+                resultsTextPatterns,
+                miniSonicPatterns);
+
+        // Load mappings with offset relative to Numbers VRAM base (0x520)
+        List<SpriteMappingFrame> resultsMappings = loadMappingFramesWithTileOffset(
+                Sonic2Constants.MAPPINGS_EOL_TITLE_CARDS_ADDR, -Sonic2Constants.VRAM_BASE_NUMBERS);
+        ObjectSpriteSheet resultsSheet = new ObjectSpriteSheet(resultsPatterns, resultsMappings, 0, 1);
+
         cached = new ObjectArtData(
                 monitorSheet,
                 spikeSheet,
@@ -217,6 +242,7 @@ public class Sonic2ObjectArt {
                 animalSheet,
                 pointsSheet,
                 signpostSheet,
+                resultsSheet,
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations,
@@ -287,6 +313,68 @@ public class Sonic2ObjectArt {
                 int heightTiles = (size & 0x3) + 1;
 
                 int tileIndex = tileWord & 0x7FF;
+                boolean hFlip = (tileWord & 0x800) != 0;
+                boolean vFlip = (tileWord & 0x1000) != 0;
+                int paletteIndex = (tileWord >> 13) & 0x3;
+
+                pieces.add(new SpriteMappingPiece(
+                        xOffset, yOffset, widthTiles, heightTiles, tileIndex, hFlip, vFlip, paletteIndex));
+            }
+            frames.add(new SpriteMappingFrame(pieces));
+        }
+        return frames;
+    }
+
+    /**
+     * Loads mapping frames from ROM and applies a tile index offset to each piece.
+     * This allows ROM mappings that use VRAM tile indices to work with pattern
+     * arrays
+     * that start at index 0.
+     *
+     * @param mappingAddr ROM address of the mapping data
+     * @param tileOffset  Offset to add to each tile index (use negative to
+     *                    subtract)
+     */
+    private List<SpriteMappingFrame> loadMappingFramesWithTileOffset(int mappingAddr, int tileOffset) {
+        int offsetTableSize = reader.readU16BE(mappingAddr);
+        int frameCount = offsetTableSize / 2;
+        List<SpriteMappingFrame> frames = new ArrayList<>(frameCount);
+        for (int i = 0; i < frameCount; i++) {
+            // Read offset as signed 16-bit (negative offsets reference other mapping
+            // tables)
+            int rawOffset = reader.readU16BE(mappingAddr + i * 2);
+            int signedOffset = (rawOffset > 32767) ? rawOffset - 65536 : rawOffset;
+
+            // Skip frames with negative offsets (they reference shared mappings elsewhere)
+            // Create an empty placeholder frame for these
+            if (signedOffset < 0) {
+                frames.add(new SpriteMappingFrame(new ArrayList<>()));
+                continue;
+            }
+
+            int frameAddr = mappingAddr + signedOffset;
+            int pieceCount = reader.readU16BE(frameAddr);
+            frameAddr += 2;
+            List<SpriteMappingPiece> pieces = new ArrayList<>(pieceCount);
+            for (int p = 0; p < pieceCount; p++) {
+                int yOffset = (byte) reader.readU8(frameAddr);
+                frameAddr += 1;
+                int size = reader.readU8(frameAddr);
+                frameAddr += 1;
+                int tileWord = reader.readU16BE(frameAddr);
+                frameAddr += 2;
+                frameAddr += 2; // 2P tile word, unused in 1P.
+                int xOffset = (short) reader.readU16BE(frameAddr);
+                frameAddr += 2;
+
+                int widthTiles = ((size >> 2) & 0x3) + 1;
+                int heightTiles = (size & 0x3) + 1;
+
+                int tileIndex = (tileWord & 0x7FF) + tileOffset;
+                // Clamp to valid range
+                if (tileIndex < 0)
+                    tileIndex = 0;
+
                 boolean hFlip = (tileWord & 0x800) != 0;
                 boolean vFlip = (tileWord & 0x1000) != 0;
                 int paletteIndex = (tileWord >> 13) & 0x3;
@@ -798,12 +886,12 @@ public class Sonic2ObjectArt {
         sonicFlip.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x0C, true, false, 0));
         sonicFlip.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
 
-        frames.add(new SpriteMappingFrame(sonic));      // 0
-        frames.add(new SpriteMappingFrame(tails));      // 1
-        frames.add(new SpriteMappingFrame(eggman));     // 2
-        frames.add(new SpriteMappingFrame(blank));      // 3
-        frames.add(new SpriteMappingFrame(edge));       // 4
-        frames.add(new SpriteMappingFrame(sonicFlip));  // 5
+        frames.add(new SpriteMappingFrame(sonic)); // 0
+        frames.add(new SpriteMappingFrame(tails)); // 1
+        frames.add(new SpriteMappingFrame(eggman)); // 2
+        frames.add(new SpriteMappingFrame(blank)); // 3
+        frames.add(new SpriteMappingFrame(edge)); // 4
+        frames.add(new SpriteMappingFrame(sonicFlip)); // 5
 
         return frames;
     }
@@ -845,5 +933,55 @@ public class Sonic2ObjectArt {
         set.addScript(4, new SpriteAnimationScript(0x0F, List.of(1), SpriteAnimationEndAction.LOOP, 0));
 
         return set;
+    }
+
+    /**
+     * Creates a pattern array matching the fixed VRAM layout for the results screen.
+     * Each art chunk is placed at its exact VRAM tile base (relative to VRAM_BASE_NUMBERS).
+     */
+    private Pattern[] createResultsVramPatterns(
+            Pattern[] numbers,
+            Pattern[] perfect,
+            Pattern[] titleCard,
+            Pattern[] resultsText,
+            Pattern[] miniSonic) {
+        int base = Sonic2Constants.VRAM_BASE_NUMBERS;
+        int maxEnd = base;
+        maxEnd = Math.max(maxEnd, base + numbers.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_PERFECT + perfect.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_TITLE_CARD + titleCard.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_RESULTS_TEXT + resultsText.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_MINI_CHARACTER + miniSonic.length);
+
+        int totalSize = Math.max(0, maxEnd - base);
+        Pattern[] result = new Pattern[totalSize];
+
+        // Fill gaps with empty tiles so unmapped references stay blank.
+        Pattern emptyPattern = new Pattern();
+        Arrays.fill(result, emptyPattern);
+
+        copyPatterns(result, numbers, Sonic2Constants.VRAM_BASE_NUMBERS - base);
+        copyPatterns(result, perfect, Sonic2Constants.VRAM_BASE_PERFECT - base);
+        copyPatterns(result, titleCard, Sonic2Constants.VRAM_BASE_TITLE_CARD - base);
+        copyPatterns(result, resultsText, Sonic2Constants.VRAM_BASE_RESULTS_TEXT - base);
+        copyPatterns(result, miniSonic, Sonic2Constants.VRAM_BASE_MINI_CHARACTER - base);
+
+        return result;
+    }
+
+    private void copyPatterns(Pattern[] dest, Pattern[] src, int destPos) {
+        if (src == null || src.length == 0 || destPos >= dest.length) {
+            return;
+        }
+        if (destPos < 0) {
+            int skip = -destPos;
+            if (skip >= src.length) {
+                return;
+            }
+            src = Arrays.copyOfRange(src, skip, src.length);
+            destPos = 0;
+        }
+        int copyLen = Math.min(src.length, dest.length - destPos);
+        System.arraycopy(src, 0, dest, destPos, copyLen);
     }
 }

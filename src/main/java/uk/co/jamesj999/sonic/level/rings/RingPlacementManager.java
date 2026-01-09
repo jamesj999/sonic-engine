@@ -78,4 +78,16 @@ public class RingPlacementManager extends AbstractPlacementManager<RingSpawn> {
         active.retainAll(window);
         active.addAll(window);
     }
+
+    public int getTotalRingCount() {
+        return spawns.size();
+    }
+
+    public int getCollectedCount() {
+        return collected.cardinality();
+    }
+
+    public boolean areAllCollected() {
+        return !spawns.isEmpty() && collected.cardinality() >= spawns.size();
+    }
 }

@@ -48,6 +48,9 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet signpostSheet;
     private final SpriteAnimationSet signpostAnimations;
 
+    // Results screen
+    private final ObjectSpriteSheet resultsSheet;
+
     private final PatternSpriteRenderer monitorRenderer;
     private final PatternSpriteRenderer spikeRenderer;
     private final PatternSpriteRenderer spikeSideRenderer;
@@ -74,6 +77,9 @@ public class ObjectRenderManager {
 
     // Signpost renderer
     private final PatternSpriteRenderer signpostRenderer;
+
+    // Results screen renderer
+    private final PatternSpriteRenderer resultsRenderer;
 
     private final List<ObjectSpriteSheet> sheetOrder = new ArrayList<>();
     private final List<PatternSpriteRenderer> rendererOrder = new ArrayList<>();
@@ -159,6 +165,11 @@ public class ObjectRenderManager {
         // Signpost renderer
         this.signpostRenderer = new PatternSpriteRenderer(signpostSheet);
         register(signpostSheet, signpostRenderer);
+
+        // Results screen
+        this.resultsSheet = artData.resultsSheet();
+        this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
+        register(resultsSheet, resultsRenderer);
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -301,5 +312,13 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getSignpostAnimations() {
         return signpostAnimations;
+    }
+
+    public PatternSpriteRenderer getResultsRenderer() {
+        return resultsRenderer;
+    }
+
+    public ObjectSpriteSheet getResultsSheet() {
+        return resultsSheet;
     }
 }

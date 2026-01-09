@@ -5,8 +5,8 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
-import uk.co.jamesj999.sonic.level.Level;
 import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
@@ -39,7 +39,7 @@ public class SignpostObjectInstance extends BoxObjectInstance {
     private static final int STATE_SPINNING = 2;
     private static final int STATE_WALK_OFF = 4;
 
-    // Mapping frames as currently rendered (verified via art viewer)
+    // Mapping frames (verified via art viewer)
     // 0=Spin right, 1=Tails, 2=Sonic, 3=Eggman, 4=Side-on, 5=Spin left
     private static final int FRAME_SPIN_RIGHT = 0;
     private static final int FRAME_TAILS = 1;
@@ -48,37 +48,37 @@ public class SignpostObjectInstance extends BoxObjectInstance {
     private static final int FRAME_SIDE_ON = 4;
     private static final int FRAME_SPIN_LEFT = 5;
 
-    // Spin timing - based on ROM animation script
-    // Animation 1: $01, $02, $03, $04, $05, $01, $03, $04, $05, $00, $03, $04, $05,
-    // $FF
-    // That's delay=1, frames: 2,3,4,5,1,3,4,5,0,3,4,5 then loop
-    private static final int SPIN_FRAME_DELAY = 2; // Frames per animation step
-
-    private int routineState = STATE_IDLE;
-    private int mappingFrame = FRAME_EGGMAN; // Start with Eggman face
-    private int animTimer = 0;
-    private int spinFrameIndex = 0;
-    private int spinCycleCount = 0; // Track number of full spin cycles
-
-    // Walk-off state
-    private short groundLockY = 0;
-    private boolean resultsSpawned = false;
+    // Spin timing
+    private static final int SPIN_FRAME_DELAY = 2;
+    private static final int SPIN_CYCLES = 3;
+    private static final int WALK_OFF_OFFSET = 0x128;
 
     // Spinning animation frame sequence (Ani_obj0D mapped to current frames)
-    // Eggman -> spin -> Tails -> spin -> Sonic
     private static final int[] SPIN_FRAMES = {
             FRAME_EGGMAN, FRAME_SPIN_RIGHT, FRAME_SIDE_ON, FRAME_SPIN_LEFT,
             FRAME_TAILS, FRAME_SPIN_RIGHT, FRAME_SIDE_ON, FRAME_SPIN_LEFT,
             FRAME_SONIC, FRAME_SPIN_RIGHT, FRAME_SIDE_ON, FRAME_SPIN_LEFT
     };
 
-    // Number of cycles to spin before stopping (about 3 full rotations)
-    private static final int SPIN_CYCLES = 3;
-    // Amount past right boundary before results trigger (ROM uses $128).
-    private static final int WALK_OFF_OFFSET = 0x128;
+    // Sparkle effect timing and positions (from s2.asm Obj0D_RingSparklePositions)
+    private static final int SPARKLE_SPAWN_DELAY = 11;
+    private static final int[][] SPARKLE_POSITIONS = {
+            { -24, -16 }, { 8, 8 }, { -16, 0 }, { 24, -8 },
+            { 0, -8 }, { 16, 0 }, { -24, 8 }, { 24, 16 }
+    };
+
+    private int routineState = STATE_IDLE;
+    private int mappingFrame = FRAME_EGGMAN;
+    private int animTimer = 0;
+    private int spinFrameIndex = 0;
+    private int spinCycleCount = 0;
+    private int sparkleTimer = 0;
+    private int sparkleIndex = 0;
+
+    private short groundLockY = 0;
+    private boolean resultsSpawned = false;
 
     public SignpostObjectInstance(ObjectSpawn spawn, String name) {
-        // Collision box: width=24, height=40 (based on ROM)
         super(spawn, name, 24, 40, 0.3f, 0.8f, 0.3f, false);
     }
 
@@ -102,7 +102,6 @@ public class SignpostObjectInstance extends BoxObjectInstance {
     }
 
     private void checkPlayerPass(AbstractPlayableSprite player) {
-        // ROM: Check if player X is >= signpost X - $20
         int signpostX = spawn.x();
         int playerX = player.getX();
 
@@ -114,28 +113,26 @@ public class SignpostObjectInstance extends BoxObjectInstance {
     private void activateSignpost(AbstractPlayableSprite player) {
         LOGGER.info("Signpost activated at X=" + spawn.x());
 
-        // Play signpost sound
         try {
             AudioManager.getInstance().playSfx(Sonic2Constants.SndID_Signpost);
         } catch (Exception e) {
             LOGGER.warning("Failed to play signpost sound: " + e.getMessage());
         }
 
-        // Lock camera
         lockCamera();
 
-        // Start spinning - begin animation from first spin frame
         routineState = STATE_SPINNING;
         spinFrameIndex = 0;
         spinCycleCount = 0;
         animTimer = 0;
-        mappingFrame = SPIN_FRAMES[0]; // Start with first spin frame
+        sparkleTimer = 0;
+        sparkleIndex = 0;
+        mappingFrame = SPIN_FRAMES[0];
     }
 
     private void lockCamera() {
         Camera camera = Camera.getInstance();
         if (camera != null) {
-            // Lock camera at current position
             short camX = camera.getX();
             camera.setMinX(camX);
             camera.setMaxX(camX);
@@ -150,12 +147,10 @@ public class SignpostObjectInstance extends BoxObjectInstance {
             animTimer = 0;
             spinFrameIndex++;
 
-            // Check if we completed a cycle
             if (spinFrameIndex >= SPIN_FRAMES.length) {
                 spinFrameIndex = 0;
                 spinCycleCount++;
 
-                // After enough cycles, stop on Sonic face
                 if (spinCycleCount >= SPIN_CYCLES) {
                     mappingFrame = FRAME_SONIC;
                     routineState = STATE_WALK_OFF;
@@ -166,35 +161,45 @@ public class SignpostObjectInstance extends BoxObjectInstance {
 
             mappingFrame = SPIN_FRAMES[spinFrameIndex];
         }
+
+        // Spawn sparkle effects
+        spawnSparkleIfReady();
+    }
+
+    private void spawnSparkleIfReady() {
+        sparkleTimer++;
+        if (sparkleTimer >= SPARKLE_SPAWN_DELAY) {
+            sparkleTimer = 0;
+
+            int[] offset = SPARKLE_POSITIONS[sparkleIndex];
+            int sparkleX = spawn.x() + offset[0];
+            int sparkleY = spawn.y() + offset[1];
+
+            SignpostSparkleObjectInstance sparkle = new SignpostSparkleObjectInstance(sparkleX, sparkleY);
+            ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+            if (objectManager != null) {
+                objectManager.addDynamicObject(sparkle);
+            }
+
+            // Cycle through positions (ROM: addq.b #2, andi.b #$E => 0,2,4,6,0,2...)
+            sparkleIndex = (sparkleIndex + 1) % SPARKLE_POSITIONS.length;
+        }
     }
 
     private void updateWalkOff(AbstractPlayableSprite player) {
-        // Wait for player to land before forcing walk (ROM checks in_air flag)
-        if (player.getAir()) {
-            return;
-        }
-
-        // Lock player Y position to prevent falling off map
+        // Only need to set control lock once (ROM behavior)
         if (groundLockY == 0) {
-            groundLockY = player.getY();
-            LOGGER.fine("Locking player Y at " + groundLockY);
-
-            // Set Control_Locked + button_right_mask (ROM behavior)
-            // This forces the right button to be held
+            groundLockY = 1; // Just use as "initialized" flag
             player.setForceInputRight(true);
             player.setControlLocked(true);
+            LOGGER.fine("Walk-off initiated: forceInputRight=true, controlLocked=true");
         }
 
-        // Force player to stay on ground level
-        player.setY(groundLockY);
-        player.setYSpeed((short) 0);
-        player.setAir(false);
-
-        // Check if player is off-screen (right edge + offset)
+        // Check for off-screen transition
         Camera camera = Camera.getInstance();
-        if (camera != null) {
+        if (camera != null && !resultsSpawned) {
             int offScreenX = resolveRightLimit(camera);
-            if (resolvePlayerRenderRight(player) > offScreenX && !resultsSpawned) {
+            if (resolvePlayerRenderRight(player) > offScreenX) {
                 spawnResultsScreen(player);
             }
         }
@@ -241,18 +246,27 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         resultsSpawned = true;
         LOGGER.info("Player off-screen, triggering end of act sequence");
 
-        // Control remains locked until next level load (ROM Control_Locked).
-
-        // Play stage clear music (0x97)
         try {
             AudioManager.getInstance().playMusic(Sonic2Constants.MusID_StageClear);
         } catch (Exception e) {
             LOGGER.warning("Failed to play stage clear music: " + e.getMessage());
         }
 
-        // TODO: Spawn Obj3A (Results screen) when implemented
-        // TODO: Calculate time bonus, ring bonus
-        // TODO: Transition to next level after results
+        // Calculate elapsed time (simple approximation: frames / 60)
+        LevelManager levelManager = LevelManager.getInstance();
+        int elapsedSeconds = levelManager.getCurrentAct() > 0 ? 45 : 30; // Placeholder - TODO: implement proper timer
+        int ringCount = player.getRingCount();
+        int actNumber = levelManager.getCurrentAct() + 1; // 1-indexed for display
+        boolean allRingsCollected = levelManager != null && levelManager.areAllRingsCollected();
+
+        // Spawn the results screen
+        ResultsScreenObjectInstance resultsScreen = new ResultsScreenObjectInstance(
+                elapsedSeconds, ringCount, actNumber, allRingsCollected);
+        ObjectManager objectManager = levelManager.getObjectManager();
+        if (objectManager != null) {
+            objectManager.addDynamicObject(resultsScreen);
+            LOGGER.info("Results screen spawned");
+        }
     }
 
     @Override
