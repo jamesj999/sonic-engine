@@ -136,7 +136,7 @@ public class Sonic2PaletteCycleManager implements AnimatedPaletteManager {
                     continue;
                 }
                 Palette.Color color = palette.getColor(colorIndices[i]);
-                color.fromSegaFormat(new byte[] { data[dataIndex], data[dataIndex + 1] });
+                color.fromSegaFormat(data, dataIndex);
             }
         }
     }

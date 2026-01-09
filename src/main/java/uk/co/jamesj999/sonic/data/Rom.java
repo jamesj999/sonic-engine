@@ -22,6 +22,11 @@ public class Rom {
     private final static int INTERNATIONAL_NAME_LEN = 48;
     private final static int INTERNATIONAL_NAME_OFFSET = DOMESTIC_NAME_OFFSET + DOMESTIC_NAME_LEN;
 
+    // Pre-allocated buffers for small reads (avoid per-call allocations)
+    private final ByteBuffer buffer1 = ByteBuffer.allocate(1);
+    private final ByteBuffer buffer2 = ByteBuffer.allocate(2);
+    private final ByteBuffer buffer4 = ByteBuffer.allocate(4);
+
     public boolean open(String spath) {
         try {
             Path path = Path.of(spath);
@@ -29,7 +34,7 @@ public class Rom {
             fileChannel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE);
             return true;
         } catch (IOException e) {
-            //System.err.println("Error",e.getMessage());
+            // System.err.println("Error",e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -107,11 +112,11 @@ public class Rom {
     }
 
     public byte readByte(long offset) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(1);
+        buffer1.clear();
         fileChannel.position(offset);
-        fileChannel.read(buffer);
-        buffer.flip();
-        return buffer.get();
+        fileChannel.read(buffer1);
+        buffer1.flip();
+        return buffer1.get();
     }
 
     public byte[] readBytes(long offset, int count) throws IOException {
@@ -122,29 +127,29 @@ public class Rom {
     }
 
     public int read16BitAddr(long offset) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(2);
+        buffer2.clear();
         long fileSize = fileChannel.size();
         if (offset > fileSize) {
-            System.out.print("offset "+offset+" is longer than current fileSize " + fileSize);
+            System.out.print("offset " + offset + " is longer than current fileSize " + fileSize);
         }
         fileChannel.position(offset);
-        int bytesRead = fileChannel.read(buffer);
+        fileChannel.read(buffer2);
 
-        buffer.flip();
-        return (Byte.toUnsignedInt(buffer.get()) << 8) | Byte.toUnsignedInt(buffer.get());
+        buffer2.flip();
+        return (Byte.toUnsignedInt(buffer2.get()) << 8) | Byte.toUnsignedInt(buffer2.get());
     }
 
     public int read32BitAddr(long offset) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(4);
+        buffer4.clear();
         fileChannel.position(offset);
-        int bytesRead = fileChannel.read(buffer);
+        fileChannel.read(buffer4);
 
-        buffer.flip();
+        buffer4.flip();
 
-        int result = (Byte.toUnsignedInt(buffer.get()) << 24) |
-                (Byte.toUnsignedInt(buffer.get()) << 16) |
-                (Byte.toUnsignedInt(buffer.get()) << 8) |
-                        Byte.toUnsignedInt(buffer.get());
+        int result = (Byte.toUnsignedInt(buffer4.get()) << 24) |
+                (Byte.toUnsignedInt(buffer4.get()) << 16) |
+                (Byte.toUnsignedInt(buffer4.get()) << 8) |
+                Byte.toUnsignedInt(buffer4.get());
 
         return result;
     }

@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
+import uk.co.jamesj999.sonic.physics.TrigLookupTable;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.sprites.animation.ScriptedVelocityAnimationProfile;
@@ -555,7 +556,7 @@ public class PlayableSpriteMovementManager extends
 		} else {
 			friction = (short) (sprite.getFriction() / 2);
 			double gSpeedSign = Math.signum(gSpeed);
-			double angleSign = Math.signum(Math.sin(Math.toRadians(angle)));
+			double angleSign = Math.signum(TrigLookupTable.sinDeg(angle));
 			if (gSpeedSign == angleSign) {
 				slopeRunningVariant = 80;
 			} else {
@@ -566,7 +567,7 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed += slopeRunningVariant * Math.sin(Math.toRadians(angle));
+		gSpeed += slopeRunningVariant * TrigLookupTable.sinDeg(angle);
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
@@ -631,9 +632,9 @@ public class PlayableSpriteMovementManager extends
 		int angle = calculateAngle(sprite);
 		jumpPressed = true;
 		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()
-				* Math.sin(Math.toRadians(angle))));
+				* TrigLookupTable.sinDeg(angle)));
 		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
-				* Math.cos(Math.toRadians(angle))));
+				* TrigLookupTable.cosDeg(angle)));
 	}
 
 	/**
@@ -729,16 +730,16 @@ public class PlayableSpriteMovementManager extends
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(Math
-							.sin(Math.toRadians(angle)))));
+					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(
+							TrigLookupTable.sinDeg(angle))));
 				}
 			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
 					|| (originalAngle >= (byte) 0x20 && originalAngle <= (byte) 0x3F)) {
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * (Math.signum(Math.sin(Math
-							.toRadians(angle)))));
+					gSpeed = (short) (ySpeed * (Math.signum(
+							TrigLookupTable.sinDeg(angle))));
 				}
 			}
 		}
@@ -805,10 +806,10 @@ public class PlayableSpriteMovementManager extends
 		short gSpeed = sprite.getGSpeed();
 		int angle = calculateAngle(sprite);
 		sprite.setXSpeed((short) Math.round(gSpeed
-				* Math.cos(Math.toRadians(angle))));
+				* TrigLookupTable.cosDeg(angle)));
 
 		sprite.setYSpeed((short) Math.round(gSpeed
-				* Math.sin(Math.toRadians(angle))));
+				* TrigLookupTable.sinDeg(angle)));
 	}
 
 	private void jumpHandler(boolean jump) {

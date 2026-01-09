@@ -31,6 +31,12 @@ public class GraphicsManager {
 	private ShaderProgram debugShaderProgram;
 	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
 
+	// Batched rendering support - disabled for now due to sprite visibility issues
+	// The uniform caching optimization in ShaderProgram/PatternRenderCommand still
+	// provides benefit
+	private boolean batchingEnabled = false;
+	private BatchedPatternRenderer batchedRenderer;
+
 	public void registerCommand(GLCommandable command) {
 		commands.add(command);
 	}
@@ -41,6 +47,7 @@ public class GraphicsManager {
 	public void init(GL2 gl, String pixelShaderPath) throws IOException {
 		this.graphics = gl;
 		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load shaders
+		this.shaderProgram.cacheUniformLocations(gl); // Cache uniform locations for fast access
 		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
 	}
 
@@ -55,14 +62,25 @@ public class GraphicsManager {
 	 * Flush all registered commands.
 	 */
 	public void flush() {
+		if (commands.isEmpty() || graphics == null) {
+			return;
+		}
+
 		short cameraX = camera.getX();
 		short cameraY = camera.getY();
 		short cameraWidth = camera.getWidth();
 		short cameraHeight = camera.getHeight();
 
+		// Reset pattern render state for new batch of commands
+		PatternRenderCommand.resetFrameState();
+
 		for (GLCommandable command : commands) {
 			command.execute(graphics, cameraX, cameraY, cameraWidth, cameraHeight);
 		}
+
+		// Cleanup pattern render state after all commands
+		PatternRenderCommand.cleanupFrameState(graphics);
+
 		commands.clear();
 	}
 
@@ -169,10 +187,67 @@ public class GraphicsManager {
 			return;
 		}
 
-		// Register a PatternRenderCommand instead of directly rendering
-		PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
+		// Try batched rendering for better performance
+		// Only use batching if enabled, batch is active, and pattern was successfully
+		// added
+		boolean usedBatch = false;
+		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+			usedBatch = batchedRenderer.addPattern(patternTextureId, desc.getPaletteIndex(), desc, x, y);
+		}
 
-		registerCommand(command);
+		if (!usedBatch) {
+			// Fallback to individual commands
+			PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
+			registerCommand(command);
+		}
+	}
+
+	/**
+	 * Begin a new pattern batch. Call before rendering patterns for a frame/layer.
+	 */
+	public void beginPatternBatch() {
+		if (batchedRenderer == null) {
+			batchedRenderer = BatchedPatternRenderer.getInstance();
+		}
+		batchedRenderer.beginBatch();
+	}
+
+	/**
+	 * Flush the current pattern batch. Call after all patterns for a layer are
+	 * submitted. This queues the batch command for execution in the proper order.
+	 */
+	public void flushPatternBatch() {
+		if (batchedRenderer != null && !batchedRenderer.isEmpty()) {
+			GLCommandable batchCommand = batchedRenderer.endBatch();
+			if (batchCommand != null) {
+				registerCommand(batchCommand);
+			}
+		}
+	}
+
+	/**
+	 * Enable or disable pattern batching.
+	 */
+	public void setBatchingEnabled(boolean enabled) {
+		this.batchingEnabled = enabled;
+	}
+
+	public boolean isBatchingEnabled() {
+		return batchingEnabled;
+	}
+
+	/**
+	 * Get the combined palette texture ID.
+	 */
+	public Integer getCombinedPaletteTextureId() {
+		return combinedPaletteTextureId;
+	}
+
+	/**
+	 * Get the texture ID for a cached pattern.
+	 */
+	public Integer getPatternTextureId(int patternIndex) {
+		return patternTextureMap.get("pattern_" + patternIndex);
 	}
 
 	/**

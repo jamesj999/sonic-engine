@@ -25,7 +25,8 @@ public class GroundSensor extends Sensor {
         }
 
         byte mapLayer = 0;
-        SensorConfiguration sensorConfiguration = SpriteManager.getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), direction);
+        SensorConfiguration sensorConfiguration = SpriteManager
+                .getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), direction);
         boolean vertical = sensorConfiguration.vertical();
         Direction globalDirection = sensorConfiguration.direction();
 
@@ -33,8 +34,12 @@ public class GroundSensor extends Sensor {
         short xOffset = rotatedOffset[0];
         short yOffset = rotatedOffset[1];
 
-        short originalX = (short) (sprite.getCentreX() + xOffset + dx);
-        short originalY = (short) (sprite.getCentreY() + yOffset + dy);
+        // Cache sprite center coordinates to avoid repeated getter calls
+        int centreX = sprite.getCentreX();
+        int centreY = sprite.getCentreY();
+
+        short originalX = (short) (centreX + xOffset + dx);
+        short originalY = (short) (centreY + yOffset + dy);
 
         int solidityBitIndex = (globalDirection == Direction.DOWN)
                 ? sprite.getTopSolidBit()
@@ -76,19 +81,19 @@ public class GroundSensor extends Sensor {
     }
 
     private SensorResult scanTile(short originalX,
-                                  short originalY,
-                                  short checkX,
-                                  short checkY,
-                                  byte mapLayer,
-                                  int solidityBitIndex,
-                                  Direction direction,
-                                  boolean vertical) {
+            short originalY,
+            short checkX,
+            short checkY,
+            byte mapLayer,
+            int solidityBitIndex,
+            Direction direction,
+            boolean vertical) {
         ChunkDesc chunkDesc = levelManager.getChunkDescAt(mapLayer, checkX, checkY);
         SolidTile tile = getSolidTile(chunkDesc, solidityBitIndex);
         if (tile == null) {
             return null;
         }
-            byte metric = getMetric(tile, chunkDesc, checkX, checkY, vertical, direction);
+        byte metric = getMetric(tile, chunkDesc, checkX, checkY, vertical, direction);
         if (metric == 0) {
             return null;
         }
@@ -115,37 +120,41 @@ public class GroundSensor extends Sensor {
         return createResult(tile, chunkDesc, originalX, originalY, checkX, checkY, direction, vertical);
     }
 
-        private byte getMetric(SolidTile tile, ChunkDesc desc, int x, int y, boolean vertical, Direction direction) {
-            if (tile == null) return 0;
-            int index;
-            if (vertical) {
-                index = x & 0x0F;
-                if (desc != null && desc.getHFlip()) index = 15 - index;
-                byte metric = tile.getHeightAt((byte) index);
-                if (metric != 0 && metric != 16) {
-                    boolean invert = (desc != null && desc.getVFlip()) ^ (direction == Direction.UP);
-                    if (invert) {
-                        metric = (byte) (16 - metric);
-                    }
+    private byte getMetric(SolidTile tile, ChunkDesc desc, int x, int y, boolean vertical, Direction direction) {
+        if (tile == null)
+            return 0;
+        int index;
+        if (vertical) {
+            index = x & 0x0F;
+            if (desc != null && desc.getHFlip())
+                index = 15 - index;
+            byte metric = tile.getHeightAt((byte) index);
+            if (metric != 0 && metric != 16) {
+                boolean invert = (desc != null && desc.getVFlip()) ^ (direction == Direction.UP);
+                if (invert) {
+                    metric = (byte) (16 - metric);
                 }
-                return metric;
-            } else {
-                index = y & 0x0F;
-                if (desc != null && desc.getVFlip()) index = 15 - index;
-                byte metric = tile.getWidthAt((byte) index);
-                if (metric != 0 && metric != 16) {
-                    boolean invert = (desc != null && desc.getHFlip()) ^ (direction == Direction.LEFT);
-                    if (invert) {
-                        metric = (byte) (16 - metric);
-                    }
-                }
-                return metric;
             }
+            return metric;
+        } else {
+            index = y & 0x0F;
+            if (desc != null && desc.getVFlip())
+                index = 15 - index;
+            byte metric = tile.getWidthAt((byte) index);
+            if (metric != 0 && metric != 16) {
+                boolean invert = (desc != null && desc.getHFlip()) ^ (direction == Direction.LEFT);
+                if (invert) {
+                    metric = (byte) (16 - metric);
+                }
+            }
+            return metric;
         }
+    }
 
-        private SensorResult createResult(SolidTile tile, ChunkDesc desc, short originalX, short originalY, short checkX, short checkY, Direction direction, boolean vertical) {
-            byte metric = getMetric(tile, desc, checkX, checkY, vertical, direction);
-            byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction);
+    private SensorResult createResult(SolidTile tile, ChunkDesc desc, short originalX, short originalY, short checkX,
+            short checkY, Direction direction, boolean vertical) {
+        byte metric = getMetric(tile, desc, checkX, checkY, vertical, direction);
+        byte distance = calculateDistance(metric, originalX, originalY, checkX, checkY, direction);
 
         return createResultWithDistance(tile, desc, distance, direction);
     }
@@ -164,7 +173,8 @@ public class GroundSensor extends Sensor {
         return new SensorResult(angle, distance, index, direction);
     }
 
-    private byte calculateDistance(byte metric, short originalX, short originalY, short checkX, short checkY, Direction direction) {
+    private byte calculateDistance(byte metric, short originalX, short originalY, short checkX, short checkY,
+            Direction direction) {
         // Round down to block start
         short tileX = (short) (checkX & ~0x0F);
         short tileY = (short) (checkY & ~0x0F);

@@ -69,6 +69,11 @@ public class ParallaxManager {
     private int currentAct = -1;
     private boolean screenShakeFlag = false;
 
+    // Pre-allocated arrays to avoid per-frame allocations
+    private final int[] arzRowSpeeds = new int[16];
+    private final int[] mczSegScroll = new int[24];
+    private final int[] wfzOffsets = new int[4];
+
     private static ParallaxManager instance;
 
     public static synchronized ParallaxManager getInstance() {
@@ -330,7 +335,7 @@ public class ParallaxManager {
             int val = hScroll[i];
             short fg = (short) (val >> 16);
             short bg = (short) (val & 0xFFFF);
-            sb.append(String.format("Line %03d: FG=%d, BG=%d%n", i, fg, bg));
+            sb.append("Line ").append(i).append(": FG=").append(fg).append(", BG=").append(bg).append('\n');
         }
         LOGGER.info(sb.toString());
     }

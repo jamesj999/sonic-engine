@@ -368,7 +368,7 @@ public class LevelManager {
         int yTopBound = Math.max(drawY, 0);
         int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
 
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(256);
 
         // Iterate over the visible area of the level
         int count = 0;
@@ -421,7 +421,7 @@ public class LevelManager {
         int yTopBound = Math.max(drawY, 0);
         int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
 
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(256);
 
         // Iterate over the visible area of the level
         int count = 0;
@@ -474,13 +474,17 @@ public class LevelManager {
         }
 
         parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(256);
 
-        // Draw Background (Layer 1)
+        // Draw Background (Layer 1) - batched for performance
+        graphicsManager.beginPatternBatch();
         drawLayer(commands, 1, camera, 0.5f, 0.1f, TilePriorityPass.ALL, false);
+        graphicsManager.flushPatternBatch();
 
-        // Draw Foreground (Layer 0) low-priority pass
+        // Draw Foreground (Layer 0) low-priority pass - batched for performance
+        graphicsManager.beginPatternBatch();
         drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true);
+        graphicsManager.flushPatternBatch();
 
         if (!commands.isEmpty()) {
             graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
@@ -502,8 +506,10 @@ public class LevelManager {
             }
         }
 
-        // Draw Foreground (Layer 0) high-priority pass
+        // Draw Foreground (Layer 0) high-priority pass - batched for performance
+        graphicsManager.beginPatternBatch();
         drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
+        graphicsManager.flushPatternBatch();
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
             if (spriteRenderManager != null) {
@@ -970,7 +976,7 @@ public class LevelManager {
         int collisionCenterY = sprite.getCentreY();
         int renderCenterX = sprite.getRenderCentreX();
         int renderCenterY = sprite.getRenderCentreY();
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(128);
 
         if (mappingBounds.width() > 0 && mappingBounds.height() > 0) {
             int mapLeft = renderCenterX + mappingBounds.minX();
@@ -1035,7 +1041,7 @@ public class LevelManager {
 
     private void drawCameraBounds() {
         Camera camera = Camera.getInstance();
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(64);
 
         int camX = camera.getX();
         int camY = camera.getY();
