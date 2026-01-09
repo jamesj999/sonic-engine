@@ -454,14 +454,14 @@ public class DebugRenderer {
                 DebugObjectArtViewer viewer = DebugObjectArtViewer.getInstance();
                 List<String> lines = new ArrayList<>();
                 lines.add("== ART VIEWER ==");
-                lines.add("Target: Signpost");
+                lines.add("Target: " + viewer.getTargetLabel());
                 int maxFrames = viewer.getMaxFrames();
                 if (maxFrames > 0) {
                         lines.add(String.format("Frame: %d/%d", viewer.getFrameIndex(), maxFrames - 1));
                 } else {
                         lines.add("Frame: --");
                 }
-                lines.add("Keys: Left/Right");
+                lines.add("Keys: Left/Right, PgUp/PgDn");
 
                 int startX = uiX(baseWidth - 160);
                 int startY = uiY(baseHeight - 120);

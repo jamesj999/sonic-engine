@@ -4,10 +4,13 @@ import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
+import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpriteSheet;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -40,11 +43,13 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     private static final int WAIT_DURATION = 180; // 3 seconds after tally (B4 hex)
     private static final int TALLY_DECREMENT = 10; // Amount to subtract per tick
 
-    // Bonus calculation thresholds (seconds)
-    private static final int[][] TIME_BONUS_TABLE = {
-            { 30, 50000 }, { 45, 10000 }, { 60, 5000 }, { 90, 4000 },
-            { 120, 3000 }, { 180, 2000 }, { 240, 1000 }, { 300, 500 }
+    // Time bonus table from s2.asm (TimeBonuses), indexed by (seconds / 15)
+    private static final int[] TIME_BONUSES = {
+            5000, 5000, 1000, 500, 400, 400, 300, 300,
+            200, 200, 200, 200, 100, 100, 100, 100,
+            50, 50, 50, 50, 0
     };
+    private static final int PERFECT_BONUS_POINTS = 5000;
 
     private int state = STATE_SLIDE_IN;
     private int stateTimer = 0;
@@ -54,6 +59,7 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     private int ringBonus;
     private int totalBonus;
     private boolean perfectBonus;
+    private int perfectBonusRemaining;
 
     // Input data
     private final int elapsedTimeSeconds;
@@ -72,6 +78,12 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     // Current slide positions
     private int slideProgress = 0;
 
+    private int lastTimeBonus = Integer.MIN_VALUE;
+    private int lastRingBonus = Integer.MIN_VALUE;
+    private int lastTotalBonus = Integer.MIN_VALUE;
+    private int lastPerfectBonus = Integer.MIN_VALUE;
+    private final Pattern blankDigit = new Pattern();
+
     public ResultsScreenObjectInstance(int elapsedTimeSeconds, int ringCount, int actNumber, boolean allRingsCollected) {
         super(null, "results_screen");
         this.elapsedTimeSeconds = elapsedTimeSeconds;
@@ -86,23 +98,24 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     }
 
     private void calculateBonuses() {
-        // Time bonus - ROM's Load_EndOfAct logic
-        timeBonus = 0;
-        for (int[] threshold : TIME_BONUS_TABLE) {
-            if (elapsedTimeSeconds < threshold[0]) {
-                timeBonus = threshold[1];
-                break;
-            }
+        // Time bonus: index by (total seconds / 15)
+        int index = elapsedTimeSeconds / 15;
+        if (index < 0) {
+            index = 0;
+        } else if (index >= TIME_BONUSES.length) {
+            index = TIME_BONUSES.length - 1;
         }
+        timeBonus = TIME_BONUSES[index];
 
-        // Ring bonus: rings * 100
-        ringBonus = ringCount * 100;
+        // Ring bonus: rings * 10 (s2.asm Load_EndOfAct)
+        ringBonus = ringCount * 10;
 
-        // Perfect bonus: 50000 if all ring objects were collected in the act
+        // Perfect bonus: 5000 if all ring objects were collected in the act
         perfectBonus = allRingsCollected;
+        perfectBonusRemaining = perfectBonus ? PERFECT_BONUS_POINTS : 0;
 
-        // Total starts as sum of all bonuses
-        totalBonus = timeBonus + ringBonus + (perfectBonus ? 50000 : 0);
+        // Total starts at 0 and counts up as bonuses tally
+        totalBonus = 0;
     }
 
     @Override
@@ -128,11 +141,13 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
 
     private void updateTally() {
         boolean anyRemaining = false;
+        int totalIncrement = 0;
 
         // Decrement time bonus
         if (timeBonus > 0) {
             int decrement = Math.min(TALLY_DECREMENT, timeBonus);
             timeBonus -= decrement;
+            totalIncrement += decrement;
             anyRemaining = true;
         }
 
@@ -140,7 +155,20 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
         if (ringBonus > 0) {
             int decrement = Math.min(TALLY_DECREMENT, ringBonus);
             ringBonus -= decrement;
+            totalIncrement += decrement;
             anyRemaining = true;
+        }
+
+        // Decrement perfect bonus
+        if (perfectBonusRemaining > 0) {
+            int decrement = Math.min(TALLY_DECREMENT, perfectBonusRemaining);
+            perfectBonusRemaining -= decrement;
+            totalIncrement += decrement;
+            anyRemaining = true;
+        }
+
+        if (totalIncrement > 0) {
+            totalBonus += totalIncrement;
         }
 
         // Play tick sound every 4 frames
@@ -243,6 +271,7 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
 
         // Bonus display - only show after slide-in complete
         if (state >= STATE_TALLY) {
+            updateBonusPatterns(renderManager);
             // "TIME BONUS" (frame 10)
             renderer.drawFrameIndex(10, worldBaseX + SCREEN_CENTER_X, worldBaseY + TEXT_Y_TIME_BONUS, false, false);
 
@@ -257,6 +286,96 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
                 renderer.drawFrameIndex(14, worldBaseX + SCREEN_CENTER_X, worldBaseY + 144, false, false);
             }
         }
+    }
+
+    private void updateBonusPatterns(ObjectRenderManager renderManager) {
+        PatternSpriteRenderer renderer = renderManager.getResultsRenderer();
+        if (renderer == null) {
+            return;
+        }
+        Pattern[] digitPatterns = renderManager.getResultsHudDigitPatterns();
+        if (digitPatterns == null || digitPatterns.length < 20) {
+            return;
+        }
+        ObjectSpriteSheet resultsSheet = renderManager.getResultsSheet();
+        if (resultsSheet == null) {
+            return;
+        }
+        Pattern[] patterns = resultsSheet.getPatterns();
+        if (patterns == null || patterns.length < Sonic2Constants.RESULTS_BONUS_DIGIT_TILES) {
+            return;
+        }
+
+        int currentPerfect = perfectBonus ? perfectBonusRemaining : 0;
+        if (timeBonus == lastTimeBonus
+                && ringBonus == lastRingBonus
+                && totalBonus == lastTotalBonus
+                && currentPerfect == lastPerfectBonus) {
+            return;
+        }
+
+        ensureWritableDigitPatterns(patterns);
+        writeBonusValue(patterns, 0, totalBonus, digitPatterns);
+        writeBonusValue(patterns, Sonic2Constants.RESULTS_BONUS_DIGIT_GROUP_TILES, timeBonus, digitPatterns);
+        writeBonusValue(patterns, Sonic2Constants.RESULTS_BONUS_DIGIT_GROUP_TILES * 2, ringBonus, digitPatterns);
+        if (perfectBonus) {
+            writeBonusValue(patterns, Sonic2Constants.RESULTS_BONUS_DIGIT_GROUP_TILES * 3, perfectBonusRemaining,
+                    digitPatterns);
+        } else {
+            clearBonusValue(patterns, Sonic2Constants.RESULTS_BONUS_DIGIT_GROUP_TILES * 3);
+        }
+
+        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        renderer.updatePatternRange(graphicsManager, 0, Sonic2Constants.RESULTS_BONUS_DIGIT_TILES);
+
+        lastTimeBonus = timeBonus;
+        lastRingBonus = ringBonus;
+        lastTotalBonus = totalBonus;
+        lastPerfectBonus = currentPerfect;
+    }
+
+    private void ensureWritableDigitPatterns(Pattern[] patterns) {
+        for (int i = 0; i < Sonic2Constants.RESULTS_BONUS_DIGIT_TILES; i++) {
+            if (patterns[i] == null) {
+                patterns[i] = new Pattern();
+            }
+        }
+    }
+
+    private void clearBonusValue(Pattern[] dest, int startIndex) {
+        for (int i = 0; i < Sonic2Constants.RESULTS_BONUS_DIGIT_GROUP_TILES; i++) {
+            int target = startIndex + i;
+            if (target < dest.length) {
+                dest[target].copyFrom(blankDigit);
+            }
+        }
+    }
+
+    private void writeBonusValue(Pattern[] dest, int startIndex, int value, Pattern[] digits) {
+        int[] divisors = { 1000, 100, 10, 1 };
+        boolean hasDigit = false;
+        for (int i = 0; i < divisors.length; i++) {
+            int divisor = divisors[i];
+            int digit = value / divisor;
+            value %= divisor;
+            int tileIndex = startIndex + (i * 2);
+            if (digit != 0 || hasDigit) {
+                hasDigit = true;
+                copyDigit(dest, tileIndex, digit, digits);
+            } else {
+                dest[tileIndex].copyFrom(blankDigit);
+                dest[tileIndex + 1].copyFrom(blankDigit);
+            }
+        }
+    }
+
+    private void copyDigit(Pattern[] dest, int destIndex, int digit, Pattern[] digits) {
+        int srcIndex = digit * 2;
+        if (srcIndex + 1 >= digits.length || destIndex + 1 >= dest.length) {
+            return;
+        }
+        dest[destIndex].copyFrom(digits[srcIndex]);
+        dest[destIndex + 1].copyFrom(digits[srcIndex + 1]);
     }
 
     /**

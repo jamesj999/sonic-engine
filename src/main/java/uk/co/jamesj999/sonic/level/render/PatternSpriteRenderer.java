@@ -29,6 +29,20 @@ public class PatternSpriteRenderer {
         patternBase = basePatternIndex;
     }
 
+    public void updatePatternRange(GraphicsManager graphicsManager, int startIndex, int count) {
+        if (graphicsManager == null || patternBase < 0 || count <= 0) {
+            return;
+        }
+        Pattern[] patterns = spriteSheet.getPatterns();
+        int end = Math.min(patterns.length, startIndex + count);
+        for (int i = Math.max(0, startIndex); i < end; i++) {
+            graphicsManager.updatePatternTexture(patterns[i], patternBase + i);
+            if (i >= 0 && i < patternBoundsCache.length) {
+                patternBoundsCache[i] = null;
+            }
+        }
+    }
+
     public boolean isReady() {
         return patternBase >= 0;
     }

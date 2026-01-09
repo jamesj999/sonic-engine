@@ -8,13 +8,30 @@ import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import java.awt.event.KeyEvent;
 
 /**
- * Debug viewer for object art frames (currently signpost).
+ * Debug viewer for object art frames.
  */
 public class DebugObjectArtViewer {
     private static DebugObjectArtViewer instance;
 
+    private enum ArtTarget {
+        SIGNPOST("Signpost"),
+        RESULTS("Results");
+
+        private final String label;
+
+        ArtTarget(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+    }
+
     private int frameIndex = 0;
     private int maxFrames = 0;
+    private ArtTarget target = ArtTarget.SIGNPOST;
+    private final int[] targetFrameIndices = new int[ArtTarget.values().length];
 
     public static synchronized DebugObjectArtViewer getInstance() {
         if (instance == null) {
@@ -36,6 +53,12 @@ public class DebugObjectArtViewer {
         if (handler.isKeyPressed(KeyEvent.VK_RIGHT)) {
             stepFrame(1);
         }
+        if (handler.isKeyPressed(KeyEvent.VK_PAGE_UP)) {
+            stepTarget(-1);
+        }
+        if (handler.isKeyPressed(KeyEvent.VK_PAGE_DOWN)) {
+            stepTarget(1);
+        }
     }
 
     public void draw(ObjectRenderManager renderManager, Camera camera) {
@@ -45,11 +68,11 @@ public class DebugObjectArtViewer {
         if (!DebugOverlayManager.getInstance().isEnabled(DebugOverlayToggle.OBJECT_ART_VIEWER)) {
             return;
         }
-        PatternSpriteRenderer renderer = renderManager.getSignpostRenderer();
+        PatternSpriteRenderer renderer = getRenderer(renderManager);
         if (renderer == null || !renderer.isReady()) {
             return;
         }
-        int frameCount = renderManager.getSignpostSheet().getFrameCount();
+        int frameCount = getFrameCount(renderManager);
         setMaxFrames(frameCount);
         if (frameCount <= 0) {
             return;
@@ -59,12 +82,30 @@ public class DebugObjectArtViewer {
         renderer.drawFrameIndex(frameIndex, drawX, drawY, false, false);
     }
 
+    public String getTargetLabel() {
+        return target.label();
+    }
+
     public int getFrameIndex() {
         return frameIndex;
     }
 
     public int getMaxFrames() {
         return maxFrames;
+    }
+
+    private PatternSpriteRenderer getRenderer(ObjectRenderManager renderManager) {
+        return switch (target) {
+            case SIGNPOST -> renderManager.getSignpostRenderer();
+            case RESULTS -> renderManager.getResultsRenderer();
+        };
+    }
+
+    private int getFrameCount(ObjectRenderManager renderManager) {
+        return switch (target) {
+            case SIGNPOST -> renderManager.getSignpostSheet().getFrameCount();
+            case RESULTS -> renderManager.getResultsSheet().getFrameCount();
+        };
     }
 
     private void setMaxFrames(int maxFrames) {
@@ -89,5 +130,24 @@ public class DebugObjectArtViewer {
             next = 0;
         }
         frameIndex = next;
+    }
+
+    private void stepTarget(int delta) {
+        ArtTarget[] targets = ArtTarget.values();
+        if (targets.length == 0) {
+            return;
+        }
+        int current = target.ordinal();
+        int next = (current + delta) % targets.length;
+        if (next < 0) {
+            next += targets.length;
+        }
+        if (next == current) {
+            return;
+        }
+        targetFrameIndices[current] = frameIndex;
+        target = targets[next];
+        frameIndex = targetFrameIndices[target.ordinal()];
+        maxFrames = 0;
     }
 }

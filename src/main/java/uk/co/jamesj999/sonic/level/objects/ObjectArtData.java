@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.level.objects;
 
+import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
 
 /**
@@ -29,6 +30,7 @@ public record ObjectArtData(
         ObjectSpriteSheet pointsSheet,
         ObjectSpriteSheet signpostSheet,
         ObjectSpriteSheet resultsSheet,
+        Pattern[] resultsHudDigitPatterns,
         SpriteAnimationSet monitorAnimations,
         SpriteAnimationSet springAnimations,
         SpriteAnimationSet checkpointAnimations,

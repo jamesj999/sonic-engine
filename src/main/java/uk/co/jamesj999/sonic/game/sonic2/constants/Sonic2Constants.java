@@ -99,6 +99,9 @@ public class Sonic2Constants {
     public static final int SndID_TallyEnd = 0xC5; // Tally complete sound
 
     // Results Screen Art (Obj3A)
+    public static final int ART_UNC_HUD_NUMBERS_ADDR = 0x4134C; // Art_Hud (digits source)
+    public static final int ART_UNC_HUD_NUMBERS_SIZE = 0x300; // 24 tiles (10 digits x 2 tiles)
+    public static final int ART_NEM_HUD_ADDR = 0x7923E; // HUD.nem (SCORE/TIME/RING text)
     public static final int ART_NEM_TITLE_CARD_ADDR = 0x7D22C; // Title card.nem
     public static final int ART_NEM_RESULTS_TEXT_ADDR = 0x7E86A; // End of level results text.nem
     public static final int ART_NEM_MINI_SONIC_ADDR = 0x7C0AA; // Sonic continue.nem (mini character)
@@ -109,8 +112,11 @@ public class Sonic2Constants {
     public static final int VRAM_BASE_TITLE_CARD = 0x580; // ArtTile_ArtNem_TitleCard
     public static final int VRAM_BASE_RESULTS_TEXT = 0x5B0; // ArtTile_ArtNem_ResultsText
     public static final int VRAM_BASE_MINI_CHARACTER = 0x5F4; // ArtTile_ArtNem_MiniCharacter
+    public static final int VRAM_BASE_HUD_TEXT = 0x6CA; // ArtTile_ArtNem_HUD
+    public static final int RESULTS_BONUS_DIGIT_TILES = 32; // 4 counters * 4 digits * 2 tiles
+    public static final int RESULTS_BONUS_DIGIT_GROUP_TILES = 8; // 4 digits * 2 tiles
 
-    public static final int ART_NEM_NUMBERS_ADDR = 0x799AC; // Numbers.nem (bonus score digits)
+    public static final int ART_NEM_NUMBERS_ADDR = 0x799AC; // Numbers.nem (points)
 
     // EHZ Badnik Art (Nemesis compressed)
     public static final int ART_NEM_BUZZER_ADDR = 0x8316A; // 28 blocks

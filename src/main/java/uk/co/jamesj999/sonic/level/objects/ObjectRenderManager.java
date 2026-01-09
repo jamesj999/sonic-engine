@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
+import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
 
@@ -50,6 +51,7 @@ public class ObjectRenderManager {
 
     // Results screen
     private final ObjectSpriteSheet resultsSheet;
+    private final Pattern[] resultsHudDigitPatterns;
 
     private final PatternSpriteRenderer monitorRenderer;
     private final PatternSpriteRenderer spikeRenderer;
@@ -116,6 +118,10 @@ public class ObjectRenderManager {
         this.signpostSheet = artData.signpostSheet();
         this.signpostAnimations = artData.signpostAnimations();
 
+        // Results screen
+        this.resultsSheet = artData.resultsSheet();
+        this.resultsHudDigitPatterns = artData.resultsHudDigitPatterns();
+
         this.monitorRenderer = new PatternSpriteRenderer(monitorSheet);
         this.spikeRenderer = new PatternSpriteRenderer(spikeSheet);
         this.spikeSideRenderer = new PatternSpriteRenderer(spikeSideSheet);
@@ -167,7 +173,6 @@ public class ObjectRenderManager {
         register(signpostSheet, signpostRenderer);
 
         // Results screen
-        this.resultsSheet = artData.resultsSheet();
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
         register(resultsSheet, resultsRenderer);
     }
@@ -320,5 +325,9 @@ public class ObjectRenderManager {
 
     public ObjectSpriteSheet getResultsSheet() {
         return resultsSheet;
+    }
+
+    public Pattern[] getResultsHudDigitPatterns() {
+        return resultsHudDigitPatterns;
     }
 }

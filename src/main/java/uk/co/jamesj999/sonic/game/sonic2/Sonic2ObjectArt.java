@@ -200,23 +200,33 @@ public class Sonic2ObjectArt {
         // ResultsText (0x5B0), MiniCharacter (0x5F4).
         // We build a pattern array aligned to VRAM_BASE_NUMBERS so that
         // mapping tile indices can be offset by -VRAM_BASE_NUMBERS.
-        Pattern[] numbersPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_NUMBERS_ADDR, "Numbers");
+        Pattern[] hudDigitPatterns = safeLoadUncompressedPatterns(
+                Sonic2Constants.ART_UNC_HUD_NUMBERS_ADDR,
+                Sonic2Constants.ART_UNC_HUD_NUMBERS_SIZE,
+                "HUDNumbers");
+        Pattern[] hudTextPatterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_HUD_ADDR,
+                "HUDText");
         Pattern[] perfectPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_PERFECT_ADDR, "PerfectText");
         Pattern[] titleCardPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_TITLE_CARD_ADDR, "TitleCard");
         Pattern[] resultsTextPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_RESULTS_TEXT_ADDR,
                 "ResultsText");
         Pattern[] miniSonicPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MINI_SONIC_ADDR, "MiniSonic");
 
+        Pattern[] bonusDisplayPatterns = createBlankPatterns(Sonic2Constants.RESULTS_BONUS_DIGIT_TILES);
+
         Pattern[] resultsPatterns = createResultsVramPatterns(
-                numbersPatterns,
+                bonusDisplayPatterns,
                 perfectPatterns,
                 titleCardPatterns,
                 resultsTextPatterns,
-                miniSonicPatterns);
+                miniSonicPatterns,
+                hudTextPatterns);
 
         // Load mappings with offset relative to Numbers VRAM base (0x520)
         List<SpriteMappingFrame> resultsMappings = loadMappingFramesWithTileOffset(
                 Sonic2Constants.MAPPINGS_EOL_TITLE_CARDS_ADDR, -Sonic2Constants.VRAM_BASE_NUMBERS);
+        resultsPatterns = ensureResultsPatternCapacity(resultsPatterns, resultsMappings);
         ObjectSpriteSheet resultsSheet = new ObjectSpriteSheet(resultsPatterns, resultsMappings, 0, 1);
 
         cached = new ObjectArtData(
@@ -243,6 +253,7 @@ public class Sonic2ObjectArt {
                 pointsSheet,
                 signpostSheet,
                 resultsSheet,
+                hudDigitPatterns,
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations,
@@ -271,6 +282,37 @@ public class Sonic2ObjectArt {
         return patterns;
     }
 
+    private Pattern[] loadUncompressedPatterns(int artAddr, int length) throws IOException {
+        if (length <= 0) {
+            return new Pattern[0];
+        }
+        FileChannel channel = rom.getFileChannel();
+        channel.position(artAddr);
+        byte[] result = new byte[length];
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(result);
+        while (buffer.hasRemaining()) {
+            int read = channel.read(buffer);
+            if (read < 0) {
+                break;
+            }
+        }
+        if (buffer.hasRemaining()) {
+            throw new IOException("Unexpected EOF reading uncompressed art");
+        }
+        if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
+            throw new IOException("Inconsistent uncompressed art tile data");
+        }
+        int patternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
+        Pattern[] patterns = new Pattern[patternCount];
+        for (int i = 0; i < patternCount; i++) {
+            patterns[i] = new Pattern();
+            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
+                    (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
+            patterns[i].fromSegaFormat(subArray);
+        }
+        return patterns;
+    }
+
     /**
      * Safely loads Nemesis patterns, returning an empty array on failure.
      * Logs full stack trace for diagnosis without blocking other art.
@@ -285,6 +327,19 @@ public class Sonic2ObjectArt {
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE,
                     String.format("Failed to load art '%s' at 0x%06X", assetName, artAddr), e);
+            return new Pattern[0];
+        }
+    }
+
+    /**
+     * Safely loads uncompressed patterns, returning an empty array on failure.
+     */
+    private Pattern[] safeLoadUncompressedPatterns(int artAddr, int length, String assetName) {
+        try {
+            return loadUncompressedPatterns(artAddr, length);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,
+                    String.format("Failed to load uncompressed art '%s' at 0x%06X", assetName, artAddr), e);
             return new Pattern[0];
         }
     }
@@ -344,13 +399,6 @@ public class Sonic2ObjectArt {
             // tables)
             int rawOffset = reader.readU16BE(mappingAddr + i * 2);
             int signedOffset = (rawOffset > 32767) ? rawOffset - 65536 : rawOffset;
-
-            // Skip frames with negative offsets (they reference shared mappings elsewhere)
-            // Create an empty placeholder frame for these
-            if (signedOffset < 0) {
-                frames.add(new SpriteMappingFrame(new ArrayList<>()));
-                continue;
-            }
 
             int frameAddr = mappingAddr + signedOffset;
             int pieceCount = reader.readU16BE(frameAddr);
@@ -940,18 +988,20 @@ public class Sonic2ObjectArt {
      * Each art chunk is placed at its exact VRAM tile base (relative to VRAM_BASE_NUMBERS).
      */
     private Pattern[] createResultsVramPatterns(
-            Pattern[] numbers,
+            Pattern[] bonusDigits,
             Pattern[] perfect,
             Pattern[] titleCard,
             Pattern[] resultsText,
-            Pattern[] miniSonic) {
+            Pattern[] miniSonic,
+            Pattern[] hudText) {
         int base = Sonic2Constants.VRAM_BASE_NUMBERS;
         int maxEnd = base;
-        maxEnd = Math.max(maxEnd, base + numbers.length);
+        maxEnd = Math.max(maxEnd, base + bonusDigits.length);
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_PERFECT + perfect.length);
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_TITLE_CARD + titleCard.length);
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_RESULTS_TEXT + resultsText.length);
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_MINI_CHARACTER + miniSonic.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_HUD_TEXT + hudText.length);
 
         int totalSize = Math.max(0, maxEnd - base);
         Pattern[] result = new Pattern[totalSize];
@@ -960,13 +1010,46 @@ public class Sonic2ObjectArt {
         Pattern emptyPattern = new Pattern();
         Arrays.fill(result, emptyPattern);
 
-        copyPatterns(result, numbers, Sonic2Constants.VRAM_BASE_NUMBERS - base);
+        copyPatterns(result, bonusDigits, Sonic2Constants.VRAM_BASE_NUMBERS - base);
         copyPatterns(result, perfect, Sonic2Constants.VRAM_BASE_PERFECT - base);
         copyPatterns(result, titleCard, Sonic2Constants.VRAM_BASE_TITLE_CARD - base);
         copyPatterns(result, resultsText, Sonic2Constants.VRAM_BASE_RESULTS_TEXT - base);
         copyPatterns(result, miniSonic, Sonic2Constants.VRAM_BASE_MINI_CHARACTER - base);
+        copyPatterns(result, hudText, Sonic2Constants.VRAM_BASE_HUD_TEXT - base);
+
+        // Tile $6F0 is used as a trailing blank in the results mappings.
+        int trailingBlank = 0x6F0 - base;
+        if (trailingBlank >= 0 && trailingBlank < result.length) {
+            result[trailingBlank] = new Pattern();
+            if (trailingBlank + 1 < result.length) {
+                result[trailingBlank + 1] = new Pattern();
+            }
+        }
 
         return result;
+    }
+
+    private Pattern[] createBlankPatterns(int count) {
+        if (count <= 0) {
+            return new Pattern[0];
+        }
+        Pattern[] patterns = new Pattern[count];
+        for (int i = 0; i < count; i++) {
+            patterns[i] = new Pattern();
+        }
+        return patterns;
+    }
+
+    private Pattern[] ensureResultsPatternCapacity(Pattern[] patterns, List<SpriteMappingFrame> mappings) {
+        int maxTileIndex = computeMaxTileIndex(mappings);
+        if (maxTileIndex < 0 || maxTileIndex < patterns.length) {
+            return patterns;
+        }
+        Pattern[] expanded = new Pattern[maxTileIndex + 1];
+        Pattern emptyPattern = new Pattern();
+        Arrays.fill(expanded, emptyPattern);
+        System.arraycopy(patterns, 0, expanded, 0, Math.min(patterns.length, expanded.length));
+        return expanded;
     }
 
     private void copyPatterns(Pattern[] dest, Pattern[] src, int destPos) {
