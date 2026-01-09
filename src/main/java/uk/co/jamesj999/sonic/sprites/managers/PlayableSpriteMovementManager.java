@@ -668,9 +668,9 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 		// xSpeed = gSpeed;
-		if (ySpeed < 0 && ySpeed > -1024) {
+		if (ySpeed < 0 && ySpeed >= -1024 && !sprite.isHurt()) {
 			if (Math.abs(xSpeed) >= 32) {
-				xSpeed *= 0.96875;
+				xSpeed = (short) (xSpeed - (xSpeed / 32));
 			}
 		}
 		ySpeed += sprite.getGravity();
