@@ -152,13 +152,19 @@ public class Engine extends GLCanvas implements GLEventListener {
         public void update() {
                 AudioManager.getInstance().update();
                 timerManager.update();
-                spriteCollisionManager.update(inputHandler);
-                camera.updatePosition();
-                levelManager.update();
+                DebugOverlayManager.getInstance().updateInput(inputHandler);
+                DebugObjectArtViewer.getInstance().updateInput(inputHandler);
+                boolean freezeForArtViewer = DebugOverlayManager.getInstance()
+                                .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
+                if (!freezeForArtViewer) {
+                        spriteCollisionManager.update(inputHandler);
+                        camera.updatePosition();
+                        levelManager.update();
+                }
 
-		if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
-			try {
-				levelManager.nextAct();
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
+                        try {
+                                levelManager.nextAct();
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -169,11 +175,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 				levelManager.nextZone();
 			} catch (IOException e) {
 				throw new RuntimeException(e);
-			}
-		}
+                        }
+                }
 
-                DebugOverlayManager.getInstance().updateInput(inputHandler);
-                DebugObjectArtViewer.getInstance().updateInput(inputHandler);
                 inputHandler.update();
         }
 
@@ -196,10 +200,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// Run the GUI codes in the event-dispatching thread for thread safety
 		SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
-				// Create the OpenGL rendering canvas
-				GLCanvas canvas = new Engine();
-				SonicConfigurationService configService = SonicConfigurationService
-						.getInstance();
+                                // Create the OpenGL rendering canvas
+                                GLCanvas canvas = new Engine();
+                                canvas.setFocusTraversalKeysEnabled(false);
+                                SonicConfigurationService configService = SonicConfigurationService
+                                                .getInstance();
 				int width = configService
 						.getInt(SonicConfiguration.SCREEN_WIDTH);
 				int height = configService

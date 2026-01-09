@@ -84,6 +84,21 @@ public class PatternSpriteRenderer {
         drawFramePieces(pieces, originX, originY, hFlip, vFlip);
     }
 
+    public void drawPatternIndex(int patternIndex, int drawX, int drawY, int paletteIndex) {
+        if (patternBase < 0) {
+            return;
+        }
+        Pattern[] patterns = spriteSheet.getPatterns();
+        if (patternIndex < 0 || patternIndex >= patterns.length) {
+            return;
+        }
+        int palette = paletteIndex >= 0 ? paletteIndex : spriteSheet.getPaletteIndex();
+        int descIndex = (patternBase + patternIndex) & 0x7FF;
+        descIndex |= (palette & 0x3) << 13;
+        PatternDesc desc = new PatternDesc(descIndex);
+        GraphicsManager.getInstance().renderPattern(desc, drawX, drawY);
+    }
+
     private void cachePatterns(GraphicsManager graphicsManager, int basePatternIndex) {
         if (graphicsManager.getGraphics() == null) {
             return;

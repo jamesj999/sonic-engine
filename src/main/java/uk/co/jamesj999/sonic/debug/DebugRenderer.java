@@ -455,13 +455,22 @@ public class DebugRenderer {
                 List<String> lines = new ArrayList<>();
                 lines.add("== ART VIEWER ==");
                 lines.add("Target: " + viewer.getTargetLabel());
-                int maxFrames = viewer.getMaxFrames();
-                if (maxFrames > 0) {
-                        lines.add(String.format("Frame: %d/%d", viewer.getFrameIndex(), maxFrames - 1));
+                lines.add("Mode: " + viewer.getViewModeLabel());
+                if (viewer.isPatternMode()) {
+                        lines.add(String.format("Tile: %d", viewer.getPatternCursor()));
+                        lines.add(String.format("Page: %d-%d", viewer.getPatternPageStart(),
+                                        viewer.getPatternPageEnd()));
+                        lines.add("Palette: " + viewer.getPaletteLabel());
+                        lines.add("Keys: Arrows, Tab/M, PgUp/PgDn, 0-4");
                 } else {
-                        lines.add("Frame: --");
+                        int maxFrames = viewer.getMaxFrames();
+                        if (maxFrames > 0) {
+                                lines.add(String.format("Frame: %d/%d", viewer.getFrameIndex(), maxFrames - 1));
+                        } else {
+                                lines.add("Frame: --");
+                        }
+                        lines.add("Keys: Left/Right, Tab/M, PgUp/PgDn");
                 }
-                lines.add("Keys: Left/Right, PgUp/PgDn");
 
                 int startX = uiX(baseWidth - 160);
                 int startY = uiY(baseHeight - 120);
