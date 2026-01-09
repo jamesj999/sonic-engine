@@ -171,7 +171,7 @@ public abstract class AbstractSprite implements Sprite {
 			yPixel = updatedYPixel;
 			ySubpixel = updatedYSubpixel;
 		}
-		// System.out.println("x=" + xPixel + " y=" + yPixel);
+
 	}
 
 	public int getWidth() {

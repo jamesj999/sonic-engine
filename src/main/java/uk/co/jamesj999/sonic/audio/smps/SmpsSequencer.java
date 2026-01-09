@@ -8,8 +8,10 @@ import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.logging.Logger;
 
 public class SmpsSequencer implements AudioStream {
+    private static final Logger LOGGER = Logger.getLogger(SmpsSequencer.class.getName());
     private final AbstractSmpsData smpsData;
     private AbstractSmpsData fallbackVoiceData;
     private final byte[] data;
@@ -18,7 +20,6 @@ public class SmpsSequencer implements AudioStream {
     private final int tempoModBase;
     private final List<Track> tracks = new ArrayList<>();
     private final int z80Base;
-    private static final boolean DEBUG_FM_LOG = false;
 
     public enum Region {
         NTSC(60.0), PAL(50.0);
@@ -1200,10 +1201,8 @@ public class SmpsSequencer implements AudioStream {
             applyFmPanAmsFms(t);
 
             synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Always key on after latching frequency/pan
-            if (DEBUG_FM_LOG) {
-                System.out.println("FM KEY ON: chVal=" + Integer.toHexString(chVal) + " port=" + port + " fnum="
-                        + Integer.toHexString(fnum) + " block=" + block + " note=" + Integer.toHexString(t.note));
-            }
+            LOGGER.fine("FM KEY ON: chVal=" + Integer.toHexString(chVal) + " port=" + port + " fnum="
+                    + Integer.toHexString(fnum) + " block=" + block + " note=" + Integer.toHexString(t.note));
             t.tieNext = false;
 
         } else {
@@ -1479,10 +1478,8 @@ public class SmpsSequencer implements AudioStream {
         if (isSfx) {
             int chVal = (port == 0) ? ch : (ch + 4);
             synth.writeFm(this, 0, 0x28, 0xF0 | (chVal & 0x0F));
-            if (DEBUG_FM_LOG) {
-                System.out.println("FM KEY ON (freq latch): chVal=" + Integer.toHexString(chVal) + " fnum="
-                        + Integer.toHexString(fnum) + " block=" + block);
-            }
+            LOGGER.fine("FM KEY ON (freq latch): chVal=" + Integer.toHexString(chVal) + " fnum="
+                    + Integer.toHexString(fnum) + " block=" + block);
         }
     }
 

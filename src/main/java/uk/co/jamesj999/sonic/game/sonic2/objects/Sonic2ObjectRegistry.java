@@ -113,7 +113,7 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         loaded = true;
         namesById.putAll(Sonic2ObjectRegistryData.NAMES_BY_ID);
         registerDefaultFactories();
-        LOGGER.info("Loaded " + namesById.size() + " object name ids from built-in registry.");
+        LOGGER.fine("Loaded " + namesById.size() + " object name ids from built-in registry.");
     }
 
     private void registerDefaultFactories() {

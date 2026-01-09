@@ -6,11 +6,14 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Represents a ROM file for reading and writing.
  */
 public class Rom {
+    private static final Logger LOGGER = Logger.getLogger(Rom.class.getName());
 
     private FileChannel fileChannel;
     private final static int CHECKSUM_OFFSET = 0x018E;
@@ -30,12 +33,11 @@ public class Rom {
     public boolean open(String spath) {
         try {
             Path path = Path.of(spath);
-            System.out.println(path.toAbsolutePath().toString());
+            LOGGER.fine(path.toAbsolutePath().toString());
             fileChannel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE);
             return true;
         } catch (IOException e) {
-            // System.err.println("Error",e.getMessage());
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Failed to open ROM: " + spath, e);
             return false;
         }
     }
@@ -130,7 +132,7 @@ public class Rom {
         buffer2.clear();
         long fileSize = fileChannel.size();
         if (offset > fileSize) {
-            System.out.print("offset " + offset + " is longer than current fileSize " + fileSize);
+            LOGGER.fine("offset " + offset + " is longer than current fileSize " + fileSize);
         }
         fileChannel.position(offset);
         fileChannel.read(buffer2);
