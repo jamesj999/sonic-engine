@@ -36,12 +36,9 @@ public class HudRenderManager {
     // Priority is handled by draw order usually, but PatternDesc needs a priority
     // bit.
     // Assuming priority 1 (high).
-    // PatternDesc for standard HUD rendering (Palette 1, no flip, priority high?)
-    // Priority is handled by draw order usually, but PatternDesc needs a priority
-    // bit.
-    // Assuming priority 1 (high).
-    // P=1 (bit 15), Palette=1 (bits 13-14), VFlip=0 (bit 12), HFlip=0 (bit 11).
-    // 0x8000 | (1 << 13) = 0xA000
+    // Palette 0 for Sonic Icon (0x8000 = Priority 1, Pal 0)
+    private final PatternDesc iconPatternDesc = new PatternDesc(0x8000);
+    // Palette 1 for HUD Text (0xA000 = Priority 1, Pal 1)
     private final PatternDesc hudPatternDesc = new PatternDesc(0xA000);
 
     public HudRenderManager(GraphicsManager graphicsManager) {
@@ -49,6 +46,7 @@ public class HudRenderManager {
     }
 
     private int textPatternCount;
+    private int livesPatternCount;
 
     public void setDigitPatternIndex(int digitPatternIndex) {
         this.digitPatternIndex = digitPatternIndex;
@@ -59,6 +57,18 @@ public class HudRenderManager {
         this.textPatternIndex = textPatternIndex;
         this.textPatternCount = count;
         System.out.println("HudRenderManager Text Index: " + textPatternIndex + ", Count: " + count);
+    }
+
+    private int livesPatternIndex;
+    private int livesNumbersPatternIndex;
+
+    public void setLivesPatternIndex(int livesPatternIndex, int count) {
+        this.livesPatternIndex = livesPatternIndex;
+        this.livesPatternCount = count;
+    }
+
+    public void setLivesNumbersPatternIndex(int livesNumbersPatternIndex) {
+        this.livesNumbersPatternIndex = livesNumbersPatternIndex;
     }
 
     public void draw(LevelGamestate levelGamestate) {
@@ -72,23 +82,99 @@ public class HudRenderManager {
         // Draw Score
         drawHudString(16, 16, "SCORE");
         // Score: Ones digit at 104.
-        drawNumberRightAligned(64, 16, GameStateManager.getInstance().getScore(), 6);
+        drawScore(GameStateManager.getInstance().getScore());
 
         // Draw Time
         drawHudString(16, 32, "TIME");
-        // Time: Y=32.
-        String timeStr = levelGamestate.getTimer().getDisplayTime(); // M:SS
         boolean flash = levelGamestate.getTimer().shouldFlash();
         if (!flash) {
-            drawTime(56, 32, timeStr);
+            drawTime(56, 32, levelGamestate.getTimer().getDisplayTime());
         }
 
-        // Draw Rings
-        drawHudString(16, 48, "RINGS");
-        // Rings: Y=48.
-        drawNumberRightAligned(72, 48, levelGamestate.getRings(), 2);
+        drawCores(levelGamestate.getRings());
+        drawLives(uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getLives());
+    }
 
-        // drawDebugStrip();
+    private void drawCores(int rings) {
+        drawHudString(16, 48, "RINGS");
+        drawNumberRightAligned(64, 48, rings, 3);
+    }
+
+    private void drawScore(int score) {
+        drawHudString(16, 16, "SCORE");
+        drawNumberRightAligned(64, 16, score, 6);
+    }
+
+    private void drawLives(int lives) {
+        int camX = Camera.getInstance().getX();
+        int camY = Camera.getInstance().getY();
+
+        // Base position for Lives HUD (Bottom Left)
+        int baseX = 16;
+        int baseY = 208;
+
+        // Draw Icon (Sonic) - Palette 0 (iconPatternDesc)
+        // 16x16 icon composed of 4 tiles in column-major order (0,1,2,3)
+        // Top-Left (0)
+        renderSafe(livesPatternIndex + 0, iconPatternDesc, baseX + camX, baseY + camY);
+        // Bottom-Left (1)
+        renderSafe(livesPatternIndex + 1, iconPatternDesc, baseX + camX, baseY + camY + 8);
+        // Top-Right (2)
+        renderSafe(livesPatternIndex + 2, iconPatternDesc, baseX + camX + 8, baseY + camY);
+        // Bottom-Right (3)
+        renderSafe(livesPatternIndex + 3, iconPatternDesc, baseX + camX + 8, baseY + camY + 8);
+
+        // Draw Name "SONIC"
+        // S: 4
+        // O: 5 (Left), 7 (Right)
+        // N: 8 (Left), 10 (Right)
+        // I: 11 (Left), 12 (Right)
+        // C: 13
+
+        int drawX = baseX + 16;
+
+        // S (8px)
+        renderSafe(livesPatternIndex + 4, hudPatternDesc, drawX + camX, baseY + camY);
+        drawX += 8;
+
+        // O (16px)
+        renderSafe(livesPatternIndex + 6, hudPatternDesc, drawX + camX, baseY + camY);
+        renderSafe(livesPatternIndex + 9, hudPatternDesc, drawX + camX + 8, baseY + camY);
+        drawX += 8;
+
+        // N I-l(16px)
+        renderSafe(livesPatternIndex + 8, hudPatternDesc, drawX + camX, baseY + camY);
+        renderSafe(livesPatternIndex + 10, hudPatternDesc, drawX + camX + 8, baseY + camY);
+        drawX += 16;
+
+        // I-r C(8px)
+        renderSafe(livesPatternIndex + 11, hudPatternDesc, drawX + camX, baseY + camY);
+
+        // NEW LINE for X and Numbers
+        int line2Y = baseY + 8; // Next line
+        // Indent to align with text above? Or align with Icon?
+        // User said: "next to the currently-misplaced X".
+        // Usually X is roughly under the start of "SONIC".
+        int xDrawX = baseX + 16;
+
+        // Draw "X"
+        // X: 5 (Left), 7 (Right) (Swapped with O)
+        renderSafe(livesPatternIndex + 5, iconPatternDesc, xDrawX + camX, line2Y + camY); // X Left
+        renderSafe(livesPatternIndex + 7, iconPatternDesc, xDrawX + camX + 8, line2Y + camY); // X Right
+
+        // Gap after X
+        int numDrawX = xDrawX + 16 + 8; // 16 for X + 8 gap
+
+        // Numbers use livesNumbersPatternIndex and iconPatternDesc
+        // livesNumbersPatternIndex corresponds to '0'
+
+        if (livesNumbersPatternIndex > 0) {
+            String s = String.valueOf(lives);
+            for (int i = 0; i < s.length(); i++) {
+                int digit = s.charAt(i) - '0';
+                renderSafe(livesNumbersPatternIndex + digit, iconPatternDesc, numDrawX + camX + (i * 8), line2Y + camY);
+            }
+        }
     }
 
     private void drawHudString(int x, int y, String text) {
@@ -124,7 +210,7 @@ public class HudRenderManager {
             case 'T' -> 8;
             case 'M' -> 10;
             case 'E' -> 11;
-            case ':' -> 12; // Assuming colon might be next?
+            case ':' -> 12;
             default -> -1;
         };
     }

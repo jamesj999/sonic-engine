@@ -349,6 +349,23 @@ public class LevelManager {
             }
             hudRenderManager.setTextPatternIndex(textBaseIndex, hudText.length);
 
+            int livesBaseIndex = textBaseIndex + hudText.length;
+            Pattern[] hudLives = artData.getHudLivesPatterns();
+            LOGGER.info("Cached " + hudLives.length + " HUD Lives patterns at index " + livesBaseIndex);
+            for (int i = 0; i < hudLives.length; i++) {
+                graphicsManager.cachePatternTexture(hudLives[i], livesBaseIndex + i);
+            }
+            hudRenderManager.setLivesPatternIndex(livesBaseIndex, hudLives.length);
+
+            int livesNumbersBaseIndex = livesBaseIndex + hudLives.length;
+            Pattern[] hudLivesNumbers = artData.getHudLivesNumbers();
+            LOGGER.info("Cached " + hudLivesNumbers.length + " HUD Lives Numbers patterns at index "
+                    + livesNumbersBaseIndex);
+            for (int i = 0; i < hudLivesNumbers.length; i++) {
+                graphicsManager.cachePatternTexture(hudLivesNumbers[i], livesNumbersBaseIndex + i);
+            }
+            hudRenderManager.setLivesNumbersPatternIndex(livesNumbersBaseIndex);
+
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load object art.", e);
             objectRenderManager = null;
@@ -1448,7 +1465,7 @@ public class LevelManager {
                 playable.setHighPriority(false);
                 playable.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
 
-                // Clear rings on respawn (ROM behavior)
+                // Clear rings on spawn (ROM behavior)
                 playable.setRingCount(0);
 
                 // Reset speed shoes effect and music tempo

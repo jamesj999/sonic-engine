@@ -100,7 +100,9 @@ public class Sonic2Constants {
 
     // Results Screen Art (Obj3A)
     public static final int ART_UNC_HUD_NUMBERS_ADDR = 0x4134C; // Art_Hud (digits source)
-    public static final int ART_UNC_HUD_NUMBERS_SIZE = 0x300; // 24 tiles (10 digits x 2 tiles)
+    public static final int ART_UNC_HUD_NUMBERS_SIZE = 0x300; // 24 tiles (10 digits x 2 tiles + extras?)
+    public static final int ART_UNC_LIVES_NUMBERS_ADDR = 0x4164C; // Small numbers for lives counter
+    public static final int ART_UNC_LIVES_NUMBERS_SIZE = 320; // 10 tiles (0-9)
     public static final int ART_NEM_HUD_ADDR = 0x7923E; // HUD.nem (SCORE/TIME/RING text)
     public static final int ART_NEM_TITLE_CARD_ADDR = 0x7D22C; // Title card.nem
     public static final int ART_NEM_RESULTS_TEXT_ADDR = 0x7E86A; // End of level results text.nem
