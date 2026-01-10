@@ -6,7 +6,7 @@
 
     <groupId>uk.co.jamesj999</groupId>
     <artifactId>sonic-engine</artifactId>
-    <version>0.05-BETA</version>
+    <version>0.1.20260110</version>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
