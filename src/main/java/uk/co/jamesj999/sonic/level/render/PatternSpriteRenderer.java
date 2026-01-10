@@ -93,10 +93,13 @@ public class PatternSpriteRenderer {
             return;
         }
         int palette = paletteIndex >= 0 ? paletteIndex : spriteSheet.getPaletteIndex();
-        int descIndex = (patternBase + patternIndex) & 0x7FF;
+        int fullPatternId = patternBase + patternIndex;
+        // Build PatternDesc with masked index (for flip/palette flags)
+        int descIndex = fullPatternId & 0x7FF;
         descIndex |= (palette & 0x3) << 13;
         PatternDesc desc = new PatternDesc(descIndex);
-        GraphicsManager.getInstance().renderPattern(desc, drawX, drawY);
+        // Use full pattern ID for texture lookup (avoids 11-bit limit)
+        GraphicsManager.getInstance().renderPatternWithId(fullPatternId, desc, drawX, drawY);
     }
 
     private void cachePatterns(GraphicsManager graphicsManager, int basePatternIndex) {
@@ -137,6 +140,7 @@ public class PatternSpriteRenderer {
                     hFlip,
                     vFlip,
                     (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
+                        // Build PatternDesc with masked index (for flip/palette flags)
                         int descIndex = patternIndex & 0x7FF;
                         if (pieceHFlip) {
                             descIndex |= 0x800;
@@ -146,7 +150,8 @@ public class PatternSpriteRenderer {
                         }
                         descIndex |= (paletteIndex & 0x3) << 13;
                         PatternDesc desc = new PatternDesc(descIndex);
-                        GraphicsManager.getInstance().renderPattern(desc, drawX, drawY);
+                        // Use full patternIndex for texture lookup (avoids 11-bit limit)
+                        GraphicsManager.getInstance().renderPatternWithId(patternIndex, desc, drawX, drawY);
                     });
         }
     }

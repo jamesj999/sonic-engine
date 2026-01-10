@@ -111,7 +111,7 @@ public class Sonic2ObjectArt {
 
         Pattern[] explosionPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_EXPLOSION_ADDR, "Explosion");
         List<SpriteMappingFrame> explosionMappings = createExplosionMappings();
-        ObjectSpriteSheet explosionSheet = new ObjectSpriteSheet(explosionPatterns, explosionMappings, 0, 1);
+        ObjectSpriteSheet explosionSheet = new ObjectSpriteSheet(explosionPatterns, explosionMappings, 1, 1);
 
         Pattern[] shieldPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SHIELD_ADDR, "Shield");
         List<SpriteMappingFrame> shieldMappings = createShieldMappings();
@@ -984,8 +984,10 @@ public class Sonic2ObjectArt {
     }
 
     /**
-     * Creates a pattern array matching the fixed VRAM layout for the results screen.
-     * Each art chunk is placed at its exact VRAM tile base (relative to VRAM_BASE_NUMBERS).
+     * Creates a pattern array matching the fixed VRAM layout for the results
+     * screen.
+     * Each art chunk is placed at its exact VRAM tile base (relative to
+     * VRAM_BASE_NUMBERS).
      */
     private Pattern[] createResultsVramPatterns(
             Pattern[] bonusDigits,
@@ -1002,6 +1004,8 @@ public class Sonic2ObjectArt {
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_RESULTS_TEXT + resultsText.length);
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_MINI_CHARACTER + miniSonic.length);
         maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_HUD_TEXT + hudText.length);
+        // Include space for trailing blank at $6F0-$6F1 (used in results mappings)
+        maxEnd = Math.max(maxEnd, 0x6F2);
 
         int totalSize = Math.max(0, maxEnd - base);
         Pattern[] result = new Pattern[totalSize];

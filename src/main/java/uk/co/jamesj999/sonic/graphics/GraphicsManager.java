@@ -176,11 +176,19 @@ public class GraphicsManager {
 	 * palette.
 	 */
 	public void renderPattern(PatternDesc desc, int x, int y) {
-		Integer patternTextureId = patternTextureMap.get("pattern_" + desc.getPatternIndex());
+		renderPatternWithId(desc.getPatternIndex(), desc, x, y);
+	}
+
+	/**
+	 * Render a pattern using an explicit pattern ID for texture lookup.
+	 * This allows using pattern IDs beyond the 11-bit limit of PatternDesc.
+	 */
+	public void renderPatternWithId(int patternId, PatternDesc desc, int x, int y) {
+		Integer patternTextureId = patternTextureMap.get("pattern_" + patternId);
 		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
 
 		if (patternTextureId == null || paletteTextureId == null) {
-			System.err.println("Pattern or Palette not cached. Pattern: " + desc.getPatternIndex() + ", Palette: "
+			System.err.println("Pattern or Palette not cached. Pattern: " + patternId + ", Palette: "
 					+ desc.getPaletteIndex());
 			return;
 		}

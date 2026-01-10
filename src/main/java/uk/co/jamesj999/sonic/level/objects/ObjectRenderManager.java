@@ -7,11 +7,14 @@ import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Caches and renders ROM-backed object art (springs, spikes, monitors).
  */
 public class ObjectRenderManager {
+    private static final Logger LOGGER = Logger.getLogger(ObjectRenderManager.class.getName());
+
     public enum SpringVariant {
         VERTICAL,
         HORIZONTAL,
@@ -172,7 +175,7 @@ public class ObjectRenderManager {
         this.signpostRenderer = new PatternSpriteRenderer(signpostSheet);
         register(signpostSheet, signpostRenderer);
 
-        // Results screen
+        // Results screen - registered last
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
         register(resultsSheet, resultsRenderer);
     }
@@ -188,6 +191,12 @@ public class ObjectRenderManager {
             ObjectSpriteSheet sheet = sheetOrder.get(i);
             PatternSpriteRenderer renderer = rendererOrder.get(i);
             int count = sheet.getPatterns().length;
+            // Debug: log all renderers to see pattern allocation
+            String name = renderer == resultsRenderer ? "Results" :
+                         renderer == explosionRenderer ? "Explosion" :
+                         renderer == monitorRenderer ? "Monitor" :
+                         "Renderer" + i;
+            LOGGER.info(name + ": base=" + next + ", count=" + count + ", max=" + (next + count - 1));
             renderer.ensurePatternsCached(graphicsManager, next);
             next += count;
         }
