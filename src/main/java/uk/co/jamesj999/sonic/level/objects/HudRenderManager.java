@@ -3,7 +3,6 @@ package uk.co.jamesj999.sonic.level.objects;
 import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 import uk.co.jamesj999.sonic.camera.Camera;
 
@@ -80,28 +79,40 @@ public class HudRenderManager {
         // GameStateManager.getInstance().getScore());
 
         // Draw Score
-        drawHudString(16, 16, "SCORE");
+        drawHudString(16, 16, "SCORE", hudPatternDesc);
         // Score: Ones digit at 104.
         drawScore(GameStateManager.getInstance().getScore());
 
         // Draw Time
-        drawHudString(16, 32, "TIME");
-        boolean flash = levelGamestate.getTimer().shouldFlash();
-        if (!flash) {
-            drawTime(56, 32, levelGamestate.getTimer().getDisplayTime());
-        }
+        boolean flashTime = levelGamestate.getTimer().shouldFlash();
+        drawHudString(16, 32, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
+        drawTime(56, 32, levelGamestate.getTimer().getDisplayTime());
 
-        drawCores(levelGamestate.getRings());
+        drawCores(levelGamestate.getRings(), levelGamestate.getTimer().getFlashCycle());
         drawLives(uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getLives());
     }
 
-    private void drawCores(int rings) {
-        drawHudString(16, 48, "RINGS");
+    private void drawCores(int rings, boolean flashCycle) {
+        boolean flash = (rings == 0);
+        PatternDesc desc = (flash && flashCycle) ? iconPatternDesc : hudPatternDesc;
+        drawHudString(16, 48, "RINGS", desc);
         drawNumberRightAligned(64, 48, rings, 3);
     }
 
     private void drawScore(int score) {
-        drawHudString(16, 16, "SCORE");
+        // "SCORE" already drawn in main draw loop to group label logic?
+        // No, invalidating previous lines logic if I just change draw().
+        // Wait, original code had `drawHudString` inside `drawScore`.
+        // I removed it in my replacement block above?
+        // Let's look at the original code structure:
+        // draw() called drawHudString("SCORE"), then drawScore().
+        // default drawScore() had: drawHudString("SCORE") inside it!
+        // That's redundant double drawing in the original code?
+        // Line 83: drawHudString(.., "SCORE")
+        // Line 104 (inside drawScore): drawHudString(.., "SCORE")
+        // Yes, the original code double-drew "SCORE".
+        // I will fix this cleanliness issue while I am here.
+
         drawNumberRightAligned(64, 16, score, 6);
     }
 
@@ -177,7 +188,7 @@ public class HudRenderManager {
         }
     }
 
-    private void drawHudString(int x, int y, String text) {
+    private void drawHudString(int x, int y, String text, PatternDesc patternDesc) {
         int camX = Camera.getInstance().getX();
         int camY = Camera.getInstance().getY();
         for (int i = 0; i < text.length(); i++) {
@@ -189,8 +200,8 @@ public class HudRenderManager {
                 // Indices 1, 3, 5...
                 // If indices 0, 2, 4 were bottoms, text would be upside down in a linear strip.
                 // Standard Nemesis/Interleaved is Top then Bottom.
-                renderSafe(textPatternIndex + (patternId * 2), hudPatternDesc, x + camX + (i * 8), y + camY);
-                renderSafe(textPatternIndex + (patternId * 2) + 1, hudPatternDesc, x + camX + (i * 8), y + camY + 8);
+                renderSafe(textPatternIndex + (patternId * 2), patternDesc, x + camX + (i * 8), y + camY);
+                renderSafe(textPatternIndex + (patternId * 2) + 1, patternDesc, x + camX + (i * 8), y + camY + 8);
             }
         }
     }

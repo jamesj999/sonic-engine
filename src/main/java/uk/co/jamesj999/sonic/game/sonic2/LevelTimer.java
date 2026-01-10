@@ -73,7 +73,11 @@ public class LevelTimer {
         if (getMinutes() < FLASH_THRESHOLD_MINUTES) {
             return false;
         }
-        // Simple blink: ON for 16 frames, OFF for 16 frames
-        return (totalFrames / 16) % 2 == 0;
+        return getFlashCycle();
+    }
+
+    public boolean getFlashCycle() {
+        // Simple blink: ON for 8 frames, OFF for 8 frames (faster blink)
+        return (totalFrames / 8) % 2 == 0;
     }
 }
