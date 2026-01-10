@@ -532,4 +532,81 @@ public class TestPlayableSpriteMovementManager {
                 assertTrue("Jump should have used original angle for velocity calculation",
                                 mockSprite.getXSpeed() != 0 || mockSprite.getYSpeed() != 0);
         }
+
+        /**
+         * Test that air control is disabled when sprite is in hurt/knockback state.
+         * Per SPG, Sonic should not have air control whilst in hurting state
+         * (after taking damage but before landing on the ground).
+         */
+        @Test
+        public void testNoAirControlWhenHurt() throws Exception {
+                // Setup: In air, hurt state, with some initial xSpeed
+                mockSprite.setAir(true);
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500); // Falling (outside air drag range)
+                mockSprite.setHurt(true); // Hurt/knockback state
+                mockSprite.setRollingJump(false); // Not a rolling jump
+
+                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
+                method.setAccessible(true);
+
+                // Act: Try to control left
+                method.invoke(manager, mockSprite, true, false);
+
+                // Assert: xSpeed should remain unchanged (no air control when hurt)
+                assertEquals("No air control when hurt - left input should not change xSpeed",
+                                (short) 1000, mockSprite.getXSpeed());
+
+                // Reset and test right input
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500);
+
+                // Act: Try to control right
+                method.invoke(manager, mockSprite, false, true);
+
+                // Assert: xSpeed should remain unchanged (no air control when hurt)
+                assertEquals("No air control when hurt - right input should not change xSpeed",
+                                (short) 1000, mockSprite.getXSpeed());
+        }
+
+        /**
+         * Test that air control DOES work when not hurt (normal air control).
+         * This is the counterpart to testNoAirControlWhenHurt to ensure we didn't
+         * accidentally break normal air control.
+         */
+        @Test
+        public void testAirControlWorksWhenNotHurt() throws Exception {
+                // Setup: In air, NOT hurt, with some initial xSpeed
+                mockSprite.setAir(true);
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500); // Falling (outside air drag range)
+                mockSprite.setHurt(false); // NOT hurt
+                mockSprite.setRollingJump(false); // Not a rolling jump
+
+                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
+                method.setAccessible(true);
+
+                // Act: Control left
+                method.invoke(manager, mockSprite, true, false);
+
+                // Assert: xSpeed should decrease (air control works)
+                // Air acceleration is 2 * runAccel = 2 * 12 = 24
+                // 1000 - 24 = 976
+                assertEquals("Air control should work when not hurt - left input decreases xSpeed",
+                                (short) 976, mockSprite.getXSpeed());
+
+                // Reset and test right input
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500);
+
+                // Act: Control right
+                method.invoke(manager, mockSprite, false, true);
+
+                // Assert: xSpeed should increase (air control works)
+                // 1000 + 24 = 1024
+                assertEquals("Air control should work when not hurt - right input increases xSpeed",
+                                (short) 1024, mockSprite.getXSpeed());
+        }
 }

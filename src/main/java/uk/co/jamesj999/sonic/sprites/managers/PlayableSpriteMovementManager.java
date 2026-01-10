@@ -727,7 +727,9 @@ public class PlayableSpriteMovementManager extends
 		// In the air
 		// SPG: In Sonic 1, 2, 3, and Knuckles, you can't control the Player's
 		// trajectory through the air with the buttons if you jump while rolling.
-		if (!sprite.getRollingJump()) {
+		// SPG: Additionally, air control is disabled while in the hurt/knockback state
+		// (after taking damage but before landing on the ground).
+		if (!sprite.getRollingJump() && !sprite.isHurt()) {
 			if (left) {
 				if (xSpeed - (2 * runAccel) < -max) {
 					xSpeed = (short) -max;
