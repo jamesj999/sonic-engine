@@ -626,10 +626,13 @@ public class PlayableSpriteMovementManager extends
 	 *               The sprite in question
 	 */
 	private void jump(AbstractPlayableSprite sprite) {
+		// CRITICAL: Calculate angle BEFORE setAir(true), because setAir(true) resets
+		// the angle to 0. We need the terrain angle from the current ground position
+		// to calculate the correct jump direction for slopes in all ground modes.
+		int angle = calculateAngle(sprite);
 		sprite.setAir(true);
 		sprite.setRolling(true);
 		audioManager.playSfx(GameSound.JUMP);
-		int angle = calculateAngle(sprite);
 		jumpPressed = true;
 		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()
 				* TrigLookupTable.sinDeg(angle)));
