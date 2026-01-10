@@ -1,7 +1,8 @@
 ============
 sonic-engine
 ============
-
+>This project is a work in progress, for the current state please see the latest version in the Releases section of this
+document
 
 Introduction
 ============
@@ -10,12 +11,9 @@ The Hedgehog games for Sega Mega Drive (Genesis). It will be capable of loading 
 the games and providing a pixel-perfect gameplay experience of the original games. It will also provide more modern features,
 such as a level editor, and an open framework allowing for modding and customisation.
 
->This project is a work in progress, for the current state please see the latest version in the Releases section of this
-document
-
 Configuration
 =============
-The engine current makes limited use of config.json to hold some basic configurations. Change these at your own risk.
+The engine currently makes limited use of config.json to hold some basic configurations. Change these at your own risk.
 
 Controls
 ========
