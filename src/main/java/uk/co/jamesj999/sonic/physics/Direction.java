@@ -6,22 +6,11 @@ public enum Direction {
     LEFT,
     RIGHT;
 
+    // Pre-computed opposites indexed by ordinal: UP(0)->DOWN, DOWN(1)->UP,
+    // LEFT(2)->RIGHT, RIGHT(3)->LEFT
+    private static final Direction[] OPPOSITES = { DOWN, UP, RIGHT, LEFT };
+
     Direction opposite() {
-        switch(this) {
-            case UP -> {
-                return DOWN;
-            }
-            case DOWN -> {
-                return UP;
-            }
-            case LEFT -> {
-                return RIGHT;
-            }
-            case RIGHT -> {
-                return LEFT;
-            }
-        }
-        // Please, Java
-        throw new IllegalStateException("Direction is none of the expected ones. If you added more, please update the opposite() method accordingly!");
+        return OPPOSITES[ordinal()];
     }
 }

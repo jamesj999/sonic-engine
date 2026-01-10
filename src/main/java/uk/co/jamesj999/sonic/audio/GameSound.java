@@ -5,12 +5,15 @@ public enum GameSound {
     RING,
     RING_LEFT,
     RING_RIGHT,
+    RING_SPILL,
     SPINDASH_CHARGE,
     SPINDASH_RELEASE,
+    ROLLING,
     SKID,
-    DEATH,
+    HURT,
+    HURT_SPIKE,
+    DROWN,
     BADNIK_HIT,
     CHECKPOINT,
-    SPIKE_HIT,
     SPRING
 }

@@ -6,22 +6,64 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
+import uk.co.jamesj999.sonic.data.AnimatedPaletteProvider;
+import uk.co.jamesj999.sonic.data.AnimatedPatternProvider;
+import uk.co.jamesj999.sonic.data.ObjectArtProvider;
+import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
+import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
-import uk.co.jamesj999.sonic.data.games.Sonic2;
+import uk.co.jamesj999.sonic.data.RomByteReader;
+import uk.co.jamesj999.sonic.game.GameModule;
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
+import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
+import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
+import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
+import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
+import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
+import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
+import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
+import uk.co.jamesj999.sonic.level.objects.HudRenderManager;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
-import uk.co.jamesj999.sonic.level.ParallaxManager;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
+import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
+import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
+// import uk.co.jamesj999.sonic.level.ParallaxManager; -> Removed unused
+import uk.co.jamesj999.sonic.level.objects.ObjectManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
+import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
+import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
+import uk.co.jamesj999.sonic.level.rings.RingManager;
+import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
+import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
+import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
+import uk.co.jamesj999.sonic.level.rings.RingSpawn;
+import uk.co.jamesj999.sonic.level.rings.LostRingManager;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
+import uk.co.jamesj999.sonic.level.animation.AnimatedPaletteManager;
+import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
+import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.Sensor;
+import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
+import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
+import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
-import uk.co.jamesj999.sonic.sprites.playable.Sonic;
+import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -32,17 +74,54 @@ import static java.util.logging.Level.SEVERE;
  */
 public class LevelManager {
     private static final Logger LOGGER = Logger.getLogger(LevelManager.class.getName());
+    private static final float SWITCHER_DEBUG_R = 1.0f;
+    private static final float SWITCHER_DEBUG_G = 0.55f;
+    private static final float SWITCHER_DEBUG_B = 0.1f;
+    private static final float SWITCHER_DEBUG_ALPHA = 0.35f;
     private static LevelManager levelManager;
     private Level level;
+    private Game game;
+    private GameModule gameModule;
+
+    public Game getGame() {
+        return game;
+    }
+
+    public GameModule getGameModule() {
+        return gameModule;
+    }
+
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final DebugOverlayManager overlayManager = DebugOverlayManager.getInstance();
     private final List<List<LevelData>> levels = new ArrayList<>();
     private int currentAct = 0;
     private int currentZone = 0;
     private int frameCounter = 0;
+    private ObjectPlacementManager objectPlacementManager;
+    private PlaneSwitcherManager planeSwitcherManager;
+    private ObjectManager objectManager;
+    private SolidObjectManager solidObjectManager;
+    private TouchResponseManager touchResponseManager;
+    private RingPlacementManager ringPlacementManager;
+    private RingRenderManager ringRenderManager;
+    private RingManager ringManager;
+    private LostRingManager lostRingManager;
+    private ObjectRenderManager objectRenderManager;
+    private HudRenderManager hudRenderManager;
+    private AnimatedPatternManager animatedPatternManager;
+    private AnimatedPaletteManager animatedPaletteManager;
+    private CheckpointState checkpointState;
+    private LevelGamestate levelGamestate;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
+
+    private enum TilePriorityPass {
+        ALL,
+        LOW_ONLY,
+        HIGH_ONLY
+    }
 
     /**
      * Private constructor for Singleton pattern.
@@ -72,18 +151,250 @@ public class LevelManager {
             Rom rom = new Rom();
             rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
             parallaxManager.load(rom);
-            Game game = new Sonic2(rom);
-            AudioManager.getInstance().setRom(rom);
-            AudioManager.getInstance().setSoundMap(game.getSoundMap());
-            AudioManager.getInstance().resetRingSound();
-            AudioManager.getInstance().playMusic(game.getMusicId(levelIndex));
+            gameModule = GameModuleRegistry.getCurrent();
+            game = gameModule.createGame(rom);
+            AudioManager audioManager = AudioManager.getInstance();
+            audioManager.setAudioProfile(gameModule.getAudioProfile());
+            audioManager.setRom(rom);
+            audioManager.setSoundMap(game.getSoundMap());
+            audioManager.resetRingSound();
+            audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
+            OscillationManager.reset();
+            initAnimatedPatterns();
+            initAnimatedPalettes();
+            RomByteReader romReader = RomByteReader.fromRom(rom);
+            objectPlacementManager = new ObjectPlacementManager(level.getObjects());
+            planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager,
+                    gameModule.getPlaneSwitcherObjectId(),
+                    gameModule.getPlaneSwitcherConfig());
+            objectManager = new ObjectManager(objectPlacementManager, gameModule.createObjectRegistry());
+            // Reset camera state from previous level (signpost may have locked it)
+            Camera camera = Camera.getInstance();
+            camera.setFrozen(false);
+            camera.setMinX((short) 0);
+            camera.setMaxX((short) (level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH));
+            objectManager.reset(camera.getX(), level.getObjects());
+            solidObjectManager = new SolidObjectManager(objectManager);
+            solidObjectManager.reset();
+            TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
+            touchResponseManager = new TouchResponseManager(objectManager, touchResponseTable);
+            touchResponseManager.reset();
+            ringPlacementManager = new RingPlacementManager(level.getRings());
+            ringPlacementManager.reset(Camera.getInstance().getX());
+            RingSpriteSheet ringSpriteSheet = level.getRingSpriteSheet();
+            if (ringSpriteSheet != null && ringSpriteSheet.getFrameCount() > 0) {
+                ringRenderManager = new RingRenderManager(ringSpriteSheet);
+                ringRenderManager.ensurePatternsCached(graphicsManager, level.getPatternCount());
+            } else {
+                ringRenderManager = null;
+            }
+            ringManager = new RingManager(ringPlacementManager, ringRenderManager);
+            lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
+            initObjectArt();
+            initPlayerSpriteArt();
+            resetPlayerState();
+            // Initialize checkpoint state for new level
+            if (checkpointState == null) {
+                checkpointState = new CheckpointState();
+            }
+            checkpointState.clear();
+            levelGamestate = new LevelGamestate();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
         } catch (Exception e) {
             LOGGER.log(SEVERE, "Unexpected error while loading level " + levelIndex, e);
             throw new IOException("Failed to load level due to unexpected error.", e);
+        }
+    }
+
+    public void update() {
+        Sprite player = null;
+        AbstractPlayableSprite playable = null;
+        boolean needsPlayer = objectManager != null || ringManager != null;
+        if (needsPlayer) {
+            player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
+        }
+        if (objectManager != null) {
+            objectManager.update(Camera.getInstance().getX(), playable);
+        } else if (objectPlacementManager != null) {
+            objectPlacementManager.update(Camera.getInstance().getX());
+        }
+        if (solidObjectManager != null) {
+            solidObjectManager.update(playable);
+        }
+        if (touchResponseManager != null) {
+            touchResponseManager.update(playable);
+        }
+        if (ringManager != null) {
+            ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
+        }
+        if (lostRingManager != null) {
+            lostRingManager.update(playable, frameCounter + 1);
+        }
+        if (levelGamestate != null) {
+            levelGamestate.update();
+            if (levelGamestate.getTimer().isTimeOver() && playable != null && !playable.getDead()) {
+                playable.applyHurtOrDeath(0, AbstractPlayableSprite.DamageCause.TIME_OVER, false);
+            }
+        }
+    }
+
+    public void applyPlaneSwitchers(AbstractPlayableSprite player) {
+        if (planeSwitcherManager == null || player == null) {
+            return;
+        }
+        planeSwitcherManager.update(player);
+    }
+
+    public LevelGamestate getLevelGamestate() {
+        return levelGamestate;
+    }
+
+    private void initPlayerSpriteArt() {
+        if (!(game instanceof PlayerSpriteArtProvider provider)) {
+            return;
+        }
+        Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+        if (!(player instanceof AbstractPlayableSprite playable)) {
+            return;
+        }
+        try {
+            SpriteArtSet artSet = provider.loadPlayerSpriteArt(playable.getCode());
+            if (artSet == null || artSet.bankSize() <= 0 || artSet.mappingFrames().isEmpty()
+                    || artSet.dplcFrames().isEmpty()) {
+                playable.setSpriteRenderer(null);
+                return;
+            }
+            PlayerSpriteRenderer renderer = new PlayerSpriteRenderer(artSet);
+            renderer.ensureCached(graphicsManager);
+            playable.setSpriteRenderer(renderer);
+            playable.setMappingFrame(0);
+            playable.setAnimationFrameCount(artSet.mappingFrames().size());
+            playable.setAnimationProfile(artSet.animationProfile());
+            playable.setAnimationSet(artSet.animationSet());
+            playable.setAnimationId(0);
+            playable.setAnimationFrameIndex(0);
+            playable.setAnimationTick(0);
+            initSpindashDust(playable);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load player sprite art.", e);
+        }
+    }
+
+    private void resetPlayerState() {
+        Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+        if (player instanceof AbstractPlayableSprite playable) {
+            playable.resetState();
+        }
+    }
+
+    private void initSpindashDust(AbstractPlayableSprite playable) {
+        if (!(game instanceof SpindashDustArtProvider dustProvider)) {
+            playable.setSpindashDustManager(null);
+            return;
+        }
+        try {
+            SpriteArtSet dustArt = dustProvider.loadSpindashDustArt(playable.getCode());
+            if (dustArt == null || dustArt.bankSize() <= 0 || dustArt.mappingFrames().isEmpty()
+                    || dustArt.dplcFrames().isEmpty()) {
+                playable.setSpindashDustManager(null);
+                return;
+            }
+            PlayerSpriteRenderer dustRenderer = new PlayerSpriteRenderer(dustArt);
+            dustRenderer.ensureCached(graphicsManager);
+            playable.setSpindashDustManager(new SpindashDustManager(playable, dustRenderer));
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load spindash dust art.", e);
+            playable.setSpindashDustManager(null);
+        }
+    }
+
+    private void initObjectArt() {
+        if (!(game instanceof ObjectArtProvider provider)) {
+            objectRenderManager = null;
+            return;
+        }
+        try {
+            var artData = provider.loadObjectArt();
+            if (artData == null) {
+                objectRenderManager = null;
+                return;
+            }
+            objectRenderManager = new ObjectRenderManager(artData);
+            int baseIndex = level != null ? level.getPatternCount() : 0;
+            RingSpriteSheet ringSpriteSheet = level != null ? level.getRingSpriteSheet() : null;
+            if (ringSpriteSheet != null) {
+                baseIndex += ringSpriteSheet.getPatterns().length;
+            }
+            LOGGER.info("Initializing Object Art. Base Index: " + baseIndex);
+            int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, baseIndex);
+
+            hudRenderManager = new HudRenderManager(graphicsManager);
+
+            Pattern[] hudDigits = artData.getHudDigitPatterns();
+            LOGGER.info("Cached " + hudDigits.length + " HUD Digit patterns at index " + hudBaseIndex);
+            for (int i = 0; i < hudDigits.length; i++) {
+                graphicsManager.cachePatternTexture(hudDigits[i], hudBaseIndex + i);
+            }
+            hudRenderManager.setDigitPatternIndex(hudBaseIndex);
+
+            int textBaseIndex = hudBaseIndex + hudDigits.length;
+            Pattern[] hudText = artData.getHudTextPatterns();
+            LOGGER.info("Cached " + hudText.length + " HUD Text patterns at index " + textBaseIndex);
+            for (int i = 0; i < hudText.length; i++) {
+                graphicsManager.cachePatternTexture(hudText[i], textBaseIndex + i);
+            }
+            hudRenderManager.setTextPatternIndex(textBaseIndex, hudText.length);
+
+            int livesBaseIndex = textBaseIndex + hudText.length;
+            Pattern[] hudLives = artData.getHudLivesPatterns();
+            LOGGER.info("Cached " + hudLives.length + " HUD Lives patterns at index " + livesBaseIndex);
+            for (int i = 0; i < hudLives.length; i++) {
+                graphicsManager.cachePatternTexture(hudLives[i], livesBaseIndex + i);
+            }
+            hudRenderManager.setLivesPatternIndex(livesBaseIndex, hudLives.length);
+
+            int livesNumbersBaseIndex = livesBaseIndex + hudLives.length;
+            Pattern[] hudLivesNumbers = artData.getHudLivesNumbers();
+            LOGGER.info("Cached " + hudLivesNumbers.length + " HUD Lives Numbers patterns at index "
+                    + livesNumbersBaseIndex);
+            for (int i = 0; i < hudLivesNumbers.length; i++) {
+                graphicsManager.cachePatternTexture(hudLivesNumbers[i], livesNumbersBaseIndex + i);
+            }
+            hudRenderManager.setLivesNumbersPatternIndex(livesNumbersBaseIndex);
+
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load object art.", e);
+            objectRenderManager = null;
+        }
+    }
+
+    private void initAnimatedPatterns() {
+        animatedPatternManager = null;
+        if (!(game instanceof AnimatedPatternProvider provider)) {
+            return;
+        }
+        try {
+            animatedPatternManager = provider.loadAnimatedPatternManager(level, currentZone);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load animated patterns.", e);
+            animatedPatternManager = null;
+        }
+    }
+
+    private void initAnimatedPalettes() {
+        animatedPaletteManager = null;
+        if (!(game instanceof AnimatedPaletteProvider provider)) {
+            return;
+        }
+        try {
+            animatedPaletteManager = provider.loadAnimatedPaletteManager(level, currentZone);
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load animated palettes.", e);
+            animatedPaletteManager = null;
         }
     }
 
@@ -113,7 +424,7 @@ public class LevelManager {
         int yTopBound = Math.max(drawY, 0);
         int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
 
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(256);
 
         // Iterate over the visible area of the level
         int count = 0;
@@ -129,7 +440,7 @@ public class LevelManager {
                     PatternDesc pDesc = new PatternDesc();
                     pDesc.setPaletteIndex(Engine.debugOption.ordinal());
                     pDesc.setPatternIndex(count);
-                    graphicsManager.renderPattern(pDesc, x, y);
+                    graphicsManager.renderPattern(pDesc, x, y + Pattern.PATTERN_HEIGHT);
                     count++;
                 }
             }
@@ -166,7 +477,7 @@ public class LevelManager {
         int yTopBound = Math.max(drawY, 0);
         int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
 
-        List<GLCommand> commands = new ArrayList<>();
+        List<GLCommand> commands = new ArrayList<>(256);
 
         // Iterate over the visible area of the level
         int count = 0;
@@ -193,27 +504,231 @@ public class LevelManager {
      * This is currently for debugging purposes to visualize collision areas.
      */
     public void draw() {
+        drawWithSpritePriority(null);
+    }
+
+    public void drawWithSpritePriority(SpriteRenderManager spriteRenderManager) {
         if (level == null) {
             LOGGER.warning("No level loaded to draw.");
             return;
         }
 
         frameCounter++;
+        if (animatedPatternManager != null) {
+            animatedPatternManager.update();
+        }
+        if (animatedPaletteManager != null) {
+            animatedPaletteManager.update();
+        }
         Camera camera = Camera.getInstance();
-        parallaxManager.update(currentZone, currentAct, camera, frameCounter);
-        List<GLCommand> commands = new ArrayList<>();
 
-        // Draw Background (Layer 1)
-        drawLayer(commands, 1, camera, 0.5f, 0.1f);
+        int bgScrollY = (int) (camera.getY() * 0.1f);
+        if (game != null) {
+            int levelIdx = levels.get(currentZone).get(currentAct).getLevelIndex();
+            int[] scroll = game.getBackgroundScroll(levelIdx, camera.getX(), camera.getY());
+            bgScrollY = scroll[1];
+        }
 
-        // Draw Foreground (Layer 0)
-        drawLayer(commands, 0, camera, 1.0f, 1.0f);
+        parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
+        List<GLCommand> commands = new ArrayList<>(256);
 
-        // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        // Draw Background (Layer 1) - batched for performance
+        graphicsManager.beginPatternBatch();
+        drawLayer(commands, 1, camera, 0.5f, 0.1f, TilePriorityPass.ALL, false);
+        graphicsManager.flushPatternBatch();
+
+        // Draw Foreground (Layer 0) low-priority pass - batched for performance
+        graphicsManager.beginPatternBatch();
+        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true);
+        graphicsManager.flushPatternBatch();
+
+        if (!commands.isEmpty()) {
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        }
+
+        if (ringManager != null) {
+            ringManager.draw(frameCounter);
+        }
+        if (lostRingManager != null) {
+            lostRingManager.draw(frameCounter);
+        }
+
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            if (spriteRenderManager != null) {
+                spriteRenderManager.drawPriorityBucket(bucket, false);
+            }
+            if (objectManager != null) {
+                objectManager.drawPriorityBucket(bucket, false);
+            }
+        }
+
+        // Draw Foreground (Layer 0) high-priority pass - batched for performance
+        graphicsManager.beginPatternBatch();
+        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
+        graphicsManager.flushPatternBatch();
+
+        for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+            if (spriteRenderManager != null) {
+                spriteRenderManager.drawPriorityBucket(bucket, true);
+            }
+            if (objectManager != null) {
+                objectManager.drawPriorityBucket(bucket, true);
+            }
+        }
+
+        DebugObjectArtViewer.getInstance().draw(objectRenderManager, camera);
+
+        if (hudRenderManager != null) {
+            hudRenderManager.draw(levelGamestate);
+        }
+
+        boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
+        boolean overlayEnabled = debugViewEnabled && overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);
+        if (overlayEnabled) {
+            graphicsManager.enqueueDebugLineState();
+        }
+
+        if (objectPlacementManager != null && overlayEnabled) {
+            boolean showObjectPoints = overlayManager.isEnabled(DebugOverlayToggle.OBJECT_POINTS);
+            boolean showPlaneSwitchers = overlayManager.isEnabled(DebugOverlayToggle.PLANE_SWITCHERS);
+            List<GLCommand> objectCommands = new ArrayList<>();
+            List<GLCommand> switcherLineCommands = new ArrayList<>();
+            List<GLCommand> switcherAreaCommands = new ArrayList<>();
+            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite
+                    ? (AbstractPlayableSprite) player
+                    : null;
+            for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
+                if (showObjectPoints) {
+                    objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                            -1,
+                            GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                            1f, 0f, 1f,
+                            spawn.x(), spawn.y(), 0, 0));
+                }
+                if (showPlaneSwitchers) {
+                    appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands, playable);
+                }
+            }
+            if (showPlaneSwitchers && !switcherAreaCommands.isEmpty()) {
+                graphicsManager.enqueueDebugLineState();
+                for (GLCommand command : switcherAreaCommands) {
+                    graphicsManager.registerCommand(command);
+                }
+            }
+            if (showPlaneSwitchers && !switcherLineCommands.isEmpty()) {
+                graphicsManager.enqueueDebugLineState();
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, switcherLineCommands));
+            }
+            if (showObjectPoints && !objectCommands.isEmpty()) {
+                graphicsManager.enqueueDebugLineState();
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
+            }
+        }
+
+        if (ringManager != null && overlayEnabled
+                && overlayManager.isEnabled(DebugOverlayToggle.RING_BOUNDS)) {
+            Collection<RingSpawn> rings = ringManager.getActiveSpawns();
+            if (!rings.isEmpty()) {
+                if (ringRenderManager == null) {
+                    List<GLCommand> ringCommands = new ArrayList<>();
+                    for (RingSpawn ring : rings) {
+                        if (!ringManager.isRenderable(ring, frameCounter)) {
+                            continue;
+                        }
+                        ringCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                                -1,
+                                GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                                1f, 0.85f, 0.1f,
+                                ring.x(), ring.y(), 0, 0));
+                    }
+                    graphicsManager.enqueueDebugLineState();
+                    graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
+                } else {
+                    PatternSpriteRenderer.FrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
+                    List<GLCommand> boxCommands = new ArrayList<>();
+                    List<GLCommand> centerCommands = new ArrayList<>();
+                    int crossHalf = 2;
+
+                    for (RingSpawn ring : rings) {
+                        if (!ringManager.isRenderable(ring, frameCounter)) {
+                            continue;
+                        }
+                        int centerX = ring.x();
+                        int centerY = ring.y();
+                        int left = centerX + bounds.minX();
+                        int right = centerX + bounds.maxX();
+                        int top = centerY + bounds.minY();
+                        int bottom = centerY + bounds.maxY();
+
+                        // Bounding box (4 line segments)
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, top, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, top, 0, 0));
+
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, top, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, bottom, 0, 0));
+
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, right, bottom, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, bottom, 0, 0));
+
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, bottom, 0, 0));
+                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                0.2f, 1f, 0.2f, left, top, 0, 0));
+
+                        // Center cross
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX - crossHalf, centerY, 0, 0));
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX + crossHalf, centerY, 0, 0));
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX, centerY - crossHalf, 0, 0));
+                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                                1f, 0.85f, 0.1f, centerX, centerY + crossHalf, 0, 0));
+                    }
+
+                    if (!boxCommands.isEmpty()) {
+                        graphicsManager.enqueueDebugLineState();
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
+                    }
+                    if (!centerCommands.isEmpty()) {
+                        graphicsManager.enqueueDebugLineState();
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
+                    }
+                }
+            }
+        }
+
+        if (overlayEnabled) {
+            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            if (player instanceof AbstractPlayableSprite playable) {
+                if (overlayManager.isEnabled(DebugOverlayToggle.CAMERA_BOUNDS)) {
+                    drawCameraBounds();
+                }
+                if (overlayManager.isEnabled(DebugOverlayToggle.PLAYER_BOUNDS)) {
+                    drawPlayableSpriteBounds(playable);
+                }
+            }
+        }
+
+        if (overlayEnabled) {
+            graphicsManager.enqueueDefaultShaderState();
+        }
     }
 
-    private void drawLayer(List<GLCommand> commands, int layerIndex, Camera camera, float parallaxX, float parallaxY) {
+    private void drawLayer(List<GLCommand> commands,
+            int layerIndex,
+            Camera camera,
+            float parallaxX,
+            float parallaxY,
+            TilePriorityPass priorityPass,
+            boolean drawCollision) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
@@ -221,6 +736,12 @@ public class LevelManager {
 
         int bgCameraX = (int) (cameraX * parallaxX);
         int bgCameraY = (int) (cameraY * parallaxY);
+
+        if (layerIndex == 1 && game != null) {
+            int levelIdx = levels.get(currentZone).get(currentAct).getLevelIndex();
+            int[] scroll = game.getBackgroundScroll(levelIdx, cameraX, cameraY);
+            bgCameraY = scroll[1];
+        }
 
         int[] hScroll = (layerIndex == 1) ? parallaxManager.getHScroll() : null;
 
@@ -248,19 +769,24 @@ public class LevelManager {
                 // Check scroll values for the scanlines covered by this chunk row
                 for (int i = 0; i < LevelConstants.CHUNK_HEIGHT; i++) {
                     int line = screenY + i;
-                    if (line < 0) line = 0;
-                    if (line >= ParallaxManager.VISIBLE_LINES) line = ParallaxManager.VISIBLE_LINES - 1;
+                    if (line < 0)
+                        line = 0;
+                    if (line >= ParallaxManager.VISIBLE_LINES)
+                        line = ParallaxManager.VISIBLE_LINES - 1;
 
-                    short val = (short)(hScroll[line] & 0xFFFF);
-                    if (val < localMin) localMin = val;
-                    if (val > localMax) localMax = val;
+                    short val = (short) (hScroll[line] & 0xFFFF);
+                    if (val < localMin)
+                        localMin = val;
+                    if (val > localMax)
+                        localMax = val;
                 }
 
                 rowXStart = -localMax;
                 rowXEnd = cameraWidth - localMin;
 
                 // Align to chunk boundary
-                rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH) % LevelConstants.CHUNK_WIDTH;
+                rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH)
+                        % LevelConstants.CHUNK_WIDTH;
 
                 // Add buffer
                 rowXStart -= LevelConstants.CHUNK_WIDTH;
@@ -279,7 +805,8 @@ public class LevelManager {
                     wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
                 } else {
                     // Foreground Clamps
-                    if (wrappedY < 0 || wrappedY >= levelHeight) continue;
+                    if (wrappedY < 0 || wrappedY >= levelHeight)
+                        continue;
                 }
 
                 Block block = getBlockAtPosition((byte) layerIndex, wrappedX, wrappedY);
@@ -293,12 +820,14 @@ public class LevelManager {
                     int screenX = x - bgCameraX;
                     int screenY = y - bgCameraY;
 
-                    // Convert to absolute coordinates expected by renderPattern (which subtracts cameraX/Y)
+                    // Convert to absolute coordinates expected by renderPattern (which subtracts
+                    // cameraX/Y)
                     int renderX = screenX + cameraX;
                     int renderY = screenY + cameraY;
 
                     // Draw collision only for foreground (Layer 0)
-                    drawChunk(commands, chunkDesc, renderX, renderY, layerIndex == 0, hScroll, screenY, bgCameraX);
+                    drawChunk(commands, chunkDesc, renderX, renderY, drawCollision, hScroll, screenY, bgCameraX,
+                            priorityPass);
                 }
             }
         }
@@ -307,17 +836,25 @@ public class LevelManager {
     /**
      * Draws a chunk of the level based on the provided chunk description.
      *
-     * @param commands  the list of GLCommands to add to
-     * @param chunkDesc the description of the chunk to draw
-     * @param x         the x-coordinate to draw the chunk at
-     * @param y         the y-coordinate to draw the chunk at
+     * @param commands      the list of GLCommands to add to
+     * @param chunkDesc     the description of the chunk to draw
+     * @param x             the x-coordinate to draw the chunk at
+     * @param y             the y-coordinate to draw the chunk at
      * @param drawCollision whether to draw collision debug info
      */
     private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
-        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0);
+        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0, TilePriorityPass.ALL);
     }
 
-    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision, int[] hScroll, int screenY, int baseBgCameraX) {
+    private void drawChunk(List<GLCommand> commands,
+            ChunkDesc chunkDesc,
+            int x,
+            int y,
+            boolean drawCollision,
+            int[] hScroll,
+            int screenY,
+            int baseBgCameraX,
+            TilePriorityPass priorityPass) {
         int chunkIndex = chunkDesc.getChunkIndex();
         if (chunkIndex >= level.getChunkCount()) {
             LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
@@ -350,15 +887,26 @@ public class LevelManager {
                 PatternDesc newPatternDesc = new PatternDesc(newIndex);
 
                 int drawX = x + (cX * Pattern.PATTERN_WIDTH);
-                int drawY = y + (cY * Pattern.PATTERN_HEIGHT);
+                // PatternRenderCommand treats drawY as the bottom of a tile.
+                int drawY = y + (cY * Pattern.PATTERN_HEIGHT) + Pattern.PATTERN_HEIGHT;
 
                 if (hScroll != null) {
                     int line = screenY + (cY * Pattern.PATTERN_HEIGHT);
-                    if (line < 0) line = 0;
-                    if (line >= ParallaxManager.VISIBLE_LINES) line = ParallaxManager.VISIBLE_LINES - 1;
+                    if (line < 0)
+                        line = 0;
+                    if (line >= ParallaxManager.VISIBLE_LINES)
+                        line = ParallaxManager.VISIBLE_LINES - 1;
 
                     short scroll = (short) (hScroll[line] & 0xFFFF);
                     drawX = drawX + scroll + baseBgCameraX;
+                }
+
+                boolean isHighPriority = newPatternDesc.getPriority();
+                if (priorityPass == TilePriorityPass.LOW_ONLY && isHighPriority) {
+                    continue;
+                }
+                if (priorityPass == TilePriorityPass.HIGH_ONLY && !isHighPriority) {
+                    continue;
                 }
 
                 graphicsManager.renderPattern(newPatternDesc, drawX, drawY);
@@ -388,16 +936,15 @@ public class LevelManager {
             Chunk chunk,
             boolean isPrimary,
             int x,
-            int y
-    ) {
+            int y) {
         if (!configService.getBoolean(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED)) {
             return;
         }
 
-        CollisionMode collisionMode = isPrimary
-                ? chunkDesc.getPrimaryCollisionMode()
-                : chunkDesc.getSecondaryCollisionMode();
-        if (collisionMode == CollisionMode.NO_COLLISION) {
+        boolean hasSolidity = isPrimary
+                ? chunkDesc.hasPrimarySolidity()
+                : chunkDesc.hasSecondarySolidity();
+        if (!hasSolidity) {
             return;
         }
 
@@ -466,8 +1013,7 @@ public class LevelManager {
                         drawStartX,
                         drawEndY,
                         drawEndX,
-                        drawStartY
-                ));
+                        drawStartY));
             }
         }
         // Re-enable texturing and shader for subsequent rendering
@@ -475,6 +1021,219 @@ public class LevelManager {
         if (shaderProgramId != 0) {
             commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, shaderProgramId));
         }
+    }
+
+    private void drawPlayableSpriteBounds(AbstractPlayableSprite sprite) {
+        PlayerSpriteRenderer renderer = sprite.getSpriteRenderer();
+        if (renderer == null) {
+            return;
+        }
+
+        boolean hFlip = Direction.LEFT.equals(sprite.getDirection());
+        SpritePieceRenderer.FrameBounds mappingBounds = renderer.getFrameBounds(sprite.getMappingFrame(), hFlip, false);
+
+        int collisionCenterX = sprite.getCentreX();
+        int collisionCenterY = sprite.getCentreY();
+        int renderCenterX = sprite.getRenderCentreX();
+        int renderCenterY = sprite.getRenderCentreY();
+        List<GLCommand> commands = new ArrayList<>(128);
+
+        if (mappingBounds.width() > 0 && mappingBounds.height() > 0) {
+            int mapLeft = renderCenterX + mappingBounds.minX();
+            int mapRight = renderCenterX + mappingBounds.maxX();
+            int mapTop = renderCenterY + mappingBounds.minY();
+            int mapBottom = renderCenterY + mappingBounds.maxY();
+            appendBox(commands, mapLeft, mapTop, mapRight, mapBottom, 0.1f, 0.85f, 1f);
+        }
+
+        int radiusLeft = collisionCenterX - sprite.getXRadius();
+        int radiusRight = collisionCenterX + sprite.getXRadius();
+        int radiusTop = collisionCenterY - sprite.getYRadius();
+        int radiusBottom = collisionCenterY + sprite.getYRadius();
+        appendBox(commands, radiusLeft, radiusTop, radiusRight, radiusBottom, 1f, 0.8f, 0.1f);
+
+        appendCross(commands, collisionCenterX, collisionCenterY, 2, 1f, 0.8f, 0.1f);
+        appendCross(commands, renderCenterX, renderCenterY, 2, 0.1f, 0.85f, 1f);
+
+        Sensor[] sensors = sprite.getAllSensors();
+        for (int i = 0; i < sensors.length; i++) {
+            Sensor sensor = sensors[i];
+            if (sensor == null) {
+                continue;
+            }
+            short[] rotatedOffset = sensor.getRotatedOffset();
+            int originX = collisionCenterX + rotatedOffset[0];
+            int originY = collisionCenterY + rotatedOffset[1];
+
+            float[] color = DebugOverlayPalette.sensorLineColor(i, sensor.isActive());
+            appendCross(commands, originX, originY, 1, color[0], color[1], color[2]);
+
+            if (!sensor.isActive()) {
+                continue;
+            }
+            SensorResult result = sensor.getCurrentResult();
+            if (result == null) {
+                continue;
+            }
+
+            SensorConfiguration sensorConfiguration = SpriteManager
+                    .getSensorConfigurationForGroundModeAndDirection(sprite.getGroundMode(), sensor.getDirection());
+            Direction globalDirection = sensorConfiguration.direction();
+
+            int dist = result.distance();
+            int endX = originX;
+            int endY = originY;
+            switch (globalDirection) {
+                case DOWN -> endY = originY + dist;
+                case UP -> endY = originY - dist;
+                case LEFT -> endX = originX - dist;
+                case RIGHT -> endX = originX + dist;
+            }
+
+            appendLine(commands, originX, originY, endX, endY, color[0], color[1], color[2]);
+        }
+
+        if (!commands.isEmpty()) {
+            graphicsManager.enqueueDebugLineState();
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        }
+    }
+
+    private void drawCameraBounds() {
+        Camera camera = Camera.getInstance();
+        List<GLCommand> commands = new ArrayList<>(64);
+
+        int camX = camera.getX();
+        int camY = camera.getY();
+        int camW = camera.getWidth();
+        int camH = camera.getHeight();
+
+        appendBox(commands, camX, camY, camX + camW, camY + camH, 0.85f, 0.9f, 1f);
+        appendCross(commands, camX + (camW / 2), camY + (camH / 2), 4, 0.85f, 0.9f, 1f);
+
+        int minX = camera.getMinX();
+        int minY = camera.getMinY();
+        int maxX = camera.getMaxX();
+        int maxY = camera.getMaxY();
+        if (maxX > minX || maxY > minY) {
+            appendBox(commands, minX, minY, maxX + camW, maxY + camH, 0.2f, 0.9f, 0.9f);
+        }
+
+        if (!commands.isEmpty()) {
+            graphicsManager.enqueueDebugLineState();
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        }
+    }
+
+    private void appendLine(
+            List<GLCommand> commands,
+            int x1,
+            int y1,
+            int x2,
+            int y2,
+            float r,
+            float g,
+            float b) {
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, x1, y1, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, x2, y2, 0, 0));
+    }
+
+    private void appendCross(
+            List<GLCommand> commands,
+            int centerX,
+            int centerY,
+            int halfSpan,
+            float r,
+            float g,
+            float b) {
+        appendLine(commands, centerX - halfSpan, centerY, centerX + halfSpan, centerY, r, g, b);
+        appendLine(commands, centerX, centerY - halfSpan, centerX, centerY + halfSpan, r, g, b);
+    }
+
+    private void appendPlaneSwitcherDebug(ObjectSpawn spawn,
+            List<GLCommand> lineCommands,
+            List<GLCommand> areaCommands,
+            AbstractPlayableSprite player) {
+        if (gameModule == null || spawn.objectId() != gameModule.getPlaneSwitcherObjectId()) {
+            return;
+        }
+        int subtype = spawn.subtype();
+        int halfSpan = PlaneSwitcherManager.decodeHalfSpan(subtype);
+        boolean horizontal = PlaneSwitcherManager.isHorizontal(subtype);
+        int x = spawn.x();
+        int y = spawn.y();
+        int sideState = planeSwitcherManager != null ? planeSwitcherManager.getSideState(spawn) : -1;
+        if (sideState < 0 && player != null) {
+            sideState = horizontal
+                    ? (player.getCentreY() >= y ? 1 : 0)
+                    : (player.getCentreX() >= x ? 1 : 0);
+        }
+        if (sideState < 0) {
+            sideState = 0;
+        }
+
+        int extent = halfSpan;
+        if (horizontal) {
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x - halfSpan, y, 0, 0));
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x + halfSpan, y, 0, 0));
+
+            int top = sideState == 0 ? y - extent : y;
+            int bottom = sideState == 0 ? y : y + extent;
+            areaCommands.add(new GLCommand(GLCommand.CommandType.RECTI, -1, GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
+                    x - halfSpan, top,
+                    x + halfSpan, bottom));
+        } else {
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x, y - halfSpan, 0, 0));
+            lineCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B,
+                    x, y + halfSpan, 0, 0));
+
+            int left = sideState == 0 ? x - extent : x;
+            int right = sideState == 0 ? x : x + extent;
+            areaCommands.add(new GLCommand(GLCommand.CommandType.RECTI, -1, GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
+                    SWITCHER_DEBUG_R, SWITCHER_DEBUG_G, SWITCHER_DEBUG_B, SWITCHER_DEBUG_ALPHA,
+                    left, y - halfSpan,
+                    right, y + halfSpan));
+        }
+    }
+
+    private void appendBox(
+            List<GLCommand> commands,
+            int left,
+            int top,
+            int right,
+            int bottom,
+            float r,
+            float g,
+            float b) {
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, top, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, top, 0, 0));
+
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, top, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, bottom, 0, 0));
+
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, right, bottom, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, bottom, 0, 0));
+
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, bottom, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, left, top, 0, 0));
     }
 
     /**
@@ -491,25 +1250,26 @@ public class LevelManager {
             return null;
         }
 
-		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-		int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-		// Handle wrapping for X
-		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
+        // Handle wrapping for X
+        int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
 
-		// Handle wrapping for Y
-		int wrappedY = y;
-		if (layer == 1) {
-			// Background loops vertically
-			wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
-		} else {
-			// Foreground Clamps
-			if (wrappedY < 0 || wrappedY >= levelHeight) return null;
-		}
+        // Handle wrapping for Y
+        int wrappedY = y;
+        if (layer == 1) {
+            // Background loops vertically
+            wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
+        } else {
+            // Foreground Clamps
+            if (wrappedY < 0 || wrappedY >= levelHeight)
+                return null;
+        }
 
         Map map = level.getMap();
-		int mapX = wrappedX / LevelConstants.BLOCK_WIDTH;
-		int mapY = wrappedY / LevelConstants.BLOCK_HEIGHT;
+        int mapX = wrappedX / LevelConstants.BLOCK_WIDTH;
+        int mapY = wrappedY / LevelConstants.BLOCK_HEIGHT;
 
         byte value = map.getValue(layer, mapX, mapY);
 
@@ -529,37 +1289,31 @@ public class LevelManager {
     }
 
     public ChunkDesc getChunkDescAt(byte layer, int x, int y) {
-        Block block = getBlockAtPosition(layer, x ,y);
-        if(block == null) {
+        Block block = getBlockAtPosition(layer, x, y);
+        if (block == null) {
             return null;
         }
 
-		int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-		int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
-		int wrappedY = y;
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
+        int wrappedY = y;
 
-		if (layer == 1) {
-			int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
-			wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
-		}
+        if (layer == 1) {
+            int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+            wrappedY = ((y % levelHeight) + levelHeight) % levelHeight;
+        }
 
-        ChunkDesc chunkDesc = block.getChunkDesc((wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,(wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
+        ChunkDesc chunkDesc = block.getChunkDesc((wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH,
+                (wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT);
         return chunkDesc;
     }
 
-    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, int solidityBitIndex) {
         try {
             if (chunkDesc == null) {
                 return null;
             }
-            CollisionMode collisionMode;
-            if (layer == 0) {
-                collisionMode = chunkDesc.getPrimaryCollisionMode();
-            } else {
-                collisionMode = chunkDesc.getSecondaryCollisionMode();
-            }
-
-            if (CollisionMode.NO_COLLISION.equals(collisionMode)) {
+            if (!chunkDesc.isSolidityBitSet(solidityBitIndex)) {
                 return null;
             }
 
@@ -567,7 +1321,7 @@ public class LevelManager {
             if (chunk == null) {
                 return null;
             }
-            if (layer == 0) {
+            if (solidityBitIndex < 0x0E) {
                 return level.getSolidTile(chunk.getSolidTileIndex());
             } else {
                 return level.getSolidTile(chunk.getSolidTileAltIndex());
@@ -583,8 +1337,14 @@ public class LevelManager {
     // or we can force update. GroundSensor is the main one.
     // I'll leave a deprecated one just in case, or remove it.
     // GroundSensor calls it. I should update GroundSensor.
-    // But I can't leave this here without updating GroundSensor first or it won't compile?
+    // But I can't leave this here without updating GroundSensor first or it won't
+    // compile?
     // Wait, I can overload.
+    public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc, byte layer) {
+        int solidityBitIndex = (layer == 0) ? 0x0C : 0x0E;
+        return getSolidTileForChunkDesc(chunkDesc, solidityBitIndex);
+    }
+
     public SolidTile getSolidTileForChunkDesc(ChunkDesc chunkDesc) {
         return getSolidTileForChunkDesc(chunkDesc, (byte) 0);
     }
@@ -598,22 +1358,126 @@ public class LevelManager {
         return level;
     }
 
+    public int getCurrentZone() {
+        return currentZone;
+    }
+
+    public int getCurrentAct() {
+        return currentAct;
+    }
+
+    public Collection<ObjectSpawn> getActiveObjectSpawns() {
+        if (objectPlacementManager == null) {
+            return List.of();
+        }
+        return objectPlacementManager.getActiveSpawns();
+    }
+
+    public TouchResponseManager getTouchResponseManager() {
+        return touchResponseManager;
+    }
+
+    public ObjectRenderManager getObjectRenderManager() {
+        return objectRenderManager;
+    }
+
+    public RingRenderManager getRingRenderManager() {
+        return ringRenderManager;
+    }
+
+    public boolean areAllRingsCollected() {
+        return ringPlacementManager != null && ringPlacementManager.areAllCollected();
+    }
+
+    public ObjectManager getObjectManager() {
+        return objectManager;
+    }
+
+    public ObjectPlacementManager getObjectPlacementManager() {
+        return objectPlacementManager;
+    }
+
+    public void spawnLostRings(AbstractPlayableSprite player, int frameCounter) {
+        if (lostRingManager == null || player == null) {
+            return;
+        }
+        int count = player.getRingCount();
+        if (count <= 0) {
+            return;
+        }
+        lostRingManager.spawnLostRings(player, count, frameCounter);
+    }
+
     public void loadCurrentLevel() {
         try {
             LevelData levelData = levels.get(currentZone).get(currentAct);
+
+            // Check if we have an active checkpoint BEFORE reloading
+            // (loadLevel clears checkpointState, so we need to save the values first)
+            boolean hasCheckpoint = checkpointState != null && checkpointState.isActive();
+            int checkpointX = hasCheckpoint ? checkpointState.getSavedX() : 0;
+            int checkpointY = hasCheckpoint ? checkpointState.getSavedY() : 0;
+            int checkpointIndex = hasCheckpoint ? checkpointState.getLastCheckpointIndex() : -1;
+
             loadLevel(levelData.getLevelIndex());
+
+            // Restore checkpoint state if we had an active checkpoint
+            // (loadLevel clears it, but we need it for subsequent respawns)
+            if (hasCheckpoint && checkpointState != null) {
+                checkpointState.restoreFromSaved(checkpointX, checkpointY, checkpointIndex);
+            }
+
             frameCounter = 0;
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
-            player.setX((short) levelData.getStartXPos());
-            player.setY((short) levelData.getStartYPos());
+
+            // Use checkpoint position if available, otherwise level start
+            if (hasCheckpoint) {
+                player.setX((short) checkpointX);
+                player.setY((short) checkpointY);
+                LOGGER.info("Set player position from checkpoint: X=" + checkpointX + ", Y=" + checkpointY);
+            } else {
+                player.setX((short) levelData.getStartXPos());
+                player.setY((short) levelData.getStartYPos());
+                LOGGER.info("Set player position from levelData: X=" + levelData.getStartXPos() +
+                        ", Y=" + levelData.getStartYPos() + " (level: " + levelData.name() + ")");
+            }
+
             if (player instanceof AbstractPlayableSprite) {
-                ((AbstractPlayableSprite) player).setXSpeed((short) 0);
-                ((AbstractPlayableSprite) player).setYSpeed((short) 0);
-                ((AbstractPlayableSprite) player).setGSpeed((short) 0);
-                ((AbstractPlayableSprite) player).setAir(false);
-                ((AbstractPlayableSprite) player).setRolling(false);
+                AbstractPlayableSprite playable = (AbstractPlayableSprite) player;
+                // Full state reset first
+                playable.resetState();
+                // Then set specific values
+                playable.setXSpeed((short) 0);
+                playable.setYSpeed((short) 0);
+                playable.setGSpeed((short) 0);
+                playable.setAir(false);
+                LOGGER.info("Player state after loadCurrentLevel: air=" + playable.getAir() +
+                        ", ySpeed=" + playable.getYSpeed() + ", layer=" + player.getLayer());
+                playable.setRolling(false);
+                playable.setDead(false);
+                playable.setHurt(false);
+                playable.setDeathCountdown(0);
+                playable.setInvulnerableFrames(0);
+                playable.setInvincibleFrames(0);
+                playable.setDirection(uk.co.jamesj999.sonic.physics.Direction.RIGHT);
+                playable.setAngle((byte) 0);
+                player.setLayer((byte) 0);
+                playable.setHighPriority(false);
+                playable.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
+
+                // Clear rings on spawn (ROM behavior)
+                playable.setRingCount(0);
+
+                // Reset speed shoes effect and music tempo
+                // Note: resetState is already called which clears speedShoes, but we also need
+                // to reset audio
+                uk.co.jamesj999.sonic.audio.AudioManager.getInstance().getBackend().setSpeedShoes(false);
+
                 Camera camera = Camera.getInstance();
-                camera.setFocusedSprite((AbstractPlayableSprite) player);
+                camera.setFrozen(false); // Unlock camera after death
+                camera.setFocusedSprite(playable);
+                camera.updatePosition(true); // Force camera to player position
+
                 Level currentLevel = getCurrentLevel();
                 if (currentLevel != null) {
                     camera.setMinX((short) currentLevel.getMinX());
@@ -628,10 +1492,38 @@ public class LevelManager {
         }
     }
 
-    public void nextAct() throws IOException  {
+    public void nextAct() throws IOException {
         currentAct++;
         if (currentAct >= levels.get(currentZone).size()) {
             currentAct = 0;
+        }
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
+        loadCurrentLevel();
+    }
+
+    /**
+     * Advance to the next level in progression order.
+     * Unlike nextAct() which wraps, this advances to next zone when acts are
+     * exhausted.
+     * Called by results screen after tally completes.
+     */
+    public void advanceToNextLevel() throws IOException {
+        currentAct++;
+        if (currentAct >= levels.get(currentZone).size()) {
+            // Move to next zone
+            currentZone++;
+            currentAct = 0;
+            if (currentZone >= levels.size()) {
+                LOGGER.info("All zones complete!");
+                currentZone = 0; // Loop back for now - TODO: end game sequence
+            }
+        }
+        // Clear checkpoint when advancing
+        if (checkpointState != null) {
+            checkpointState.clear();
         }
         loadCurrentLevel();
     }
@@ -639,22 +1531,42 @@ public class LevelManager {
     public void loadZoneAndAct(int zone, int act) throws IOException {
         currentAct = act;
         currentZone = zone;
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
     }
 
-    public void nextZone() throws IOException  {
+    public void nextZone() throws IOException {
         currentZone++;
         if (currentZone >= levels.size()) {
             currentZone = 0;
         }
         currentAct = 0;
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
     }
 
     public void loadZone(int zone) throws IOException {
         currentZone = zone;
         currentAct = 0;
+        // Clear checkpoint when manually changing level
+        if (checkpointState != null) {
+            checkpointState.clear();
+        }
         loadCurrentLevel();
+    }
+
+    public SolidObjectManager getSolidObjectManager() {
+        return solidObjectManager;
+    }
+
+    public CheckpointState getCheckpointState() {
+        return checkpointState;
     }
 
     /**

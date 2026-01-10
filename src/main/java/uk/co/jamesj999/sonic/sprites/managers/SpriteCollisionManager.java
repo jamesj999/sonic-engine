@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.sprites.managers;
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -19,6 +20,7 @@ public class SpriteCollisionManager {
 
         SonicConfigurationService configService = SonicConfigurationService.getInstance();
         SpriteManager spriteManager = SpriteManager.getInstance();
+        LevelManager levelManager = LevelManager.getInstance();
 
         private int upKey;
         private int downKey;
@@ -26,6 +28,7 @@ public class SpriteCollisionManager {
         private int rightKey;
         private int jumpKey;
         private int testKey;
+        private int frameCounter;
 
         private SpriteCollisionManager() {
                 upKey = configService.getInt(SonicConfiguration.UP);
@@ -40,6 +43,7 @@ public class SpriteCollisionManager {
          * Calls all sprites to recalculate their positions.
          */
         public void update(InputHandler handler) {
+                frameCounter++;
                 Collection<Sprite> sprites = spriteManager.getAllSprites();
                 // Firstly calculate key presses:
                 boolean up = handler.isKeyDown(upKey);
@@ -53,8 +57,21 @@ public class SpriteCollisionManager {
                 for (Sprite sprite : sprites) {
                         // Check we're dealing with a playable sprite:
                         if (sprite instanceof AbstractPlayableSprite) {
-                                ((AbstractPlayableSprite) sprite).getMovementManager()
-                                                .handleMovement(up, down, left, right, space, testButton);
+                                AbstractPlayableSprite playable = (AbstractPlayableSprite) sprite;
+
+                                // Check if player is being forced to walk right (end-of-act)
+                                boolean controlLocked = playable.isControlLocked();
+                                boolean effectiveRight = right || playable.isForceInputRight() || controlLocked;
+                                boolean effectiveLeft = !controlLocked && left && !playable.isForceInputRight();
+                                boolean effectiveUp = controlLocked ? false : up;
+                                boolean effectiveDown = controlLocked ? false : down;
+                                boolean effectiveJump = controlLocked ? false : space;
+                                boolean effectiveTest = controlLocked ? false : testButton;
+
+                                levelManager.applyPlaneSwitchers(playable);
+                                playable.getMovementManager()
+                                                .handleMovement(effectiveUp, effectiveDown, effectiveLeft,
+                                                                effectiveRight, effectiveJump, effectiveTest);
                                 /*
                                  * Idea: We can put object collision handling here - although
                                  * the X and Y have been set for the sprite, we still have the
@@ -63,7 +80,9 @@ public class SpriteCollisionManager {
                                  * tick.
                                  * Update: lol, we never did that.
                                  */
-                                ((AbstractPlayableSprite) sprite).endOfTick();
+                                playable.getAnimationManager().update(frameCounter);
+                                playable.tickStatus();
+                                playable.endOfTick();
                         }
                 }
         }

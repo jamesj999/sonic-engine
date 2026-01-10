@@ -2,6 +2,7 @@
 
 uniform sampler2D Palette;
 uniform sampler2D IndexedColorTexture;
+uniform float PaletteLine;
 
 void main()
 {
@@ -15,12 +16,12 @@ void main()
         discard;
     }
 
-    // Map the index to palette coordinates (assuming 16 colors)
-    // We want the center of the texel. 1/16 = 0.0625. Center is 0.5/16 + index/16.
+    // Map the index to palette coordinates (16 colors, 4 lines)
     float paletteX = (index + 0.5) / 16.0;
+    float paletteY = (PaletteLine + 0.5) / 4.0;
 
     // Sample the palette texture to get the actual color
-    vec4 indexedColor = texture2D(Palette, vec2(paletteX, 0.5));
+    vec4 indexedColor = texture2D(Palette, vec2(paletteX, paletteY));
 
     gl_FragColor = indexedColor; // Output the final color
 }

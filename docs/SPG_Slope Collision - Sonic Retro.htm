@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html class="client-nojs" lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8"/>
+<title>SPG:Slope Collision - Sonic Retro</title>
+<script>document.documentElement.className = document.documentElement.className.replace( /(^|\s)client-nojs(\s|$)/, "$1client-js$2" );</script>
+<script>(window.RLQ=window.RLQ||[]).push(function(){mw.config.set({"wgCanonicalNamespace":"","wgCanonicalSpecialPageName":false,"wgNamespaceNumber":0,"wgPageName":"SPG:Slope_Collision","wgTitle":"SPG:Slope Collision","wgCurRevisionId":384518,"wgRevisionId":384518,"wgArticleId":73512,"wgIsArticle":true,"wgIsRedirect":false,"wgAction":"view","wgUserName":null,"wgUserGroups":["*"],"wgCategories":["Pages with syntax highlighting errors","Sonic Physics Guide"],"wgBreakFrames":false,"wgPageContentLanguage":"en","wgPageContentModel":"wikitext","wgSeparatorTransformTable":["",""],"wgDigitTransformTable":["",""],"wgDefaultDateFormat":"dmy","wgMonthNames":["","January","February","March","April","May","June","July","August","September","October","November","December"],"wgMonthNamesShort":["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"wgRelevantPageName":"SPG:Slope_Collision","wgRelevantArticleId":73512,"wgRequestId":"550c2f378fa590b88ca6c1e2","wgIsProbablyEditable":false,"wgRelevantPageIsProbablyEditable":false,"wgRestrictionEdit":[],"wgRestrictionMove":[]});mw.loader.state({"site.styles":"ready","noscript":"ready","user.styles":"ready","user":"ready","user.options":"loading","user.tokens":"loading","ext.pygments":"ready","ext.tmh.thumbnail.styles":"ready","mediawiki.legacy.shared":"ready","mediawiki.legacy.commonPrint":"ready","mediawiki.sectionAnchor":"ready","skins.foreground.styles":"ready"});mw.loader.implement("user.options@0bhc5ha",function($,jQuery,require,module){mw.user.options.set([]);});mw.loader.implement("user.tokens@0ywsqlq",function ( $, jQuery, require, module ) {
+mw.user.tokens.set({"editToken":"+\\","patrolToken":"+\\","watchToken":"+\\","csrfToken":"+\\"});/*@nomin*/
+
+});mw.loader.load(["site","mediawiki.page.startup","mediawiki.user","mediawiki.hidpi","mediawiki.page.ready","mediawiki.toc","mediawiki.searchSuggest","mw.MediaWikiPlayer.loader","mw.PopUpMediaTransform","skins.foreground.js"]);});</script>
+<link rel="stylesheet" href="/load.php?debug=false&amp;lang=en&amp;modules=ext.pygments%7Cext.tmh.thumbnail.styles%7Cmediawiki.legacy.commonPrint%2Cshared%7Cmediawiki.sectionAnchor%7Cskins.foreground.styles&amp;only=styles&amp;skin=foreground"/>
+<script async="" src="/load.php?debug=false&amp;lang=en&amp;modules=startup&amp;only=scripts&amp;skin=foreground"></script>
+<meta name="ResourceLoaderDynamicStyles" content=""/>
+<link rel="stylesheet" href="/load.php?debug=false&amp;lang=en&amp;modules=site.styles&amp;only=styles&amp;skin=foreground"/>
+<meta name="generator" content="MediaWiki 1.30.2"/>
+<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1.0"/>
+<meta name="theme-color" content="#787848"/>
+<link rel="shortcut icon" href="/favicon.ico"/>
+<link rel="search" type="application/opensearchdescription+xml" href="/opensearch_desc.php" title="Sonic Retro (en)"/>
+<link rel="EditURI" type="application/rsd+xml" href="https://info.sonicretro.org/api.php?action=rsd"/>
+<link rel="alternate" type="application/atom+xml" title="Sonic Retro Atom feed" href="/index.php?title=Special:RecentChanges&amp;feed=atom"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<!--[if lt IE 9]><script src="/resources/lib/html5shiv/html5shiv.min.js?40bd4"></script><![endif]-->
+</head>
+<body class="mediawiki ltr sitedir-ltr mw-hide-empty-elt ns-0 ns-subject page-SPG_Slope_Collision rootpage-SPG_Slope_Collision skin-foreground action-view"><div id='navwrapper'><!-- START FOREGROUNDTEMPLATE -->
+<link href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700,700i&display=swap" rel="stylesheet">
+<div id="title" class="bgcolor2">
+<a style="float:left; position: absolute; top: 0; left:0; height:65px; width:350px;" href="https://info.sonicretro.org"></a>
+<div id="title_button">
+<a href="https://sonicretro.org">Home</a>
+<a class="current bgcolor3" href="https://info.sonicretro.org">Info</a>
+<a href="https://forums.sonicretro.org">Forums</a>
+<a href="https://github.com/sonicretro/"><i class="fab fa-github" style="font-size:1.5em"></i></a>
+<a href="https://sonicretro.org/discord/"><i class="fab fa-discord" style="font-size:1.5em"></i></a>
+<a href="https://segaretro.org"><img src="https://sonicretro.org/segaretro-knockout.svg" alt="Sega Retro" class="navicon"></a>
+</div>
+</div>
+		<nav class="top-bar" data-topbar role="navigation" data-options="back_text: Back">
+                                <li class="toggle-topbar menu-icon">
+                                        <a href="#"><span>Menu</span></a>
+                                </li>
+
+		<section class="top-bar-section">
+
+			<ul id="top-bar-left" class="left">
+				<li class="divider show-for-small"></li>
+									<li class="has-dropdown active"  id='p-Main'>
+					<a href="#">Main</a>
+													<ul class="dropdown">
+								<li id="n-mainpage"><a href="/Main_Page" title="Visit the main page [z]" accesskey="z">Main Page</a></li><li id="n-recentchanges"><a href="/Special:RecentChanges" title="A list of recent changes in the wiki [r]" accesskey="r">Recent changes</a></li><li id="n-randompage"><a href="/Special:Random" title="Load a random page [x]" accesskey="x">Random page</a></li><li id="n-help"><a href="/Help:Contents" title="The place to find out">Help</a></li><li id="n-specialpages"><a href="/Special:SpecialPages">Special pages</a></li><li id="n-Upload"><a href="/Special:Upload">Upload file</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Games'>
+					<a href="#">Games</a>
+													<ul class="dropdown">
+								<li id="n-Game-List"><a href="/Category:Games">Game List</a></li><li id="n-Prereleases"><a href="/Category:Prereleases">Prereleases</a></li><li id="n-Unreleased"><a href="/Category:Unreleased_games">Unreleased</a></li><li id="n-Unlicensed"><a href="/Category:Unlicensed_games">Unlicensed</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Game_Info'>
+					<a href="#">Game Info</a>
+													<ul class="dropdown">
+								<li id="n-Game-Development"><a href="/Category:Development">Game Development</a></li><li id="n-Hidden-Content"><a href="/Category:Hidden_content">Hidden Content</a></li><li id="n-Bugs"><a href="/Category:Bugs">Bugs</a></li><li id="n-Characters"><a href="/Category:Characters">Characters</a></li><li id="n-Enemies"><a href="/Category:Enemies">Enemies</a></li><li id="n-Bosses"><a href="/Category:Bosses">Bosses</a></li><li id="n-Items"><a href="/Category:Items">Items</a></li><li id="n-Locations"><a href="/Category:Locations">Locations</a></li><li id="n-Level-Themes"><a href="/Category:Level_themes">Level Themes</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Music'>
+					<a href="#">Music</a>
+													<ul class="dropdown">
+								<li id="n-Albums"><a href="/Category:Albums">Albums</a></li><li id="n-EPs"><a href="/Category:EPs">EPs</a></li><li id="n-Tracks"><a href="/Category:Tracks">Tracks</a></li><li id="n-Musicians"><a href="/Category:Musicians">Musicians</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-TV_.26_Film'>
+					<a href="#">TV &amp; Film</a>
+													<ul class="dropdown">
+								<li id="n-Adventures-of-Sonic"><a href="/Category:Adventures_of_Sonic_the_Hedgehog">Adventures of Sonic</a></li><li id="n-Saturday-Morning"><a href="/Category:Sonic_the_Hedgehog_(TV_series)">Saturday Morning</a></li><li id="n-Sonic-OVA"><a href="/Category:Sonic_the_Hedgehog_(anime)">Sonic OVA</a></li><li id="n-Sonic-Underground"><a href="/Category:Sonic_Underground">Sonic Underground</a></li><li id="n-Sonic-X"><a href="/Category:Sonic_X">Sonic X</a></li><li id="n-Sonic-Boom"><a href="/Category:Sonic_Boom_(TV_series)">Sonic Boom</a></li><li id="n-Live-action-Films"><a href="/Category:Sonic_the_Hedgehog_(film_series)">Live-action Films</a></li><li id="n-Sonic-Prime"><a href="/Category:Sonic_Prime">Sonic Prime</a></li><li id="n-Shorts"><a href="/Category:Shorts">Shorts</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Printed_Media'>
+					<a href="#">Printed Media</a>
+													<ul class="dropdown">
+								<li id="n-Shogakukan-manga"><a href="/Category:Sonic_the_Hedgehog_(manga)">Shogakukan manga</a></li><li id="n-Sonic-the-Comic"><a href="/Category:Sonic_the_Comic">Sonic the Comic</a></li><li id="n-Archie-comics"><a href="/Category:Sonic_the_Hedgehog_(Archie_comics)">Archie comics</a></li><li id="n-IDW-comics"><a href="/Category:Sonic_the_Hedgehog_(IDW_comics)">IDW comics</a></li><li id="n-Books"><a href="/Category:Books">Books</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Modding'>
+					<a href="#">Modding</a>
+													<ul class="dropdown">
+								<li id="n-Hacks"><a href="/Category:Hacks">Hacks</a></li><li id="n-Community-Hacking-Guide"><a href="/Category:Sonic_Community_Hacking_Guide">Community Hacking Guide</a></li><li id="n-Programs"><a href="/Category:Programs">Programs</a></li>							</ul>
+																		<li class="has-dropdown active"  id='p-Fan_Gaming'>
+					<a href="#">Fan Gaming</a>
+													<ul class="dropdown">
+								<li id="n-Fan-Games"><a href="/Category:Fan_games">Fan Games</a></li><li id="n-Resources"><a href="/Category:Fan_game_resources">Resources</a></li>							</ul>
+																							</ul>
+
+			<ul id="top-bar-right" class="right">
+				<li class="has-form">
+					<form action="/index.php" id="searchform" class="mw-search">
+						<div class="row collapse">
+						<div class="small-12 columns">
+							<input type="search" name="search" placeholder="Search Sonic Retro" title="Search Sonic Retro [f]" accesskey="f" id="searchInput"/>							<button type="submit" class="button search">Search</button>
+						</div>
+						</div>
+					</form>
+				</li>
+				<li class="divider show-for-small"></li>
+
+				<li class="has-dropdown active"><a href="#"><i class="fa fa-cogs"></i></a>
+					<ul id="toolbox-dropdown" class="dropdown">
+						<li id="t-whatlinkshere"><a href="/Special:WhatLinksHere/SPG:Slope_Collision" title="A list of all wiki pages that link here [j]" accesskey="j">What links here</a></li><li id="t-recentchangeslinked"><a href="/Special:RecentChangesLinked/SPG:Slope_Collision" rel="nofollow" title="Recent changes in pages linked from this page [k]" accesskey="k">Related changes</a></li><li id="t-specialpages"><a href="/Special:SpecialPages" title="A list of all special pages [q]" accesskey="q">Special pages</a></li><li id="t-print"><a href="/index.php?title=SPG:Slope_Collision&amp;printable=yes" rel="alternate" title="Printable version of this page [p]" accesskey="p">Printable version</a></li><li id="t-permalink"><a href="/index.php?title=SPG:Slope_Collision&amp;oldid=384518" title="Permanent link to this revision of the page">Permanent link</a></li><li id="t-info"><a href="/index.php?title=SPG:Slope_Collision&amp;action=info" title="More information about this page">Page information</a></li><li id="t-cite"><a href="/index.php?title=Special:CiteThisPage&amp;page=SPG%3ASlope_Collision&amp;id=384518" title="Information on how to cite this page">Cite this page</a></li>						<li id="n-recentchanges"><a href="/Special:RecentChanges" title="Special:RecentChanges">Recent changes</a></li>						<li id="n-help" ><a href="https://www.mediawiki.org/wiki/Special:MyLanguage/Help:Contents">Help</a></li>					</ul>
+				</li>
+
+				<li id="personal-tools-dropdown" class="has-dropdown active"><a href="#"><i class="fa fa-user"></i></a>
+					<ul class="dropdown">
+						<li id="pt-createaccount"><a href="/index.php?title=Special:CreateAccount&amp;returnto=SPG%3ASlope+Collision" title="You are encouraged to create an account and log in; however, it is not mandatory">Create account</a></li><li id="pt-login"><a href="/index.php?title=Special:UserLogin&amp;returnto=SPG%3ASlope+Collision" title="You are encouraged to log in; however, it is not mandatory [o]" accesskey="o">Log in</a></li>					</ul>
+				</li>
+
+			</ul>
+		</section>
+		</nav>
+		
+		</div>		
+		<div id="page-content">
+		<div class="row fullWidth">
+				<div class="large-12 columns">
+					<!-- Output page indicators -->
+					<div class="mw-indicators mw-body-content">
+</div>
+					<!-- If user is logged in output echo location -->
+									<!--[if lt IE 9]>
+				<div id="siteNotice" class="sitenotice panel radius">Sonic Retro may not look as expected in this version of Internet Explorer. We recommend you upgrade to a newer version of Internet Explorer or switch to a browser like Firefox or Chrome.</div>
+				<![endif]-->
+
+												</div>
+		</div>
+
+		<div id="mw-js-message" style="display:none;"></div>
+
+		<div class="row fullWidth">
+				<div id="p-cactions" class="large-12 columns">
+											<a id="actions-button" href="#" data-dropdown="actions" data-options="align:left; is_hover: true; hover_timeout:700" class="button small secondary radius"><i class="fa fa-cog"><span class="show-for-medium-up">&nbsp;Actions</span></i></a>
+						<!--RTL -->
+						<ul id="actions" class="f-dropdown" data-dropdown-content>
+							<li id="ca-nstab-main" class="selected"><a href="/SPG:Slope_Collision" title="View the content page [c]" accesskey="c">Page</a></li><li id="ca-talk" class="new"><a href="/index.php?title=Talk:SPG:Slope_Collision&amp;action=edit&amp;redlink=1" rel="discussion" title="Discussion about the content page [t]" accesskey="t">Discussion</a></li><li id="ca-viewsource"><a href="/index.php?title=SPG:Slope_Collision&amp;action=edit" title="This page is protected.&#10;You can view its source [e]" accesskey="e">View source</a></li><li id="ca-history"><a href="/index.php?title=SPG:Slope_Collision&amp;action=history" title="Past revisions of this page [h]" accesskey="h">History</a></li>													</ul>
+						<!--RTL -->
+										<div id="content">
+					<h1  id="firstHeading" class="title">SPG:Slope Collision</h1>
+											<h3 id="tagline">From Sonic Retro</h3>					<h5 id="siteSub" class="subtitle"></h5>
+					<div id="contentSub" class="clear_both"></div>
+					<div id="bodyContent" class="mw-bodytext">
+						<div id="mw-content-text" lang="en" dir="ltr" class="mw-content-ltr"><div class="mw-parser-output"><table cellpadding="0" cellspacing="0" class="breakout" style="width:auto !important; max-width: 340px; padding: 0px; float: right; margin-left: 15px; display: inline; position: relative">
+
+<tr>
+<th style="padding-top:2px; padding-bottom:2px; width:320px; text-align:center;">  <a href="/Sonic_Physics_Guide" title="Sonic Physics Guide"><b>Sonic Physics Guide</b></a>
+</th></tr>
+<tr>
+<td style="padding-top:2px; padding-bottom:2px; width:320px; text-align:left;">
+<ul><li><a href="/SPG:Basics" title="SPG:Basics">Basics</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Basics#Positions_And_Speeds" title="SPG:Basics"><i>Positions And Speeds</i></a></li>
+<li><a href="/SPG:Basics#Angles" title="SPG:Basics"><i>Angles</i></a></li>
+<li><a href="/SPG:Basics#Variables" title="SPG:Basics"><i>Variables</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Calculations" title="SPG:Calculations">Calculations</a> (Technical)</li></ul>
+<dl><dd><ul><li><a href="/SPG:Calculations#Pixel_and_Subpixel" title="SPG:Calculations"><i>Pixel and Subpixel</i></a></li>
+<li><a href="/SPG:Calculations#Hex_Angles" title="SPG:Calculations"><i>Hex Angles</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Characters" title="SPG:Characters">Characters</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Characters#Sonic" title="SPG:Characters"><i>Sonic</i></a></li>
+<li><a href="/SPG:Characters#Tails" title="SPG:Characters"><i>Tails</i></a></li>
+<li><a href="/SPG:Characters#Knuckles" title="SPG:Characters"><i>Knuckles</i></a></li></ul></dd></dl>
+</td></tr>
+<tr>
+<th style="padding-top:2px; padding-bottom:2px; width:320px; text-align:center;">  <b>Collision</b>
+</th></tr>
+<tr>
+<td style="padding-top:2px; padding-bottom:2px; width:320px; text-align:left;">
+<ul><li><a href="/SPG:Solid_Tiles" title="SPG:Solid Tiles">Solid Tiles</a> (Terrain Part 1)</li></ul>
+<dl><dd><ul><li><a href="/SPG:Solid_Tiles#Sensors" title="SPG:Solid Tiles"><i>Sensors</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Solid_Terrain" title="SPG:Solid Terrain">Solid Terrain</a> (Terrain Part 2)</li></ul>
+<dl><dd><ul><li><a href="/SPG:Solid_Terrain#Layers" title="SPG:Solid Terrain"><i>Layers</i></a></li>
+<li><a href="/SPG:Solid_Terrain#Loops" title="SPG:Solid Terrain"><i>Loops</i></a></li></ul></dd></dl>
+<ul><li><a class="mw-selflink selflink">Slope Collision</a> (Slopes Part 1)</li></ul>
+<dl><dd><ul><li><a href="/SPG:Slope_Collision#The_Player.27s_Sensors" title="SPG:Slope Collision"><i>The Player's Sensors</i></a></li>
+<li><a href="/SPG:Slope_Collision#While_Grounded" title="SPG:Slope Collision"><i>While Grounded</i></a>
+<ul><li><a href="/SPG:Slope_Collision#360_Degree_Collision" title="SPG:Slope Collision"><i>360 Degree Collision</i></a></li></ul></li>
+<li><a href="/SPG:Slope_Collision#While_Airborne" title="SPG:Slope Collision"><i>While Airborne</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Hitboxes" title="SPG:Hitboxes">Hitboxes</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Hitboxes#The_Player.27s_Hitbox" title="SPG:Hitboxes"><i>The Player's Hitbox</i></a></li>
+<li><a href="/SPG:Hitboxes#Trigger_Areas" title="SPG:Hitboxes"><i>Trigger Areas</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Solid_Objects" title="SPG:Solid Objects">Solid Objects</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Solid_Objects#Solid_Objects" title="SPG:Solid Objects"><i>Solid Objects</i></a></li>
+<li><a href="/SPG:Solid_Objects#Sloped_Objects" title="SPG:Solid Objects"><i>Sloped Objects</i></a></li>
+<li><a href="/SPG:Solid_Objects#Jump_Through_Platforms" title="SPG:Solid Objects"><i>Jump Through Platforms</i></a></li>
+<li><a href="/SPG:Solid_Objects#Pushable_Blocks" title="SPG:Solid Objects"><i>Pushable Blocks</i></a></li>
+<li><a href="/SPG:Solid_Objects#Item_Monitor" title="SPG:Solid Objects"><i>Item Monitor</i></a></li></ul></dd></dl>
+</td></tr>
+<tr>
+<th style="padding-top:2px; padding-bottom:2px; width:320px; text-align:center;">  <b>Physics</b>
+</th></tr>
+<tr>
+<td style="padding-top:2px; padding-bottom:2px; width:320px; text-align:left;">
+<ul><li><a href="/SPG:Slope_Physics" title="SPG:Slope Physics">Slope Physics</a> (Slopes Part 2)</li></ul>
+<dl><dd><ul><li><a href="/SPG:Slope_Physics#Moving_Along_Slopes" title="SPG:Slope Physics"><i>Moving Along Slopes</i></a></li>
+<li><a href="/SPG:Slope_Physics#360_Degree_Movement" title="SPG:Slope Physics"><i>360 Degree Movement</i></a></li>
+<li><a href="/SPG:Slope_Physics#Falling_and_Slipping_Down_Slopes" title="SPG:Slope Physics"><i>Falling and Slipping Down Slopes</i></a></li>
+<li><a href="/SPG:Slope_Physics#Landing_On_The_Ground" title="SPG:Slope Physics"><i>Landing On The Ground</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Air_State" title="SPG:Air State">Air State</a></li>
+<li><a href="/SPG:Running" title="SPG:Running">Running</a></li>
+<li><a href="/SPG:Jumping" title="SPG:Jumping">Jumping</a></li>
+<li><a href="/SPG:Rolling" title="SPG:Rolling">Rolling</a></li>
+<li><a href="/SPG:Getting_Hit" title="SPG:Getting Hit">Getting Hit</a></li>
+<li><a href="/SPG:Rebound" title="SPG:Rebound">Rebound</a></li>
+<li><a href="/SPG:Underwater" title="SPG:Underwater">Underwater</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Underwater#Air" title="SPG:Underwater"><i>Air</i></a></li>
+<li><a href="/SPG:Underwater#Physics" title="SPG:Underwater"><i>Physics</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Super_Speeds" title="SPG:Super Speeds">Super Speeds</a></li></ul>
+</td></tr>
+<tr>
+<th style="padding-top:2px; padding-bottom:2px; width:320px; text-align:center;">  <b>Gameplay</b>
+</th></tr>
+<tr>
+<td style="padding-top:2px; padding-bottom:2px; width:320px; text-align:left;">
+<ul><li><a href="/SPG:Main_Game_Loop" title="SPG:Main Game Loop">Main Game Loop</a></li>
+<li><a href="/SPG:Game_Objects" title="SPG:Game Objects">Game Objects</a></li>
+<li><a href="/SPG:Game_Enemies" title="SPG:Game Enemies">Game Enemies</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Game_Enemies#Badniks" title="SPG:Game Enemies"><i>Badniks</i></a></li>
+<li><a href="/SPG:Game_Enemies#Bosses" title="SPG:Game Enemies"><i>Bosses</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Ring_Loss" title="SPG:Ring Loss">Ring Loss</a></li>
+<li><a href="/SPG:Special_Abilities" title="SPG:Special Abilities">Special Abilities</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Special_Abilities#Spindash_.28Sonic_2.2C_3.2C_.26_K.29" title="SPG:Special Abilities"><i>Spindash</i></a></li>
+<li><a href="/SPG:Special_Abilities#Dash_.28Super_Peel_Out.29" title="SPG:Special Abilities"><i>Super Peel Out</i></a></li>
+<li><a href="/SPG:Special_Abilities#Drop_Dash_.28Mania.29" title="SPG:Special Abilities"><i>Drop Dash</i></a></li>
+<li><a href="/SPG:Special_Abilities#Insta-Shield" title="SPG:Special Abilities"><i>Insta-Shield</i></a></li>
+<li><a href="/SPG:Special_Abilities#Flying" title="SPG:Special Abilities"><i>Flying</i></a></li>
+<li><a href="/SPG:Special_Abilities#Gliding" title="SPG:Special Abilities"><i>Gliding</i></a></li>
+<li><a href="/SPG:Special_Abilities#Climbing" title="SPG:Special Abilities"><i>Climbing</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Elemental_Shields" title="SPG:Elemental Shields">Elemental Shields</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Elemental_Shields#Flame_Shield" title="SPG:Elemental Shields"><i>Flame Shield</i></a></li>
+<li><a href="/SPG:Elemental_Shields#Bubble_Shield" title="SPG:Elemental Shields"><i>Bubble Shield</i></a></li>
+<li><a href="/SPG:Elemental_Shields#Lightning_Shield" title="SPG:Elemental Shields"><i>Lightning Shield</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Player_2" title="SPG:Player 2">Player 2</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Player_2#Player_2_CPU" title="SPG:Player 2"><i>Player 2 CPU</i></a></li>
+<li><a href="/SPG:Player_2#Respawning" title="SPG:Player 2"><i>Respawning</i></a></li></ul></dd></dl>
+<ul><li><a href="/SPG:Special_Stages" title="SPG:Special Stages">Special Stages</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Special_Stages#Rotating_Maze" title="SPG:Special Stages"><i>Rotating Maze</i></a></li></ul></dd></dl>
+</td></tr>
+<tr>
+<th style="padding-top:2px; padding-bottom:2px; width:320px; text-align:center;">  <b>Presentation</b>
+</th></tr>
+<tr>
+<td style="padding-top:2px; padding-bottom:2px; width:320px; text-align:left;">
+<ul><li><a href="/SPG:Camera" title="SPG:Camera">Camera</a></li>
+<li><a href="/SPG:Animations" title="SPG:Animations">Animations</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Animations#Animation_System" title="SPG:Animations"><i>Animation System</i></a></li>
+<li><a href="/SPG:Animations#Variable_Speed_Animation_Timings" title="SPG:Animations"><i>Variable Speed Animation Timings</i></a></li>
+<li><a href="/SPG:Animations#Normal_Animation_Timings" title="SPG:Animations"><i>Normal Animation Timings</i></a></li>
+<li><a href="/SPG:Animations#Animation_Rules" title="SPG:Animations"><i>Animation Rules</i></a></li></ul></dd></dl>
+</td></tr>
+<tr>
+<th style="padding-top:2px; padding-bottom:2px; width:320px; text-align:center;">  <b>Special</b>
+</th></tr>
+<tr>
+<td style="padding-top:2px; padding-bottom:2px; width:320px; text-align:left;">
+<ul><li><a href="/SPG:Overlay_Scripts" title="SPG:Overlay Scripts">Overlay Scripts</a></li></ul>
+<dl><dd><ul><li><a href="/SPG:Overlay_Scripts#Sonic_1_Overlay" title="SPG:Overlay Scripts"><i>Sonic 1 Overlay</i></a></li>
+<li><a href="/SPG:Overlay_Scripts#Sonic_2_Overlay" title="SPG:Overlay Scripts"><i>Sonic 2 Overlay</i></a></li></ul></dd></dl>
+</td></tr>
+
+</table>
+<p><b>Notes:</b>
+</p>
+<ul><li><i>The research applies to all four of the <a href="/Sega_Mega_Drive" class="mw-redirect" title="Sega Mega Drive">Sega Mega Drive</a> games and <a href="/Sonic_CD" class="mw-redirect" title="Sonic CD">Sonic CD</a></i>.</li>
+<li><i>This guide relies on information about tiles and Sensors discussed in <a href="/SPG:Solid_Tiles" title="SPG:Solid Tiles">Solid Tiles</a></i>.</li>
+<li><i>This page is essentially part 1 of 2. This details the Player's terrain collision and 360 collision with walls and ceilings. For part 2, detailing Player physics and speeds when on slopes, go to <a href="/SPG:Slope_Physics" title="SPG:Slope Physics">Slope Physics</a></i>.</li></ul>
+<div id="toc" class="toc"><div class="toctitle"><h2>Contents</h2></div>
+<ul>
+<li class="toclevel-1 tocsection-1"><a href="#Introduction"><span class="tocnumber">1</span> <span class="toctext">Introduction</span></a></li>
+<li class="toclevel-1 tocsection-2"><a href="#The_Player.27s_Sensors"><span class="tocnumber">2</span> <span class="toctext">The Player's Sensors</span></a></li>
+<li class="toclevel-1 tocsection-3"><a href="#While_Grounded"><span class="tocnumber">3</span> <span class="toctext">While Grounded</span></a>
+<ul>
+<li class="toclevel-2 tocsection-4"><a href="#Grounded_Sensor_Activation"><span class="tocnumber">3.1</span> <span class="toctext">Grounded Sensor Activation</span></a></li>
+<li class="toclevel-2 tocsection-5"><a href="#360_Degree_Collision"><span class="tocnumber">3.2</span> <span class="toctext">360 Degree Collision</span></a>
+<ul>
+<li class="toclevel-3 tocsection-6"><a href="#The_Four_Modes"><span class="tocnumber">3.2.1</span> <span class="toctext">The Four Modes</span></a>
+<ul>
+<li class="toclevel-4 tocsection-7"><a href="#Determining_The_Mode"><span class="tocnumber">3.2.1.1</span> <span class="toctext">Determining The Mode</span></a></li>
+<li class="toclevel-4 tocsection-8"><a href="#Mode_Collision_Changes"><span class="tocnumber">3.2.1.2</span> <span class="toctext">Mode Collision Changes</span></a></li>
+<li class="toclevel-4 tocsection-9"><a href="#When_to_Change_Mode"><span class="tocnumber">3.2.1.3</span> <span class="toctext">When to Change Mode</span></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-10"><a href="#Ground_Sensors_.28Grounded.29"><span class="tocnumber">3.3</span> <span class="toctext">Ground Sensors (Grounded)</span></a>
+<ul>
+<li class="toclevel-3 tocsection-11"><a href="#Movement"><span class="tocnumber">3.3.1</span> <span class="toctext">Movement</span></a></li>
+<li class="toclevel-3 tocsection-12"><a href="#Process"><span class="tocnumber">3.3.2</span> <span class="toctext">Process</span></a></li>
+<li class="toclevel-3 tocsection-13"><a href="#Angles_Of_Flagged_Tiles"><span class="tocnumber">3.3.3</span> <span class="toctext">Angles Of Flagged Tiles</span></a></li>
+<li class="toclevel-3 tocsection-14"><a href="#Ledges"><span class="tocnumber">3.3.4</span> <span class="toctext">Ledges</span></a>
+<ul>
+<li class="toclevel-4 tocsection-15"><a href="#Balancing_On_Edges"><span class="tocnumber">3.3.4.1</span> <span class="toctext">Balancing On Edges</span></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-16"><a href="#Push_Sensors_.28Grounded.29"><span class="tocnumber">3.4</span> <span class="toctext">Push Sensors (Grounded)</span></a>
+<ul>
+<li class="toclevel-3 tocsection-17"><a href="#Movement_2"><span class="tocnumber">3.4.1</span> <span class="toctext">Movement</span></a></li>
+<li class="toclevel-3 tocsection-18"><a href="#Process_2"><span class="tocnumber">3.4.2</span> <span class="toctext">Process</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-19"><a href="#Jump_Check"><span class="tocnumber">3.5</span> <span class="toctext">Jump Check</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-20"><a href="#While_Airborne"><span class="tocnumber">4</span> <span class="toctext">While Airborne</span></a>
+<ul>
+<li class="toclevel-2 tocsection-21"><a href="#Airborne_Sensor_Activation"><span class="tocnumber">4.1</span> <span class="toctext">Airborne Sensor Activation</span></a></li>
+<li class="toclevel-2 tocsection-22"><a href="#Ground_Sensors_.28Airborne.29"><span class="tocnumber">4.2</span> <span class="toctext">Ground Sensors (Airborne)</span></a>
+<ul>
+<li class="toclevel-3 tocsection-23"><a href="#Movement_3"><span class="tocnumber">4.2.1</span> <span class="toctext">Movement</span></a></li>
+<li class="toclevel-3 tocsection-24"><a href="#Process_3"><span class="tocnumber">4.2.2</span> <span class="toctext">Process</span></a></li>
+<li class="toclevel-3 tocsection-25"><a href="#Landing_On_A_Floor"><span class="tocnumber">4.2.3</span> <span class="toctext">Landing On A Floor</span></a></li>
+<li class="toclevel-3 tocsection-26"><a href="#Jumping_.22Through.22_Floors"><span class="tocnumber">4.2.4</span> <span class="toctext">Jumping "Through" Floors</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-27"><a href="#Ceiling_Sensors"><span class="tocnumber">4.3</span> <span class="toctext">Ceiling Sensors</span></a>
+<ul>
+<li class="toclevel-3 tocsection-28"><a href="#Movement_4"><span class="tocnumber">4.3.1</span> <span class="toctext">Movement</span></a></li>
+<li class="toclevel-3 tocsection-29"><a href="#Process_4"><span class="tocnumber">4.3.2</span> <span class="toctext">Process</span></a></li>
+<li class="toclevel-3 tocsection-30"><a href="#Landing_On_A_Ceiling"><span class="tocnumber">4.3.3</span> <span class="toctext">Landing On A Ceiling</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-31"><a href="#Push_Sensors_.28Airborne.29"><span class="tocnumber">4.4</span> <span class="toctext">Push Sensors (Airborne)</span></a>
+<ul>
+<li class="toclevel-3 tocsection-32"><a href="#Movement_5"><span class="tocnumber">4.4.1</span> <span class="toctext">Movement</span></a></li>
+<li class="toclevel-3 tocsection-33"><a href="#Process_5"><span class="tocnumber">4.4.2</span> <span class="toctext">Process</span></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-34"><a href="#Summary"><span class="tocnumber">5</span> <span class="toctext">Summary</span></a>
+<ul>
+<li class="toclevel-2 tocsection-35"><a href="#Bugs_Using_This_Method"><span class="tocnumber">5.1</span> <span class="toctext">Bugs Using This Method</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-36"><a href="#Notes"><span class="tocnumber">6</span> <span class="toctext">Notes</span></a></li>
+</ul>
+</div>
+
+<h2><span class="mw-headline" id="Introduction">Introduction</span></h2>
+<p>Now that you know how <a href="/SPG:Solid_Tiles" title="SPG:Solid Tiles">Solid Tiles</a> and <a href="/SPG:Solid_Tiles#Sensors" title="SPG:Solid Tiles">Sensors</a> work, the Player object can use these to detect where nearby surfaces are, and react to collisions to essentially allow terrain around them to act "solid".
+</p>
+<h2><span class="mw-headline" id="The_Player.27s_Sensors">The Player's Sensors</span></h2>
+<p>Like any object which wants to collide with tiles, Sensors are needed at the edges to detect the Solid Tiles. In the case of the Player object, many of these Sensors surround them in all 4 directions. 
+</p>
+<table class="prettytable" style="width: auto;">
+<tr>
+<td style="text-align: center;"><a href="/Special:FilePath/SPGSensors.png" title="Special:FilePath/SPGSensors.png"><img alt="SPGSensors.png" src="/images/4/45/SPGSensors.png" width="384" height="128" /></a>
+</td>
+<td style="text-align: center;"><a href="/File:SPGSensorAnchors.png" class="image"><img alt="SPGSensorAnchors.png" src="/images/7/71/SPGSensorAnchors.png" width="384" height="128" /></a>
+</td></tr>
+<tr>
+<th style="text-align: center;">Coloured lines represent the Player's Sensors.
+</th>
+<th style="text-align: center;">White points represent the anchor positions of the Player's Sensors.
+</th></tr></table>
+<table class="prettytable" style="width: auto;">
+<tr>
+<th>Sensor
+</th>
+<th>Purpose
+</th></tr>
+<tr>
+<td>
+<p><span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span>
+</p>
+</td>
+<td>
+<p>Ground collision
+</p>
+</td></tr>
+<tr>
+<td>
+<p><span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span>
+</p>
+</td>
+<td>
+<p>Ceiling collision
+</p>
+</td></tr>
+<tr>
+<td>
+<p><span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span>
+</p>
+</td>
+<td>
+<p>Push collision
+</p>
+</td></tr>
+</table>
+<p>Since the Player's collision setup is symmetrical, it makes sense for the game to set up widths and heights using radius values. The Player has separate radius values for their <span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span> Sensor pair (their <b>Push Radius</b>) which always remains the same,  and for their <span style="color:#00f000; font-weight: bold;">A</span>, <span style="color:#38ffa2; font-weight: bold;">B</span>, <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> Sensors there is a Width Radius and Height Radius both of which will change depending on the Player's state. For these sizes see <a href="/SPG:Characters" title="SPG:Characters">Characters</a>.
+</p><p>Note on sprite alignment:
+</p>
+<ul><li> The Player's sprite is 1 pixel offset to the left when they face left, which can result in them appearing to be 1px inside a tile when pushing leftwards. Amusingly, this offset will appear corrected when pushing most objects thanks to their hitboxes sticking out <i>1</i> pixel further on their right and bottom (due to their origins being off-centre by <i>1</i> in X and Y). So while tiles are collided with accuracy, it will appear the opposite in-game. More about object collision in <a href="/SPG:Solid_Objects" title="SPG:Solid Objects">Solid Objects</a>.</li></ul>
+<p><br />
+</p>
+<h2><span class="mw-headline" id="While_Grounded">While Grounded</span></h2>
+<p>When on the ground, the Player will persistently check for the ground by their feet in order to update their <i><b>Ground Angle</b></i> and <i><b>Ground Speed</b></i>. With that, they can update their position. They will also check to push against walls that meet the ground if they are moving.
+</p>
+<h3><span class="mw-headline" id="Grounded_Sensor_Activation">Grounded Sensor Activation</span></h3>
+<p>Before jumping into exactly how these Sensors make Sonic react to the terrain, it's best to know when they are actually being used.
+</p><p>Ground Sensors <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> are always active while grounded, and will actively search for new terrain at the Player's feet at any angle. 
+</p><p>When grounded, Push Sensors <span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span> only activate when the Player is walking in that direction. For example, while standing still the Player isn't checking with their Push Sensors at all, but while <i><b>Ground Speed</b></i> is positive, the Player's <span style="color:#ff38ff; font-weight: bold;">E</span> Sensor is inactive, and while <i><b>Ground Speed</b></i> is negative, the Player's <span style="color:#ff5454; font-weight: bold;">F</span> Sensor is inactive.
+</p><p>However this is not always the case, both Push Sensors simply aren't active when the Player's <i><b>Ground Angle</b></i> is outside of a <i>0</i> to <i>90</i> and <i>270</i> to <i>360</i> (or simply <i>-90</i> to <i>90</i>) degree range, meaning when you running around a loop, the Push Sensors will vanish for the top half of the loop. In S3K however, Push Sensors will also appear when the Player's <i><b>Ground Angle</b></i> is a multiple of <i>90° (64)</i> in addition to the normal angle ranges.
+</p><p>While grounded, Ceiling Sensors <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> are never active, and the Player won't check for collision with Solid Tiles above them while grounded.
+</p>
+<h3><span class="mw-headline" id="360_Degree_Collision">360 Degree Collision</span></h3>
+<p>One of the main features of classic Sonic gameplay is the ability to traverse terrain of any angle.
+With Ground Sensors that point downwards as shown above, the Player could run over basic hills and ramps and ledges, and all that works great. But it is not enough, as they cannot make their way from the flat ground, up a steeper and steeper slope, to walls and ceilings without more work.
+</p><p>Why not? Well to better understand, imagine what we will call a "simple platformer". A character can walk left and right, and up/down some simple slopes. No full loops, just a few shallow hills and very flat ramps. To stay aligned with the floor after moving horizontally, all the character would need to do is move up or down until they met the level of the ground. The angle of the floor would then be measured. The angle would be used to attenuate <i><b>Ground Speed</b></i>, but nothing more is needed. The character can just move along horizontally and then be moved straight up and down to adhere to floor level. 
+</p>
+<table class="prettytable" style="width: auto;">
+<tr>
+<td style="text-align:center; width: 256px;"><a href="/File:SPGNoModeChange.gif" class="image"><img alt="SPGNoModeChange.gif" src="/images/b/b5/SPGNoModeChange.gif" width="192" height="192" /></a>
+</td>
+<td>
+<p>In this example, the game has been modified to function more like this simple platformer, to demonstrate the issue explained above. When Sonic reaches the upper end of the curve, the game is still aligning him to the floor vertically, and his steep <i><b>Ground Angle</b></i> means each frame he is moving in the opposite direction that the Sensors are pointing, rather than perpendicular. There's also no accounting for Sonic's adjusted "width" when he's rotated so much. There is just no way the game can handle the transition to walls when everything is built for moving snapping the Player up and down on the Y-axis.
+</p>
+</td></tr></table>
+<p>What does the game actually do to solve this? It uses four different modes of collision.
+</p>
+<h4><span class="mw-headline" id="The_Four_Modes">The Four Modes</span></h4>
+<p>Each mode is essentially an entire separate copy of a simple platformer collision, each with a unique functionality. There are 2 modes that align the Player vertically on the Y Axis (Floor mode and Ceiling mode), and 2 modes that align the Player horizontally on the X Axis (Left Wall mode and Right Wall mode).
+</p><p><a href="/File:SPGModes.gif" class="image"><img alt="SPGModes.gif" src="/images/3/31/SPGModes.gif" width="118" height="142" /></a>
+</p><p>In the example of the "simple platformer",  the character is essentially always in Floor mode, aligning the player vertically with the ground below them. However in Sonic games, when <i><b>Ground Angle</b></i> gets too steep, the Player switches mode, moving from Floor mode to Right Wall mode (to Ceiling mode, to Left Wall mode, and back around to Floor mode, etc). At any one time, in any one mode, the Player behaves like a simpler platformer on different axis. The magic happens by combining all four modes, and seamlessly switching between them.
+</p>
+<h5><span class="mw-headline" id="Determining_The_Mode">Determining The Mode</span></h5>
+<p>The Player's current mode is derived entirely from the current <i><b>Ground Angle</b></i>. For example, when walking to the right up a quarter pipe, if <i><b>Ground Angle</b></i> is shallower than <i>46° (223)</i>, the player will be in Floor mode. Floor mode behaves more or less like any other kind of platformer, with the ground below the Player, and the Player aligns to the ground vertically.
+</p><p>Then, when <i><b>Ground Angle</b></i> reaches a point steeper than <i>45° (224)</i>, the Player will be in Right Wall mode. Here everything is basically the same, only rotated 90 degrees. The ground is to the right of the Player, and the Player aligns to the ground horizontally instead of vertically.
+</p><p>And of course, if <i><b>Ground Angle</b></i> then became shallower than <i>46° (223)</i>, the Player would be back in Floor mode.
+</p><p>The other transitions work in exactly the same way. When the mode is being calculated, it simply checks which quadrant the Player's <i><b>Ground Angle</b></i> is currently in, which will place the Player's Ground Sensors in the correct mode (ranges are inclusive):
+</p>
+<table class="prettytable" style="width: auto;">
+<tr>
+<th>Ground Sensor Mode
+</th>
+<th>Angle Range
+</th></tr>
+<tr>
+<td>Floor Mode
+</td>
+<td><i>0° (255)</i> to <i>45° (224)</i>
+<p>and mirrored: <i>315° (32)</i> to <i>360° (0)</i>
+</p>
+</td></tr>
+<tr>
+<td>Right Wall Mode
+</td>
+<td><i>46° (223)</i> to <i>134° (161)</i>
+</td></tr>
+<tr>
+<td>Ceiling Mode
+</td>
+<td><i>135° (160)</i> to <i>225° (96)</i>
+</td></tr>
+<tr>
+<td>Left Wall Mode
+</td>
+<td><i>226° (95)</i> to <i>314° (33)</i>
+</td></tr></table>
+<p><a href="/File:SPGModeRanges.png" class="image"><img alt="SPGModeRanges.png" src="/images/4/4a/SPGModeRanges.png" width="320" height="416" /></a><br />
+Note: <i>Unlike most other angle ranges used, extra effort was applied to ensure these are symmetrical, as not doing so would noticeably affect gameplay. The Floor and Ceiling mode ranges are slightly bigger than the wall ranges.</i>
+</p><p>Now, the Push sensors will change mode at slightly different ranges.
+</p>
+<table class="prettytable" style="width: auto;">
+<tr>
+<th>Push Sensor Mode
+</th>
+<th>Angle Range
+</th></tr>
+<tr>
+<td>Floor Mode
+</td>
+<td><i>0° (255)</i> to <i>44° (225)</i>
+<p>and mirrored: <i>316° (31)</i> to <i>360° (0)</i>
+</p>
+</td></tr>
+<tr>
+<td>Right Wall Mode
+</td>
+<td><i>45° (224)</i> to <i>135° (160)</i>
+</td></tr>
+<tr>
+<td>Ceiling Mode
+</td>
+<td><i>136° (159)</i> to <i>224° (97)</i>
+</td></tr>
+<tr>
+<td>Left Wall Mode
+</td>
+<td><i>225° (96)</i> to <i>315° (32)</i>
+</td></tr></table>
+<p><a href="/File:SPGModePushRanges.png" class="image"><img alt="SPGModePushRanges.png" src="/images/1/1e/SPGModePushRanges.png" width="320" height="416" /></a><br />
+Note: <i>Again, these are symmetrical. But this time, the Floor mode range is slightly smaller than the wall ranges.</i>
+</p><p>It's important to note (as explained above in <a href="/SPG:Slope_Collision#Grounded_Sensor_Activation" title="SPG:Slope Collision">sensor activation</a>) that the Push sensors don't appear on walls or angles steeper than walls. However, in S3K the game activates the Push Sensors while on walls and ceilings that are multiples of 90 degrees.
+</p><p>Overall, these small changes in the ranges results in the Push Sensors rotating a few frames sooner when walking up a slope than the Ground Sensors.
+</p>
+<h5><span class="mw-headline" id="Mode_Collision_Changes">Mode Collision Changes</span></h5>
+<p>Where are the sensors when in modes other then Floor mode? Simply put, they change axis to point in the new direction of the ground. 
+</p><p>For example, in Right Wall mode they're in exactly the same place, only rotated 90 degrees. Sensor <span style="color:#00f000; font-weight: bold;">A</span> is now at <code><i><b>Y Position</b></i> + <i><b>Width Radius</b></i></code> instead of <code><i><b>X Position</b></i> - <i><b>Width Radius</b></i></code>. Sensor <span style="color:#38ffa2; font-weight: bold;">B</span> is now at <code><i><b>Y Position</b></i> - <i><b>Width Radius</b></i></code>, instead of <code><i><b>X Position</b></i> + <i><b>Width Radius</b></i></code>. Instead of downward vertical sensor, they are now horizontal facing left, at his foot level (which is now "below" them, at <code><i><b>X Position</b></i> + <i><b>Width Radius</b></i></code>). They move and rotate in the same way for the other modes.
+</p><p>Because the sensors move so far, it is possible for the Player to be "popped" out to a new position in the step in which he switches mode. However, this is hardly ever more than a few pixels and really isn't noticeable during normal play. 
+</p><p>The Push Sensors work in much the same way, simply rotating based on their current mode.
+</p><p>With these four modes, the Player can go over all sorts of shapes. Inner curves, outer curves, you name them. Here are some approximate example images with their angle values to help give you some idea of what this results in:
+</p><p><a href="/Special:FilePath/SPGInnerCurve.PNG" title="Special:FilePath/SPGInnerCurve.PNG"><img alt="SPGInnerCurve.PNG" src="/images/c/c4/SPGInnerCurve.PNG" width="256" height="224" /></a> <a href="/Special:FilePath/SPGInnerCurveChart.PNG" title="Special:FilePath/SPGInnerCurveChart.PNG"><img alt="SPGInnerCurveChart.PNG" src="/images/e/e8/SPGInnerCurveChart.PNG" width="144" height="144" /></a>
+</p><p>You can observe Sonic's mode changing after his <i><b>Ground Angle</b></i> exceeds <i>45°</i>.  Sonic's position shifts a bit when the mode change occurs, due to the totally new collision angle and position. You can also notice his Push Sensor changing mode first due to it's slightly different angle range.
+</p><p><a href="/Special:FilePath/SPGOuterCurve.PNG" title="Special:FilePath/SPGOuterCurve.PNG"><img alt="SPGOuterCurve.PNG" src="/images/2/26/SPGOuterCurve.PNG" width="256" height="224" /></a> <a href="/Special:FilePath/SPGOuterCurveChart.PNG" title="Special:FilePath/SPGOuterCurveChart.PNG"><img alt="SPGOuterCurveChart.PNG" src="/images/8/8a/SPGOuterCurveChart.PNG" width="144" height="144" /></a>
+</p><p>You may notice the Sonic's mode switches erratically on the convex curve, this is because his <i><b>Ground Angle</b></i> will suddenly decrease when switching to wall mode, causing it to switch back and forth until he is far enough down the curve to stabilise. This isn't usually noticeable, and happens less the faster you are moving.
+</p>
+<h5><span class="mw-headline" id="When_to_Change_Mode">When to Change Mode</span></h5>
+<p>If you've checked the guide regarding the <a href="/SPG:Main_Game_Loop" title="SPG:Main Game Loop">Main Game Loop</a> you may notice the mode switching isn't mentioned at all, that's because the game doesn't actually ever "switch" or "update" the Player's mode. The Player's current "mode" is decided right before a collision occurs. It will measure their <i><b>Ground Angle</b></i> as described above, and decide which mode of collision to use right there and then. There is no "mode" state stored in memory. So effectively, the Player's mode updates whenever their angle (<i><b>Ground Angle</b></i>) does. 
+</p><p>Since a new <i><b>Ground Angle</b></i> is only calculated as a <b>result</b> of <a href="/SPG:Slope_Collision#Ground_Sensors_.28Grounded.29" title="SPG:Slope Collision">ground collision</a>, the Player's mode for the current frame's ground collision has to use the <i>previous</i> frames angle, even though the Player has moved to a new part of the slope since then. This results in the Player's mode effectively changing 1 frame <i>after</i> the Player reaches one of the diagonal angle thresholds, as seen above.
+</p>
+<h3><span class="mw-headline" id="Ground_Sensors_.28Grounded.29">Ground Sensors (Grounded)</span></h3>
+<p><a href="/Special:FilePath/SPGStandingAnimated.gif" title="Special:FilePath/SPGStandingAnimated.gif"><img alt="SPGStandingAnimated.gif" src="/images/a/a5/SPGStandingAnimated.gif" width="128" height="152" /></a>
+</p><p>Ground sensors <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> sit at either side of the Player's feet.
+</p><p><a href="/File:SPGSensorsOnTiles.gif" class="image"><img alt="SPGSensorsOnTiles.gif" src="/images/4/4f/SPGSensorsOnTiles.gif" width="256" height="256" /></a>
+</p>
+<h4><span class="mw-headline" id="Movement">Movement</span></h4>
+<p>Sensor <span style="color:#00f000; font-weight: bold;">A</span> is on the Player's left side, at <code><i><b>X Position</b></i> - <i><b>Width Radius</b></i></code>, <code><i><b>Y Position</b></i> + <i><b>Height Radius</b></i></code>. While <span style="color:#38ffa2; font-weight: bold;">B</span> is on their right, at <code><i><b>X Position</b></i> + <i><b>Width Radius</b></i></code>, <code><i><b>Y Position</b></i> + <i><b>Height Radius</b></i></code>. That is of course when in <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">floor mode</a>. In other modes, <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">the Sensor arrangement rotates</a>.
+</p><p>These radius values change depending on the character and action (see <a href="/SPG:Characters" title="SPG:Characters">Characters</a>).
+</p>
+<h4><span class="mw-headline" id="Process">Process</span></h4>
+<p>The Ground Sensors are 2 Sensors and they effectively compete to find the nearest floor to the Player. Both Sensors behave the same and search for a Solid Tile and the smaller distance is the Sensor that wins. For example, <i>-10</i> is a "smaller" distance than <i>5</i>. If both distances are the same, Sensor <span style="color:#00f000; font-weight: bold;">A</span> will win. The Sensor that wins is is then the distance and tile angle used (and it's found tile is the one referenced).
+</p><p>Once the winning distance is found, it can be tested and used to reposition the player.
+</p><p>As we know, Sensors return a distance to the nearest surface, up to an extreme maximum of <i>32</i> pixels. If the Player's Ground Sensors are within <i>32</i>ish pixels of the floor, the game may know the floor is there but we might not just want them to snap down right away. The game will test the winning distance found and react appropriately.
+</p><p>In Sonic 1, if the winning distance value is less than <i>-14</i> or greater than <i>14</i>, the Player won't collide.
+In Sonic 2 onward however the positive limit depends on the Player's current speed. In this case, (for when the Player is on the floor) if the distance is greater than <code>minimum(absolute(<i><b>X Speed</b></i>) + <i>4</i>, <i>14</i>)</code> then they won't collide. So the faster the Player moves, the greater the distance the Player can be from the floor while still being pulled back down to it. 
+The <i>-14</i> limit remains the same.
+</p><p>If the Player was in a <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">sideways mode</a>, such as on a wall, it would use <i><b>Y Speed</b></i> instead.
+</p><p>If the player does collide with the floor, the distance will be added to (or subtracted from, when in <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">ceiling mode or left wall mode</a>) the Players <i><b>X or Y Position</b></i>, and the <i><b>Ground Angle</b></i> will be set to the tile angle found by the winning Sensor.
+</p>
+<h4><span class="mw-headline" id="Angles_Of_Flagged_Tiles">Angles Of Flagged Tiles</span></h4>
+<p>Typically, the tile angle found by a Sensor will be the specific angle value that tile has set.
+</p><p>However, certain tiles are <a href="/SPG:Solid_Tiles#Flagged_Tiles" title="SPG:Solid Tiles">flagged</a>, which changes how the Player reacts to the angle. If the tile is flagged, (usually a normal full block, or certain other special tiles) rather than using the tile's angle directly, the (grounded) Ground Sensors will take the current <i><b>Ground Angle</b></i> and simply snap it to the nearest right angle. For example, if Ground Angle was <i>95° (188)</i>, it would become <i>90° (192)</i>. Essentially, the calculation used for degrees would be:
+</p>
+<div class="mw-highlight mw-content-ltr" dir="ltr"><pre>snapped_angle = (round(Ground Angle / 90) mod 4) * 90;</pre></div>
+<p>In Sonic 2 onwards, this angle snapping also occurs with normal tiles if the absolute difference between your current <i><b>Ground Angle</b></i> and the tile's angle is greater than <i>45° (32)</i>.
+</p>
+<h4><span class="mw-headline" id="Ledges">Ledges</span></h4>
+<p>The Player has to be able to run off of ledges. If both Sensor <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> detect no solid tiles, the Player will become <a href="/SPG:Air_State" title="SPG:Air State">airborne</a>.
+</p>
+<h5><span class="mw-headline" id="Balancing_On_Edges">Balancing On Edges</span></h5>
+<p>One nice touch is that the Player goes into a balancing animation when near to the edge of a ledge. This only happens when they are stopped (their <i><b>Ground Speed</b></i> is <i>0</i>).
+</p><p>How does the game know? It is simple - any time only one of the Ground Sensors finds the floor, the Player must be near a ledge. If <span style="color:#00f000; font-weight: bold;">A</span> is active and <span style="color:#38ffa2; font-weight: bold;">B</span> is not the ledge is to their right and vice versa.
+</p><p>But if the Player began balancing the instant one of the Sensors found nothing, they would do it too "early", and it would look silly. So it only happens when only one Sensor is active, and <i><b>X Position</b></i> is greater than the edge of the solid tile. This is checked with an extra downward Sensor at the Player's <i><b>X Position</b></i> and <code><i><b>Y Position</b></i> + <i><b>Height Radius</b></i></code> when <i><b>Ground Speed</b></i> is <i>0</i>. All this extra Sensor does is check if there is floor at their <i><b>X Position</b></i>, it is not related to collision or physics. 
+</p><p><a href="/Special:FilePath/SPGBalancingAnimated.gif" title="Special:FilePath/SPGBalancingAnimated.gif"><img alt="SPGBalancingAnimated.gif" src="/images/b/b2/SPGBalancingAnimated.gif" width="384" height="152" /></a>
+</p><p>Assuming the right edge of the ledge to be an X position of <i>2655</i>, the Player will only start to balance at an <i><b>X Position</b></i> of <i>2656</i> (edge pixel + <i>1</i>). they'll fall off at an <i><b>X Position</b></i> of <i>2665</i> (edge pixel + <i>10</i>) when both Sensors find nothing.
+</p><p>In <i><a href="/Sonic_2" class="mw-redirect" title="Sonic 2">Sonic 2</a></i> and <i><a href="/Sonic_CD" class="mw-redirect" title="Sonic CD">Sonic CD</a></i>, if the ledge is in the opposite direction than the Player is facing, they have a second balancing animation.
+</p><p>In <i><a href="/Sonic_2" class="mw-redirect" title="Sonic 2">Sonic 2</a></i>, <i><a href="/Sonic_3" class="mw-redirect" title="Sonic 3">Sonic 3</a></i>, and <i><a href="/Sonic_%26_Knuckles" title="Sonic &amp; Knuckles">Sonic &amp; Knuckles</a></i>, the Player has yet a <i>third</i> balancing animation, for when they are even further out on the ledge. Assuming the same values as above, this would start when they are at an <i><b>X Position</b></i> of <i>2662</i>.
+</p><p><b>Note:</b> While balancing, certain abilities are not allowed (ducking, looking up, spindash, etc). In <i><a href="/Sonic_3" class="mw-redirect" title="Sonic 3">Sonic 3</a></i> and <i><a href="/Sonic_%26_Knuckles" title="Sonic &amp; Knuckles">Sonic &amp; Knuckles</a></i>, the Player is still allowed to duck and spindash (not to look up, though) when balancing on the ground but not when balancing on an object.
+</p>
+<h3><span class="mw-headline" id="Push_Sensors_.28Grounded.29">Push Sensors (Grounded)</span></h3>
+<p><a href="/Special:FilePath/SPGPushingAnimated.gif" title="Special:FilePath/SPGPushingAnimated.gif"><img alt="SPGPushingAnimated.gif" src="/images/b/b2/SPGPushingAnimated.gif" width="256" height="160" /></a>
+</p><p><span style="color:#ff38ff; font-weight: bold;">E</span> sits at the Player's left at <code><i><b>X Position</b></i> - <i><b>Push Radius</b></i></code>, while <span style="color:#ff5454; font-weight: bold;">F</span> sits at their right at <code><i><b>X Position</b></i> + <i><b>Push Radius</b></i></code>. That is, when in floor mode. In other modes, <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">the Sensor arrangement rotates</a>.
+</p>
+<h4><span class="mw-headline" id="Movement_2">Movement</span></h4>
+<p><i><b>Push Radius</b></i> is always <i>10</i>, placing <span style="color:#ff38ff; font-weight: bold;">E</span> to the Player's left side, at <code><i><b>X Position</b></i> - <i>10</i></code>. While <span style="color:#ff5454; font-weight: bold;">F</span> is to their right, at <code><i><b>X Position</b></i> + <i>10</i></code>, giving the Player a total width of <i>21</i> pixels when pushing.
+</p><p>Sensors <span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span> spend most of their time at the Player's <i><b>Y Position</b></i> however while the Player's <i><b>Ground Angle</b></i> is <i>0</i> (on totally flat ground) both Push Sensors will move to their <code><i><b>Y Position</b></i> + <i>8</i></code> so that they can push against low steps and not just snap up ontop of them.
+</p><p>As noted above, this arrangement is rotated when in any mode other than <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">floor mode</a>.
+</p><p>You may remember that Sensors <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> are only <i>19</i> pixels apart but the Player is <i>21</i> pixels wide when pushing into walls. This means that the Player is skinnier by <i>2</i> pixels when running off of ledges than when bumping into walls.
+</p><p>So, these Sensors remain rather steady, especially considering that <i><b>Push Radius</b></i> never changes. That's not to say these Sensors don't move relative to this starting position though. They do, and a lot. 
+As noted in <a href="/SPG:Main_Game_Loop" title="SPG:Main Game Loop">Main Game Loop</a> wall collision (while grounded) actually takes place before the Player's position physically moves anywhere that frame, so they wont actually be in/touching a wall when they need to collide with it. The game accounts for this by actually adding their <i><b>X Speed</b></i> and <i><b>Y Speed</b></i> to the Sensor's default position each frame, this is where the Sensor <i>would</i> be if the Player had moved yet.
+</p>
+<h4><span class="mw-headline" id="Process_2">Process</span></h4>
+<p>Assuming the wall's left side to be at an X position of <i>704</i>, the Player cannot get closer than an <i><b>X Position</b></i> of <i>693</i>. Assuming the wall's right side to be at an X position of <i>831</i>, the Player cannot get closer than an <i><b>X Position</b></i> of <i>842</i>. Thus the distance between both Sensors inclusive should be <i>21</i> pixels, stretching from the Player's <code><i><b>X Position</b></i> - <i>10</i></code> to <code><i><b>X Position</b></i> + <i>10</i></code>. 
+</p><p>When the Player collides with a wall, this will set their <i><b>Ground Speed</b></i> to <i>0</i> if they are moving in the direction of the wall, not while moving away from it.
+</p><p>The distance value found by the Sensor in it's given direction is used to stop the Player at a wall in the following ways.
+</p><p>The distances found by the Push Sensors are used slightly differently while grounded.
+</p><p>Naturally, the game will ignore a positive distance because they will not collide. If the Sensor's distance is negative, this means that when the Player's position actually does change, they will be inside the wall.
+</p><p>In this case, because the Sensor is actually out in front of the Player (where they <i>will</i> be after they move that frame), instead of using the distance to reposition the Player by directly changing their position the game smartly uses the fact that the Player has still yet to move within the current frame. All it has to do is add the distance to the Player's <i><b>X Speed</b></i> (if moving right, or <i>subtract</i> the distance from the Player's <i><b>X Speed</b></i> if moving left. This would be done to <i><b>Y Speed</b></i> if in <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">wall mode</a>). This results in the Player moving when their position changes, right up to the wall, but no further. In the next frame, because <i><b>Ground Speed</b></i> has been set to <i>0</i> the Player will have stopped just like in any other situation.
+</p><p>Thanks to this process and the Sensor's movement, this effectively results in no difference between this and if the Sensor was simply checked <b>after</b> movement had occurred like all other Sensors.
+</p>
+<h3><span class="mw-headline" id="Jump_Check">Jump Check</span></h3>
+<p>The Player cannot jump when there is a low ceiling above them. The frame that the Player tries jumping, <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> Ceiling Sensors are activated for one frame to check if their is ceiling too close. If there is a collision detected with upwards <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> Sensors at the Player's <code><i><b>X Position</b></i> - <i><b>Width Radius</b></i></code> and <code><i><b>X Position</b></i> + <i><b>Width Radius</b></i></code>, and if the closest distance found is less than <i>6</i> (meaning for a character the same size as Sonic the ceiling would be <i>25</i> pixels above the Player's <i><b>Y Position</b></i> or closer while standing), the Player won't bother jumping at all.
+</p>
+<h2><span class="mw-headline" id="While_Airborne">While Airborne</span></h2>
+<p>When in the air, the Player will use their Sensors in all directions to detect the surrounding terrain to bump walls, or to land on floors and ceilings.
+</p><p>Note: <i>Unlike on the ground, the Player's angle does not affect or rotate collision while in the air.</i>
+</p>
+<h3><span class="mw-headline" id="Airborne_Sensor_Activation">Airborne Sensor Activation</span></h3>
+<p>While in the air, all Sensors play a part to find ground to reattach the Player to, or bump against. But rather than have all active at once and risk lag, only 4-5 will be active at any given time.
+</p><p>As you move through the air, the game will check the angle of your motion (<i><b>X Speed</b></i> and <i><b>Y Speed</b></i>) through the air. It will then pick a quadrant by checking the angle found.
+</p>
+<table class="prettytable" style="width: auto;">
+<tr>
+<th>Range
+</th>
+<th>Values (inclusive)
+</th></tr>
+<tr>
+<th>Mostly Right
+</th>
+<td><i>0° (255)</i> to <i>45° (224)</i>
+<p>And mirrored: <i>316° (31)</i> to <i>360° (0)</i>
+</p>
+</td></tr>
+<tr>
+<th>Mostly Up
+</th>
+<td><i>46° (223)</i> to <i>135° (160)</i>
+</td></tr>
+<tr>
+<th>Mostly Left
+</th>
+<td><i>136° (159)</i> to <i>225° (96)</i>
+</td></tr>
+<tr>
+<th>Mostly Down
+</th>
+<td><i>226° (95)</i> to <i>315° (32)</i>
+</td></tr>
+</table>
+<p>Note: You can get a similar result by more simply comparing <i><b>X Speed</b></i> and <i><b>Y Speed</b></i> and choosing the dominant axis/direction being moved along.
+</p><p>Depending on the quadrant, different Sensors will be active.
+</p><p>When going <i>mostly right</i>, the Player's <span style="color:#ff5454; font-weight: bold;">F</span> Push Sensor will be active, along with both <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> Ground Sensors and the <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> Ceiling Sensors.
+</p><p>When going <i>mostly left</i>, it is the exact same as going right, but the <span style="color:#ff38ff; font-weight: bold;">E</span> Push Sensor instead.
+</p><p>When going <i>mostly up</i>, both the <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> Ceiling Sensors and the <span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span> Push Sensors are active.
+</p><p>When going <i>mostly down</i>, it is the same as going up, but the <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> Ground Sensors are active instead of the Ceiling Sensors.
+</p>
+<h3><span class="mw-headline" id="Ground_Sensors_.28Airborne.29">Ground Sensors (Airborne)</span></h3>
+<p>While airborne, the Ground Sensors work a lot like they do when grounded, competing to find a "winning" distance. Though the process after this is a little different.
+</p>
+<h4><span class="mw-headline" id="Movement_3">Movement</span></h4>
+<p>Sensor <span style="color:#00f000; font-weight: bold;">A</span> is on the Player's left side, at <code><i><b>X Position</b></i> - <i><b>Width Radius</b></i></code>, <code><i><b>Y Position</b></i> + <i><b>Height Radius</b></i></code>. While <span style="color:#38ffa2; font-weight: bold;">B</span> is on their right, at <code><i><b>X Position</b></i> + <i><b>Width Radius</b></i></code>, <code><i><b>Y Position</b></i> + <i><b>Height Radius</b></i></code>.
+</p>
+<h4><span class="mw-headline" id="Process_3">Process</span></h4>
+<p>While airborne, if the winning distance value is greater than or equal <i>0</i> (meaning the Sensor isn't overlapping the terrain yet) the Player won't collide and the game will exit the collision code. 
+</p><p>If still colliding after that check, the game will then check the following:
+</p><p>When moving <b>mostly down</b>, it will check if both Sensor's distances are larger than or equal to <code>-(<i><b>Y Speed</b></i> + <i>8</i>)</code>. If either of them are, the player will collide, if neither of them are, the Player will not collide. 
+</p><p>However when moving <b>mostly left</b> or <b>mostly right</b>, the Player will collide if the Player's <i><b>Y Speed</b></i> is greater than or equal to <i>0</i>.
+</p><p>Note: The winning angle found by all sensors take <a href="/SPG:Slope_Collision#Angles_Of_Flagged_Tiles" title="SPG:Slope Collision">flagged tiles into account</a>.
+</p>
+<h4><span class="mw-headline" id="Landing_On_A_Floor">Landing On A Floor</span></h4>
+<p>Finally, upon successfully colliding, the Player will land. 
+</p><p>The winning distance will be added to the Player's <i><b>Y Position</b></i>.
+</p><p>Then the the Player's grounded flag is set, <a href="/SPG:Slope_Physics#Landing_On_The_Ground" title="SPG:Slope Physics"><i><b>Ground Speed</b></i> is set according to the winning angle and the Player's speed</a>, and <i><b>Ground Angle</b></i> is set to that winning angle.
+</p><p>Ground collision in the next frame will be done via the <a href="/SPG:Slope_Collision#Ground_Sensors_.28Grounded.29" title="SPG:Slope Collision">grounded Ground Sensors</a>. Based on the new <i><b>Ground Angle</b></i>, in the next frame the Player is likely to be in <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">floor mode</a> but could be in a <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">wall mode</a> if the angle is steeper.
+</p>
+<h4><span class="mw-headline" id="Jumping_.22Through.22_Floors">Jumping "Through" Floors</span></h4>
+<p>The above airborne behaviours are most noticeable with jump through (top solid) tiles when jumping from underneath. The solid tiles that make up these ledges are flagged as being a certain type that should only be detected by the Player's <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> Ground Sensors, so solid from the top only.
+</p><p>These are often in the hilly, green zones such as <a href="/Green_Hill_Zone_(Sonic_the_Hedgehog_16-bit)" title="Green Hill Zone (Sonic the Hedgehog 16-bit)">Green Hill Zone</a>, <a href="/Emerald_Hill_Zone" title="Emerald Hill Zone">Emerald Hill Zone</a>, <a href="/Palmtree_Panic_Zone" class="mw-redirect" title="Palmtree Panic Zone">Palmtree Panic Zone</a>, and so on. They are ignored entirely by <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> as well as the Push Sensors <span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span>. Finally, sensor <span style="color:#00f000; font-weight: bold;">A</span> and <span style="color:#38ffa2; font-weight: bold;">B</span> (mostly) are only active in the air when the player is <b>not</b> moving mostly upwards. So with a slightly shorter jump, you will see the Player 'pop' upwards onto a jump through surface once they begin to fall.
+</p><p>As discussed above there are conditions to be met aside from just the Sensors being active and finding the floor related to both the distances found and the current <i><b>Y Speed</b></i> of the Player. So you may also see the Player pop upwards onto a Jump through ledge if you start moving to the side at the peak of a straight jump thanks to those more relaxed rules for landing when moving mostly left or mostly right.
+</p>
+<h3><span class="mw-headline" id="Ceiling_Sensors">Ceiling Sensors</span></h3>
+<p><a href="/Special:FilePath/SPGHitCeiling.gif" title="Special:FilePath/SPGHitCeiling.gif"><img alt="SPGHitCeiling.gif" src="/images/5/55/SPGHitCeiling.gif" width="192" height="288" /></a>
+</p>
+<h4><span class="mw-headline" id="Movement_4">Movement</span></h4>
+<p>The Player's <span style="color:#00aeef; font-weight: bold;">C</span> and <span style="color:#fff238; font-weight: bold;">D</span> Ceiling Sensors are always an exact mirror image of the Player's Ground Sensors, they have the same X positions but are flipped upside down and face upwards. 
+</p>
+<h4><span class="mw-headline" id="Process_4">Process</span></h4>
+<p>They perform in the exact same way as the Ground Sensors, competing against each other, simply up instead of down. When these Sensors find a ceiling, the Sensor which finds the smallest distance will win. The Sensor that wins is the distance and angle used (and it's found tile is the one referenced).
+</p><p>The distances are processed here in the same way as the Ground Sensors do while airborne, mainly being that a winning distance of greater than <i>0</i> is not reacted to. If the winning distance is less than <i>0</i>, the Player will collide.
+</p><p>Note: The winning angle found by all sensors take <a href="/SPG:Slope_Collision#Angles_Of_Flagged_Tiles" title="SPG:Slope Collision">flagged tiles into account</a>.
+</p>
+<h4><span class="mw-headline" id="Landing_On_A_Ceiling">Landing On A Ceiling</span></h4>
+<p>Upon successfully colliding with a ceiling, the winning distance will be subtracted from the Player's Y Position.
+</p><p>The game will then <a href="/SPG:Slope_Physics#Landing_On_The_Ground" title="SPG:Slope Physics">test if the Player should land on the ceiling</a> or just bump their head (for these checks see <a href="/SPG:Slope_Physics#Landing_On_The_Ground" title="SPG:Slope Physics">Slope Physics</a>). 
+</p><p><a href="/File:SPGCeilingLand.gif" class="image"><img alt="SPGCeilingLand.gif" src="/images/7/76/SPGCeilingLand.gif" width="192" height="224" /></a>
+</p><p>If they landed, they will become grounded and their <i><b>Ground Speed</b></i> will be calculated and <i><b>Ground Angle</b></i> will be set to that found by the Ceiling Sensors. 
+</p><p>Because they are now grounded, on the next frame the Player will continue to collide with the ceiling with their <a href="/SPG:Slope_Collision#Ground_Sensors_.28Grounded.29" title="SPG:Slope Collision">Ground Sensors</a>. The Player is likely to be in <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">wall mode</a> because their <i><b>Ground Angle</b></i> has been set to that of the ceiling, but the Player <a href="/SPG:Slope_Physics#When_Going_Upward" title="SPG:Slope Physics">won't become grounded if the ceiling angle is too "flat"</a>. However, obviously if their angle was somehow "flat" enough they'd be in <a href="/SPG:Slope_Collision#The_Four_Modes" title="SPG:Slope Collision">ceiling mode</a>.
+</p><p>Otherwise, if they just bumped their head, <i><b>Y Speed</b></i> is set to <i>0</i>.
+</p>
+<h3><span class="mw-headline" id="Push_Sensors_.28Airborne.29">Push Sensors (Airborne)</span></h3>
+<p>While airborne, the Push Sensors work a lot like they do when grounded, though the process is slightly different.
+</p>
+<h4><span class="mw-headline" id="Movement_5">Movement</span></h4>
+<p><span style="color:#ff38ff; font-weight: bold;">E</span> is to the Player's left side, at <code><i><b>X Position</b></i> - <i>10</i></code>. While <span style="color:#ff5454; font-weight: bold;">F</span> is to their right, at <code><i><b>X Position</b></i> + <i>10</i></code>. They are both at <i><b>Y Position</b></i>.
+</p>
+<h4><span class="mw-headline" id="Process_5">Process</span></h4>
+<p>Like normal, if the distance is negative and the Sensor is inside the wall, they will collide. The game will ignore a positive distance.
+</p><p>Airborne Push collision happens <i>after</i> the Player moves like all other Sensors, so it will just add the distance to the Player's <i><b>X Position</b></i> and set <i><b>X Speed</b></i> to <i>0</i>.
+</p>
+<h2><span class="mw-headline" id="Summary">Summary</span></h2>
+<p>Here's a visualisation of how Sensors interact with <a href="/SPG:Solid_Tiles" title="SPG:Solid Tiles">solid tiles</a> during some typical gameplay. Here, you can notice how the Ground Sensors align the Player to the "highest" ground tile they find. The <span style="color:#ff38ff; font-weight: bold;">E</span> and <span style="color:#ff5454; font-weight: bold;">F</span> Sensors lower when on flat ground. You can also notice the Sensors snap to the 4 cardinal directions based on the Ground Angle, resulting in the four <a href="/SPG:Slope_Collision#360_Degree_Collision" title="SPG:Slope Collision">collision modes</a>.
+</p><p><a href="/Special:FilePath/SPGCollisionDemo.gif" title="Special:FilePath/SPGCollisionDemo.gif"><img alt="SPGCollisionDemo.gif" src="/images/5/53/SPGCollisionDemo.gif" width="384" height="416" /></a> 
+</p>
+<h3><span class="mw-headline" id="Bugs_Using_This_Method">Bugs Using This Method</span></h3>
+<p>Unfortunately, there are a couple of quirks in the original games because of the 2 sensor Ground collision method.
+</p><p>If the Player stands on a slanted ledge, one Sensor will find no tile and return a height of foot level. This causes the Player to be set to the wrong position.
+</p><p><a href="/Special:FilePath/SPGSlopeBug1Animated.gif" title="Special:FilePath/SPGSlopeBug1Animated.gif"><img alt="SPGSlopeBug1Animated.gif" src="/images/2/25/SPGSlopeBug1Animated.gif" width="384" height="288" /></a>
+</p><p>The Player raises up with Sensor <span style="color:#38ffa2; font-weight: bold;">B</span> as they move right. When <span style="color:#38ffa2; font-weight: bold;">B</span> drops off the ledge, the Player defaults to the level of Sensor <span style="color:#00f000; font-weight: bold;">A</span>. Then they raise up with Sensor <span style="color:#00f000; font-weight: bold;">A</span> as they move further right. So they will move up, drop down, and move up again as they run off the ledge.
+</p><p>There are only a few areas where this is noticeable, but it applies to all Mega Drive titles.
+</p><p>The second form of it occurs when two opposing ramp tiles abut each other, as in some of the low hills in <a href="/Green_Hill_Zone_(Sonic_the_Hedgehog_16-bit)" title="Green Hill Zone (Sonic the Hedgehog 16-bit)">Green Hill Zone</a> and <a href="/Marble_Zone" title="Marble Zone">Marble Zone</a>.
+</p><p><a href="/Special:FilePath/SPGSlopeBug2Animated.gif" title="Special:FilePath/SPGSlopeBug2Animated.gif"><img alt="SPGSlopeBug2Animated.gif" src="/images/c/c4/SPGSlopeBug2Animated.gif" width="384" height="152" /></a>
+</p><p>Sensor <span style="color:#38ffa2; font-weight: bold;">B</span> starts climbing down the ramp on the right, but the Player still defaults to the level of the previous ramp found by Sensor <span style="color:#00f000; font-weight: bold;">A</span>. Because these ramps are usually shallow, this only causes them to dip down in the middle by about <i>1</i> pixel.
+</p><p>But that is not all. Because the highest Sensor is the one the Player gets the angle from, even though it looks like they should be considered to be at the angle of the ramp on the right (because they are closer to it), they will still have the angle of the ramp on the left. When you jump, they will jump at that angle, moving backward, not forward like you would expect.
+</p>
+<h2><span class="mw-headline" id="Notes">Notes</span></h2>
+<ul><li><i>This page is essentially part 1 of 2. This details the Player's terrain collision and 360 collision with walls and ceilings. For part 2, detailing Player physics and speeds when on slopes, go to <a href="/SPG:Slope_Physics" title="SPG:Slope Physics">Slope Physics</a></i>.</li></ul>
+
+<!-- 
+NewPP limit report
+Cached time: 20251116164213
+Cache expiry: 86400
+Dynamic content: false
+CPU time usage: 0.050 seconds
+Real time usage: 0.151 seconds
+Preprocessor visited node count: 617/1000000
+Preprocessor generated node count: 906/1000000
+Post‐expand include size: 24642/2097152 bytes
+Template argument size: 12820/2097152 bytes
+Highest expansion depth: 7/40
+Expensive parser function count: 0/400
+ExtLoops count: 0
+-->
+<!--
+Transclusion expansion time report (%,ms,calls,template)
+100.00%   12.767      1 Template:SPGPages
+100.00%   12.767      1 -total
+ 92.55%   11.816      1 Template:BobTable
+ 78.75%   10.054     12 Template:BobRow
+-->
+</div>
+<!-- Saved in parser cache with key sonicret_info-wiki_:pcache:idhash:73512-0!canonical and timestamp 20251116164213 and revision id 384518
+ -->
+</div><div class="printfooter">
+Retrieved from "<a dir="ltr" href="https://info.sonicretro.org/index.php?title=SPG:Slope_Collision&amp;oldid=384518">https://info.sonicretro.org/index.php?title=SPG:Slope_Collision&amp;oldid=384518</a>"</div>
+						<div class="clear_both"></div>
+					</div>
+		    	<div class="group"><div id="catlinks" class="catlinks" data-mw="interface"><div id="mw-normal-catlinks" class="mw-normal-catlinks"><a href="/Special:Categories" title="Special:Categories">Categories</a>: <ul><li><a href="/Category:Pages_with_syntax_highlighting_errors" title="Category:Pages with syntax highlighting errors">Pages with syntax highlighting errors</a></li><li><a href="/Category:Sonic_Physics_Guide" title="Category:Sonic Physics Guide">Sonic Physics Guide</a></li></ul></div></div></div>
+		    					</div>
+		    </div>
+		</div>
+
+			<footer class="row fullWidth">
+				<div id="footer">
+										<div id="footer-left" class="small-12 large-centered columns text-center">
+					<ul id="footer-left">
+													<li id="footer-lastmod"> This page was last edited on 29 March 2025, at 01:02.</li>
+													<li id="footer-privacy"><a href="/Sonic_Retro:Privacy_policy" class="mw-redirect" title="Sonic Retro:Privacy policy">Privacy policy</a></li>
+													<li id="footer-about"><a href="/Sonic_Retro:About" class="mw-redirect" title="Sonic Retro:About">About Sonic Retro</a></li>
+													<li id="footer-disclaimer"><a href="/Sonic_Retro:General_disclaimer" title="Sonic Retro:General disclaimer">Disclaimers</a></li>
+															
+					</ul>
+					</div>	
+					<div id="footer-right-icons" class="large-12 small-12 columns">
+					<ul id="poweredby">
+													<li class="poweredby">								<a href="//www.mediawiki.org/">Powered by MediaWiki</a>															</li>
+											</ul>
+					</div>								
+				</div>
+			</footer>
+
+		</div>
+		
+		<script>(window.RLQ=window.RLQ||[]).push(function(){mw.config.set({"wgPageParseReport":{"limitreport":{"cputime":"0.050","walltime":"0.151","ppvisitednodes":{"value":617,"limit":1000000},"ppgeneratednodes":{"value":906,"limit":1000000},"postexpandincludesize":{"value":24642,"limit":2097152},"templateargumentsize":{"value":12820,"limit":2097152},"expansiondepth":{"value":7,"limit":40},"expensivefunctioncount":{"value":0,"limit":400},"timingprofile":["100.00%   12.767      1 Template:SPGPages","100.00%   12.767      1 -total"," 92.55%   11.816      1 Template:BobTable"," 78.75%   10.054     12 Template:BobRow"]},"cachereport":{"timestamp":"20251116164213","ttl":86400,"transientcontent":false}}});});</script><script>(window.RLQ=window.RLQ||[]).push(function(){mw.config.set({"wgBackendResponseTime":277});});</script>				
+		<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"940cb3f5d1824be49334cb8f5386cda8","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+		<!-- Cached/compressed 20251116164213 -->
+</html>
+

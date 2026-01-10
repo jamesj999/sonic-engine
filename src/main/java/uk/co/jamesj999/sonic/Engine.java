@@ -8,6 +8,8 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
+import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
+import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugState;
@@ -16,7 +18,9 @@ import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
+import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 
 import com.jogamp.opengl.GL2;
@@ -100,14 +104,18 @@ public class Engine extends GLCanvas implements GLEventListener {
 			AudioManager.getInstance().setBackend(new JOALAudioBackend());
 		}
 
-		Sonic sonic = new Sonic(
-				configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE),
-				(short) 100, (short) 624, debugModeEnabled);
-		spriteManager.addSprite(sonic);
+		String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+		AbstractPlayableSprite mainSprite;
+		if ("tails".equalsIgnoreCase(mainCode)) {
+			mainSprite = new Tails(mainCode, (short) 100, (short) 624, debugModeEnabled);
+		} else {
+			mainSprite = new Sonic(mainCode, (short) 100, (short) 624, debugModeEnabled);
+		}
+		spriteManager.addSprite(mainSprite);
 
 		// Causes camera to instantiate itself... TODO Probably remove this
 		// later since it'll be used in the first update loop anyway
-		camera.setFocusedSprite(sonic);
+		camera.setFocusedSprite(mainSprite);
 		camera.updatePosition(true);
 
 		//levelManager.setLevel(new TestOldLevel());
@@ -141,15 +149,22 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glLoadIdentity(); // reset
 	}
 
-	public void update() {
-		AudioManager.getInstance().update();
-		timerManager.update();
-		spriteCollisionManager.update(inputHandler);
-		camera.updatePosition();
+        public void update() {
+                AudioManager.getInstance().update();
+                timerManager.update();
+                DebugOverlayManager.getInstance().updateInput(inputHandler);
+                DebugObjectArtViewer.getInstance().updateInput(inputHandler);
+                boolean freezeForArtViewer = DebugOverlayManager.getInstance()
+                                .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
+                if (!freezeForArtViewer) {
+                        spriteCollisionManager.update(inputHandler);
+                        camera.updatePosition();
+                        levelManager.update();
+                }
 
-		if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
-			try {
-				levelManager.nextAct();
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
+                        try {
+                                levelManager.nextAct();
 			} catch (IOException e) {
 				throw new RuntimeException(e);
 			}
@@ -160,43 +175,42 @@ public class Engine extends GLCanvas implements GLEventListener {
 				levelManager.nextZone();
 			} catch (IOException e) {
 				throw new RuntimeException(e);
-			}
-		}
+                        }
+                }
 
-		inputHandler.update();
-	}
+                inputHandler.update();
+        }
 
 
 
-	public void draw() {
-		if (!debugViewEnabled) {
-			levelManager.draw();
-			spriteRenderManager.draw();
-		} else {
-			switch (debugState) {
-				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
-				case CHUNKS_VIEW -> levelManager.drawAllChunks();
-				case BLOCKS_VIEW -> levelManager.draw();
-				case null, default -> { levelManager.draw(); spriteRenderManager.draw(); }
-			}
-		}
-	}
+        public void draw() {
+                if (!debugViewEnabled) {
+                        levelManager.drawWithSpritePriority(spriteRenderManager);
+                } else {
+                        switch (debugState) {
+                                case PATTERNS_VIEW -> levelManager.drawAllPatterns();
+                                case CHUNKS_VIEW -> levelManager.drawAllChunks();
+                                case BLOCKS_VIEW -> levelManager.draw();
+                                case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
+                        }
+                }
+        }
 
 	public static void main(String[] args) {
 		// Run the GUI codes in the event-dispatching thread for thread safety
 		SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
-				// Create the OpenGL rendering canvas
-				GLCanvas canvas = new Engine();
-				SonicConfigurationService configService = SonicConfigurationService
-						.getInstance();
+                                // Create the OpenGL rendering canvas
+                                GLCanvas canvas = new Engine();
+                                canvas.setFocusTraversalKeysEnabled(false);
+                                SonicConfigurationService configService = SonicConfigurationService
+                                                .getInstance();
 				int width = configService
 						.getInt(SonicConfiguration.SCREEN_WIDTH);
 				int height = configService
 						.getInt(SonicConfiguration.SCREEN_HEIGHT);
 				int fps = configService.getInt(SonicConfiguration.FPS);
-				String version = configService
-						.getString(SonicConfiguration.VERSION);
+				String version = SonicConfigurationService.ENGINE_VERSION;
 
 				canvas.setPreferredSize(new Dimension(width, height));
 
@@ -263,28 +277,41 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear color
 																// and depth
 																// buffers
-		gl.glLoadIdentity(); // reset the model-view matrix
-		update();
+                gl.glLoadIdentity(); // reset the model-view matrix
+                gl.glDisable(GL2.GL_LIGHTING);
+                gl.glDisable(GL2.GL_COLOR_MATERIAL);
+                gl.glColorMask(true, true, true, true);
+                update();
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
-		if (debugViewEnabled) {
-			// Reset OpenGL state for JOGL's TextRenderer
-			gl.glActiveTexture(GL2.GL_TEXTURE0);
-			gl.glUseProgram(0);
-			// Reset matrices for 2D rendering
-			gl.glMatrixMode(GL_PROJECTION);
-			gl.glLoadIdentity();
-			glu.gluOrtho2D(0, realWidth, 0, realHeight);
-			gl.glMatrixMode(GL_MODELVIEW);
-			gl.glLoadIdentity();
+                if (debugViewEnabled) {
+                        // Reset OpenGL state for JOGL's TextRenderer
+                        gl.glActiveTexture(GL2.GL_TEXTURE0);
+                        gl.glUseProgram(0);
+                        gl.glDisable(GL2.GL_LIGHTING);
+                        gl.glDisable(GL2.GL_COLOR_MATERIAL);
+                        gl.glDisable(GL2.GL_DEPTH_TEST);
+                        gl.glColor4f(1f, 1f, 1f, 1f);
+                        gl.glEnable(GL2.GL_TEXTURE_2D);
+                        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+                        gl.glActiveTexture(GL2.GL_TEXTURE1);
+                        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+                        gl.glActiveTexture(GL2.GL_TEXTURE0);
+                        // Reset matrices for 2D rendering
+                        gl.glMatrixMode(GL_PROJECTION);
+                        gl.glLoadIdentity();
+                        glu.gluOrtho2D(0, realWidth, 0, realHeight);
+                        gl.glMatrixMode(GL_MODELVIEW);
+                        gl.glLoadIdentity();
 
 			// Re-enable blending for the TextRenderer
-			gl.glEnable(GL2.GL_BLEND);
-			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+                        gl.glEnable(GL2.GL_BLEND);
+                        gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
 
-			debugRenderer.renderDebugInfo();
-		}
+                        debugRenderer.updateViewport(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+                        debugRenderer.renderDebugInfo();
+                }
 	}
 
 	/**

@@ -5,8 +5,12 @@ import uk.co.jamesj999.sonic.audio.smps.DacData;
 
 public interface AudioBackend {
     void init();
+
+    void setAudioProfile(GameAudioProfile profile);
+
     /**
      * Plays music by ID (potentially loading from ROM or fallback map).
+     * 
      * @param musicId The music ID from the ROM/LevelData.
      */
     void playMusic(int musicId);
@@ -19,6 +23,7 @@ public interface AudioBackend {
 
     /**
      * Plays a sound effect by name (mapped to a WAV file).
+     * 
      * @param sfxName The name of the SFX (e.g., "JUMP", "RING").
      */
     void playSfx(String sfxName);
@@ -31,12 +36,27 @@ public interface AudioBackend {
     void stopPlayback();
 
     void toggleMute(ChannelType type, int channel);
+
     void toggleSolo(ChannelType type, int channel);
+
     boolean isMuted(ChannelType type, int channel);
+
     boolean isSoloed(ChannelType type, int channel);
 
     void setSpeedShoes(boolean enabled);
 
+    void restoreMusic();
+
+    /**
+     * Ends a temporary music override (e.g., invincibility). If the override is
+     * currently playing, it should restore the previous track. If it is queued
+     * beneath another override, it should be removed so it does not resume.
+     *
+     * @param musicId The music ID to end.
+     */
+    void endMusicOverride(int musicId);
+
     void update();
+
     void destroy();
 }

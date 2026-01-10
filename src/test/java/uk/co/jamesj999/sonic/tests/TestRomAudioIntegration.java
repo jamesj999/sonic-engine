@@ -1,10 +1,11 @@
 package uk.co.jamesj999.sonic.tests;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Before;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsLoader;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
@@ -61,6 +62,31 @@ public class TestRomAudioIntegration {
     }
 
     @Test
+    public void testChemicalPlantNoiseChannelEmitsVolume() {
+        AbstractSmpsData data = loader.loadMusic(0x8C); // Chemical Plant
+        assertNotNull("Chemical Plant should load", data);
+        DacData dac = loader.loadDacData();
+        assertNotNull("DAC data should load", dac);
+
+        LoggingSynth synth = new LoggingSynth();
+        SmpsSequencer seq = new SmpsSequencer(data, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
+
+        // Run enough frames to cover early percussion passages
+        short[] buffer = new short[4096];
+        for (int i = 0; i < 32; i++) {
+            seq.read(buffer);
+        }
+
+        boolean hasNoiseLatch = synth.psg.stream().anyMatch(v -> (v & 0xF0) == 0xE0);
+        long noiseVolWrites = synth.psg.stream()
+                .filter(v -> (v & 0xF0) == 0xF0 && (v & 0x0F) < 0x0F)
+                .count();
+
+        assertTrue("Noise channel should receive latch writes", hasNoiseLatch);
+        assertTrue("Noise channel should receive audible volume writes", noiseVolWrites > 0);
+    }
+
+    @Test
     public void testMusicDecompressionAndLoading() {
         AbstractSmpsData data = loader.loadMusic(0x82);
         assertNotNull("Should load Metropolis music (0x82)", data);
@@ -87,7 +113,7 @@ public class TestRomAudioIntegration {
         AbstractSmpsData data = loader.loadMusic(0x82); // Metropolis
         DacData dac = loader.loadDacData();
 
-        SmpsSequencer seq = new SmpsSequencer(data, dac);
+        SmpsSequencer seq = new SmpsSequencer(data, dac, Sonic2SmpsSequencerConfig.CONFIG);
         short[] buffer = new short[4096];
 
         // Run for more ticks (50 iterations * 4096 samples ~ 5 seconds)
@@ -106,7 +132,7 @@ public class TestRomAudioIntegration {
         DacData dac = loader.loadDacData();
 
         LoggingSynth synth = new LoggingSynth();
-        SmpsSequencer seq = new SmpsSequencer(data, dac, synth);
+        SmpsSequencer seq = new SmpsSequencer(data, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Check for init write before clearing
         boolean hasInitWrite = synth.fm.stream().anyMatch(cmd -> cmd.contains("2B 80"));
@@ -130,7 +156,7 @@ public class TestRomAudioIntegration {
         AbstractSmpsData smps = loader.loadMusic(0x82); // Metropolis contains DAC drums
         DacData dacData = loader.loadDacData();
         LoggingSynth synth = new LoggingSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, dacData, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buffer = new short[4096];
         seq.read(buffer);
@@ -142,7 +168,7 @@ public class TestRomAudioIntegration {
 
     @Test
     public void testLevelMusicMapping() throws IOException {
-        uk.co.jamesj999.sonic.data.games.Sonic2 game = new uk.co.jamesj999.sonic.data.games.Sonic2(rom);
+        uk.co.jamesj999.sonic.game.sonic2.Sonic2 game = new uk.co.jamesj999.sonic.game.sonic2.Sonic2(rom);
 
         // Emerald Hill (0x81)
         assertEquals("Emerald Hill 1 Music ID", 0x81, game.getMusicId(0));

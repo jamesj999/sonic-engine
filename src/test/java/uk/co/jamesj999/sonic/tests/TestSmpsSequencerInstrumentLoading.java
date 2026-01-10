@@ -1,4 +1,5 @@
 package uk.co.jamesj999.sonic.tests;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
@@ -96,7 +97,7 @@ public class TestSmpsSequencerInstrumentLoading {
         MockSynthesizer synth = new MockSynthesizer();
         DacData dac = new DacData(new HashMap<>(), new HashMap<>()); // Empty
 
-        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[2000]; // Enough to tick
         seq.read(buf); // Should trigger tick and process commands

@@ -2,7 +2,7 @@ package uk.co.jamesj999.sonic.audio;
 
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.audio.smps.SmpsLoader;
 import uk.co.jamesj999.sonic.data.Rom;
 
 import java.util.Map;
@@ -12,9 +12,10 @@ public class AudioManager {
     private static final Logger LOGGER = Logger.getLogger(AudioManager.class.getName());
     private static AudioManager instance;
     private AudioBackend backend;
-    private Sonic2SmpsLoader smpsLoader;
+    private SmpsLoader smpsLoader;
     private DacData dacData;
     private Map<GameSound, Integer> soundMap;
+    private GameAudioProfile audioProfile;
     private boolean ringLeft = true;
 
     private AudioManager() {
@@ -29,6 +30,10 @@ public class AudioManager {
         return instance;
     }
 
+    public AudioBackend getBackend() {
+        return backend;
+    }
+
     public void setBackend(AudioBackend backend) {
         if (this.backend != null) {
             this.backend.destroy();
@@ -36,6 +41,7 @@ public class AudioManager {
         this.backend = backend;
         try {
             this.backend.init();
+            this.backend.setAudioProfile(audioProfile);
             LOGGER.info("AudioBackend initialized: " + backend.getClass().getSimpleName());
         } catch (Exception e) {
             LOGGER.severe("Failed to initialize AudioBackend: " + e.getMessage());
@@ -44,9 +50,25 @@ public class AudioManager {
         }
     }
 
+    public void setAudioProfile(GameAudioProfile audioProfile) {
+        this.audioProfile = audioProfile;
+        if (backend != null) {
+            backend.setAudioProfile(audioProfile);
+        }
+    }
+
+    public GameAudioProfile getAudioProfile() {
+        return audioProfile;
+    }
+
     public void setRom(Rom rom) {
-        this.smpsLoader = new Sonic2SmpsLoader(rom);
-        this.dacData = smpsLoader.loadDacData();
+        if (audioProfile == null) {
+            this.smpsLoader = null;
+            this.dacData = null;
+            return;
+        }
+        this.smpsLoader = audioProfile.createSmpsLoader(rom);
+        this.dacData = smpsLoader != null ? smpsLoader.loadDacData() : null;
     }
 
     public void setSoundMap(Map<GameSound, Integer> soundMap) {
@@ -58,6 +80,16 @@ public class AudioManager {
     }
 
     public void playMusic(int musicId) {
+        if (audioProfile != null) {
+            if (musicId == audioProfile.getSpeedShoesOnCommandId()) {
+                backend.setSpeedShoes(true);
+                return;
+            } else if (musicId == audioProfile.getSpeedShoesOffCommandId()) {
+                backend.setSpeedShoes(false);
+                return;
+            }
+        }
+
         if (smpsLoader != null) {
             AbstractSmpsData data = smpsLoader.loadMusic(musicId);
             if (data != null) {
@@ -120,6 +152,10 @@ public class AudioManager {
 
     public void update() {
         backend.update();
+    }
+
+    public void endMusicOverride(int musicId) {
+        backend.endMusicOverride(musicId);
     }
 
     public void destroy() {

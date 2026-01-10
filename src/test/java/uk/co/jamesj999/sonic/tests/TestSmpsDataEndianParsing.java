@@ -5,7 +5,7 @@ import org.junit.Before;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.Sonic1SmpsData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 

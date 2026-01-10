@@ -6,11 +6,14 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Represents a ROM file for reading and writing.
  */
 public class Rom {
+    private static final Logger LOGGER = Logger.getLogger(Rom.class.getName());
 
     private FileChannel fileChannel;
     private final static int CHECKSUM_OFFSET = 0x018E;
@@ -22,15 +25,19 @@ public class Rom {
     private final static int INTERNATIONAL_NAME_LEN = 48;
     private final static int INTERNATIONAL_NAME_OFFSET = DOMESTIC_NAME_OFFSET + DOMESTIC_NAME_LEN;
 
+    // Pre-allocated buffers for small reads (avoid per-call allocations)
+    private final ByteBuffer buffer1 = ByteBuffer.allocate(1);
+    private final ByteBuffer buffer2 = ByteBuffer.allocate(2);
+    private final ByteBuffer buffer4 = ByteBuffer.allocate(4);
+
     public boolean open(String spath) {
         try {
             Path path = Path.of(spath);
-            System.out.println(path.toAbsolutePath().toString());
+            LOGGER.fine(path.toAbsolutePath().toString());
             fileChannel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE);
             return true;
         } catch (IOException e) {
-            //System.err.println("Error",e.getMessage());
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Failed to open ROM: " + spath, e);
             return false;
         }
     }
@@ -41,6 +48,23 @@ public class Rom {
 
     public long getSize() throws IOException {
         return fileChannel.size();
+    }
+
+    /**
+     * Read the whole ROM into memory.
+     */
+    public byte[] readAllBytes() throws IOException {
+        long size = getSize();
+        if (size > Integer.MAX_VALUE) {
+            throw new IOException("ROM too large to buffer in memory: " + size + " bytes");
+        }
+        ByteBuffer buffer = ByteBuffer.allocate((int) size);
+        fileChannel.position(0);
+        int read = fileChannel.read(buffer);
+        if (read < size) {
+            throw new IOException("Unable to read entire ROM (read " + read + " of " + size + " bytes)");
+        }
+        return buffer.array();
     }
 
     public int readAddrRange() throws IOException {
@@ -90,11 +114,11 @@ public class Rom {
     }
 
     public byte readByte(long offset) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(1);
+        buffer1.clear();
         fileChannel.position(offset);
-        fileChannel.read(buffer);
-        buffer.flip();
-        return buffer.get();
+        fileChannel.read(buffer1);
+        buffer1.flip();
+        return buffer1.get();
     }
 
     public byte[] readBytes(long offset, int count) throws IOException {
@@ -105,29 +129,29 @@ public class Rom {
     }
 
     public int read16BitAddr(long offset) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(2);
+        buffer2.clear();
         long fileSize = fileChannel.size();
         if (offset > fileSize) {
-            System.out.print("offset "+offset+" is longer than current fileSize " + fileSize);
+            LOGGER.fine("offset " + offset + " is longer than current fileSize " + fileSize);
         }
         fileChannel.position(offset);
-        int bytesRead = fileChannel.read(buffer);
+        fileChannel.read(buffer2);
 
-        buffer.flip();
-        return (Byte.toUnsignedInt(buffer.get()) << 8) | Byte.toUnsignedInt(buffer.get());
+        buffer2.flip();
+        return (Byte.toUnsignedInt(buffer2.get()) << 8) | Byte.toUnsignedInt(buffer2.get());
     }
 
     public int read32BitAddr(long offset) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(4);
+        buffer4.clear();
         fileChannel.position(offset);
-        int bytesRead = fileChannel.read(buffer);
+        fileChannel.read(buffer4);
 
-        buffer.flip();
+        buffer4.flip();
 
-        int result = (Byte.toUnsignedInt(buffer.get()) << 24) |
-                (Byte.toUnsignedInt(buffer.get()) << 16) |
-                (Byte.toUnsignedInt(buffer.get()) << 8) |
-                        Byte.toUnsignedInt(buffer.get());
+        int result = (Byte.toUnsignedInt(buffer4.get()) << 24) |
+                (Byte.toUnsignedInt(buffer4.get()) << 16) |
+                (Byte.toUnsignedInt(buffer4.get()) << 8) |
+                Byte.toUnsignedInt(buffer4.get());
 
         return result;
     }

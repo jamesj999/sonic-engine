@@ -5,47 +5,76 @@ import uk.co.jamesj999.sonic.audio.smps.DacData;
 
 public class NullAudioBackend implements AudioBackend {
     @Override
-    public void init() {}
+    public void init() {
+    }
 
     @Override
-    public void playMusic(int musicId) {}
+    public void setAudioProfile(GameAudioProfile profile) {
+    }
 
     @Override
-    public void playSmps(AbstractSmpsData data, DacData dacData) {}
+    public void playMusic(int musicId) {
+    }
 
     @Override
-    public void playSfxSmps(AbstractSmpsData data, DacData dacData) {}
+    public void playSmps(AbstractSmpsData data, DacData dacData) {
+    }
 
     @Override
-    public void playSfxSmps(AbstractSmpsData data, DacData dacData, float pitch) {}
+    public void playSfxSmps(AbstractSmpsData data, DacData dacData) {
+    }
 
     @Override
-    public void playSfx(String sfxName) {}
+    public void playSfxSmps(AbstractSmpsData data, DacData dacData, float pitch) {
+    }
 
     @Override
-    public void playSfx(String sfxName, float pitch) {}
+    public void playSfx(String sfxName) {
+    }
 
     @Override
-    public void stopPlayback() {}
+    public void playSfx(String sfxName, float pitch) {
+    }
 
     @Override
-    public void toggleMute(ChannelType type, int channel) {}
+    public void stopPlayback() {
+    }
 
     @Override
-    public void toggleSolo(ChannelType type, int channel) {}
+    public void toggleMute(ChannelType type, int channel) {
+    }
 
     @Override
-    public boolean isMuted(ChannelType type, int channel) { return false; }
+    public void toggleSolo(ChannelType type, int channel) {
+    }
 
     @Override
-    public boolean isSoloed(ChannelType type, int channel) { return false; }
+    public boolean isMuted(ChannelType type, int channel) {
+        return false;
+    }
 
     @Override
-    public void setSpeedShoes(boolean enabled) {}
+    public boolean isSoloed(ChannelType type, int channel) {
+        return false;
+    }
 
     @Override
-    public void update() {}
+    public void setSpeedShoes(boolean enabled) {
+    }
 
     @Override
-    public void destroy() {}
+    public void restoreMusic() {
+    }
+
+    @Override
+    public void endMusicOverride(int musicId) {
+    }
+
+    @Override
+    public void update() {
+    }
+
+    @Override
+    public void destroy() {
+    }
 }

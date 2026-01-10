@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.data;
 
-import uk.co.jamesj999.sonic.data.games.Sonic2;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2;
 import uk.co.jamesj999.sonic.level.Level;
 import java.util.Optional;
 

@@ -1,0 +1,1084 @@
+package uk.co.jamesj999.sonic.game.sonic2;
+
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
+
+import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.RomByteReader;
+import uk.co.jamesj999.sonic.level.Pattern;
+import uk.co.jamesj999.sonic.level.objects.ObjectArtData;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpriteSheet;
+import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
+import uk.co.jamesj999.sonic.level.render.SpriteMappingPiece;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationEndAction;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationScript;
+import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
+import uk.co.jamesj999.sonic.tools.NemesisReader;
+
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * Loads common object art (monitors, spikes, springs) for Sonic 2 (REV01).
+ */
+public class Sonic2ObjectArt {
+    private static final Logger LOGGER = Logger.getLogger(Sonic2ObjectArt.class.getName());
+
+    private final Rom rom;
+    private final RomByteReader reader;
+    private ObjectArtData cached;
+
+    public Sonic2ObjectArt(Rom rom, RomByteReader reader) {
+        this.rom = rom;
+        this.reader = reader;
+    }
+
+    public ObjectArtData load() throws IOException {
+        if (cached != null) {
+            return cached;
+        }
+
+        // Load Monitor Art (base art)
+        Pattern[] monitorBasePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR, "Monitor");
+        // Load Tails Life Art (used for Tails Monitor icon, requests tile 340)
+        Pattern[] tailsLifePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_TAILS_LIFE_ADDR, "TailsLife");
+
+        List<SpriteMappingFrame> monitorMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_MONITOR_ADDR);
+
+        // Calculate max requested tile index
+        int maxTileIndex = 0;
+        for (SpriteMappingFrame frame : monitorMappings) {
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                maxTileIndex = Math.max(maxTileIndex, piece.tileIndex());
+            }
+        }
+
+        // Extend monitor patterns to cover the max requested index
+        int requiredSize = maxTileIndex + 1;
+        // Ensure we have enough space for Tails Life Art starting at 340 (0x154 * 32
+        // bytes = 10880 offset)
+        int lifeArtOffset = 340;
+        requiredSize = Math.max(requiredSize, lifeArtOffset + tailsLifePatterns.length);
+
+        Pattern[] monitorPatterns = new Pattern[requiredSize];
+        // Copy base patterns
+        if (monitorBasePatterns.length > 0) {
+            System.arraycopy(monitorBasePatterns, 0, monitorPatterns, 0, monitorBasePatterns.length);
+        }
+        // Copy Tails Life patterns at offset 340
+        if (tailsLifePatterns.length > 0 && lifeArtOffset < monitorPatterns.length) {
+            System.arraycopy(tailsLifePatterns, 0, monitorPatterns, lifeArtOffset,
+                    Math.min(tailsLifePatterns.length, monitorPatterns.length - lifeArtOffset));
+        }
+
+        // Fill gaps with empty patterns to prevent NPEs
+        for (int i = 0; i < monitorPatterns.length; i++) {
+            if (monitorPatterns[i] == null) {
+                monitorPatterns[i] = new Pattern();
+            }
+        }
+
+        ObjectSpriteSheet monitorSheet = new ObjectSpriteSheet(monitorPatterns, monitorMappings, 0, 1);
+
+        Pattern[] spikePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_ADDR, "Spikes");
+        Pattern[] spikeSidePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPIKES_SIDE_ADDR, "SpikesSide");
+        List<SpriteMappingFrame> spikeMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_SPIKES_ADDR);
+        ObjectSpriteSheet spikeSheet = new ObjectSpriteSheet(spikePatterns, spikeMappings, 1, 1);
+        ObjectSpriteSheet spikeSideSheet = new ObjectSpriteSheet(spikeSidePatterns, spikeMappings, 1, 1);
+
+        Pattern[] springVerticalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_VERTICAL_ADDR,
+                "SpringVertical");
+        Pattern[] springHorizontalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_HORIZONTAL_ADDR,
+                "SpringHorizontal");
+        Pattern[] springDiagonalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPRING_DIAGONAL_ADDR,
+                "SpringDiagonal");
+        List<SpriteMappingFrame> springMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_SPRING_ADDR);
+        List<SpriteMappingFrame> springMappingsRed = loadMappingFrames(Sonic2Constants.MAP_UNC_SPRING_RED_ADDR);
+        ObjectSpriteSheet springVerticalSheet = new ObjectSpriteSheet(springVerticalPatterns, springMappings, 0, 1);
+        ObjectSpriteSheet springHorizontalSheet = new ObjectSpriteSheet(springHorizontalPatterns, springMappings, 0, 1);
+        ObjectSpriteSheet springDiagonalSheet = new ObjectSpriteSheet(springDiagonalPatterns, springMappings, 0, 1);
+        ObjectSpriteSheet springVerticalRedSheet = new ObjectSpriteSheet(springVerticalPatterns, springMappingsRed, 1,
+                1);
+        ObjectSpriteSheet springHorizontalRedSheet = new ObjectSpriteSheet(springHorizontalPatterns, springMappingsRed,
+                1, 1);
+
+        ObjectSpriteSheet springDiagonalRedSheet = new ObjectSpriteSheet(springDiagonalPatterns, springMappingsRed, 1,
+                1);
+
+        Pattern[] explosionPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_EXPLOSION_ADDR, "Explosion");
+        List<SpriteMappingFrame> explosionMappings = createExplosionMappings();
+        ObjectSpriteSheet explosionSheet = new ObjectSpriteSheet(explosionPatterns, explosionMappings, 1, 1);
+
+        Pattern[] shieldPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SHIELD_ADDR, "Shield");
+        List<SpriteMappingFrame> shieldMappings = createShieldMappings();
+        ObjectSpriteSheet shieldSheet = new ObjectSpriteSheet(shieldPatterns, shieldMappings, 0, 1);
+
+        Pattern[] bridgePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BRIDGE_ADDR, "Bridge");
+        List<SpriteMappingFrame> bridgeMappings = createBridgeMappings();
+        ObjectSpriteSheet bridgeSheet = new ObjectSpriteSheet(bridgePatterns, bridgeMappings, 2, 1);
+
+        Pattern[] waterfallPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_EHZ_WATERFALL_ADDR,
+                "EHZWaterfall");
+        List<SpriteMappingFrame> waterfallMappings = createEHZWaterfallMappings();
+        int waterfallMaxTile = computeMaxTileIndex(waterfallMappings);
+        if (waterfallMaxTile >= waterfallPatterns.length) {
+            Pattern[] extended = new Pattern[waterfallMaxTile + 1];
+            if (waterfallPatterns.length > 0) {
+                System.arraycopy(waterfallPatterns, 0, extended, 0, waterfallPatterns.length);
+            }
+            for (int i = 0; i < extended.length; i++) {
+                if (extended[i] == null) {
+                    extended[i] = new Pattern();
+                }
+            }
+            waterfallPatterns = extended;
+        }
+        ObjectSpriteSheet waterfallSheet = new ObjectSpriteSheet(waterfallPatterns, waterfallMappings, 1, 1);
+
+        Pattern[] invincibilityStarsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_INVINCIBILITY_STARS_ADDR,
+                "InvincibilityStars");
+        List<SpriteMappingFrame> rawInvincibilityStarsMappings = loadMappingFrames(
+                Sonic2Constants.MAP_UNC_INVINCIBILITY_STARS_ADDR);
+        List<SpriteMappingFrame> invincibilityStarsMappings = normalizeMappings(rawInvincibilityStarsMappings);
+
+        ObjectSpriteSheet invincibilityStarsSheet = new ObjectSpriteSheet(invincibilityStarsPatterns,
+                invincibilityStarsMappings, 0, 1);
+
+        SpriteAnimationSet monitorAnimations = loadAnimationSet(
+                Sonic2Constants.ANI_OBJ26_ADDR,
+                Sonic2Constants.ANI_OBJ26_SCRIPT_COUNT);
+        SpriteAnimationSet springAnimations = loadAnimationSet(
+                Sonic2Constants.ANI_OBJ41_ADDR,
+                Sonic2Constants.ANI_OBJ41_SCRIPT_COUNT);
+
+        // Checkpoint/Starpost art
+        Pattern[] checkpointPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CHECKPOINT_ADDR, "Checkpoint");
+        List<SpriteMappingFrame> checkpointMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_CHECKPOINT_ADDR);
+        List<SpriteMappingFrame> checkpointStarMappings = loadMappingFrames(
+                Sonic2Constants.MAP_UNC_CHECKPOINT_STAR_ADDR);
+        ObjectSpriteSheet checkpointSheet = new ObjectSpriteSheet(checkpointPatterns, checkpointMappings, 0, 1);
+        ObjectSpriteSheet checkpointStarSheet = new ObjectSpriteSheet(checkpointPatterns, checkpointStarMappings, 0, 1);
+        SpriteAnimationSet checkpointAnimations = loadAnimationSet(
+                Sonic2Constants.ANI_OBJ79_ADDR,
+                Sonic2Constants.ANI_OBJ79_SCRIPT_COUNT);
+
+        // Badnik art (Masher, Buzzer, Coconuts)
+        Pattern[] masherPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MASHER_ADDR, "Masher");
+        List<SpriteMappingFrame> masherMappings = createMasherMappings();
+        ObjectSpriteSheet masherSheet = new ObjectSpriteSheet(masherPatterns, masherMappings, 0, 1);
+
+        Pattern[] buzzerPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUZZER_ADDR, "Buzzer");
+        List<SpriteMappingFrame> buzzerMappings = createBuzzerMappings();
+        ObjectSpriteSheet buzzerSheet = new ObjectSpriteSheet(buzzerPatterns, buzzerMappings, 0, 1);
+
+        Pattern[] coconutsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_COCONUTS_ADDR, "Coconuts");
+        List<SpriteMappingFrame> coconutsMappings = createCoconutsMappings();
+        ObjectSpriteSheet coconutsSheet = new ObjectSpriteSheet(coconutsPatterns, coconutsMappings, 0, 1);
+
+        Pattern[] animalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ANIMAL_ADDR, "Animal");
+        List<SpriteMappingFrame> animalMappings = createAnimalMappings();
+        ObjectSpriteSheet animalSheet = new ObjectSpriteSheet(animalPatterns, animalMappings, 0, 1);
+
+        // Load correct points art
+        Pattern[] pointsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_NUMBERS_ADDR, "Numbers");
+        List<SpriteMappingFrame> pointsMappings = createPointsMappings();
+        ObjectSpriteSheet pointsSheet = new ObjectSpriteSheet(pointsPatterns, pointsMappings, 0, 1);
+
+        // Signpost/Goal plate art
+        Pattern[] signpostPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SIGNPOST_ADDR, "Signpost");
+        List<SpriteMappingFrame> signpostMappings = createSignpostMappings();
+        ObjectSpriteSheet signpostSheet = new ObjectSpriteSheet(signpostPatterns, signpostMappings, 0, 1);
+        SpriteAnimationSet signpostAnimations = createSignpostAnimations();
+
+        // Results screen art (Obj3A)
+        // ROM mappings expect fixed VRAM tile bases for each chunk:
+        // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
+        // ResultsText (0x5B0), MiniCharacter (0x5F4).
+        // We build a pattern array aligned to VRAM_BASE_NUMBERS so that
+        // mapping tile indices can be offset by -VRAM_BASE_NUMBERS.
+        Pattern[] hudDigitPatterns = safeLoadUncompressedPatterns(
+                Sonic2Constants.ART_UNC_HUD_NUMBERS_ADDR,
+                Sonic2Constants.ART_UNC_HUD_NUMBERS_SIZE,
+                "HUDNumbers");
+        Pattern[] hudTextPatterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_HUD_ADDR,
+                "HUDText");
+        Pattern[] perfectPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_PERFECT_ADDR, "PerfectText");
+        Pattern[] titleCardPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_TITLE_CARD_ADDR, "TitleCard");
+        Pattern[] resultsTextPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_RESULTS_TEXT_ADDR,
+                "ResultsText");
+        Pattern[] miniSonicPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MINI_SONIC_ADDR, "MiniSonic");
+
+        Pattern[] bonusDisplayPatterns = createBlankPatterns(Sonic2Constants.RESULTS_BONUS_DIGIT_TILES);
+
+        Pattern[] resultsPatterns = createResultsVramPatterns(
+                bonusDisplayPatterns,
+                perfectPatterns,
+                titleCardPatterns,
+                resultsTextPatterns,
+                miniSonicPatterns,
+                hudTextPatterns);
+
+        // Load mappings with offset relative to Numbers VRAM base (0x520)
+        List<SpriteMappingFrame> resultsMappings = loadMappingFramesWithTileOffset(
+                Sonic2Constants.MAPPINGS_EOL_TITLE_CARDS_ADDR, -Sonic2Constants.VRAM_BASE_NUMBERS);
+        resultsPatterns = ensureResultsPatternCapacity(resultsPatterns, resultsMappings);
+        ObjectSpriteSheet resultsSheet = new ObjectSpriteSheet(resultsPatterns, resultsMappings, 0, 1);
+
+        Pattern[] hudLivesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SONIC_LIFE_ADDR, "SonicLife");
+        Pattern[] hudLivesNumbers = safeLoadUncompressedPatterns(Sonic2Constants.ART_UNC_LIVES_NUMBERS_ADDR,
+                Sonic2Constants.ART_UNC_LIVES_NUMBERS_SIZE, "LivesNumbers");
+
+        cached = new ObjectArtData(
+                monitorSheet,
+                spikeSheet,
+                spikeSideSheet,
+                springVerticalSheet,
+                springHorizontalSheet,
+                springDiagonalSheet,
+                springVerticalRedSheet,
+                springHorizontalRedSheet,
+                springDiagonalRedSheet,
+                explosionSheet,
+                shieldSheet,
+                invincibilityStarsSheet,
+                bridgeSheet,
+                waterfallSheet,
+                checkpointSheet,
+                checkpointStarSheet,
+                masherSheet,
+                buzzerSheet,
+                coconutsSheet,
+                animalSheet,
+                pointsSheet,
+                signpostSheet,
+                resultsSheet,
+                hudDigitPatterns,
+                hudTextPatterns,
+                hudLivesPatterns,
+                hudLivesNumbers,
+                monitorMappings,
+                springMappings,
+                checkpointMappings,
+                monitorAnimations,
+                springAnimations,
+                checkpointAnimations,
+                signpostAnimations);
+
+        return cached;
+    }
+
+    private Pattern[] loadNemesisPatterns(int artAddr) throws IOException {
+        FileChannel channel = rom.getFileChannel();
+        channel.position(artAddr);
+        byte[] result = NemesisReader.decompress(channel);
+
+        if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
+            throw new IOException("Inconsistent object art tile data");
+        }
+
+        int patternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
+        Pattern[] patterns = new Pattern[patternCount];
+        for (int i = 0; i < patternCount; i++) {
+            patterns[i] = new Pattern();
+            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
+                    (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
+            patterns[i].fromSegaFormat(subArray);
+        }
+        return patterns;
+    }
+
+    private Pattern[] loadUncompressedPatterns(int artAddr, int length) throws IOException {
+        if (length <= 0) {
+            return new Pattern[0];
+        }
+        FileChannel channel = rom.getFileChannel();
+        channel.position(artAddr);
+        byte[] result = new byte[length];
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(result);
+        while (buffer.hasRemaining()) {
+            int read = channel.read(buffer);
+            if (read < 0) {
+                break;
+            }
+        }
+        if (buffer.hasRemaining()) {
+            throw new IOException("Unexpected EOF reading uncompressed art");
+        }
+        if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
+            throw new IOException("Inconsistent uncompressed art tile data");
+        }
+        int patternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
+        Pattern[] patterns = new Pattern[patternCount];
+        for (int i = 0; i < patternCount; i++) {
+            patterns[i] = new Pattern();
+            byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
+                    (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
+            patterns[i].fromSegaFormat(subArray);
+        }
+        return patterns;
+    }
+
+    /**
+     * Safely loads Nemesis patterns, returning an empty array on failure.
+     * Logs full stack trace for diagnosis without blocking other art.
+     * 
+     * @param artAddr   ROM address of the Nemesis-compressed art
+     * @param assetName Human-readable name for error reporting
+     * @return Decompressed patterns, or empty array on failure
+     */
+    private Pattern[] safeLoadNemesisPatterns(int artAddr, String assetName) {
+        try {
+            return loadNemesisPatterns(artAddr);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,
+                    String.format("Failed to load art '%s' at 0x%06X", assetName, artAddr), e);
+            return new Pattern[0];
+        }
+    }
+
+    /**
+     * Safely loads uncompressed patterns, returning an empty array on failure.
+     */
+    private Pattern[] safeLoadUncompressedPatterns(int artAddr, int length, String assetName) {
+        try {
+            return loadUncompressedPatterns(artAddr, length);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,
+                    String.format("Failed to load uncompressed art '%s' at 0x%06X", assetName, artAddr), e);
+            return new Pattern[0];
+        }
+    }
+
+    private List<SpriteMappingFrame> loadMappingFrames(int mappingAddr) {
+        int offsetTableSize = reader.readU16BE(mappingAddr);
+        int frameCount = offsetTableSize / 2;
+        List<SpriteMappingFrame> frames = new ArrayList<>(frameCount);
+        for (int i = 0; i < frameCount; i++) {
+            int frameAddr = mappingAddr + reader.readU16BE(mappingAddr + i * 2);
+            int pieceCount = reader.readU16BE(frameAddr);
+            frameAddr += 2;
+            List<SpriteMappingPiece> pieces = new ArrayList<>(pieceCount);
+            for (int p = 0; p < pieceCount; p++) {
+                int yOffset = (byte) reader.readU8(frameAddr);
+                frameAddr += 1;
+                int size = reader.readU8(frameAddr);
+                frameAddr += 1;
+                int tileWord = reader.readU16BE(frameAddr);
+                frameAddr += 2;
+                frameAddr += 2; // 2P tile word, unused in 1P.
+                int xOffset = (short) reader.readU16BE(frameAddr);
+                frameAddr += 2;
+
+                int widthTiles = ((size >> 2) & 0x3) + 1;
+                int heightTiles = (size & 0x3) + 1;
+
+                int tileIndex = tileWord & 0x7FF;
+                boolean hFlip = (tileWord & 0x800) != 0;
+                boolean vFlip = (tileWord & 0x1000) != 0;
+                int paletteIndex = (tileWord >> 13) & 0x3;
+
+                pieces.add(new SpriteMappingPiece(
+                        xOffset, yOffset, widthTiles, heightTiles, tileIndex, hFlip, vFlip, paletteIndex));
+            }
+            frames.add(new SpriteMappingFrame(pieces));
+        }
+        return frames;
+    }
+
+    /**
+     * Loads mapping frames from ROM and applies a tile index offset to each piece.
+     * This allows ROM mappings that use VRAM tile indices to work with pattern
+     * arrays
+     * that start at index 0.
+     *
+     * @param mappingAddr ROM address of the mapping data
+     * @param tileOffset  Offset to add to each tile index (use negative to
+     *                    subtract)
+     */
+    private List<SpriteMappingFrame> loadMappingFramesWithTileOffset(int mappingAddr, int tileOffset) {
+        int offsetTableSize = reader.readU16BE(mappingAddr);
+        int frameCount = offsetTableSize / 2;
+        List<SpriteMappingFrame> frames = new ArrayList<>(frameCount);
+        for (int i = 0; i < frameCount; i++) {
+            // Read offset as signed 16-bit (negative offsets reference other mapping
+            // tables)
+            int rawOffset = reader.readU16BE(mappingAddr + i * 2);
+            int signedOffset = (rawOffset > 32767) ? rawOffset - 65536 : rawOffset;
+
+            int frameAddr = mappingAddr + signedOffset;
+            int pieceCount = reader.readU16BE(frameAddr);
+            frameAddr += 2;
+            List<SpriteMappingPiece> pieces = new ArrayList<>(pieceCount);
+            for (int p = 0; p < pieceCount; p++) {
+                int yOffset = (byte) reader.readU8(frameAddr);
+                frameAddr += 1;
+                int size = reader.readU8(frameAddr);
+                frameAddr += 1;
+                int tileWord = reader.readU16BE(frameAddr);
+                frameAddr += 2;
+                frameAddr += 2; // 2P tile word, unused in 1P.
+                int xOffset = (short) reader.readU16BE(frameAddr);
+                frameAddr += 2;
+
+                int widthTiles = ((size >> 2) & 0x3) + 1;
+                int heightTiles = (size & 0x3) + 1;
+
+                int tileIndex = (tileWord & 0x7FF) + tileOffset;
+                // Clamp to valid range
+                if (tileIndex < 0)
+                    tileIndex = 0;
+
+                boolean hFlip = (tileWord & 0x800) != 0;
+                boolean vFlip = (tileWord & 0x1000) != 0;
+                int paletteIndex = (tileWord >> 13) & 0x3;
+
+                pieces.add(new SpriteMappingPiece(
+                        xOffset, yOffset, widthTiles, heightTiles, tileIndex, hFlip, vFlip, paletteIndex));
+            }
+            frames.add(new SpriteMappingFrame(pieces));
+        }
+        return frames;
+    }
+
+    private SpriteAnimationSet loadAnimationSet(int animAddr, int scriptCount) {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+        for (int i = 0; i < scriptCount; i++) {
+            int scriptAddr = animAddr + reader.readU16BE(animAddr + i * 2);
+            int delay = reader.readU8(scriptAddr);
+            scriptAddr += 1;
+
+            List<Integer> frames = new ArrayList<>();
+            SpriteAnimationEndAction endAction = SpriteAnimationEndAction.LOOP;
+            int endParam = 0;
+
+            while (true) {
+                int value = reader.readU8(scriptAddr);
+                scriptAddr += 1;
+                if (value >= 0xF0) {
+                    if (value == 0xFF) {
+                        endAction = SpriteAnimationEndAction.LOOP;
+                        break;
+                    }
+                    if (value == 0xFE) {
+                        endAction = SpriteAnimationEndAction.LOOP_BACK;
+                        endParam = reader.readU8(scriptAddr);
+                        scriptAddr += 1;
+                        break;
+                    }
+                    if (value == 0xFD) {
+                        endAction = SpriteAnimationEndAction.SWITCH;
+                        endParam = reader.readU8(scriptAddr);
+                        scriptAddr += 1;
+                        break;
+                    }
+                    endAction = SpriteAnimationEndAction.HOLD;
+                    break;
+                }
+                frames.add(value);
+            }
+
+            set.addScript(i, new SpriteAnimationScript(delay, frames, endAction, endParam));
+        }
+        return set;
+    }
+
+    private List<SpriteMappingFrame> createExplosionMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: -8, -8, 2x2, tile 0 (16x16 pixels)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        // Frame 1: -16, -16, 4x4, tile 4 (32x32 pixels)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 4));
+        // Frame 2: -16, -16, 4x4, tile 20 (0x14)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 20));
+        // Frame 3: -16, -16, 4x4, tile 36 (0x24)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 36));
+        // Frame 4: -16, -16, 4x4, tile 52 (0x34)
+        frames.add(createSimpleFrame(-16, -16, 4, 4, 52));
+        return frames;
+    }
+
+    private List<SpriteMappingFrame> createShieldMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj38_000C (0 tiles offset)
+        frames.add(create2x2Frame(0));
+        // Frame 1: Map_obj38_002E (4 tiles offset)
+        frames.add(create2x2Frame(4));
+        // Frame 2: Map_obj38_0050 (8 tiles offset)
+        frames.add(create2x2Frame(8));
+        // Frame 3: Map_obj38_0072 (12 tiles offset)
+        frames.add(create2x2Frame(12));
+        // Frame 4: Map_obj38_0094 (16 tiles offset)
+        frames.add(create2x2Frame(16));
+
+        // Frame 5: Map_obj38_00B6 (20 tiles offset) - Larger frame
+        List<SpriteMappingPiece> pieces5 = new ArrayList<>();
+        // Note: Palette index 0 assumed.
+        // pieces: xOffset, yOffset, w, h, tileIndex, hFlip, vFlip, palIndex
+        // obj38.asm: spritePiece -$18, -$20, 3, 4, $14... (3 tiles wide, 4 tiles high)
+        pieces5.add(new SpriteMappingPiece(-24, -32, 3, 4, 20, false, false, 0));
+        pieces5.add(new SpriteMappingPiece(0, -32, 3, 4, 20, true, false, 0));
+        pieces5.add(new SpriteMappingPiece(-24, 0, 3, 4, 20, false, true, 0));
+        pieces5.add(new SpriteMappingPiece(0, 0, 3, 4, 20, true, true, 0));
+
+        frames.add(new SpriteMappingFrame(pieces5));
+
+        return frames;
+    }
+
+    /**
+     * Creates bridge mappings based on obj11_b.asm:
+     * Frame 0: 2x2 tiles at tile index 4 (log segment 1)
+     * Frame 1: 2x2 tiles at tile index 0 (log segment 2 / stake)
+     */
+    private List<SpriteMappingFrame> createBridgeMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: -8, -8, 2x2, tile 4
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 4));
+        // Frame 1: -8, -8, 2x2, tile 0
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        return frames;
+    }
+
+    private List<SpriteMappingFrame> createEHZWaterfallMappings() {
+        // Translating from obj49.asm
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj49_0010 (Small top/bottom piece)
+        // spritePiece -$20, -$80, 4, 2, 0, 0, 0, 0, 0
+        // spritePiece 0, -$80, 4, 2, 0, 0, 0, 0, 0
+        // Note: Y offset -128 (-$80) seems very high relative to object center, but
+        // matching ROM
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Map_obj49_0022 (Long waterfall section)
+        // Pieces at Y: -128, -96, -64, -32, 0, 32, 64, 96 (0x60)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        // Loop of body pieces
+        for (int y = -128; y <= 96; y += 32) {
+            // These are 4x4 tiles (32x32), tile index 8
+            if (y == -128)
+                continue; // Skip first which was handled via 4x2 pieces at tile 0
+            frame1.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame1.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Map_obj49_00B4 (Empty)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+
+        // Frame 3: Map_obj49_00B6 (Small section)
+        // Pieces at Y: -32, 0 (4x4 tile 8)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-32, -32, 4, 4, 8, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, -32, 4, 4, 8, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-32, 0, 4, 4, 8, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, 0, 4, 4, 8, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Map_obj49_00D8 (Medium section)
+        // Pieces at Y: -64, -32, 0, 32, 64
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        for (int y = -64; y <= 64; y += 32) {
+            frame4.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame4.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Same as Frame 2 (Empty) - in mappings table
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+
+        // Frame 6: Same as Frame 4
+        frames.add(frames.get(3)); // reuse frame 3 (Map_obj49_00D8 was referenced? No, wait)
+        // Correction: Table is:
+        // 0: Map_obj49_0010
+        // 1: Map_obj49_0022
+        // 2: Map_obj49_00B4 (Empty)
+        // 3: Map_obj49_00B6
+        // 4: Map_obj49_00B4 (Empty) - WAIT, mappingsTableEntry.w Map_obj49_00B4 is
+        // index 4?
+        // Let's re-read table:
+        // 0: Map_obj49_0010
+        // 1: Map_obj49_0022
+        // 2: Map_obj49_00B4
+        // 3: Map_obj49_00B6
+        // 4: Map_obj49_00B4
+        // 5: Map_obj49_00D8
+        // 6: Map_obj49_0010
+        // 7: Map_obj49_012A (Longer version of 1?)
+
+        // Let's restart frame list based directly on table indices:
+        frames.clear();
+        // 0: Map_obj49_0010
+        frames.add(new SpriteMappingFrame(frame0));
+        // 1: Map_obj49_0022
+        frames.add(new SpriteMappingFrame(frame1));
+        // 2: Map_obj49_00B4 (Empty)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+        // 3: Map_obj49_00B6
+        frames.add(new SpriteMappingFrame(frame3));
+        // 4: Map_obj49_00B4 (Empty)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+        // 5: Map_obj49_00D8
+        frames.add(new SpriteMappingFrame(frame4));
+        // 6: Map_obj49_0010
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // 7: Map_obj49_012A
+        List<SpriteMappingPiece> frame7 = new ArrayList<>();
+        frame7.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        for (int y = -128; y <= 32; y += 32) {
+            if (y == -128)
+                continue;
+            frame7.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame7.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        // Actually, frame 7 (012A) looks like: -80(2), -80(4), -60, -40, -20, 0, 20
+        // -80 (0x-50)?? No, disassembly says:
+        /*
+         * Map_obj49_012A:
+         * spritePiece -$20, -$80, 4, 2, 0...
+         * spritePiece 0, -$80, 4, 2, 0...
+         * spritePiece -$20, -$80, 4, 4, 8...
+         * spritePiece 0, -$80, 4, 4, 8...
+         * ... down to $20
+         */
+        frame7.clear();
+        frame7.add(new SpriteMappingPiece(-32, -128, 4, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(0, -128, 4, 2, 0, false, false, 0));
+        for (int y = -128; y <= 32; y += 32) {
+            frame7.add(new SpriteMappingPiece(-32, y, 4, 4, 8, false, false, 0));
+            frame7.add(new SpriteMappingPiece(0, y, 4, 4, 8, false, false, 0));
+        }
+        frames.add(new SpriteMappingFrame(frame7));
+
+        return frames;
+    }
+
+    private SpriteMappingFrame create2x2Frame(int startTile) {
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
+        // 2x2 tiles (16x16 pixels). w=2, h=2.
+        pieces.add(new SpriteMappingPiece(-16, -16, 2, 2, startTile, false, false, 0));
+        pieces.add(new SpriteMappingPiece(0, -16, 2, 2, startTile, true, false, 0));
+        pieces.add(new SpriteMappingPiece(-16, 0, 2, 2, startTile, false, true, 0));
+        pieces.add(new SpriteMappingPiece(0, 0, 2, 2, startTile, true, true, 0));
+        return new SpriteMappingFrame(pieces);
+    }
+
+    private SpriteMappingFrame createSimpleFrame(int x, int y, int wTiles, int hTiles, int tileIndex) {
+        SpriteMappingPiece piece = new SpriteMappingPiece(x, y, wTiles, hTiles, tileIndex, false, false, 0);
+        return new SpriteMappingFrame(List.of(piece));
+    }
+
+    private List<SpriteMappingFrame> normalizeMappings(List<SpriteMappingFrame> originalFrames) {
+        int minTileIndex = Integer.MAX_VALUE;
+
+        // Pass 1: Find minimum tile index
+        for (SpriteMappingFrame frame : originalFrames) {
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                minTileIndex = Math.min(minTileIndex, piece.tileIndex());
+            }
+        }
+
+        // Pass 2: Create new frames with shifted indices
+        List<SpriteMappingFrame> newFrames = new ArrayList<>(originalFrames.size());
+        for (SpriteMappingFrame frame : originalFrames) {
+            List<SpriteMappingPiece> newPieces = new ArrayList<>(frame.pieces().size());
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                newPieces.add(new SpriteMappingPiece(
+                        piece.xOffset(),
+                        piece.yOffset(),
+                        piece.widthTiles(),
+                        piece.heightTiles(),
+                        piece.tileIndex() - minTileIndex,
+                        piece.hFlip(),
+                        piece.vFlip(),
+                        piece.paletteIndex()));
+            }
+            newFrames.add(new SpriteMappingFrame(newPieces));
+        }
+
+        return newFrames;
+    }
+
+    private int computeMaxTileIndex(List<SpriteMappingFrame> frames) {
+        int max = -1;
+        if (frames == null) {
+            return max;
+        }
+        for (SpriteMappingFrame frame : frames) {
+            if (frame == null || frame.pieces() == null) {
+                continue;
+            }
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                int tiles = piece.widthTiles() * piece.heightTiles();
+                int end = piece.tileIndex() + Math.max(tiles, 1) - 1;
+                max = Math.max(max, end);
+            }
+        }
+        return max;
+    }
+
+    /**
+     * Creates mappings for Masher (Obj5C) - Leaping piranha badnik.
+     * Based on obj5C.asm with 2 frames.
+     */
+    private List<SpriteMappingFrame> createMasherMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Mouth closed
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-12, -16, 2, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(4, -16, 1, 2, 4, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, 0, 3, 2, 10, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Mouth open
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-12, -16, 2, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(2, -16, 2, 2, 6, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-12, 0, 3, 2, 16, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Buzzer (Obj4B) - Flying bee/wasp badnik.
+     * Based on obj4B.asm with 7 frames.
+     */
+    private List<SpriteMappingFrame> createBuzzerMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Body with wings extended
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-24, -8, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -8, 3, 2, 6, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Body with wings up
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-24, -8, 3, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -8, 2, 2, 12, false, false, 0));
+        frame1.add(new SpriteMappingPiece(2, 8, 2, 2, 16, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Similar to frame 1 with slightly different wing position
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-24, -8, 3, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0, -8, 2, 2, 12, false, false, 0));
+        frame2.add(new SpriteMappingPiece(2, 8, 2, 2, 20, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frames 3-6: Projectile frames
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(4, -16, 1, 2, 20, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(4, -16, 1, 2, 22, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-12, -8, 1, 2, 24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        List<SpriteMappingPiece> frame6 = new ArrayList<>();
+        frame6.add(new SpriteMappingPiece(-12, -8, 1, 2, 26, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame6));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Coconuts (Obj9D) - Monkey badnik.
+     * Based on obj9D.asm with 4 frames.
+     */
+    private List<SpriteMappingFrame> createCoconutsMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Climbing 1
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-2, 0, 2, 2, 26, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-4, -16, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, 0, 4, 2, 6, false, false, 0));
+        frame0.add(new SpriteMappingPiece(12, 16, 1, 2, 14, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Climbing 2
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-2, 0, 2, 2, 30, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-4, -16, 3, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-12, 0, 4, 2, 16, false, false, 0));
+        frame1.add(new SpriteMappingPiece(12, 16, 1, 2, 24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Throwing
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(7, -8, 1, 2, 34, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-4, -16, 3, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-12, 0, 4, 2, 16, false, false, 0));
+        frame2.add(new SpriteMappingPiece(12, 16, 1, 2, 24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: Coconut projectile (palette line 1 for orange)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 36, false, false, 2));
+        frame3.add(new SpriteMappingPiece(0, -8, 1, 2, 36, true, false, 2));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Animal (Obj28) - Rabbit (Pocky).
+     * Based on obj28_e.asm (Rabbit).
+     */
+    private List<SpriteMappingFrame> createAnimalMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj28_e_0010 (-8, -12, 2x3, tile 6)
+        frames.add(createSimpleFrame(-8, -12, 2, 3, 6));
+
+        // Frame 1: Map_obj28_e_001A (-8, -12, 2x3, tile 12 ($C))
+        frames.add(createSimpleFrame(-8, -12, 2, 3, 12));
+
+        // Frame 2: Map_obj28_e_0006 (-8, -12, 2x3, tile 0)
+        frames.add(createSimpleFrame(-8, -12, 2, 3, 0));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Points (Obj29).
+     * Based on obj29.asm.
+     */
+    private List<SpriteMappingFrame> createPointsMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: 100 points (-8, -8, 2x2, tile 2)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 2));
+
+        // Frame 1: 200 points (-8, -8, 2x2, tile 6)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 6));
+
+        // Frame 2: 500 points (-8, -8, 2x2, tile 10 ($A))
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 10));
+
+        // Frame 3: 1000 points
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, -8, 2, 2, 14, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: 10 points
+        frames.add(createSimpleFrame(-4, -8, 1, 2, 0));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Signpost (Obj0D).
+     * Based on obj0D_a.asm with 6 frames for spinning.
+     * Frame order must match Ani_obj0D indices:
+     * 0=Sonic, 1=Tails, 2=Eggman, 3=Blank, 4=Edge, 5=Sonic (h-flip).
+     */
+    private List<SpriteMappingFrame> createSignpostMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Sonic face (full view)
+        // spritePiece -$10, -$10, 4, 4, $C, 0, 0, 0, 0
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> sonic = new ArrayList<>();
+        sonic.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x0C, false, false, 0));
+        sonic.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Side spinning (thin) - Tails face in original
+        // spritePiece -$18, -$10, 1, 4, $3A, 0, 0, 0, 0
+        // spritePiece -$10, -$10, 4, 4, $3E, 0, 0, 0, 0
+        // spritePiece $10, -$10, 1, 4, $3A, 1, 0, 0, 0 (hflipped)
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> tails = new ArrayList<>();
+        tails.add(new SpriteMappingPiece(-24, -16, 1, 4, 0x3A, false, false, 0));
+        tails.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x3E, false, false, 0));
+        tails.add(new SpriteMappingPiece(16, -16, 1, 4, 0x3A, true, false, 0));
+        tails.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Eggman face (wide view)
+        // spritePiece -$18, -$10, 3, 4, $22, 0, 0, 0, 0
+        // spritePiece 0, -$10, 3, 4, $2E, 0, 0, 0, 0
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> eggman = new ArrayList<>();
+        eggman.add(new SpriteMappingPiece(-24, -16, 3, 4, 0x22, false, false, 0));
+        eggman.add(new SpriteMappingPiece(0, -16, 3, 4, 0x2E, false, false, 0));
+        eggman.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Blank face (mid-spin)
+        // spritePiece -$18, -$10, 3, 4, 0, 0, 0, 0, 0
+        // spritePiece 0, -$10, 3, 4, 0, 1, 0, 0, 0 (hflipped)
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> blank = new ArrayList<>();
+        blank.add(new SpriteMappingPiece(-24, -16, 3, 4, 0, false, false, 0));
+        blank.add(new SpriteMappingPiece(0, -16, 3, 4, 0, true, false, 0));
+        blank.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Edge view (very thin)
+        // spritePiece -4, -$10, 1, 4, $1C, 0, 0, 0, 0
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> edge = new ArrayList<>();
+        edge.add(new SpriteMappingPiece(-4, -16, 1, 4, 0x1C, false, false, 0));
+        edge.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        // Sonic face flipped (for alternating direction spin)
+        // spritePiece -$10, -$10, 4, 4, $C, 1, 0, 0, 0 (hflipped)
+        // spritePiece -4, $10, 1, 2, $20, 0, 0, 0, 0 (pole)
+        List<SpriteMappingPiece> sonicFlip = new ArrayList<>();
+        sonicFlip.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x0C, true, false, 0));
+        sonicFlip.add(new SpriteMappingPiece(-4, 16, 1, 2, 0x20, false, false, 0));
+
+        frames.add(new SpriteMappingFrame(sonic)); // 0
+        frames.add(new SpriteMappingFrame(tails)); // 1
+        frames.add(new SpriteMappingFrame(eggman)); // 2
+        frames.add(new SpriteMappingFrame(blank)); // 3
+        frames.add(new SpriteMappingFrame(edge)); // 4
+        frames.add(new SpriteMappingFrame(sonicFlip)); // 5
+
+        return frames;
+    }
+
+    /**
+     * Creates animations for Signpost (Obj0D).
+     * Based on Ani_obj0D in s2.asm.
+     * 
+     * Animation scripts:
+     * 0: $0F, $02, $FF (hold frame 2 - Eggman face)
+     * 1: $01, $02, $03, $04, $05, $01, $03, $04, $05, $00, $03, $04, $05, $FF
+     * (spinning)
+     * 2: same as 1
+     * 3: $0F, $00, $FF (hold frame 0 - Sonic face)
+     * 4: $0F, $01, $FF (hold frame 1 - Tails face)
+     */
+    private SpriteAnimationSet createSignpostAnimations() {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+
+        // Anim 0: Hold Eggman face (frame 3 in current mapping order)
+        set.addScript(0, new SpriteAnimationScript(0x0F, List.of(3), SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 1: Spinning to Sonic (mapped to current frames)
+        // Eggman -> spin -> Tails -> spin -> Sonic
+        set.addScript(1, new SpriteAnimationScript(0x01,
+                List.of(3, 0, 4, 5, 1, 0, 4, 5, 2, 0, 4, 5),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 2: Same as 1 (used for 2P mode)
+        set.addScript(2, new SpriteAnimationScript(0x01,
+                List.of(3, 0, 4, 5, 1, 0, 4, 5, 2, 0, 4, 5),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 3: Hold Sonic face (frame 2 in current mapping order)
+        // From disasm: byte_195B7: dc.b $0F, $00, $FF - hold frame 0
+        set.addScript(3, new SpriteAnimationScript(0x0F, List.of(2), SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 4: Hold Tails face (frame 1 in current mapping order)
+        set.addScript(4, new SpriteAnimationScript(0x0F, List.of(1), SpriteAnimationEndAction.LOOP, 0));
+
+        return set;
+    }
+
+    /**
+     * Creates a pattern array matching the fixed VRAM layout for the results
+     * screen.
+     * Each art chunk is placed at its exact VRAM tile base (relative to
+     * VRAM_BASE_NUMBERS).
+     */
+    private Pattern[] createResultsVramPatterns(
+            Pattern[] bonusDigits,
+            Pattern[] perfect,
+            Pattern[] titleCard,
+            Pattern[] resultsText,
+            Pattern[] miniSonic,
+            Pattern[] hudText) {
+        int base = Sonic2Constants.VRAM_BASE_NUMBERS;
+        int maxEnd = base;
+        maxEnd = Math.max(maxEnd, base + bonusDigits.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_PERFECT + perfect.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_TITLE_CARD + titleCard.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_RESULTS_TEXT + resultsText.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_MINI_CHARACTER + miniSonic.length);
+        maxEnd = Math.max(maxEnd, Sonic2Constants.VRAM_BASE_HUD_TEXT + hudText.length);
+        // Include space for trailing blank at $6F0-$6F1 (used in results mappings)
+        maxEnd = Math.max(maxEnd, 0x6F2);
+
+        int totalSize = Math.max(0, maxEnd - base);
+        Pattern[] result = new Pattern[totalSize];
+
+        // Fill gaps with empty tiles so unmapped references stay blank.
+        Pattern emptyPattern = new Pattern();
+        Arrays.fill(result, emptyPattern);
+
+        copyPatterns(result, bonusDigits, Sonic2Constants.VRAM_BASE_NUMBERS - base);
+        copyPatterns(result, perfect, Sonic2Constants.VRAM_BASE_PERFECT - base);
+        copyPatterns(result, titleCard, Sonic2Constants.VRAM_BASE_TITLE_CARD - base);
+        copyPatterns(result, resultsText, Sonic2Constants.VRAM_BASE_RESULTS_TEXT - base);
+        copyPatterns(result, miniSonic, Sonic2Constants.VRAM_BASE_MINI_CHARACTER - base);
+        copyPatterns(result, hudText, Sonic2Constants.VRAM_BASE_HUD_TEXT - base);
+
+        // Tile $6F0 is used as a trailing blank in the results mappings.
+        int trailingBlank = 0x6F0 - base;
+        if (trailingBlank >= 0 && trailingBlank < result.length) {
+            result[trailingBlank] = new Pattern();
+            if (trailingBlank + 1 < result.length) {
+                result[trailingBlank + 1] = new Pattern();
+            }
+        }
+
+        return result;
+    }
+
+    private Pattern[] createBlankPatterns(int count) {
+        if (count <= 0) {
+            return new Pattern[0];
+        }
+        Pattern[] patterns = new Pattern[count];
+        for (int i = 0; i < count; i++) {
+            patterns[i] = new Pattern();
+        }
+        return patterns;
+    }
+
+    private Pattern[] ensureResultsPatternCapacity(Pattern[] patterns, List<SpriteMappingFrame> mappings) {
+        int maxTileIndex = computeMaxTileIndex(mappings);
+        if (maxTileIndex < 0 || maxTileIndex < patterns.length) {
+            return patterns;
+        }
+        Pattern[] expanded = new Pattern[maxTileIndex + 1];
+        Pattern emptyPattern = new Pattern();
+        Arrays.fill(expanded, emptyPattern);
+        System.arraycopy(patterns, 0, expanded, 0, Math.min(patterns.length, expanded.length));
+        return expanded;
+    }
+
+    private void copyPatterns(Pattern[] dest, Pattern[] src, int destPos) {
+        if (src == null || src.length == 0 || destPos >= dest.length) {
+            return;
+        }
+        if (destPos < 0) {
+            int skip = -destPos;
+            if (skip >= src.length) {
+                return;
+            }
+            src = Arrays.copyOfRange(src, skip, src.length);
+            destPos = 0;
+        }
+        int copyLen = Math.min(src.length, dest.length - destPos);
+        System.arraycopy(src, 0, dest, destPos, copyLen);
+    }
+}

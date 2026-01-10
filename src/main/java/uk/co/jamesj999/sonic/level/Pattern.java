@@ -60,4 +60,15 @@ public class Pattern {
         }
         pixels[y * PATTERN_WIDTH + x] = value;
     }
+
+    public void copyFrom(Pattern other) {
+        if (other == null) {
+            return;
+        }
+        for (int y = 0; y < PATTERN_HEIGHT; y++) {
+            for (int x = 0; x < PATTERN_WIDTH; x++) {
+                setPixel(x, y, other.getPixel(x, y));
+            }
+        }
+    }
 }

@@ -2,11 +2,13 @@ package uk.co.jamesj999.sonic.timer;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Created by James on 26/03/15.
  */
 public class TimerManager {
+    private static final Logger LOGGER = Logger.getLogger(TimerManager.class.getName());
     private static TimerManager timerManager;
 
     private Map<String, Timer> timers = new HashMap<String, Timer>();
@@ -40,7 +42,7 @@ public class TimerManager {
                 if (timer.perform()) {
                     iterator.remove();
                 } else {
-                    System.out.println(
+                    LOGGER.fine(
                             "ERROR: " + timer.getClass() + " " + timer.getCode() + " failed to complete successfully.");
                     iterator.remove();
                 }

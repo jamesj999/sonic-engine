@@ -1,13 +1,22 @@
 package uk.co.jamesj999.sonic.tests;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import org.junit.Test;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
-import uk.co.jamesj999.sonic.audio.smps.Sonic2SmpsData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SfxData;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.synth.VirtualSynthesizer;
+import uk.co.jamesj999.sonic.audio.synth.Synthesizer;
+import uk.co.jamesj999.sonic.game.sonic2.audio.smps.Sonic2SmpsLoader;
+import uk.co.jamesj999.sonic.audio.smps.DacData;
+import uk.co.jamesj999.sonic.data.Rom;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 
@@ -19,6 +28,26 @@ public class TestSmpsSequencer {
         @Override
         public void writeFm(Object source, int port, int reg, int val) {
             log.add(String.format("FM P%d R%02X V%02X", port, reg, val));
+        }
+    }
+
+    static class MockPsgSynth extends VirtualSynthesizer {
+        final List<Integer> psgLog = new ArrayList<>();
+
+        @Override
+        public void writePsg(Object source, int val) {
+            psgLog.add(val & 0xFF);
+            super.writePsg(source, val);
+        }
+    }
+
+    static class MockFmSynth extends VirtualSynthesizer {
+        final List<String> fmLog = new ArrayList<>();
+
+        @Override
+        public void writeFm(Object source, int port, int reg, int val) {
+            fmLog.add(port + ":" + String.format("%02X", reg) + ":" + String.format("%02X", val));
+            super.writeFm(source, port, reg, val);
         }
     }
 
@@ -47,7 +76,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Increase buffer to ensure at least one tick at 0x80 tempo (~2 frames)
         short[] buf = new short[2000];
@@ -92,7 +121,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[4000];
         seq.read(buf);
@@ -130,7 +159,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Enough samples for ~16 frames. Without resetting the accumulator, the leftover fast-tempo ticks
         // would advance to the second note (takes ~10 frames), but with a reset the slow tempo (takes ~17 frames)
@@ -175,7 +204,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[12000];
         seq.read(buf); // should execute both notes
@@ -205,7 +234,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[5000];
         seq.read(buf);
@@ -238,7 +267,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[100];
         seq.read(buf);
@@ -268,7 +297,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         // Read small buffer. Track should still be active and playing the note.
         short[] buf = new short[2000];
@@ -316,7 +345,7 @@ public class TestSmpsSequencer {
 
         AbstractSmpsData smps = new Sonic2SmpsData(data);
         MockSynth synth = new MockSynth();
-        SmpsSequencer seq = new SmpsSequencer(smps, null, synth);
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[735]; // ~1 frame
 
@@ -341,5 +370,150 @@ public class TestSmpsSequencer {
 
         assertEquals("Should play C4 3 times", 3, c4Count);
         assertEquals("Should play D4 3 times", 3, d4Count);
+    }
+
+    @Test
+    public void testPsgEnvelopeHoldAndInitialStepApplied() {
+        byte[] data = new byte[64];
+        data[2] = 1; // DAC only in FM table
+        data[3] = 1; // 1 PSG channel
+        data[4] = 1; // Dividing timing
+        data[5] = (byte) 0x80; // Tempo
+
+        // DAC track stub -> stop
+        data[0x06] = 0x30;
+        data[0x07] = 0x00;
+        data[0x30] = (byte) 0xF2;
+
+        // PSG track header (pointer, key offset, vol offset, mod env, instrument)
+        data[0x0A] = 0x20;
+        data[0x0B] = 0x00;
+        data[0x0C] = 0x00;
+        data[0x0D] = 0x00;
+        data[0x0E] = 0x00;
+        data[0x0F] = 0x01; // PSG instrument 1
+
+        // PSG track script: note, duration, stop
+        int pos = 0x20;
+        data[pos++] = (byte) 0x81; // C
+        data[pos++] = 0x02;        // Duration 2
+        data[pos] = (byte) 0xF2;   // Stop
+
+        Map<Integer, byte[]> envs = new HashMap<>();
+        envs.put(1, new byte[] {0x01, (byte) 0x80}); // Step to 1, then hold
+
+        Sonic2SmpsData smps = new Sonic2SmpsData(data);
+        smps.setPsgEnvelopes(envs);
+
+        MockPsgSynth synth = new MockPsgSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
+
+        // Prime sequencer (runs initial tick) without advancing tempo frames
+        seq.read(new short[2]);
+        // Advance enough samples for one additional tempo tick (2 frames @ tempo 0x80)
+        seq.advance(1500);
+
+        List<Integer> volumeWrites = new ArrayList<>();
+        for (int val : synth.psgLog) {
+            if ((val & 0xF0) == 0x90) {
+                volumeWrites.add(val);
+            }
+        }
+
+        assertEquals("PSG volume should be written once (hold, no loop)", 1, volumeWrites.size());
+        assertEquals("First envelope step should apply immediately", 0x91, (int) volumeWrites.get(0));
+    }
+
+    @Test
+    public void testNoiseChannelUsesTone2Frequency() {
+        byte[] data = new byte[96];
+        data[0] = 0x00; // Voice pointer (none)
+        data[1] = 0x00;
+        data[2] = 0x01; // Tick multiplier
+        data[3] = 0x01; // Track count
+
+        // Track header: flags, channel (PSG3), pointer, transpose, volume
+        data[4] = 0x00;
+        data[5] = (byte) 0xC0;       // PSG channel 3 (noise-capable)
+        data[6] = 0x20; data[7] = (byte) 0x80; // Pointer to 0x8020 -> relocates to 0x20
+        data[8] = 0x00;
+        data[9] = 0x00;
+
+        // PSG track script at 0x20: enable noise (tone2 match), note, duration, stop
+        int pos = 0x20;
+        data[pos++] = (byte) 0xF3; // PSG noise
+        data[pos++] = 0x07;        // White noise, tone2 frequency
+        data[pos++] = (byte) 0x81; // Note
+        data[pos++] = 0x02;        // Duration
+        data[pos] = (byte) 0xF2;   // Stop
+
+        Sonic2SfxData smps = new Sonic2SfxData(data, 0x8000, 0, 0);
+
+        MockPsgSynth synth = new MockPsgSynth();
+        SmpsSequencer seq = new SmpsSequencer(smps, null, synth, Sonic2SmpsSequencerConfig.CONFIG);
+
+        // Prime sequencer (runs initial tick)
+        seq.read(new short[2]);
+        // Advance enough samples for one additional tempo tick
+        seq.advance(1500);
+
+        boolean hasNoiseLatch = false;
+        boolean hasTone2Latch = false;
+        for (int val : synth.psgLog) {
+            if (val == 0xE7) {
+                hasNoiseLatch = true;
+            }
+            if ((val & 0xF0) == 0xC0) {
+                hasTone2Latch = true;
+            }
+        }
+
+        assertTrue("Noise command should be issued", hasNoiseLatch);
+        assertTrue("Tone 2 frequency should still be latched while in noise mode (tone2 match)", hasTone2Latch);
+    }
+
+    @Test
+    public void testSfxBcFmVoicePlaysWithCenteredPan() {
+        // Load real SFX 0xBC from ROM to exercise the FM blip.
+        File romFile = RomTestUtils.ensureRomAvailable();
+        Rom rom = new Rom();
+        assertTrue("Failed to open ROM", rom.open(romFile.getAbsolutePath()));
+        Sonic2SmpsLoader loader = new Sonic2SmpsLoader(rom);
+        AbstractSmpsData sfx = loader.loadSfx(0xBC);
+        assertNotNull("SFX 0xBC should load", sfx);
+        assertTrue("Expected Sonic2SfxData for SFX 0xBC", sfx instanceof Sonic2SfxData);
+        assertNotNull("SFX 0xBC should have voice 0", sfx.getVoice(0));
+        Sonic2SfxData sfxData = (Sonic2SfxData) sfx;
+        int ptr = sfxData.getTrackEntries().get(0).pointer;
+        assertTrue("Track pointer should be within data", ptr >= 0 && ptr < sfxData.getData().length);
+        assertEquals("SFX 0xBC track should start with Set Voice", (byte) 0xEF, sfxData.getData()[ptr]);
+
+        DacData dacData = loader.loadDacData();
+        MockFmSynth synth = new MockFmSynth();
+        SmpsSequencer seq = new SmpsSequencer(sfx, dacData, synth, Sonic2SmpsSequencerConfig.CONFIG);
+
+        // Prime and run a few ticks
+        seq.read(new short[2]);
+        SmpsSequencer.DebugState initial = seq.debugState();
+        seq.advance(20000);
+
+        boolean hasKeyEvent = false;
+        boolean hasCenteredPan = false;
+        for (String log : synth.fmLog) {
+            if (log.contains(":28:")) {
+                hasKeyEvent = true;
+            }
+            if (log.startsWith("1:B") && log.endsWith("C0")) {
+                hasCenteredPan = true;
+            }
+        }
+
+        assertFalse("FM track should exist", initial.tracks.isEmpty());
+        assertEquals("Track 0 should be FM for SFX 0xBC", SmpsSequencer.TrackType.FM, initial.tracks.get(0).type);
+        assertEquals("FM track should use voice 0", 0, initial.tracks.get(0).voiceId);
+        assertFalse("FM track should not be tied when key-on expected", initial.tracks.get(0).tieNext);
+
+        assertTrue("SFX 0xBC FM should poke the key on/off register. FM log: " + synth.fmLog, hasKeyEvent);
+        assertTrue("SFX 0xBC FM should center pan (not inherit music pan). FM log: " + synth.fmLog, hasCenteredPan);
     }
 }

@@ -42,14 +42,28 @@ public class Camera {
 			return;
 		}
 		if (frozen) {
-			framesBehind++;
+			// Clamp framesBehind to prevent exceeding history array length (32)
+			if (framesBehind < 31) {
+				framesBehind++;
+			}
 			return;
 		}
 		short focusedSpriteRealX;
 		short focusedSpriteRealY;
-		if(framesBehind > 0) {
-			focusedSpriteRealX = (short) (focusedSprite.getCentreX(framesBehind) - x);
-			focusedSpriteRealY = (short) (focusedSprite.getCentreY(framesBehind) - y);
+		if (framesBehind > 0) {
+			// SPG: During spindash lag catchup, use the average of two consecutive
+			// historical positions. This smoothly interpolates through the 64 recorded
+			// positions (32 during freeze + 32 during catchup) over 32 frames.
+			// Position pair: (framesBehind) and (framesBehind - 1)
+			int idx1 = framesBehind;
+			int idx2 = Math.max(0, framesBehind - 1);
+			short x1 = focusedSprite.getCentreX(idx1);
+			short x2 = focusedSprite.getCentreX(idx2);
+			short y1 = focusedSprite.getCentreY(idx1);
+			short y2 = focusedSprite.getCentreY(idx2);
+			// Average the two positions (add together and use as the target)
+			focusedSpriteRealX = (short) (((x1 + x2) / 2) - x);
+			focusedSpriteRealY = (short) (((y1 + y2) / 2) - y);
 		} else {
 			focusedSpriteRealX = (short) (focusedSprite.getCentreX() - x);
 			focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
@@ -133,12 +147,22 @@ public class Camera {
 			y = maxY;
 		}
 		if (framesBehind > 0) {
-			framesBehind--;
+			// SPG: Decrement by 2 each frame since we're processing position pairs
+			// This means we catch up through the full 64 positions (32 freeze + 32 catchup)
+			// in approximately 32 frames
+			framesBehind -= 2;
+			if (framesBehind < 0) {
+				framesBehind = 0;
+			}
 		}
 	}
 
 	public void setFrozen(boolean frozen) {
 		this.frozen = frozen;
+		// SPG: When unfreezing, do NOT reset framesBehind!
+		// The camera should continue using the position history while framesBehind > 0,
+		// gradually catching up to the current player position by processing
+		// pairs of positions from history.
 	}
 
 	public boolean getFrozen() {
@@ -173,11 +197,11 @@ public class Camera {
 	public short getY() {
 		return y;
 	}
-	
+
 	public short getWidth() {
 		return width;
 	}
-	
+
 	public short getHeight() {
 		return height;
 	}

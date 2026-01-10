@@ -11,7 +11,6 @@ import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.util.GLBuffers;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,11 +22,18 @@ public class GraphicsManager {
 	List<GLCommandable> commands = new ArrayList<>();
 
 	private final Map<String, Integer> patternTextureMap = new HashMap<>(); // Map for pattern textures
-	private final Map<String, Integer> paletteTextureMap = new HashMap<>();  // Map for palette textures
+	private final Map<String, Integer> paletteTextureMap = new HashMap<>(); // Map for palette textures
+	private Integer combinedPaletteTextureId;
 
 	private final Camera camera = Camera.getInstance();
 	private GL2 graphics;
 	private ShaderProgram shaderProgram;
+	private ShaderProgram debugShaderProgram;
+	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
+
+	// Batched rendering support
+	private boolean batchingEnabled = true;
+	private BatchedPatternRenderer batchedRenderer;
 
 	public void registerCommand(GLCommandable command) {
 		commands.add(command);
@@ -38,7 +44,9 @@ public class GraphicsManager {
 	 */
 	public void init(GL2 gl, String pixelShaderPath) throws IOException {
 		this.graphics = gl;
-		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath);  // Load shaders
+		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load shaders
+		this.shaderProgram.cacheUniformLocations(gl); // Cache uniform locations for fast access
+		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
 	}
 
 	/**
@@ -52,14 +60,25 @@ public class GraphicsManager {
 	 * Flush all registered commands.
 	 */
 	public void flush() {
+		if (commands.isEmpty() || graphics == null) {
+			return;
+		}
+
 		short cameraX = camera.getX();
 		short cameraY = camera.getY();
 		short cameraWidth = camera.getWidth();
 		short cameraHeight = camera.getHeight();
 
+		// Reset pattern render state for new batch of commands
+		PatternRenderCommand.resetFrameState();
+
 		for (GLCommandable command : commands) {
 			command.execute(graphics, cameraX, cameraY, cameraWidth, cameraHeight);
 		}
+
+		// Cleanup pattern render state after all commands
+		PatternRenderCommand.cleanupFrameState(graphics);
+
 		commands.clear();
 	}
 
@@ -83,7 +102,8 @@ public class GraphicsManager {
 
 		// Upload the pattern buffer to the GPU as a 2D texture
 		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE,
+				patternBuffer);
 
 		// Set texture parameters (wrapping and filtering)
 		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
@@ -94,13 +114,43 @@ public class GraphicsManager {
 		patternTextureMap.put("pattern_" + patternId, textureId);
 	}
 
+	public void updatePatternTexture(Pattern pattern, int patternId) {
+		if (graphics == null) {
+			return;
+		}
+		Integer textureId = patternTextureMap.get("pattern_" + patternId);
+		if (textureId == null) {
+			cachePatternTexture(pattern, patternId);
+			return;
+		}
+
+		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
+		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
+			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
+				byte colorIndex = pattern.getPixel(row, col);
+				patternBuffer.put(colorIndex);
+			}
+		}
+		patternBuffer.flip();
+
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
+		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, 0, 8, 8, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+	}
 
 	public void cachePaletteTexture(Palette palette, int paletteId) {
-		int textureId = glGenTexture();
+		if (combinedPaletteTextureId == null) {
+			combinedPaletteTextureId = glGenTexture();
+			ByteBuffer emptyBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4 * 4);
+			graphics.glBindTexture(GL2.GL_TEXTURE_2D, combinedPaletteTextureId);
+			graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 4, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE,
+					emptyBuffer);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
+		}
 
-		// Create a buffer to store the palette (16 colors, each RGBA component as an unsigned byte)
-		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4); // 16 colors, each RGBA (4 bytes)
-
+		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4);
 		for (int i = 0; i < COLORS_PER_PALETTE; i++) {
 			Palette.Color color = palette.getColor(i);
 			paletteBuffer.put((byte) Byte.toUnsignedInt(color.r));
@@ -114,34 +164,97 @@ public class GraphicsManager {
 		}
 		paletteBuffer.flip();
 
-		// Upload the palette to the GPU as a 1x16 texture using GL_UNSIGNED_BYTE
-		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 1, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE, paletteBuffer);
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, combinedPaletteTextureId);
+		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, paletteId, 16, 1, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE,
+				paletteBuffer);
 
-		// Set texture parameters
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
-
-		paletteTextureMap.put("palette_" + paletteId, textureId);
+		paletteTextureMap.put("palette_" + paletteId, combinedPaletteTextureId);
 	}
 
-
 	/**
-	 * Render a pre-cached pattern at the given coordinates using the specified palette.
+	 * Render a pre-cached pattern at the given coordinates using the specified
+	 * palette.
 	 */
 	public void renderPattern(PatternDesc desc, int x, int y) {
-		Integer patternTextureId = patternTextureMap.get("pattern_" + desc.getPatternIndex());
+		renderPatternWithId(desc.getPatternIndex(), desc, x, y);
+	}
+
+	/**
+	 * Render a pattern using an explicit pattern ID for texture lookup.
+	 * This allows using pattern IDs beyond the 11-bit limit of PatternDesc.
+	 */
+	public void renderPatternWithId(int patternId, PatternDesc desc, int x, int y) {
+		Integer patternTextureId = patternTextureMap.get("pattern_" + patternId);
 		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
 
 		if (patternTextureId == null || paletteTextureId == null) {
-			System.err.println("Pattern or Palette not cached.");
+			System.err.println("Pattern or Palette not cached. Pattern: " + patternId + ", Palette: "
+					+ desc.getPaletteIndex());
 			return;
 		}
 
-		// Register a PatternRenderCommand instead of directly rendering
-		PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
-		registerCommand(command);
+		// Try batched rendering for better performance
+		// Only use batching if enabled, batch is active, and pattern was successfully
+		// added
+		boolean usedBatch = false;
+		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+			usedBatch = batchedRenderer.addPattern(patternTextureId, desc.getPaletteIndex(), desc, x, y);
+		}
+
+		if (!usedBatch) {
+			// Fallback to individual commands
+			PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
+			registerCommand(command);
+		}
+	}
+
+	/**
+	 * Begin a new pattern batch. Call before rendering patterns for a frame/layer.
+	 */
+	public void beginPatternBatch() {
+		if (batchedRenderer == null) {
+			batchedRenderer = BatchedPatternRenderer.getInstance();
+		}
+		batchedRenderer.beginBatch();
+	}
+
+	/**
+	 * Flush the current pattern batch. Call after all patterns for a layer are
+	 * submitted. This queues the batch command for execution in the proper order.
+	 */
+	public void flushPatternBatch() {
+		if (batchedRenderer != null) {
+			// Always call endBatch to reset batchActive state, even if batch is empty
+			GLCommandable batchCommand = batchedRenderer.endBatch();
+			if (batchCommand != null) {
+				registerCommand(batchCommand);
+			}
+		}
+	}
+
+	/**
+	 * Enable or disable pattern batching.
+	 */
+	public void setBatchingEnabled(boolean enabled) {
+		this.batchingEnabled = enabled;
+	}
+
+	public boolean isBatchingEnabled() {
+		return batchingEnabled;
+	}
+
+	/**
+	 * Get the combined palette texture ID.
+	 */
+	public Integer getCombinedPaletteTextureId() {
+		return combinedPaletteTextureId;
+	}
+
+	/**
+	 * Get the texture ID for a cached pattern.
+	 */
+	public Integer getPatternTextureId(int patternIndex) {
+		return patternTextureMap.get("pattern_" + patternIndex);
 	}
 
 	/**
@@ -150,15 +263,18 @@ public class GraphicsManager {
 	public void cleanup() {
 		// Delete pattern textures
 		for (int textureId : patternTextureMap.values()) {
-			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
+			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
 		}
 		// Delete palette textures
-		for (int textureId : paletteTextureMap.values()) {
-			graphics.glDeleteTextures(1, new int[]{textureId}, 0);
+		for (int textureId : new java.util.HashSet<>(paletteTextureMap.values())) {
+			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
 		}
 		// Cleanup shader program
 		if (shaderProgram != null) {
 			shaderProgram.cleanup(graphics);
+		}
+		if (debugShaderProgram != null) {
+			debugShaderProgram.cleanup(graphics);
 		}
 	}
 
@@ -185,7 +301,32 @@ public class GraphicsManager {
 		return shaderProgram;
 	}
 
+	public ShaderProgram getDebugShaderProgram() {
+		return debugShaderProgram;
+	}
+
 	public GL2 getGraphics() {
 		return graphics;
+	}
+
+	public void enqueueDebugLineState() {
+		ShaderProgram debugShader = getDebugShaderProgram();
+		int programId = debugShader != null ? debugShader.getProgramId() : 0;
+		registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_LIGHTING));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_COLOR_MATERIAL));
+		registerCommand(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_DEPTH_TEST));
+	}
+
+	public void enqueueDefaultShaderState() {
+		registerCommand(new GLCommand(GLCommand.CommandType.ENABLE, GL2.GL_TEXTURE_2D));
+		ShaderProgram shader = getShaderProgram();
+		if (shader != null) {
+			int programId = shader.getProgramId();
+			if (programId != 0) {
+				registerCommand(new GLCommand(GLCommand.CommandType.USE_PROGRAM, programId));
+			}
+		}
 	}
 }

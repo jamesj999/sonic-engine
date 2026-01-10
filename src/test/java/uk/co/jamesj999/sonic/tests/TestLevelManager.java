@@ -3,6 +3,8 @@ package uk.co.jamesj999.sonic.tests;
 import org.junit.After;
 import org.junit.Test;
 import uk.co.jamesj999.sonic.level.*;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -68,7 +70,9 @@ public class TestLevelManager {
 
         @Override public SolidTile getSolidTile(int index) { return null; }
         @Override public Map getMap() { return map; }
-        @Override public java.util.List<LevelObject> getObjects() { return java.util.Collections.emptyList(); }
+        @Override public java.util.List<ObjectSpawn> getObjects() { return java.util.Collections.emptyList(); }
+        @Override public java.util.List<uk.co.jamesj999.sonic.level.rings.RingSpawn> getRings() { return java.util.Collections.emptyList(); }
+        @Override public RingSpriteSheet getRingSpriteSheet() { return null; }
         @Override public int getMinX() { return 0; }
         @Override public int getMaxX() { return 0; }
         @Override public int getMinY() { return 0; }

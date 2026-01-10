@@ -11,6 +11,7 @@ import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
 import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
+import uk.co.jamesj999.sonic.audio.smps.SmpsSequencerConfig;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
@@ -43,6 +44,24 @@ public class JOALAudioBackend implements AudioBackend {
     private SmpsSequencer currentSmps;
     private SmpsDriver smpsDriver;
 
+    private static class MusicState {
+        final AudioStream stream;
+        final SmpsSequencer smps;
+        final SmpsDriver driver;
+        final int musicId;
+
+        MusicState(AudioStream stream, SmpsSequencer smps, SmpsDriver driver, int musicId) {
+            this.stream = stream;
+            this.smps = smps;
+            this.driver = driver;
+            this.musicId = musicId;
+        }
+    }
+
+    private final Deque<MusicState> musicStack = new ArrayDeque<>();
+    private int currentMusicId = -1;
+    private volatile boolean pendingRestore = false;
+
     // Fallback mappings
     private final Map<Integer, String> musicFallback = new HashMap<>();
     private final Map<String, String> sfxFallback = new HashMap<>();
@@ -54,6 +73,8 @@ public class JOALAudioBackend implements AudioBackend {
     private final boolean[] psgUserSolos = new boolean[4];
 
     private boolean speedShoesEnabled = false;
+    private GameAudioProfile audioProfile;
+    private SmpsSequencerConfig smpsConfig;
 
     public JOALAudioBackend() {
         // Initialize fallback mappings
@@ -62,6 +83,12 @@ public class JOALAudioBackend implements AudioBackend {
         sfxFallback.put("RING", "sfx/ring.wav");
         sfxFallback.put("SPINDASH", "sfx/spindash.wav");
         sfxFallback.put("SKID", "sfx/skid.wav");
+    }
+
+    @Override
+    public void setAudioProfile(GameAudioProfile profile) {
+        this.audioProfile = profile;
+        this.smpsConfig = profile != null ? profile.getSequencerConfig() : null;
     }
 
     @Override
@@ -78,13 +105,13 @@ public class JOALAudioBackend implements AudioBackend {
 
             context = alc.alcCreateContext(device, null);
             if (context == null) {
-                 throw new RuntimeException("Could not create ALC context");
+                throw new RuntimeException("Could not create ALC context");
             }
 
             alc.alcMakeContextCurrent(context);
 
             if (al.alGetError() != AL.AL_NO_ERROR) {
-                 throw new RuntimeException("AL Error during init");
+                throw new RuntimeException("AL Error during init");
             }
 
             LOGGER.info("OpenAL Initialized. Buffer Size: " + STREAM_BUFFER_SIZE);
@@ -109,6 +136,8 @@ public class JOALAudioBackend implements AudioBackend {
     public void playMusic(int musicId) {
         LOGGER.info("Requesting Music ID: " + Integer.toHexString(musicId));
         stopStream(); // Stop any running stream
+        clearMusicStack();
+        currentMusicId = -1;
 
         // Try fallback map first
         String filename = musicFallback.get(musicId);
@@ -122,12 +151,27 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSmps(AbstractSmpsData data, DacData dacData) {
-        stopStream();
-        // Stop music source if playing wav
-        al.alSourceStop(musicSource);
+        int musicId = data.getId();
+        boolean isOverride = audioProfile != null && audioProfile.isMusicOverride(musicId);
+        if (isOverride) {
+            pushCurrentState();
+
+            // Just disconnect the current driver from the source without stopping/clearing
+            // it.
+            al.alSourceStop(musicSource);
+            al.alSourcei(musicSource, AL.AL_BUFFER, 0);
+            currentStream = null;
+            currentSmps = null;
+            smpsDriver = null;
+        } else {
+            stopStream();
+            // Stop music source if playing wav
+            al.alSourceStop(musicSource);
+            clearMusicStack();
+        }
 
         smpsDriver = new SmpsDriver();
-        
+
         // Configure Region
         String regionStr = SonicConfigurationService.getInstance().getString(SonicConfiguration.REGION);
         if ("PAL".equalsIgnoreCase(regionStr)) {
@@ -141,14 +185,15 @@ public class JOALAudioBackend implements AudioBackend {
 
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
-            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
-            seq.setSpeedShoes(speedShoesEnabled);
-            seq.setFm6DacOff(fm6DacOff);
-            // Music is the primary voice source for SFX fallback
-            seq.setFallbackVoiceData(data);
-            smpsDriver.addSequencer(seq, false);
-            currentSmps = seq;
-        
+        SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
+        seq.setSpeedShoes(speedShoesEnabled);
+        seq.setFm6DacOff(fm6DacOff);
+        // Music is the primary voice source for SFX fallback
+        seq.setFallbackVoiceData(data);
+        smpsDriver.addSequencer(seq, false);
+        currentSmps = seq;
+        currentMusicId = musicId;
+
         updateSynthesizerConfig();
         currentStream = smpsDriver;
         startStream();
@@ -168,7 +213,7 @@ public class JOALAudioBackend implements AudioBackend {
             // Mix into current driver
             // Note: DAC interpolation is global on the driver/synth.
             // FM6 DAC Off is per-sequencer.
-            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver);
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -186,7 +231,7 @@ public class JOALAudioBackend implements AudioBackend {
                 sfxDriver.setDacInterpolate(dacInterpolate);
                 sfxStream = sfxDriver;
             }
-            SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver);
+            SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver, requireSmpsConfig());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -236,10 +281,18 @@ public class JOALAudioBackend implements AudioBackend {
                 smpsDriver.stopAll();
                 smpsDriver = null;
             }
+            currentMusicId = -1;
         }
     }
 
     private void updateStream() {
+        // Check for pending music restoration (deferred from E4 handler)
+        if (pendingRestore) {
+            pendingRestore = false;
+            doRestoreMusic();
+            return;
+        }
+
         if (currentStream != null || sfxStream != null) {
             // Only update if playing via SMPS. If playing WAV, musicSource handles it.
             // But musicSource is used for streaming.
@@ -269,20 +322,72 @@ public class JOALAudioBackend implements AudioBackend {
         }
     }
 
+    @Override
+    public void restoreMusic() {
+        // Defer actual restoration to next updateStream cycle to avoid
+        // modifying buffers while they're being rendered
+        if (!musicStack.isEmpty()) {
+            pendingRestore = true;
+        }
+    }
+
+    private void doRestoreMusic() {
+        MusicState savedState = musicStack.pollFirst();
+        if (savedState == null || savedState.stream == null || savedState.smps == null
+                || savedState.driver == null) {
+            return;
+        }
+
+        // Stop the current (invincibility/extra-life) music stream
+        al.alSourceStop(musicSource);
+
+        // Unqueue ALL buffers (both processed and queued) to avoid OpenAL errors
+        int[] queued = new int[1];
+        al.alGetSourcei(musicSource, AL.AL_BUFFERS_QUEUED, queued, 0);
+        for (int i = 0; i < queued[0]; i++) {
+            int[] buffers = new int[1];
+            al.alSourceUnqueueBuffers(musicSource, 1, buffers, 0);
+        }
+
+        // Stop the current (non-saved) smps driver
+        if (smpsDriver != null && smpsDriver != savedState.driver) {
+            smpsDriver.stopAll();
+        }
+
+        // Restore saved state
+        currentStream = savedState.stream;
+        currentSmps = savedState.smps;
+        smpsDriver = savedState.driver;
+        currentMusicId = savedState.musicId;
+
+        if (currentSmps != null) {
+            // Restore speed shoes state to the saved sequencer
+            currentSmps.setSpeedShoes(speedShoesEnabled);
+            currentSmps.refreshAllVoices();
+            currentSmps.triggerFadeIn(0x28, 2);
+        }
+
+        startStream();
+    }
+
     private void fillBuffer(int bufferId) {
         // Stereo buffer: 2 channels * STREAM_BUFFER_SIZE
         short[] data = new short[STREAM_BUFFER_SIZE * 2];
-        int read = (currentStream != null) ? currentStream.read(data) : 0;
+        if (currentStream != null) {
+            currentStream.read(data);
+        }
         // If music stream ended or not present, buffer is 0.
 
         if (sfxStream != null) {
             short[] sfxData = new short[STREAM_BUFFER_SIZE * 2];
             sfxStream.read(sfxData);
 
-            for(int i=0; i<data.length; i++) {
+            for (int i = 0; i < data.length; i++) {
                 int mixed = data[i] + sfxData[i];
-                if (mixed > 32000) mixed = 32000;
-                if (mixed < -32000) mixed = -32000;
+                if (mixed > 32000)
+                    mixed = 32000;
+                if (mixed < -32000)
+                    mixed = -32000;
                 data[i] = (short) mixed;
             }
 
@@ -328,6 +433,17 @@ public class JOALAudioBackend implements AudioBackend {
         al.alSourcei(musicSource, AL.AL_BUFFER, 0);
         currentStream = null;
         currentSmps = null;
+        currentMusicId = -1;
+        clearMusicStack();
+    }
+
+    @Override
+    public void endMusicOverride(int musicId) {
+        if (currentSmps != null && currentMusicId == musicId) {
+            restoreMusic();
+            return;
+        }
+        removeSavedOverride(musicId);
     }
 
     @Override
@@ -391,38 +507,80 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void updateSynthesizerConfig() {
-        if (currentSmps == null || currentSmps.getSynthesizer() == null) return;
+        if (currentSmps == null || currentSmps.getSynthesizer() == null)
+            return;
         var synth = currentSmps.getSynthesizer();
 
         boolean anyFmSolo = false;
-        for (boolean s : fmUserSolos) if (s) anyFmSolo = true;
+        for (boolean s : fmUserSolos)
+            if (s)
+                anyFmSolo = true;
 
         boolean anyPsgSolo = false;
-        for (boolean s : psgUserSolos) if (s) anyPsgSolo = true;
+        for (boolean s : psgUserSolos)
+            if (s)
+                anyPsgSolo = true;
 
         boolean anySolo = anyFmSolo || anyPsgSolo;
 
         for (int i = 0; i < 6; i++) {
             boolean soloed = fmUserSolos[i];
             boolean muted = fmUserMutes[i];
-            if (soloed) muted = false;
-            else if (anySolo) muted = true;
+            if (soloed)
+                muted = false;
+            else if (anySolo)
+                muted = true;
             synth.setFmMute(i, muted);
         }
 
         for (int i = 0; i < 4; i++) {
             boolean soloed = psgUserSolos[i];
             boolean muted = psgUserMutes[i];
-            if (soloed) muted = false;
-            else if (anySolo) muted = true;
+            if (soloed)
+                muted = false;
+            else if (anySolo)
+                muted = true;
             synth.setPsgMute(i, muted);
         }
+    }
+
+    private SmpsSequencerConfig requireSmpsConfig() {
+        if (smpsConfig == null) {
+            throw new IllegalStateException("SMPS sequencer config not set");
+        }
+        return smpsConfig;
     }
 
     private int getAvailableSource() {
         int[] src = new int[1];
         al.alGenSources(1, src, 0);
         return src[0];
+    }
+
+    private void pushCurrentState() {
+        if (currentStream == null || currentSmps == null || smpsDriver == null) {
+            return;
+        }
+        musicStack.push(new MusicState(currentStream, currentSmps, smpsDriver, currentMusicId));
+    }
+
+    private void clearMusicStack() {
+        musicStack.clear();
+        pendingRestore = false;
+    }
+
+    private boolean removeSavedOverride(int musicId) {
+        if (musicStack.isEmpty()) {
+            return false;
+        }
+        for (Iterator<MusicState> iterator = musicStack.iterator(); iterator.hasNext();) {
+            MusicState state = iterator.next();
+            if (state.musicId == musicId) {
+                iterator.remove();
+                return true;
+            }
+        }
+        return false;
     }
 
     private void playWav(String resourcePath, int source, boolean loop) {
@@ -460,7 +618,7 @@ public class JOALAudioBackend implements AudioBackend {
                 return;
             }
             try (BufferedInputStream bis = new BufferedInputStream(is);
-                 AudioInputStream ais = AudioSystem.getAudioInputStream(bis)) {
+                    AudioInputStream ais = AudioSystem.getAudioInputStream(bis)) {
 
                 AudioFormat format = ais.getFormat();
                 int channels = format.getChannels();
@@ -496,11 +654,11 @@ public class JOALAudioBackend implements AudioBackend {
         // Cleanup stopped sources
         Iterator<Integer> it = sfxSources.iterator();
         int[] state = new int[1];
-        while(it.hasNext()) {
+        while (it.hasNext()) {
             int src = it.next();
             al.alGetSourcei(src, AL.AL_SOURCE_STATE, state, 0);
             if (state[0] == AL.AL_STOPPED) {
-                al.alDeleteSources(1, new int[]{src}, 0);
+                al.alDeleteSources(1, new int[] { src }, 0);
                 it.remove();
             }
         }
