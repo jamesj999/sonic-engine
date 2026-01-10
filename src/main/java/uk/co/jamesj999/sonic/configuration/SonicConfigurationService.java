@@ -12,6 +12,8 @@ import java.util.Map;
 
 public class SonicConfigurationService {
 	private static SonicConfigurationService sonicConfigurationService;
+	public static String ENGINE_VERSION = "0.1.20260110";
+
 	private Map<String, Object> config;
 
 	private SonicConfigurationService() {

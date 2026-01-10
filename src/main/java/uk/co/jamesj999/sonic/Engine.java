@@ -210,8 +210,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 				int height = configService
 						.getInt(SonicConfiguration.SCREEN_HEIGHT);
 				int fps = configService.getInt(SonicConfiguration.FPS);
-				String version = configService
-						.getString(SonicConfiguration.VERSION);
+				String version = SonicConfigurationService.ENGINE_VERSION;
 
 				canvas.setPreferredSize(new Dimension(width, height));
 
