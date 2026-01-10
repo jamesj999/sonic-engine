@@ -246,7 +246,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
                     ee0c = 0;
                     break;
 
-                case 0x00C372: // CPZ - Multi-layer vertical bases
+                case 0x00C372: // MTZ - Multi-layer vertical bases
                     // Camera_BG_X_pos = cameraX >> 2
                     d0 = (d0 >>> 2) & 0xFFFF;
                     ee0c = d0;

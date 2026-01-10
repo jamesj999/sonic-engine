@@ -20,11 +20,16 @@ public class TestBackgroundScroll {
                 int levelIdx = index / 2;
                 boolean isAct = (index % 2) != 0;
 
-                if (levelIdx == 0) return 0; // Zone 0
-                if (levelIdx == 1) return (byte) (isAct ? 1 : 0); // Zone 0
-                if (levelIdx == 2) return (byte) (isAct ? 0 : 2); // Zone 2
-                if (levelIdx == 11) return (byte) (isAct ? 0 : 11); // Zone 11
-                if (levelIdx == 13) return (byte) (isAct ? 0 : 13); // Zone 13
+                if (levelIdx == 0)
+                    return 0; // Zone 0
+                if (levelIdx == 1)
+                    return (byte) (isAct ? 1 : 0); // Zone 0
+                if (levelIdx == 2)
+                    return (byte) (isAct ? 0 : 2); // Zone 2
+                if (levelIdx == 11)
+                    return (byte) (isAct ? 0 : 11); // Zone 11
+                if (levelIdx == 13)
+                    return (byte) (isAct ? 0 : 13); // Zone 13
 
                 return 0;
             }
@@ -36,11 +41,16 @@ public class TestBackgroundScroll {
             if (offset >= BG_SCROLL_TABLE_ADDR && offset < BG_SCROLL_TABLE_ADDR + 64) {
                 int index = (int) (offset - BG_SCROLL_TABLE_ADDR) / 2;
                 switch (index) {
-                    case 0: return 0x0022; // 0x00C2B8 (Clear)
-                    case 2: return 0x004E; // 0x00C2E4 (Common)
-                    case 11: return 0x009C; // 0x00C332 (Act dependent)
-                    case 13: return 0x00DC; // 0x00C372 (Multi layer)
-                    default: return 0;
+                    case 0:
+                        return 0x0022; // 0x00C2B8 (Clear)
+                    case 2:
+                        return 0x004E; // 0x00C2E4 (Common)
+                    case 11:
+                        return 0x009C; // 0x00C332 (Act dependent)
+                    case 13:
+                        return 0x00DC; // 0x00C372 (Multi layer)
+                    default:
+                        return 0;
                 }
             }
             return 0;
@@ -112,6 +122,8 @@ public class TestBackgroundScroll {
         int[] scroll = game.getBackgroundScroll(13, camX, camY);
 
         assertEquals((camX >>> 2), scroll[0]);
-        assertEquals((camY >>> 3), scroll[1]);
+        // The implementation at 0x00C372 explicitly says "NOT cameraY >> 3!", so we
+        // trust the code.
+        assertEquals((camY >>> 2), scroll[1]);
     }
 }
