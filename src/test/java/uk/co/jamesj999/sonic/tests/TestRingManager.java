@@ -113,6 +113,18 @@ public class TestRingManager {
             pushSensors = new Sensor[0];
         }
 
+        private int ringCount = 0;
+
+        @Override
+        public void addRings(int delta) {
+            ringCount += delta;
+        }
+
+        @Override
+        public int getRingCount() {
+            return ringCount;
+        }
+
         @Override
         public void draw() {
 

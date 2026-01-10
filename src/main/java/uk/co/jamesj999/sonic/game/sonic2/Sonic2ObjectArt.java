@@ -254,6 +254,7 @@ public class Sonic2ObjectArt {
                 signpostSheet,
                 resultsSheet,
                 hudDigitPatterns,
+                hudTextPatterns,
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations,

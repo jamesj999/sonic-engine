@@ -107,18 +107,20 @@ public abstract class AbstractBadnikInstance extends AbstractObjectInstance
                 new ObjectSpawn(currentX, currentY, 0x28, 0, 0, false, 0), levelManager);
         levelManager.getObjectManager().addDynamicObject(animal);
 
-        // Spawn points (100)
+        // Calculate points based on chain
+        int pointsValue = 100;
+        if (player != null) {
+            pointsValue = player.incrementBadnikChain();
+            uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addScore(pointsValue);
+        }
+
+        // Spawn points
         PointsObjectInstance points = new PointsObjectInstance(
-                new ObjectSpawn(currentX, currentY, 0x29, 0, 0, false, 0), levelManager, 100);
+                new ObjectSpawn(currentX, currentY, 0x29, 0, 0, false, 0), levelManager, pointsValue);
         levelManager.getObjectManager().addDynamicObject(points);
 
         // Play explosion SFX
         uk.co.jamesj999.sonic.audio.AudioManager.getInstance().playSfx(Sonic2Constants.SndID_Explosion);
-
-        // Award 100 points
-        if (player != null) {
-            // player.addScore(100); // Need to check if available
-        }
 
         // Remove self
         // Remove self (handled by update loop via destroyed flag)

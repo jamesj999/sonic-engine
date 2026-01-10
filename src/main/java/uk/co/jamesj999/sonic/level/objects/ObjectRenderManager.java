@@ -123,7 +123,7 @@ public class ObjectRenderManager {
 
         // Results screen
         this.resultsSheet = artData.resultsSheet();
-        this.resultsHudDigitPatterns = artData.resultsHudDigitPatterns();
+        this.resultsHudDigitPatterns = artData.getHudDigitPatterns();
 
         this.monitorRenderer = new PatternSpriteRenderer(monitorSheet);
         this.spikeRenderer = new PatternSpriteRenderer(spikeSheet);
@@ -177,7 +177,8 @@ public class ObjectRenderManager {
 
         // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
-        // Don't register - Results gets its own pattern namespace in ensurePatternsCached
+        // Don't register - Results gets its own pattern namespace in
+        // ensurePatternsCached
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -185,7 +186,7 @@ public class ObjectRenderManager {
         rendererOrder.add(renderer);
     }
 
-    public void ensurePatternsCached(GraphicsManager graphicsManager, int basePatternIndex) {
+    public int ensurePatternsCached(GraphicsManager graphicsManager, int basePatternIndex) {
         int next = basePatternIndex;
         for (int i = 0; i < rendererOrder.size(); i++) {
             ObjectSpriteSheet sheet = sheetOrder.get(i);
@@ -200,6 +201,8 @@ public class ObjectRenderManager {
         // avoiding issues with high basePatternIndex values.
         // We use a high offset (0x10000) to avoid collision with level/object patterns.
         resultsRenderer.ensurePatternsCached(graphicsManager, 0x10000);
+
+        return next;
     }
 
     public boolean isReady() {

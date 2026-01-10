@@ -84,7 +84,8 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     private int lastPerfectBonus = Integer.MIN_VALUE;
     private final Pattern blankDigit = new Pattern();
 
-    public ResultsScreenObjectInstance(int elapsedTimeSeconds, int ringCount, int actNumber, boolean allRingsCollected) {
+    public ResultsScreenObjectInstance(int elapsedTimeSeconds, int ringCount, int actNumber,
+            boolean allRingsCollected) {
         super(null, "results_screen");
         this.elapsedTimeSeconds = elapsedTimeSeconds;
         this.ringCount = ringCount;
@@ -169,6 +170,7 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
 
         if (totalIncrement > 0) {
             totalBonus += totalIncrement;
+            uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addScore(totalIncrement);
         }
 
         // Play tick sound every 4 frames

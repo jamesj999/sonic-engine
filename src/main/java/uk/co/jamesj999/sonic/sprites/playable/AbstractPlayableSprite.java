@@ -125,7 +125,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         public enum DamageCause {
                 NORMAL,
                 SPIKE,
-                DROWN
+                DROWN,
+                TIME_OVER
         }
 
         /**
@@ -139,7 +140,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         protected float spindashConstant = 0f;
 
-        protected int ringCount = 0;
         private PlayerSpriteRenderer spriteRenderer;
         private int mappingFrame = 0;
         private int animationFrameCount = 0;
@@ -185,7 +185,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.speedShoesFrames = 0;
                 this.invincibleFrames = 0;
                 this.invulnerableFrames = 0;
-                this.ringCount = 0;
+                this.invincibleFrames = 0;
+                this.invulnerableFrames = 0;
+                // Ring count is managed by LevelGamestate and reset by LevelManager
                 this.dead = false;
                 this.hurt = false;
                 this.deathCountdown = 0;
@@ -253,19 +255,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public int getRingCount() {
-                return ringCount;
+                var levelState = LevelManager.getInstance().getLevelGamestate();
+                return levelState != null ? levelState.getRings() : 0;
         }
 
         public void setRingCount(int ringCount) {
-                this.ringCount = Math.max(0, ringCount);
+                var levelState = LevelManager.getInstance().getLevelGamestate();
+                if (levelState != null) {
+                        levelState.setRings(ringCount);
+                }
         }
 
         public void addRings(int delta) {
-                if (delta == 0) {
-                        return;
+                var levelState = LevelManager.getInstance().getLevelGamestate();
+                if (levelState != null) {
+                        levelState.addRings(delta);
                 }
-                int next = ringCount + delta;
-                ringCount = Math.max(0, next);
         }
 
         public PlayerSpriteRenderer getSpriteRenderer() {
@@ -384,7 +389,27 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (air) {
                         setGroundMode(GroundMode.GROUND);
                         setAngle((byte) 0);
+                } else {
+                        // Reset badnik chain when landing
+                        resetBadnikChain();
                 }
+        }
+
+        private int badnikChainCounter = 0;
+
+        public void resetBadnikChain() {
+                badnikChainCounter = 0;
+        }
+
+        public int incrementBadnikChain() {
+                badnikChainCounter++;
+                // 1st: 100, 2nd: 200, 3rd: 500, 4th+: 1000
+                return switch (badnikChainCounter) {
+                        case 1 -> 100;
+                        case 2 -> 200;
+                        case 3 -> 500;
+                        default -> 1000;
+                };
         }
 
         public byte getTopSolidBit() {
@@ -641,7 +666,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private GameSound resolveDamageSound(DamageCause cause) {
                 return switch (cause) {
                         case SPIKE -> GameSound.HURT_SPIKE;
-                        case DROWN -> GameSound.DROWN;
+                        case DROWN, TIME_OVER -> GameSound.DROWN; // Time over usually uses Drown or specific logic,
+                                                                  // checking s2 asm... usually it's just game over
+                                                                  // music. but for damage sound?
                         default -> GameSound.HURT;
                 };
         }

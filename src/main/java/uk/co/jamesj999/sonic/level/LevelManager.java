@@ -17,11 +17,13 @@ import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
+import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
 import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
+import uk.co.jamesj999.sonic.level.objects.HudRenderManager;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
@@ -107,9 +109,11 @@ public class LevelManager {
     private RingManager ringManager;
     private LostRingManager lostRingManager;
     private ObjectRenderManager objectRenderManager;
+    private HudRenderManager hudRenderManager;
     private AnimatedPatternManager animatedPatternManager;
     private AnimatedPaletteManager animatedPaletteManager;
     private CheckpointState checkpointState;
+    private LevelGamestate levelGamestate;
 
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
@@ -195,6 +199,7 @@ public class LevelManager {
                 checkpointState = new CheckpointState();
             }
             checkpointState.clear();
+            levelGamestate = new LevelGamestate();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -229,6 +234,12 @@ public class LevelManager {
         if (lostRingManager != null) {
             lostRingManager.update(playable, frameCounter + 1);
         }
+        if (levelGamestate != null) {
+            levelGamestate.update();
+            if (levelGamestate.getTimer().isTimeOver() && playable != null && !playable.getDead()) {
+                playable.applyHurtOrDeath(0, AbstractPlayableSprite.DamageCause.TIME_OVER, false);
+            }
+        }
     }
 
     public void applyPlaneSwitchers(AbstractPlayableSprite player) {
@@ -236,6 +247,10 @@ public class LevelManager {
             return;
         }
         planeSwitcherManager.update(player);
+    }
+
+    public LevelGamestate getLevelGamestate() {
+        return levelGamestate;
     }
 
     private void initPlayerSpriteArt() {
@@ -314,7 +329,26 @@ public class LevelManager {
             if (ringSpriteSheet != null) {
                 baseIndex += ringSpriteSheet.getPatterns().length;
             }
-            objectRenderManager.ensurePatternsCached(graphicsManager, baseIndex);
+            LOGGER.info("Initializing Object Art. Base Index: " + baseIndex);
+            int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, baseIndex);
+
+            hudRenderManager = new HudRenderManager(graphicsManager);
+
+            Pattern[] hudDigits = artData.getHudDigitPatterns();
+            LOGGER.info("Cached " + hudDigits.length + " HUD Digit patterns at index " + hudBaseIndex);
+            for (int i = 0; i < hudDigits.length; i++) {
+                graphicsManager.cachePatternTexture(hudDigits[i], hudBaseIndex + i);
+            }
+            hudRenderManager.setDigitPatternIndex(hudBaseIndex);
+
+            int textBaseIndex = hudBaseIndex + hudDigits.length;
+            Pattern[] hudText = artData.getHudTextPatterns();
+            LOGGER.info("Cached " + hudText.length + " HUD Text patterns at index " + textBaseIndex);
+            for (int i = 0; i < hudText.length; i++) {
+                graphicsManager.cachePatternTexture(hudText[i], textBaseIndex + i);
+            }
+            hudRenderManager.setTextPatternIndex(textBaseIndex, hudText.length);
+
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load object art.", e);
             objectRenderManager = null;
@@ -526,6 +560,10 @@ public class LevelManager {
         }
 
         DebugObjectArtViewer.getInstance().draw(objectRenderManager, camera);
+
+        if (hudRenderManager != null) {
+            hudRenderManager.draw(levelGamestate);
+        }
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
         boolean overlayEnabled = debugViewEnabled && overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);
