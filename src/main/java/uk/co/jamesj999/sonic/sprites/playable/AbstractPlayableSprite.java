@@ -75,6 +75,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean rolling = false;
 
         /**
+         * Whether the current jump originated from a rolling state.
+         * In Sonic 1, 2, 3 & K, air control is locked when jumping while rolling.
+         * Reset to false when landing.
+         */
+        protected boolean rollingJump = false;
+
+        /**
          * Whether or not this sprite is in the air
          */
         protected boolean air = false;
@@ -195,6 +202,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.springing = false;
                 this.springingFrames = 0;
                 this.rolling = false;
+                this.rollingJump = false;
                 this.spindash = false;
                 this.pushing = false;
                 this.crouching = false;
@@ -383,6 +391,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (!air && this.air && hurt) {
                         hurt = false;
                         setInvulnerableFrames(0x78); // 120 frames invulnerability on landing
+                }
+                // Reset rolling jump flag when landing
+                if (!air && this.air) {
+                        rollingJump = false;
                 }
                 // TODO Update ground sensors here
                 this.air = air;
@@ -907,6 +919,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 moveForGroundModeAndDirection(delta, Direction.DOWN);
 
                 this.rolling = rolling;
+        }
+
+        public boolean getRollingJump() {
+                return rollingJump;
+        }
+
+        public void setRollingJump(boolean rollingJump) {
+                this.rollingJump = rollingJump;
         }
 
         @Override

@@ -167,11 +167,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x20);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Run RIGHT (left=false, right=true)
-                method.invoke(manager, mockSprite, false, true);
+                // Act: Run RIGHT (left=false, right=true), raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, false, true, false, true);
 
                 // Assert: gSpeed should be > 1536 (approx 1536 + 22 = 1558).
                 // Original code would clamp this to 1536.
@@ -187,11 +188,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x00);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Hold Right
-                method.invoke(manager, mockSprite, false, true);
+                // Act: Hold Right, raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, false, true, false, true);
 
                 // Assert: Speed should NOT drop to max (1536).
                 // It should stay at 3000 (no slope gravity, no friction because pressing
@@ -207,11 +209,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x00);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Hold Right
-                method.invoke(manager, mockSprite, false, true);
+                // Act: Hold Right, raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, false, true, false, true);
 
                 // Assert: Speed should increase by runAccel (12).
                 // 1000 + 12 = 1012.
@@ -225,11 +228,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x00);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Hold Left
-                method.invoke(manager, mockSprite, true, false);
+                // Act: Hold Left, raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, true, false, true, false);
 
                 // Assert: Speed should NOT clamp to -max (-1536).
                 assertEquals("gSpeed should be maintained when < -max", (short) -3000, mockSprite.getGSpeed());

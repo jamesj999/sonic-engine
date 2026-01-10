@@ -74,6 +74,12 @@ public class PlayableSpriteMovementManager extends
 
 		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null;
 
+		// SPG: Store raw button state before control lock modifies it.
+		// During control lock, friction is only applied when NO buttons are pressed.
+		// If left/right is pressed during lock, no friction is applied (faster slip).
+		boolean rawLeft = left;
+		boolean rawRight = right;
+
 		if (controlLocked || sprite.getSpringing()) {
 			left = false;
 			right = false;
@@ -141,7 +147,7 @@ public class PlayableSpriteMovementManager extends
 				// Commence jump
 				jump(sprite);
 			} else {
-				calculateGSpeed(sprite, left, right);
+				calculateGSpeed(sprite, left, right, rawLeft, rawRight);
 				// Since this will update the gSpeed, we now need to update the X/Y from this.
 				calculateXYFromGSpeed(sprite);
 
@@ -517,9 +523,19 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	private void spindashCooldown(AbstractPlayableSprite sprite) {
+		// SPG: spinrev -= ((spinrev div 0.125) / 256)
+		// "div" is integer division ignoring any remainder.
+		// This is equivalent to: spinrev -= spinrev / 32 (using integer div)
+		// Since we store as float but want integer behavior, convert to int for the
+		// calc
 		float spindashConstant = sprite.getSpindashConstant();
-		spindashConstant -= ((spindashConstant / 0.125) / 256);
-		if (spindashConstant < 0.01) {
+		// Multiply by 256 to work in subpixels, apply integer division, convert back
+		int subpixels = (int) (spindashConstant * 256);
+		// Integer division: subpixels / 32 (which is (spinrev / 0.125) / 256)
+		int decay = subpixels / 32;
+		subpixels -= decay;
+		spindashConstant = subpixels / 256.0f;
+		if (spindashConstant < 0.01f) {
 			spindashConstant = 0f;
 		}
 		sprite.setSpindashConstant(spindashConstant);
@@ -531,16 +547,22 @@ public class PlayableSpriteMovementManager extends
 	 * calculate gSpeed, X/Y speeds must be calculated afterwards.
 	 *
 	 * @param sprite
-	 *               The sprite in question
+	 *                 The sprite in question
 	 * @param left
-	 *               Whether or not the left key is pressed
+	 *                 Whether or not the left key is pressed (after control lock)
 	 * @param right
-	 *               Whether or not the right key is pressed
+	 *                 Whether or not the right key is pressed (after control lock)
+	 * @param rawLeft
+	 *                 Raw left button state (before control lock), for friction
+	 *                 check
+	 * @param rawRight
+	 *                 Raw right button state (before control lock), for friction
+	 *                 check
 	 */
 	private void calculateGSpeed(AbstractPlayableSprite sprite, boolean left,
-			boolean right) {
+			boolean right, boolean rawLeft, boolean rawRight) {
 		short gSpeed = sprite.getGSpeed();
-		int angle = calculateAngle(sprite);
+		int hexAngle = getHexAngle(sprite);
 
 		short friction;
 		short slopeRunningVariant;
@@ -556,7 +578,8 @@ public class PlayableSpriteMovementManager extends
 		} else {
 			friction = (short) (sprite.getFriction() / 2);
 			double gSpeedSign = Math.signum(gSpeed);
-			double angleSign = Math.signum(TrigLookupTable.sinDeg(angle));
+			// SPG: Use hex-angle sin for slope direction check
+			double angleSign = Math.signum(TrigLookupTable.sinHex(hexAngle));
 			if (gSpeedSign == angleSign) {
 				slopeRunningVariant = 80;
 			} else {
@@ -567,10 +590,27 @@ public class PlayableSpriteMovementManager extends
 			maxSpeed = maxRoll;
 		}
 		// Running or rolling on the ground
-		gSpeed += slopeRunningVariant * TrigLookupTable.sinDeg(angle);
+		// SPG: In Sonic 1/2, walking/running Slope Factor doesn't get subtracted
+		// if the Player is stopped (Ground Speed is 0). Rolling slope factor
+		// has no check for if Ground Speed is 0 in any of the games.
+		// SPG: Slope Factor * sin(Ground Angle) using hex-angle trig
+		if (sprite.getRolling() || gSpeed != 0) {
+			gSpeed += slopeRunningVariant * TrigLookupTable.sinHexNormalized(hexAngle);
+		}
 		if (left) {
 			if (gSpeed > 0) {
 				gSpeed -= decel;
+				// SPG Rolling: Friction is ALSO applied during deceleration
+				// Unlike running, friction is still in effect while decelerating when rolling.
+				// So while decelerating, Ground Speed slows by roll_decel + roll_friction.
+				if (sprite.getRolling()) {
+					gSpeed -= friction;
+				}
+				// SPG: At any time deceleration results in Ground Speed changing sign,
+				// Ground Speed is set to 0.5 (128 subpixels) in the opposite direction.
+				if (gSpeed <= 0) {
+					gSpeed = (short) -128;
+				}
 				if (!sprite.getRolling() && gSpeed >= 4 * 256 && !skidding) {
 					audioManager.playSfx(GameSound.SKID);
 					skidding = true;
@@ -588,6 +628,15 @@ public class PlayableSpriteMovementManager extends
 		if (right) {
 			if (gSpeed < 0) {
 				gSpeed += decel;
+				// SPG Rolling: Friction is ALSO applied during deceleration
+				if (sprite.getRolling()) {
+					gSpeed += friction; // Add friction (reduce magnitude of negative speed)
+				}
+				// SPG: At any time deceleration results in Ground Speed changing sign,
+				// Ground Speed is set to 0.5 (128 subpixels) in the opposite direction.
+				if (gSpeed >= 0) {
+					gSpeed = (short) 128;
+				}
 				if (!sprite.getRolling() && gSpeed <= -4 * 256 && !skidding) {
 					audioManager.playSfx(GameSound.SKID);
 					skidding = true;
@@ -605,7 +654,11 @@ public class PlayableSpriteMovementManager extends
 		if (!left && !right) {
 			skidding = false;
 		}
-		if ((!left && !right) || (sprite.getRolling() && left && gSpeed < 0)
+		// SPG: Friction check uses RAW button state. During control lock, if player
+		// is pressing left/right (even though input is locked), friction is NOT
+		// applied.
+		// This means pressing buttons during slip causes faster sliding.
+		if ((!rawLeft && !rawRight) || (sprite.getRolling() && left && gSpeed < 0)
 				|| (sprite.getRolling() && right && gSpeed > 0)) {
 			if ((gSpeed < friction && gSpeed > 0) || (gSpeed > -friction)
 					&& gSpeed < 0) {
@@ -629,15 +682,23 @@ public class PlayableSpriteMovementManager extends
 		// CRITICAL: Calculate angle BEFORE setAir(true), because setAir(true) resets
 		// the angle to 0. We need the terrain angle from the current ground position
 		// to calculate the correct jump direction for slopes in all ground modes.
-		int angle = calculateAngle(sprite);
+		int hexAngle = getHexAngle(sprite);
+		// SPG: In S1/S2/S3K, air control is locked when jumping while rolling.
+		// Must capture this BEFORE setAir(true) which could affect state.
+		boolean wasRolling = sprite.getRolling();
+		sprite.setRollingJump(wasRolling);
 		sprite.setAir(true);
 		sprite.setRolling(true);
 		audioManager.playSfx(GameSound.JUMP);
 		jumpPressed = true;
+		// SPG: X Speed -= jump_force * sin(Ground Angle)
+		// SPG: Y Speed -= jump_force * cos(Ground Angle)
+		// Note: Due to Mega Drive clockwise angle system + screen Y-down coordinates,
+		// the signs work out such that we ADD sin for X and SUBTRACT cos for Y.
 		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()
-				* TrigLookupTable.sinDeg(angle)));
+				* TrigLookupTable.sinHexNormalized(hexAngle)));
 		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
-				* TrigLookupTable.cosDeg(angle)));
+				* TrigLookupTable.cosHexNormalized(hexAngle)));
 	}
 
 	/**
@@ -656,18 +717,22 @@ public class PlayableSpriteMovementManager extends
 		short xSpeed = sprite.getXSpeed();
 		short ySpeed = sprite.getYSpeed();
 		// In the air
-		if (left) {
-			if (xSpeed - (2 * runAccel) < -max) {
-				xSpeed = (short) -max;
-			} else {
-				xSpeed -= (2 * runAccel);
+		// SPG: In Sonic 1, 2, 3, and Knuckles, you can't control the Player's
+		// trajectory through the air with the buttons if you jump while rolling.
+		if (!sprite.getRollingJump()) {
+			if (left) {
+				if (xSpeed - (2 * runAccel) < -max) {
+					xSpeed = (short) -max;
+				} else {
+					xSpeed -= (2 * runAccel);
+				}
 			}
-		}
-		if (right) {
-			if (xSpeed + (2 * runAccel) > max) {
-				xSpeed = max;
-			} else {
-				xSpeed += (2 * runAccel);
+			if (right) {
+				if (xSpeed + (2 * runAccel) > max) {
+					xSpeed = max;
+				} else {
+					xSpeed += (2 * runAccel);
+				}
 			}
 		}
 		// Air drag: Sonic 2 applies drag only when ySpeed is in [-1024, 0)
@@ -726,27 +791,39 @@ public class PlayableSpriteMovementManager extends
 		short ySpeed = sprite.getYSpeed();
 		short xSpeed = sprite.getXSpeed();
 		short gSpeed = sprite.getGSpeed();
-		int angle = calculateAngle(sprite);
+		int hexAngle = getHexAngle(sprite);
 		if (ySpeed > 0) {
 			byte originalAngle = sprite.getAngle();
-			if ((originalAngle >= (byte) 0xF0 && originalAngle <= (byte) 0xFF)
-					|| (originalAngle >= (byte) 0x00 && originalAngle <= (byte) 0x0F)) {
+			int unsignedAngle = originalAngle & 0xFF;
+			// SPG Landing Angle Ranges (when falling downward):
+			// Flat: 0xF0-0xFF (240-255) and 0x00-0x0F (0-15) -> gSpeed = xSpeed
+			// Slope: 0xE0-0xFF (224-255) and 0x00-0x1F (0-31) -> depends on movement
+			// Steep: Anything else -> depends on movement
+			boolean isFlat = (unsignedAngle >= 0xF0) || (unsignedAngle <= 0x0F);
+			boolean isSlope = (unsignedAngle >= 0xE0) || (unsignedAngle <= 0x1F);
+
+			if (isFlat) {
+				// SPG Flat: Ground Speed is set to the value of X Speed
 				gSpeed = xSpeed;
-			} else if ((originalAngle >= (byte) 0xE0 && originalAngle <= (byte) 0xEF)
-					|| (originalAngle >= (byte) 0x10 && originalAngle <= (byte) 0x1F)) {
+			} else if (isSlope) {
+				// SPG Slope: Use X Speed if moving mostly horizontal, else Y Speed * 0.5
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * 0.5 * (Math.signum(
-							TrigLookupTable.sinDeg(angle))));
+					// SPG: Ground Speed = Y Speed * 0.5 * -sign(sin(Ground Angle))
+					// Note: Due to MD clockwise angles, sign is inverted
+					gSpeed = (short) (ySpeed * 0.5 * Math.signum(
+							TrigLookupTable.sinHex(hexAngle)));
 				}
-			} else if ((originalAngle >= (byte) 0xC0 && originalAngle <= (byte) 0xDF)
-					|| (originalAngle >= (byte) 0x20 && originalAngle <= (byte) 0x3F)) {
+			} else {
+				// SPG Steep: Use X Speed if moving mostly horizontal, else full Y Speed
 				if (Math.abs(xSpeed) > Math.abs(ySpeed)) {
 					gSpeed = xSpeed;
 				} else {
-					gSpeed = (short) (ySpeed * (Math.signum(
-							TrigLookupTable.sinDeg(angle))));
+					// SPG: Ground Speed = Y Speed * -sign(sin(Ground Angle))
+					// Note: Due to MD clockwise angles, sign is inverted
+					gSpeed = (short) (ySpeed * Math.signum(
+							TrigLookupTable.sinHex(hexAngle)));
 				}
 			}
 		}
@@ -790,11 +867,26 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	/**
+	 * Gets the hex angle from the sprite.
+	 * SPG: Uses 256-step hex angles directly without converting to degrees.
 	 *
 	 * @param sprite
 	 *               The sprite in question
-	 * @return The correct angle, based on 360 degree rotation. Convert this to
-	 *         radians before using Math.sin etc.
+	 * @return The hex angle (0x00-0xFF), suitable for use with
+	 *         TrigLookupTable.sinHex/cosHex
+	 */
+	private int getHexAngle(AbstractPlayableSprite sprite) {
+		return sprite.getAngle() & 0xFF;
+	}
+
+	/**
+	 * Legacy method for compatibility - converts hex angle to degrees.
+	 * 
+	 * @deprecated Use getHexAngle with hex-based trig functions instead.
+	 *
+	 * @param sprite
+	 *               The sprite in question
+	 * @return The correct angle, based on 360 degree rotation.
 	 */
 	private int calculateAngle(AbstractPlayableSprite sprite) {
 		int angle = (int) ((sprite.getAngle() & 0xFF) * 1.40625);
@@ -811,12 +903,16 @@ public class PlayableSpriteMovementManager extends
 
 	private void calculateXYFromGSpeed(AbstractPlayableSprite sprite) {
 		short gSpeed = sprite.getGSpeed();
-		int angle = calculateAngle(sprite);
+		int hexAngle = getHexAngle(sprite);
+		// SPG: X Speed = Ground Speed * cos(Ground Angle)
+		// SPG: Y Speed = Ground Speed * -sin(Ground Angle)
+		// Note: In screen coords (Y+ down) and MD clockwise angles, the sign works out
+		// such that Y Speed = gSpeed * sin(angle) gives correct direction.
 		sprite.setXSpeed((short) Math.round(gSpeed
-				* TrigLookupTable.cosDeg(angle)));
+				* TrigLookupTable.cosHexNormalized(hexAngle)));
 
 		sprite.setYSpeed((short) Math.round(gSpeed
-				* TrigLookupTable.sinDeg(angle)));
+				* TrigLookupTable.sinHexNormalized(hexAngle)));
 	}
 
 	private void jumpHandler(boolean jump) {
