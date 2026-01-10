@@ -487,7 +487,12 @@ public class PlayableSpriteMovementManager extends
 			sprite.setSpindash(true);
 			sprite.setSpindashConstant(2f);
 		} else {
-			sprite.setSpindashConstant(sprite.getSpindashConstant() + 2f);
+			// SPG: spinrev is increased by 2, up to a maximum of 8
+			float newConstant = sprite.getSpindashConstant() + 2f;
+			if (newConstant > 8f) {
+				newConstant = 8f;
+			}
+			sprite.setSpindashConstant(newConstant);
 		}
 		float pitch = 1.0f + (sprite.getSpindashConstant() / 24.0f);
 		audioManager.playSfx(GameSound.SPINDASH_CHARGE, pitch);
@@ -506,8 +511,11 @@ public class PlayableSpriteMovementManager extends
 			sprite.setGSpeed(spindashGSpeed);
 		}
 		Camera.getInstance().setFrozen(true);
+		// SPG: Camera lag timer is set to 32 - spinrev, where spinrev is between 0-8
+		// This gives a timer range of 24-32 frames
+		int spinrevForTimer = Math.min(8, (int) Math.floor(sprite.getSpindashConstant()));
 		TimerManager.getInstance()
-				.registerTimer(new SpindashCameraTimer("spindash", (32 - (int) sprite.getSpindashConstant())));
+				.registerTimer(new SpindashCameraTimer("spindash", 32 - spinrevForTimer));
 
 		sprite.setSpindashConstant(0f);
 	}
