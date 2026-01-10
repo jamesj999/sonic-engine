@@ -359,7 +359,9 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
             int digit = value / divisor;
             value %= divisor;
             int tileIndex = startIndex + (i * 2);
-            if (digit != 0 || hasDigit) {
+            // Always show the last digit (ones place), even if value is 0
+            boolean isLastDigit = (i == divisors.length - 1);
+            if (digit != 0 || hasDigit || isLastDigit) {
                 hasDigit = true;
                 copyDigit(dest, tileIndex, digit, digits);
             } else {

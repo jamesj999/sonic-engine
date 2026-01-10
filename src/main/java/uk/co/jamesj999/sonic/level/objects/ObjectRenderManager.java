@@ -175,9 +175,9 @@ public class ObjectRenderManager {
         this.signpostRenderer = new PatternSpriteRenderer(signpostSheet);
         register(signpostSheet, signpostRenderer);
 
-        // Results screen - registered last
+        // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
-        register(resultsSheet, resultsRenderer);
+        // Don't register - Results gets its own pattern namespace in ensurePatternsCached
     }
 
     private void register(ObjectSpriteSheet sheet, PatternSpriteRenderer renderer) {
@@ -191,15 +191,15 @@ public class ObjectRenderManager {
             ObjectSpriteSheet sheet = sheetOrder.get(i);
             PatternSpriteRenderer renderer = rendererOrder.get(i);
             int count = sheet.getPatterns().length;
-            // Debug: log all renderers to see pattern allocation
-            String name = renderer == resultsRenderer ? "Results" :
-                         renderer == explosionRenderer ? "Explosion" :
-                         renderer == monitorRenderer ? "Monitor" :
-                         "Renderer" + i;
-            LOGGER.info(name + ": base=" + next + ", count=" + count + ", max=" + (next + count - 1));
             renderer.ensurePatternsCached(graphicsManager, next);
             next += count;
         }
+
+        // Results screen uses a dedicated pattern namespace starting at 0.
+        // This ensures its tile indices (0-465) map directly to texture IDs,
+        // avoiding issues with high basePatternIndex values.
+        // We use a high offset (0x10000) to avoid collision with level/object patterns.
+        resultsRenderer.ensurePatternsCached(graphicsManager, 0x10000);
     }
 
     public boolean isReady() {
