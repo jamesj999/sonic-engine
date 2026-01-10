@@ -58,7 +58,7 @@ public class Sonic extends AbstractPlayableSprite {
 		slopeRollingDown = 20;
 		slopeRollingUp = 80;
 		rollDecel = 32;
-		minStartRollSpeed = 264;
+		minStartRollSpeed = 128; // SPG: 0.5 pixels (128 subpixels) in S1/S2
 		minRollSpeed = 128;
 		maxRoll = 4096;
 		rollHeight = 28;

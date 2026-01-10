@@ -167,11 +167,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x20);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Run RIGHT (left=false, right=true)
-                method.invoke(manager, mockSprite, false, true);
+                // Act: Run RIGHT (left=false, right=true), raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, false, true, false, true);
 
                 // Assert: gSpeed should be > 1536 (approx 1536 + 22 = 1558).
                 // Original code would clamp this to 1536.
@@ -187,11 +188,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x00);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Hold Right
-                method.invoke(manager, mockSprite, false, true);
+                // Act: Hold Right, raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, false, true, false, true);
 
                 // Assert: Speed should NOT drop to max (1536).
                 // It should stay at 3000 (no slope gravity, no friction because pressing
@@ -207,11 +209,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x00);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Hold Right
-                method.invoke(manager, mockSprite, false, true);
+                // Act: Hold Right, raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, false, true, false, true);
 
                 // Assert: Speed should increase by runAccel (12).
                 // 1000 + 12 = 1012.
@@ -225,11 +228,12 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAngle((byte) 0x00);
 
                 Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
-                                AbstractPlayableSprite.class, boolean.class, boolean.class);
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
                 method.setAccessible(true);
 
-                // Act: Hold Left
-                method.invoke(manager, mockSprite, true, false);
+                // Act: Hold Left, raw inputs same as effective inputs
+                method.invoke(manager, mockSprite, true, false, true, false);
 
                 // Assert: Speed should NOT clamp to -max (-1536).
                 assertEquals("gSpeed should be maintained when < -max", (short) -3000, mockSprite.getGSpeed());
@@ -527,5 +531,82 @@ public class TestPlayableSpriteMovementManager {
                 // The key test is that xSpeed is non-zero (indicating angle was used)
                 assertTrue("Jump should have used original angle for velocity calculation",
                                 mockSprite.getXSpeed() != 0 || mockSprite.getYSpeed() != 0);
+        }
+
+        /**
+         * Test that air control is disabled when sprite is in hurt/knockback state.
+         * Per SPG, Sonic should not have air control whilst in hurting state
+         * (after taking damage but before landing on the ground).
+         */
+        @Test
+        public void testNoAirControlWhenHurt() throws Exception {
+                // Setup: In air, hurt state, with some initial xSpeed
+                mockSprite.setAir(true);
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500); // Falling (outside air drag range)
+                mockSprite.setHurt(true); // Hurt/knockback state
+                mockSprite.setRollingJump(false); // Not a rolling jump
+
+                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
+                method.setAccessible(true);
+
+                // Act: Try to control left
+                method.invoke(manager, mockSprite, true, false);
+
+                // Assert: xSpeed should remain unchanged (no air control when hurt)
+                assertEquals("No air control when hurt - left input should not change xSpeed",
+                                (short) 1000, mockSprite.getXSpeed());
+
+                // Reset and test right input
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500);
+
+                // Act: Try to control right
+                method.invoke(manager, mockSprite, false, true);
+
+                // Assert: xSpeed should remain unchanged (no air control when hurt)
+                assertEquals("No air control when hurt - right input should not change xSpeed",
+                                (short) 1000, mockSprite.getXSpeed());
+        }
+
+        /**
+         * Test that air control DOES work when not hurt (normal air control).
+         * This is the counterpart to testNoAirControlWhenHurt to ensure we didn't
+         * accidentally break normal air control.
+         */
+        @Test
+        public void testAirControlWorksWhenNotHurt() throws Exception {
+                // Setup: In air, NOT hurt, with some initial xSpeed
+                mockSprite.setAir(true);
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500); // Falling (outside air drag range)
+                mockSprite.setHurt(false); // NOT hurt
+                mockSprite.setRollingJump(false); // Not a rolling jump
+
+                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
+                method.setAccessible(true);
+
+                // Act: Control left
+                method.invoke(manager, mockSprite, true, false);
+
+                // Assert: xSpeed should decrease (air control works)
+                // Air acceleration is 2 * runAccel = 2 * 12 = 24
+                // 1000 - 24 = 976
+                assertEquals("Air control should work when not hurt - left input decreases xSpeed",
+                                (short) 976, mockSprite.getXSpeed());
+
+                // Reset and test right input
+                mockSprite.setXSpeed((short) 1000);
+                mockSprite.setYSpeed((short) 500);
+
+                // Act: Control right
+                method.invoke(manager, mockSprite, false, true);
+
+                // Assert: xSpeed should increase (air control works)
+                // 1000 + 24 = 1024
+                assertEquals("Air control should work when not hurt - right input increases xSpeed",
+                                (short) 1024, mockSprite.getXSpeed());
         }
 }
