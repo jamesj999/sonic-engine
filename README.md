@@ -10,15 +10,35 @@ The Hedgehog games for Sega Mega Drive (Genesis). It will be capable of loading 
 the games and providing a pixel-perfect gameplay experience of the original games. It will also provide more modern features,
 such as a level editor, and an open framework allowing for modding and customisation.
 
-This project is a work in progress, for the current state please see the latest version in the Releases section of this
+>This project is a work in progress, for the current state please see the latest version in the Releases section of this
 document
 
-Status
-======
-PRE-ALPHA:
-No official releases have yet been made; the engine is still in pre-alpha state. This means that the graphics are an
-un-skinned representation of the engine and not all engine features will be complete. It will move into alpha state
-when basic physics are implemented correctly.
+Configuration
+=============
+The engine current makes limited use of config.json to hold some basic configurations. Change these at your own risk.
+
+Controls
+========
+>Currently, only Keyboard controls are supported.
+
+Player Controls
+- D-Pad Up/Down/Left/Right - Movement Controls
+- Space - Jump
+- Z - Cycle Acts
+- X - Cycle Zones
+
+Debug Controls
+- F1 - Show/Hide Debug Overlay (Includes text and bounding boxes)
+- F2 - Show/Hide Shortcuts Overlay
+- F3 - Show/Hide Player Panel
+- F4 - Show/Hide Sensor Labels
+- F5 - Show/Hide Object Labels
+- F6 - Show/Hide Camera Bounds
+- F7 - Show/Hide Player Bounds
+- F9 - Show/Hide Ring Bounds
+- F10 - Show/Hide Plane Switchers
+- F11 - Show/Hide Touch Response
+- F12 - Show/Hide Art Viewer
 
 Releases
 ========
