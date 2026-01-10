@@ -221,18 +221,13 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 
-		// Temporary 'death' detection - just resets X/Y of sprite.
-		// TODO - This no longer works. y <= 0 would put sonic above the viewport. Needs
-		// to work based on level height once merged.
-		/*
-		 * if (sprite.getY() <= 0) {
-		 * sprite.setX((short) 50);
-		 * sprite.setY((short) 50);
-		 * sprite.setXSpeed((short) 0);
-		 * sprite.setYSpeed((short) 0);
-		 * sprite.setGSpeed((short) 0);
-		 * }
-		 */
+		// Pit death detection: if Sonic falls below the camera's viewable area, trigger
+		// death
+		Camera camera = Camera.getInstance();
+		if (camera != null && sprite.getY() > camera.getY() + camera.getHeight()) {
+			sprite.applyPitDeath();
+		}
+
 		// Update sprite ground mode for next tick:
 
 		// Update active sensors
@@ -774,9 +769,10 @@ public class PlayableSpriteMovementManager extends
 		sprite.setXSpeed((short) 0);
 		sprite.setYSpeed(ySpeed);
 
-		// Check if player has fallen below camera + 256 pixels to start death countdown
+		// Check if player has fallen 256 pixels below the camera view to start death
+		// countdown
 		Camera camera = Camera.getInstance();
-		if (camera != null && sprite.getY() > camera.getMaxY() + 256) {
+		if (camera != null && sprite.getY() > camera.getY() + camera.getHeight() + 256) {
 			sprite.startDeathCountdown();
 		}
 

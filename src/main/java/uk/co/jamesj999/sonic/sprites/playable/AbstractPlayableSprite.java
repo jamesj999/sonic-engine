@@ -133,7 +133,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 NORMAL,
                 SPIKE,
                 DROWN,
-                TIME_OVER
+                TIME_OVER,
+                PIT
         }
 
         /**
@@ -652,6 +653,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 return applyDeath(DamageCause.DROWN);
         }
 
+        public boolean applyPitDeath() {
+                return applyDeath(DamageCause.PIT);
+        }
+
         private boolean applyDeath(DamageCause cause) {
                 if (dead) {
                         return false;
@@ -671,7 +676,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 setXSpeed((short) 0);
                 setYSpeed((short) -0x700);
                 setHighPriority(true);
-                AudioManager.getInstance().playSfx(resolveDamageSound(cause));
+                GameSound sound = resolveDamageSound(cause);
+                if (sound != null) {
+                        AudioManager.getInstance().playSfx(sound);
+                }
                 return true;
         }
 
@@ -681,6 +689,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         case DROWN, TIME_OVER -> GameSound.DROWN; // Time over usually uses Drown or specific logic,
                                                                   // checking s2 asm... usually it's just game over
                                                                   // music. but for damage sound?
+                        case PIT -> GameSound.HURT;
                         default -> GameSound.HURT;
                 };
         }
