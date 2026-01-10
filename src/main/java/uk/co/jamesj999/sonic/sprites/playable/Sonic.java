@@ -48,6 +48,7 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	public void defineSpeeds() {
+		// Base values - speed shoes boost is applied dynamically in getters
 		runAccel = 12;
 		runDecel = 128;
 		friction = 12;

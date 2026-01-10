@@ -21,9 +21,7 @@ public class PlayableSpriteMovementManager extends
 			.getInstance();
 	private final AudioManager audioManager = AudioManager.getInstance();
 
-	private final short max;
-	private final short runAccel;
-	private final short runDecel;
+	// These values don't change with speed shoes, so we cache them
 	private final short slopeRunning;
 	private final short minStartRollSpeed;
 	private final short minRollSpeed;
@@ -40,9 +38,8 @@ public class PlayableSpriteMovementManager extends
 
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
 		super(sprite);
-		max = sprite.getMax();
-		runAccel = sprite.getRunAccel();
-		runDecel = sprite.getRunDecel();
+		// Note: max, runAccel, runDecel, and friction are read dynamically from sprite
+		// to support speed shoes power-up which modifies these values at runtime
 		slopeRunning = sprite.getSlopeRunning();
 		minStartRollSpeed = sprite.getMinStartRollSpeed();
 		minRollSpeed = sprite.getMinRollSpeed();
@@ -572,6 +569,10 @@ public class PlayableSpriteMovementManager extends
 		short maxSpeed;
 		short accel;
 		short decel;
+		// Read values dynamically from sprite to support speed shoes power-up
+		short runAccel = sprite.getRunAccel();
+		short runDecel = sprite.getRunDecel();
+		short max = sprite.getMax();
 		if (!sprite.getRolling()) {
 			friction = sprite.getFriction();
 			slopeRunningVariant = slopeRunning;
@@ -719,6 +720,9 @@ public class PlayableSpriteMovementManager extends
 			boolean left, boolean right) {
 		short xSpeed = sprite.getXSpeed();
 		short ySpeed = sprite.getYSpeed();
+		// Read values dynamically from sprite to support speed shoes power-up
+		short runAccel = sprite.getRunAccel();
+		short max = sprite.getMax();
 		// In the air
 		// SPG: In Sonic 1, 2, 3, and Knuckles, you can't control the Player's
 		// trajectory through the air with the buttons if you jump while rolling.
