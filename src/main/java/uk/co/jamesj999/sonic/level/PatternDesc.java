@@ -32,6 +32,18 @@ public final class PatternDesc {
         this.patternIndex = patternIndex;
     }
 
+    public void setPriority(boolean priority) {
+        this.priority = priority;
+    }
+
+    public void setHFlip(boolean hFlip) {
+        this.hFlip = hFlip;
+    }
+
+    public void setVFlip(boolean vFlip) {
+        this.vFlip = vFlip;
+    }
+
     private int patternIndex;  // Cached pattern index
 
     // Default instance of an empty pattern descriptor

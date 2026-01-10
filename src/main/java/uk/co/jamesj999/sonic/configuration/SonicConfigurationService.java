@@ -154,6 +154,7 @@ public class SonicConfigurationService {
 		putDefault(SonicConfiguration.FM6_DAC_OFF, true); // Default true for Sonic 2 parity
 		putDefault(SonicConfiguration.AUDIO_ENABLED, true);
 		putDefault(SonicConfiguration.REGION, "NTSC");
+		putDefault(SonicConfiguration.SPECIAL_STAGE_KEY, java.awt.event.KeyEvent.VK_HOME);
 	}
 
 	private void putDefault(SonicConfiguration key, Object value) {

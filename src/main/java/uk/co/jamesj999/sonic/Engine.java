@@ -22,6 +22,8 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.game.GameMode;
+import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
@@ -74,6 +76,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	// TODO move this into a manager
 	private final LevelManager levelManager = LevelManager.getInstance();
+	private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
+
+	private GameMode currentGameMode = GameMode.LEVEL;
 
 	private GLU glu;
 
@@ -154,37 +159,89 @@ public class Engine extends GLCanvas implements GLEventListener {
                 timerManager.update();
                 DebugOverlayManager.getInstance().updateInput(inputHandler);
                 DebugObjectArtViewer.getInstance().updateInput(inputHandler);
-                boolean freezeForArtViewer = DebugOverlayManager.getInstance()
-                                .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
-                if (!freezeForArtViewer) {
-                        spriteCollisionManager.update(inputHandler);
-                        camera.updatePosition();
-                        levelManager.update();
+
+                // Check for Special Stage toggle (F5 by default)
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_KEY))) {
+                        toggleSpecialStage();
                 }
 
-                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
-                        try {
-                                levelManager.nextAct();
-			} catch (IOException e) {
-				throw new RuntimeException(e);
-			}
-		}
+                if (currentGameMode == GameMode.SPECIAL_STAGE) {
+                        updateSpecialStageInput();
+                        specialStageManager.update();
+                } else {
+                        boolean freezeForArtViewer = DebugOverlayManager.getInstance()
+                                        .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
+                        if (!freezeForArtViewer) {
+                                spriteCollisionManager.update(inputHandler);
+                                camera.updatePosition();
+                                levelManager.update();
+                        }
 
-		if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ZONE))) {
-			try {
-				levelManager.nextZone();
-			} catch (IOException e) {
-				throw new RuntimeException(e);
+                        if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
+                                try {
+                                        levelManager.nextAct();
+                                } catch (IOException e) {
+                                        throw new RuntimeException(e);
+                                }
+                        }
+
+                        if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ZONE))) {
+                                try {
+                                        levelManager.nextZone();
+                                } catch (IOException e) {
+                                        throw new RuntimeException(e);
+                                }
                         }
                 }
 
                 inputHandler.update();
         }
 
+        private void toggleSpecialStage() {
+                if (currentGameMode == GameMode.LEVEL) {
+                        try {
+                                specialStageManager.initialize(0); // Start with stage 1
+                                currentGameMode = GameMode.SPECIAL_STAGE;
+                        } catch (IOException e) {
+                                throw new RuntimeException("Failed to initialize Special Stage", e);
+                        }
+                } else {
+                        specialStageManager.reset();
+                        currentGameMode = GameMode.LEVEL;
+                }
+        }
+
+        private void updateSpecialStageInput() {
+                int leftKey = configService.getInt(SonicConfiguration.LEFT);
+                int rightKey = configService.getInt(SonicConfiguration.RIGHT);
+                int jumpKey = configService.getInt(SonicConfiguration.JUMP);
+
+                int heldButtons = 0;
+                int pressedButtons = 0;
+
+                if (inputHandler.isKeyDown(leftKey)) {
+                        heldButtons |= 0x04;
+                }
+                if (inputHandler.isKeyDown(rightKey)) {
+                        heldButtons |= 0x08;
+                }
+
+                if (inputHandler.isKeyPressed(jumpKey)) {
+                        pressedButtons |= 0x70;
+                }
+                if (inputHandler.isKeyDown(jumpKey)) {
+                        heldButtons |= 0x70;
+                }
+
+                specialStageManager.handleInput(heldButtons, pressedButtons);
+        }
+
 
 
         public void draw() {
-                if (!debugViewEnabled) {
+                if (currentGameMode == GameMode.SPECIAL_STAGE) {
+                        specialStageManager.draw();
+                } else if (!debugViewEnabled) {
                         levelManager.drawWithSpritePriority(spriteRenderManager);
                 } else {
                         switch (debugState) {

@@ -24,6 +24,15 @@ public class Palette {
         public byte g;
         public byte b;
 
+        public Color() {
+        }
+
+        public Color(byte r, byte g, byte b) {
+            this.r = r;
+            this.g = g;
+            this.b = b;
+        }
+
         // Converts the color from Sega's format (char-based data)
         public void fromSegaFormat(byte[] bytes, int offset) {
             // Mega Drive palette format is 1 word (2 bytes) per color.

@@ -125,6 +125,11 @@ public enum SonicConfiguration {
 	 * Whether to mute FM6 when playing a note on it (if DAC is enabled).
 	 * Parity hack from SMPSPlay.
 	 */
-	FM6_DAC_OFF;
+	FM6_DAC_OFF,
+
+	/**
+	 * Key to toggle Special Stage mode (for testing).
+	 */
+	SPECIAL_STAGE_KEY;
 
 }
