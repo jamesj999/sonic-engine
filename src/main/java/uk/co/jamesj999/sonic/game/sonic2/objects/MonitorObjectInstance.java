@@ -201,7 +201,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             }
             case SONIC, TAILS -> {
                 AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_EXTRA_LIFE);
-                // TODO: Increment lives
+                uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addLife();
             }
             default -> {
                 // TODO: implement remaining monitor effects.

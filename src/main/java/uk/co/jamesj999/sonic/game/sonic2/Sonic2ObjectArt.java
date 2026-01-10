@@ -229,6 +229,10 @@ public class Sonic2ObjectArt {
         resultsPatterns = ensureResultsPatternCapacity(resultsPatterns, resultsMappings);
         ObjectSpriteSheet resultsSheet = new ObjectSpriteSheet(resultsPatterns, resultsMappings, 0, 1);
 
+        Pattern[] hudLivesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SONIC_LIFE_ADDR, "SonicLife");
+        Pattern[] hudLivesNumbers = safeLoadUncompressedPatterns(Sonic2Constants.ART_UNC_LIVES_NUMBERS_ADDR,
+                Sonic2Constants.ART_UNC_LIVES_NUMBERS_SIZE, "LivesNumbers");
+
         cached = new ObjectArtData(
                 monitorSheet,
                 spikeSheet,
@@ -255,6 +259,11 @@ public class Sonic2ObjectArt {
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
+                hudLivesPatterns,
+                hudLivesNumbers,
+                monitorMappings,
+                springMappings,
+                checkpointMappings,
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations,

@@ -42,7 +42,7 @@ public class GameStateManager {
         return lives;
     }
 
-    public void addLive() {
+    public void addLife() {
         this.lives++;
     }
 

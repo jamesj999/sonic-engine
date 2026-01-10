@@ -1,7 +1,10 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import uk.co.jamesj999.sonic.level.Pattern;
+import uk.co.jamesj999.sonic.level.render.SpriteMappingFrame;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
+
+import java.util.List;
 
 /**
  * Bundles object art and animations loaded from ROM.
@@ -32,6 +35,11 @@ public class ObjectArtData {
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
+        private final Pattern[] hudLivesPatterns;
+        private final Pattern[] hudLivesNumbers;
+        private final List<SpriteMappingFrame> obj26Mappings;
+        private final List<SpriteMappingFrame> obj41Mappings;
+        private final List<SpriteMappingFrame> obj79Mappings;
         private final SpriteAnimationSet monitorAnimations;
         private final SpriteAnimationSet springAnimations;
         private final SpriteAnimationSet checkpointAnimations;
@@ -63,6 +71,11 @@ public class ObjectArtData {
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
+                        Pattern[] hudLivesPatterns,
+                        Pattern[] hudLivesNumbers,
+                        List<SpriteMappingFrame> obj26Mappings,
+                        List<SpriteMappingFrame> obj41Mappings,
+                        List<SpriteMappingFrame> obj79Mappings,
                         SpriteAnimationSet monitorAnimations,
                         SpriteAnimationSet springAnimations,
                         SpriteAnimationSet checkpointAnimations,
@@ -92,6 +105,11 @@ public class ObjectArtData {
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
+                this.hudLivesPatterns = hudLivesPatterns;
+                this.hudLivesNumbers = hudLivesNumbers;
+                this.obj26Mappings = obj26Mappings;
+                this.obj41Mappings = obj41Mappings;
+                this.obj79Mappings = obj79Mappings;
                 this.monitorAnimations = monitorAnimations;
                 this.springAnimations = springAnimations;
                 this.checkpointAnimations = checkpointAnimations;
@@ -196,6 +214,14 @@ public class ObjectArtData {
 
         public Pattern[] getHudTextPatterns() {
                 return hudTextPatterns;
+        }
+
+        public Pattern[] getHudLivesPatterns() {
+                return hudLivesPatterns;
+        }
+
+        public Pattern[] getHudLivesNumbers() {
+                return hudLivesNumbers;
         }
 
         public SpriteAnimationSet monitorAnimations() {

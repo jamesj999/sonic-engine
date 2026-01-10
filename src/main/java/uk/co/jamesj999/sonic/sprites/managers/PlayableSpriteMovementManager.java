@@ -707,6 +707,7 @@ public class PlayableSpriteMovementManager extends
 
 		// Tick death countdown and trigger level reload when it reaches 0
 		if (sprite.tickDeathCountdown()) {
+			uk.co.jamesj999.sonic.game.GameStateManager.getInstance().loseLife();
 			uk.co.jamesj999.sonic.level.LevelManager.getInstance().loadCurrentLevel();
 		}
 	}
