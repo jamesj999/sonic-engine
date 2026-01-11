@@ -149,6 +149,7 @@ public class Sonic2TrackFrameDecoder {
                         break;
                     }
                 } else {
+                    int cellsInRowBefore = vdpIndex % VDP_PLANE_WIDTH;
                     int[] rleEntry = readRleEntry(rleReader);
                     if (rleEntry != null && rleEntry[1] >= 0) {
                         rlePattern = rleEntry[0] | RLE_FLAGS;
@@ -159,16 +160,17 @@ public class Sonic2TrackFrameDecoder {
                         vdpBuffer[vdpIndex++] = rlePattern;
                         rleEntryCount++;
                     } else {
-                        // EOL marker ($7F) - advance to next 128-cell row
-                        int currentVdpRow = vdpIndex / VDP_PLANE_WIDTH;
-                        int nextRowStart = (currentVdpRow + 1) * VDP_PLANE_WIDTH;
-
-                        // Wait, check if the original code did this correctly.
-                        if (nextRowStart < maxVdpIndex) {
-                            vdpIndex = nextRowStart;
-                        } else {
-                            break; // Past last row
+                        // EOL marker ($7F) - in Genesis, this just increments the line counter
+                        // but does NOT advance the VDP write position. The VDP auto-increments
+                        // and data is written sequentially. EOL is just a signal that a "line"
+                        // of decode work is complete, used for the 7-lines-per-call limit.
+                        // In our decoder, we process everything at once, so EOL is a no-op.
+                        if (diagnose) {
+                            int currentVdpRow = vdpIndex / VDP_PLANE_WIDTH;
+                            int cellsInRow = vdpIndex % VDP_PLANE_WIDTH;
+                            LOGGER.info("DIAG: EOL marker at row " + currentVdpRow + ", cell " + cellsInRow + " (no position change)");
                         }
+                        // Don't advance vdpIndex - just continue to next entry
                     }
                 }
             }
@@ -177,6 +179,18 @@ public class Sonic2TrackFrameDecoder {
                 int decodedVdpRows = (vdpIndex + VDP_PLANE_WIDTH - 1) / VDP_PLANE_WIDTH;
                 LOGGER.info(String.format("DIAG: Decoded %d VDP cells (%d rows), %d unc, %d rle entries",
                         vdpIndex, decodedVdpRows, uncCount, rleEntryCount));
+
+                // Count non-empty cells per row to diagnose alternating blank rows
+                StringBuilder rowInfo = new StringBuilder("DIAG: Non-empty cells per row: ");
+                for (int row = 0; row < Math.min(28, (vdpIndex + 127) / 128); row++) {
+                    int rowStart = row * 128;
+                    int nonEmpty = 0;
+                    for (int col = 0; col < 128 && rowStart + col < vdpBuffer.length; col++) {
+                        if ((vdpBuffer[rowStart + col] & 0x7FF) != 0) nonEmpty++;
+                    }
+                    rowInfo.append(String.format("%d:%d ", row, nonEmpty));
+                }
+                LOGGER.info(rowInfo.toString());
             }
 
             // Direct mapping: The buffer is exactly the plane data
