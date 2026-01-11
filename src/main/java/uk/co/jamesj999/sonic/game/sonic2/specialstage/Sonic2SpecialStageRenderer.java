@@ -136,6 +136,10 @@ public class Sonic2SpecialStageRenderer {
         graphicsManager.flushPatternBatch();
     }
 
+    // Set to true to debug with full tiles instead of strip rendering
+    // When true, renders only strip 0's tiles as full 8x8 tiles (no strip interleaving)
+    private static final boolean DEBUG_FULL_TILE_MODE = true;
+
     /**
      * Renders the track plane (Plane A) using 2-scanline strip rendering.
      *
@@ -145,9 +149,12 @@ public class Sonic2SpecialStageRenderer {
      * - Each strip shows a different 32-column band of the 128-wide VDP plane
      * - This creates the "folded" perspective where the track converges to a point
      *
-     * The decoder outputs 28 screen rows, where each group of 4 rows (a "tile row")
-     * represents the 4 strips of one VDP row. We render each as a 2-pixel-high
-     * strip.
+     * The VDP plane is 128 cells wide. The Genesis uses H-scroll to show different
+     * 32-column slices at different scanlines within each tile row:
+     * - Scanlines 0-1: VDP columns 0-31 (strip 0)
+     * - Scanlines 2-3: VDP columns 32-63 (strip 1)
+     * - Scanlines 4-5: VDP columns 64-95 (strip 2)
+     * - Scanlines 6-7: VDP columns 96-127 (strip 3)
      *
      * @param trackFrameIndex Current track frame index (0-55)
      * @param frameTiles      Decoded tile data from track frame (or null for
@@ -156,6 +163,11 @@ public class Sonic2SpecialStageRenderer {
     public void renderTrack(int trackFrameIndex, int[] frameTiles) {
         if (frameTiles == null || frameTiles.length == 0) {
             renderPlaceholderTrack(trackFrameIndex);
+            return;
+        }
+
+        if (DEBUG_FULL_TILE_MODE) {
+            renderTrackDebugFullTiles(frameTiles);
             return;
         }
 
@@ -168,9 +180,8 @@ public class Sonic2SpecialStageRenderer {
         // Track Data Structure:
         // Decoded frameTiles represents the VRAM Plane A (28 rows * 128 cells).
         // Each VRAM row contains 4 strips of 32 cells (Strip 0, 1, 2, 3).
-        // The game displays these using H-Scroll interleaving.
-        // Even/Odd row usage in the engine is complex (based on turn/orientation),
-        // but for standard rendering we assume Order 0, 1, 2, 3.
+        // The game displays these using H-Scroll interleaving where each pair of
+        // scanlines shows a different 32-column slice of the 128-wide plane.
 
         final int NUM_ROWS = 28;
         final int CELLS_PER_ROW = 128; // The full plane width
@@ -179,18 +190,17 @@ public class Sonic2SpecialStageRenderer {
         for (int row = 0; row < NUM_ROWS; row++) {
             int baseY = row * 8; // Screen Y for this tile row
 
-            // Always use standard strip order: 0, 1, 2, 3
-            // (The decoder handles mirroring if 'flipped' is passed, by flipping the buffer
-            // content)
-            int[] stripOrder = { 0, 1, 2, 3 };
+            // Render each of the 4 strips (2 scanlines each)
+            for (int stripNum = 0; stripNum < 4; stripNum++) {
+                // Which 2-scanline strip within this tile row (0-3)
+                // stripNum 0 = top 2 scanlines of the tile (rows 0-1)
+                // stripNum 3 = bottom 2 scanlines of the tile (rows 6-7)
+                int screenY = baseY + stripNum * 2;
 
-            for (int i = 0; i < 4; i++) {
-                int stripIndex = stripOrder[i];
-                int yOffset = i * 2; // 0, 2, 4, 6 pixels offset
-                int drawY = baseY + yOffset;
-
+                // Which 32-column slice of the 128-wide plane to show
+                // stripNum 0 shows columns 0-31, stripNum 1 shows 32-63, etc.
                 int rowDataStart = row * CELLS_PER_ROW;
-                int stripDataStart = rowDataStart + stripIndex * CELLS_PER_STRIP;
+                int stripDataStart = rowDataStart + stripNum * CELLS_PER_STRIP;
 
                 for (int col = 0; col < CELLS_PER_STRIP; col++) {
                     int tileIndex = stripDataStart + col;
@@ -208,11 +218,50 @@ public class Sonic2SpecialStageRenderer {
                     PatternDesc desc = new PatternDesc(word);
                     int patternId = desc.getPatternIndex() + trackPatternBase;
 
-                    // Draw centered
+                    // Draw centered, using strip rendering (2px high instead of 8px)
                     int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
 
-                    graphicsManager.renderPatternWithId(patternId, desc, drawX, drawY);
+                    // Use strip rendering - only show 2 scanlines of the 8x8 tile
+                    // stripNum tells us which 2-scanline portion of the source tile to show
+                    graphicsManager.renderStripPatternWithId(patternId, desc, drawX, screenY, stripNum);
                 }
+            }
+        }
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Debug mode: Renders track using full 8x8 tiles instead of strips.
+     * This renders just the first 32 columns (strip 0) as full tiles
+     * to verify the tile data is correct.
+     */
+    private void renderTrackDebugFullTiles(int[] frameTiles) {
+        graphicsManager.beginPatternBatch();
+
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+        final int NUM_ROWS = 28;
+        final int CELLS_PER_ROW = 128;
+
+        // Only render strip 0 (columns 0-31) as full 8x8 tiles
+        for (int row = 0; row < NUM_ROWS; row++) {
+            int screenY = row * 8;
+            int rowDataStart = row * CELLS_PER_ROW;
+
+            for (int col = 0; col < 32; col++) {
+                int tileIndex = rowDataStart + col;
+                if (tileIndex >= frameTiles.length) break;
+
+                int word = frameTiles[tileIndex];
+                if ((word & 0x7FF) == 0) continue;
+
+                PatternDesc desc = new PatternDesc(word);
+                int patternId = desc.getPatternIndex() + trackPatternBase;
+                int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
+
+                // Use full tile rendering (8x8) instead of strips
+                graphicsManager.renderPatternWithId(patternId, desc, drawX, screenY);
             }
         }
 

@@ -183,20 +183,28 @@ public class BatchedPatternRenderer {
         float x1 = x + 8;
         float y1 = screenY + 2;      // Top of quad in OpenGL
 
-        // Calculate texture V coordinates for this strip
+        // Calculate texture V coordinates for this strip using PIXEL-CENTER coordinates.
         // Strip 0 = rows 0-1 (top), Strip 3 = rows 6-7 (bottom)
-        // Each strip covers 2/8 = 0.25 of the texture height
         //
-        // OpenGL texture coordinates: v=0 is first row of texture data (Genesis row 0)
-        // We need to flip so Genesis row 0 appears at top of quad.
+        // CRITICAL: With GL_NEAREST, we must sample at pixel centers, not edges!
+        // Using edge coordinates (0.0, 0.25, 0.5, 0.75) causes boundary pixels to
+        // potentially sample the wrong texture row due to floating-point precision.
         //
-        // For stripIndex=0 (rows 0-1): sample v=0.0 to v=0.25
-        //   With default flip: bottom of quad gets v=0.25, top gets v=0.0
-        // For stripIndex=3 (rows 6-7): sample v=0.75 to v=1.0
-        //   With default flip: bottom of quad gets v=1.0, top gets v=0.75
-        float stripHeight = 0.25f;
-        float stripTop = stripIndex * stripHeight;      // v coord for top of strip (e.g., 0.0 for strip 0)
-        float stripBottom = stripTop + stripHeight;     // v coord for bottom of strip (e.g., 0.25 for strip 0)
+        // For an 8-pixel tall texture:
+        //   Row 0 center: v = 0.5/8 = 0.0625
+        //   Row 1 center: v = 1.5/8 = 0.1875
+        //   Row 2 center: v = 2.5/8 = 0.3125
+        //   ...etc
+        //
+        // Each strip shows 2 rows. We sample at the center of each row:
+        // Strip 0 (rows 0-1): top=0.0625, bottom=0.1875
+        // Strip 1 (rows 2-3): top=0.3125, bottom=0.4375
+        // Strip 2 (rows 4-5): top=0.5625, bottom=0.6875
+        // Strip 3 (rows 6-7): top=0.8125, bottom=0.9375
+        float firstRowCenter = (stripIndex * 2 + 0.5f) / 8.0f;   // Center of first row of strip
+        float secondRowCenter = (stripIndex * 2 + 1.5f) / 8.0f;  // Center of second row of strip
+        float stripTop = firstRowCenter;
+        float stripBottom = secondRowCenter;
 
         // Handle flips by adjusting texture coordinates
         float u0, u1, v0, v1;

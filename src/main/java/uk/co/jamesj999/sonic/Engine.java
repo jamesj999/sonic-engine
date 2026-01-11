@@ -258,8 +258,10 @@ public class Engine extends GLCanvas implements GLEventListener {
                         specialStageManager.initialize(stageIndex);
                         currentGameMode = GameMode.SPECIAL_STAGE;
 
-                        // Switch to H32 mode projection (256 pixels wide)
-                        projectionWidth = 256;
+                        // Keep projection at 320 for proper letterboxing
+                        // The special stage renderer will center the 256px content within the 320px viewport
+                        // This creates black bars on the sides (32px each) for authentic H32 mode look
+                        projectionWidth = realWidth;
 
                         // Set camera to origin for special stage rendering (uses screen coordinates)
                         camera.setX((short) 0);
