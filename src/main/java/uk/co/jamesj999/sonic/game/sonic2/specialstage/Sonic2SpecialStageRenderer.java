@@ -137,8 +137,28 @@ public class Sonic2SpecialStageRenderer {
     }
 
     // Set to true to debug with full tiles instead of strip rendering
-    // When true, renders only strip 0's tiles as full 8x8 tiles (no strip interleaving)
-    private static final boolean DEBUG_FULL_TILE_MODE = true;
+    private static final boolean DEBUG_FULL_TILE_MODE = false;
+
+    // Which strip's tiles to render in debug mode (0-3, or -1 for all)
+    // 0 = columns 0-31, 1 = columns 96-127, 2 = columns 64-95, 3 = columns 32-63
+    private static final int DEBUG_STRIP_TO_RENDER = -1;
+
+    // Set to true to force all strips to use strip index 0 (tests if texture coord issue)
+    private static final boolean DEBUG_FORCE_STRIP_ZERO = false;
+
+    // Set to true to render strips as full 8-pixel height instead of 2-pixel
+    // This tests if the issue is with the strip height vs the data selection
+    private static final boolean DEBUG_STRIP_AS_FULL_HEIGHT = false;
+
+    // X offset (in pixels) applied to each strip to compensate for built-in offsets in track data
+    // The Genesis H-scroll cancels these offsets; we simulate by shifting X position
+    // Positive = shift right, Negative = shift left
+    // Strip 1 appears ~4-8 tiles left, so try compensating with increasing right shifts
+    private static final int[] DEBUG_STRIP_X_OFFSETS = {0, 0, 0, 0};
+
+    // Debug: force all strips to use data from a specific strip's columns
+    // -1 = normal (each strip uses its own columns), 0-3 = use that strip's columns for all
+    private static final int DEBUG_FORCE_DATA_FROM_STRIP = -1; // Normal mode - each strip uses its own data
 
     /**
      * Renders the track plane (Plane A) using 2-scanline strip rendering.
@@ -192,15 +212,19 @@ public class Sonic2SpecialStageRenderer {
 
             // Render each of the 4 strips (2 scanlines each)
             for (int stripNum = 0; stripNum < 4; stripNum++) {
+                // Debug: optionally render only one strip
+                if (DEBUG_STRIP_TO_RENDER >= 0 && stripNum != DEBUG_STRIP_TO_RENDER) {
+                    continue;
+                }
+
                 // Which 2-scanline strip within this tile row (0-3)
-                // stripNum 0 = top 2 scanlines of the tile (rows 0-1)
-                // stripNum 3 = bottom 2 scanlines of the tile (rows 6-7)
                 int screenY = baseY + stripNum * 2;
 
                 // Which 32-column slice of the 128-wide plane to show
-                // stripNum 0 shows columns 0-31, stripNum 1 shows 32-63, etc.
+                // Strip 0: columns 0-31, Strip 1: columns 32-63, etc.
                 int rowDataStart = row * CELLS_PER_ROW;
-                int stripDataStart = rowDataStart + stripNum * CELLS_PER_STRIP;
+                int dataStripNum = (DEBUG_FORCE_DATA_FROM_STRIP >= 0) ? DEBUG_FORCE_DATA_FROM_STRIP : stripNum;
+                int stripDataStart = rowDataStart + dataStripNum * CELLS_PER_STRIP;
 
                 for (int col = 0; col < CELLS_PER_STRIP; col++) {
                     int tileIndex = stripDataStart + col;
@@ -218,12 +242,26 @@ public class Sonic2SpecialStageRenderer {
                     PatternDesc desc = new PatternDesc(word);
                     int patternId = desc.getPatternIndex() + trackPatternBase;
 
-                    // Draw centered, using strip rendering (2px high instead of 8px)
-                    int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
+                    // Calculate X position within the 256-pixel H32 viewport, with wrapping
+                    // The offset simulates H-scroll which wraps within the viewport
+                    int viewportX = col * TILE_SIZE + DEBUG_STRIP_X_OFFSETS[stripNum];
+                    // Wrap within the 256-pixel viewport (H32 width)
+                    viewportX = ((viewportX % H32_WIDTH) + H32_WIDTH) % H32_WIDTH;
+                    // Convert to screen position (add letterbox offset)
+                    int drawX = SCREEN_CENTER_OFFSET + viewportX;
 
-                    // Use strip rendering - only show 2 scanlines of the 8x8 tile
-                    // stripNum tells us which 2-scanline portion of the source tile to show
-                    graphicsManager.renderStripPatternWithId(patternId, desc, drawX, screenY, stripNum);
+                    if (DEBUG_STRIP_AS_FULL_HEIGHT) {
+                        // Render as full 8x8 tile at the strip's Y position
+                        // This tests if the issue is with strip height or data selection
+                        graphicsManager.renderPatternWithId(patternId, desc, drawX, screenY);
+                    } else {
+                        // Use strip rendering - only show 2 scanlines of the 8x8 tile
+                        // stripNum tells us which 2-scanline portion of the source tile to show
+                        // Since track tiles are 1-line-per-tile (all rows identical), the strip index
+                        // shouldn't matter visually - but we use it for correct texture sampling
+                        int actualStripIndex = DEBUG_FORCE_STRIP_ZERO ? 0 : stripNum;
+                        graphicsManager.renderStripPatternWithId(patternId, desc, drawX, screenY, actualStripIndex);
+                    }
                 }
             }
         }
@@ -233,8 +271,8 @@ public class Sonic2SpecialStageRenderer {
 
     /**
      * Debug mode: Renders track using full 8x8 tiles instead of strips.
-     * This renders just the first 32 columns (strip 0) as full tiles
-     * to verify the tile data is correct.
+     * Mode 1: Only strip 0's tiles (32 columns)
+     * Mode 2: All strips' tiles stacked (shows full 128 columns as 4 vertical sections)
      */
     private void renderTrackDebugFullTiles(int[] frameTiles) {
         graphicsManager.beginPatternBatch();
@@ -243,25 +281,34 @@ public class Sonic2SpecialStageRenderer {
         final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
         final int NUM_ROWS = 28;
         final int CELLS_PER_ROW = 128;
+        final int CELLS_PER_STRIP = 32;
 
-        // Only render strip 0 (columns 0-31) as full 8x8 tiles
+        // Render all 4 strips worth of tiles, stacked vertically
+        // Each strip becomes a separate 8-pixel-tall band
+        // This shows the full decoded data in a blocky but visible way
         for (int row = 0; row < NUM_ROWS; row++) {
-            int screenY = row * 8;
             int rowDataStart = row * CELLS_PER_ROW;
 
-            for (int col = 0; col < 32; col++) {
-                int tileIndex = rowDataStart + col;
-                if (tileIndex >= frameTiles.length) break;
+            for (int stripNum = 0; stripNum < 4; stripNum++) {
+                // Each strip rendered as full tiles, stacked at different Y positions
+                // Strip 0 at Y offset 0, Strip 1 at Y offset 2, etc (within each row's 8px)
+                int screenY = row * 8 + stripNum * 2;
+                int stripDataStart = rowDataStart + stripNum * CELLS_PER_STRIP;
 
-                int word = frameTiles[tileIndex];
-                if ((word & 0x7FF) == 0) continue;
+                for (int col = 0; col < CELLS_PER_STRIP; col++) {
+                    int tileIndex = stripDataStart + col;
+                    if (tileIndex >= frameTiles.length) break;
 
-                PatternDesc desc = new PatternDesc(word);
-                int patternId = desc.getPatternIndex() + trackPatternBase;
-                int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
+                    int word = frameTiles[tileIndex];
+                    if ((word & 0x7FF) == 0) continue;
 
-                // Use full tile rendering (8x8) instead of strips
-                graphicsManager.renderPatternWithId(patternId, desc, drawX, screenY);
+                    PatternDesc desc = new PatternDesc(word);
+                    int patternId = desc.getPatternIndex() + trackPatternBase;
+                    int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
+
+                    // Use full tile rendering (8x8) - this will overlap/stack
+                    graphicsManager.renderPatternWithId(patternId, desc, drawX, screenY);
+                }
             }
         }
 

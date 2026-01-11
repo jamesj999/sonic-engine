@@ -150,9 +150,12 @@ public class Sonic2TrackFrameDecoder {
                     }
                 } else {
                     int[] rleEntry = readRleEntry(rleReader);
-                    if (rleEntry != null && rleEntry[1] > 0) {
+                    if (rleEntry != null && rleEntry[1] >= 0) {
                         rlePattern = rleEntry[0] | RLE_FLAGS;
-                        rleCount = rleEntry[1] - 1;
+                        // Genesis uses dbf which loops count+1 times
+                        // We write first tile here, then rleCount more in the loop
+                        // So rleCount should equal the LUT value (not value-1)
+                        rleCount = rleEntry[1];
                         vdpBuffer[vdpIndex++] = rlePattern;
                         rleEntryCount++;
                     } else {
