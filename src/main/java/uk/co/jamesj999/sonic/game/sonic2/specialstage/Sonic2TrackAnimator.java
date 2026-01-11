@@ -40,9 +40,16 @@ public class Sonic2TrackAnimator {
     private int currentSegmentType;
     private boolean currentSegmentFlipped;
 
-    private int speedFactor = 4;
+    private int speedFactor = 12;
 
     private boolean stageComplete = false;
+
+    /**
+     * Persistent orientation state, matching SSTrack_Orientation in the original game.
+     * Only updated at specific trigger frames (Straight2, Rise14, Drop6).
+     */
+    private boolean orientationFlipped = false;
+    private int lastOrientationFrame = -1;  // Track which frame last set orientation
 
     public Sonic2TrackAnimator(Sonic2SpecialStageDataLoader dataLoader) {
         this.dataLoader = dataLoader;
@@ -62,6 +69,7 @@ public class Sonic2TrackAnimator {
         currentFrameInSegment = 0;
         frameDelayCounter = 0;
         stageComplete = false;
+        resetOrientation();
 
         if (layoutLength > 0) {
             parseCurrentSegment();
@@ -94,6 +102,7 @@ public class Sonic2TrackAnimator {
         currentFrameInSegment = 0;
         frameDelayCounter = 0;
         stageComplete = false;
+        resetOrientation();
 
         parseCurrentSegment();
 
@@ -151,8 +160,24 @@ public class Sonic2TrackAnimator {
 
         parseCurrentSegment();
         LOGGER.fine("Advanced to segment " + currentSegmentIndex +
-                    ", type " + currentSegmentType +
+                    ", type " + getSegmentTypeName(currentSegmentType) +
                     ", flipped " + currentSegmentFlipped);
+    }
+
+    /** Segment type names for debugging */
+    private static final String[] SEGMENT_TYPE_NAMES = {
+        "TURN_THEN_RISE",
+        "TURN_THEN_DROP",
+        "TURN_THEN_STRAIGHT",
+        "STRAIGHT",
+        "STRAIGHT_THEN_TURN"
+    };
+
+    private static String getSegmentTypeName(int type) {
+        if (type >= 0 && type < SEGMENT_TYPE_NAMES.length) {
+            return SEGMENT_TYPE_NAMES[type];
+        }
+        return "UNKNOWN(" + type + ")";
     }
 
     /**
@@ -169,6 +194,10 @@ public class Sonic2TrackAnimator {
         int[] parsed = Sonic2SpecialStageDataLoader.parseSegmentByte(segmentByte);
         currentSegmentType = parsed[0];
         currentSegmentFlipped = parsed[1] != 0;
+
+        // Log segment transitions with flip state (FINE level to reduce noise)
+        LOGGER.fine(String.format("Segment %d: %s, flipped=%b (raw byte=0x%02X)",
+                currentSegmentIndex, getSegmentTypeName(currentSegmentType), currentSegmentFlipped, segmentByte));
 
         if (currentSegmentType >= SEGMENT_ANIMATIONS.length) {
             LOGGER.warning("Invalid segment type " + currentSegmentType + ", defaulting to STRAIGHT");
@@ -195,6 +224,82 @@ public class Sonic2TrackAnimator {
      */
     public boolean isCurrentSegmentFlipped() {
         return currentSegmentFlipped;
+    }
+
+    // Trigger frames where orientation is updated (from SSTrackSetOrientation in disassembly)
+    private static final int TRIGGER_STRAIGHT2 = 0x12;  // MapSpec_Straight2
+    private static final int TRIGGER_RISE14 = 0x0E;     // MapSpec_Rise14
+    private static final int TRIGGER_DROP6 = 0x1A;      // MapSpec_Drop6
+
+    /**
+     * Gets the effective flip state for rendering, matching the original game's
+     * SSTrack_Orientation behavior.
+     *
+     * The original game maintains a persistent orientation state that only updates
+     * at specific trigger frames:
+     * - Straight frame 2 (0x12): set orientation = current segment's flip
+     * - Rise frame 14 (0x0E): set orientation = current segment's flip
+     * - Drop frame 6 (0x1A): set orientation = current segment's flip
+     *
+     * Between trigger frames, the orientation persists unchanged.
+     *
+     * @return The effective flip state for the current frame
+     */
+    public boolean getEffectiveFlipState() {
+        int trackFrame = getCurrentTrackFrameIndex();
+
+        // Check if we're at a trigger frame and need to update orientation
+        boolean isTriggerFrame = (trackFrame == TRIGGER_STRAIGHT2) ||
+                                 (trackFrame == TRIGGER_RISE14) ||
+                                 (trackFrame == TRIGGER_DROP6);
+
+        if (isTriggerFrame && trackFrame != lastOrientationFrame) {
+            // Update orientation based on current segment's flip bit
+            boolean newOrientation = currentSegmentFlipped;
+            if (newOrientation != orientationFlipped) {
+                LOGGER.fine(String.format("ORIENTATION TRIGGER at frame 0x%02X: %b -> %b (segment %d: %s)",
+                        trackFrame, orientationFlipped, newOrientation,
+                        currentSegmentIndex, getSegmentTypeName(currentSegmentType)));
+            }
+            orientationFlipped = newOrientation;
+            lastOrientationFrame = trackFrame;
+        }
+
+        return orientationFlipped;
+    }
+
+    /**
+     * Resets the orientation state (called when initializing a new stage).
+     */
+    private void resetOrientation() {
+        orientationFlipped = false;
+        lastOrientationFrame = -1;
+    }
+
+    /**
+     * Gets the flip state of the next segment in the layout.
+     * Returns false if there is no next segment.
+     */
+    private boolean getNextSegmentFlipped() {
+        int nextIndex = currentSegmentIndex + 1;
+        if (stageLayout == null || nextIndex >= layoutLength) {
+            return false;  // Default to unflipped if at end
+        }
+        int segmentByte = stageLayout[nextIndex] & 0xFF;
+        return (segmentByte & 0x80) != 0;
+    }
+
+    /**
+     * Gets the flip state of the previous segment in the layout.
+     * Returns false if there is no previous segment.
+     */
+    private boolean getPreviousSegmentFlipped() {
+        int prevIndex = currentSegmentIndex - 1;
+        if (stageLayout == null || prevIndex < 0) {
+            return false;  // Default to unflipped if at start
+        }
+        int segmentByte = stageLayout[prevIndex] & 0xFF;
+        return (segmentByte & 0x80) != 0;
     }
 
     /**
@@ -282,5 +387,38 @@ public class Sonic2TrackAnimator {
         layoutLength = Math.min(layoutLength, allLayouts.length - offset);
         stageLayout = new byte[layoutLength];
         System.arraycopy(allLayouts, offset, stageLayout, 0, layoutLength);
+
+        // Log first 10 segments at FINE level
+        if (LOGGER.isLoggable(java.util.logging.Level.FINE)) {
+            StringBuilder sb = new StringBuilder("Stage " + (stageIndex + 1) + " layout (first 10 segments): ");
+            for (int i = 0; i < Math.min(10, layoutLength); i++) {
+                int segByte = stageLayout[i] & 0xFF;
+                int type = segByte & 0x7F;
+                boolean flip = (segByte & 0x80) != 0;
+                sb.append(String.format("[%d:%s%s] ", i, getSegmentTypeName(type), flip ? "(F)" : ""));
+            }
+            LOGGER.fine(sb.toString());
+        }
+    }
+
+    /**
+     * Returns the total number of straight animation steps at the start of the current stage.
+     * Useful for calculating startup timing.
+     */
+    public int countInitialStraightSteps() {
+        int steps = 0;
+        for (int i = 0; i < layoutLength; i++) {
+            int segByte = stageLayout[i] & 0xFF;
+            int type = segByte & 0x7F;
+            if (type == SEGMENT_STRAIGHT) {
+                steps += 16; // STRAIGHT = 16 animation steps
+            } else if (type == SEGMENT_STRAIGHT_THEN_TURN) {
+                steps += 4; // Only the first 4 frames are straight
+                break; // Turn begins after this
+            } else {
+                break; // Any other segment type = no more straight
+            }
+        }
+        return steps;
     }
 }

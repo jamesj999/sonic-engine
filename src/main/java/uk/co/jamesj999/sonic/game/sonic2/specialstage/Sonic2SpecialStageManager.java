@@ -170,15 +170,6 @@ public class Sonic2SpecialStageManager {
             graphicsManager.cachePaletteTexture(palettes[i], i);
         }
 
-        // Dump palette 3 colors (used by track tiles)
-        System.out.println("=== PALETTE 3 COLORS (track palette) ===");
-        for (int c = 0; c < 16; c++) {
-            Palette.Color color = palettes[3].getColor(c);
-            System.out.println(String.format("  Color %d: R=%d G=%d B=%d",
-                    c, color.r & 0xFF, color.g & 0xFF, color.b & 0xFF));
-        }
-        System.out.println("=== END PALETTE 3 ===");
-
         LOGGER.fine("Special Stage palettes cached");
     }
 
@@ -197,7 +188,7 @@ public class Sonic2SpecialStageManager {
         for (int i = 0; i < trackPatterns.length; i++) {
             graphicsManager.cachePatternTexture(trackPatterns[i], trackPatternBase + i);
         }
-        LOGGER.info("Cached " + trackPatterns.length + " track patterns at base 0x" +
+        LOGGER.fine("Cached " + trackPatterns.length + " track patterns at base 0x" +
                 Integer.toHexString(trackPatternBase) + " (range 0x" +
                 Integer.toHexString(trackPatternBase) + "-0x" +
                 Integer.toHexString(trackPatternBase + trackPatterns.length - 1) + ")");
@@ -212,7 +203,7 @@ public class Sonic2SpecialStageManager {
         renderer.setPatternBases(backgroundPatternBase, trackPatternBase);
         renderer.setPlayerPatternBase(playerPatternBase);
 
-        LOGGER.info("Special Stage art loaded: " + bgPatterns.length + " bg, " +
+        LOGGER.fine("Special Stage art loaded: " + bgPatterns.length + " bg, " +
                 trackPatterns.length + " track, " + playerPatterns.length + " player patterns");
     }
 
@@ -225,7 +216,8 @@ public class Sonic2SpecialStageManager {
     private void setupTrackAnimator() throws IOException {
         trackAnimator = new Sonic2TrackAnimator(dataLoader);
 
-        trackAnimator.initializeWithMockLayout();
+        // Use the real stage layout data from ROM
+        trackAnimator.initialize(currentStage);
 
         lastDecodedFrameIndex = -1;
         decodedTrackFrame = null;
@@ -328,13 +320,14 @@ public class Sonic2SpecialStageManager {
     }
 
     private boolean diagnosticDone = false;
+    private boolean flipDiagnosticDone = false;
 
     /**
      * Decodes the current track frame if needed.
      */
     private void decodeCurrentTrackFrame() {
         int frameIndex = trackAnimator.getCurrentTrackFrameIndex();
-        boolean flipped = trackAnimator.isCurrentSegmentFlipped();
+        boolean flipped = trackAnimator.getEffectiveFlipState();
 
         if (frameIndex == lastDecodedFrameIndex && flipped == lastDecodedFlipped && decodedTrackFrame != null) {
             return;
@@ -343,12 +336,8 @@ public class Sonic2SpecialStageManager {
         if (trackFrames != null && frameIndex >= 0 && frameIndex < trackFrames.length) {
             byte[] frameData = trackFrames[frameIndex];
 
-            // Run diagnostic on first decode
-            boolean runDiag = !diagnosticDone;
-            if (runDiag) {
-                LOGGER.info("=== TRACK FRAME DIAGNOSTIC (frame " + frameIndex + ") ===");
-                diagnosticDone = true;
-            }
+            // Diagnostic logging disabled - set to true to enable verbose frame decode logging
+            boolean runDiag = false;
 
             decodedTrackFrame = Sonic2TrackFrameDecoder.decodeFrame(frameData, flipped, runDiag);
             lastDecodedFrameIndex = frameIndex;
@@ -456,6 +445,7 @@ public class Sonic2SpecialStageManager {
         resultState = ResultState.RUNNING;
         emeraldCollected = false;
         diagnosticDone = false;
+        flipDiagnosticDone = false;
     }
 
     /**

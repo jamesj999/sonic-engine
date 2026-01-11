@@ -56,6 +56,7 @@ public class Sonic2TrackFrameDecoder {
 
     private static final int PALETTE_LINE_3 = 0x6000;
     private static final int HIGH_PRIORITY = 0x8000;
+    private static final int FLIP_X = 0x0800;
     private static final int RLE_FLAGS = PALETTE_LINE_3 | HIGH_PRIORITY; // $E000 for RLE tiles
 
     /**
@@ -94,6 +95,10 @@ public class Sonic2TrackFrameDecoder {
         // Decode into a buffer matching VDP plane layout (28 rows × 128 cells)
         int[] vdpBuffer = new int[TOTAL_VDP_TILES];
         Arrays.fill(vdpBuffer, 0);
+
+        // Track which tiles came from UNC vs RLE (needed for correct flipping)
+        // In flipped mode, UNC tiles get flip_x toggled, RLE tiles do NOT
+        boolean[] isUncTile = flipped ? new boolean[TOTAL_VDP_TILES] : null;
 
         try {
             FrameSegments segments = parseSegments(frameData);
@@ -141,7 +146,11 @@ public class Sonic2TrackFrameDecoder {
                 if (flag == 1) {
                     int pattern = readUncompressedPattern(uncReader);
                     if (pattern != -1) {
-                        vdpBuffer[vdpIndex++] = pattern;
+                        vdpBuffer[vdpIndex] = pattern;
+                        if (isUncTile != null) {
+                            isUncTile[vdpIndex] = true;
+                        }
+                        vdpIndex++;
                         uncCount++;
                     } else {
                         if (diagnose)
@@ -160,17 +169,30 @@ public class Sonic2TrackFrameDecoder {
                         vdpBuffer[vdpIndex++] = rlePattern;
                         rleEntryCount++;
                     } else {
-                        // EOL marker ($7F) - in Genesis, this just increments the line counter
-                        // but does NOT advance the VDP write position. The VDP auto-increments
-                        // and data is written sequentially. EOL is just a signal that a "line"
-                        // of decode work is complete, used for the 7-lines-per-call limit.
-                        // In our decoder, we process everything at once, so EOL is a no-op.
+                        // EOL marker ($7F) - signals end of the current row.
+                        // In the original game:
+                        // - Normal mode: VDP auto-increment continues, rows fill naturally
+                        // - Flipped mode: Each row starts at its right edge (position reset on EOL)
+                        //
+                        // For flipped mode with our post-processing approach, we need to ensure
+                        // each row starts at the correct boundary so the flip operates per-row.
+                        // For normal mode, we continue sequentially (original behavior).
+                        int currentVdpRow = vdpIndex / VDP_PLANE_WIDTH;
+                        int cellsInRow = vdpIndex % VDP_PLANE_WIDTH;
+
                         if (diagnose) {
-                            int currentVdpRow = vdpIndex / VDP_PLANE_WIDTH;
-                            int cellsInRow = vdpIndex % VDP_PLANE_WIDTH;
-                            LOGGER.info("DIAG: EOL marker at row " + currentVdpRow + ", cell " + cellsInRow + " (no position change)");
+                            LOGGER.info("DIAG: EOL marker at row " + currentVdpRow + ", cell " + cellsInRow +
+                                    (flipped ? " (flipped mode - will advance)" : " (normal mode - no change)"));
                         }
-                        // Don't advance vdpIndex - just continue to next entry
+
+                        // Only advance to row boundary in flipped mode
+                        // Normal mode continues sequentially as VDP auto-increment would
+                        if (flipped && cellsInRow > 0) {
+                            vdpIndex = (currentVdpRow + 1) * VDP_PLANE_WIDTH;
+                            if (diagnose) {
+                                LOGGER.info("DIAG: Advanced vdpIndex to " + vdpIndex + " (row " + (currentVdpRow + 1) + ")");
+                            }
+                        }
                     }
                 }
             }
@@ -193,12 +215,70 @@ public class Sonic2TrackFrameDecoder {
                 LOGGER.info(rowInfo.toString());
             }
 
-            // Direct mapping: The buffer is exactly the plane data
-            // If flipped, handle it.
+            // If flipped, reverse tile order per row and toggle flip_x on UNC tiles only
+            // This matches the original game's SSTrackDrawLineFlipLoop behavior:
+            // - Tiles are written right-to-left (we reverse here)
+            // - UNC tiles: XOR with flip_x (toggle H-flip bit)
+            // - RLE tiles: NO flip_x toggle (just palette/priority flags)
             if (flipped) {
-                // We need to flip rows.
-                // Since we are returning the raw buffer, we can just flip the buffer.
-                flipTilesHorizontally(vdpBuffer);
+                if (diagnose) {
+                    // Log state before flip - find a row with UNC tiles
+                    LOGGER.info("DIAG: FLIPPED MODE - applying horizontal flip");
+
+                    // Count UNC/RLE per row to find interesting rows
+                    for (int row = 0; row < Math.min(10, VDP_ROWS); row++) {
+                        int rowStart = row * VDP_PLANE_WIDTH;
+                        int uncInRow = 0, rleInRow = 0, emptyInRow = 0;
+                        for (int col = 0; col < VDP_PLANE_WIDTH; col++) {
+                            int idx = rowStart + col;
+                            if (vdpBuffer[idx] == 0) emptyInRow++;
+                            else if (isUncTile[idx]) uncInRow++;
+                            else rleInRow++;
+                        }
+                        LOGGER.info(String.format("DIAG: Row %d: %d UNC, %d RLE, %d empty",
+                                row, uncInRow, rleInRow, emptyInRow));
+
+                        // Show detail for rows with UNC tiles
+                        if (uncInRow > 0 && uncInRow < 50) {
+                            // Find first and last non-empty positions
+                            int firstNonEmpty = -1, lastNonEmpty = -1;
+                            for (int col = 0; col < VDP_PLANE_WIDTH; col++) {
+                                if (vdpBuffer[rowStart + col] != 0) {
+                                    if (firstNonEmpty < 0) firstNonEmpty = col;
+                                    lastNonEmpty = col;
+                                }
+                            }
+                            if (firstNonEmpty >= 0) {
+                                LOGGER.info(String.format("DIAG: Row %d tiles span cols %d-%d, first=%04X last=%04X",
+                                        row, firstNonEmpty, lastNonEmpty,
+                                        vdpBuffer[rowStart + firstNonEmpty],
+                                        vdpBuffer[rowStart + lastNonEmpty]));
+                            }
+                        }
+                    }
+                }
+
+                flipTilesHorizontally(vdpBuffer, isUncTile, diagnose);
+
+                if (diagnose) {
+                    // Show result for same rows
+                    for (int row = 0; row < Math.min(5, VDP_ROWS); row++) {
+                        int rowStart = row * VDP_PLANE_WIDTH;
+                        int firstNonEmpty = -1, lastNonEmpty = -1;
+                        for (int col = 0; col < VDP_PLANE_WIDTH; col++) {
+                            if (vdpBuffer[rowStart + col] != 0) {
+                                if (firstNonEmpty < 0) firstNonEmpty = col;
+                                lastNonEmpty = col;
+                            }
+                        }
+                        if (firstNonEmpty >= 0) {
+                            LOGGER.info(String.format("DIAG: After flip row %d: cols %d-%d, first=%04X last=%04X",
+                                    row, firstNonEmpty, lastNonEmpty,
+                                    vdpBuffer[rowStart + firstNonEmpty],
+                                    vdpBuffer[rowStart + lastNonEmpty]));
+                        }
+                    }
+                }
             }
 
             return vdpBuffer;
@@ -314,23 +394,62 @@ public class Sonic2TrackFrameDecoder {
         return lastRleIndex;
     }
 
+    // Number of tiles per strip (matches H-scroll interleaving)
+    private static final int TILES_PER_STRIP = 32;
+
     /**
-     * Flips the tiles horizontally within each row.
-     * Also toggles the horizontal flip bit in each pattern.
+     * Flips the tiles horizontally within each 32-tile strip.
+     *
+     * The VDP plane is 128 cells wide, but the renderer shows it as 4 strips
+     * of 32 cells each at different Y positions. To achieve a horizontal mirror,
+     * we need to reverse tiles within each 32-tile strip, not across the entire row.
+     *
+     * This matches the visual effect of the original game's SSTrackDrawLineFlipLoop
+     * when combined with the H-scroll interleaving.
+     *
+     * @param tiles The tile buffer to flip
+     * @param isUncTile Array indicating which tiles came from UNC stream (true) vs RLE (false)
+     * @param diagnose Whether to log diagnostic info
      */
-    private static void flipTilesHorizontally(int[] tiles) {
+    private static void flipTilesHorizontally(int[] tiles, boolean[] isUncTile, boolean diagnose) {
+        int swapCount = 0;
+        int uncFlipCount = 0;
+        int rleNoFlipCount = 0;
+
+        // For each row, flip within each 32-tile strip
         for (int row = 0; row < TILE_ROWS; row++) {
             int rowStart = row * TILE_COLS;
-            for (int col = 0; col < TILE_COLS / 2; col++) {
-                int leftIdx = rowStart + col;
-                int rightIdx = rowStart + (TILE_COLS - 1 - col);
 
-                int leftTile = tiles[leftIdx];
-                int rightTile = tiles[rightIdx];
+            // Process each 32-tile strip within the row
+            for (int strip = 0; strip < TILE_COLS / TILES_PER_STRIP; strip++) {
+                int stripStart = rowStart + strip * TILES_PER_STRIP;
 
-                tiles[leftIdx] = flipTileH(rightTile);
-                tiles[rightIdx] = flipTileH(leftTile);
+                // Reverse tiles within this 32-tile strip
+                for (int col = 0; col < TILES_PER_STRIP / 2; col++) {
+                    int leftIdx = stripStart + col;
+                    int rightIdx = stripStart + (TILES_PER_STRIP - 1 - col);
+
+                    int leftTile = tiles[leftIdx];
+                    int rightTile = tiles[rightIdx];
+                    boolean leftIsUnc = isUncTile != null && isUncTile[leftIdx];
+                    boolean rightIsUnc = isUncTile != null && isUncTile[rightIdx];
+
+                    // Swap positions, but only toggle flip_x on UNC tiles
+                    tiles[leftIdx] = rightIsUnc ? flipTileH(rightTile) : rightTile;
+                    tiles[rightIdx] = leftIsUnc ? flipTileH(leftTile) : leftTile;
+
+                    swapCount++;
+                    if (rightIsUnc) uncFlipCount++;
+                    else if (rightTile != 0) rleNoFlipCount++;
+                    if (leftIsUnc) uncFlipCount++;
+                    else if (leftTile != 0) rleNoFlipCount++;
+                }
             }
+        }
+
+        if (diagnose) {
+            LOGGER.info(String.format("DIAG: Flip stats (32-tile strips) - %d swaps, %d UNC flip toggles, %d RLE no-toggles",
+                    swapCount, uncFlipCount, rleNoFlipCount));
         }
     }
 
@@ -338,7 +457,7 @@ public class Sonic2TrackFrameDecoder {
      * Toggles the horizontal flip bit in a pattern word.
      */
     private static int flipTileH(int pattern) {
-        return pattern ^ 0x0800;
+        return pattern ^ FLIP_X;
     }
 
     /**

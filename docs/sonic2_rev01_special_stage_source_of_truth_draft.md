@@ -37,6 +37,8 @@ The emphasis here is on verifiable facts (ROM offsets, raw byte matches, disasse
 | Skydome scroll table usage semantics | ✅ Done | Row/column selection documented | See "Skydome scroll table" section |
 | `SSAnim_Base_Duration` index mapping | ✅ Done | Speed factor conversion documented | See "SSAnim_Base_Duration" section |
 | Checkpoint gate (`Obj5A`) full behavior | ✅ Done | All routines documented | See "Checkpoint gate" section |
+| START banner sequence timing | ✅ Done | ~181 frame startup delay documented | See "START banner sequence timing" section |
+| Checkpoint timing and track behavior | ✅ Done | No-pause behavior documented | See "Checkpoint timing" section |
 
 ---
 
@@ -560,10 +562,12 @@ The following items are explicitly not yet validated into ROM-offset form or ful
 - **Level layout format**: ✅ Now documented. Each byte is a segment type (0-4) with bit 7 as flip flag.
 - **Object perspective data format**: ✅ Now documented. 56 word offset table + 6-byte entries per depth level.
 - **Track BIN mapping frame structure**: ✅ Now documented. 3-segment bitstream with bitflags, uncompressed LUT, and RLE LUT.
+- **Checkpoint gate (`Obj5A`) full behavior**: ✅ Now documented. All routines, message encoding, and timing documented.
+- **START banner sequence timing**: ✅ Now documented. ~181 frame startup with track animation consuming initial STRAIGHT segments.
+- **Checkpoint timing**: ✅ Now documented. No pause during checkpoints; rainbow animation runs parallel with track.
 - Semantic mapping between marker bytes (`$FF/$FE/$FD/$FC...`) and the *meaning* in each stage script (which marker appears at which gate or end point). Marker behaviors are now validated, but the scripts still need decompression and direct inspection.
 - Full VRAM tile layout and PLC sequencing (which tiles each asset uses, and DMA order). Offsets are validated, but tile indices and DMA timing are not yet documented.
 - Validate exact fixed point scaling for `ss_x_sub/ss_y_sub` and the airborne integrator (the code uses `<<8` before adding velocities). Confirm whether subpixel bits affect any collision or rendering paths beyond airborne movement.
-- Checkpoint gate (`Obj5A`) full behavior and message ID mapping (phrase tables, flashing cadence, “rings to go” warning).
 - Results screen flow and mode switches (H32/H40 transitions, palette switching) for end-of-stage.
 
 This document will be updated in place on each continuation.
@@ -573,6 +577,86 @@ This document will be updated in place on each continuation.
 ## Known implementation issues
 
 *(No known issues at this time)*
+
+### Flipped track segment rendering ✅ RESOLVED
+
+**Status:** Fixed
+
+**Original symptom:** When segments with the flip flag (bit 7) set were rendered, individual patterns appeared to be flipped incorrectly, resulting in visual glitches. The track appeared to have scrambled tiles rather than a properly mirrored track curving to the left.
+
+**Root cause:** The original decoder applied the horizontal flip bit toggle to ALL tiles when rendering a flipped segment. However, the original game's `SSTrackDrawLineFlipLoop` only toggles the flip bit on **uncompressed (UNC) tiles**, not on **RLE tiles**.
+
+From the disassembly:
+- **Normal mode** (`SSTrackDrawLineLoop`):
+  - UNC tiles: `ori.w #palette_line_3,d1` then `move.w d1,(a6)`
+  - RLE tiles: `ori.w #palette_line_3|high_priority,d1` then `move.w d1,(a6)`
+
+- **Flipped mode** (`SSTrackDrawLineFlipLoop`):
+  - UNC tiles: `eori.w #flip_x|palette_line_3,d0` then `move.w d0,-(a6)` — **XOR toggles flip_x**
+  - RLE tiles: `ori.w #palette_line_3|high_priority,d1` then `move.w d1,-(a6)` — **NO flip_x toggle**
+  - Both types written right-to-left using pre-decrement addressing
+
+The RLE tiles form most of the track floor with symmetric repeating patterns. These should maintain their original orientation. Only the UNC tiles (which define the perspective edges and details) need their flip bits toggled.
+
+**Resolution:** Updated `Sonic2TrackFrameDecoder.decodeFrame()` to:
+1. Track which tiles came from the UNC stream vs RLE stream during decoding
+2. In `flipTilesHorizontally()`, only toggle the H-flip bit (`0x0800`) on tiles marked as UNC
+3. RLE tiles have their positions reversed but their flip bits are NOT toggled
+4. Tiles are reversed within each 32-tile strip (matching H-scroll interleaving), not the entire 128-tile row
+
+See s2.asm lines 7892-8500 for the original `SSTrackDrawLineFlipLoop` implementation.
+
+### Orientation trigger timing ✅ RESOLVED
+
+**Status:** Fixed
+
+**Original symptom:** Track orientation (flip state) was being applied at segment boundaries, causing visual glitches where turns would flip mid-animation or entry/exit curves would show incorrect orientation.
+
+**Root cause:** The original game maintains a **persistent orientation state** (`SSTrack_Orientation`) that only updates at specific **trigger frames**, not at segment boundaries.
+
+From `SSTrackSetOrientation` in s2.asm (lines 9024-9075):
+```assembly
+; Trigger frames where orientation is checked:
+; - MapSpec_Straight2 (0x12): Straight frame 2
+; - MapSpec_Rise14 (0x0E): Rise frame 14
+; - MapSpec_Drop6 (0x1A): Drop frame 6
+
+; At each trigger frame:
+movea.l (SS_CurrentLevelLayout).w,a5    ; Get layout
+move.b (SpecialStage_CurrentSegment).w,d1  ; Get current segment
+move.b (a5,d1.w),d1                     ; Get segment byte
+bpl.s +++                               ; Branch if NOT flipped (bit 7 = 0)
+st.b (SSTrack_Orientation).w            ; Set orientation = flipped
+; ... or ...
+sf.b (SSTrack_Orientation).w            ; Set orientation = unflipped
+```
+
+**Key insight:** The flip flag can appear on ANY segment type. Common patterns:
+- `STRAIGHT_THEN_TURN` with flip flag: Entering a left turn
+- `TURN_THEN_DROP` with flip flag: Left turn going down
+- `TURN_THEN_STRAIGHT` typically inherits flip from previous segment
+
+**Resolution:** Updated `Sonic2TrackAnimator.getEffectiveFlipState()` to:
+1. Maintain a persistent `orientationFlipped` state variable
+2. Only update orientation at trigger frames (0x12, 0x0E, 0x1A)
+3. At trigger frames, read the **current segment's** flip bit
+4. Between triggers, orientation persists unchanged
+
+This matches the original game where orientation can change mid-segment (at the trigger frame) rather than at segment boundaries.
+
+### Layout does not loop ✅ DOCUMENTED
+
+**Status:** Expected behavior documented
+
+**Observation:** Stage 1 layout ends with segment 45 (`TURN_THEN_RISE`), which would create a visual discontinuity if looping back to segment 0 (`STRAIGHT`).
+
+**Explanation:** The original game never loops the layout:
+- Each stage has 4 checkpoints (Current_Special_Act 0-3)
+- At checkpoint 3, `SS_Check_Rings_flag` is set and the stage ends
+- The game transitions to results before the layout runs out
+- Checkpoints are defined in object location data, not in the layout itself
+
+The layout was designed knowing the stage would end before reaching the last segment. For testing purposes, the engine may loop, but this creates expected visual artifacts.
 
 ### Track art 1-line-per-tile format ✅ RESOLVED
 
@@ -997,6 +1081,155 @@ The speed factor is set to `$C0000` at stage start and `$0` when the stage ends 
 
 - `SSTrack_duration_timer`: counts down from duration; when it reaches 0, advance to next track animation frame
 - `SS_player_anim_frame_timer`: set to `duration - 1`; used for player sprite animation timing
+
+---
+
+## START banner sequence timing (validated from disassembly)
+
+The Special Stage has a multi-phase startup sequence before main gameplay begins. During this sequence, the **track animates continuously** while the START banner is displayed. This is critical for timing: the initial STRAIGHT segments in the layout are "consumed" during this intro phase.
+
+### Startup phase sequence (s2.asm lines 6640-6686)
+
+```
+Phase 1: Sync loop (lines 6640-6643)
+    Wait until SSTrack_drawing_index == 0 (sync to start of animation frame)
+
+Phase 2: Initial frame (lines 6645-6654)
+    Call SSTrack_Draw once
+    Loop: SSTrack_Draw, SSLoadCurrentPerspective, SSObjectsManager
+    Until: SSTrack_duration_timer reaches 1 (one full animation step)
+
+Phase 3: Ring requirement display (line 6656)
+    Call Obj5A_CreateRingsToGoText (spawns "GET XX RINGS" message)
+
+Phase 4: Final setup (lines 6657-6668)
+    SS_ScrollBG, RunObjects, BuildSprites, RunPLC_RAM
+    Palette fade from white (Pal_FadeFromWhite)
+    Start music (MusID_SpecStage)
+    Enable display
+
+Phase 5: START banner loop (lines 6670-6686)
+    Main loop runs until SpecialStage_Started == true
+    Track continues animating (SSTrack_Draw called each frame)
+    Player objects run (RunObjects) - players CAN move during banner
+```
+
+### Obj5F (START banner) timing (s2.asm lines 9658-9741)
+
+The START banner object controls when `SpecialStage_Started` is set:
+
+| Phase | Duration | Action | Code reference |
+|-------|----------|--------|----------------|
+| Drop | 136 frames | Banner drops from y=-$40 to y=$48 at velocity $100 (1 pixel/frame) | Line 9674-9678 |
+| Wait 1 | 15 frames | `objoff_2A = $F`, banner stationary, letters spawn at end | Line 9680, 9688-9689 |
+| Wait 2 | 31 frames | `objoff_2A = $1E`, ring requirement text visible | Line 9726, 9730-9732 |
+| Complete | - | Creates "GET XX RINGS" message, sets `SpecialStage_Started = true`, deletes self | Line 9739-9742 |
+
+**Total: 136 + 15 + 31 = 182 frames before main gameplay starts**
+
+Note: Wait 2 is 31 frames because the timer counts 30→0 inclusive. The `bpl` instruction branches while >= 0, so it runs 31 times before falling through.
+
+### Track animation during startup
+
+At speed factor 12 (duration = 5 frames per animation step):
+- 182 frames ÷ 5 = **36.4 animation steps** during the START sequence
+- A single STRAIGHT segment = 16 animation steps
+- This means **2+ full STRAIGHT segments** are animated before gameplay truly begins
+
+### Stage 1 timing example
+
+Stage 1 layout begins with:
+- Segment 0: STRAIGHT (16 animation steps = 80 frames)
+- Segment 1: STRAIGHT (16 animation steps = 80 frames)
+- Segment 2: STRAIGHT_THEN_TURN (4 straight steps + 7 turn steps = 11 total)
+
+Total straight animation steps: 16 + 16 + 4 = **36 steps** (180 frames)
+
+With the 182-frame startup sequence consuming 36.4 steps:
+- By the time `SpecialStage_Started` is set, the track is **just beginning to turn**
+- The turn frame (0x31) appears almost exactly as gameplay starts
+- During gameplay, only ~7 more turn frames remain before the turn completes
+
+**This is intentional design**: The level designers placed exactly enough STRAIGHT segments to fill the startup sequence, so the turn begins precisely when the player gains control.
+
+### Palette fade timing
+
+Before the pre-gameplay loop, `Pal_FadeFromWhite` runs (line 6668):
+- Duration: 22 frames (`move.w #$15,d4` = 21, dbf runs 22 times)
+- VBlank routine: `VintID_Fade` (NOT `VintID_S2SS`)
+- **Track animation is FROZEN during the fade**
+
+Complete startup sequence:
+1. Initial sync: ~5 frames (track animates)
+2. `Pal_FadeFromWhite`: 22 frames (**track frozen**)
+3. Pre-gameplay loop (Obj5F): 182 frames (track animates)
+
+Total visible time: ~204+ frames from scene start to gameplay start
+But only ~187 frames of actual track animation (5 + 182 = 187 frames ÷ 5 = ~37.4 steps)
+
+### Common implementation error
+
+If an engine starts gameplay immediately without the 182-frame startup sequence:
+- All 36 straight steps appear during gameplay
+- Player sees 180 frames = **3 seconds** of straight track
+- This differs from the original where straights are mostly consumed during intro
+- The turn appears to be "too early" relative to the UI timing
+
+### Implementation requirement
+
+The engine must implement this startup sequence:
+1. Track animation runs from frame 1 (segment 0, frame 0)
+2. START banner drops and displays for ~181 frames
+3. During this time, track advances through ~36 animation steps
+4. Only after `SpecialStage_Started` is set does main gameplay begin
+
+The level designers placed STRAIGHT segments at the beginning of each stage layout knowing they would be consumed during this intro phase. If the engine skips this startup sequence, the straights will appear too short.
+
+---
+
+## Checkpoint timing (validated from disassembly)
+
+Unlike the START sequence, **checkpoints do NOT pause the track animation**. The rainbow effect and message display run in parallel with the continuing track animation.
+
+### Checkpoint animation timing
+
+The rainbow animation (`Obj5A_CheckpointRainbow`, line 71153) advances once per animation step:
+- Only updates when `SSTrack_drawing_index == 4` (once per 5 game frames at normal speed)
+- Progresses through 10 frame indices: `0, 1, 1, 1, 2, 4, 6, 8, 9, $FF`
+- **Total: ~50 game frames** (10 steps × 5 frames/step)
+
+During this ~50 frame rainbow animation:
+- Track continues animating (advances ~10 animation steps)
+- Player can still move and collect rings
+- Message objects run independently
+
+### Design implication
+
+Checkpoints are placed at positions in the object stream that correspond to STRAIGHT segments in the layout. The level designers ensured that:
+1. Checkpoint markers (`$FE`) appear at segment boundaries where STRAIGHT segments occur
+2. The rainbow and message display over a stable straight track visual
+3. The ~50 frame animation completes while the track shows straight geometry
+
+### Stage 7 final checkpoint exception
+
+Only the final checkpoint of Stage 7 has a blocking wait mechanism (`SSCheckpoint_rainbow`, lines 6886-6906):
+
+```assembly
+SSCheckpoint_rainbow:
+    tst.b   (SS_Pause_Only_flag).w
+    beq.s   -                           ; Loop until paused
+    andi.b  #1,(Vint_runcount+3).w
+    bne.w   -                           ; Only run on even frames
+    cmp.w   (SS_Ring_Requirement).w,d2
+    blt.w   -                           ; Loop until rings >= requirement
+```
+
+This blocking loop:
+1. Waits for `SS_Pause_Only_flag` to be set
+2. Only executes on even frames (every other frame)
+3. Loops until ring count meets requirement
+
+This is a special case for the emerald collection sequence in the final stage.
 
 ---
 

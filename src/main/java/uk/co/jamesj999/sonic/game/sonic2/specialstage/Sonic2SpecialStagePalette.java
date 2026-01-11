@@ -179,7 +179,7 @@ public class Sonic2SpecialStagePalette {
                 sb.append(String.format("%04X ", color));
             }
 
-            LOGGER.info(sb.toString());
+            LOGGER.fine(sb.toString());
         } catch (IOException e) {
             LOGGER.warning("Failed to dump palette data: " + e.getMessage());
         }
