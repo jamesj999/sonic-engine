@@ -83,8 +83,8 @@ public class Sonic2SpecialStagePlayer {
 
     private int collisionProperty;
 
-    private static final int SS_OFFSET_X = 0x80;
-    private static final int SS_OFFSET_Y = 0x50;
+    private static final int SS_OFFSET_X = 0x80;  // From s2disasm line 6631
+    private static final int SS_OFFSET_Y = 0x36;  // From s2disasm line 6632 (was incorrectly 0x50)
 
     private static final int INITIAL_Z_POS_MAIN = 0x6E;
     private static final int INITIAL_Z_POS_SIDEKICK = 0x80;

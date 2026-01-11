@@ -259,18 +259,76 @@ public class Sonic2SpecialStageDataLoader {
      * Loads track art patterns (Kosinski compressed).
      * The decompressed data starts with a word containing the tile count,
      * followed by the tile data itself.
+     *
+     * IMPORTANT: The track art uses a special compressed format where only ONE line
+     * (4 bytes = 8 pixels) is stored per tile. The other 7 lines are identical,
+     * so each line must be duplicated 8 times to create a full 8x8 tile.
+     * See s2.asm comment at ArtKos_Special (line 90412-90414).
      */
     public Pattern[] getTrackArtPatterns() throws IOException {
         if (trackArtPatterns == null) {
             byte[] compressed = rom.readBytes(TRACK_ART_OFFSET, TRACK_ART_SIZE);
             byte[] decompressed = decompressKosinski(compressed);
 
-            int tileCount = ((decompressed[0] & 0xFF) << 8) | (decompressed[1] & 0xFF);
-            LOGGER.fine("Track art tile count from header: " + tileCount);
+            // Print prominently to ensure this shows up
+            System.out.println("=== TRACK ART LOADING DIAGNOSTIC ===");
+            System.out.println("Track art: compressed=" + compressed.length + " bytes at ROM offset 0x" +
+                Long.toHexString(TRACK_ART_OFFSET) + ", decompressed=" + decompressed.length + " bytes");
+            System.out.println("Track art compressed first 8 bytes: " + String.format("%02X %02X %02X %02X %02X %02X %02X %02X",
+                compressed[0] & 0xFF, compressed[1] & 0xFF, compressed[2] & 0xFF, compressed[3] & 0xFF,
+                compressed[4] & 0xFF, compressed[5] & 0xFF, compressed[6] & 0xFF, compressed[7] & 0xFF));
+            System.out.println("Track art decompressed first 8 bytes: " + String.format("%02X %02X %02X %02X %02X %02X %02X %02X",
+                decompressed[0] & 0xFF, decompressed[1] & 0xFF, decompressed[2] & 0xFF, decompressed[3] & 0xFF,
+                decompressed[4] & 0xFF, decompressed[5] & 0xFF, decompressed[6] & 0xFF, decompressed[7] & 0xFF));
 
-            byte[] tileData = Arrays.copyOfRange(decompressed, 2, decompressed.length);
-            trackArtPatterns = bytesToPatterns(tileData);
-            LOGGER.fine("Loaded track art: " + trackArtPatterns.length + " patterns (header said " + tileCount + ")");
+            int tileCount = ((decompressed[0] & 0xFF) << 8) | (decompressed[1] & 0xFF);
+            int expectedDataSize = 2 + tileCount * 4;
+            System.out.println("Track art tile count from header: " + tileCount + " (0x" + Integer.toHexString(tileCount) + ")");
+            System.out.println("Expected data size: " + expectedDataSize + ", actual: " + decompressed.length);
+
+            // Lookup tables reference tiles up to 0x173 = 371, so we need at least 372 tiles
+            if (tileCount < 372) {
+                System.out.println("WARNING: Track art tile count " + tileCount + " is less than required 372! Max lookup table index is 0x173.");
+            }
+            System.out.println("=== END TRACK ART DIAGNOSTIC ===");
+
+            trackArtPatterns = new Pattern[tileCount];
+            int srcOffset = 2;
+            int actualLoaded = 0;
+
+            for (int i = 0; i < tileCount && srcOffset + 4 <= decompressed.length; i++) {
+                Pattern pattern = new Pattern();
+                for (int row = 0; row < 8; row++) {
+                    for (int col = 0; col < 8; col += 2) {
+                        byte packedByte = decompressed[srcOffset + (col / 2)];
+                        pattern.setPixel(col, row, (byte) ((packedByte >> 4) & 0x0F));
+                        pattern.setPixel(col + 1, row, (byte) (packedByte & 0x0F));
+                    }
+                }
+                trackArtPatterns[i] = pattern;
+                srcOffset += 4;
+                actualLoaded++;
+            }
+
+            LOGGER.info("Loaded track art: " + actualLoaded + " patterns (requested " + tileCount + ", 1-line-per-tile format expanded)");
+            if (actualLoaded < tileCount) {
+                LOGGER.warning("Only loaded " + actualLoaded + " of " + tileCount + " tiles - data may be truncated!");
+            }
+
+            // Debug: dump specific tiles referenced by first frame
+            int[] tilesToCheck = {0, 1, 2, 21, 26, 29};  // Based on first frame diagnostic
+            System.out.println("=== TRACK PATTERN PIXEL DATA ===");
+            for (int ti : tilesToCheck) {
+                if (ti < trackArtPatterns.length) {
+                    Pattern p = trackArtPatterns[ti];
+                    StringBuilder sb = new StringBuilder();
+                    for (int px = 0; px < 8; px++) {
+                        sb.append(String.format("%X", p.getPixel(px, 0)));
+                    }
+                    System.out.println("Track tile " + ti + " (patternId " + (ti + 0x1100) + ") pixels: " + sb.toString());
+                }
+            }
+            System.out.println("=== END TRACK PATTERN PIXEL DATA ===");
         }
         return trackArtPatterns;
     }

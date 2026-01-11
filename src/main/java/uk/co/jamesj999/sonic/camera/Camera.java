@@ -194,8 +194,16 @@ public class Camera {
 		return x;
 	}
 
+	public void setX(short x) {
+		this.x = x;
+	}
+
 	public short getY() {
 		return y;
+	}
+
+	public void setY(short y) {
+		this.y = y;
 	}
 
 	public short getWidth() {

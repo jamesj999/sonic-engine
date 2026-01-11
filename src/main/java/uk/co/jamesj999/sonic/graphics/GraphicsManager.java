@@ -209,6 +209,33 @@ public class GraphicsManager {
 	}
 
 	/**
+	 * Render a pattern as a 2-scanline strip for special stage track rendering.
+	 *
+	 * The Sonic 2 special stage uses per-scanline horizontal scroll to create
+	 * a pseudo-3D halfpipe effect where each 8x8 tile appears as 4 strips of
+	 * 2 scanlines each. This method renders a single strip (8 wide × 2 high).
+	 *
+	 * @param patternId The pattern texture ID
+	 * @param desc The pattern descriptor (handles H/V flip and palette)
+	 * @param x Screen X position
+	 * @param y Screen Y position of this strip
+	 * @param stripIndex Which strip to render (0-3, where 0 is top of original tile)
+	 */
+	public void renderStripPatternWithId(int patternId, PatternDesc desc, int x, int y, int stripIndex) {
+		Integer patternTextureId = patternTextureMap.get("pattern_" + patternId);
+		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
+
+		if (patternTextureId == null || paletteTextureId == null) {
+			return;
+		}
+
+		// Only use batched rendering for strip patterns
+		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+			batchedRenderer.addStripPattern(patternTextureId, desc.getPaletteIndex(), desc, x, y, stripIndex);
+		}
+	}
+
+	/**
 	 * Begin a new pattern batch. Call before rendering patterns for a frame/layer.
 	 */
 	public void beginPatternBatch() {

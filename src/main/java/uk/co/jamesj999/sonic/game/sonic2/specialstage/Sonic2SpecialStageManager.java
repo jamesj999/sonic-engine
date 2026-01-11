@@ -32,6 +32,15 @@ public class Sonic2SpecialStageManager {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SpecialStageManager.class.getName());
     private static Sonic2SpecialStageManager instance;
 
+    /**
+     * Result state for special stage completion.
+     */
+    public enum ResultState {
+        RUNNING,
+        COMPLETED,
+        FAILED
+    }
+
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
 
@@ -40,6 +49,8 @@ public class Sonic2SpecialStageManager {
 
     private boolean initialized = false;
     private int currentStage = 0;
+    private ResultState resultState = ResultState.RUNNING;
+    private boolean emeraldCollected = false;
 
     public static final int H32_WIDTH = 256;
     public static final int H32_HEIGHT = 224;
@@ -51,6 +62,7 @@ public class Sonic2SpecialStageManager {
     private byte[] backgroundArt;
     private byte[] backgroundMainMappings;
     private byte[] backgroundLowerMappings;
+    private byte[] combinedBackgroundMappings; // Combined: lower (rows 0-15) + main (rows 16-31)
     private byte[] skydomeScrollTable;
     private Palette[] palettes;
 
@@ -104,8 +116,8 @@ public class Sonic2SpecialStageManager {
 
         loadData();
         setupPalettes();
-        setupPatterns();
         setupRenderer();
+        setupPatterns();
         setupTrackAnimator();
         setupPlayers();
 
@@ -129,6 +141,24 @@ public class Sonic2SpecialStageManager {
         backgroundLowerMappings = dataLoader.getBackgroundLowerMappings();
         LOGGER.fine("Background lower mappings: " + backgroundLowerMappings.length + " bytes");
 
+        // Combine background mappings: Main goes first (rows 0-15), then Lower (rows
+        // 16-31)
+        // Correct order per s2.asm: MapEng_SpecialBack ($A000) then
+        // MapEng_SpecialBackBottom
+        int expectedMainSize = 32 * 16 * 2; // 1024 bytes for rows 0-15
+        int expectedLowerSize = 32 * 16 * 2; // 1024 bytes for rows 16-31
+        combinedBackgroundMappings = new byte[expectedMainSize + expectedLowerSize];
+
+        // Copy Main mappings to rows 0-15
+        int mainCopyLen = Math.min(backgroundMainMappings.length, expectedMainSize);
+        System.arraycopy(backgroundMainMappings, 0, combinedBackgroundMappings, 0, mainCopyLen);
+
+        // Copy Lower mappings to rows 16-31
+        int lowerCopyLen = Math.min(backgroundLowerMappings.length, expectedLowerSize);
+        System.arraycopy(backgroundLowerMappings, 0, combinedBackgroundMappings, expectedMainSize, lowerCopyLen);
+
+        LOGGER.fine("Combined background mappings: " + combinedBackgroundMappings.length + " bytes");
+
         skydomeScrollTable = dataLoader.getSkydomeScrollTable();
         LOGGER.fine("Skydome scroll table: " + skydomeScrollTable.length + " bytes");
     }
@@ -139,6 +169,15 @@ public class Sonic2SpecialStageManager {
         for (int i = 0; i < palettes.length; i++) {
             graphicsManager.cachePaletteTexture(palettes[i], i);
         }
+
+        // Dump palette 3 colors (used by track tiles)
+        System.out.println("=== PALETTE 3 COLORS (track palette) ===");
+        for (int c = 0; c < 16; c++) {
+            Palette.Color color = palettes[3].getColor(c);
+            System.out.println(String.format("  Color %d: R=%d G=%d B=%d",
+                    c, color.r & 0xFF, color.g & 0xFF, color.b & 0xFF));
+        }
+        System.out.println("=== END PALETTE 3 ===");
 
         LOGGER.fine("Special Stage palettes cached");
     }
@@ -158,20 +197,10 @@ public class Sonic2SpecialStageManager {
         for (int i = 0; i < trackPatterns.length; i++) {
             graphicsManager.cachePatternTexture(trackPatterns[i], trackPatternBase + i);
         }
-
-        int maxTrackTile = 372;
-        for (int i = trackPatterns.length; i < maxTrackTile; i++) {
-            Pattern placeholder = new Pattern();
-            int shade = (i * 3) % 16;
-            if (shade == 0) shade = 1;
-            for (int y = 0; y < 8; y++) {
-                for (int x = 0; x < 8; x++) {
-                    placeholder.setPixel(x, y, (byte) shade);
-                }
-            }
-            graphicsManager.cachePatternTexture(placeholder, trackPatternBase + i);
-        }
-        LOGGER.fine("Cached " + trackPatterns.length + " real + " + (maxTrackTile - trackPatterns.length) + " placeholder track patterns");
+        LOGGER.info("Cached " + trackPatterns.length + " track patterns at base 0x" +
+                Integer.toHexString(trackPatternBase) + " (range 0x" +
+                Integer.toHexString(trackPatternBase) + "-0x" +
+                Integer.toHexString(trackPatternBase + trackPatterns.length - 1) + ")");
 
         Pattern[] playerPatterns = dataLoader.getPlayerArtPatterns();
         for (int i = 0; i < playerPatterns.length; i++) {
@@ -179,15 +208,17 @@ public class Sonic2SpecialStageManager {
         }
         LOGGER.fine("Cached " + playerPatterns.length + " player patterns");
 
+        // Now set the pattern bases on the renderer (after they have valid values)
+        renderer.setPatternBases(backgroundPatternBase, trackPatternBase);
         renderer.setPlayerPatternBase(playerPatternBase);
 
         LOGGER.info("Special Stage art loaded: " + bgPatterns.length + " bg, " +
-                    maxTrackTile + " track, " + playerPatterns.length + " player patterns");
+                trackPatterns.length + " track, " + playerPatterns.length + " player patterns");
     }
 
     private void setupRenderer() {
         renderer = new Sonic2SpecialStageRenderer(graphicsManager);
-        renderer.setPatternBases(backgroundPatternBase, trackPatternBase);
+        // Pattern bases are set in setupPatterns() after they have valid values
         LOGGER.fine("Special Stage renderer initialized");
     }
 
@@ -216,18 +247,18 @@ public class Sonic2SpecialStageManager {
         switch (characterCode) {
             case "tails":
                 tailsPlayer = new Sonic2SpecialStagePlayer(
-                    Sonic2SpecialStagePlayer.PlayerType.TAILS, true);
+                        Sonic2SpecialStagePlayer.PlayerType.TAILS, true);
                 players.add(tailsPlayer);
                 LOGGER.fine("Special Stage: Tails alone");
                 break;
 
             case "sonic_and_tails":
                 sonicPlayer = new Sonic2SpecialStagePlayer(
-                    Sonic2SpecialStagePlayer.PlayerType.SONIC, true);
+                        Sonic2SpecialStagePlayer.PlayerType.SONIC, true);
                 players.add(sonicPlayer);
 
                 tailsPlayer = new Sonic2SpecialStagePlayer(
-                    Sonic2SpecialStagePlayer.PlayerType.TAILS, false);
+                        Sonic2SpecialStagePlayer.PlayerType.TAILS, false);
                 players.add(tailsPlayer);
 
                 sonicPlayer.setOtherPlayer(tailsPlayer);
@@ -238,7 +269,7 @@ public class Sonic2SpecialStageManager {
             case "sonic":
             default:
                 sonicPlayer = new Sonic2SpecialStagePlayer(
-                    Sonic2SpecialStagePlayer.PlayerType.SONIC, true);
+                        Sonic2SpecialStagePlayer.PlayerType.SONIC, true);
                 players.add(sonicPlayer);
                 LOGGER.fine("Special Stage: Sonic alone");
                 break;
@@ -288,13 +319,15 @@ public class Sonic2SpecialStageManager {
      * Handles input for the Special Stage.
      * Call this from the input handler with the current button state.
      *
-     * @param held Bitmask of currently held buttons
+     * @param held    Bitmask of currently held buttons
      * @param pressed Bitmask of newly pressed buttons this frame
      */
     public void handleInput(int held, int pressed) {
         this.heldButtons = held;
         this.pressedButtons |= pressed;
     }
+
+    private boolean diagnosticDone = false;
 
     /**
      * Decodes the current track frame if needed.
@@ -309,15 +342,23 @@ public class Sonic2SpecialStageManager {
 
         if (trackFrames != null && frameIndex >= 0 && frameIndex < trackFrames.length) {
             byte[] frameData = trackFrames[frameIndex];
-            decodedTrackFrame = Sonic2TrackFrameDecoder.decodeFrame(frameData, flipped);
+
+            // Run diagnostic on first decode
+            boolean runDiag = !diagnosticDone;
+            if (runDiag) {
+                LOGGER.info("=== TRACK FRAME DIAGNOSTIC (frame " + frameIndex + ") ===");
+                diagnosticDone = true;
+            }
+
+            decodedTrackFrame = Sonic2TrackFrameDecoder.decodeFrame(frameData, flipped, runDiag);
             lastDecodedFrameIndex = frameIndex;
             lastDecodedFlipped = flipped;
 
             if (frameCounter % 60 == 0) {
                 LOGGER.fine("Decoded track frame " + frameIndex +
-                           " (flipped=" + flipped + "), segment " +
-                           trackAnimator.getCurrentSegmentIndex() +
-                           ", type " + trackAnimator.getCurrentSegmentType());
+                        " (flipped=" + flipped + "), segment " +
+                        trackAnimator.getCurrentSegmentIndex() +
+                        ", type " + trackAnimator.getCurrentSegmentType());
             }
         }
     }
@@ -330,19 +371,20 @@ public class Sonic2SpecialStageManager {
             return;
         }
 
-        renderer.renderBackground(backgroundMainMappings, 0, 0);
+        renderer.renderBackground(combinedBackgroundMappings, 0, 0);
 
         int trackFrameIndex = trackAnimator.getCurrentTrackFrameIndex();
         renderer.renderTrack(trackFrameIndex, decodedTrackFrame);
 
-        renderer.renderPlaceholderPlayers();
+        renderer.renderPlayers();
     }
 
     /**
      * Gets the current track frame index (0-55).
      */
     public int getCurrentTrackFrameIndex() {
-        if (!initialized || trackAnimator == null) return 0;
+        if (!initialized || trackAnimator == null)
+            return 0;
         return trackAnimator.getCurrentTrackFrameIndex();
     }
 
@@ -350,7 +392,8 @@ public class Sonic2SpecialStageManager {
      * Gets the raw track frame data for the current animation state.
      */
     public byte[] getCurrentTrackFrameData() {
-        if (!initialized || trackFrames == null || trackAnimator == null) return null;
+        if (!initialized || trackFrames == null || trackAnimator == null)
+            return null;
         int frameIndex = trackAnimator.getCurrentTrackFrameIndex();
         if (frameIndex >= 0 && frameIndex < trackFrames.length) {
             return trackFrames[frameIndex];
@@ -399,6 +442,7 @@ public class Sonic2SpecialStageManager {
         backgroundArt = null;
         backgroundMainMappings = null;
         backgroundLowerMappings = null;
+        combinedBackgroundMappings = null;
         skydomeScrollTable = null;
         palettes = null;
 
@@ -408,6 +452,54 @@ public class Sonic2SpecialStageManager {
 
         heldButtons = 0;
         pressedButtons = 0;
+
+        resultState = ResultState.RUNNING;
+        emeraldCollected = false;
+        diagnosticDone = false;
+    }
+
+    /**
+     * Gets the current result state.
+     */
+    public ResultState getResultState() {
+        return resultState;
+    }
+
+    /**
+     * Checks if the special stage has finished (completed or failed).
+     */
+    public boolean isFinished() {
+        return resultState == ResultState.COMPLETED || resultState == ResultState.FAILED;
+    }
+
+    /**
+     * Marks the stage as failed (e.g., hit too many bombs, time over).
+     */
+    public void markFailed() {
+        this.resultState = ResultState.FAILED;
+    }
+
+    /**
+     * Marks the stage as completed.
+     * 
+     * @param gotEmerald true if the emerald was collected
+     */
+    public void markCompleted(boolean gotEmerald) {
+        this.resultState = ResultState.COMPLETED;
+        this.emeraldCollected = gotEmerald;
+    }
+
+    /**
+     * Sets whether an emerald was collected (for gameplay logic to call).
+     */
+    public void setEmeraldCollected(boolean collected) {
+        this.emeraldCollected = collected;
+    }
+
+    /**
+     * Checks if an emerald was collected in this run.
+     */
+    public boolean hasEmeraldCollected() {
+        return emeraldCollected;
     }
 }
-

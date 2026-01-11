@@ -115,6 +115,8 @@ public class LevelManager {
     private CheckpointState checkpointState;
     private LevelGamestate levelGamestate;
 
+    private boolean specialStageRequestedFromCheckpoint;
+
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
 
     private enum TilePriorityPass {
@@ -1570,6 +1572,24 @@ public class LevelManager {
     }
 
     /**
+     * Request entry to special stage from a checkpoint star.
+     * Called by CheckpointStarInstance when the player touches a star.
+     */
+    public void requestSpecialStageFromCheckpoint() {
+        this.specialStageRequestedFromCheckpoint = true;
+    }
+
+    /**
+     * Consumes and clears the special stage request flag.
+     * @return true if a special stage was requested since last check
+     */
+    public boolean consumeSpecialStageRequest() {
+        boolean requested = specialStageRequestedFromCheckpoint;
+        specialStageRequestedFromCheckpoint = false;
+        return requested;
+    }
+
+    /**
      * Returns the singleton instance of LevelManager.
      *
      * @return the singleton LevelManager instance
@@ -1589,5 +1609,25 @@ public class LevelManager {
                 Byte.toUnsignedInt(backgroundColor.g) / 255f,
                 Byte.toUnsignedInt(backgroundColor.b) / 255f,
                 1.0f);
+    }
+
+    /**
+     * Reloads the current level's palettes into the graphics manager.
+     * Call this after returning from special stage to restore level colors.
+     */
+    public void reloadLevelPalettes() {
+        if (level == null) {
+            LOGGER.warning("Cannot reload palettes: no level loaded");
+            return;
+        }
+
+        int paletteCount = level.getPaletteCount();
+        for (int i = 0; i < paletteCount; i++) {
+            Palette palette = level.getPalette(i);
+            if (palette != null) {
+                graphicsManager.cachePaletteTexture(palette, i);
+            }
+        }
+        LOGGER.fine("Reloaded " + paletteCount + " level palettes");
     }
 }

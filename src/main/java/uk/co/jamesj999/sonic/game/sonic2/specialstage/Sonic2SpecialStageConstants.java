@@ -189,4 +189,41 @@ public final class Sonic2SpecialStageConstants {
     // ========== Number of special stages ==========
 
     public static final int SPECIAL_STAGE_COUNT = 7;
+
+    // ========== Palette data (raw, uncompressed) ==========
+    // Validated against s2disasm art/palettes/ files and ROM byte patterns
+
+    /**
+     * Special Stage Main palette - 96 bytes (3 palette lines)
+     * Loaded to palette lines 0, 1, 2.
+     * - Line 0 (bytes 0-31): Background/sky colors
+     * - Line 1 (bytes 32-63): Track/ground colors
+     * - Line 2 (bytes 64-95): Object colors (rings, bombs, shadows)
+     */
+    public static final long PALETTE_MAIN_OFFSET = 0x003162;
+    public static final int PALETTE_MAIN_SIZE = 96;
+
+    /**
+     * Per-stage palettes - 32 bytes each (1 palette line)
+     * Loaded to palette line 3 (player/character colors vary per stage).
+     */
+    public static final long PALETTE_STAGE_1_OFFSET = 0x0031C2;
+    public static final long PALETTE_STAGE_2_OFFSET = 0x0031E2;
+    public static final long PALETTE_STAGE_3_OFFSET = 0x003202;
+    public static final long PALETTE_STAGE_4_OFFSET = 0x003222;
+    public static final long PALETTE_STAGE_5_OFFSET = 0x003242;
+    public static final long PALETTE_STAGE_6_OFFSET = 0x003262;
+    public static final long PALETTE_STAGE_7_OFFSET = 0x003282;
+    public static final int PALETTE_STAGE_SIZE = 32;
+
+    /** Array of per-stage palette offsets indexed by stage number (0-6) */
+    public static final long[] PALETTE_STAGE_OFFSETS = {
+        PALETTE_STAGE_1_OFFSET,
+        PALETTE_STAGE_2_OFFSET,
+        PALETTE_STAGE_3_OFFSET,
+        PALETTE_STAGE_4_OFFSET,
+        PALETTE_STAGE_5_OFFSET,
+        PALETTE_STAGE_6_OFFSET,
+        PALETTE_STAGE_7_OFFSET
+    };
 }

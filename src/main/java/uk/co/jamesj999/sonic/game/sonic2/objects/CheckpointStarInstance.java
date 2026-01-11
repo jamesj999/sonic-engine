@@ -92,9 +92,11 @@ public class CheckpointStarInstance extends AbstractObjectInstance {
         // Update animation frame (ROM: lines 44476-44484)
         updateAnimation();
 
-        // Stub collision (special stages not implemented)
+        // Check for player collision to trigger special stage entry
         if (collisionEnabled && player != null && isPlayerInRange(player)) {
-            LOGGER.fine("STUB: Player touched special stage star");
+            LOGGER.info("Player touched special stage star - requesting special stage entry");
+            LevelManager.getInstance().requestSpecialStageFromCheckpoint();
+            setDestroyed(true);
         }
     }
 

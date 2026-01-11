@@ -6,7 +6,6 @@ import uk.co.jamesj999.sonic.level.PatternDesc;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.logging.Logger;
 
 /**
  * Handles rendering for Sonic 2 Special Stage.
@@ -18,8 +17,6 @@ import java.util.logging.Logger;
  * H32 mode: 256 pixels wide × 224 pixels tall (32×28 tiles)
  */
 public class Sonic2SpecialStageRenderer {
-    private static final Logger LOGGER = Logger.getLogger(Sonic2SpecialStageRenderer.class.getName());
-
     public static final int H32_TILES_X = 32;
     public static final int H32_TILES_Y = 28;
     public static final int TILE_SIZE = 8;
@@ -30,8 +27,6 @@ public class Sonic2SpecialStageRenderer {
     private int backgroundPatternBase;
     private int trackPatternBase;
     private int playerPatternBase;
-    private int scrollX = 0;
-    private int scrollY = 0;
 
     private List<Sonic2SpecialStagePlayer> players = new ArrayList<>();
 
@@ -56,9 +51,15 @@ public class Sonic2SpecialStageRenderer {
     /**
      * Renders the background plane (Plane B).
      *
+     * The background mapping buffer is 32 tiles wide × 32 tiles tall.
+     * - Rows 0-15: Lower/upper sky portion (from MapEng_SpecialBackBottom)
+     * - Rows 16-31: Main background portion (from MapEng_SpecialBack)
+     *
+     * Only rows that fit on screen (28 rows in H32 mode) are rendered.
+     *
      * @param mappings Enigma-decoded mapping data (16-bit words)
-     * @param scrollX Horizontal scroll offset
-     * @param scrollY Vertical scroll offset
+     * @param scrollX  Horizontal scroll offset
+     * @param scrollY  Vertical scroll offset
      */
     public void renderBackground(byte[] mappings, int scrollX, int scrollY) {
         if (mappings == null || mappings.length < 2) {
@@ -68,21 +69,36 @@ public class Sonic2SpecialStageRenderer {
 
         graphicsManager.beginPatternBatch();
 
-        int wordCount = mappings.length / 2;
-        int mapWidth = H32_TILES_X;
-        int mapHeight = Math.min(wordCount / mapWidth, H32_TILES_Y);
+        // Screen parameters for H32 mode emulation
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2; // Center 256px image on 320px screen
 
-        for (int ty = 0; ty < mapHeight; ty++) {
+        int wordCount = mappings.length / 2;
+        int mapWidth = H32_TILES_X; // 32 tiles wide
+        int mapTotalHeight = 32; // Background is 32 tiles tall
+        int mapHeight = Math.min(wordCount / mapWidth, mapTotalHeight);
+
+        // Only render the visible portion (28 rows fit on screen)
+        int visibleRows = Math.min(mapHeight, H32_TILES_Y);
+
+        for (int ty = 0; ty < visibleRows; ty++) {
             for (int tx = 0; tx < mapWidth; tx++) {
                 int wordIndex = ty * mapWidth + tx;
-                if (wordIndex * 2 + 1 >= mappings.length) continue;
+                if (wordIndex * 2 + 1 >= mappings.length)
+                    continue;
 
                 int word = ((mappings[wordIndex * 2] & 0xFF) << 8) |
-                           (mappings[wordIndex * 2 + 1] & 0xFF);
+                        (mappings[wordIndex * 2 + 1] & 0xFF);
+
+                // Skip empty tiles
+                if (word == 0)
+                    continue;
 
                 PatternDesc desc = new PatternDesc(word);
 
-                int screenX = (tx * TILE_SIZE - scrollX) & 0xFF;
+                // Calculate screen position with H32 offset centered
+                // Background wraps horizontally every 256 pixels
+                int screenX = SCREEN_CENTER_OFFSET + ((tx * TILE_SIZE - scrollX) & 0xFF);
                 int screenY = ((H32_TILES_Y - 1 - ty) * TILE_SIZE + scrollY);
 
                 int patternId = desc.getPatternIndex() + backgroundPatternBase;
@@ -121,10 +137,21 @@ public class Sonic2SpecialStageRenderer {
     }
 
     /**
-     * Renders the track plane (Plane A).
+     * Renders the track plane (Plane A) using 2-scanline strip rendering.
+     *
+     * The Sonic 2 special stage uses per-scanline horizontal scroll to create
+     * a pseudo-3D halfpipe effect:
+     * - Each 8-scanline tile row is divided into 4 strips of 2 scanlines each
+     * - Each strip shows a different 32-column band of the 128-wide VDP plane
+     * - This creates the "folded" perspective where the track converges to a point
+     *
+     * The decoder outputs 28 screen rows, where each group of 4 rows (a "tile row")
+     * represents the 4 strips of one VDP row. We render each as a 2-pixel-high
+     * strip.
      *
      * @param trackFrameIndex Current track frame index (0-55)
-     * @param frameTiles Decoded tile data from track frame (or null for placeholder)
+     * @param frameTiles      Decoded tile data from track frame (or null for
+     *                        placeholder)
      */
     public void renderTrack(int trackFrameIndex, int[] frameTiles) {
         if (frameTiles == null || frameTiles.length == 0) {
@@ -134,20 +161,58 @@ public class Sonic2SpecialStageRenderer {
 
         graphicsManager.beginPatternBatch();
 
-        int tileIndex = 0;
-        for (int ty = 0; ty < H32_TILES_Y && tileIndex < frameTiles.length; ty++) {
-            for (int tx = 0; tx < H32_TILES_X && tileIndex < frameTiles.length; tx++) {
-                int word = frameTiles[tileIndex++];
+        // Screen parameters for H32 mode emulation
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2; // Center 256px image on 320px screen
 
-                if (word == 0) continue;
+        // Track Data Structure:
+        // Decoded frameTiles represents the VRAM Plane A (28 rows * 128 cells).
+        // Each VRAM row contains 4 strips of 32 cells (Strip 0, 1, 2, 3).
+        // The game displays these using H-Scroll interleaving.
+        // Even/Odd row usage in the engine is complex (based on turn/orientation),
+        // but for standard rendering we assume Order 0, 1, 2, 3.
 
-                PatternDesc desc = new PatternDesc(word);
-                int patternId = desc.getPatternIndex() + trackPatternBase;
+        final int NUM_ROWS = 28;
+        final int CELLS_PER_ROW = 128; // The full plane width
+        final int CELLS_PER_STRIP = 32;
 
-                int screenX = tx * TILE_SIZE;
-                int screenY = (H32_TILES_Y - 1 - ty) * TILE_SIZE;
+        for (int row = 0; row < NUM_ROWS; row++) {
+            int baseY = row * 8; // Screen Y for this tile row
 
-                graphicsManager.renderPatternWithId(patternId, desc, screenX, screenY);
+            // Always use standard strip order: 0, 1, 2, 3
+            // (The decoder handles mirroring if 'flipped' is passed, by flipping the buffer
+            // content)
+            int[] stripOrder = { 0, 1, 2, 3 };
+
+            for (int i = 0; i < 4; i++) {
+                int stripIndex = stripOrder[i];
+                int yOffset = i * 2; // 0, 2, 4, 6 pixels offset
+                int drawY = baseY + yOffset;
+
+                int rowDataStart = row * CELLS_PER_ROW;
+                int stripDataStart = rowDataStart + stripIndex * CELLS_PER_STRIP;
+
+                for (int col = 0; col < CELLS_PER_STRIP; col++) {
+                    int tileIndex = stripDataStart + col;
+
+                    if (tileIndex >= frameTiles.length)
+                        break;
+
+                    int word = frameTiles[tileIndex];
+
+                    // Skip empty tiles (check pattern index)
+                    if ((word & 0x7FF) == 0) {
+                        continue;
+                    }
+
+                    PatternDesc desc = new PatternDesc(word);
+                    int patternId = desc.getPatternIndex() + trackPatternBase;
+
+                    // Draw centered
+                    int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, drawX, drawY);
+                }
             }
         }
 
@@ -191,18 +256,10 @@ public class Sonic2SpecialStageRenderer {
      * For Phase 1, this is a placeholder. Full implementation requires
      * custom shader support or scanline-based rendering.
      *
-     * @param scrollTable The skydome scroll delta table
+     * @param scrollTable  The skydome scroll delta table
      * @param frameCounter Current frame number for animation
      */
     public void applySkydomeScroll(byte[] scrollTable, int frameCounter) {
-    }
-
-    public void setScrollX(int scrollX) {
-        this.scrollX = scrollX;
-    }
-
-    public void setScrollY(int scrollY) {
-        this.scrollY = scrollY;
     }
 
     /**
@@ -339,5 +396,3 @@ public class Sonic2SpecialStageRenderer {
         graphicsManager.flushPatternBatch();
     }
 }
-
-

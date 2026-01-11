@@ -82,7 +82,7 @@ public class BatchedPatternRenderer {
 
     /**
      * Add a pattern to the current batch.
-     * 
+     *
      * @return true if the pattern was added, false if batch is full or not active
      */
     public boolean addPattern(int patternTextureId, int paletteIndex, PatternDesc desc, int x, int y) {
@@ -115,6 +115,110 @@ public class BatchedPatternRenderer {
         } else {
             v0 = 1.0f;
             v1 = 0.0f;
+        }
+
+        // Calculate array offsets
+        int vertOffset = patternCount * FLOATS_PER_PATTERN_VERTS;
+        int texOffset = patternCount * FLOATS_PER_PATTERN_TEXCOORDS;
+
+        // Add vertices (quad: bottom-left, bottom-right, top-right, top-left)
+        vertexData[vertOffset + 0] = x0;
+        vertexData[vertOffset + 1] = y0;
+        vertexData[vertOffset + 2] = x1;
+        vertexData[vertOffset + 3] = y0;
+        vertexData[vertOffset + 4] = x1;
+        vertexData[vertOffset + 5] = y1;
+        vertexData[vertOffset + 6] = x0;
+        vertexData[vertOffset + 7] = y1;
+
+        // Add texture coordinates
+        texCoordData[texOffset + 0] = u0;
+        texCoordData[texOffset + 1] = v0;
+        texCoordData[texOffset + 2] = u1;
+        texCoordData[texOffset + 3] = v0;
+        texCoordData[texOffset + 4] = u1;
+        texCoordData[texOffset + 5] = v1;
+        texCoordData[texOffset + 6] = u0;
+        texCoordData[texOffset + 7] = v1;
+
+        // Store texture ID and palette for this pattern
+        patternTextureIds[patternCount] = patternTextureId;
+        paletteIndices[patternCount] = paletteIndex;
+        patternCount++;
+
+        return true;
+    }
+
+    /**
+     * Add a strip pattern to the current batch for special stage track rendering.
+     *
+     * The Sonic 2 special stage track uses per-scanline horizontal scroll to create
+     * a pseudo-3D halfpipe effect. Each 8x8 tile is shown as 4 strips of 2 scanlines
+     * each. This method renders a single strip (8 wide × 2 high).
+     *
+     * @param patternTextureId The pattern texture ID
+     * @param paletteIndex The palette line to use
+     * @param desc The pattern descriptor (handles H/V flip)
+     * @param x Screen X position
+     * @param y Screen Y position (of the strip, not the full tile)
+     * @param stripIndex Which 2-scanline strip to render (0-3, where 0 is top of tile)
+     * @return true if the pattern was added, false if batch is full or not active
+     */
+    public boolean addStripPattern(int patternTextureId, int paletteIndex, PatternDesc desc,
+                                   int x, int y, int stripIndex) {
+        if (!batchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
+            return false;
+        }
+
+        // Convert Y to screen coordinates (flip Y axis)
+        // Genesis Y=0 is top of screen, OpenGL Y=0 is bottom
+        // For a 2-pixel strip at Genesis Y, the OpenGL bottom should be:
+        //   screenHeight - y - stripHeight = 224 - y - 2
+        // This ensures Genesis Y=0 maps to OpenGL Y=222-224 (visible top of screen)
+        int screenY = screenHeight - y - 2;
+
+        // Compute the 4 corners of the quad (8 wide × 2 high)
+        float x0 = x;
+        float y0 = screenY;          // Bottom of quad in OpenGL
+        float x1 = x + 8;
+        float y1 = screenY + 2;      // Top of quad in OpenGL
+
+        // Calculate texture V coordinates for this strip
+        // Strip 0 = rows 0-1 (top), Strip 3 = rows 6-7 (bottom)
+        // Each strip covers 2/8 = 0.25 of the texture height
+        //
+        // OpenGL texture coordinates: v=0 is first row of texture data (Genesis row 0)
+        // We need to flip so Genesis row 0 appears at top of quad.
+        //
+        // For stripIndex=0 (rows 0-1): sample v=0.0 to v=0.25
+        //   With default flip: bottom of quad gets v=0.25, top gets v=0.0
+        // For stripIndex=3 (rows 6-7): sample v=0.75 to v=1.0
+        //   With default flip: bottom of quad gets v=1.0, top gets v=0.75
+        float stripHeight = 0.25f;
+        float stripTop = stripIndex * stripHeight;      // v coord for top of strip (e.g., 0.0 for strip 0)
+        float stripBottom = stripTop + stripHeight;     // v coord for bottom of strip (e.g., 0.25 for strip 0)
+
+        // Handle flips by adjusting texture coordinates
+        float u0, u1, v0, v1;
+        if (desc.getHFlip()) {
+            u0 = 1.0f;
+            u1 = 0.0f;
+        } else {
+            u0 = 0.0f;
+            u1 = 1.0f;
+        }
+
+        // V coordinates for the strip
+        // Default (VFlip=false): flip texture so row 0 is at top of quad
+        //   Bottom of quad gets stripBottom, top gets stripTop
+        // VFlip=true: don't flip, so row 0 is at bottom of quad
+        //   Bottom of quad gets stripTop, top gets stripBottom
+        if (desc.getVFlip()) {
+            v0 = stripTop;      // Bottom of quad
+            v1 = stripBottom;   // Top of quad
+        } else {
+            v0 = stripBottom;   // Bottom of quad
+            v1 = stripTop;      // Top of quad
         }
 
         // Calculate array offsets

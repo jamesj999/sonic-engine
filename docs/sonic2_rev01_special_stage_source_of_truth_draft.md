@@ -1,6 +1,6 @@
 # Sonic 2 (Genesis) REV01 — Special Stage source of truth (draft)
 
-Last updated: 2026-01-10 23:15:00Z
+Last updated: 2026-01-11
 
 This document is being built iteratively across chat continuations. It is intended as a **source of truth** for reimplementing Sonic the Hedgehog 2 (Genesis) Special Stages, targeting the **REV01** ROM, and integrating into the Java engine at:
 `https://github.com/jamesj999/sonic-engine/tree/ai-improvement-test-1`
@@ -18,10 +18,14 @@ The emphasis here is on verifiable facts (ROM offsets, raw byte matches, disasse
 | ROM loading infrastructure | ✅ | `Rom` class supports slicing by offset |
 | Kosinski decompression | ✅ | `KosinskiReader` exists |
 | Nemesis decompression | ✅ | Used for normal level art |
-| ENI decompression | ❌ | **Needed** for background mappings |
-| H32 render mode (256px wide) | ❌ | **Needed** - VDP mode change |
-| Per-scanline Plane B scroll | ❌ | **Needed** for skydome effect |
-| Special Stage scene/state | ❌ | **Needed** - separate from normal levels |
+| ENI decompression | ✅ | `EnigmaReader` implemented |
+| H32 render mode (256px wide) | ✅ | `Sonic2SpecialStageManager.H32_WIDTH/HEIGHT` constants |
+| Per-scanline Plane B scroll | ⚠️ | Skydome scroll table loaded; rendering not yet applied |
+| Special Stage scene/state | ✅ | `Sonic2SpecialStageManager` with player physics |
+| Track art loading | ✅ | 1-line-per-tile format handled in `Sonic2SpecialStageDataLoader` |
+| Track frame decoding | ✅ | `Sonic2TrackFrameDecoder` with lookup tables |
+| Track animation | ✅ | `Sonic2TrackAnimator` with segment state machine |
+| Player physics | ✅ | `Sonic2SpecialStagePlayer` with movement, jumping, Tails follow |
 
 ### Documentation gaps (prioritized)
 
@@ -63,7 +67,7 @@ This yields offsets suitable for “pull directly from ROM” strategies without
 
 | Asset (disassembly path) | ROM offset (REV01) | Size (bytes) | SHA-256 | Unique match |
 |---|---:|---:|---|:--:|
-| `art/kosinski/SpecStag.kos` | `0x0DCA38` | 816 | `aca5054e44d3e9823b5acdd2c801a0c004c40f85cdce02a9bf514f32fc76da81` | ✅ |
+| `art/kosinski/SpecStag.kos` ¹ | `0x0DCA38` | 816 | `aca5054e44d3e9823b5acdd2c801a0c004c40f85cdce02a9bf514f32fc76da81` | ✅ |
 | `art/nemesis/Special stage ring art.nem` | `0x0DDA7E` | 1318 | `a82afe44dae1342625deb57ea8334e6c802ac3ab3635360ee67a46a4fb91e74a` | ✅ |
 | `art/nemesis/Bomb from special stage.nem` | `0x0DE4BC` | 1008 | `b0ec8619e5d996fdcd3d571b6de332b72e7b7b6a32f5939d556aef06968fd8f3` | ✅ |
 | `art/nemesis/Emerald from special stage.nem` | `0x0DE8AC` | 583 | `a1afdb7b01b044ae5ee2d7a727ddba080d0fbe67a8188ca81d8e357462df40d7` | ✅ |
@@ -75,6 +79,79 @@ This yields offsets suitable for “pull directly from ROM” strategies without
 | `mappings/misc/Main background mappings for special stage.eni` | `0x0DD1DE` | 302 | `371c81e08f06cf0859e563f4989f9334dee7c467303b4e5bbcaeb2a0cfbd2326` | ✅ |
 | `mappings/misc/Lower background mappings for special stage.eni` | `0x0DD30C` | 382 | `9f20c295ac287f8056718d694a6094eb81a3a41d00532f8e147a3cdfdb03febe` | ✅ |
 | `art/nemesis/Background art for special stage.nem` | `0x0DCD68` | 1141 | `762b2571dae3166c70937c73e40411de99ea71253443233e632f0a6764588a2f` | ✅ |
+
+¹ **Track art tile format**: `SpecStag.kos` uses a special 1-line-per-tile compression. See "Track art tile format" section below.
+
+### Palette data (raw, uncompressed)
+
+Palettes are stored as raw bytes (no compression), with each color as a big-endian 16-bit word in Genesis format (`----BBB0GGG0RRR0`).
+
+| Asset (disassembly path) | ROM offset (REV01) | Size (bytes) | Palette lines | Unique match |
+|---|---:|---:|---|:--:|
+| `art/palettes/Special Stage Main.bin` | `0x003162` | 96 | Lines 0, 1, 2 | ✅ |
+| `art/palettes/Special Stage 1.bin` | `0x0031C2` | 32 | Line 3 | ✅ |
+| `art/palettes/Special Stage 2.bin` | `0x0031E2` | 32 | Line 3 | ✅ |
+| `art/palettes/Special Stage 3.bin` | `0x003202` | 32 | Line 3 | ✅ |
+| `art/palettes/Special Stage 4.bin` | `0x003222` | 32 | Line 3 | ✅ |
+| `art/palettes/Special Stage 5.bin` | `0x003242` | 32 | Line 3 | ✅ |
+| `art/palettes/Special Stage 6.bin` | `0x003262` | 32 | Line 3 | ✅ |
+| `art/palettes/Special Stage 7.bin` | `0x003282` | 32 | Line 3 | ✅ |
+
+**Palette line assignments (from s2.asm `PalPointers`):**
+- `Pal_SS` (Main): Loaded to palette line 0 (96 bytes = 3 consecutive palette lines)
+  - Line 0: Background/sky colors
+  - Line 1: Track/ground colors
+  - Line 2: Object colors (rings, bombs, shadows)
+- `Pal_SS1` through `Pal_SS7`: Loaded to palette line 3 (per-stage varying colors)
+
+**Genesis color format:** `----BBB0GGG0RRR0`
+- Bits 1-3: Red (0-7, scaled to 0-252 for 8-bit RGB)
+- Bits 5-7: Green (0-7)
+- Bits 9-11: Blue (0-7)
+
+**Loading sequence (from `SSInitPalAndData`):**
+1. Load `PalID_SS` (main palette) to lines 0-2
+2. Index into `SpecialStage_Palettes` table using `Current_Special_Stage`
+3. Load per-stage palette (`PalID_SS1` through `PalID_SS7`) to line 3
+
+## Track art tile format (SpecStag.kos)
+
+The track art tiles use a **unique compressed format** that differs from standard SEGA tiles.
+
+### Standard vs Special Stage tile format
+
+| Format | Bytes per tile | Description |
+|---|---:|---|
+| Standard SEGA tile | 32 | 8 lines × 4 bytes per line (8 pixels, 4bpp) |
+| Special Stage track tile | 4 | 1 line × 4 bytes, duplicated 8 times |
+
+### File structure
+
+After Kosinski decompression:
+```
+Offset 0-1: Word - tile count (big-endian, typically 372 = $0174)
+Offset 2+:  4 bytes per tile × tile count
+```
+
+### Tile expansion algorithm
+
+Each 4-byte tile entry contains one horizontal line of 8 pixels (4 bits per pixel, packed 2 pixels per byte). This single line must be **duplicated 8 times** to create a full 8×8 tile:
+
+```
+For each tile (4 bytes at offset 2 + i*4):
+    For each row (0-7):
+        Copy the 4 bytes to row[row]
+```
+
+This produces horizontal stripe patterns for track floor textures, which is the visual style of the Special Stage track.
+
+### Validation
+
+- Compressed size: 816 bytes
+- Decompressed size: 1490 bytes (2-byte header + 372 × 4 bytes)
+- Expanded size: 372 × 32 = 11,904 bytes (372 full tiles)
+
+Reference: s2.asm lines 90412-90414 comment at `ArtKos_Special` label.
 
 ## Special Stage track mapping frames (56 frames)
 
@@ -495,24 +572,21 @@ This document will be updated in place on each continuation.
 
 ## Known implementation issues
 
-### Track art Kosinski decompression incomplete
+*(No known issues at this time)*
 
-**Status:** To debug
+### Track art 1-line-per-tile format ✅ RESOLVED
 
-**Symptom:** The track art at ROM offset `0x0DCA38` (`art/kosinski/SpecStag.kos`, 816 bytes compressed) decompresses to only 1492 bytes. The first word of decompressed data is `0x0174` (372), indicating 372 tiles expected. However, the actual decompressed tile data is only 1490 bytes (46 tiles).
+**Status:** Fixed
 
-**Impact:** The track LUT (`SSPNT_UncLUT`) references tile indices up to 371 (0x173). With only 46 tiles available, most track tiles render as placeholders.
+**Original symptom:** The track art at ROM offset `0x0DCA38` (`art/kosinski/SpecStag.kos`, 816 bytes compressed) decompressed to only 1492 bytes. The first word of decompressed data is `0x0174` (372), indicating 372 tiles expected. This appeared to produce only 46 tiles.
 
-**Investigation notes:**
-- The Kosinski decompressor hits a terminator marker after 1492 bytes
-- The disassembly shows the game reads the first word as a tile count, then transfers `count × 32` bytes to VRAM
-- Possible causes:
-  1. Decompressor bug causing early termination
-  2. Multiple Kosinski streams concatenated
-  3. Different compression variant used for this asset
-  4. ROM offset or size mismatch
+**Root cause:** The track art uses a **special 1-line-per-tile format** where only 4 bytes (one horizontal line of 8 pixels) is stored per tile. Each line must be duplicated 8 times to create a full 8×8 tile. This is documented in `s2.asm` at the `ArtKos_Special` label (lines 90412-90414):
 
-**Workaround:** Placeholder patterns are generated for tile indices 46-371 so the track renders (with visual artifacts).
+> "Only one line of each tile is stored in this archive. The other 7 lines are the same as this one line, so to get the full tiles, each line needs to be duplicated 7 times over."
+
+**Resolution:** Updated `Sonic2SpecialStageDataLoader.getTrackArtPatterns()` to expand each 4-byte tile line into a full 8×8 pattern by duplicating it across all 8 rows. All 372 track tiles now load correctly.
+
+See "Track art tile format (SpecStag.kos)" section for full documentation.
 
 ---
 
@@ -574,8 +648,7 @@ Effort labels: S (<1h), M (1-3h), L (1-2d), XL (>2d)
 
 **Implementation notes:**
 - Player mode respects `MAIN_CHARACTER_CODE` config: "sonic" = Sonic alone, "tails" = Tails alone, "sonic_and_tails" = both
-- Real art loaded: 127 background patterns, 46 track patterns (+ 326 placeholders), 851 player patterns
-- See "Known implementation issues" for track art decompression limitation
+- Real art loaded: 127 background patterns, 372 track patterns (1-line-per-tile format expanded), 851 player patterns
 
 ### Phase 4: Object stream + rings/bombs (L)
 
@@ -733,21 +806,35 @@ Bitstream: each bit selects source for next tile:
 
 ### Segment 2 (uncompressed lookup)
 
-Bitstream format:
-- First bit determines index size:
-  - `0` = next 6 bits index into `SSPNT_UncLUT` (first 64 entries)
-  - `1` = next 10 bits index into `SSPNT_UncLUT_Part2` (additional entries)
+Bitstream format (from s2.asm lines 8711-8713):
+- First bit is extended flag:
+  - `0` = next **6 bits** index into `SSPNT_UncLUT` (base table, 64 entries at indices 0x00-0x3F)
+  - `1` = next **9 bits** index into `SSPNT_UncLUT_Part2` (offset 0x40 added, ~548 entries)
+- Total bits per tile: 7 bits (non-extended) or 10 bits (extended)
 - Tiles drawn in palette line 3
 
 ### Segment 3 (RLE lookup)
 
-Bitstream format:
-- First bit determines index size:
-  - `0` = next 6 bits index into `SSPNT_RLELUT`
-  - `1` = next 7 bits index into `SSPNT_RLELUT_Part2`
+Bitstream format (from s2.asm lines 8718-8720):
+- First bit is extended flag:
+  - `0` = next **6 bits** index into `SSPNT_RLELUT` (base table, 64 entries at indices 0x00-0x3F)
+  - `1` = next **6 bits** index into `SSPNT_RLELUT_Part2` (offset 0x40 added, ~70 entries)
+- Total bits per tile: 7 bits (both modes)
+- End-of-line marker: 0x3F in either mode terminates line processing
 - Tiles drawn in palette line 3, high priority
 
+### Lookup tables
+
 The lookup tables (`SSPNT_UncLUT`, `SSPNT_RLELUT`, etc.) are hardcoded in the engine as pattern name table entries with tile indices, flip flags, and priority bits.
+
+| Table | Entries | Index range |
+|---|---:|---|
+| `SSPNT_UncLUT` | 64 | 0x00-0x3F |
+| `SSPNT_UncLUT_Part2` | ~548 | 0x40-0x263 |
+| `SSPNT_RLELUT` | 64 | 0x00-0x3F |
+| `SSPNT_RLELUT_Part2` | 70 | 0x40-0x85 |
+
+Each RLE entry is 4 bytes: 2-byte pattern name + 2-byte repeat count.
 
 ---
 
