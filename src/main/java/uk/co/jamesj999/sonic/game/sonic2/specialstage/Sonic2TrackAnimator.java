@@ -304,6 +304,7 @@ public class Sonic2TrackAnimator {
 
     /**
      * Gets the frame duration based on the current speed factor.
+     * This is used for track animation timing.
      */
     private int getFrameDuration() {
         int index = (speedFactor >> 1) & 0x7;
@@ -311,6 +312,18 @@ public class Sonic2TrackAnimator {
             return Math.max(1, ANIM_BASE_DURATIONS[index]);
         }
         return 15;
+    }
+
+    /**
+     * Gets the player animation frame timer value.
+     * This is SS_player_anim_frame_timer from the original game.
+     * The player animation uses this value divided by 2.
+     * @return The current player animation timer value
+     */
+    public int getPlayerAnimFrameTimer() {
+        // In the original game, this decrements each frame from the base duration.
+        // For simplicity, return the base duration - 1 (matching line 69975: subq.b #1)
+        return getFrameDuration() - 1;
     }
 
     /**

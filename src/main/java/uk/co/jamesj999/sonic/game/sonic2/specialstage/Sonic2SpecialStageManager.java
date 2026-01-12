@@ -369,13 +369,20 @@ public class Sonic2SpecialStageManager {
     }
 
     private void updatePlayers() {
+        // Get the global animation frame timer from the track animator
+        int animTimer = trackAnimator.getPlayerAnimFrameTimer();
+
         if (sonicPlayer != null && tailsPlayer != null) {
+            sonicPlayer.setGlobalAnimFrameTimer(animTimer);
             sonicPlayer.update(heldButtons, pressedButtons);
             int delayedInput = sonicPlayer.getControlRecordEntry(8);
+            tailsPlayer.setGlobalAnimFrameTimer(animTimer);
             tailsPlayer.update(delayedInput, 0);
         } else if (sonicPlayer != null) {
+            sonicPlayer.setGlobalAnimFrameTimer(animTimer);
             sonicPlayer.update(heldButtons, pressedButtons);
         } else if (tailsPlayer != null) {
+            tailsPlayer.setGlobalAnimFrameTimer(animTimer);
             tailsPlayer.update(heldButtons, pressedButtons);
         }
 

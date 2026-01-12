@@ -121,9 +121,11 @@ public class Sonic2SpecialStagePlayer {
         { 3, 0, 4, 12, 4, 0, 4, 12, 4, -1 }
     };
 
-    // Animation frame timer from special stage (SS_player_anim_frame_timer)
-    // This is normally based on speed, but we'll use a fixed rate for now
-    private static final int BASE_ANIM_DURATION = 6;
+    // Global animation frame timer from special stage (SS_player_anim_frame_timer)
+    // This is set by the manager each frame based on the track animator's speed factor.
+    // Animation timing based on SSAnim_Base_Duration table from s2.asm (lines 986-989)
+    // The player animation uses this value divided by 2 (lsr.b #1)
+    private int globalAnimFrameTimer = 30;
 
     private int[] ctrlRecordBuf;
     private int ctrlRecordIndex;
@@ -177,7 +179,7 @@ public class Sonic2SpecialStagePlayer {
         ssLastAngleIndex = 0;
 
         anim = 0;
-        prevAnim = 0;
+        prevAnim = -1;  // Force animation update on first frame
         animFrame = 0;
         animFrameDuration = 0;
         mappingFrame = 0;
@@ -201,6 +203,15 @@ public class Sonic2SpecialStagePlayer {
         ctrlRecordIndex = 0;
 
         routine = RoutineState.NORMAL;
+    }
+
+    /**
+     * Sets the global animation frame timer from the track animator.
+     * This should be called by the manager each frame before update().
+     * @param timer The SS_player_anim_frame_timer value
+     */
+    public void setGlobalAnimFrameTimer(int timer) {
+        this.globalAnimFrameTimer = timer;
     }
 
     public void update(int heldButtons, int pressedButtons) {
@@ -317,9 +328,12 @@ public class Sonic2SpecialStagePlayer {
             return;
         }
 
-        int sine = calcSine(angle);
+        // Original uses d1 (cosine) from CalcSine, not d0 (sine)
+        // This creates a restoring force: cos(0x40) = 0 at center,
+        // positive on one side, negative on other
+        int cosine = calcCosine(angle);
 
-        int traction = (sine * TRACTION_FACTOR) >> 8;
+        int traction = (cosine * TRACTION_FACTOR) >> 8;
         inertia += traction;
 
         int a = angle & 0xFF;
@@ -335,21 +349,19 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void ssObjectMove() {
-        int d2 = inertia;
-        if (d2 < 0) {
-            d2 = -d2;
-            int angleChange = d2 >> 8;
-            angle = (angle - angleChange) & 0xFF;
-        } else {
-            int angleChange = d2 >> 8;
-            angle = (angle + angleChange) & 0xFF;
-        }
+        // Add inertia to angle: angle += inertia >> 8
+        // Inertia is signed, so positive = left (increasing angle), negative = right
+        int angleChange = inertia >> 8;
+        angle = (angle + angleChange) & 0xFF;
 
+        // Calculate track-space position from angle and depth
+        // ss_x_pos = cos(angle) * ss_z_pos >> 8
+        // ss_y_pos = sin(angle) * ss_z_pos >> 8
         int sine = calcSine(angle);
         int cosine = calcCosine(angle);
 
-        ssXPos = (sine * ssZPos) >> 8;
-        ssYPos = (cosine * ssZPos) >> 8;
+        ssXPos = (cosine * ssZPos) >> 8;
+        ssYPos = (sine * ssZPos) >> 8;
     }
 
     private void ssAnglePos() {
@@ -519,18 +531,30 @@ public class Sonic2SpecialStagePlayer {
             return;
         }
 
+        // Convert angle to table index: (angle - 0x10) >> 5 gives 0-7
         int d0 = ((angle - 0x10) & 0xFF) >> 5;
         ssLastAngleIndex = d0;
 
+        // Animation table from byte_33E90 in s2disasm (lines 69031-69039)
+        // Format: {anim, xFlip, yFlip}
+        // The table maps 8 angle ranges (each 32 units) to animations:
+        //   Index 0 (angle 0x10-0x2F): anim 1 (diagonal), xFlip
+        //   Index 1 (angle 0x30-0x4F): anim 0 (upright), no flip - CENTER BOTTOM
+        //   Index 2 (angle 0x50-0x6F): anim 1 (diagonal), no flip
+        //   Index 3 (angle 0x70-0x8F): anim 2 (horizontal), no flip
+        //   Index 4 (angle 0x90-0xAF): anim 1 (diagonal), yFlip
+        //   Index 5 (angle 0xB0-0xCF): anim 0 (upright), yFlip
+        //   Index 6 (angle 0xD0-0xEF): anim 1 (diagonal), xFlip+yFlip
+        //   Index 7 (angle 0xF0-0x0F): anim 2 (horizontal), xFlip
         int[][] animTable = {
-            {0, 1, 1},
-            {0, 0, 0},
-            {0, 0, 0},
-            {2, 0, 0},
-            {0, 0, 1},
-            {0, 0, 1},
-            {0, 1, 1},
-            {2, 1, 0}
+            {1, 1, 0},  // Index 0: diagonal, xFlip
+            {0, 0, 0},  // Index 1: upright, no flip (center bottom)
+            {1, 0, 0},  // Index 2: diagonal, no flip
+            {2, 0, 0},  // Index 3: horizontal, no flip
+            {1, 0, 1},  // Index 4: diagonal, yFlip
+            {0, 0, 1},  // Index 5: upright, yFlip
+            {1, 1, 1},  // Index 6: diagonal, xFlip+yFlip
+            {2, 1, 0}   // Index 7: horizontal, xFlip
         };
 
         if (d0 < animTable.length) {
@@ -539,6 +563,7 @@ public class Sonic2SpecialStagePlayer {
             statusYFlip = animTable[d0][2] != 0;
         }
 
+        // Reset flip timer at specific angle indices (center positions)
         if (d0 == 1 || d0 == 5) {
             ssInitFlipTimer = 0x400;
         }
@@ -576,9 +601,10 @@ public class Sonic2SpecialStagePlayer {
             return;
         }
 
-        // Reset frame duration (first byte of script is the base duration)
-        // In original game this is modified by SS_player_anim_frame_timer based on speed
-        animFrameDuration = BASE_ANIM_DURATION >> 1;
+        // Reset frame duration using the global animation timer divided by 2.
+        // Original: move.b (SS_player_anim_frame_timer).w,d0 / lsr.b #1,d0
+        // For now, use the script's duration value until we verify the global timer works correctly.
+        animFrameDuration = script[0];
 
         // Handle flip timer for anim 0 (upright running with periodic flip)
         if (currentAnim == 0) {
@@ -587,6 +613,9 @@ public class Sonic2SpecialStagePlayer {
                 // Toggle x flip
                 statusXFlip = !statusXFlip;
                 renderXFlip = !renderXFlip;
+                // Original: move.b ss_init_flip_timer(a0),ss_flip_timer(a0)
+                // On 68000 big-endian, reading a byte from word 0x400 gives 0x04 (high byte)
+                // However, the original flip behavior with timer=0 created the running illusion
                 ssFlipTimer = ssInitFlipTimer & 0xFF;
             }
         }

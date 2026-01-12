@@ -455,8 +455,15 @@ public class Sonic2SpecialStageRenderer {
      * @param player The player to render
      */
     private void renderPlayer(Sonic2SpecialStagePlayer player) {
-        int screenX = player.getXPos();
-        int screenY = H32_HEIGHT - player.getYPos();
+        // Add H32 centering offset to match track rendering
+        // The player's xPos is in H32 viewport coordinates (0-255), but we render on a 320px screen
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        int screenX = SCREEN_CENTER_OFFSET + player.getXPos();
+        // Y position is already in screen coordinates (Y=0 at top, increasing downward)
+        // No need to invert since SSAnglePos already adds SS_Offset_Y
+        int screenY = player.getYPos();
 
         int basePattern = playerPatternBase;
         if (player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.TAILS) {
@@ -473,6 +480,11 @@ public class Sonic2SpecialStageRenderer {
 
         int paletteIndex = player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.SONIC ? 1 : 2;
 
+        // Debug: log frame info once per animation change
+        if (mappingFrame == 0 && !playerXFlip && !playerYFlip) {
+            // Log nothing for now - can enable for debugging
+        }
+
         // Render each sprite piece in the frame
         for (Sonic2SpecialStageSpriteMappings.SpritePiece piece : frame.pieces) {
             // Calculate piece position, applying player flip
@@ -484,11 +496,18 @@ public class Sonic2SpecialStageRenderer {
             boolean finalVFlip = piece.vFlip ^ playerYFlip;
 
             // Render all tiles in this piece
-            // Mega Drive sprites use COLUMN-MAJOR order: tiles go top-to-bottom, then left-to-right
-            int tileIndex = piece.tileIndex;
+            // Mega Drive VDP sprites use COLUMN-MAJOR order: tiles go top-to-bottom, then left-to-right
+            // When H-flipped, the VDP draws tiles from the LAST column first (tiles are rearranged)
+            // When V-flipped, the VDP draws tiles from the BOTTOM row first (tiles are rearranged)
+            // The flip flags ALSO flip each tile's pixels
             for (int tx = 0; tx < piece.widthTiles; tx++) {
                 for (int ty = 0; ty < piece.heightTiles; ty++) {
-                    int patternId = basePattern + tileIndex;
+                    // Determine which source tile to read based on flip state
+                    int srcCol = finalHFlip ? (piece.widthTiles - 1 - tx) : tx;
+                    int srcRow = finalVFlip ? (piece.heightTiles - 1 - ty) : ty;
+                    // Column-major index: column * height + row
+                    int tileIndexInPiece = srcCol * piece.heightTiles + srcRow;
+                    int patternId = basePattern + piece.tileIndex + tileIndexInPiece;
 
                     PatternDesc desc = new PatternDesc();
                     desc.setPriority(true);
@@ -497,24 +516,14 @@ public class Sonic2SpecialStageRenderer {
                     desc.setVFlip(finalVFlip);
                     desc.setPatternIndex(patternId & 0x7FF);
 
-                    // Calculate tile position within the piece
-                    int tileOffsetX, tileOffsetY;
-                    if (finalHFlip) {
-                        tileOffsetX = (piece.widthTiles - 1 - tx) * TILE_SIZE;
-                    } else {
-                        tileOffsetX = tx * TILE_SIZE;
-                    }
-                    if (finalVFlip) {
-                        tileOffsetY = (piece.heightTiles - 1 - ty) * TILE_SIZE;
-                    } else {
-                        tileOffsetY = ty * TILE_SIZE;
-                    }
+                    // Calculate tile position within the piece (always sequential on screen)
+                    int tileOffsetX = tx * TILE_SIZE;
+                    int tileOffsetY = ty * TILE_SIZE;
 
                     int tileScreenX = screenX + pieceX + tileOffsetX;
                     int tileScreenY = screenY + pieceY + tileOffsetY;
 
                     graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
-                    tileIndex++;
                 }
             }
         }
@@ -540,7 +549,7 @@ public class Sonic2SpecialStageRenderer {
             }
 
             int screenX = player.getXPos();
-            int screenY = H32_HEIGHT - player.getYPos();
+            int screenY = player.getYPos();
 
             int tilesWide = player.isJumping() ? 2 : 2;
             int tilesHigh = player.isJumping() ? 2 : 3;
