@@ -109,6 +109,14 @@ public class PlayableSpriteMovementManager extends
 			jumpHandler(jump);
 		}
 
+		// SPG: When a spring launches the player, reset jumpPressed to prevent
+		// the jump velocity cap from applying to the spring launch. Without this,
+		// if the player jumped onto the spring and released jump, the velocity
+		// would be capped after the springing state ends (15 frames).
+		if (sprite.getSpringing()) {
+			jumpPressed = false;
+		}
+
 		if (sprite.getSpindash()) {
 			sprite.setCrouching(false);
 			// A little bit of logic to make sure holding jump doesn't accelerate the
