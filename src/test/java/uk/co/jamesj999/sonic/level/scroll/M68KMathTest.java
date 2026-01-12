@@ -3,13 +3,14 @@ package uk.co.jamesj999.sonic.level.scroll;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import static uk.co.jamesj999.sonic.level.scroll.SoftwareScrollManager.*;
+import static uk.co.jamesj999.sonic.level.scroll.M68KMath.*;
 
 /**
- * Tests for 68000 arithmetic helpers in SoftwareScrollManager.
- * Verifies that Java operations match Motorola 68000 semantics.
+ * Tests for Motorola 68000 arithmetic helpers in M68KMath.
+ * Verifies that Java operations match Motorola 68000 semantics for
+ * pixel-perfect scrolling.
  */
-public class SoftwareScrollManagerTest {
+public class M68KMathTest {
 
     // ==================== wordOf tests ====================
 
