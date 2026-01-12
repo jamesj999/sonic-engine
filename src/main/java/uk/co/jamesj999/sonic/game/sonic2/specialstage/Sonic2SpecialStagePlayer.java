@@ -263,13 +263,15 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void updateJumping(int heldButtons) {
+        // Original Obj09_MdJump does NOT call SSPlayer_SetAnimation
+        // Animation is set to 3 (ball) when entering jump state
         ssPlayerChgJumpDir(heldButtons);
         ssObjectMoveAndFall();
         ssPlayerJumpAngle();
         ssPlayerDoLevelCollision();
         ssPlayerSwapPositions();
         ssAnglePos();
-        ssPlayerSetAnimation();
+        // Note: No ssPlayerSetAnimation() here - matches original
         ssPlayerAnimate();
     }
 
@@ -398,7 +400,11 @@ public class Sonic2SpecialStagePlayer {
         animFrameDuration = 0;
         collisionProperty = 0;
 
-        swapPositionsFlag = !swapPositionsFlag;
+        // Original: tst.b (SS_2p_Flag).w / bne.s loc_33B9E / tst.w (Player_mode).w / bne.s loc_33BA2
+        // Only toggle swap flag in team mode (when otherPlayer exists)
+        if (otherPlayer != null) {
+            swapPositionsFlag = !swapPositionsFlag;
+        }
 
         LOGGER.fine("Player jumped at angle " + angle + ", vel=(" + xVel + "," + yVel + ")");
     }
@@ -501,6 +507,13 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void ssPlayerSwapPositions() {
+        // Original: tst.w (Player_mode).w / bne.s return_33E8E
+        // Only swap positions in team mode (Sonic & Tails together)
+        // In solo mode, otherPlayer is null, so skip this logic
+        if (otherPlayer == null) {
+            return;
+        }
+
         int d0 = ssZPos;
 
         boolean shouldMoveCloser;
@@ -621,8 +634,7 @@ public class Sonic2SpecialStagePlayer {
 
         // Reset frame duration using the global animation timer divided by 2.
         // Original: move.b (SS_player_anim_frame_timer).w,d0 / lsr.b #1,d0
-        // For now, use the script's duration value until we verify the global timer works correctly.
-        animFrameDuration = script[0];
+        animFrameDuration = (globalAnimFrameTimer >> 1) & 0xFF;
 
         // Handle flip timer for anim 0 (upright running with periodic flip)
         // Original: subi_.b #1,ss_flip_timer(a0) / bgt.s + / bchg ...
