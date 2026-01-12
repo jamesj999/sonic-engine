@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.scroll.BackgroundCamera;
 import uk.co.jamesj999.sonic.level.scroll.ParallaxTables;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -65,6 +66,8 @@ public class ParallaxManager {
     private ParallaxTables tables;
     private boolean loaded = false;
 
+    private SwScrlEhz ehzHandler;
+
     private int currentZone = -1;
     private int currentAct = -1;
     private boolean screenShakeFlag = false;
@@ -88,6 +91,7 @@ public class ParallaxManager {
             return;
         try {
             tables = new ParallaxTables(rom);
+            ehzHandler = new SwScrlEhz(tables);
             loaded = true;
             LOGGER.info("Parallax tables loaded.");
         } catch (IOException e) {
@@ -178,7 +182,15 @@ public class ParallaxManager {
 
         switch (zoneId) {
             case ZONE_EHZ:
-                fillEhz(cameraX, frameCounter, bgScrollY);
+                if (ehzHandler != null) {
+                    ehzHandler.update(hScroll, cameraX, cameraY, frameCounter, actId);
+                    minScroll = ehzHandler.getMinScrollOffset();
+                    maxScroll = ehzHandler.getMaxScrollOffset();
+                    vscrollFactorBG = ehzHandler.getVscrollFactorBG();
+                } else {
+                    // Fallback should normally not happen if loaded
+                    // fillEhz(cameraX, frameCounter, bgScrollY);
+                }
                 break;
             case ZONE_CPZ:
                 fillCpz(cameraX, bgScrollY, frameCounter);
@@ -227,118 +239,7 @@ public class ParallaxManager {
      * EHZ - Emerald Hill Zone
      * Pixel-perfect implementation matching SwScrl_EHZ (1P) from S2 disassembly.
      */
-    private void fillEhz(int cameraX, int frameCounter, int bgScrollY) {
-        // Vscroll_Factor_BG is copied directly from Camera_BG_Y_pos
-        vscrollFactorBG = (short) bgScrollY;
 
-        short fgScroll = (short) -cameraX;
-        final boolean fixBugs = false; // "Default" mode (bug-accurate)
-
-        // Segment definitions match S2 disassembly exactly.
-        int line = 0;
-        int d2 = -cameraX; // Base valid for FG (and BG calc base)
-        int d3;
-
-        // Segment 1: 0-21 (22 lines) - Static 0
-        for (int i = 0; i < 22; i++) {
-            setLineWithOffset(line++, fgScroll, 0 - fgScroll);
-        }
-
-        // Segment 2: 22-79 (58 lines) - 1/64 speed
-        // background scroll is (-Camera_X_pos) >> 6
-        d3 = d2 >> 6;
-        for (int i = 0; i < 58; i++) {
-            setLineWithOffset(line++, fgScroll, d3 - fgScroll);
-        }
-
-        // Segment 3: 80-100 (21 lines) - Water
-        // User requested removal of ripple animation; it is handled by tile animation.
-        // This segment now behaves as a continuation of Segment 2 (1/64 speed).
-        // This also addresses the "distant hills cut" issue by extending the hill
-        // scroll speed.
-        for (int i = 0; i < 21; i++) {
-            setLineWithOffset(line++, fgScroll, d3 - fgScroll);
-        }
-
-        // Segment 4: 101-111 (11 lines) - Static 0
-        for (int i = 0; i < 11; i++) {
-            setLineWithOffset(line++, fgScroll, 0 - fgScroll);
-        }
-
-        // Segment 5: 112-127 (16 lines) - 1/16 speed
-        // background scroll is (-Camera_X_pos) >> 4
-        d3 = d2 >> 4;
-        for (int i = 0; i < 16; i++) {
-            setLineWithOffset(line++, fgScroll, d3 - fgScroll);
-        }
-
-        // Segment 6: 128-143 (16 lines) - Interp 1/8 -> 1/4
-        fillEhzDeformation(line, 16, d2, 3, 2);
-        line += 16;
-
-        // Segment 7: 144-158 (15 lines) - Interp 1/4 -> 1/2
-        fillEhzDeformation(line, 15, d2, 2, 1);
-        line += 15;
-
-        // Segment 8: 159-176 (18 lines) - Interp 1/2 -> 3/4
-        fillEhzDeformationCustom(line, 18, d2, 1.0 / 2.0, 3.0 / 4.0);
-        line += 18;
-
-        // Segment 9: 177-221 (45 lines) - Interp 3/4 -> 1.0 (FG speed)
-        fillEhzDeformationCustom(line, 45, d2, 3.0 / 4.0, 1.0);
-        line += 45;
-
-        // Segment 10: 222-223 (2 lines) - Bug fix
-        if (fixBugs && line < VISIBLE_LINES) {
-            fillEhzDeformationCustom(line, 2, d2, 1.0, 1.0);
-        }
-    }
-
-    private void fillEhzDeformation(int startLine, int count, int baseVal, int startShift, int endShift) {
-        // Fixed point 16.16 calculation
-        // Start: baseVal >> startShift. In 16.16: (baseVal << 16) >> startShift =
-        // baseVal << (16 - startShift)
-        int startFixed = baseVal << (16 - startShift);
-        int endFixed = baseVal << (16 - endShift);
-        // Step = (End - Start) / Count
-        int step = (endFixed - startFixed) / count;
-
-        int current = startFixed;
-        short fgScroll = (short) baseVal; // d2 is -Camera_X
-
-        for (int i = 0; i < count && (startLine + i) < VISIBLE_LINES; i++) {
-            int scroll = current >> 16;
-            setLineWithOffset(startLine + i, fgScroll, scroll - fgScroll);
-            current += step;
-        }
-    }
-
-    private void fillEhzDeformationCustom(int startLine, int count, int baseVal, double startFrac, double endFrac) {
-        int startFixed = (int) (baseVal * startFrac * 65536.0);
-        int endFixed = (int) (baseVal * endFrac * 65536.0);
-        int step = (endFixed - startFixed) / count;
-
-        int current = startFixed;
-        short fgScroll = (short) baseVal;
-
-        for (int i = 0; i < count && (startLine + i) < VISIBLE_LINES; i++) {
-            int scroll = current >> 16;
-            setLineWithOffset(startLine + i, fgScroll, scroll - fgScroll);
-            current += step;
-        }
-    }
-
-    public void dumpEhzBuffer() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("EHZ Scroll Buffer Dump:\n");
-        for (int i = 0; i < VISIBLE_LINES; i++) {
-            int val = hScroll[i];
-            short fg = (short) (val >> 16);
-            short bg = (short) (val & 0xFFFF);
-            sb.append("Line ").append(i).append(": FG=").append(fg).append(", BG=").append(bg).append('\n');
-        }
-        LOGGER.info(sb.toString());
-    }
 
     /**
      * CPZ - Chemical Plant Zone
