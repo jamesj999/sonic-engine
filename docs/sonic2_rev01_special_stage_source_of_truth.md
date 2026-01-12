@@ -1,17 +1,55 @@
-# Sonic 2 (Genesis) REV01 — Special Stage source of truth (draft)
+# Sonic 2 (Genesis) REV01 — Special Stage Source of Truth
 
-Last updated: 2026-01-11
+Last updated: 2026-01-12
 
-This document is being built iteratively across chat continuations. It is intended as a **source of truth** for reimplementing Sonic the Hedgehog 2 (Genesis) Special Stages, targeting the **REV01** ROM, and integrating into the Java engine at:
-`https://github.com/jamesj999/sonic-engine/tree/ai-improvement-test-1`
+This document serves as the **authoritative reference** for reimplementing Sonic the Hedgehog 2 (Genesis) Special Stages in the Java engine. It targets the **REV01** ROM and covers ROM data formats, implementation status, and remaining work.
 
-The emphasis here is on verifiable facts (ROM offsets, raw byte matches, disassembly label references) and a strategy a coding agent can follow.
+**Repository:** `https://github.com/jamesj999/sonic-engine` (branch: `feature/ai-special-stages`)
+
+The emphasis is on verifiable facts (ROM offsets, raw byte matches, disassembly label references) and actionable implementation guidance.
 
 ---
 
-## Implementation readiness summary
+## Implementation status dashboard
 
-### Engine capabilities available
+### Java classes implemented
+
+| Class | Purpose | Status | Lines |
+|-------|---------|:------:|------:|
+| `Sonic2SpecialStageManager` | Main coordinator | ✅ Complete | 632 |
+| `Sonic2SpecialStagePlayer` | Player physics/animation | ✅ Complete | 777 |
+| `Sonic2SpecialStageRenderer` | Rendering pipeline | ⚠️ 95% | 806 |
+| `Sonic2TrackAnimator` | Segment state machine | ✅ Complete | 439 |
+| `Sonic2TrackFrameDecoder` | Bitstream decoding | ✅ Complete | ~250 |
+| `Sonic2SpecialStageIntro` | START sequence | ✅ Complete | 284 |
+| `Sonic2SpecialStageDataLoader` | ROM decompression | ✅ Complete | ~400 |
+| `Sonic2SpecialStageConstants` | ROM offsets | ✅ Complete | 280 |
+| `Sonic2SpecialStagePalette` | Palette management | ✅ Complete | ~100 |
+| `Sonic2SpecialStageSpriteMappings` | Player sprite frames | ✅ Complete | ~200 |
+| `Sonic2TrackLookupTables` | LUT data for track decoding | ✅ Complete | ~600 |
+
+### Feature completion matrix
+
+| Feature | Status | Notes |
+|---------|:------:|-------|
+| Track rendering | ✅ | 56 frames, H-scroll interleaving, 4×32 strip layout |
+| Track animation | ✅ | All 5 segment types with orientation triggers |
+| Player physics | ✅ | Movement, jump, traction, angle-based motion |
+| Tails CPU follow | ✅ | 16-frame input delay buffer |
+| Depth swap logic | ✅ | `ss_z_pos` and priority management |
+| Intro sequence | ✅ | START banner, ~181 frame timing |
+| Ring objects | ❌ | Art loaded, no instances |
+| Bomb objects | ❌ | Art loaded, no instances |
+| Collision detection | ❌ | Stub only |
+| Ring counter | ❌ | Not implemented |
+| Checkpoints | ❌ | Not implemented |
+| Stage progression | ❌ | Stub (`ResultState` enum exists) |
+| Shadow rendering | ❌ | Art loaded, not rendered |
+| Skydome scroll | ⚠️ | Placeholder method |
+
+---
+
+## Engine capabilities
 
 | Capability | Status | Notes |
 |---|:---:|---|
@@ -672,6 +710,45 @@ The layout was designed knowing the stage would end before reaching the last seg
 
 See "Track art tile format (SpecStag.kos)" section for full documentation.
 
+### Outstanding implementation gaps
+
+#### Shadow rendering — NOT STARTED
+
+Art patterns loaded from ROM:
+- `SHADOW_HORIZ_ART_OFFSET` (0x0DDFA4, 181 bytes Nemesis) — horizontal shadow
+- `SHADOW_DIAG_ART_OFFSET` (0x0DE05A, 198 bytes Nemesis) — diagonal shadow
+- `SHADOW_VERT_ART_OFFSET` (0x0DE120, 103 bytes Nemesis) — vertical shadow
+
+Shadow objects should follow player during jump, positioned below player on track surface. Shadow type (horizontal/diagonal/vertical) depends on player's angle on the track.
+
+#### Skydome per-scanline scroll — PLACEHOLDER
+
+`Sonic2SpecialStageRenderer.applySkydomeScroll()` is an empty stub (lines 420-421). The scroll table data (`off_6DEE`) is loaded but not applied to per-scanline H-scroll during rendering.
+
+Required implementation:
+1. Select row based on track animation type and frame (see "Skydome scroll table usage semantics")
+2. Select column based on `SSTrack_drawing_index` (0-4)
+3. Apply delta to all 224 scanlines of Plane B horizontal scroll
+
+#### Object spawning system — NOT STARTED
+
+Object location lists are decompressed from ROM (`0x0E35F2`, 3216 bytes Kosinski) but never iterated during gameplay.
+
+Required implementation:
+1. Create `Sonic2SpecialStageObjectManager` class
+2. Parse object stream per-segment (see "Object stream format and marker handling")
+3. Spawn ring/bomb objects at segment transitions
+4. Handle marker bytes ($FF=end, $FE=checkpoint, $FD=emerald)
+
+#### Ring/bomb collision system — NOT STARTED
+
+Player has `collisionProperty` field and hurt state handling in `ssPlayerCollision()`, but no actual collision detection with game objects.
+
+Required implementation:
+1. Collision testing only when object `anim == 8` (closest perspective size)
+2. Ring collision: increment ring counter, spawn sparkle animation
+3. Bomb collision: trigger hurt state, BCD ring loss (10 rings or all if < 10)
+
 ---
 
 ## Implementation phases
@@ -734,44 +811,167 @@ Effort labels: S (<1h), M (1-3h), L (1-2d), XL (>2d)
 - Player mode respects `MAIN_CHARACTER_CODE` config: "sonic" = Sonic alone, "tails" = Tails alone, "sonic_and_tails" = both
 - Real art loaded: 127 background patterns, 372 track patterns (1-line-per-tile format expanded), 851 player patterns
 
-### Phase 4: Object stream + rings/bombs (L)
+### Phase 4: Object stream + rings/bombs (L) ⬜ IN PROGRESS
 
 **Goal:** Full playable track with rings/bombs and correct hit behavior.
 
-1. Parse `object location lists.kos` fully:
-   - Build per-stage, per-segment object streams
-   - Implement `SSObjectsManager` record/marker logic
-2. Implement ring and bomb objects:
-   - Perspective sizes 0-9, animation tables
-   - Collision window: only test on `anim == 8`
-3. Implement bomb-hit effect:
-   - BCD-like ring loss
-   - Hurt duration (32 frames) and invulnerability (30 frames flicker)
-   - `SSPlayerSwapPositions` behavior
+#### 4.1 Object location stream parsing ⬜
 
-### Phase 5: Gates, requirements, results (L-XL)
+- Parse `object location lists.kos` decompressed data
+- Build per-stage, per-segment object arrays
+- Format: byte 0 = type/distance, byte 1 = angle (see "Object stream format")
+- Markers: $FF=end, $FE=checkpoint, $FD=emerald
 
-**Goal:** Fully accurate Special Stage flow.
+**Files to create/modify:**
+- NEW: `Sonic2SpecialStageObjectManager.java`
+- MODIFY: `Sonic2SpecialStageManager.java` (call object manager per segment)
 
-1. Decode stage script marker semantics
-2. Wire ring requirement tables into gate logic
-3. Implement checkpoint gate object (`Obj5A`) and message behavior
-4. Implement results screen with H32/H40 transition
+#### 4.2 Ring object implementation ⬜
+
+- Create `Sonic2SpecialStageRing.java`
+- 10 perspective sizes (animation indices 0-9)
+- Use perspective data for screen position
+- Animation: 5-frame spin cycle per size (`size -> size+$0A -> size+$14 -> size+$0A -> size`)
+- Sparkle animation on collection (`$A`)
+
+**ROM data:**
+- Art: `RING_ART_OFFSET` (0x0DDA7E, 1318 bytes Nemesis)
+- Animation table: `Ani_obj5B_obj60` (documented above)
+
+#### 4.3 Bomb object implementation ⬜
+
+- Create `Sonic2SpecialStageBomb.java`
+- 10 perspective sizes (animation indices 0-9)
+- Single-frame per size (delay `$0B` = 11 frames)
+- Explosion animation on hit (`$A`)
+
+**ROM data:**
+- Art: `BOMB_ART_OFFSET` (0x0DE4BC, 1008 bytes Nemesis)
+- Animation table: `Ani_obj61` (documented above)
+
+#### 4.4 Perspective sizing system ⬜
+
+- Load `object perspective data.kos` (already in DataLoader)
+- 56 word offset table + 6-byte entries per depth
+- Calculate screen position:
+  ```
+  x_pos = x_base + (cos(angle) * x_radius) >> 8
+  y_pos = y_base + (sin(angle) * y_radius) >> 8
+  ```
+- Visibility culling via `angle_min`/`angle_max`
+- When `SSTrack_Orientation` is set (track flipped), negate `x_base` relative to `$100`
+
+**Files to modify:**
+- `Sonic2SpecialStageDataLoader.java` — expose perspective lookups
+- NEW: `Sonic2PerspectiveCalculator.java` or inline in object classes
+
+#### 4.5 Collision detection ⬜
+
+- Only test when `anim == 8` (closest size threshold)
+- Ring collision: add to ring counter, play sparkle
+- Bomb collision: trigger hurt state
+
+**Integration points:**
+- `Sonic2SpecialStagePlayer.ssPlayerCollision()` — already has hurt state handling
+- Need to add ring pickup and bomb hit triggers
+
+#### 4.6 Ring counter and HUD ⬜
+
+- Track `ringsCollected` in manager
+- Update HUD display (already has digit rendering)
+- BCD ring loss on bomb hit:
+  - If tens digit > 0: decrement tens, subtract 10 rings
+  - Else if hundreds digit > 0: decrement hundreds, set tens to 9, subtract 10 rings
+  - Else: subtract all remaining units (1-9), leaving 0
 
 ---
 
-## Data loaders needed
+### Phase 5: Gates, requirements, results (L-XL) ⬜ NOT STARTED
 
-| Loader | Format | Status | Priority |
-|---|---|:---:|:---:|
-| ENI decompressor | Enigma compression | Format documented | High |
-| Track BIN frames | 3-segment bitstream | Format documented | High |
-| Object perspective table | Kosinski -> 6-byte entries | Format documented | High |
-| Level layout | Nemesis -> segment bytes | Format documented | High |
-| Object location lists | Kosinski -> documented format | Missing | Medium |
-| Skydome scroll table | Row/column indexed | Format documented | Medium |
-| Ring requirement tables | Raw bytes | Missing | Low |
-| Base duration table | Speed factor indexed | Format documented | Low |
+**Goal:** Fully accurate Special Stage flow with checkpoints and win/lose.
+
+#### 5.1 Checkpoint marker detection ⬜
+
+- Detect `$FE` marker in object stream
+- Trigger checkpoint event
+- 4 checkpoints per stage (`Current_Special_Act` 0-3)
+
+#### 5.2 Ring requirement enforcement ⬜
+
+- Load requirements from `RING_REQ_TEAM_OFFSET` (0x007756) or `RING_REQ_SOLO_OFFSET` (0x007772)
+- 28 bytes per table (7 stages × 4 checkpoints)
+- Check `ringsCollected >= requirement` at each checkpoint
+
+#### 5.3 Checkpoint message objects ⬜
+
+- "RINGS TO GO" counter display (see "Checkpoint gate (Obj5A) full behavior")
+- Rainbow arc animation (10 frames: `0, 1, 1, 1, 2, 4, 6, 8, 9, $FF`)
+- Message flyout animation
+- Flash timing: 7/8 duty cycle (`(Vint_runcount & 7) < 6`)
+
+**ROM data:**
+- Messages art: `MESSAGES_ART_OFFSET` (0x0DEAF4, 953 bytes Nemesis)
+
+#### 5.4 Stage result determination ⬜
+
+- Success: checkpoint 3 cleared with enough rings
+- Failure: not enough rings at checkpoint
+- Set `ResultState.COMPLETED` or `ResultState.FAILED` in manager
+
+#### 5.5 Emerald collection ⬜
+
+- `$FD` marker spawns emerald object
+- Emerald art: `EMERALD_ART_OFFSET` (0x0DE8AC, 583 bytes Nemesis)
+- Collision awards emerald, sets `emeraldCollected = true`
+
+#### 5.6 Results screen ⬜
+
+- H32 → H40 mode transition
+- Ring bonus tallying
+- Emerald display if collected
+- Return to main game flow
+
+---
+
+### Phase 6: Polish (optional) ⬜
+
+#### 6.1 Shadow rendering ⬜
+
+- Horizontal, diagonal, vertical shadows based on player angle
+- Follows player during jump arc
+- Shadow type selection:
+  - Horizontal: player near bottom of track
+  - Diagonal: player at 45° angles
+  - Vertical: player near sides of track
+
+#### 6.2 Skydome parallax ⬜
+
+- Per-scanline H-scroll using `off_6DEE` table
+- Row selection based on track animation type and frame
+- Column selection based on `SSTrack_drawing_index` (0-4)
+
+#### 6.3 2P mode support ⬜
+
+- Split screen rendering
+- Independent player tracking
+- "Most rings wins" logic at checkpoints
+
+---
+
+## Data loaders status
+
+| Loader | Format | Status | Notes |
+|--------|--------|:------:|-------|
+| Kosinski decompressor | `.kos` | ✅ Complete | `KosinskiReader` |
+| Nemesis decompressor | `.nem` | ✅ Complete | Used for art |
+| Enigma decompressor | `.eni` | ✅ Complete | `EnigmaReader` |
+| Track BIN frames | 3-segment bitstream | ✅ Complete | `Sonic2TrackFrameDecoder` |
+| Object perspective table | Kosinski + 6-byte entries | ✅ Loaded | ⚠️ Not used in gameplay |
+| Level layout | Nemesis + segment bytes | ✅ Complete | `Sonic2TrackAnimator` |
+| Object location lists | Kosinski | ✅ Loaded | ⚠️ Not parsed for gameplay |
+| Ring requirement tables | Raw bytes | ✅ Loaded | ⚠️ Not enforced |
+| Skydome scroll table | Row/column indexed | ✅ Loaded | ⚠️ Not applied |
+| Base duration table | Speed factor indexed | ✅ Complete | Used in `TrackAnimator` |
 
 ---
 
