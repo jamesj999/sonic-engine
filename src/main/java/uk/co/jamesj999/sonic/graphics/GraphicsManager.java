@@ -35,6 +35,12 @@ public class GraphicsManager {
 	private boolean batchingEnabled = true;
 	private BatchedPatternRenderer batchedRenderer;
 
+	/**
+	 * Headless mode flag. When true, GL operations are skipped.
+	 * This enables testing game logic without requiring an OpenGL context.
+	 */
+	private boolean headlessMode = false;
+
 	public void registerCommand(GLCommandable command) {
 		commands.add(command);
 	}
@@ -43,10 +49,36 @@ public class GraphicsManager {
 	 * Initialize the GraphicsManager with shader loading.
 	 */
 	public void init(GL2 gl, String pixelShaderPath) throws IOException {
+		if (headlessMode) {
+			return;
+		}
 		this.graphics = gl;
 		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load shaders
 		this.shaderProgram.cacheUniformLocations(gl); // Cache uniform locations for fast access
 		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
+	}
+
+	/**
+	 * Initialize the GraphicsManager in headless mode (no GL context).
+	 * Use this for testing game logic without rendering.
+	 */
+	public void initHeadless() {
+		this.headlessMode = true;
+		this.graphics = null;
+	}
+
+	/**
+	 * Check if running in headless mode.
+	 */
+	public boolean isHeadlessMode() {
+		return headlessMode;
+	}
+
+	/**
+	 * Set headless mode. Should be called before init().
+	 */
+	public void setHeadlessMode(boolean headless) {
+		this.headlessMode = headless;
 	}
 
 	/**
@@ -60,7 +92,8 @@ public class GraphicsManager {
 	 * Flush all registered commands.
 	 */
 	public void flush() {
-		if (commands.isEmpty() || graphics == null) {
+		if (headlessMode || commands.isEmpty() || graphics == null) {
+			commands.clear();
 			return;
 		}
 
@@ -86,6 +119,11 @@ public class GraphicsManager {
 	 * Cache a pattern texture (contains color indices) in the GPU.
 	 */
 	public void cachePatternTexture(Pattern pattern, int patternId) {
+		if (headlessMode) {
+			// In headless mode, just record that the pattern was cached
+			patternTextureMap.put("pattern_" + patternId, -1);
+			return;
+		}
 		int textureId = glGenTexture();
 
 		// Create a buffer to store the color indices (8x8 grid of 1-byte indices)
@@ -115,7 +153,11 @@ public class GraphicsManager {
 	}
 
 	public void updatePatternTexture(Pattern pattern, int patternId) {
-		if (graphics == null) {
+		if (headlessMode || graphics == null) {
+			// In headless mode, just ensure pattern is tracked
+			if (headlessMode && !patternTextureMap.containsKey("pattern_" + patternId)) {
+				patternTextureMap.put("pattern_" + patternId, -1);
+			}
 			return;
 		}
 		Integer textureId = patternTextureMap.get("pattern_" + patternId);
@@ -138,6 +180,11 @@ public class GraphicsManager {
 	}
 
 	public void cachePaletteTexture(Palette palette, int paletteId) {
+		if (headlessMode) {
+			// In headless mode, just record that the palette was cached
+			paletteTextureMap.put("palette_" + paletteId, -1);
+			return;
+		}
 		if (combinedPaletteTextureId == null) {
 			combinedPaletteTextureId = glGenTexture();
 			ByteBuffer emptyBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4 * 4);
@@ -239,6 +286,9 @@ public class GraphicsManager {
 	 * Begin a new pattern batch. Call before rendering patterns for a frame/layer.
 	 */
 	public void beginPatternBatch() {
+		if (headlessMode) {
+			return;
+		}
 		if (batchedRenderer == null) {
 			batchedRenderer = BatchedPatternRenderer.getInstance();
 		}
@@ -250,6 +300,9 @@ public class GraphicsManager {
 	 * submitted. This queues the batch command for execution in the proper order.
 	 */
 	public void flushPatternBatch() {
+		if (headlessMode) {
+			return;
+		}
 		if (batchedRenderer != null) {
 			// Always call endBatch to reset batchActive state, even if batch is empty
 			GLCommandable batchCommand = batchedRenderer.endBatch();
@@ -288,6 +341,13 @@ public class GraphicsManager {
 	 * Cleanup method to delete textures and release resources.
 	 */
 	public void cleanup() {
+		if (headlessMode || graphics == null) {
+			// In headless mode, just clear the tracking maps
+			patternTextureMap.clear();
+			paletteTextureMap.clear();
+			combinedPaletteTextureId = null;
+			return;
+		}
 		// Delete pattern textures
 		for (int textureId : patternTextureMap.values()) {
 			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
@@ -322,6 +382,16 @@ public class GraphicsManager {
 			graphicsManager = new GraphicsManager();
 		}
 		return graphicsManager;
+	}
+
+	/**
+	 * Reset the singleton instance. Used for testing.
+	 */
+	public static synchronized void resetInstance() {
+		if (graphicsManager != null) {
+			graphicsManager.cleanup();
+			graphicsManager = null;
+		}
 	}
 
 	public ShaderProgram getShaderProgram() {

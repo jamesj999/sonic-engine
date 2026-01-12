@@ -8,25 +8,17 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
-import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
-import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 import uk.co.jamesj999.sonic.sprites.playable.Tails;
-import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.game.GameMode;
-import uk.co.jamesj999.sonic.game.GameStateManager;
-import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
-import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
-import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 
 import com.jogamp.opengl.GL2;
@@ -59,14 +51,13 @@ public class Engine extends GLCanvas implements GLEventListener {
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
 	private final SpriteRenderManager spriteRenderManager = SpriteRenderManager.getInstance();
-	private final SpriteCollisionManager spriteCollisionManager = SpriteCollisionManager.getInstance();
 	private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
 
 	private final Camera camera = Camera.getInstance();
 	private final DebugRenderer debugRenderer = DebugRenderer.getInstance();
-    private final TimerManager timerManager = TimerManager.getInstance();
 
-	private InputHandler inputHandler;
+	private final GameLoop gameLoop = new GameLoop();
+
 	public static DebugState debugState = DebugState.NONE;
 	public static DebugOption debugOption = DebugOption.A;
 
@@ -87,12 +78,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final LevelManager levelManager = LevelManager.getInstance();
 	private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
 
-	private GameMode currentGameMode = GameMode.LEVEL;
-
-	// Saved camera position for returning from special stage
-	private short savedCameraX = 0;
-	private short savedCameraY = 0;
-
 	private GLU glu;
 
 	// TODO Add Log4J Support, or some other logging that allows proper
@@ -100,10 +85,17 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public Engine() {
 		this.addGLEventListener(this);
+
+		// Set up game mode change listener to update projection width
+		gameLoop.setGameModeChangeListener((oldMode, newMode) -> {
+			// Keep projection at 320 for both modes
+			// Special stage renderer will center 256px content within 320px viewport
+			projectionWidth = realWidth;
+		});
 	}
 
 	public void setInputHandler(InputHandler inputHandler) {
-		this.inputHandler = inputHandler;
+		gameLoop.setInputHandler(inputHandler);
 	}
 
 	public void init(GLAutoDrawable drawable) {
@@ -168,196 +160,32 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glLoadIdentity(); // reset
 	}
 
+        /**
+         * Updates the game state by one frame.
+         * Delegates to the GameLoop for headless-compatible logic.
+         */
         public void update() {
-                AudioManager.getInstance().update();
-                timerManager.update();
-                DebugOverlayManager.getInstance().updateInput(inputHandler);
-                DebugObjectArtViewer.getInstance().updateInput(inputHandler);
-
-                // Check for Special Stage toggle (HOME by default)
-                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_KEY))) {
-                        handleSpecialStageDebugKey();
-                }
-
-                if (currentGameMode == GameMode.SPECIAL_STAGE) {
-                        updateSpecialStageInput();
-                        specialStageManager.update();
-
-                        // Check for special stage completion or failure
-                        if (specialStageManager.isFinished()) {
-                                var result = specialStageManager.getResultState();
-                                boolean completed = (result == Sonic2SpecialStageManager.ResultState.COMPLETED);
-                                boolean gotEmerald = completed && specialStageManager.hasEmeraldCollected();
-                                exitSpecialStage(completed, gotEmerald);
-                        }
-                } else {
-                        boolean freezeForArtViewer = DebugOverlayManager.getInstance()
-                                        .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
-                        if (!freezeForArtViewer) {
-                                spriteCollisionManager.update(inputHandler);
-                                camera.updatePosition();
-                                levelManager.update();
-
-                                // Check if a checkpoint star requested a special stage
-                                if (levelManager.consumeSpecialStageRequest()) {
-                                        enterSpecialStage();
-                                }
-                        }
-
-                        if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
-                                try {
-                                        levelManager.nextAct();
-                                } catch (IOException e) {
-                                        throw new RuntimeException(e);
-                                }
-                        }
-
-                        if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ZONE))) {
-                                try {
-                                        levelManager.nextZone();
-                                } catch (IOException e) {
-                                        throw new RuntimeException(e);
-                                }
-                        }
-                }
-
-                inputHandler.update();
+                gameLoop.step();
         }
 
         /**
-         * Handles the special stage debug key (HOME by default).
-         * When in level mode, enters the next special stage.
-         * When in special stage mode, exits back to level (as failure).
+         * Gets the current game mode from the game loop.
          */
-        private void handleSpecialStageDebugKey() {
-                if (currentGameMode == GameMode.LEVEL) {
-                        enterSpecialStage();
-                } else if (currentGameMode == GameMode.SPECIAL_STAGE) {
-                        exitSpecialStage(false, false);
-                }
+        public GameMode getCurrentGameMode() {
+                return gameLoop.getCurrentGameMode();
         }
 
         /**
-         * Enters the special stage from level mode.
-         * Uses GameStateManager to track which stage to enter (cycles 0-6).
+         * Gets the game loop instance for testing purposes.
          */
-        private void enterSpecialStage() {
-                if (currentGameMode != GameMode.LEVEL) {
-                        return;
-                }
-
-                GameStateManager gsm = GameStateManager.getInstance();
-                int stageIndex = gsm.consumeCurrentSpecialStageIndexAndAdvance();
-
-                try {
-                        // Save camera position for when we return
-                        savedCameraX = camera.getX();
-                        savedCameraY = camera.getY();
-
-                        specialStageManager.reset();
-                        specialStageManager.initialize(stageIndex);
-                        currentGameMode = GameMode.SPECIAL_STAGE;
-
-                        // Keep projection at 320 for proper letterboxing
-                        // The special stage renderer will center the 256px content within the 320px viewport
-                        // This creates black bars on the sides (32px each) for authentic H32 mode look
-                        projectionWidth = realWidth;
-
-                        // Set camera to origin for special stage rendering (uses screen coordinates)
-                        camera.setX((short) 0);
-                        camera.setY((short) 0);
-
-                        AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_SPECIAL_STAGE);
-
-                        java.util.logging.Logger.getLogger(Engine.class.getName())
-                                .info("Entered Special Stage " + (stageIndex + 1) + " (H32 mode: 256x224)");
-                } catch (IOException e) {
-                        throw new RuntimeException("Failed to initialize Special Stage " + (stageIndex + 1), e);
-                }
-        }
-
-        /**
-         * Exits the special stage and returns to the level.
-         * @param completed true if the stage was completed (reached end)
-         * @param emeraldCollected true if an emerald was collected
-         */
-        private void exitSpecialStage(boolean completed, boolean emeraldCollected) {
-                if (currentGameMode != GameMode.SPECIAL_STAGE) {
-                        return;
-                }
-
-                if (emeraldCollected) {
-                        GameStateManager gsm = GameStateManager.getInstance();
-                        int emeraldIndex = specialStageManager.getCurrentStage();
-                        gsm.markEmeraldCollected(emeraldIndex);
-
-                        java.util.logging.Logger.getLogger(Engine.class.getName())
-                                .info("Collected emerald " + (emeraldIndex + 1) + "! Total: " + gsm.getEmeraldCount());
-                }
-
-                specialStageManager.reset();
-                currentGameMode = GameMode.LEVEL;
-
-                // Restore H40 mode projection (320 pixels wide)
-                projectionWidth = realWidth;
-
-                // Restore level palettes (special stage overwrites them)
-                levelManager.reloadLevelPalettes();
-
-                // Restore camera position
-                camera.setX(savedCameraX);
-                camera.setY(savedCameraY);
-
-                String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-                if (mainCode == null) mainCode = "sonic";
-                var sprite = spriteManager.getSprite(mainCode);
-
-                if (sprite instanceof AbstractPlayableSprite playable) {
-                        CheckpointState checkpointState = levelManager.getCheckpointState();
-
-                        if (checkpointState != null && checkpointState.isActive()) {
-                                checkpointState.restoreToPlayer(playable, camera);
-                        }
-
-                        LevelGamestate gamestate = levelManager.getLevelGamestate();
-                        if (gamestate != null) {
-                                gamestate.setRings(0);
-                        }
-                }
-
-                java.util.logging.Logger.getLogger(Engine.class.getName())
-                        .info("Exited Special Stage, returned to level at checkpoint");
-        }
-
-        private void updateSpecialStageInput() {
-                int leftKey = configService.getInt(SonicConfiguration.LEFT);
-                int rightKey = configService.getInt(SonicConfiguration.RIGHT);
-                int jumpKey = configService.getInt(SonicConfiguration.JUMP);
-
-                int heldButtons = 0;
-                int pressedButtons = 0;
-
-                if (inputHandler.isKeyDown(leftKey)) {
-                        heldButtons |= 0x04;
-                }
-                if (inputHandler.isKeyDown(rightKey)) {
-                        heldButtons |= 0x08;
-                }
-
-                if (inputHandler.isKeyPressed(jumpKey)) {
-                        pressedButtons |= 0x70;
-                }
-                if (inputHandler.isKeyDown(jumpKey)) {
-                        heldButtons |= 0x70;
-                }
-
-                specialStageManager.handleInput(heldButtons, pressedButtons);
+        public GameLoop getGameLoop() {
+                return gameLoop;
         }
 
 
 
         public void draw() {
-                if (currentGameMode == GameMode.SPECIAL_STAGE) {
+                if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
                         specialStageManager.draw();
                 } else if (!debugViewEnabled) {
                         levelManager.drawWithSpritePriority(spriteRenderManager);
@@ -457,7 +285,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glMatrixMode(GL_MODELVIEW);
 
 		// Set clear color based on game mode
-		if (currentGameMode == GameMode.SPECIAL_STAGE) {
+		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
 			gl.glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Black for special stage
 		} else {
 			levelManager.setClearColor(gl);
@@ -475,7 +303,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		graphicsManager.flush();
 
 		// Only show debug overlay in level mode, not during special stage
-                if (debugViewEnabled && currentGameMode != GameMode.SPECIAL_STAGE) {
+                if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
                         // Reset OpenGL state for JOGL's TextRenderer
                         gl.glActiveTexture(GL2.GL_TEXTURE0);
                         gl.glUseProgram(0);
