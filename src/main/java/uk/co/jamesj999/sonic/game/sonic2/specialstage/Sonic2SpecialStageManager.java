@@ -96,6 +96,15 @@ public class Sonic2SpecialStageManager {
     private int startPatternBase;
     private int messagesPatternBase;
 
+    // Object system (Phase 4)
+    private Sonic2SpecialStageObjectManager objectManager;
+    private Sonic2PerspectiveData perspectiveData;
+    private int ringPatternBase;
+    private int bombPatternBase;
+
+    // Track state for object spawning
+    private int lastDrawingIndex = -1;
+
     private Sonic2SpecialStageManager() {
     }
 
@@ -135,6 +144,7 @@ public class Sonic2SpecialStageManager {
             setupTrackAnimator();
             setupPlayers();
             setupIntro();
+            setupObjectSystem();
 
             initialized = true;
 
@@ -170,6 +180,45 @@ public class Sonic2SpecialStageManager {
         renderer.setIntro(intro);
 
         LOGGER.fine("Intro sequence initialized with ring requirement: " + ringReq);
+    }
+
+    /**
+     * Sets up the object system (rings, bombs, perspective data).
+     */
+    private void setupObjectSystem() throws IOException {
+        // Load perspective data
+        perspectiveData = new Sonic2PerspectiveData();
+        perspectiveData.load(dataLoader);
+
+        // Initialize object manager
+        objectManager = new Sonic2SpecialStageObjectManager(dataLoader);
+        objectManager.initialize(currentStage);
+
+        // Load ring and bomb art
+        Pattern[] ringPatterns = dataLoader.getRingArtPatterns();
+        ringPatternBase = messagesPatternBase + dataLoader.getMessagesArtPatterns().length;
+        for (int i = 0; i < ringPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(ringPatterns[i], ringPatternBase + i);
+        }
+        LOGGER.fine("Cached " + ringPatterns.length + " ring patterns at base 0x" +
+                   Integer.toHexString(ringPatternBase));
+
+        Pattern[] bombPatterns = dataLoader.getBombArtPatterns();
+        bombPatternBase = ringPatternBase + ringPatterns.length;
+        for (int i = 0; i < bombPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(bombPatterns[i], bombPatternBase + i);
+        }
+        LOGGER.fine("Cached " + bombPatterns.length + " bomb patterns at base 0x" +
+                   Integer.toHexString(bombPatternBase));
+
+        // Pass pattern bases to renderer
+        renderer.setObjectPatternBases(ringPatternBase, bombPatternBase);
+        renderer.setObjectManager(objectManager);
+        renderer.setPerspectiveData(perspectiveData);
+
+        lastDrawingIndex = -1;
+
+        LOGGER.fine("Object system initialized");
     }
 
     private void loadData() throws IOException {
@@ -370,9 +419,104 @@ public class Sonic2SpecialStageManager {
             trackAnimator.resetStageComplete();
         }
 
-        // Only update players when intro allows input
+        // Only update players and objects when intro allows input
         if (intro == null || intro.isInputEnabled()) {
             updatePlayers();
+            updateObjects();
+        }
+    }
+
+    /**
+     * Updates objects (rings, bombs) and handles segment transitions.
+     */
+    private void updateObjects() {
+        if (objectManager == null || trackAnimator == null) {
+            return;
+        }
+
+        // Check for segment transition (drawing index reaches 4)
+        int drawingIndex = trackAnimator.getCurrentFrameInSegment() % 5;
+
+        // Process new segment when drawing_index reaches 4 and segment changed
+        if (drawingIndex == 4 && lastDrawingIndex != 4) {
+            int segmentIndex = trackAnimator.getCurrentSegmentIndex();
+            int segmentType = trackAnimator.getCurrentSegmentType();
+            objectManager.processSegment(segmentIndex, segmentType);
+        }
+        lastDrawingIndex = drawingIndex;
+
+        // Update all active objects
+        int currentFrame = trackAnimator.getCurrentTrackFrameIndex();
+        boolean flipped = trackAnimator.getEffectiveFlipState();
+        objectManager.update(currentFrame, flipped);
+
+        // Update screen positions using perspective data
+        if (perspectiveData != null) {
+            for (Sonic2SpecialStageObject obj : objectManager.getActiveObjects()) {
+                obj.updateScreenPosition(perspectiveData, currentFrame, flipped);
+            }
+        }
+
+        // Check collisions between players and objects
+        checkObjectCollisions();
+    }
+
+    /**
+     * Checks collisions between players and objects (rings/bombs).
+     * Collision only occurs when object animIndex == 8 (closest perspective size).
+     */
+    private void checkObjectCollisions() {
+        if (objectManager == null) {
+            return;
+        }
+
+        for (Sonic2SpecialStageObject obj : objectManager.getActiveObjects()) {
+            // Only test collidable objects (animIndex == 8)
+            if (!obj.isCollidable()) {
+                continue;
+            }
+
+            // Test against each player
+            for (Sonic2SpecialStagePlayer player : players) {
+                if (player == null || player.isInvulnerable()) {
+                    continue;
+                }
+
+                // Check collision using screen positions
+                // Objects and players both have screen X/Y coordinates
+                int objX = obj.getScreenX();
+                int objY = obj.getScreenY();
+                int playerX = player.getXPos();
+                int playerY = player.getYPos();
+
+                // Simple bounding box collision (16x16 object vs ~16x24 player)
+                int dx = Math.abs(objX - playerX);
+                int dy = Math.abs(objY - playerY);
+
+                // Collision threshold: within 12 pixels horizontally and 16 vertically
+                if (dx < 12 && dy < 16) {
+                    handleObjectCollision(obj, player);
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles a collision between a player and an object.
+     */
+    private void handleObjectCollision(Sonic2SpecialStageObject obj, Sonic2SpecialStagePlayer player) {
+        if (obj.isRing()) {
+            Sonic2SpecialStageRing ring = (Sonic2SpecialStageRing) obj;
+            ring.collect();
+            objectManager.collectRing();
+            LOGGER.fine("Collected ring! Total: " + objectManager.getRingsCollected());
+        } else if (obj.isBomb()) {
+            Sonic2SpecialStageBomb bomb = (Sonic2SpecialStageBomb) obj;
+            bomb.explode();
+            player.triggerHit();
+            int ringsLost = objectManager.loseRingsFromBombHit();
+            LOGGER.fine("Hit bomb! Lost " + ringsLost + " rings. Remaining: " +
+                       objectManager.getRingsCollected());
         }
     }
 
@@ -455,11 +599,19 @@ public class Sonic2SpecialStageManager {
         int trackFrameIndex = trackAnimator.getCurrentTrackFrameIndex();
         renderer.renderTrack(trackFrameIndex, decodedTrackFrame);
 
+        // Render objects (rings, bombs) between track and players
+        renderer.renderObjects();
+
         renderer.renderPlayers();
 
         // Render intro UI (banner and messages) on top
         if (intro != null && !intro.isComplete()) {
             renderer.renderIntroUI();
+        }
+
+        // Render ring counter HUD (after intro completes)
+        if (intro == null || intro.isComplete()) {
+            renderer.renderRingCounter(objectManager != null ? objectManager.getRingsCollected() : 0);
         }
     }
 
@@ -541,6 +693,16 @@ public class Sonic2SpecialStageManager {
         hudPatternBase = 0;
         startPatternBase = 0;
         messagesPatternBase = 0;
+
+        // Object system
+        if (objectManager != null) {
+            objectManager.reset();
+        }
+        objectManager = null;
+        perspectiveData = null;
+        ringPatternBase = 0;
+        bombPatternBase = 0;
+        lastDrawingIndex = -1;
 
         resultState = ResultState.RUNNING;
         emeraldCollected = false;
@@ -628,5 +790,26 @@ public class Sonic2SpecialStageManager {
      */
     public int getPlayerPatternBase() {
         return playerPatternBase;
+    }
+
+    /**
+     * Gets the object manager.
+     */
+    public Sonic2SpecialStageObjectManager getObjectManager() {
+        return objectManager;
+    }
+
+    /**
+     * Gets the perspective data.
+     */
+    public Sonic2PerspectiveData getPerspectiveData() {
+        return perspectiveData;
+    }
+
+    /**
+     * Gets the current ring count.
+     */
+    public int getRingsCollected() {
+        return objectManager != null ? objectManager.getRingsCollected() : 0;
     }
 }

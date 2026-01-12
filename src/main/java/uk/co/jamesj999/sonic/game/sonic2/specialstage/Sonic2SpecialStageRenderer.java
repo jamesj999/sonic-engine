@@ -36,6 +36,12 @@ public class Sonic2SpecialStageRenderer {
     private List<Sonic2SpecialStagePlayer> players = new ArrayList<>();
     private Sonic2SpecialStageIntro intro;
 
+    // Object rendering (Phase 4)
+    private int ringPatternBase;
+    private int bombPatternBase;
+    private Sonic2SpecialStageObjectManager objectManager;
+    private Sonic2PerspectiveData perspectiveData;
+
     /**
      * START banner sprite-piece definition (Obj5F frame0 from obj5F_a.asm).
      * spritePiece format: xOffset, yOffset, widthTiles, heightTiles, tileIndexOffset, hFlip, vFlip
@@ -108,6 +114,19 @@ public class Sonic2SpecialStageRenderer {
         this.hudPatternBase = hudBase;
         this.startPatternBase = startBase;
         this.messagesPatternBase = messagesBase;
+    }
+
+    public void setObjectPatternBases(int ringBase, int bombBase) {
+        this.ringPatternBase = ringBase;
+        this.bombPatternBase = bombBase;
+    }
+
+    public void setObjectManager(Sonic2SpecialStageObjectManager objectManager) {
+        this.objectManager = objectManager;
+    }
+
+    public void setPerspectiveData(Sonic2PerspectiveData perspectiveData) {
+        this.perspectiveData = perspectiveData;
     }
 
     /**
@@ -802,5 +821,188 @@ public class Sonic2SpecialStageRenderer {
         // Bottom tile
         desc.setPatternIndex(bottomPatternId & 0x7FF);
         graphicsManager.renderPatternWithId(bottomPatternId, desc, x, y);
+    }
+
+    // ========== Ring Counter HUD (Phase 4.6) ==========
+
+    /**
+     * Renders the ring counter HUD during gameplay.
+     * Shows current ring count in the top-left area.
+     *
+     * @param ringCount Current number of rings collected
+     */
+    public void renderRingCounter(int ringCount) {
+        graphicsManager.beginPatternBatch();
+
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        // Position: top-left corner with some padding
+        // Original SS HUD is at approximately y=16 from top
+        int baseX = SCREEN_CENTER_OFFSET + 16;
+        int baseY = 16;
+
+        // Render "RINGS" label using message letters (optional - can be just digits)
+        // For now, just render the digit count
+
+        // Calculate number of digits to display (always at least 1)
+        int digitCount = 1;
+        if (ringCount >= 100) {
+            digitCount = 3;
+        } else if (ringCount >= 10) {
+            digitCount = 2;
+        }
+
+        // Position digits
+        int digitX = baseX;
+        int digitPalette = 2; // Use palette 2 for HUD digits
+
+        // Hundreds digit
+        if (ringCount >= 100) {
+            int hundreds = (ringCount / 100) % 10;
+            renderHudDigit(digitX, baseY, hundreds, digitPalette);
+            digitX += 8;
+        }
+
+        // Tens digit (show as 0 if >= 10)
+        if (ringCount >= 10) {
+            int tens = (ringCount / 10) % 10;
+            renderHudDigit(digitX, baseY, tens, digitPalette);
+            digitX += 8;
+        }
+
+        // Ones digit
+        int ones = ringCount % 10;
+        renderHudDigit(digitX, baseY, ones, digitPalette);
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    // ========== Object Rendering (Phase 4) ==========
+
+    /**
+     * Renders all special stage objects (rings and bombs).
+     * Objects are sorted by depth (furthest first) for correct z-ordering.
+     */
+    public void renderObjects() {
+        if (objectManager == null) {
+            return;
+        }
+
+        List<Sonic2SpecialStageObject> objects = objectManager.getActiveObjects();
+        if (objects.isEmpty()) {
+            return;
+        }
+
+        // Sort by depth (higher depth = further away = draw first)
+        List<Sonic2SpecialStageObject> sortedObjects = new ArrayList<>(objects);
+        sortedObjects.sort((a, b) -> Integer.compare(b.getDepth(), a.getDepth()));
+
+        graphicsManager.beginPatternBatch();
+
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        for (Sonic2SpecialStageObject obj : sortedObjects) {
+            if (!obj.isOnScreen()) {
+                continue;
+            }
+
+            if (obj.isRing()) {
+                renderRing((Sonic2SpecialStageRing) obj, SCREEN_CENTER_OFFSET);
+            } else if (obj.isBomb()) {
+                renderBomb((Sonic2SpecialStageBomb) obj, SCREEN_CENTER_OFFSET);
+            }
+        }
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders a ring object using proper sprite mappings.
+     * Ring sprites vary in size based on perspective distance.
+     */
+    private void renderRing(Sonic2SpecialStageRing ring, int screenCenterOffset) {
+        int screenX = screenCenterOffset + ring.getScreenX();
+        int screenY = ring.getScreenY();
+
+        // Get the mapping frame for current animation state
+        int mappingFrame = ring.getMappingFrame();
+        Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
+            Sonic2SpecialStageSpriteData.getRingPieces(mappingFrame);
+
+        // Rings use palette line 3 (from make_art_tile(ArtTile_ArtNem_SpecialRings,3,0))
+        int paletteIndex = 3;
+
+        // Render each sprite piece
+        for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
+            int pieceX = screenX + piece.xOffset;
+            int pieceY = screenY + piece.yOffset;
+
+            // Render all tiles in this piece (column-major order)
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    // Column-major index
+                    int tileIndex = tx * piece.heightTiles + ty;
+                    int patternId = ringPatternBase + piece.tileIndex + tileIndex;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(ring.isHighPriority());
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(piece.hFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
+    }
+
+    /**
+     * Renders a bomb object using proper sprite mappings.
+     * Bomb sprites vary in size based on perspective distance.
+     */
+    private void renderBomb(Sonic2SpecialStageBomb bomb, int screenCenterOffset) {
+        int screenX = screenCenterOffset + bomb.getScreenX();
+        int screenY = bomb.getScreenY();
+
+        // Get the mapping frame for current animation state
+        int mappingFrame = bomb.getMappingFrame();
+        Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
+            Sonic2SpecialStageSpriteData.getBombPieces(mappingFrame);
+
+        // Bombs use palette line 1 (from make_art_tile(ArtTile_ArtNem_SpecialBomb,1,0))
+        int paletteIndex = 1;
+
+        // Render each sprite piece
+        for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
+            int pieceX = screenX + piece.xOffset;
+            int pieceY = screenY + piece.yOffset;
+
+            // Render all tiles in this piece (column-major order)
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    // Column-major index
+                    int tileIndex = tx * piece.heightTiles + ty;
+                    int patternId = bombPatternBase + piece.tileIndex + tileIndex;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(bomb.isHighPriority());
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(piece.hFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
     }
 }

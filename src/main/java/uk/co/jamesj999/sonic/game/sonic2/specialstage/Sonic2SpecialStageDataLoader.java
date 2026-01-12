@@ -314,10 +314,13 @@ public class Sonic2SpecialStageDataLoader {
 
     /**
      * Loads ring art patterns (Nemesis compressed).
+     * Note: We read extra bytes as padding because Nemesis bitstream may read
+     * slightly beyond the exact compressed size during decompression.
      */
     public Pattern[] getRingArtPatterns() throws IOException {
         if (ringArtPatterns == null) {
-            byte[] compressed = rom.readBytes(RING_ART_OFFSET, RING_ART_SIZE);
+            // Add small buffer (16 bytes) for decompression edge cases
+            byte[] compressed = rom.readBytes(RING_ART_OFFSET, RING_ART_SIZE + 16);
             ringArtPatterns = decompressNemesisToPatterns(compressed);
             LOGGER.fine("Loaded ring art: " + ringArtPatterns.length + " patterns");
         }
@@ -326,10 +329,13 @@ public class Sonic2SpecialStageDataLoader {
 
     /**
      * Loads bomb art patterns (Nemesis compressed).
+     * Note: We read extra bytes as padding because Nemesis bitstream may read
+     * slightly beyond the exact compressed size during decompression.
      */
     public Pattern[] getBombArtPatterns() throws IOException {
         if (bombArtPatterns == null) {
-            byte[] compressed = rom.readBytes(BOMB_ART_OFFSET, BOMB_ART_SIZE);
+            // Add small buffer (16 bytes) for decompression edge cases
+            byte[] compressed = rom.readBytes(BOMB_ART_OFFSET, BOMB_ART_SIZE + 16);
             bombArtPatterns = decompressNemesisToPatterns(compressed);
             LOGGER.fine("Loaded bomb art: " + bombArtPatterns.length + " patterns");
         }
