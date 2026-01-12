@@ -69,6 +69,8 @@ public class Sonic2TrackAnimator {
         currentFrameInSegment = 0;
         frameDelayCounter = 0;
         stageComplete = false;
+        // Reset speed factor to initial value (0xC from original game's SS_New_Speed_Factor)
+        speedFactor = 12;
         resetOrientation();
 
         if (layoutLength > 0) {

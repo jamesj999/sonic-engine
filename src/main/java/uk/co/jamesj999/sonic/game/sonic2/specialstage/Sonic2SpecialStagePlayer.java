@@ -595,8 +595,12 @@ public class Sonic2SpecialStagePlayer {
         statusYFlip = animTable[d0][2] != 0;
 
         // Reset flip timer at specific angle indices (center positions)
+        // In the original, writing word 0x400 to ss_init_flip_timer (offset $32)
+        // also writes to ss_flip_timer (offset $33) since it's a 16-bit write.
+        // High byte ($32) gets 0x04, low byte ($33) gets 0x00.
         if (d0 == 1 || d0 == 5) {
             ssInitFlipTimer = 0x400;
+            ssFlipTimer = ssInitFlipTimer & 0xFF;  // = 0 (triggers flip on next anim advance)
         }
     }
 
@@ -744,8 +748,8 @@ public class Sonic2SpecialStagePlayer {
     public int getMappingFrame() { return mappingFrame; }
     public int getAnim() { return anim; }
     public int getAnimFrame() { return animFrame; }
-    public boolean isRenderXFlip() { return renderXFlip || statusXFlip; }
-    public boolean isRenderYFlip() { return renderYFlip || statusYFlip; }
+    public boolean isRenderXFlip() { return renderXFlip; }
+    public boolean isRenderYFlip() { return renderYFlip; }
     public boolean isJumping() { return statusJumping; }
     public boolean isHurt() { return routineSecondary == 2; }
     public boolean isInvulnerable() { return ssDplcTimer > 0; }
