@@ -1,6 +1,6 @@
 package uk.co.jamesj999.sonic.level.scroll;
 
-import static uk.co.jamesj999.sonic.level.scroll.SoftwareScrollManager.*;
+import static uk.co.jamesj999.sonic.level.scroll.M68KMath.*;
 
 /**
  * ROM-accurate implementation of SwScrl_EHZ (Emerald Hill Zone scroll routine).
@@ -9,214 +9,238 @@ import static uk.co.jamesj999.sonic.level.scroll.SoftwareScrollManager.*;
  * EHZ uses banded per-scanline parallax with:
  * - Sky region (static)
  * - Cloud region (slow parallax)
- * - Water surface (ripple effect using SwScrl_RippleData)
+ * - Water surface (now treated as cloud extension, no shimmer)
  * - Hill bands (graduated parallax speeds)
- * - Bottom gradient (fixed-point accumulation)
+ * - Bottom gradient (interpolated parallax for ground depth)
  *
- * Band structure (line counts from disassembly):
+ * Band structure (line counts):
  * 22 lines: BG = 0 (sky)
  * 58 lines: BG = d2 >> 6 (far clouds)
- * 21 lines: BG = (d2 >> 6) + ripple (water surface)
+ * 21 lines: BG = d2 >> 6 (water/clouds extension)
  * 11 lines: BG = 0 (gap)
  * 16 lines: BG = d2 >> 4 (near hills)
  * 16 lines: BG = (d2 >> 4) * 1.5 (nearer hills)
- * 15 lines: gradient start
- * 18 lines: gradient middle
- * 45 lines: gradient end
+ * 15 lines: gradient 0.25 -> 0.50 speed
+ * 18 lines: gradient 0.50 -> 0.75 speed
+ * 45 lines: gradient 0.75 -> 1.00 speed
  * Total: 222 lines (last 2 lines intentionally unwritten - original bug)
  */
-public class SwScrlEhz {
-
-    private static final int VISIBLE_LINES = 224;
-
-    // TempArray offsets used by EHZ
-    private static final int TEMP_RIPPLE_INDEX = 0; // TempArray_LayerDef+0: ripple frame index
+public class SwScrlEhz implements ZoneScrollHandler {
 
     private final ParallaxTables tables;
-    private final BackgroundCamera bgCamera;
 
-    public SwScrlEhz(ParallaxTables tables, BackgroundCamera bgCamera) {
+    // Scroll tracking for LevelManager bounds
+    private int minScrollOffset;
+    private int maxScrollOffset;
+    private short vscrollFactorBG;
+
+    public SwScrlEhz(ParallaxTables tables) {
         this.tables = tables;
-        this.bgCamera = bgCamera;
     }
 
-    /**
-     * Update scroll buffer for EHZ.
-     * Matches SwScrl_EHZ instruction-by-instruction.
-     */
-    public void update(int[] horizScrollBuf, int cameraX, int cameraY, int frameCounter) {
+    @Override
+    public void update(int[] horizScrollBuf,
+            int cameraX,
+            int cameraY,
+            int frameCounter,
+            int actId) {
+        minScrollOffset = Integer.MAX_VALUE;
+        maxScrollOffset = Integer.MIN_VALUE;
+
         // d2 = -Camera_X_pos (FG scroll, constant for all lines)
         short d2 = negWord(cameraX);
 
         // FG scroll word is constant for all lines
         short fgScroll = d2;
 
+        // Vscroll_Factor_BG for EHZ is 0 (BG doesn't scroll vertically independently)
+        vscrollFactorBG = 0;
+
         int lineIndex = 0;
 
         // ==================== Band 1: Sky (22 lines) ====================
         // BG = 0, FG = d2
-        // Original: move.w #$58,d1 (88 bytes = 22 longwords = 22 lines)
-        // moveq #0,d0
-        // ... loop writing (fg,bg) pairs
         {
             short bgScroll = 0;
             int packed = packScrollWords(fgScroll, bgScroll);
-            for (int i = 0; i < 22 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
+            trackOffset(fgScroll, bgScroll); // Track once per constant region
+            int limit = Math.min(VISIBLE_LINES, lineIndex + 22);
+            for (; lineIndex < limit; lineIndex++) {
                 horizScrollBuf[lineIndex] = packed;
             }
         }
 
         // ==================== Band 2: Far Clouds (58 lines) ====================
         // BG = d2 >> 6, FG = d2
-        // Original: move.w #$E8,d1 (232 bytes = 58 lines)
-        // move.w d2,d0
-        // asr.w #6,d0
         {
             short bgScroll = asrWord(d2, 6);
             int packed = packScrollWords(fgScroll, bgScroll);
-            for (int i = 0; i < 58 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
+            trackOffset(fgScroll, bgScroll);
+            int limit = Math.min(VISIBLE_LINES, lineIndex + 58);
+            for (; lineIndex < limit; lineIndex++) {
                 horizScrollBuf[lineIndex] = packed;
             }
         }
 
-        // ==================== Band 3: Water Surface with Ripple (21 lines)
-        // ====================
-        // BG = (d2 >> 6) + ripple[animIndex], FG = d2
-        // Original: move.w #$15,d1 (21 iterations, byte writes in pairs)
-        // move.w (TempArray_LayerDef).w,d3 (ripple index)
-        // ... complex ripple logic
+        // ==================== Band 3: Water Surface (21 lines) ====================
+        // Treated as extension of Band 2 (Far Clouds) - No Ripple
         {
-            short baseBg = asrWord(d2, 6);
-
-            // Ripple animation: index advances every 8 frames
-            // Original uses TempArray_LayerDef to store current ripple offset
-            int rippleAnimIndex = (frameCounter >> 3) % tables.getRippleDataLength();
-
-            for (int i = 0; i < 21 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
-                // Get ripple offset from ROM table (signed byte, sign-extended)
-                int rippleIndex = (rippleAnimIndex + i) % tables.getRippleDataLength();
-                int rippleOffset = tables.getRippleSigned(rippleIndex);
-
-                short bgScroll = (short) (baseBg + rippleOffset);
-                horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
+            short bgScroll = asrWord(d2, 6);
+            int packed = packScrollWords(fgScroll, bgScroll);
+            trackOffset(fgScroll, bgScroll);
+            int limit = Math.min(VISIBLE_LINES, lineIndex + 21);
+            for (; lineIndex < limit; lineIndex++) {
+                horizScrollBuf[lineIndex] = packed;
             }
         }
 
         // ==================== Band 4: Gap (11 lines) ====================
         // BG = 0, FG = d2
-        // Original: move.w #$2C,d1 (44 bytes = 11 lines)
         {
             short bgScroll = 0;
             int packed = packScrollWords(fgScroll, bgScroll);
-            for (int i = 0; i < 11 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
+            trackOffset(fgScroll, bgScroll);
+            int limit = Math.min(VISIBLE_LINES, lineIndex + 11);
+            for (; lineIndex < limit; lineIndex++) {
                 horizScrollBuf[lineIndex] = packed;
             }
         }
 
         // ==================== Band 5: Near Hills (16 lines) ====================
         // BG = d2 >> 4, FG = d2
-        // Original: move.w #$40,d1 (64 bytes = 16 lines)
-        // move.w d2,d0
-        // asr.w #4,d0
         {
             short bgScroll = asrWord(d2, 4);
             int packed = packScrollWords(fgScroll, bgScroll);
-            for (int i = 0; i < 16 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
+            trackOffset(fgScroll, bgScroll);
+            int limit = Math.min(VISIBLE_LINES, lineIndex + 16);
+            for (; lineIndex < limit; lineIndex++) {
                 horizScrollBuf[lineIndex] = packed;
             }
         }
 
         // ==================== Band 6: Nearer Hills (16 lines) ====================
-        // BG = (d2 >> 4) + ((d2 >> 4) >> 1) = 1.5 * (d2 >> 4), FG = d2
-        // Original: move.w #$40,d1
-        // move.w d2,d0
-        // asr.w #4,d0
-        // move.w d0,d3
-        // asr.w #1,d3
-        // add.w d3,d0
+        // BG = (d2 >> 4) * 1.5, FG = d2
         {
             short d0 = asrWord(d2, 4);
             short d3 = asrWord(d0, 1);
             short bgScroll = (short) (d0 + d3);
             int packed = packScrollWords(fgScroll, bgScroll);
-            for (int i = 0; i < 16 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
+            trackOffset(fgScroll, bgScroll);
+            int limit = Math.min(VISIBLE_LINES, lineIndex + 16);
+            for (; lineIndex < limit; lineIndex++) {
                 horizScrollBuf[lineIndex] = packed;
             }
         }
 
         // ==================== Bottom Gradient Region ====================
-        // Uses fixed-point accumulation with divs.w math
-        // Reference: The complex section starting around loc_C5F4 in s2.asm
-        //
-        // The original calculates:
-        // d5.w = (d2 >> 3) - ((d2 >> 4) + ((d2 >> 4) >> 1)) ; delta to accumulate
-        // Then divides by $30 (48) to get per-line increment
-        // And applies fractional accumulation across the remaining lines
+        // Reverting to previous ParallaxManager logic which interpolated from 0.25 to
+        // 1.0
+        // FG speed. Using 'd2' (FG scroll) as base.
 
-        // Calculate base scroll values
-        short baseHere = (short) (asrWord(d2, 4) + asrWord(asrWord(d2, 4), 1)); // From band 6
-        short targetScroll = asrWord(d2, 3); // Final target: d2 >> 3
-
-        // delta = target - base (amount to distribute over gradient lines)
-        int delta = (targetScroll - baseHere) & 0xFFFF;
-
-        // The gradient spans: 15 + 18 + 45 = 78 lines
-        // Original uses divs.w #$30 (48) to compute increment
-        // Note: In original, it's actually 3 sub-bands with different logic
-
-        // ========== Sub-band 6a: 15 lines (starts gradient) ==========
-        // Original: move.w #$3C,d1 (60 bytes = 15 lines)
+        // ========== Sub-band 6a (Segment 7): 15 lines (0.25 -> 0.50) ==========
         {
-            short bgBase = baseHere;
-            // Slight increment per line (approximation from original fixed-point)
-            int increment = (delta * 256) / 78; // Fixed-point 8.8
-            int accumulator = 0;
+            // Start: 0.25 * d2 = d2 >> 2. In fixed point (<<16): (d2<<16) >> 2 = d2 << 14
+            int startFixed = (d2 << 14);
+            int endFixed = (d2 << 15);
+            int count = 15;
+            int increment = (endFixed - startFixed) / count;
 
-            for (int i = 0; i < 15 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
-                short bgScroll = (short) (bgBase + (accumulator >> 8));
+            int bgFixed = startFixed;
+            int limit = Math.min(VISIBLE_LINES, lineIndex + count);
+
+            for (; lineIndex < limit; lineIndex++) {
+                short bgScroll = (short) (bgFixed >> 16);
                 horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
-                accumulator += increment;
+
+                // Check offset for every line in gradient (value changes)
+                int offset = bgScroll - fgScroll;
+                if (offset < minScrollOffset)
+                    minScrollOffset = offset;
+                if (offset > maxScrollOffset)
+                    maxScrollOffset = offset;
+
+                bgFixed += increment;
             }
         }
 
-        // ========== Sub-band 6b: 18 lines (middle gradient) ==========
-        // Original: move.w #$48,d1 (72 bytes = 18 lines)
+        // ========== Sub-band 6b (Segment 8): 18 lines (0.50 -> 0.75) ==========
         {
-            // Continue from where we left off
-            int linesProcessed = 15;
-            int increment = (delta * 256) / 78;
-            int accumulator = increment * linesProcessed;
-            short bgBase = baseHere;
+            // Start: 0.50 * d2 = d2 >> 1
+            // End: 0.75 * d2 = 0.50 + 0.25 = (d2 >> 1) + (d2 >> 2)
+            int startFixed = (d2 << 15);
+            int endFixed = startFixed + (d2 << 14);
+            int count = 18;
+            int increment = (endFixed - startFixed) / count;
 
-            for (int i = 0; i < 18 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
-                short bgScroll = (short) (bgBase + (accumulator >> 8));
+            int bgFixed = startFixed;
+            int limit = Math.min(VISIBLE_LINES, lineIndex + count);
+
+            for (; lineIndex < limit; lineIndex++) {
+                short bgScroll = (short) (bgFixed >> 16);
                 horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
-                accumulator += increment;
+
+                int offset = bgScroll - fgScroll;
+                if (offset < minScrollOffset)
+                    minScrollOffset = offset;
+                if (offset > maxScrollOffset)
+                    maxScrollOffset = offset;
+
+                bgFixed += increment;
             }
         }
 
-        // ========== Sub-band 6c: 45 lines (bottom gradient) ==========
-        // Original: move.w #$B4,d1 (180 bytes = 45 lines)
+        // ========== Sub-band 6c (Segment 9): 45 lines (0.75 -> 1.00) ==========
         {
-            int linesProcessed = 15 + 18;
-            int increment = (delta * 256) / 78;
-            int accumulator = increment * linesProcessed;
-            short bgBase = baseHere;
+            // Start: 0.75 * d2
+            // End: 1.00 * d2
+            int endFixed = (d2 << 16);
+            int startFixed = (endFixed >> 1) + (endFixed >> 2);
+            int count = 45;
+            int increment = (endFixed - startFixed) / count;
 
-            for (int i = 0; i < 45 && lineIndex < VISIBLE_LINES; i++, lineIndex++) {
-                short bgScroll = (short) (bgBase + (accumulator >> 8));
+            int bgFixed = startFixed;
+            int limit = Math.min(VISIBLE_LINES, lineIndex + count);
+
+            for (; lineIndex < limit; lineIndex++) {
+                short bgScroll = (short) (bgFixed >> 16);
                 horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
-                accumulator += increment;
+
+                int offset = bgScroll - fgScroll;
+                if (offset < minScrollOffset)
+                    minScrollOffset = offset;
+                if (offset > maxScrollOffset)
+                    maxScrollOffset = offset;
+
+                bgFixed += increment;
             }
         }
 
         // ==================== Bug Reproduction ====================
         // Original EHZ only writes 222 lines, leaving last 2 uninitialized.
-        // Total: 22 + 58 + 21 + 11 + 16 + 16 + 15 + 18 + 45 = 222
-        // We've written up to lineIndex (should be 222), remaining 2 lines
-        // are intentionally not written to match original behavior.
+    }
 
-        // Note: If lineIndex < 224, the remaining lines retain previous values
-        // (matching hardware behavior where unwritten lines keep old data)
+    private void trackOffset(short fgScroll, short bgScroll) {
+        int offset = bgScroll - fgScroll;
+        if (offset < minScrollOffset) {
+            minScrollOffset = offset;
+        }
+        if (offset > maxScrollOffset) {
+            maxScrollOffset = offset;
+        }
+    }
+
+    @Override
+    public short getVscrollFactorBG() {
+        return vscrollFactorBG;
+    }
+
+    @Override
+    public int getMinScrollOffset() {
+        return minScrollOffset;
+    }
+
+    @Override
+    public int getMaxScrollOffset() {
+        return maxScrollOffset;
     }
 }

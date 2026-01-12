@@ -41,9 +41,9 @@ import static com.jogamp.opengl.fixedfunc.GLMatrixFunc.GL_PROJECTION;
 
 /**
  * Controls the game.
- * 
+ *
  * @author james
- * 
+ *
  */
 @SuppressWarnings("serial")
 public class Engine extends GLCanvas implements GLEventListener {
@@ -72,7 +72,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	// H32 mode (special stages): 256 pixels wide
 	private double projectionWidth = realWidth;
 
-    private boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
+	private boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
 	private boolean debugModeEnabled = configService.getBoolean(SonicConfiguration.DEBUG_MODE);
 
 	// TODO move this into a manager
@@ -104,12 +104,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 		glu = new GLU(); // get GL Utilities
 		gl.glShadeModel(GL_SMOOTH); // blends colors nicely, and smooths out
 									// lighting
-        try {
-            graphicsManager.init(gl, RESOURCES_SHADERS_PIXEL_SHADER_GLSL);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        graphicsManager.setGraphics(gl);
+		try {
+			graphicsManager.init(gl, RESOURCES_SHADERS_PIXEL_SHADER_GLSL);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		graphicsManager.setGraphics(gl);
 
 		if (configService.getBoolean(SonicConfiguration.AUDIO_ENABLED)) {
 			AudioManager.getInstance().setBackend(new JOALAudioBackend());
@@ -129,7 +129,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		camera.setFocusedSprite(mainSprite);
 		camera.updatePosition(true);
 
-		//levelManager.setLevel(new TestOldLevel());
+		// levelManager.setLevel(new TestOldLevel());
 
 		try {
 			levelManager.loadZoneAndAct(0, 0);
@@ -137,6 +137,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 			throw new RuntimeException(e);
 		}
 	}
+
+	// Viewport parameters for aspect-ratio-correct rendering
+	private int viewportX = 0;
+	private int viewportY = 0;
+	private int viewportWidth = 0;
+	private int viewportHeight = 0;
 
 	/**
 	 * Call-back handler for window re-size event. Also called when the drawable
@@ -147,8 +153,26 @@ public class Engine extends GLCanvas implements GLEventListener {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL 2 graphics context
 		graphicsManager.setGraphics(gl);
 
-		// Set the view port (display area) to cover the entire window
-		gl.glViewport(0, 0, width, height);
+		// Calculate aspect-ratio-correct viewport
+		double targetAspect = realWidth / realHeight;
+		double windowAspect = (double) width / height;
+
+		if (windowAspect > targetAspect) {
+			// Window is wider than target - pillarbox (black bars on sides)
+			viewportHeight = height;
+			viewportWidth = (int) (height * targetAspect);
+			viewportX = (width - viewportWidth) / 2;
+			viewportY = 0;
+		} else {
+			// Window is taller than target - letterbox (black bars on top/bottom)
+			viewportWidth = width;
+			viewportHeight = (int) (width / targetAspect);
+			viewportX = 0;
+			viewportY = (height - viewportHeight) / 2;
+		}
+
+		// Set the viewport to the aspect-ratio-correct area
+		gl.glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
 
 		// Setup perspective projection using current projection width
 		// (H40=320 for levels, H32=256 for special stages)
@@ -161,59 +185,57 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glLoadIdentity(); // reset
 	}
 
-        /**
-         * Updates the game state by one frame.
-         * Delegates to the GameLoop for headless-compatible logic.
-         */
-        public void update() {
-                gameLoop.step();
-        }
+	/**
+	 * Updates the game state by one frame.
+	 * Delegates to the GameLoop for headless-compatible logic.
+	 */
+	public void update() {
+		gameLoop.step();
+	}
 
-        /**
-         * Gets the current game mode from the game loop.
-         */
-        public GameMode getCurrentGameMode() {
-                return gameLoop.getCurrentGameMode();
-        }
+	/**
+	 * Gets the current game mode from the game loop.
+	 */
+	public GameMode getCurrentGameMode() {
+		return gameLoop.getCurrentGameMode();
+	}
 
-        /**
-         * Gets the game loop instance for testing purposes.
-         */
-        public GameLoop getGameLoop() {
-                return gameLoop;
-        }
+	/**
+	 * Gets the game loop instance for testing purposes.
+	 */
+	public GameLoop getGameLoop() {
+		return gameLoop;
+	}
 
-
-
-        public void draw() {
-                if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
-                        // Check if sprite debug mode is active
-                        if (specialStageManager.isSpriteDebugMode()) {
-                                DebugSpecialStageSprites.getInstance().draw();
-                        } else {
-                                specialStageManager.draw();
-                        }
-                } else if (!debugViewEnabled) {
-                        levelManager.drawWithSpritePriority(spriteRenderManager);
-                } else {
-                        switch (debugState) {
-                                case PATTERNS_VIEW -> levelManager.drawAllPatterns();
-                                case CHUNKS_VIEW -> levelManager.drawAllChunks();
-                                case BLOCKS_VIEW -> levelManager.draw();
-                                case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
-                        }
-                }
-        }
+	public void draw() {
+		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
+			// Check if sprite debug mode is active
+			if (specialStageManager.isSpriteDebugMode()) {
+				DebugSpecialStageSprites.getInstance().draw();
+			} else {
+				specialStageManager.draw();
+			}
+		} else if (!debugViewEnabled) {
+			levelManager.drawWithSpritePriority(spriteRenderManager);
+		} else {
+			switch (debugState) {
+				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
+				case CHUNKS_VIEW -> levelManager.drawAllChunks();
+				case BLOCKS_VIEW -> levelManager.draw();
+				case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
+			}
+		}
+	}
 
 	public static void main(String[] args) {
 		// Run the GUI codes in the event-dispatching thread for thread safety
 		SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
-                                // Create the OpenGL rendering canvas
-                                GLCanvas canvas = new Engine();
-                                canvas.setFocusTraversalKeysEnabled(false);
-                                SonicConfigurationService configService = SonicConfigurationService
-                                                .getInstance();
+				// Create the OpenGL rendering canvas
+				GLCanvas canvas = new Engine();
+				canvas.setFocusTraversalKeysEnabled(false);
+				SonicConfigurationService configService = SonicConfigurationService
+						.getInstance();
 				int width = configService
 						.getInt(SonicConfiguration.SCREEN_WIDTH);
 				int height = configService
@@ -283,6 +305,14 @@ public class Engine extends GLCanvas implements GLEventListener {
 	public void display(GLAutoDrawable drawable) {
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL 2 graphics context
 
+		// Clear the entire window to black first (for letterbox/pillarbox bars)
+		gl.glViewport(0, 0, drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+		gl.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		// Set the viewport to the aspect-ratio-correct area for game rendering
+		gl.glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+
 		// Update projection matrix for current mode (H40=320 for levels, H32=256 for special stages)
 		// This must be done each frame since we can switch modes at runtime
 		gl.glMatrixMode(GL_PROJECTION);
@@ -290,52 +320,54 @@ public class Engine extends GLCanvas implements GLEventListener {
 		glu.gluOrtho2D(0, projectionWidth, 0, realHeight);
 		gl.glMatrixMode(GL_MODELVIEW);
 
-		// Set clear color based on game mode
+		// Set clear color based on game mode and clear the game viewport
 		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
 			gl.glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Black for special stage
 		} else {
 			levelManager.setClearColor(gl);
 		}
-		gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear color
-																// and depth
-																// buffers
-                gl.glLoadIdentity(); // reset the model-view matrix
-                gl.glDisable(GL2.GL_LIGHTING);
-                gl.glDisable(GL2.GL_COLOR_MATERIAL);
-                gl.glColorMask(true, true, true, true);
-                update();
+		gl.glScissor(viewportX, viewportY, viewportWidth, viewportHeight);
+		gl.glEnable(GL2.GL_SCISSOR_TEST);
+		gl.glClear(GL_COLOR_BUFFER_BIT);
+		gl.glDisable(GL2.GL_SCISSOR_TEST);
+
+		gl.glLoadIdentity(); // reset the model-view matrix
+		gl.glDisable(GL2.GL_LIGHTING);
+		gl.glDisable(GL2.GL_COLOR_MATERIAL);
+		gl.glColorMask(true, true, true, true);
+		update();
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
 
 		// Only show debug overlay in level mode, not during special stage
-                if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
-                        // Reset OpenGL state for JOGL's TextRenderer
-                        gl.glActiveTexture(GL2.GL_TEXTURE0);
-                        gl.glUseProgram(0);
-                        gl.glDisable(GL2.GL_LIGHTING);
-                        gl.glDisable(GL2.GL_COLOR_MATERIAL);
-                        gl.glDisable(GL2.GL_DEPTH_TEST);
-                        gl.glColor4f(1f, 1f, 1f, 1f);
-                        gl.glEnable(GL2.GL_TEXTURE_2D);
-                        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
-                        gl.glActiveTexture(GL2.GL_TEXTURE1);
-                        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
-                        gl.glActiveTexture(GL2.GL_TEXTURE0);
-                        // Reset matrices for 2D rendering
-                        gl.glMatrixMode(GL_PROJECTION);
-                        gl.glLoadIdentity();
-                        glu.gluOrtho2D(0, projectionWidth, 0, realHeight);
-                        gl.glMatrixMode(GL_MODELVIEW);
-                        gl.glLoadIdentity();
+		if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
+			// Reset OpenGL state for JOGL's TextRenderer
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+			gl.glUseProgram(0);
+			gl.glDisable(GL2.GL_LIGHTING);
+			gl.glDisable(GL2.GL_COLOR_MATERIAL);
+			gl.glDisable(GL2.GL_DEPTH_TEST);
+			gl.glColor4f(1f, 1f, 1f, 1f);
+			gl.glEnable(GL2.GL_TEXTURE_2D);
+			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+			gl.glActiveTexture(GL2.GL_TEXTURE1);
+			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+			// Reset matrices for 2D rendering
+			gl.glMatrixMode(GL_PROJECTION);
+			gl.glLoadIdentity();
+			glu.gluOrtho2D(0, projectionWidth, 0, realHeight);
+			gl.glMatrixMode(GL_MODELVIEW);
+			gl.glLoadIdentity();
 
 			// Re-enable blending for the TextRenderer
-                        gl.glEnable(GL2.GL_BLEND);
-                        gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+			gl.glEnable(GL2.GL_BLEND);
+			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
 
-                        debugRenderer.updateViewport(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
-                        debugRenderer.renderDebugInfo();
-                }
+			debugRenderer.updateViewport(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+			debugRenderer.renderDebugInfo();
+		}
 	}
 
 	/**
@@ -344,7 +376,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 	 */
 	public void dispose(GLAutoDrawable drawable) {
 		graphicsManager.cleanup();
-        AudioManager.getInstance().destroy();
+		AudioManager.getInstance().destroy();
 	}
 
 	public static void nextDebugState() {
