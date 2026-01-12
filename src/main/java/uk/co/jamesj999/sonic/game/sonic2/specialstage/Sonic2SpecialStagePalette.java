@@ -1,8 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 
-import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
-import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.level.Palette;
 
 import java.io.IOException;
@@ -77,9 +76,7 @@ public class Sonic2SpecialStagePalette {
      */
     private static void loadPaletteDataIfNeeded() throws IOException {
         if (cachedMainPalette == null || cachedStagePalettes == null) {
-            SonicConfigurationService configService = SonicConfigurationService.getInstance();
-            Rom rom = new Rom();
-            rom.open(configService.getString(SonicConfiguration.ROM_FILENAME));
+            Rom rom = RomManager.getInstance().getRom();
 
             // Load main palette (96 bytes = 3 palette lines)
             cachedMainPalette = rom.readBytes(PALETTE_MAIN_OFFSET, PALETTE_MAIN_SIZE);

@@ -58,6 +58,14 @@ public final class Sonic2SpecialStageConstants {
     public static final long MESSAGES_ART_OFFSET = 0x0DEAF4;
     public static final int MESSAGES_ART_SIZE = 953;
 
+    /** HUD number/text art - Nemesis compressed (numbers 0-9, etc.) */
+    public static final long HUD_ART_OFFSET = 0x0DD48A;
+    public static final int HUD_ART_SIZE = 774;
+
+    /** START banner art - Nemesis compressed (includes checkered flag) */
+    public static final long START_ART_OFFSET = 0x0DD790;
+    public static final int START_ART_SIZE = 318;  // 0xDD8CE - 0xDD790
+
     /** Sonic and Tails animation frames - Nemesis compressed */
     public static final long PLAYER_ART_OFFSET = 0x0DEEAE;
     public static final int PLAYER_ART_SIZE = 13775;
@@ -189,6 +197,49 @@ public final class Sonic2SpecialStageConstants {
     // ========== Number of special stages ==========
 
     public static final int SPECIAL_STAGE_COUNT = 7;
+
+    // ========== Intro sequence timing (from Obj5F disassembly) ==========
+
+    /** START banner initial Y position (off screen above) */
+    public static final int INTRO_BANNER_START_Y = -64;  // -$40
+    /** START banner final Y position (centered on screen) */
+    public static final int INTRO_BANNER_END_Y = 72;     // $48
+    /** START banner X position (center of H32 screen) */
+    public static final int INTRO_BANNER_X = 128;        // $80
+    /** START banner drop velocity (pixels per frame) */
+    public static final int INTRO_BANNER_VELOCITY = 1;   // $100 in 8.8 fixed = 1 pixel
+
+    /** Duration of DROP phase: banner falls from -64 to 72 = 136 frames */
+    public static final int INTRO_DROP_FRAMES = 136;
+    /** Duration of WAIT1 phase: letters spawn/explode (objoff_2A = $F) */
+    public static final int INTRO_WAIT1_FRAMES = 15;
+    /** Duration of WAIT2 phase: show ring requirement (objoff_2A = $1E, bpl = 31) */
+    public static final int INTRO_WAIT2_FRAMES = 31;
+    /** Total intro duration before SpecialStage_Started is set */
+    public static final int INTRO_TOTAL_FRAMES = INTRO_DROP_FRAMES + INTRO_WAIT1_FRAMES + INTRO_WAIT2_FRAMES;
+
+    /** "GET X RINGS" message display duration (objoff_2A = $46) */
+    public static final int MESSAGE_DISPLAY_FRAMES = 70;
+    /** "GET X RINGS" message flyout duration (approximate) */
+    public static final int MESSAGE_FLYOUT_FRAMES = 15;
+
+    // ========== Player art offsets ==========
+
+    /**
+     * Tails' pattern offset from Sonic's base pattern in special stage player art.
+     * Sonic's frames come first (96 patterns = 0x60), followed by Tails' frames.
+     * This matches the ROM art layout where Tails' art immediately follows Sonic's.
+     */
+    public static final int TAILS_PATTERN_OFFSET = 0x60;
+
+    // ========== VDP tile indices for special stage UI ==========
+
+    /** HUD art tile base (numbers, text) - ArtTile_ArtNem_SpecialHUD */
+    public static final int TILE_HUD_BASE = 0x01FA;
+    /** START banner art tile base - ArtTile_ArtNem_SpecialStart */
+    public static final int TILE_START_BASE = 0x038A;
+    /** Messages art tile base - ArtTile_ArtNem_SpecialMessages */
+    public static final int TILE_MESSAGES_BASE = 0x01A2;
 
     // ========== Palette data (raw, uncompressed) ==========
     // Validated against s2disasm art/palettes/ files and ROM byte patterns

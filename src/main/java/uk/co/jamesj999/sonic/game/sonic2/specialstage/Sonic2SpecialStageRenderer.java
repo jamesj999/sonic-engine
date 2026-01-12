@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import static uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageConstants.TAILS_PATTERN_OFFSET;
+
 /**
  * Handles rendering for Sonic 2 Special Stage.
  *
@@ -27,8 +29,58 @@ public class Sonic2SpecialStageRenderer {
     private int backgroundPatternBase;
     private int trackPatternBase;
     private int playerPatternBase;
+    private int hudPatternBase;
+    private int startPatternBase;
+    private int messagesPatternBase;
 
     private List<Sonic2SpecialStagePlayer> players = new ArrayList<>();
+    private Sonic2SpecialStageIntro intro;
+
+    /**
+     * START banner sprite-piece definition (Obj5F frame0 from obj5F_a.asm).
+     * spritePiece format: xOffset, yOffset, widthTiles, heightTiles, tileIndexOffset, hFlip, vFlip
+     */
+    private static final class SpritePiece {
+        final int xOffset;
+        final int yOffset;
+        final int widthTiles;
+        final int heightTiles;
+        final int tileIndexOffset;
+        final boolean hFlip;
+        final boolean vFlip;
+
+        SpritePiece(int xOffset, int yOffset, int widthTiles, int heightTiles,
+                    int tileIndexOffset, boolean hFlip, boolean vFlip) {
+            this.xOffset = xOffset;
+            this.yOffset = yOffset;
+            this.widthTiles = widthTiles;
+            this.heightTiles = heightTiles;
+            this.tileIndexOffset = tileIndexOffset;
+            this.hFlip = hFlip;
+            this.vFlip = vFlip;
+        }
+    }
+
+    /**
+     * Obj5F frame0 mapping (START banner fully visible).
+     * From obj5F_a.asm:
+     * spritePiece -$48, 0, 4, 4, 0,   0, 0, 1, 1   ; left checkered
+     * spritePiece -$28, 0, 2, 4, $10, 0, 0, 1, 1   ; S
+     * spritePiece -$18, 0, 2, 4, $18, 0, 0, 1, 1   ; T
+     * spritePiece -8,   0, 2, 4, $20, 0, 0, 1, 1   ; A
+     * spritePiece 8,    0, 2, 4, $28, 0, 0, 1, 1   ; R
+     * spritePiece $18,  0, 2, 4, $18, 0, 0, 1, 1   ; T (reused)
+     * spritePiece $28,  0, 4, 4, 0,   1, 0, 1, 1   ; right checkered (h-flipped)
+     */
+    private static final SpritePiece[] START_BANNER_FRAME0 = {
+        new SpritePiece(-0x48, 0, 4, 4, 0x00, false, false), // left checkered
+        new SpritePiece(-0x28, 0, 2, 4, 0x10, false, false), // S
+        new SpritePiece(-0x18, 0, 2, 4, 0x18, false, false), // T
+        new SpritePiece(-0x08, 0, 2, 4, 0x20, false, false), // A
+        new SpritePiece( 0x08, 0, 2, 4, 0x28, false, false), // R
+        new SpritePiece( 0x18, 0, 2, 4, 0x18, false, false), // T (reused)
+        new SpritePiece( 0x28, 0, 4, 4, 0x00, true,  false), // right checkered, h-flipped
+    };
 
     public Sonic2SpecialStageRenderer(GraphicsManager graphicsManager) {
         this.graphicsManager = graphicsManager;
@@ -46,6 +98,16 @@ public class Sonic2SpecialStageRenderer {
 
     public void setPlayers(List<Sonic2SpecialStagePlayer> players) {
         this.players = players != null ? players : new ArrayList<>();
+    }
+
+    public void setIntro(Sonic2SpecialStageIntro intro) {
+        this.intro = intro;
+    }
+
+    public void setIntroPatternBases(int hudBase, int startBase, int messagesBase) {
+        this.hudPatternBase = hudBase;
+        this.startPatternBase = startBase;
+        this.messagesPatternBase = messagesBase;
     }
 
     /**
@@ -394,7 +456,7 @@ public class Sonic2SpecialStageRenderer {
 
         int basePattern = playerPatternBase;
         if (player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.TAILS) {
-            basePattern += 0x60;
+            basePattern += TAILS_PATTERN_OFFSET;
         }
 
         int spriteWidth = 3;
@@ -490,5 +552,203 @@ public class Sonic2SpecialStageRenderer {
         }
 
         graphicsManager.flushPatternBatch();
+    }
+
+    // ========== Intro UI Rendering ==========
+
+    /**
+     * Renders the intro sequence UI elements (START banner and ring requirement message).
+     */
+    public void renderIntroUI() {
+        if (intro == null) {
+            return;
+        }
+
+        graphicsManager.beginPatternBatch();
+
+        // Screen parameters for H32 mode
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        // Render START banner if visible
+        if (intro.isBannerVisible()) {
+            renderStartBanner(SCREEN_CENTER_OFFSET);
+        }
+
+        // Render ring requirement message if visible
+        if (intro.isMessageVisible()) {
+            renderRingMessage(SCREEN_CENTER_OFFSET);
+        }
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders the START banner sprite using the real Obj5F frame0 sprite pieces.
+     *
+     * Mega Drive coordinate system: Y=0 is at the TOP of the screen.
+     * intro.getBannerX()/getBannerY() are in that same space.
+     */
+    private void renderStartBanner(int screenCenterOffset) {
+        int bannerX = intro.getBannerX();
+        int bannerY = intro.getBannerY();
+
+        // Convert from H32 coordinates to screen coordinates:
+        // H32: X=0 is left, Y=0 is top. Our renderer also uses Y=0 at top.
+        int baseX = screenCenterOffset + bannerX;
+        int baseY = bannerY;
+
+        // All pieces use palette 1 and priority 1 in the original mappings.
+        final int paletteIndex = 1;
+
+        for (SpritePiece piece : START_BANNER_FRAME0) {
+            int pieceX = baseX + piece.xOffset;
+            int pieceY = baseY + piece.yOffset;
+
+            // Each spritePiece is a widthTiles x heightTiles block starting at tileIndexOffset.
+            // VDP uses COLUMN-MAJOR ordering: tiles are stored column by column.
+            // For a WxH piece, tile at (tx, ty) is at offset: tx * heightTiles + ty
+            for (int ty = 0; ty < piece.heightTiles; ty++) {
+                for (int tx = 0; tx < piece.widthTiles; tx++) {
+                    // Calculate tile offset within piece using column-major order
+                    int localTx = piece.hFlip ? (piece.widthTiles - 1 - tx) : tx;
+                    int localTy = piece.vFlip ? (piece.heightTiles - 1 - ty) : ty;
+                    int patternOffset = piece.tileIndexOffset + localTx * piece.heightTiles + localTy;
+                    int patternId = startPatternBase + patternOffset;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(true);
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(piece.hFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
+    }
+
+    /**
+     * Tile offsets in SpecialMessages art for letters.
+     * From obj5A.asm Map_obj5A mappings - each is a 1x2 tile piece (8x16 pixels).
+     * These are stored interleaved: top tile then bottom tile.
+     */
+    private static final int TILE_G = 0x04;
+    private static final int TILE_E = 0x02;
+    private static final int TILE_T = 0x14;
+    private static final int TILE_R = 0x10;  // Actually maps to 'N' in obj5A, R needs verification
+    private static final int TILE_I = 0x08;
+    private static final int TILE_N = 0x10;
+    private static final int TILE_S = 0x0C;
+
+    /**
+     * Renders the "GET XX RINGS" message.
+     * Uses HUD patterns for digits (interleaved format like HudRenderManager).
+     * Uses SpecialMessages art for text letters.
+     *
+     * Mega Drive coordinate system: Y=0 is at the TOP of the screen.
+     * Original position from disasm: x=$54 for GET, digits centered, x=$84 for RINGS
+     */
+    private void renderRingMessage(int screenCenterOffset) {
+        int ringReq = intro.getRingRequirement();
+
+        // Original positions from Obj5A_CreateRingReqMessage:
+        // GET at x=$54, y=$6C; digits at x=$80 (centered); RINGS! at x=$84, y=$6C
+        final int baseY = 0x6C;
+        final int textPalette = 1;   // Palette 1 for message text
+        final int digitPalette = 2;  // Palette 2 for HUD digits (matching Obj87)
+
+        // Render "GET" using Messages art at x=$54
+        int getX = screenCenterOffset + 0x54;
+        renderMessageLetter(getX, baseY, TILE_G, textPalette);
+        renderMessageLetter(getX + 8, baseY, TILE_E, textPalette);
+        renderMessageLetter(getX + 16, baseY, TILE_T, textPalette);
+
+        // Render digits using HUD art (interleaved format like HudRenderManager)
+        // Position depends on digit count
+        int digitX;
+        if (ringReq >= 100) {
+            digitX = screenCenterOffset + 0x80 - 12;
+        } else if (ringReq >= 10) {
+            digitX = screenCenterOffset + 0x80 - 8;
+        } else {
+            digitX = screenCenterOffset + 0x80 - 4;
+        }
+
+        // Hundreds digit
+        if (ringReq >= 100) {
+            int hundreds = (ringReq / 100) % 10;
+            renderHudDigit(digitX, baseY, hundreds, digitPalette);
+            digitX += 8;
+        }
+
+        // Tens digit
+        if (ringReq >= 10) {
+            int tens = (ringReq / 10) % 10;
+            renderHudDigit(digitX, baseY, tens, digitPalette);
+            digitX += 8;
+        }
+
+        // Ones digit
+        int ones = ringReq % 10;
+        renderHudDigit(digitX, baseY, ones, digitPalette);
+
+        // Render "RINGS!" at appropriate position
+        int ringsX = screenCenterOffset + (ringReq >= 100 ? 0x90 : 0x88);
+        renderMessageLetter(ringsX, baseY, TILE_R, textPalette);
+        renderMessageLetter(ringsX + 8, baseY, TILE_I, textPalette);
+        renderMessageLetter(ringsX + 16, baseY, TILE_N, textPalette);
+        renderMessageLetter(ringsX + 24, baseY, TILE_G, textPalette);
+        renderMessageLetter(ringsX + 32, baseY, TILE_S, textPalette);
+    }
+
+    /**
+     * Renders a single 1x2 tile letter from the SpecialMessages art.
+     * Each letter is 8 pixels wide × 16 pixels tall (2 tiles stacked vertically).
+     */
+    private void renderMessageLetter(int x, int y, int tileOffset, int paletteIndex) {
+        for (int ty = 0; ty < 2; ty++) {
+            int patternId = messagesPatternBase + tileOffset + ty;
+
+            PatternDesc desc = new PatternDesc();
+            desc.setPriority(true);
+            desc.setPaletteIndex(paletteIndex);
+            desc.setHFlip(false);
+            desc.setVFlip(false);
+            desc.setPatternIndex(patternId & 0x7FF);
+
+            // Letters are centered: offset by half the height (-8 pixels)
+            int drawY = y - 8 + ty * TILE_SIZE;
+
+            graphicsManager.renderPatternWithId(patternId, desc, x, drawY);
+        }
+    }
+
+    /**
+     * Renders a digit using HUD art patterns in interleaved format.
+     * Matches HudRenderManager's approach: digit N uses patterns (N*2) and (N*2+1).
+     */
+    private void renderHudDigit(int x, int y, int digit, int paletteIndex) {
+        // Interleaved layout: top tile = digit*2, bottom tile = digit*2+1
+        int topPatternId = hudPatternBase + (digit * 2);
+        int bottomPatternId = hudPatternBase + (digit * 2) + 1;
+
+        PatternDesc desc = new PatternDesc();
+        desc.setPriority(true);
+        desc.setPaletteIndex(paletteIndex);
+        desc.setHFlip(false);
+        desc.setVFlip(false);
+
+        // Top tile
+        desc.setPatternIndex(topPatternId & 0x7FF);
+        graphicsManager.renderPatternWithId(topPatternId, desc, x, y - 8);
+
+        // Bottom tile
+        desc.setPatternIndex(bottomPatternId & 0x7FF);
+        graphicsManager.renderPatternWithId(bottomPatternId, desc, x, y);
     }
 }

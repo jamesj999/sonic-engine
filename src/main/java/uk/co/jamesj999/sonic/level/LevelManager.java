@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
+import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
@@ -150,8 +151,7 @@ public class LevelManager {
      */
     public void loadLevel(int levelIndex) throws IOException {
         try {
-            Rom rom = new Rom();
-            rom.open(SonicConfigurationService.getInstance().getString(SonicConfiguration.ROM_FILENAME));
+            Rom rom = RomManager.getInstance().getRom();
             parallaxManager.load(rom);
             gameModule = GameModuleRegistry.getCurrent();
             game = gameModule.createGame(rom);

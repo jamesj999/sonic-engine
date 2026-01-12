@@ -11,8 +11,9 @@ import java.util.logging.Logger;
 
 /**
  * Represents a ROM file for reading and writing.
+ * Implements AutoCloseable for proper resource management.
  */
-public class Rom {
+public class Rom implements AutoCloseable {
     private static final Logger LOGGER = Logger.getLogger(Rom.class.getName());
 
     private FileChannel fileChannel;
@@ -40,6 +41,29 @@ public class Rom {
             LOGGER.log(Level.SEVERE, "Failed to open ROM: " + spath, e);
             return false;
         }
+    }
+
+    /**
+     * Closes the ROM file channel and releases resources.
+     */
+    @Override
+    public void close() {
+        if (fileChannel != null) {
+            try {
+                fileChannel.close();
+                LOGGER.fine("ROM file channel closed");
+            } catch (IOException e) {
+                LOGGER.log(Level.WARNING, "Error closing ROM file channel", e);
+            }
+            fileChannel = null;
+        }
+    }
+
+    /**
+     * Checks if the ROM file is currently open.
+     */
+    public boolean isOpen() {
+        return fileChannel != null && fileChannel.isOpen();
     }
 
     public FileChannel getFileChannel() {

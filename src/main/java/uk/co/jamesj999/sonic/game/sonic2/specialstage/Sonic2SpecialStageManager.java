@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
@@ -84,6 +85,12 @@ public class Sonic2SpecialStageManager {
     private int heldButtons = 0;
     private int pressedButtons = 0;
 
+    // Intro sequence
+    private Sonic2SpecialStageIntro intro;
+    private int hudPatternBase;
+    private int startPatternBase;
+    private int messagesPatternBase;
+
     private Sonic2SpecialStageManager() {
     }
 
@@ -101,29 +108,63 @@ public class Sonic2SpecialStageManager {
      * @throws IOException If data loading fails
      */
     public void initialize(int stageIndex) throws IOException {
-        if (rom == null) {
-            rom = new Rom();
-            rom.open(configService.getString(SonicConfiguration.ROM_FILENAME));
+        // Reset any partial state from previous initialization attempts
+        reset();
+
+        try {
+            // Get ROM from centralized RomManager
+            rom = RomManager.getInstance().getRom();
+
+            if (dataLoader == null) {
+                dataLoader = new Sonic2SpecialStageDataLoader(rom);
+            }
+
+            this.currentStage = stageIndex;
+
+            LOGGER.info("Initializing Special Stage " + (stageIndex + 1));
+
+            loadData();
+            setupPalettes();
+            setupRenderer();
+            setupPatterns();
+            setupTrackAnimator();
+            setupPlayers();
+            setupIntro();
+
+            initialized = true;
+
+            LOGGER.info("Special Stage " + (stageIndex + 1) + " initialized successfully");
+        } catch (IOException e) {
+            // Clean up partial state on failure
+            LOGGER.severe("Failed to initialize Special Stage " + (stageIndex + 1) + ": " + e.getMessage());
+            reset();
+            throw e;
+        }
+    }
+
+    /**
+     * Sets up the intro sequence for the current stage.
+     */
+    private void setupIntro() {
+        intro = new Sonic2SpecialStageIntro();
+
+        // Get ring requirement for checkpoint 0 (first quarter)
+        // Solo mode if only one player character, team mode if Sonic & Tails
+        boolean teamMode = (sonicPlayer != null && tailsPlayer != null);
+        int ringReq = 0;
+        try {
+            ringReq = dataLoader.getRingRequirement(currentStage, 0, teamMode);
+        } catch (IOException e) {
+            LOGGER.warning("Failed to load ring requirement: " + e.getMessage());
+            ringReq = 30; // Default fallback
         }
 
-        if (dataLoader == null) {
-            dataLoader = new Sonic2SpecialStageDataLoader(rom);
-        }
+        intro.initialize(currentStage, ringReq);
 
-        this.currentStage = stageIndex;
+        // Pass intro to renderer
+        renderer.setIntro(intro);
 
-        LOGGER.info("Initializing Special Stage " + (stageIndex + 1));
-
-        loadData();
-        setupPalettes();
-        setupRenderer();
-        setupPatterns();
-        setupTrackAnimator();
-        setupPlayers();
-
-        initialized = true;
-
-        LOGGER.info("Special Stage " + (stageIndex + 1) + " initialized successfully");
+        LOGGER.fine("Intro sequence initialized with ring requirement: " + ringReq);
     }
 
     private void loadData() throws IOException {
@@ -199,12 +240,37 @@ public class Sonic2SpecialStageManager {
         }
         LOGGER.fine("Cached " + playerPatterns.length + " player patterns");
 
+        // Load HUD and START banner art for intro sequence
+        hudPatternBase = playerPatternBase + playerPatterns.length;
+        Pattern[] hudPatterns = dataLoader.getHudArtPatterns();
+        for (int i = 0; i < hudPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(hudPatterns[i], hudPatternBase + i);
+        }
+        LOGGER.fine("Cached " + hudPatterns.length + " HUD patterns");
+
+        startPatternBase = hudPatternBase + hudPatterns.length;
+        Pattern[] startPatterns = dataLoader.getStartArtPatterns();
+        for (int i = 0; i < startPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(startPatterns[i], startPatternBase + i);
+        }
+        LOGGER.fine("Cached " + startPatterns.length + " START banner patterns");
+
+        messagesPatternBase = startPatternBase + startPatterns.length;
+        Pattern[] messagesPatterns = dataLoader.getMessagesArtPatterns();
+        for (int i = 0; i < messagesPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(messagesPatterns[i], messagesPatternBase + i);
+        }
+        LOGGER.fine("Cached " + messagesPatterns.length + " Messages patterns");
+
         // Now set the pattern bases on the renderer (after they have valid values)
         renderer.setPatternBases(backgroundPatternBase, trackPatternBase);
         renderer.setPlayerPatternBase(playerPatternBase);
+        renderer.setIntroPatternBases(hudPatternBase, startPatternBase, messagesPatternBase);
 
         LOGGER.fine("Special Stage art loaded: " + bgPatterns.length + " bg, " +
-                trackPatterns.length + " track, " + playerPatterns.length + " player patterns");
+                trackPatterns.length + " track, " + playerPatterns.length + " player, " +
+                hudPatterns.length + " HUD, " + startPatterns.length + " START, " +
+                messagesPatterns.length + " Messages patterns");
     }
 
     private void setupRenderer() {
@@ -280,6 +346,12 @@ public class Sonic2SpecialStageManager {
 
         frameCounter++;
 
+        // Update intro sequence
+        if (intro != null) {
+            intro.update();
+        }
+
+        // Track animation always runs (even during intro)
         boolean frameChanged = trackAnimator.update();
 
         if (frameChanged || decodedTrackFrame == null) {
@@ -290,7 +362,10 @@ public class Sonic2SpecialStageManager {
             trackAnimator.resetStageComplete();
         }
 
-        updatePlayers();
+        // Only update players when intro allows input
+        if (intro == null || intro.isInputEnabled()) {
+            updatePlayers();
+        }
     }
 
     private void updatePlayers() {
@@ -366,6 +441,11 @@ public class Sonic2SpecialStageManager {
         renderer.renderTrack(trackFrameIndex, decodedTrackFrame);
 
         renderer.renderPlayers();
+
+        // Render intro UI (banner and messages) on top
+        if (intro != null && !intro.isComplete()) {
+            renderer.renderIntroUI();
+        }
     }
 
     /**
@@ -442,10 +522,29 @@ public class Sonic2SpecialStageManager {
         heldButtons = 0;
         pressedButtons = 0;
 
+        intro = null;
+        hudPatternBase = 0;
+        startPatternBase = 0;
+        messagesPatternBase = 0;
+
         resultState = ResultState.RUNNING;
         emeraldCollected = false;
         diagnosticDone = false;
         flipDiagnosticDone = false;
+    }
+
+    /**
+     * Gets the intro sequence manager.
+     */
+    public Sonic2SpecialStageIntro getIntro() {
+        return intro;
+    }
+
+    /**
+     * Checks if the intro sequence is still playing.
+     */
+    public boolean isIntroPlaying() {
+        return intro != null && !intro.isComplete();
     }
 
     /**

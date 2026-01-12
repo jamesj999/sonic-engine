@@ -46,6 +46,9 @@ public class Sonic2SpecialStageDataLoader {
     private Pattern[] shadowHorizPatterns;
     private Pattern[] shadowDiagPatterns;
     private Pattern[] shadowVertPatterns;
+    private Pattern[] hudArtPatterns;
+    private Pattern[] startArtPatterns;
+    private Pattern[] messagesArtPatterns;
 
     public Sonic2SpecialStageDataLoader(Rom rom) {
         this.rom = rom;
@@ -367,6 +370,46 @@ public class Sonic2SpecialStageDataLoader {
             LOGGER.fine("Loaded vertical shadow art: " + shadowVertPatterns.length + " patterns");
         }
         return shadowVertPatterns;
+    }
+
+    /**
+     * Loads HUD art patterns (Nemesis compressed).
+     * Contains numbers 0-9, text characters for ring counts, etc.
+     */
+    public Pattern[] getHudArtPatterns() throws IOException {
+        if (hudArtPatterns == null) {
+            byte[] compressed = rom.readBytes(HUD_ART_OFFSET, HUD_ART_SIZE);
+            hudArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded HUD art: " + hudArtPatterns.length + " patterns");
+        }
+        return hudArtPatterns;
+    }
+
+    /**
+     * Loads START banner art patterns (Nemesis compressed).
+     * Contains the "START" text and checkered flag graphics.
+     */
+    public Pattern[] getStartArtPatterns() throws IOException {
+        if (startArtPatterns == null) {
+            byte[] compressed = rom.readBytes(START_ART_OFFSET, START_ART_SIZE);
+            startArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded START banner art: " + startArtPatterns.length + " patterns");
+        }
+        return startArtPatterns;
+    }
+
+    /**
+     * Loads Messages art patterns (Nemesis compressed).
+     * Contains letters for "GET", "RINGS!", numbers 0-9, and other message text.
+     * Used by Obj5A for special stage messages.
+     */
+    public Pattern[] getMessagesArtPatterns() throws IOException {
+        if (messagesArtPatterns == null) {
+            byte[] compressed = rom.readBytes(MESSAGES_ART_OFFSET, MESSAGES_ART_SIZE);
+            messagesArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded Messages art: " + messagesArtPatterns.length + " patterns");
+        }
+        return messagesArtPatterns;
     }
 
     private byte[] decompressKosinski(byte[] compressed) throws IOException {
