@@ -7,6 +7,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
+import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
 import uk.co.jamesj999.sonic.game.GameMode;
 import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
@@ -19,6 +20,7 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 
+import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.util.logging.Logger;
 
@@ -111,6 +113,22 @@ public class GameLoop {
         }
 
         if (currentGameMode == GameMode.SPECIAL_STAGE) {
+            // F12: Toggle sprite frame debug viewer (shows all animation frames)
+            if (inputHandler.isKeyPressed(KeyEvent.VK_F12)) {
+                specialStageManager.toggleSpriteDebugMode();
+            }
+
+            // Handle sprite debug viewer page navigation (Left/Right arrows)
+            if (specialStageManager.isSpriteDebugMode()) {
+                DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
+                if (inputHandler.isKeyPressed(KeyEvent.VK_RIGHT)) {
+                    debugSprites.nextPage();
+                }
+                if (inputHandler.isKeyPressed(KeyEvent.VK_LEFT)) {
+                    debugSprites.previousPage();
+                }
+            }
+
             updateSpecialStageInput();
             specialStageManager.update();
 

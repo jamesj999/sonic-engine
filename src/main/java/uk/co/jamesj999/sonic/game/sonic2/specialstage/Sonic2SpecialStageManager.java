@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
+import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
@@ -70,6 +71,10 @@ public class Sonic2SpecialStageManager {
     private static final int SS_PATTERN_BASE = 0x1000;
     private int backgroundPatternBase;
     private int trackPatternBase;
+    private int playerPatternBase;
+
+    // Debug mode for viewing all sprite frames
+    private boolean spriteDebugMode = false;
 
     private Sonic2SpecialStageRenderer renderer;
     private int frameCounter = 0;
@@ -217,7 +222,7 @@ public class Sonic2SpecialStageManager {
     private void setupPatterns() throws IOException {
         backgroundPatternBase = SS_PATTERN_BASE;
         trackPatternBase = SS_PATTERN_BASE + 256;
-        int playerPatternBase = trackPatternBase + 512;
+        playerPatternBase = trackPatternBase + 512;
 
         Pattern[] bgPatterns = dataLoader.getBackgroundArtPatterns();
         for (int i = 0; i < bgPatterns.length; i++) {
@@ -271,6 +276,9 @@ public class Sonic2SpecialStageManager {
                 trackPatterns.length + " track, " + playerPatterns.length + " player, " +
                 hudPatterns.length + " HUD, " + startPatterns.length + " START, " +
                 messagesPatterns.length + " Messages patterns");
+
+        // Update debug sprite viewer with player pattern base
+        DebugSpecialStageSprites.getInstance().setPlayerPatternBase(playerPatternBase);
     }
 
     private void setupRenderer() {
@@ -597,5 +605,28 @@ public class Sonic2SpecialStageManager {
      */
     public boolean hasEmeraldCollected() {
         return emeraldCollected;
+    }
+
+    /**
+     * Toggles the sprite debug mode which shows all 18 animation frames.
+     */
+    public void toggleSpriteDebugMode() {
+        spriteDebugMode = !spriteDebugMode;
+        DebugSpecialStageSprites.getInstance().setEnabled(spriteDebugMode);
+        LOGGER.info("Sprite debug mode: " + (spriteDebugMode ? "ON" : "OFF"));
+    }
+
+    /**
+     * Checks if sprite debug mode is active.
+     */
+    public boolean isSpriteDebugMode() {
+        return spriteDebugMode;
+    }
+
+    /**
+     * Gets the player pattern base for debug rendering.
+     */
+    public int getPlayerPatternBase() {
+        return playerPatternBase;
     }
 }

@@ -10,6 +10,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
+import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
 import uk.co.jamesj999.sonic.debug.DebugState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
@@ -186,7 +187,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 
         public void draw() {
                 if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
-                        specialStageManager.draw();
+                        // Check if sprite debug mode is active
+                        if (specialStageManager.isSpriteDebugMode()) {
+                                DebugSpecialStageSprites.getInstance().draw();
+                        } else {
+                                specialStageManager.draw();
+                        }
                 } else if (!debugViewEnabled) {
                         levelManager.drawWithSpritePriority(spriteRenderManager);
                 } else {

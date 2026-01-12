@@ -61,12 +61,26 @@ public final class Sonic2SpecialStageSpriteMappings {
         return new SpritePiece(x, y, w, h, tile, hf != 0, vf != 0);
     }
 
+    // Art section offsets - each animation type has its own section in the art data
+    // From s2.asm: SSPlayer_DPLCPtrs
+    // The DPLC source offsets are RELATIVE to each section's start
+    private static final int ART_OFFSET_UPRIGHT = 0x00;     // tiles_to_bytes($000) - 0x58 tiles
+    private static final int ART_OFFSET_DIAGONAL = 0x58;    // tiles_to_bytes($058) - 0xCC tiles
+    private static final int ART_OFFSET_HORIZONTAL = 0x124; // tiles_to_bytes($124) - 0x4D tiles
+    private static final int ART_OFFSET_BALL = 0x171;       // tiles_to_bytes($171) - 0x12 tiles
+
     /**
      * Sonic special stage sprite mappings.
      * 18 frames total, ported from obj09.asm with tile indices converted using DPLC data.
      *
-     * Each frame's tile indices are the SOURCE offsets from the art data.
-     * Conversion done by mapping destination tiles (from obj09.asm) through DPLC entries.
+     * Each frame's tile indices are the ABSOLUTE offsets in the art data.
+     * Conversion: (DPLC source offset) + (art section offset) = absolute tile index.
+     *
+     * Art section offsets (from s2.asm SSPlayer_DPLCPtrs):
+     * - Upright (frames 0-3): offset 0x00
+     * - Diagonal (frames 4-11): offset 0x58
+     * - Horizontal (frames 12-15): offset 0x124
+     * - Ball (frames 16-17): offset 0x171
      *
      * DPLC data from s2.asm (Obj09_MapRUnc_345FA):
      *
@@ -164,152 +178,155 @@ public final class Sonic2SpecialStageSpriteMappings {
         ),
 
         // ========== DIAGONAL FRAMES (4-11) ==========
+        // Note: All tile indices have ART_OFFSET_DIAGONAL (0x58) added
 
         // Frame 4 (Map_obj09_008C): DPLC: dest 0->src 0, dest 9->src 9, dest 13->src 0xD, dest 15->src 0xF
         // Mapping: tile 0 (3x3), tile 9 (1x4), tile $D (1x2), tile $F (4x3)
-        // Source:  tile 0x00,    tile 0x09,    tile 0x0D,     tile 0x0F
+        // Source:  tile 0x00+0x58=0x58, tile 0x09+0x58=0x61, tile 0x0D+0x58=0x65, tile 0x0F+0x58=0x67
         new SpriteFrame(
-            p(-0x14, -0x1C, 3, 3, 0x00, 0, 0),
-            p( 0x04, -0x1C, 1, 4, 0x09, 0, 0),
-            p( 0x0C, -0x14, 1, 2, 0x0D, 0, 0),
-            p(-0x1C, -0x04, 4, 3, 0x0F, 0, 0)
+            p(-0x14, -0x1C, 3, 3, ART_OFFSET_DIAGONAL + 0x00, 0, 0),
+            p( 0x04, -0x1C, 1, 4, ART_OFFSET_DIAGONAL + 0x09, 0, 0),
+            p( 0x0C, -0x14, 1, 2, ART_OFFSET_DIAGONAL + 0x0D, 0, 0),
+            p(-0x1C, -0x04, 4, 3, ART_OFFSET_DIAGONAL + 0x0F, 0, 0)
         ),
 
         // Frame 5 (Map_obj09_00AE): DPLC: dest 0->src 0x1B, dest 6->src 0x21, dest 8->src 0x23, dest 16->src 0x2B, dest 24->src 0x33
         // Mapping: tile 0 (3x2), tile 6 (1x2), tile 8 (4x2), tile $10 (4x2), tile $18 (1x1)
-        // Source:  tile 0x1B,    tile 0x21,    tile 0x23,    tile 0x2B,      tile 0x33
+        // Source:  tile 0x1B+0x58, tile 0x21+0x58, tile 0x23+0x58, tile 0x2B+0x58, tile 0x33+0x58
         new SpriteFrame(
-            p(-0x0C, -0x1C, 3, 2, 0x1B, 0, 0),
-            p( 0x0C, -0x14, 1, 2, 0x21, 0, 0),
-            p(-0x14, -0x0C, 4, 2, 0x23, 0, 0),
-            p(-0x1A,  0x04, 4, 2, 0x2B, 0, 0),
-            p(-0x12,  0x14, 1, 1, 0x33, 0, 0)
+            p(-0x0C, -0x1C, 3, 2, ART_OFFSET_DIAGONAL + 0x1B, 0, 0),
+            p( 0x0C, -0x14, 1, 2, ART_OFFSET_DIAGONAL + 0x21, 0, 0),
+            p(-0x14, -0x0C, 4, 2, ART_OFFSET_DIAGONAL + 0x23, 0, 0),
+            p(-0x1A,  0x04, 4, 2, ART_OFFSET_DIAGONAL + 0x2B, 0, 0),
+            p(-0x12,  0x14, 1, 1, ART_OFFSET_DIAGONAL + 0x33, 0, 0)
         ),
 
         // Frame 6 (Map_obj09_00D8): DPLC: dest 0->src 0x34, dest 2->src 0x36, dest 14->src 0x42, dest 17->src 0x45, dest 23->src 0x4B
         // Mapping: tile 0 (2x1), tile 2 (4x3), tile $E (1x3), tile $11 (2x3), tile $17 (2x2)
-        // Source:  tile 0x34,    tile 0x36,    tile 0x42,     tile 0x45,      tile 0x4B
+        // Source:  tile 0x34+0x58, tile 0x36+0x58, tile 0x42+0x58, tile 0x45+0x58, tile 0x4B+0x58
         new SpriteFrame(
-            p(-0x05, -0x1C, 2, 1, 0x34, 0, 0),
-            p(-0x14, -0x14, 4, 3, 0x36, 0, 0),
-            p( 0x0C, -0x14, 1, 3, 0x42, 0, 0),
-            p(-0x19,  0x04, 2, 3, 0x45, 0, 0),
-            p(-0x09,  0x04, 2, 2, 0x4B, 0, 0)
+            p(-0x05, -0x1C, 2, 1, ART_OFFSET_DIAGONAL + 0x34, 0, 0),
+            p(-0x14, -0x14, 4, 3, ART_OFFSET_DIAGONAL + 0x36, 0, 0),
+            p( 0x0C, -0x14, 1, 3, ART_OFFSET_DIAGONAL + 0x42, 0, 0),
+            p(-0x19,  0x04, 2, 3, ART_OFFSET_DIAGONAL + 0x45, 0, 0),
+            p(-0x09,  0x04, 2, 2, ART_OFFSET_DIAGONAL + 0x4B, 0, 0)
         ),
 
         // Frame 7 (Map_obj09_0102): DPLC: dest 0->src 0x4F, dest 2->src 0x51, dest 18->src 0x61, dest 21->src 0x64, dest 22->src 0x65
         // Mapping: tile 0 (2x1), tile 2 (4x4), tile $12 (1x3), tile $15 (1x1), tile $16 (2x2)
-        // Source:  tile 0x4F,    tile 0x51,    tile 0x61,      tile 0x64,      tile 0x65
+        // Source:  tile 0x4F+0x58, tile 0x51+0x58, tile 0x61+0x58, tile 0x64+0x58, tile 0x65+0x58
         new SpriteFrame(
-            p(-0x04, -0x1C, 2, 1, 0x4F, 0, 0),
-            p(-0x14, -0x14, 4, 4, 0x51, 0, 0),
-            p( 0x0C, -0x14, 1, 3, 0x61, 0, 0),
-            p(-0x1C,  0x04, 1, 1, 0x64, 0, 0),
-            p(-0x16,  0x0C, 2, 2, 0x65, 0, 0)
+            p(-0x04, -0x1C, 2, 1, ART_OFFSET_DIAGONAL + 0x4F, 0, 0),
+            p(-0x14, -0x14, 4, 4, ART_OFFSET_DIAGONAL + 0x51, 0, 0),
+            p( 0x0C, -0x14, 1, 3, ART_OFFSET_DIAGONAL + 0x61, 0, 0),
+            p(-0x1C,  0x04, 1, 1, ART_OFFSET_DIAGONAL + 0x64, 0, 0),
+            p(-0x16,  0x0C, 2, 2, ART_OFFSET_DIAGONAL + 0x65, 0, 0)
         ),
 
         // Frame 8 (Map_obj09_012C): DPLC: dest 0->src 0x69, dest 4->src 0x6D, dest 8->src 0x71, dest 20->src 0x7D
         // Mapping: tile 0 (2x2), tile 4 (1x4), tile 8 (4x3), tile $14 (2x2)
-        // Source:  tile 0x69,    tile 0x6D,    tile 0x71,    tile 0x7D
+        // Source:  tile 0x69+0x58, tile 0x6D+0x58, tile 0x71+0x58, tile 0x7D+0x58
         new SpriteFrame(
-            p(-0x04, -0x1C, 2, 2, 0x69, 0, 0),
-            p( 0x0C, -0x14, 1, 4, 0x6D, 0, 0),
-            p(-0x14, -0x0C, 4, 3, 0x71, 0, 0),
-            p(-0x14,  0x0C, 2, 2, 0x7D, 0, 0)
+            p(-0x04, -0x1C, 2, 2, ART_OFFSET_DIAGONAL + 0x69, 0, 0),
+            p( 0x0C, -0x14, 1, 4, ART_OFFSET_DIAGONAL + 0x6D, 0, 0),
+            p(-0x14, -0x0C, 4, 3, ART_OFFSET_DIAGONAL + 0x71, 0, 0),
+            p(-0x14,  0x0C, 2, 2, ART_OFFSET_DIAGONAL + 0x7D, 0, 0)
         ),
 
         // Frame 9 (Map_obj09_014E): DPLC: dest 0->src 0x81, dest 4->src 0x85, dest 7->src 0x88, dest 15->src 0x90, dest 23->src 0x98
         // Mapping: tile 0 (2x2), tile 4 (1x3), tile 7 (4x2), tile $F (4x2), tile $17 (1x1)
-        // Source:  tile 0x81,    tile 0x85,    tile 0x88,    tile 0x90,     tile 0x98
+        // Source:  tile 0x81+0x58, tile 0x85+0x58, tile 0x88+0x58, tile 0x90+0x58, tile 0x98+0x58
         new SpriteFrame(
-            p(-0x04, -0x1C, 2, 2, 0x81, 0, 0),
-            p( 0x0C, -0x14, 1, 3, 0x85, 0, 0),
-            p(-0x14, -0x0C, 4, 2, 0x88, 0, 0),
-            p(-0x18,  0x04, 4, 2, 0x90, 0, 0),
-            p(-0x0C, -0x14, 1, 1, 0x98, 0, 0)
+            p(-0x04, -0x1C, 2, 2, ART_OFFSET_DIAGONAL + 0x81, 0, 0),
+            p( 0x0C, -0x14, 1, 3, ART_OFFSET_DIAGONAL + 0x85, 0, 0),
+            p(-0x14, -0x0C, 4, 2, ART_OFFSET_DIAGONAL + 0x88, 0, 0),
+            p(-0x18,  0x04, 4, 2, ART_OFFSET_DIAGONAL + 0x90, 0, 0),
+            p(-0x0C, -0x14, 1, 1, ART_OFFSET_DIAGONAL + 0x98, 0, 0)
         ),
 
         // Frame 10 (Map_obj09_0178): DPLC: dest 0->src 0x99, dest 6->src 0x9F, dest 8->src 0xA1, dest 16->src 0xA9, dest 24->src 0xB1
         // Mapping: tile 0 (3x2), tile 6 (1x2), tile 8 (4x2), tile $10 (4x2), tile $18 (1x1)
-        // Source:  tile 0x99,    tile 0x9F,    tile 0xA1,    tile 0xA9,      tile 0xB1
+        // Source:  tile 0x99+0x58, tile 0x9F+0x58, tile 0xA1+0x58, tile 0xA9+0x58, tile 0xB1+0x58
         new SpriteFrame(
-            p(-0x05, -0x1C, 3, 2, 0x99, 0, 0),
-            p( 0x0E, -0x0C, 1, 2, 0x9F, 0, 0),
-            p(-0x12, -0x0C, 4, 2, 0xA1, 0, 0),
-            p(-0x19,  0x04, 4, 2, 0xA9, 0, 0),
-            p(-0x11,  0x14, 1, 1, 0xB1, 0, 0)
+            p(-0x05, -0x1C, 3, 2, ART_OFFSET_DIAGONAL + 0x99, 0, 0),
+            p( 0x0E, -0x0C, 1, 2, ART_OFFSET_DIAGONAL + 0x9F, 0, 0),
+            p(-0x12, -0x0C, 4, 2, ART_OFFSET_DIAGONAL + 0xA1, 0, 0),
+            p(-0x19,  0x04, 4, 2, ART_OFFSET_DIAGONAL + 0xA9, 0, 0),
+            p(-0x11,  0x14, 1, 1, ART_OFFSET_DIAGONAL + 0xB1, 0, 0)
         ),
 
         // Frame 11 (Map_obj09_01A2): DPLC: dest 0->src 0xB2, dest 1->src 0xB3, dest 9->src 0xBB, dest 10->src 0xBC, dest 12->src 0xBE, dest 20->src 0xC6
         // Mapping: tile 0 (1x1), tile 1 (4x2), tile 9 (1x1), tile $A (1x2), tile $C (2x4), tile $14 (2x3)
-        // Source:  tile 0xB2,    tile 0xB3,    tile 0xBB,    tile 0xBC,     tile 0xBE,     tile 0xC6
+        // Source:  tile 0xB2+0x58, tile 0xB3+0x58, tile 0xBB+0x58, tile 0xBC+0x58, tile 0xBE+0x58, tile 0xC6+0x58
         new SpriteFrame(
-            p( 0x02, -0x1C, 1, 1, 0xB2, 0, 0),
-            p(-0x0C, -0x14, 4, 2, 0xB3, 0, 0),
-            p( 0x0C, -0x04, 1, 1, 0xBB, 0, 0),
-            p(-0x1C,  0x04, 1, 2, 0xBC, 0, 0),
-            p(-0x14, -0x04, 2, 4, 0xBE, 0, 0),
-            p(-0x04, -0x04, 2, 3, 0xC6, 0, 0)
+            p( 0x02, -0x1C, 1, 1, ART_OFFSET_DIAGONAL + 0xB2, 0, 0),
+            p(-0x0C, -0x14, 4, 2, ART_OFFSET_DIAGONAL + 0xB3, 0, 0),
+            p( 0x0C, -0x04, 1, 1, ART_OFFSET_DIAGONAL + 0xBB, 0, 0),
+            p(-0x1C,  0x04, 1, 2, ART_OFFSET_DIAGONAL + 0xBC, 0, 0),
+            p(-0x14, -0x04, 2, 4, ART_OFFSET_DIAGONAL + 0xBE, 0, 0),
+            p(-0x04, -0x04, 2, 3, ART_OFFSET_DIAGONAL + 0xC6, 0, 0)
         ),
 
         // ========== HORIZONTAL FRAMES (12-15) ==========
+        // Note: All tile indices have ART_OFFSET_HORIZONTAL (0x124) added
 
         // Frame 12 (Map_obj09_01D4): DPLC: dest 0->src 0, dest 6->src 6, dest 7->src 7
         // Mapping: tile 0 (2x3), tile 6 (1x1), tile 7 (4x4)
-        // Source:  tile 0x00,    tile 0x06,    tile 0x07
+        // Source:  tile 0x00+0x124, tile 0x06+0x124, tile 0x07+0x124
         new SpriteFrame(
-            p(-0x18, -0x10, 2, 3, 0x00, 0, 0),
-            p(-0x10,  0x08, 1, 1, 0x06, 0, 0),
-            p(-0x08, -0x10, 4, 4, 0x07, 0, 0)
+            p(-0x18, -0x10, 2, 3, ART_OFFSET_HORIZONTAL + 0x00, 0, 0),
+            p(-0x10,  0x08, 1, 1, ART_OFFSET_HORIZONTAL + 0x06, 0, 0),
+            p(-0x08, -0x10, 4, 4, ART_OFFSET_HORIZONTAL + 0x07, 0, 0)
         ),
 
         // Frame 13 (Map_obj09_01EE): DPLC: dest 0->src 0x17, dest 6->src 0x1D, dest 10->src 0x21
         // Mapping: tile 0 (2x3), tile 6 (1x4), tile $A (3x4)
-        // Source:  tile 0x17,    tile 0x1D,    tile 0x21
+        // Source:  tile 0x17+0x124, tile 0x1D+0x124, tile 0x21+0x124
         new SpriteFrame(
-            p(-0x18, -0x10, 2, 3, 0x17, 0, 0),
-            p(-0x08, -0x0F, 1, 4, 0x1D, 0, 0),
-            p( 0x00, -0x10, 3, 4, 0x21, 0, 0)
+            p(-0x18, -0x10, 2, 3, ART_OFFSET_HORIZONTAL + 0x17, 0, 0),
+            p(-0x08, -0x0F, 1, 4, ART_OFFSET_HORIZONTAL + 0x1D, 0, 0),
+            p( 0x00, -0x10, 3, 4, ART_OFFSET_HORIZONTAL + 0x21, 0, 0)
         ),
 
         // Frame 14 (Map_obj09_0208): DPLC: dest 0->src 0x2D, dest 3->src 0x30, dest 6->src 0x33
         // Mapping: tile 0 (1x3), tile 3 (1x3), tile 6 (4x4)
-        // Source:  tile 0x2D,    tile 0x30,    tile 0x33
+        // Source:  tile 0x2D+0x124, tile 0x30+0x124, tile 0x33+0x124
         new SpriteFrame(
-            p(-0x18, -0x0F, 1, 3, 0x2D, 0, 0),
-            p(-0x10, -0x10, 1, 3, 0x30, 0, 0),
-            p(-0x08, -0x10, 4, 4, 0x33, 0, 0)
+            p(-0x18, -0x0F, 1, 3, ART_OFFSET_HORIZONTAL + 0x2D, 0, 0),
+            p(-0x10, -0x10, 1, 3, ART_OFFSET_HORIZONTAL + 0x30, 0, 0),
+            p(-0x08, -0x10, 4, 4, ART_OFFSET_HORIZONTAL + 0x33, 0, 0)
         ),
 
         // Frame 15 (Map_obj09_0222): DPLC: dest 0->src 0x43, dest 6->src 0x49, dest 10->src 0x21
         // Mapping: tile 0 (2x3), tile 6 (1x4), tile $A (3x4)
-        // Source:  tile 0x43,    tile 0x49,    tile 0x21
+        // Source:  tile 0x43+0x124, tile 0x49+0x124, tile 0x21+0x124
         new SpriteFrame(
-            p(-0x18, -0x08, 2, 3, 0x43, 0, 0),
-            p(-0x08, -0x11, 1, 4, 0x49, 0, 0),
-            p( 0x00, -0x10, 3, 4, 0x21, 0, 0)
+            p(-0x18, -0x08, 2, 3, ART_OFFSET_HORIZONTAL + 0x43, 0, 0),
+            p(-0x08, -0x11, 1, 4, ART_OFFSET_HORIZONTAL + 0x49, 0, 0),
+            p( 0x00, -0x10, 3, 4, ART_OFFSET_HORIZONTAL + 0x21, 0, 0)
         ),
 
         // ========== BALL FRAMES (16-17) ==========
+        // Note: All tile indices have ART_OFFSET_BALL (0x171) added
 
         // Frame 16 (Map_obj09_023C): DPLC: dest 0->src 0, dest 8->src 8
         // Mapping: tile 0 (2x4), tile 8 (2x1), tile 0 hflip (2x4), tile 8 hflip (2x1)
-        // Source:  tile 0x00,    tile 0x08,    tile 0x00,          tile 0x08
+        // Source:  tile 0x00+0x171, tile 0x08+0x171, tile 0x00+0x171, tile 0x08+0x171
         new SpriteFrame(
-            p(-0x10, -0x14, 2, 4, 0x00, 0, 0),
-            p(-0x10,  0x0C, 2, 1, 0x08, 0, 0),
-            p( 0x00, -0x14, 2, 4, 0x00, 1, 0),
-            p( 0x00,  0x0C, 2, 1, 0x08, 1, 0)
+            p(-0x10, -0x14, 2, 4, ART_OFFSET_BALL + 0x00, 0, 0),
+            p(-0x10,  0x0C, 2, 1, ART_OFFSET_BALL + 0x08, 0, 0),
+            p( 0x00, -0x14, 2, 4, ART_OFFSET_BALL + 0x00, 1, 0),
+            p( 0x00,  0x0C, 2, 1, ART_OFFSET_BALL + 0x08, 1, 0)
         ),
 
         // Frame 17 (Map_obj09_025E): DPLC: dest 0->src 0xA, dest 8->src 8
         // Mapping: tile 0 (2x4), tile 8 (2x1), tile 0 hflip (2x4), tile 8 hflip (2x1)
-        // Source:  tile 0x0A,    tile 0x08,    tile 0x0A,          tile 0x08
+        // Source:  tile 0x0A+0x171, tile 0x08+0x171, tile 0x0A+0x171, tile 0x08+0x171
         new SpriteFrame(
-            p(-0x10, -0x14, 2, 4, 0x0A, 0, 0),
-            p(-0x10,  0x0C, 2, 1, 0x08, 0, 0),
-            p( 0x00, -0x14, 2, 4, 0x0A, 1, 0),
-            p( 0x00,  0x0C, 2, 1, 0x08, 1, 0)
+            p(-0x10, -0x14, 2, 4, ART_OFFSET_BALL + 0x0A, 0, 0),
+            p(-0x10,  0x0C, 2, 1, ART_OFFSET_BALL + 0x08, 0, 0),
+            p( 0x00, -0x14, 2, 4, ART_OFFSET_BALL + 0x0A, 1, 0),
+            p( 0x00,  0x0C, 2, 1, ART_OFFSET_BALL + 0x08, 1, 0)
         )
     };
 
