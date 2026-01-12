@@ -446,7 +446,11 @@ public class Sonic2SpecialStageRenderer {
     }
 
     /**
-     * Renders a single player sprite.
+     * Renders a single player sprite using multi-piece mappings.
+     *
+     * Special stage sprites are NOT simple grids - they consist of multiple
+     * sprite pieces at different positions with different sizes.
+     * Data is from obj09.asm (Sonic) / obj0A.asm (Tails) mappings.
      *
      * @param player The player to render
      */
@@ -459,37 +463,59 @@ public class Sonic2SpecialStageRenderer {
             basePattern += TAILS_PATTERN_OFFSET;
         }
 
-        int spriteWidth = 3;
-        int spriteHeight = 4;
+        // Get the mapping frame for current animation
+        int mappingFrame = player.getMappingFrame();
+        Sonic2SpecialStageSpriteMappings.SpriteFrame frame =
+            Sonic2SpecialStageSpriteMappings.getSonicFrame(mappingFrame);
 
-        int animOffset = player.getAnim() * 16;
+        boolean playerXFlip = player.isRenderXFlip();
+        boolean playerYFlip = player.isRenderYFlip();
 
-        boolean xFlip = player.isRenderXFlip();
-        boolean yFlip = player.isRenderYFlip();
+        int paletteIndex = player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.SONIC ? 1 : 2;
 
-        int centerOffsetX = (spriteWidth * TILE_SIZE) / 2;
-        int centerOffsetY = (spriteHeight * TILE_SIZE) / 2;
+        // Render each sprite piece in the frame
+        for (Sonic2SpecialStageSpriteMappings.SpritePiece piece : frame.pieces) {
+            // Calculate piece position, applying player flip
+            int pieceX = playerXFlip ? -piece.xOffset - (piece.widthTiles * TILE_SIZE) : piece.xOffset;
+            int pieceY = playerYFlip ? -piece.yOffset - (piece.heightTiles * TILE_SIZE) : piece.yOffset;
 
-        for (int ty = 0; ty < spriteHeight; ty++) {
-            for (int tx = 0; tx < spriteWidth; tx++) {
-                int tileIndex = ty * spriteWidth + tx + animOffset;
+            // Combine piece flip with player flip
+            boolean finalHFlip = piece.hFlip ^ playerXFlip;
+            boolean finalVFlip = piece.vFlip ^ playerYFlip;
 
-                int drawTx = xFlip ? (spriteWidth - 1 - tx) : tx;
-                int drawTy = yFlip ? (spriteHeight - 1 - ty) : ty;
+            // Render all tiles in this piece
+            // Mega Drive sprites use COLUMN-MAJOR order: tiles go top-to-bottom, then left-to-right
+            int tileIndex = piece.tileIndex;
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    int patternId = basePattern + tileIndex;
 
-                int patternId = basePattern + tileIndex;
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(true);
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(finalHFlip);
+                    desc.setVFlip(finalVFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
 
-                PatternDesc desc = new PatternDesc();
-                desc.setPriority(true);
-                desc.setPaletteIndex(player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.SONIC ? 1 : 2);
-                desc.setHFlip(xFlip);
-                desc.setVFlip(yFlip);
-                desc.setPatternIndex(patternId & 0x7FF);
+                    // Calculate tile position within the piece
+                    int tileOffsetX, tileOffsetY;
+                    if (finalHFlip) {
+                        tileOffsetX = (piece.widthTiles - 1 - tx) * TILE_SIZE;
+                    } else {
+                        tileOffsetX = tx * TILE_SIZE;
+                    }
+                    if (finalVFlip) {
+                        tileOffsetY = (piece.heightTiles - 1 - ty) * TILE_SIZE;
+                    } else {
+                        tileOffsetY = ty * TILE_SIZE;
+                    }
 
-                int tileScreenX = screenX - centerOffsetX + drawTx * TILE_SIZE;
-                int tileScreenY = screenY - centerOffsetY + drawTy * TILE_SIZE;
+                    int tileScreenX = screenX + pieceX + tileOffsetX;
+                    int tileScreenY = screenY + pieceY + tileOffsetY;
 
-                graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                    tileIndex++;
+                }
             }
         }
     }
@@ -636,14 +662,27 @@ public class Sonic2SpecialStageRenderer {
      * Tile offsets in SpecialMessages art for letters.
      * From obj5A.asm Map_obj5A mappings - each is a 1x2 tile piece (8x16 pixels).
      * These are stored interleaved: top tile then bottom tile.
+     *
+     * Charset mapping from s2.asm (lines 71524-71530) maps letters to frame numbers:
+     * - G = frame 0, E = frame 1, T = frame 2, R = frame 3, I = frame 4, N = frame 5, S = frame 6
+     *
+     * Frame-to-tile mappings from obj5A.asm:
+     * - Frame 0: tile offset 0x04 (G)
+     * - Frame 1: tile offset 0x02 (E)
+     * - Frame 2: tile offset 0x14 (T)
+     * - Frame 3: tile offset 0x10 (R)
+     * - Frame 4: tile offset 0x08 (I)
+     * - Frame 5: tile offset 0x0C (N)
+     * - Frame 6: tile offset 0x12 (S)
+     * - Frame 7: tile offset 0x00 (unused here)
      */
-    private static final int TILE_G = 0x04;
-    private static final int TILE_E = 0x02;
-    private static final int TILE_T = 0x14;
-    private static final int TILE_R = 0x10;  // Actually maps to 'N' in obj5A, R needs verification
-    private static final int TILE_I = 0x08;
-    private static final int TILE_N = 0x10;
-    private static final int TILE_S = 0x0C;
+    private static final int TILE_G = 0x04;   // Frame 0
+    private static final int TILE_E = 0x02;   // Frame 1
+    private static final int TILE_T = 0x14;   // Frame 2
+    private static final int TILE_R = 0x10;   // Frame 3
+    private static final int TILE_I = 0x08;   // Frame 4
+    private static final int TILE_N = 0x0C;   // Frame 5
+    private static final int TILE_S = 0x12;   // Frame 6 - S uses tile $12, not $00!
 
     /**
      * Renders the "GET XX RINGS" message.
@@ -697,8 +736,10 @@ public class Sonic2SpecialStageRenderer {
         int ones = ringReq % 10;
         renderHudDigit(digitX, baseY, ones, digitPalette);
 
-        // Render "RINGS!" at appropriate position
-        int ringsX = screenCenterOffset + (ringReq >= 100 ? 0x90 : 0x88);
+        // Render "RINGS" at appropriate position
+        // Note: Uses same TILE_G as in "GET" - 'G' is frame 0 in the charset
+        // From disasm: x=$84 for 2-digit, $8C for 3-digit
+        int ringsX = screenCenterOffset + (ringReq >= 100 ? 0x8C : 0x84);
         renderMessageLetter(ringsX, baseY, TILE_R, textPalette);
         renderMessageLetter(ringsX + 8, baseY, TILE_I, textPalette);
         renderMessageLetter(ringsX + 16, baseY, TILE_N, textPalette);
@@ -730,12 +771,14 @@ public class Sonic2SpecialStageRenderer {
 
     /**
      * Renders a digit using HUD art patterns in interleaved format.
-     * Matches HudRenderManager's approach: digit N uses patterns (N*2) and (N*2+1).
+     * From obj5F_b.asm: digit 0 starts at tile $12, each digit is 2 tiles.
+     * So digit N uses tiles at offset (0x12 + N*2) and (0x12 + N*2 + 1).
      */
     private void renderHudDigit(int x, int y, int digit, int paletteIndex) {
-        // Interleaved layout: top tile = digit*2, bottom tile = digit*2+1
-        int topPatternId = hudPatternBase + (digit * 2);
-        int bottomPatternId = hudPatternBase + (digit * 2) + 1;
+        // HUD digits start at tile offset 0x12, interleaved format
+        int tileOffset = 0x12 + (digit * 2);
+        int topPatternId = hudPatternBase + tileOffset;
+        int bottomPatternId = hudPatternBase + tileOffset + 1;
 
         PatternDesc desc = new PatternDesc();
         desc.setPriority(true);

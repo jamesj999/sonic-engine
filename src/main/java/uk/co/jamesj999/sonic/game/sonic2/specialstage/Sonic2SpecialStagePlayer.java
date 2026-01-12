@@ -106,6 +106,25 @@ public class Sonic2SpecialStagePlayer {
 
     private static final int SCREEN_SCALE_FACTOR = 0xCC;
 
+    // Animation scripts from s2disasm off_341E4 (byte_341EE through byte_34208)
+    // Format: {duration, frame0, frame1, ..., -1 to mark end/loop}
+    private static final int[][] ANIM_SCRIPTS = {
+        // Anim 0: Upright running - frames 0,1,2,3 looping
+        { 3, 0, 1, 2, 3, -1 },
+        // Anim 1: Diagonal - frames 4,5,6,7,8,9,10,11 looping
+        { 3, 4, 5, 6, 7, 8, 9, 10, 11, -1 },
+        // Anim 2: Horizontal - frames 12,13,14,15 looping
+        { 3, 12, 13, 14, 15, -1 },
+        // Anim 3: Ball/Jump - frames 16,17 looping
+        { 1, 16, 17, -1 },
+        // Anim 4: Hurt rotation - frames 0,4,12,4,0,4,12,4 looping
+        { 3, 0, 4, 12, 4, 0, 4, 12, 4, -1 }
+    };
+
+    // Animation frame timer from special stage (SS_player_anim_frame_timer)
+    // This is normally based on speed, but we'll use a fixed rate for now
+    private static final int BASE_ANIM_DURATION = 6;
+
     private int[] ctrlRecordBuf;
     private int ctrlRecordIndex;
     private static final int CTRL_RECORD_SIZE = 16;
@@ -222,6 +241,7 @@ public class Sonic2SpecialStagePlayer {
         ssAnglePos();
         ssPlayerJump(pressedButtons);
         ssPlayerSetAnimation();
+        ssPlayerAnimate();
         ssPlayerCollision();
     }
 
@@ -232,6 +252,8 @@ public class Sonic2SpecialStagePlayer {
         ssPlayerDoLevelCollision();
         ssPlayerSwapPositions();
         ssAnglePos();
+        ssPlayerSetAnimation();
+        ssPlayerAnimate();
     }
 
     private void updateAirborne(int heldButtons) {
@@ -242,6 +264,7 @@ public class Sonic2SpecialStagePlayer {
         ssPlayerSwapPositions();
         ssAnglePos();
         ssPlayerSetAnimation();
+        ssPlayerAnimate();
     }
 
     private void updateHurt() {
@@ -519,6 +542,79 @@ public class Sonic2SpecialStagePlayer {
         if (d0 == 1 || d0 == 5) {
             ssInitFlipTimer = 0x400;
         }
+    }
+
+    /**
+     * Animates the player by stepping through the animation script.
+     * Based on SSPlayer_Animate from s2disasm (lines 69079-69120).
+     *
+     * The animation script format is: duration, frame0, frame1, ..., -1 (loop marker)
+     * This method decrements the frame duration timer, and when it reaches 0,
+     * advances to the next frame in the script and sets mappingFrame.
+     */
+    private void ssPlayerAnimate() {
+        int currentAnim = anim;
+
+        // Bounds check
+        if (currentAnim < 0 || currentAnim >= ANIM_SCRIPTS.length) {
+            currentAnim = 0;
+        }
+
+        // Check if animation changed
+        if (currentAnim != prevAnim) {
+            animFrame = 0;
+            prevAnim = currentAnim;
+            animFrameDuration = 0;
+        }
+
+        int[] script = ANIM_SCRIPTS[currentAnim];
+
+        // Decrement frame duration timer
+        animFrameDuration--;
+        if (animFrameDuration >= 0) {
+            // Still waiting, no update needed
+            return;
+        }
+
+        // Reset frame duration (first byte of script is the base duration)
+        // In original game this is modified by SS_player_anim_frame_timer based on speed
+        animFrameDuration = BASE_ANIM_DURATION >> 1;
+
+        // Handle flip timer for anim 0 (upright running with periodic flip)
+        if (currentAnim == 0) {
+            ssFlipTimer--;
+            if (ssFlipTimer <= 0) {
+                // Toggle x flip
+                statusXFlip = !statusXFlip;
+                renderXFlip = !renderXFlip;
+                ssFlipTimer = ssInitFlipTimer & 0xFF;
+            }
+        }
+
+        // Get current frame from script (frame data starts at index 1)
+        int frameDataIndex = animFrame + 1;
+        if (frameDataIndex >= script.length || script[frameDataIndex] == -1) {
+            // Loop back to start
+            animFrame = 0;
+            frameDataIndex = 1;
+        }
+
+        int frame = script[frameDataIndex];
+        if (frame == -1) {
+            // Safety: loop marker, restart
+            animFrame = 0;
+            frame = script[1];
+        }
+
+        // Set the mapping frame (strip sign bit like original: andi.b #$7F,d0)
+        mappingFrame = frame & 0x7F;
+
+        // Apply status flip flags to render flags
+        renderXFlip = statusXFlip;
+        renderYFlip = statusYFlip;
+
+        // Advance to next frame
+        animFrame++;
     }
 
     private void ssPlayerCollision() {
