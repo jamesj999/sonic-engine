@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.PatternDesc;
+import uk.co.jamesj999.sonic.level.render.BackgroundRenderer;
 
 import static uk.co.jamesj999.sonic.level.LevelConstants.*;
 
@@ -16,8 +17,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class GraphicsManager {
+	private static final Logger LOGGER = Logger.getLogger(GraphicsManager.class.getName());
+
 	private static GraphicsManager graphicsManager;
 	List<GLCommandable> commands = new ArrayList<>();
 
@@ -30,6 +35,10 @@ public class GraphicsManager {
 	private ShaderProgram shaderProgram;
 	private ShaderProgram debugShaderProgram;
 	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
+	private static final String PARALLAX_SHADER_PATH = "shaders/shader_parallax_bg.glsl";
+
+	// Background renderer for per-scanline parallax scrolling
+	private BackgroundRenderer backgroundRenderer;
 
 	// Batched rendering support
 	private boolean batchingEnabled = true;
@@ -262,11 +271,12 @@ public class GraphicsManager {
 	 * a pseudo-3D halfpipe effect where each 8x8 tile appears as 4 strips of
 	 * 2 scanlines each. This method renders a single strip (8 wide × 2 high).
 	 *
-	 * @param patternId The pattern texture ID
-	 * @param desc The pattern descriptor (handles H/V flip and palette)
-	 * @param x Screen X position
-	 * @param y Screen Y position of this strip
-	 * @param stripIndex Which strip to render (0-3, where 0 is top of original tile)
+	 * @param patternId  The pattern texture ID
+	 * @param desc       The pattern descriptor (handles H/V flip and palette)
+	 * @param x          Screen X position
+	 * @param y          Screen Y position of this strip
+	 * @param stripIndex Which strip to render (0-3, where 0 is top of original
+	 *                   tile)
 	 */
 	public void renderStripPatternWithId(int patternId, PatternDesc desc, int x, int y, int stripIndex) {
 		Integer patternTextureId = patternTextureMap.get("pattern_" + patternId);
@@ -404,6 +414,26 @@ public class GraphicsManager {
 
 	public GL2 getGraphics() {
 		return graphics;
+	}
+
+	/**
+	 * Get the background renderer for shader-based parallax scrolling.
+	 * Initializes it lazily on first access.
+	 */
+	public BackgroundRenderer getBackgroundRenderer() {
+		if (headlessMode) {
+			return null;
+		}
+		if (backgroundRenderer == null && graphics != null) {
+			try {
+				backgroundRenderer = new BackgroundRenderer();
+				backgroundRenderer.init(graphics, PARALLAX_SHADER_PATH);
+				LOGGER.info("BackgroundRenderer initialized for shader-based parallax.");
+			} catch (IOException e) {
+				LOGGER.log(Level.SEVERE, "Failed to initialize BackgroundRenderer", e);
+			}
+		}
+		return backgroundRenderer;
 	}
 
 	public void enqueueDebugLineState() {
