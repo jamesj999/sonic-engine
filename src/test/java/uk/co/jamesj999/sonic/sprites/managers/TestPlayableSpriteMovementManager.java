@@ -609,4 +609,98 @@ public class TestPlayableSpriteMovementManager {
                 assertEquals("Air control should work when not hurt - right input increases xSpeed",
                                 (short) 1024, mockSprite.getXSpeed());
         }
+
+        /**
+         * Test that rolling is prevented when the down key is locked.
+         * When crouching (standing still with down held) and pressing left/right,
+         * the down key should be locked and not trigger rolling until released.
+         */
+        @Test
+        public void testDownLockedPreventsRoll() throws Exception {
+                // Setup: On ground, started from crouch state, now moving with high speed
+                // Simulate the scenario: was crouching, then pressed left/right to start moving
+                mockSprite.setAir(false);
+                mockSprite.setRolling(false);
+                mockSprite.setGSpeed((short) 0);
+                mockSprite.setCrouching(true); // Was crouching
+
+                // First, update crouch state with left/right pressed (should lock down)
+                Method crouchMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "updateCrouchState", AbstractPlayableSprite.class, boolean.class,
+                                boolean.class, boolean.class, boolean.class);
+                crouchMethod.setAccessible(true);
+                crouchMethod.invoke(manager, mockSprite, true, true, false, true); // down + left, wasCrouching=true
+
+                // Now move at high speed and try to roll - should fail because down is locked
+                mockSprite.setGSpeed((short) 500); // High speed
+
+                Method rollMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateRoll", AbstractPlayableSprite.class, boolean.class);
+                rollMethod.setAccessible(true);
+                rollMethod.invoke(manager, mockSprite, true); // down still held
+
+                // Assert: Rolling should NOT start because down is locked
+                assertTrue("Rolling should NOT start when down is locked from crouch transition",
+                                !mockSprite.getRolling());
+        }
+
+        /**
+         * Test that releasing and re-pressing down unlocks the down key and allows
+         * rolling.
+         */
+        @Test
+        public void testDownReleasedUnlocksRolling() throws Exception {
+                // Setup: Start from locked state (transitioned from crouch)
+                mockSprite.setAir(false);
+                mockSprite.setRolling(false);
+                mockSprite.setGSpeed((short) 0);
+                mockSprite.setCrouching(true);
+
+                // Lock the down key by transitioning from crouch
+                Method crouchMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "updateCrouchState", AbstractPlayableSprite.class, boolean.class,
+                                boolean.class, boolean.class, boolean.class);
+                crouchMethod.setAccessible(true);
+                crouchMethod.invoke(manager, mockSprite, true, true, false, true); // down + left, wasCrouching=true
+                                                                                   // (locks)
+
+                // Now release down - should unlock
+                crouchMethod.invoke(manager, mockSprite, false, true, false, false); // no down, left,
+                                                                                     // wasCrouching=false
+
+                // Now set up for roll - moving with high speed and press down again
+                mockSprite.setGSpeed((short) 500);
+
+                Method rollMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateRoll", AbstractPlayableSprite.class, boolean.class);
+                rollMethod.setAccessible(true);
+                rollMethod.invoke(manager, mockSprite, true); // down pressed fresh
+
+                // Assert: Rolling SHOULD start because down was released and pressed again
+                assertTrue("Rolling should start after down is released and pressed again",
+                                mockSprite.getRolling());
+        }
+
+        /**
+         * Test that rolling works normally when not starting from crouch state.
+         * If the player is already moving and presses down (not from crouch), rolling
+         * should work.
+         */
+        @Test
+        public void testRollingWorksWhenNotFromCrouch() throws Exception {
+                // Setup: On ground, moving fast, not crouching
+                mockSprite.setAir(false);
+                mockSprite.setRolling(false);
+                mockSprite.setCrouching(false); // NOT crouching
+                mockSprite.setGSpeed((short) 500); // Already moving fast
+
+                Method rollMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                                "calculateRoll", AbstractPlayableSprite.class, boolean.class);
+                rollMethod.setAccessible(true);
+                rollMethod.invoke(manager, mockSprite, true); // down pressed
+
+                // Assert: Rolling SHOULD start because we weren't crouching
+                assertTrue("Rolling should work when not transitioning from crouch",
+                                mockSprite.getRolling());
+        }
 }

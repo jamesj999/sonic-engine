@@ -34,6 +34,12 @@ public class PlayableSpriteMovementManager extends
 	private boolean jumpHeld;
 	private boolean skidding;
 
+	// Tracks when the down button was held while crouching.
+	// When the player crouches (standing still with down held) and then presses
+	// left/right, the down button should be "locked" and not trigger rolling.
+	// The down key must be released and pressed again to trigger a roll.
+	private boolean downLocked;
+
 	private boolean testKeyPressed;
 
 	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
@@ -90,6 +96,10 @@ public class PlayableSpriteMovementManager extends
 			sprite.updateSensors(originalX, originalY);
 			return;
 		}
+
+		// Save crouching state before clearing it, so we can detect transitions
+		// from crouching to moving (for down key locking)
+		boolean wasCrouching = sprite.getCrouching();
 		sprite.setCrouching(false);
 
 		// First thing to do is run this additional method to find out if the jump
@@ -185,7 +195,7 @@ public class PlayableSpriteMovementManager extends
 		// (Only applicable if not in the air)
 		if (!sprite.getAir()) {
 			calculateRoll(sprite, down);
-			updateCrouchState(sprite, down, left, right);
+			updateCrouchState(sprite, down, left, right, wasCrouching);
 		}
 
 		// Store some attributes in case we need to 'reset' the terrain collision:
@@ -845,9 +855,9 @@ public class PlayableSpriteMovementManager extends
 		short gSpeed = sprite.getGSpeed();
 
 		// If the player is pressing down, we're not in the air, we're not
-		// currently rolling and our ground speed is greater than the minimum
-		// speed, start rolling:
-		if (down && !sprite.getAir() && !sprite.getRolling()
+		// currently rolling, down is not locked, and our ground speed is greater
+		// than the minimum speed, start rolling:
+		if (down && !downLocked && !sprite.getAir() && !sprite.getRolling()
 				&& (gSpeed > minStartRollSpeed || gSpeed < -minStartRollSpeed)) {
 			sprite.setRolling(true);
 			// TODO we should only play this if it's not immediately the result of a
@@ -866,7 +876,9 @@ public class PlayableSpriteMovementManager extends
 		}
 	}
 
-	private void updateCrouchState(AbstractPlayableSprite sprite, boolean down, boolean left, boolean right) {
+	private void updateCrouchState(AbstractPlayableSprite sprite, boolean down, boolean left, boolean right,
+			boolean wasCrouching) {
+
 		boolean crouching = down
 				&& !left
 				&& !right
@@ -875,6 +887,19 @@ public class PlayableSpriteMovementManager extends
 				&& !sprite.getSpindash()
 				&& sprite.getGSpeed() == 0;
 		sprite.setCrouching(crouching);
+
+		// If the player was crouching (standing still with down held) and now
+		// presses left or right, lock the down key to prevent rolling from
+		// triggering. The down key must be released and pressed again to trigger
+		// a roll. This prevents the oscillating roll/stop-rolling bug.
+		if (wasCrouching && (left || right)) {
+			downLocked = true;
+		}
+
+		// Unlock the down key when it is released
+		if (!down) {
+			downLocked = false;
+		}
 	}
 
 	/**
