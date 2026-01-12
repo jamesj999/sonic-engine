@@ -59,6 +59,9 @@ public class Sonic2SpecialStagePlayer {
     private int ssHurtTimer;
     private int ssDplcTimer;
 
+    // Flip timer for creating 8-frame running animation from 4 art frames.
+    // ss_init_flip_timer is a word (0x400), but when read as byte it gives high byte (0x04).
+    // After every 4 animation frame advances, the flip toggles.
     private int ssInitFlipTimer;
     private int ssFlipTimer;
     private int ssLastAngleIndex;
@@ -175,7 +178,10 @@ public class Sonic2SpecialStagePlayer {
         ssDplcTimer = 0;
 
         ssInitFlipTimer = 0x400;
-        ssFlipTimer = 0;
+        // Original 68000: ss_init_flip_timer is at offset $32, ss_flip_timer at offset $33
+        // When move.w #$400 writes to offset $32, it puts $04 at $32 and $00 at $33
+        // So ss_flip_timer (offset $33) starts at 0, triggering flip on first frame
+        ssFlipTimer = ssInitFlipTimer & 0xFF;  // = 0 (low byte)
         ssLastAngleIndex = 0;
 
         anim = 0;
@@ -533,7 +539,6 @@ public class Sonic2SpecialStagePlayer {
 
         // Convert angle to table index: (angle - 0x10) >> 5 gives 0-7
         int d0 = ((angle - 0x10) & 0xFF) >> 5;
-        ssLastAngleIndex = d0;
 
         // Animation table from byte_33E90 in s2disasm (lines 69031-69039)
         // Format: {anim, xFlip, yFlip}
@@ -557,11 +562,24 @@ public class Sonic2SpecialStagePlayer {
             {2, 1, 0}   // Index 7: horizontal, xFlip
         };
 
-        if (d0 < animTable.length) {
-            anim = animTable[d0][0];
-            statusXFlip = animTable[d0][1] != 0;
-            statusYFlip = animTable[d0][2] != 0;
+        if (d0 >= animTable.length) {
+            return;
         }
+
+        int newAnim = animTable[d0][0];
+
+        // Original assembly (lines 69057-69060):
+        // cmp.b anim(a0),d2 / bne.s + / cmp.b ss_last_angle_index(a0),d1 / beq.s return
+        // Only update status flip flags if animation OR angle index changed.
+        // This preserves the flip timer's toggled state when staying in the same position.
+        if (newAnim == anim && d0 == ssLastAngleIndex) {
+            return;
+        }
+
+        ssLastAngleIndex = d0;
+        anim = newAnim;
+        statusXFlip = animTable[d0][1] != 0;
+        statusYFlip = animTable[d0][2] != 0;
 
         // Reset flip timer at specific angle indices (center positions)
         if (d0 == 1 || d0 == 5) {
@@ -607,16 +625,17 @@ public class Sonic2SpecialStagePlayer {
         animFrameDuration = script[0];
 
         // Handle flip timer for anim 0 (upright running with periodic flip)
+        // Original: subi_.b #1,ss_flip_timer(a0) / bgt.s + / bchg ...
+        // The flip timer counts down, and when it reaches 0, toggles the flip
+        // and resets to the byte at ss_init_flip_timer offset ($32), which is 0x04
         if (currentAnim == 0) {
             ssFlipTimer--;
             if (ssFlipTimer <= 0) {
-                // Toggle x flip
+                // Toggle x flip status (render flags are copied from status at end)
                 statusXFlip = !statusXFlip;
-                renderXFlip = !renderXFlip;
-                // Original: move.b ss_init_flip_timer(a0),ss_flip_timer(a0)
-                // On 68000 big-endian, reading a byte from word 0x400 gives 0x04 (high byte)
-                // However, the original flip behavior with timer=0 created the running illusion
-                ssFlipTimer = ssInitFlipTimer & 0xFF;
+                // Reset timer: read byte at ss_init_flip_timer offset ($32)
+                // When word 0x0400 is written at $32, byte at $32 is 0x04 (high byte)
+                ssFlipTimer = (ssInitFlipTimer >> 8) & 0xFF;
             }
         }
 
