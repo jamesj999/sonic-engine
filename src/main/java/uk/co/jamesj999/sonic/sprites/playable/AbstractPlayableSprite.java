@@ -23,6 +23,8 @@ import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
 import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
+import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.timer.timers.SpeedShoesTimer;
 
 /**
  * Movement speeds are in subpixels (256 subpixels per pixel...).
@@ -166,7 +168,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private ShieldObjectInstance shieldObject;
         private InvincibilityStarsObjectInstance invincibilityObject;
         protected boolean speedShoes = false;
-        protected int speedShoesFrames = 0;
 
         /**
          * When true, forces right input regardless of actual keyboard input.
@@ -190,7 +191,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         this.invincibilityObject = null;
                 }
                 this.speedShoes = false;
-                this.speedShoesFrames = 0;
+                // Cancel any active speed shoes timer
+                TimerManager.getInstance().removeTimerForCode("SpeedShoes-" + getCode());
                 this.invincibleFrames = 0;
                 this.invulnerableFrames = 0;
                 this.invincibleFrames = 0;
@@ -240,8 +242,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void giveSpeedShoes() {
                 this.speedShoes = true;
-                this.speedShoesFrames = 1200; // 20 seconds @ 60fps
-                defineSpeeds(); // Recalculate speeds
+                // Register speed shoes timer using the existing timer framework
+                // Duration is 1200 frames (20 seconds @ 60fps) per SPG Sonic 2
+                TimerManager.getInstance().registerTimer(
+                                new SpeedShoesTimer("SpeedShoes-" + getCode(), this));
+        }
+
+        /**
+         * Called by SpeedShoesTimer when the effect expires.
+         * Deactivates speed shoes and resets physics values.
+         */
+        public void deactivateSpeedShoes() {
+                this.speedShoes = false;
         }
 
         public void giveInvincibility() {
@@ -577,18 +589,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                                 springing = false;
                         }
                 }
-                if (speedShoesFrames > 0) {
-                        speedShoesFrames--;
-                        if (speedShoesFrames == 0) {
-                                speedShoes = false;
-                                defineSpeeds();
-                                AudioManager audioManager = AudioManager.getInstance();
-                                GameAudioProfile audioProfile = audioManager.getAudioProfile();
-                                if (audioProfile != null) {
-                                        audioManager.playMusic(audioProfile.getSpeedShoesOffCommandId());
-                                }
-                        }
-                }
+                // Speed shoes countdown is now handled by SpeedShoesTimer
         }
 
         public boolean applyHurt(int sourceX) {
@@ -845,7 +846,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public short getRunAccel() {
-                return runAccel;
+                // SPG Sonic 2: Speed shoes double acceleration
+                return hasSpeedShoes() ? (short) (runAccel * 2) : runAccel;
         }
 
         public short getRunDecel() {
@@ -865,11 +867,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public short getFriction() {
-                return friction;
+                // SPG Sonic 2: Speed shoes double friction
+                return hasSpeedShoes() ? (short) (friction * 2) : friction;
         }
 
         public short getMax() {
-                return max;
+                // SPG Sonic 2: Speed shoes double top speed
+                return hasSpeedShoes() ? (short) (max * 2) : max;
         }
 
         public byte getAngle() {
