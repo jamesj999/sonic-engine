@@ -439,7 +439,7 @@ public class Sonic2SpecialStageManager {
             if (frameSampleCount >= FRAME_SAMPLE_SIZE) {
                 double avgMs = (frameSampleSum / (double) frameSampleCount) / 1_000_000.0;
                 double actualFps = 1000.0 / avgMs;
-                LOGGER.info(String.format("Actual FPS: %.1f (%.2f ms/frame)", actualFps, avgMs));
+                LOGGER.fine(String.format("Actual FPS: %.1f (%.2f ms/frame)", actualFps, avgMs));
                 frameSampleCount = 0;
                 frameSampleSum = 0;
             }
