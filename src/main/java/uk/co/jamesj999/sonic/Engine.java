@@ -215,6 +215,15 @@ public class Engine extends GLCanvas implements GLEventListener {
 			} else {
 				specialStageManager.draw();
 			}
+		} else if (getCurrentGameMode() == GameMode.SPECIAL_STAGE_RESULTS) {
+			// Render results screen
+			var resultsScreen = gameLoop.getResultsScreen();
+			if (resultsScreen != null) {
+				java.util.List<uk.co.jamesj999.sonic.graphics.GLCommand> commands = new java.util.ArrayList<>();
+				resultsScreen.appendRenderCommands(commands);
+				graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommandGroup(
+						com.jogamp.opengl.GL2.GL_LINES, commands));
+			}
 		} else if (!debugViewEnabled) {
 			levelManager.drawWithSpritePriority(spriteRenderManager);
 		} else {
@@ -323,6 +332,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// Set clear color based on game mode and clear the game viewport
 		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
 			gl.glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Black for special stage
+		} else if (getCurrentGameMode() == GameMode.SPECIAL_STAGE_RESULTS) {
+			gl.glClearColor(0.85f, 0.9f, 0.95f, 1.0f); // Light blue/white for results
 		} else {
 			levelManager.setClearColor(gl);
 		}

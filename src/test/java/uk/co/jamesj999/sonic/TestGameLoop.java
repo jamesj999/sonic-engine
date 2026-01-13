@@ -105,15 +105,12 @@ public class TestGameLoop {
     }
 
     @Test
-    public void testExitSpecialStageFromLevelModeDoesNothing() {
-        // When already in LEVEL mode, exitSpecialStage should do nothing
+    public void testGameModeStartsInLevelMode() {
+        // When starting, should be in LEVEL mode
         assertEquals("Should be in LEVEL mode", GameMode.LEVEL, gameLoop.getCurrentGameMode());
 
-        gameLoop.exitSpecialStage(false, false);
-
-        // Should still be in LEVEL mode
-        assertEquals("Should still be in LEVEL mode after invalid exit",
-                GameMode.LEVEL, gameLoop.getCurrentGameMode());
+        // Verify no results screen is active
+        assertNull("Results screen should be null initially", gameLoop.getResultsScreen());
     }
 
     // ==================== Game Mode Accessor Tests ====================

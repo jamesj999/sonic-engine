@@ -41,8 +41,12 @@ public class Sonic2SpecialStageRenderer {
     private int bombPatternBase;
     private int starsPatternBase;      // For ring sparkle animation (uses separate art)
     private int explosionPatternBase;  // For bomb explosion animation (uses separate art)
+    private int emeraldPatternBase;    // For chaos emerald
     private Sonic2SpecialStageObjectManager objectManager;
     private Sonic2PerspectiveData perspectiveData;
+
+    // Checkpoint system
+    private Sonic2SpecialStageCheckpoint checkpoint;
 
     /**
      * START banner sprite-piece definition (Obj5F frame0 from obj5F_a.asm).
@@ -128,12 +132,20 @@ public class Sonic2SpecialStageRenderer {
         this.explosionPatternBase = explosionBase;
     }
 
+    public void setEmeraldPatternBase(int emeraldBase) {
+        this.emeraldPatternBase = emeraldBase;
+    }
+
     public void setObjectManager(Sonic2SpecialStageObjectManager objectManager) {
         this.objectManager = objectManager;
     }
 
     public void setPerspectiveData(Sonic2PerspectiveData perspectiveData) {
         this.perspectiveData = perspectiveData;
+    }
+
+    public void setCheckpoint(Sonic2SpecialStageCheckpoint checkpoint) {
+        this.checkpoint = checkpoint;
     }
 
     /**
@@ -718,6 +730,7 @@ public class Sonic2SpecialStageRenderer {
     private static final int TILE_I = 0x08;   // Frame 4
     private static final int TILE_N = 0x0C;   // Frame 5
     private static final int TILE_S = 0x12;   // Frame 6 - S uses tile $12, not $00!
+    private static final int TILE_O = 0x6A;   // Frame 8 - O uses tile $6A (overflows into HUD art)
 
     /**
      * Renders the "GET XX RINGS" message.
@@ -785,10 +798,26 @@ public class Sonic2SpecialStageRenderer {
     /**
      * Renders a single 1x2 tile letter from the SpecialMessages art.
      * Each letter is 8 pixels wide × 16 pixels tall (2 tiles stacked vertically).
+     *
+     * IMPORTANT: The original game's VRAM layout has SpecialMessages at $1A2 and
+     * SpecialHUD at $1FA (88 tiles later). Some letters like 'O' use tile offset
+     * $6A (106), which exceeds SpecialMessages' 88 tiles and overflows into
+     * SpecialHUD territory. We handle this by checking if the offset is >= 88
+     * and adjusting to use hudPatternBase instead.
      */
     private void renderMessageLetter(int x, int y, int tileOffset, int paletteIndex) {
+        // SpecialMessages has exactly 88 tiles ($58). Offsets >= 88 overflow into SpecialHUD.
+        final int MESSAGES_TILE_COUNT = 0x58;  // 88 tiles
+
         for (int ty = 0; ty < 2; ty++) {
-            int patternId = messagesPatternBase + tileOffset + ty;
+            int patternId;
+            if (tileOffset >= MESSAGES_TILE_COUNT) {
+                // Overflow case: offset is in SpecialHUD territory
+                // Calculate offset into HUD: (tileOffset - 88) + ty
+                patternId = hudPatternBase + (tileOffset - MESSAGES_TILE_COUNT) + ty;
+            } else {
+                patternId = messagesPatternBase + tileOffset + ty;
+            }
 
             PatternDesc desc = new PatternDesc();
             desc.setPriority(true);
@@ -885,6 +914,134 @@ public class Sonic2SpecialStageRenderer {
         graphicsManager.flushPatternBatch();
     }
 
+    // ========== Rings To Go HUD ==========
+
+    /**
+     * Renders the "X RINGS TO GO" counter during gameplay.
+     * This is the persistent countdown display from Obj5A_RingsNeeded in the original game.
+     *
+     * The original game displays: [digits] RING[S] TO GO!
+     * - Digits and "RING" are at fixed positions
+     * - "TO GO!" letters animate from edges toward center
+     * - "S" appears/hides based on count (pluralization)
+     *
+     * From s2.asm:
+     * - y_pos = $38 (56 decimal)
+     * - "RING" starts at x=$68, digits to the left starting at x=$5A
+     * - "TO GO!" animates from Obj5A_ToGoOffsets positions
+     *
+     * @param ringsToGo Number of rings still needed (requirement - collected)
+     * @param frameCounter Current frame for flash timing
+     */
+    public void renderRingsToGoHUD(int ringsToGo, int frameCounter) {
+        // Don't show if we've already met the requirement
+        if (ringsToGo <= 0) {
+            return;
+        }
+
+        // Flash effect: hide every 8th frame (matching original's andi.b #7,d0; cmpi.b #6,d0)
+        if ((frameCounter & 7) >= 6) {
+            return;
+        }
+
+        graphicsManager.beginPatternBatch();
+
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        // Position matches original: y=$38 (56)
+        final int baseY = 0x38;
+        final int textPalette = 2;
+        final int digitPalette = 2;
+
+        // Original layout (from disassembly):
+        // - Digits start at x=$5A and decrease by 8 for each additional digit
+        // - "RING" starts at x=$68
+        // - "TO GO!" letters at various positions from Obj5A_ToGoOffsets
+        // - "S" at position based on digit count
+
+        // Calculate digit count
+        int digitCount = 1;
+        if (ringsToGo >= 100) {
+            digitCount = 3;
+        } else if (ringsToGo >= 10) {
+            digitCount = 2;
+        }
+
+        // Simplified centered layout: "[digits] RINGS TO GO"
+        // Total width: digits + space + RINGS(40) + space + TO(16) + space + GO(16) = varies
+        final int RING_WIDTH = 32;  // "RING" = 4 letters * 8px
+        final int TO_GO_WIDTH = 40; // "TO GO" = 5 letters * 8px (with spaces)
+
+        int totalWidth = (digitCount * 8) + 8 + RING_WIDTH + 8 + TO_GO_WIDTH;
+        int startX = SCREEN_CENTER_OFFSET + (H32_WIDTH - totalWidth) / 2;
+
+        int drawX = startX;
+
+        // Render digits
+        if (ringsToGo >= 100) {
+            int hundreds = (ringsToGo / 100) % 10;
+            renderMessageDigit(drawX, baseY, hundreds, digitPalette);
+            drawX += 8;
+        }
+
+        if (ringsToGo >= 10) {
+            int tens = (ringsToGo / 10) % 10;
+            renderMessageDigit(drawX, baseY, tens, digitPalette);
+            drawX += 8;
+        }
+
+        int ones = ringsToGo % 10;
+        renderMessageDigit(drawX, baseY, ones, digitPalette);
+        drawX += 8;
+
+        // Space
+        drawX += 8;
+
+        // Render "RING" (singular form in original)
+        renderMessageLetter(drawX, baseY, TILE_R, textPalette);
+        renderMessageLetter(drawX + 8, baseY, TILE_I, textPalette);
+        renderMessageLetter(drawX + 16, baseY, TILE_N, textPalette);
+        renderMessageLetter(drawX + 24, baseY, TILE_G, textPalette);
+        drawX += 32;
+
+        // Render "S" if plural (rings > 1)
+        if (ringsToGo > 1) {
+            renderMessageLetter(drawX, baseY, TILE_S, textPalette);
+        }
+        drawX += 8;
+
+        // Space
+        drawX += 8;
+
+        // Render "TO GO" (simplified - original animates these)
+        renderMessageLetter(drawX, baseY, TILE_T, textPalette);
+        renderMessageLetter(drawX + 8, baseY, TILE_O, textPalette);
+        drawX += 24;  // TO + space
+
+        renderMessageLetter(drawX, baseY, TILE_G, textPalette);
+        renderMessageLetter(drawX + 8, baseY, TILE_O, textPalette);
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders a digit using the SpecialMessages art (0-9).
+     * The digits in SpecialMessages art use different tile offsets than HUD art.
+     *
+     * From obj5A.asm: digits 0-9 are frames 12-16 (but frame ordering is different)
+     * Actually looking at the charset, the digits use frames that map to specific tiles.
+     *
+     * For simplicity, we use the same HUD digit rendering which uses the Obj87 HUD art.
+     */
+    private void renderMessageDigit(int x, int y, int digit, int paletteIndex) {
+        // Use messagesPatternBase for consistency
+        // The messages art has digits at specific offsets
+        // From the intro "GET XX RINGS", digits use hudPatternBase
+        // So we'll continue using the HUD digit rendering
+        renderHudDigit(x, y, digit, paletteIndex);
+    }
+
     // ========== Object Rendering (Phase 4) ==========
 
     /**
@@ -919,6 +1076,8 @@ public class Sonic2SpecialStageRenderer {
                 renderRing((Sonic2SpecialStageRing) obj, SCREEN_CENTER_OFFSET);
             } else if (obj.isBomb()) {
                 renderBomb((Sonic2SpecialStageBomb) obj, SCREEN_CENTER_OFFSET);
+            } else if (obj.isEmerald()) {
+                renderEmerald((Sonic2SpecialStageEmerald) obj, SCREEN_CENTER_OFFSET);
             }
         }
 
@@ -1029,6 +1188,244 @@ public class Sonic2SpecialStageRenderer {
 
                     graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
                 }
+            }
+        }
+    }
+
+    /**
+     * Renders an emerald object using proper sprite mappings.
+     * Emerald sprites vary in size based on perspective distance (frames 0-9).
+     * Uses palette line 3 (same as player).
+     */
+    private void renderEmerald(Sonic2SpecialStageEmerald emerald, int screenCenterOffset) {
+        int screenX = screenCenterOffset + emerald.getScreenX();
+        int screenY = emerald.getScreenY();
+
+        // Apply bobbing offset when collected
+        if (emerald.getPhase() == Sonic2SpecialStageEmerald.EmeraldPhase.COLLECTED) {
+            screenY += emerald.getBobbingOffset();
+        }
+
+        // Get the mapping frame for current animation state
+        int mappingFrame = emerald.getMappingFrame();
+        Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
+            Sonic2SpecialStageSpriteData.getEmeraldPieces(mappingFrame);
+
+        // Emerald uses palette 3 (from make_art_tile(ArtTile_ArtNem_SpecialEmerald,3,0))
+        int patternBase = emeraldPatternBase;
+        int paletteIndex = 3;
+
+        // Render each sprite piece
+        for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
+            int pieceX = screenX + piece.xOffset;
+            int pieceY = screenY + piece.yOffset;
+
+            // Render all tiles in this piece (column-major order)
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    // Column-major index
+                    int tileIndex = tx * piece.heightTiles + ty;
+                    int patternId = patternBase + piece.tileIndex + tileIndex;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(true);  // Emerald always high priority
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(piece.hFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
+    }
+
+    // ========== Checkpoint Message Rendering ==========
+
+    /**
+     * Renders checkpoint UI elements (message text and hand).
+     * Called when a checkpoint is active.
+     */
+    public void renderCheckpointUI() {
+        if (checkpoint == null || !checkpoint.isActive()) {
+            return;
+        }
+
+        graphicsManager.beginPatternBatch();
+
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        // Render checkpoint message letters
+        if (checkpoint.isMessageVisible()) {
+            renderCheckpointMessage(SCREEN_CENTER_OFFSET);
+        }
+
+        // Render checkpoint hand (with wings)
+        if (checkpoint.isHandVisible()) {
+            renderCheckpointHand(SCREEN_CENTER_OFFSET);
+        }
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders the checkpoint message text ("COOL!" or "NOT ENOUGH RINGS...").
+     *
+     * From s2.asm Init_Obj5A (line 71005) and Obj5A_CreateTextLetter (line 71509):
+     * - Uses ArtTile_ArtNem_SpecialMessages ($1A2) with palette 2
+     * - Same art as intro "GET XX RINGS" message
+     *
+     * Uses renderMessageLetter which handles the overflow case for letters like 'O'
+     * that use tile offsets >= 88 (which overflow into SpecialHUD territory).
+     */
+    private void renderCheckpointMessage(int screenCenterOffset) {
+        // Palette 2 for checkpoint message text (from make_art_tile(ArtTile_ArtNem_SpecialMessages,2,0))
+        final int textPalette = 2;
+
+        for (Sonic2SpecialStageCheckpoint.MessageLetter letter : checkpoint.getMessageLetters()) {
+            if (!letter.visible) {
+                continue;
+            }
+
+            int screenX = screenCenterOffset + letter.x;
+            int screenY = letter.y;
+
+            // Use renderMessageLetter which handles the overflow case for 'O' and other letters
+            renderMessageLetter(screenX, screenY, letter.tileOffset, textPalette);
+        }
+    }
+
+    /**
+     * Renders the checkpoint hand sprite (with wings).
+     *
+     * From obj5A.asm mappings and s2.asm Obj5A_Handshake:
+     * - Frame $14 (20): Checkpoint wings (Map_obj5A_00F4)
+     * - Frame $15 (21): Checkpoint hand (Map_obj5A_0136)
+     *
+     * IMPORTANT: The hand uses ArtTile_ArtNem_SpecialMessages (messagesPatternBase),
+     * NOT ArtTile_ArtNem_SpecialRings. See s2.asm line 71413.
+     *
+     * The hand shows thumbs up when passing, thumbs down (v-flipped) when failing.
+     */
+    private void renderCheckpointHand(int screenCenterOffset) {
+        int handX = screenCenterOffset + checkpoint.getHandX();
+        int handY = checkpoint.getHandY();
+        boolean thumbsUp = checkpoint.isHandThumbsUp();
+
+        // Palette 1 for hand/wings (from make_art_tile(ArtTile_ArtNem_SpecialMessages,1,0))
+        final int handPalette = 1;
+
+        // Render wings first (Frame $14 = Map_obj5A_00F4) - behind hand
+        renderCheckpointWingsFrame20(handX, handY, handPalette);
+
+        // Render hand (Frame $15 = Map_obj5A_0136)
+        // vFlip = !thumbsUp (thumbs down when failing)
+        renderCheckpointHandFrame21(handX, handY, handPalette, !thumbsUp);
+    }
+
+    /**
+     * Renders the checkpoint wings sprite using Frame 20 mapping (Map_obj5A_00F4).
+     *
+     * From obj5A.asm - 8 sprite pieces forming symmetrical wings:
+     * spritePiece -$30, -$1C, 1, 4, $1A, 0, 0, 0, 1   ; left edge
+     * spritePiece -$28, -$14, 4, 4, $1E, 0, 0, 0, 1   ; left wing body
+     * spritePiece -8, -$14, 1, 4, $2E, 0, 0, 0, 1     ; center left
+     * spritePiece -$20, $C, 4, 2, $32, 0, 0, 0, 1     ; bottom left ribbon
+     * spritePiece 0, -$14, 1, 4, $2E, 1, 0, 0, 1      ; center right (h-flipped)
+     * spritePiece 0, $C, 4, 2, $32, 1, 0, 0, 1        ; bottom right ribbon (h-flipped)
+     * spritePiece 8, -$14, 4, 4, $1E, 1, 0, 0, 1      ; right wing body (h-flipped)
+     * spritePiece $28, -$1C, 1, 4, $1A, 1, 0, 0, 1    ; right edge (h-flipped)
+     */
+    private void renderCheckpointWingsFrame20(int centerX, int centerY, int paletteIndex) {
+        // Left side pieces (not flipped)
+        renderMessageSpritePiece(centerX - 0x30, centerY - 0x1C, 1, 4, 0x1A, paletteIndex, false, false);
+        renderMessageSpritePiece(centerX - 0x28, centerY - 0x14, 4, 4, 0x1E, paletteIndex, false, false);
+        renderMessageSpritePiece(centerX - 8, centerY - 0x14, 1, 4, 0x2E, paletteIndex, false, false);
+        renderMessageSpritePiece(centerX - 0x20, centerY + 0x0C, 4, 2, 0x32, paletteIndex, false, false);
+
+        // Right side pieces (h-flipped)
+        renderMessageSpritePiece(centerX, centerY - 0x14, 1, 4, 0x2E, paletteIndex, true, false);
+        renderMessageSpritePiece(centerX, centerY + 0x0C, 4, 2, 0x32, paletteIndex, true, false);
+        renderMessageSpritePiece(centerX + 8, centerY - 0x14, 4, 4, 0x1E, paletteIndex, true, false);
+        renderMessageSpritePiece(centerX + 0x28, centerY - 0x1C, 1, 4, 0x1A, paletteIndex, true, false);
+    }
+
+    /**
+     * Renders the checkpoint hand sprite using Frame 21 mapping (Map_obj5A_0136).
+     *
+     * From obj5A.asm - 4 sprite pieces forming the hand:
+     * spritePiece -$18, -$10, 3, 4, $3A, 0, 0, 0, 1  ; main hand body (palm/wrist)
+     * spritePiece -$18, $10, 3, 1, $46, 0, 0, 0, 1   ; bottom (thumb area)
+     * spritePiece 0, 0, 3, 3, $49, 0, 0, 0, 1        ; right side (fingers)
+     * spritePiece 0, -$18, 2, 3, $52, 0, 0, 0, 1     ; top right (fingertips)
+     *
+     * @param centerX Center X position
+     * @param centerY Center Y position
+     * @param paletteIndex Palette to use
+     * @param vFlip True if hand should be v-flipped (thumbs down for failure)
+     */
+    private void renderCheckpointHandFrame21(int centerX, int centerY, int paletteIndex, boolean vFlip) {
+        // When v-flipped, we need to mirror Y positions around center
+        // Original offsets: -$10, $10, 0, -$18
+        // Flipped offsets: $10 - height, -$10 - height, 0 - height, $18 - height
+
+        if (!vFlip) {
+            // Normal orientation (thumbs up)
+            renderMessageSpritePiece(centerX - 0x18, centerY - 0x10, 3, 4, 0x3A, paletteIndex, false, false);
+            renderMessageSpritePiece(centerX - 0x18, centerY + 0x10, 3, 1, 0x46, paletteIndex, false, false);
+            renderMessageSpritePiece(centerX, centerY, 3, 3, 0x49, paletteIndex, false, false);
+            renderMessageSpritePiece(centerX, centerY - 0x18, 2, 3, 0x52, paletteIndex, false, false);
+        } else {
+            // Flipped orientation (thumbs down)
+            // Each piece needs its Y position mirrored and individual tiles v-flipped
+            // For a piece at offset Y with height H*8, flipped offset = -Y - H*8
+            renderMessageSpritePiece(centerX - 0x18, centerY + 0x10 - 32, 3, 4, 0x3A, paletteIndex, false, true);
+            renderMessageSpritePiece(centerX - 0x18, centerY - 0x10 - 8, 3, 1, 0x46, paletteIndex, false, true);
+            renderMessageSpritePiece(centerX, centerY - 24, 3, 3, 0x49, paletteIndex, false, true);
+            renderMessageSpritePiece(centerX, centerY + 0x18 - 24, 2, 3, 0x52, paletteIndex, false, true);
+        }
+    }
+
+    /**
+     * Renders a sprite piece from the SpecialMessages art.
+     * Used for checkpoint hand and wings which use messagesPatternBase.
+     *
+     * @param x Top-left X position
+     * @param y Top-left Y position
+     * @param widthTiles Width in tiles
+     * @param heightTiles Height in tiles
+     * @param baseTile Base tile offset in SpecialMessages art
+     * @param paletteIndex Palette to use
+     * @param hFlip Horizontal flip
+     * @param vFlip Vertical flip
+     */
+    private void renderMessageSpritePiece(int x, int y, int widthTiles, int heightTiles,
+                                          int baseTile, int paletteIndex, boolean hFlip, boolean vFlip) {
+        for (int tx = 0; tx < widthTiles; tx++) {
+            for (int ty = 0; ty < heightTiles; ty++) {
+                // Column-major order (VDP sprite format)
+                int srcTx = hFlip ? (widthTiles - 1 - tx) : tx;
+                int srcTy = vFlip ? (heightTiles - 1 - ty) : ty;
+                int tileIndex = srcTx * heightTiles + srcTy;
+
+                // Use messagesPatternBase because hand/wings use SpecialMessages art
+                int patternId = messagesPatternBase + baseTile + tileIndex;
+
+                PatternDesc desc = new PatternDesc();
+                desc.setPriority(true);
+                desc.setPaletteIndex(paletteIndex);
+                desc.setHFlip(hFlip);
+                desc.setVFlip(vFlip);
+                desc.setPatternIndex(patternId & 0x7FF);
+
+                int drawX = x + tx * TILE_SIZE;
+                int drawY = y + ty * TILE_SIZE;
+
+                graphicsManager.renderPatternWithId(patternId, desc, drawX, drawY);
             }
         }
     }

@@ -25,6 +25,14 @@ public class DisassemblySearchTool {
             Pattern.CASE_INSENSITIVE
     );
 
+    // Pattern for palette macro: "Label: palette path[,path2] [; comment]"
+    // The macro expands to BINCLUDE "art/palettes/{path}"
+    // path can contain spaces, stops at comma, semicolon, or end of line
+    private static final Pattern PALETTE_PATTERN = Pattern.compile(
+            "^\\s*(\\w+):\\s*palette\\s+([^,;]+?)(?:\\s*,\\s*([^;]+?))?(?:\\s*;.*)?\\s*$",
+            Pattern.CASE_INSENSITIVE
+    );
+
     private final Path disasmRoot;
 
     public DisassemblySearchTool(Path disasmRoot) {
@@ -218,8 +226,60 @@ public class DisassemblySearchTool {
                                     line.trim()
                             ));
                         }
+                    } else {
+                        // Check for palette macro
+                        Matcher paletteMatcher = PALETTE_PATTERN.matcher(line);
+                        if (paletteMatcher.find()) {
+                            parsePaletteMacroResults(paletteMatcher, asmFile, lineNumber, line, pattern, results);
+                        }
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Parse palette macro and add results.
+     * Palette macro format: "Label: palette path[,path2]"
+     * Expands to: BINCLUDE "art/palettes/{path}"
+     */
+    private void parsePaletteMacroResults(Matcher matcher, Path asmFile, int lineNumber,
+                                           String line, String pattern, List<DisassemblySearchResult> results) {
+        String label = matcher.group(1);
+        String path1 = matcher.group(2).trim();
+        String path2 = matcher.group(3) != null ? matcher.group(3).trim() : null;
+
+        // First palette file
+        String filePath1 = "art/palettes/" + path1;
+        if (pattern.isEmpty() ||
+            label.toLowerCase().contains(pattern) ||
+            filePath1.toLowerCase().contains(pattern)) {
+            results.add(new DisassemblySearchResult(
+                    label,
+                    filePath1,
+                    CompressionType.UNCOMPRESSED, // Palettes are .bin (uncompressed)
+                    disasmRoot.relativize(asmFile).toString(),
+                    lineNumber,
+                    line.trim()
+            ));
+        }
+
+        // Second palette file (if present)
+        if (path2 != null && !path2.isEmpty()) {
+            String filePath2 = "art/palettes/" + path2;
+            // Create a label with "_2" suffix for the second palette
+            String label2 = label + "_2";
+            if (pattern.isEmpty() ||
+                label2.toLowerCase().contains(pattern) ||
+                filePath2.toLowerCase().contains(pattern)) {
+                results.add(new DisassemblySearchResult(
+                        label2,
+                        filePath2,
+                        CompressionType.UNCOMPRESSED,
+                        disasmRoot.relativize(asmFile).toString(),
+                        lineNumber,
+                        line.trim()
+                ));
             }
         }
     }
@@ -263,9 +323,51 @@ public class DisassemblySearchTool {
                                     line.trim()
                             ));
                         }
+                    } else {
+                        // Check for palette macro (palettes are UNCOMPRESSED)
+                        if (type == CompressionType.UNCOMPRESSED) {
+                            Matcher paletteMatcher = PALETTE_PATTERN.matcher(line);
+                            if (paletteMatcher.find()) {
+                                parsePaletteMacroResultsForType(paletteMatcher, asmFile, lineNumber, line, results);
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Parse palette macro for compression type search (no pattern filter).
+     */
+    private void parsePaletteMacroResultsForType(Matcher matcher, Path asmFile, int lineNumber,
+                                                  String line, List<DisassemblySearchResult> results) {
+        String label = matcher.group(1);
+        String path1 = matcher.group(2).trim();
+        String path2 = matcher.group(3) != null ? matcher.group(3).trim() : null;
+
+        // First palette file
+        String filePath1 = "art/palettes/" + path1;
+        results.add(new DisassemblySearchResult(
+                label,
+                filePath1,
+                CompressionType.UNCOMPRESSED,
+                disasmRoot.relativize(asmFile).toString(),
+                lineNumber,
+                line.trim()
+        ));
+
+        // Second palette file (if present)
+        if (path2 != null && !path2.isEmpty()) {
+            String filePath2 = "art/palettes/" + path2;
+            results.add(new DisassemblySearchResult(
+                    label + "_2",
+                    filePath2,
+                    CompressionType.UNCOMPRESSED,
+                    disasmRoot.relativize(asmFile).toString(),
+                    lineNumber,
+                    line.trim()
+            ));
         }
     }
 }

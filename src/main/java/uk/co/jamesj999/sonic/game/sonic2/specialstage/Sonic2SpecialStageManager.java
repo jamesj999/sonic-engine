@@ -105,9 +105,16 @@ public class Sonic2SpecialStageManager {
     private int bombPatternBase;
     private int starsPatternBase;      // For ring sparkle animation
     private int explosionPatternBase;  // For bomb explosion animation
+    private int emeraldPatternBase;    // For chaos emerald
 
     // Track state for object spawning
     private int lastDrawingIndex = -1;
+
+    // Checkpoint system
+    private Sonic2SpecialStageCheckpoint checkpoint;
+
+    // Current ring requirement for the active checkpoint (for "rings to go" display)
+    private int currentRingRequirement = 0;
 
     // Frame timing diagnostics
     private long lastFrameTime = 0;
@@ -186,6 +193,9 @@ public class Sonic2SpecialStageManager {
 
         intro.initialize(currentStage, ringReq);
 
+        // Store current ring requirement for "rings to go" display
+        currentRingRequirement = ringReq;
+
         // Pass intro to renderer
         renderer.setIntro(intro);
 
@@ -239,15 +249,138 @@ public class Sonic2SpecialStageManager {
         LOGGER.fine("Cached " + explosionPatterns.length + " explosion patterns at base 0x" +
                    Integer.toHexString(explosionPatternBase));
 
+        // Load emerald art (for chaos emerald at stage end)
+        Pattern[] emeraldPatterns = dataLoader.getEmeraldArtPatterns();
+        emeraldPatternBase = explosionPatternBase + explosionPatterns.length;
+        for (int i = 0; i < emeraldPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(emeraldPatterns[i], emeraldPatternBase + i);
+        }
+        LOGGER.fine("Cached " + emeraldPatterns.length + " emerald patterns at base 0x" +
+                   Integer.toHexString(emeraldPatternBase));
+
         // Pass pattern bases to renderer
         renderer.setObjectPatternBases(ringPatternBase, bombPatternBase);
         renderer.setEffectPatternBases(starsPatternBase, explosionPatternBase);
+        renderer.setEmeraldPatternBase(emeraldPatternBase);
         renderer.setObjectManager(objectManager);
         renderer.setPerspectiveData(perspectiveData);
 
         lastDrawingIndex = -1;
 
+        // Setup checkpoint system
+        setupCheckpointSystem();
+
         LOGGER.fine("Object system initialized");
+    }
+
+    /**
+     * Sets up the checkpoint system and callback.
+     */
+    private void setupCheckpointSystem() {
+        checkpoint = new Sonic2SpecialStageCheckpoint();
+        renderer.setCheckpoint(checkpoint);
+
+        // Set up music fade callback for when checkpoint fails
+        checkpoint.setOnMusicFadeRequested(() -> {
+            // Fade out the special stage music
+            AudioManager.getInstance().stopMusic();
+            LOGGER.info("Music fade requested - stopping special stage music");
+        });
+
+        // Set up checkpoint callback
+        objectManager.setCheckpointCallback(new Sonic2SpecialStageObjectManager.CheckpointCallback() {
+            @Override
+            public void onCheckpoint(int checkpointNumber, int ringsCollected) {
+                handleCheckpointReached(checkpointNumber, ringsCollected);
+            }
+
+            @Override
+            public void onEmerald() {
+                handleEmeraldReached();
+            }
+        });
+
+        LOGGER.fine("Checkpoint system initialized");
+    }
+
+    /**
+     * Handles checkpoint reached event from the object manager.
+     *
+     * @param checkpointNumber The checkpoint number (1-4)
+     * @param ringsCollected Current rings collected
+     */
+    private void handleCheckpointReached(int checkpointNumber, int ringsCollected) {
+        // Determine if this is team mode or solo mode
+        boolean teamMode = (sonicPlayer != null && tailsPlayer != null);
+
+        // Get ring requirement for this checkpoint (quarter = checkpointNumber - 1)
+        int quarter = checkpointNumber - 1;
+        if (quarter < 0) quarter = 0;
+        if (quarter > 3) quarter = 3;
+
+        int ringRequirement;
+        try {
+            ringRequirement = dataLoader.getRingRequirement(currentStage, quarter, teamMode);
+        } catch (IOException e) {
+            LOGGER.warning("Failed to get ring requirement: " + e.getMessage());
+            ringRequirement = 30; // Fallback
+        }
+
+        // Is this the final checkpoint (checkpoint 4 / quarter 3)?
+        boolean isFinalCheckpoint = (checkpointNumber >= 4);
+
+        // Trigger the checkpoint animation and check result
+        Sonic2SpecialStageCheckpoint.Result result = checkpoint.triggerCheckpoint(
+                checkpointNumber, ringRequirement, ringsCollected, isFinalCheckpoint);
+
+        // Play appropriate sound
+        if (result == Sonic2SpecialStageCheckpoint.Result.FAILED) {
+            // Play error sound for failure (SndID_Error = $ED)
+            AudioManager.getInstance().playSfx(GameSound.ERROR);
+            LOGGER.info("Checkpoint FAILED: needed " + ringRequirement + ", had " + ringsCollected);
+        } else {
+            // Play checkpoint sound for success
+            AudioManager.getInstance().playSfx(GameSound.CHECKPOINT);
+            LOGGER.info("Checkpoint PASSED: needed " + ringRequirement + ", had " + ringsCollected);
+
+            // Update ring requirement for next checkpoint (for "rings to go" display)
+            if (!isFinalCheckpoint) {
+                try {
+                    currentRingRequirement = dataLoader.getRingRequirement(currentStage, quarter + 1, teamMode);
+                    LOGGER.fine("Next checkpoint requirement: " + currentRingRequirement);
+                } catch (IOException e) {
+                    LOGGER.warning("Failed to get next ring requirement: " + e.getMessage());
+                }
+            }
+        }
+
+        // Handle result
+        if (result == Sonic2SpecialStageCheckpoint.Result.STAGE_COMPLETE) {
+            // Final checkpoint passed - will award emerald
+            LOGGER.info("Stage complete! Emerald will be awarded.");
+        } else if (result == Sonic2SpecialStageCheckpoint.Result.FAILED) {
+            // Stage failed - will eject player
+            LOGGER.info("Stage failed! Player will be ejected.");
+            // Note: actual ejection happens after message animation completes
+        }
+    }
+
+    /**
+     * Handles emerald reached event from the object manager.
+     * Configures the spawned emerald object with ring requirements and manager reference.
+     */
+    private void handleEmeraldReached() {
+        LOGGER.info("Emerald marker reached - configuring emerald object");
+
+        // Get the emerald object that was just spawned
+        Sonic2SpecialStageEmerald emerald = objectManager.getActiveEmerald();
+        if (emerald != null) {
+            // Set the ring requirement for collection check
+            emerald.setRingRequirement(currentRingRequirement);
+            // Set the manager reference so emerald can check ring count and end stage
+            emerald.setManager(this);
+            LOGGER.info("Emerald configured with ring requirement: " + currentRingRequirement);
+        }
     }
 
     private void loadData() throws IOException {
@@ -355,8 +488,12 @@ public class Sonic2SpecialStageManager {
                 hudPatterns.length + " HUD, " + startPatterns.length + " START, " +
                 messagesPatterns.length + " Messages patterns");
 
-        // Update debug sprite viewer with player pattern base
-        DebugSpecialStageSprites.getInstance().setPlayerPatternBase(playerPatternBase);
+        // Update debug sprite viewer with all pattern bases
+        DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
+        debugSprites.setPlayerPatternBase(playerPatternBase);
+        debugSprites.setHudPatternBase(hudPatternBase, hudPatterns.length);
+        debugSprites.setStartPatternBase(startPatternBase, startPatterns.length);
+        debugSprites.setMessagesPatternBase(messagesPatternBase, messagesPatterns.length);
     }
 
     private void setupRenderer() {
@@ -468,6 +605,43 @@ public class Sonic2SpecialStageManager {
         if (intro == null || intro.isInputEnabled()) {
             updatePlayers();
             updateObjects();
+        }
+
+        // Update checkpoint animation
+        if (checkpoint != null && checkpoint.isActive()) {
+            boolean checkpointComplete = checkpoint.update();
+            if (checkpointComplete) {
+                handleCheckpointAnimationComplete();
+            }
+        }
+    }
+
+    /**
+     * Called when a checkpoint animation sequence completes.
+     */
+    private void handleCheckpointAnimationComplete() {
+        Sonic2SpecialStageCheckpoint.Result lastResult = checkpoint.getLastResult();
+
+        if (lastResult == Sonic2SpecialStageCheckpoint.Result.FAILED) {
+            // Stage failed - mark as failed and prepare for ejection
+            markFailed();
+            LOGGER.info("Checkpoint animation complete - stage FAILED, ejecting player");
+        } else if (lastResult == Sonic2SpecialStageCheckpoint.Result.STAGE_COMPLETE) {
+            // Stage complete - mark as completed with emerald
+            markCompleted(true);
+            LOGGER.info("Checkpoint animation complete - stage COMPLETE with emerald!");
+        } else if (lastResult == Sonic2SpecialStageCheckpoint.Result.PASSED) {
+            // Checkpoint passed - reset "rings to go" display and show next requirement
+            if (objectManager != null) {
+                objectManager.resetRingsToGoEnabled();
+            }
+
+            // Show "GET XX RINGS" message for the next checkpoint
+            if (intro != null && currentRingRequirement > 0) {
+                intro.showRingRequirementMessage(currentRingRequirement);
+                LOGGER.info("Checkpoint animation complete - PASSED, showing next requirement: " +
+                           currentRingRequirement + " rings");
+            }
         }
     }
 
@@ -691,6 +865,21 @@ public class Sonic2SpecialStageManager {
         // Render ring counter HUD (after intro completes)
         if (intro == null || intro.isComplete()) {
             renderer.renderRingCounter(objectManager != null ? objectManager.getRingsCollected() : 0);
+
+            // Render "rings to go" counter if:
+            // 1. Not in checkpoint animation
+            // 2. The display has been enabled (by encountering a $FC marker)
+            if ((checkpoint == null || !checkpoint.isActive()) &&
+                    objectManager != null && objectManager.isRingsToGoEnabled()) {
+                int ringsCollected = objectManager.getRingsCollected();
+                int ringsToGo = currentRingRequirement - ringsCollected;
+                renderer.renderRingsToGoHUD(ringsToGo, frameCounter);
+            }
+        }
+
+        // Render checkpoint UI (messages and hand) when active
+        if (checkpoint != null && checkpoint.isActive()) {
+            renderer.renderCheckpointUI();
         }
     }
 
@@ -744,6 +933,9 @@ public class Sonic2SpecialStageManager {
      * Resets the Special Stage manager state.
      */
     public void reset() {
+        // Stop any playing music when resetting
+        AudioManager.getInstance().stopMusic();
+
         initialized = false;
         currentStage = 0;
 
@@ -783,7 +975,15 @@ public class Sonic2SpecialStageManager {
         bombPatternBase = 0;
         starsPatternBase = 0;
         explosionPatternBase = 0;
+        emeraldPatternBase = 0;
         lastDrawingIndex = -1;
+
+        // Checkpoint system
+        if (checkpoint != null) {
+            checkpoint.reset();
+        }
+        checkpoint = null;
+        currentRingRequirement = 0;
 
         resultState = ResultState.RUNNING;
         emeraldCollected = false;
@@ -874,6 +1074,27 @@ public class Sonic2SpecialStageManager {
     }
 
     /**
+     * Gets the HUD pattern base for debug rendering.
+     */
+    public int getHudPatternBase() {
+        return hudPatternBase;
+    }
+
+    /**
+     * Gets the START banner pattern base for debug rendering.
+     */
+    public int getStartPatternBase() {
+        return startPatternBase;
+    }
+
+    /**
+     * Gets the messages pattern base for debug rendering.
+     */
+    public int getMessagesPatternBase() {
+        return messagesPatternBase;
+    }
+
+    /**
      * Gets the object manager.
      */
     public Sonic2SpecialStageObjectManager getObjectManager() {
@@ -892,5 +1113,19 @@ public class Sonic2SpecialStageManager {
      */
     public int getRingsCollected() {
         return objectManager != null ? objectManager.getRingsCollected() : 0;
+    }
+
+    /**
+     * Gets the checkpoint manager.
+     */
+    public Sonic2SpecialStageCheckpoint getCheckpoint() {
+        return checkpoint;
+    }
+
+    /**
+     * Checks if a checkpoint animation is currently playing.
+     */
+    public boolean isCheckpointActive() {
+        return checkpoint != null && checkpoint.isActive();
     }
 }

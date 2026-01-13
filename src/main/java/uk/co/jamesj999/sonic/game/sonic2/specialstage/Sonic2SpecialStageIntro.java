@@ -281,4 +281,28 @@ public class Sonic2SpecialStageIntro {
     public int getLetterFlyoutProgress() {
         return letterFlyoutProgress;
     }
+
+    /**
+     * Shows just the "GET XX RINGS" message without the full intro sequence.
+     * Used after passing a checkpoint to display the next ring requirement.
+     *
+     * @param ringRequirement Number of rings required for the next checkpoint
+     */
+    public void showRingRequirementMessage(int ringRequirement) {
+        this.ringRequirement = ringRequirement;
+
+        // Skip directly to WAIT2 (message display phase)
+        currentPhase = Phase.WAIT2;
+        phaseTimer = 0;
+
+        bannerVisible = false;  // No banner
+        messageVisible = true;  // Show the message
+        messageX = 128;
+        messageY = 108;
+
+        lettersFlying = false;
+        letterFlyoutProgress = 0;
+
+        LOGGER.info("Showing ring requirement message: GET " + ringRequirement + " RINGS");
+    }
 }

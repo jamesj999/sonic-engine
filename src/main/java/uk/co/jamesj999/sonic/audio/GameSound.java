@@ -16,5 +16,6 @@ public enum GameSound {
     BADNIK_HIT,
     CHECKPOINT,
     SPRING,
-    SLOW_SMASH  // Special stage bomb explosion
+    SLOW_SMASH,  // Special stage bomb explosion
+    ERROR        // Error/fail sound (used for checkpoint failure)
 }

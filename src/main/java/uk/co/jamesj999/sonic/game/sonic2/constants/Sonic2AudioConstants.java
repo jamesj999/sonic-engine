@@ -19,6 +19,7 @@ public final class Sonic2AudioConstants {
     public static final int SFX_ROLLING = 0xBE;
     public static final int SFX_SHIELD = 0xAF;
     public static final int SFX_EXPLOSION = 0xC1;
+    public static final int SFX_ERROR = 0xED;   // Error/fail sound (SndID_Error)
 
     public static final int MUS_CASINO_NIGHT_2P = 0x80;
     public static final int MUS_EMERALD_HILL = 0x81;
@@ -50,6 +51,9 @@ public final class Sonic2AudioConstants {
     public static final int MUS_GOT_EMERALD = 0xBA;
     public static final int MUS_CREDITS = 0xBD;
     public static final int MUS_UNDERWATER = 0xDC;
+
+    // Special stage sounds
+    public static final int SFX_SPECIAL_STAGE_ENTRY = 0xCA;  // SndID_SpecStageEntry - warp in/out sound
 
     public static final int CMD_SPEED_UP = 0xFB;
     public static final int CMD_SLOW_DOWN = 0xFC;

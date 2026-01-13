@@ -1543,6 +1543,23 @@ public class LevelManager {
         return currentAct;
     }
 
+    /**
+     * Gets the music ID for the current level.
+     * Returns -1 if no level is loaded or music ID cannot be determined.
+     */
+    public int getCurrentLevelMusicId() {
+        if (game == null || levels == null || levels.isEmpty()) {
+            return -1;
+        }
+        try {
+            int levelIdx = levels.get(currentZone).get(currentAct).getLevelIndex();
+            return game.getMusicId(levelIdx);
+        } catch (Exception e) {
+            LOGGER.warning("Failed to get music ID for current level: " + e.getMessage());
+            return -1;
+        }
+    }
+
     public Collection<ObjectSpawn> getActiveObjectSpawns() {
         if (objectPlacementManager == null) {
             return List.of();

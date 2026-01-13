@@ -51,6 +51,7 @@ public class Sonic2SpecialStageDataLoader {
     private Pattern[] messagesArtPatterns;
     private Pattern[] explosionArtPatterns;
     private Pattern[] starsArtPatterns;
+    private Pattern[] emeraldArtPatterns;
 
     public Sonic2SpecialStageDataLoader(Rom rom) {
         this.rom = rom;
@@ -446,6 +447,20 @@ public class Sonic2SpecialStageDataLoader {
             LOGGER.fine("Loaded Stars art: " + starsArtPatterns.length + " patterns");
         }
         return starsArtPatterns;
+    }
+
+    /**
+     * Loads Emerald art patterns (Nemesis compressed).
+     * Used for the chaos emerald object at the end of special stages.
+     * Art has 10 frames for perspective sizes (smallest to largest).
+     */
+    public Pattern[] getEmeraldArtPatterns() throws IOException {
+        if (emeraldArtPatterns == null) {
+            byte[] compressed = rom.readBytes(EMERALD_ART_OFFSET, EMERALD_ART_SIZE + 16);
+            emeraldArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded Emerald art: " + emeraldArtPatterns.length + " patterns");
+        }
+        return emeraldArtPatterns;
     }
 
     private byte[] decompressKosinski(byte[] compressed) throws IOException {
