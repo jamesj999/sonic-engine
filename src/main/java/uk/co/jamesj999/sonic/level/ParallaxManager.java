@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.scroll.BackgroundCamera;
 import uk.co.jamesj999.sonic.level.scroll.ParallaxTables;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlArz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlCpz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlMcz;
@@ -42,19 +43,6 @@ public class ParallaxManager {
     private static final int OOZ_BG_HEIGHT = 256;
     private static final int MCZ_BG_HEIGHT = 256;
 
-    // ARZ Constants and State
-    private static final int[] ARZ_ROW_HEIGHTS = {
-            0xB0, 0x70, 0x30, 0x60, 0x15, 0x0C, 0x0E, 0x06,
-            0x0C, 0x1F, 0x30, 0xC0, 0xF0, 0xF0, 0xF0, 0xF0
-    };
-
-    private int arzBgXPos; // 16.16 Target
-    private int arzBgXPosFast; // 16.16 Actual
-    private int arzBgYPos; // 16.16 Accumulator
-
-    private int lastCameraX;
-    private int lastCameraY;
-
     // Packed as (planeA << 16) | (planeB & 0xFFFF)
     private final int[] hScroll = new int[VISIBLE_LINES];
 
@@ -68,6 +56,7 @@ public class ParallaxManager {
     private ParallaxTables tables;
     private boolean loaded = false;
 
+    private SwScrlArz arzHandler;
     private SwScrlEhz ehzHandler;
     private SwScrlCpz cpzHandler;
     private SwScrlMcz mczHandler;
@@ -76,7 +65,6 @@ public class ParallaxManager {
     private int currentAct = -1;
 
     // Pre-allocated arrays to avoid per-frame allocations
-    private final int[] arzRowSpeeds = new int[16];
     private final int[] wfzOffsets = new int[4];
 
     private static ParallaxManager instance;
@@ -93,6 +81,7 @@ public class ParallaxManager {
             return;
         try {
             tables = new ParallaxTables(rom);
+            arzHandler = new SwScrlArz(tables);
             ehzHandler = new SwScrlEhz(tables);
             cpzHandler = new SwScrlCpz(tables);
             mczHandler = new SwScrlMcz(tables);
@@ -109,32 +98,11 @@ public class ParallaxManager {
             currentZone = zoneId;
             currentAct = actId;
 
-            if (zoneId == ZONE_ARZ) {
-                initArz(actId, cameraX, cameraY);
+            if (zoneId == ZONE_ARZ && arzHandler != null) {
+                arzHandler.init(actId, cameraX, cameraY);
             } else if (zoneId == ZONE_CPZ && cpzHandler != null) {
                 cpzHandler.init(cameraX, cameraY);
             }
-        }
-    }
-
-    private void initArz(int actId, int cameraX, int cameraY) {
-        lastCameraX = cameraX;
-        lastCameraY = cameraY;
-
-        // Initial BG X: (Camera_X_pos * $0119) >> 8 (This is integer result from
-        // original code)
-        // We want 16.16. (cameraX * 0x119) is 24.8. Shift left 8 to get 16.16.
-        long initialBgX = (long) cameraX * 0x119;
-        arzBgXPos = (int) (initialBgX << 8);
-        arzBgXPosFast = arzBgXPos;
-
-        // Initial BG Y
-        if (actId == 0) {
-            // Act 1: Camera_Y_pos - $180
-            arzBgYPos = (cameraY - 0x180) << 16;
-        } else {
-            // Act 2: (Camera_Y_pos - $E0) >> 1
-            arzBgYPos = ((cameraY - 0xE0) >> 1) << 16;
         }
     }
 
@@ -187,13 +155,6 @@ public class ParallaxManager {
         int cameraX = cam.getX();
         int cameraY = cam.getY();
 
-        // Calculate diffs for ARZ (8.8 fixed)
-        int diffX = (cameraX - lastCameraX) << 8;
-        int diffY = (cameraY - lastCameraY) << 8;
-
-        lastCameraX = cameraX;
-        lastCameraY = cameraY;
-
         vscrollFactorFG = (short) cameraY;
         vscrollFactorBG = (short) bgCamera.getBgYPos();
 
@@ -220,7 +181,12 @@ public class ParallaxManager {
                 }
                 break;
             case ZONE_ARZ:
-                fillArz(cameraX, diffX, diffY);
+                if (arzHandler != null) {
+                    arzHandler.update(hScroll, cameraX, cameraY, frameCounter, actId);
+                    minScroll = arzHandler.getMinScrollOffset();
+                    maxScroll = arzHandler.getMaxScrollOffset();
+                    vscrollFactorBG = arzHandler.getVscrollFactorBG();
+                }
                 break;
             case ZONE_CNZ:
                 fillCnz(cameraX, bgScrollY);
@@ -304,124 +270,6 @@ public class ParallaxManager {
             }
 
             setLineWithOffset(screenLine, fgScroll, offset);
-        }
-    }
-
-    /**
-     * ARZ - Aquatic Ruin Zone
-     * Pixel-identical implementation of ARZ parallax.
-     */
-    private void fillArz(int cameraX, int diffX, int diffY) {
-        // 1. Update BG X (Smoothing)
-        // diffX is 8.8, 0x0119 is 8.8. Result is 16.16.
-        int d4_fixed = diffX * 0x0119;
-
-        arzBgXPos += d4_fixed;
-
-        int targetBGX = arzBgXPos >> 16;
-        int currentBGX = arzBgXPosFast >> 16;
-        int delta = targetBGX - currentBGX;
-
-        // Clamp delta to [-0x10, +0x10]
-        if (delta < -16)
-            delta = -16;
-        if (delta > 16)
-            delta = 16;
-
-        arzBgXPosFast += (delta << 16);
-
-        // 2. Update BG Y
-        int d5_fixed = diffY << 7;
-        if (currentAct == 0) {
-            d5_fixed <<= 1;
-        }
-        arzBgYPos += d5_fixed;
-
-        // Update vscrollFactorBG for external use
-        vscrollFactorBG = (short) (arzBgYPos >> 16);
-
-        // 3. Row Selection
-        int bgY = arzBgYPos >> 16;
-        // Normalize bgY to [0, 1728) for safety, though original relies on subtraction
-        // loop
-        int totalHeight = 1728;
-        bgY %= totalHeight;
-        if (bgY < 0)
-            bgY += totalHeight;
-
-        int currentRowIndex = 0;
-        int remainingPixels = 0;
-
-        int tempY = bgY;
-        for (int i = 0; i < 16; i++) {
-            int h = ARZ_ROW_HEIGHTS[i];
-            tempY -= h;
-            if (tempY < 0) {
-                currentRowIndex = i;
-                remainingPixels = -tempY;
-                break;
-            }
-        }
-
-        // 4. Row Speeds
-        int[] rowSpeeds = new int[16];
-
-        // Rows 4..11 (indices 3..10)
-        // q = ((Camera_X_pos << 4) / 10)
-        // baseFixed = q << 12
-        int q = (cameraX << 4) / 10;
-        int baseFixed = q << 12;
-
-        int d1 = baseFixed;
-        // Row 4 speed
-        rowSpeeds[3] = baseFixed >> 16;
-
-        d1 = d1 + d1 + baseFixed; // d1 = 3 * baseFixed
-
-        // Rows 5..10
-        for (int i = 4; i <= 9; i++) {
-            rowSpeeds[i] = d1 >> 16;
-            d1 += baseFixed;
-        }
-
-        // Row 11
-        rowSpeeds[10] = d1 >> 16;
-
-        // Rows 1..3 and 12..16 use Fast BG X
-        int fastSpeed = arzBgXPosFast >> 16;
-        rowSpeeds[1] = fastSpeed; // Row 2
-        rowSpeeds[0] = fastSpeed; // Row 1 (overwrite)
-        rowSpeeds[2] = fastSpeed; // Row 3 (overwrite)
-
-        rowSpeeds[11] = fastSpeed;
-        rowSpeeds[12] = fastSpeed;
-        rowSpeeds[13] = fastSpeed;
-        rowSpeeds[14] = fastSpeed;
-        rowSpeeds[15] = fastSpeed;
-
-        // 5. Fill Buffer
-        short fgScroll = (short) -cameraX;
-        int currentLine = 0;
-        int rowIdx = currentRowIndex;
-        int pixelsInRow = remainingPixels;
-
-        while (currentLine < VISIBLE_LINES) {
-            int speed = rowSpeeds[rowIdx];
-            int count = Math.min(pixelsInRow, VISIBLE_LINES - currentLine);
-
-            for (int k = 0; k < count; k++) {
-                short bgScroll = (short) -speed;
-                hScroll[currentLine++] = packScrollWords(fgScroll, bgScroll);
-
-                short offset = (short) (bgScroll - fgScroll);
-                if (offset < minScroll)
-                    minScroll = offset;
-                if (offset > maxScroll)
-                    maxScroll = offset;
-            }
-
-            rowIdx = (rowIdx + 1) % 16;
-            pixelsInRow = ARZ_ROW_HEIGHTS[rowIdx];
         }
     }
 
