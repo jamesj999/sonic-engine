@@ -38,6 +38,48 @@ The engine requires `Sonic The Hedgehog 2 (W) (REV01) [!].gen` in the working di
 
 These directories are untracked (not in git) but available locally.
 
+## ROM Offset Finder Tool
+
+If `docs/s2disasm` is present, use the **RomOffsetFinder** tool to search for disassembly items and find their ROM offsets. This streamlines finding offsets for items defined in the disassembly.
+
+### Quick Reference
+
+```bash
+# Search for items (by label or filename)
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search ring" -q
+
+# List all files of a compression type (nem, kos, eni, sax)
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list nem" -q
+
+# Test decompression at a ROM offset
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 nem" -q
+
+# Auto-detect compression type at offset
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 auto" -q
+```
+
+### Compression Types
+| Type | Extension | CLI Arg |
+|------|-----------|---------|
+| Nemesis | `.nem` | `nem` |
+| Kosinski | `.kos` | `kos` |
+| Enigma | `.eni` | `eni` |
+| Saxman | `.sax` | `sax` |
+
+### Programmatic Usage
+
+```java
+// Search the disassembly
+DisassemblySearchTool searchTool = new DisassemblySearchTool("docs/s2disasm");
+List<DisassemblySearchResult> results = searchTool.search("Ring");
+
+// Test decompression at a ROM offset
+CompressionTestTool testTool = new CompressionTestTool("path/to/rom.gen");
+CompressionTestResult result = testTool.testDecompression(0x3000, CompressionType.NEMESIS);
+```
+
+See `uk.co.jamesj999.sonic.tools.disasm` package for full API.
+
 ## Architecture
 
 ### Entry Point

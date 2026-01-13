@@ -44,6 +44,73 @@ The project is in a **pre-alpha** state.
     *   `tools` – utilities such as `KosinskiReader` for decompressing Sega data
 *   **Tests:** Live under `src/test/java/uk/co/jamesj999/sonic/tests` and cover ROM loading, decompression, and collision.
 
+## ROM Offset Finder Tool
+
+If `docs/s2disasm` is present, you can use the **RomOffsetFinder** tool to search for disassembly items and find their ROM offsets. This is useful for locating data in the ROM that is defined in the disassembly.
+
+### Prerequisites
+- `docs/s2disasm/` directory (Sonic 2 disassembly) must be present
+- ROM file `Sonic The Hedgehog 2 (W) (REV01) [!].gen` in the project root
+
+### Usage via Maven
+
+```bash
+# Search for items by label or filename pattern
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search <pattern>"
+
+# Find ROM offset for a specific disassembly item
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="find <label>"
+
+# Test decompression at a ROM offset
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test <offset> <type>"
+
+# List all files of a compression type
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list <type>"
+```
+
+### Examples
+
+```bash
+# Search for ring-related items
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search ring" -q
+
+# List all Nemesis-compressed files
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list nem" -q
+
+# Test Nemesis decompression at offset 0x3000
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 nem" -q
+
+# Test with auto-detection
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 auto" -q
+```
+
+### Compression Types
+| Type | Extension | Argument |
+|------|-----------|----------|
+| Nemesis | `.nem` | `nem` |
+| Kosinski | `.kos` | `kos` |
+| Enigma | `.eni` | `eni` |
+| Saxman | `.sax` | `sax` |
+| Uncompressed | `.bin` | `bin` |
+
+### Programmatic Usage
+
+The tools in `uk.co.jamesj999.sonic.tools.disasm` can also be used programmatically:
+
+```java
+// Search the disassembly
+DisassemblySearchTool searchTool = new DisassemblySearchTool("docs/s2disasm");
+List<DisassemblySearchResult> results = searchTool.search("Ring");
+
+// Test decompression at a ROM offset
+CompressionTestTool testTool = new CompressionTestTool("path/to/rom.gen");
+CompressionTestResult result = testTool.testDecompression(0x3000, CompressionType.NEMESIS);
+if (result.isSuccess()) {
+    System.out.printf("Decompressed %d bytes from %d compressed bytes%n",
+        result.getDecompressedSize(), result.getCompressedSize());
+}
+```
+
 ## Audio Engine hints
 *   **Useful locations:** Work In Progress.
     *   `docs` – Contains lots of information about the audio engine in saved htm files.
