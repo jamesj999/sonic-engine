@@ -15,5 +15,6 @@ public enum GameSound {
     DROWN,
     BADNIK_HIT,
     CHECKPOINT,
-    SPRING
+    SPRING,
+    SLOW_SMASH  // Special stage bomb explosion
 }

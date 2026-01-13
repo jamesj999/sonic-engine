@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -101,9 +103,17 @@ public class Sonic2SpecialStageManager {
     private Sonic2PerspectiveData perspectiveData;
     private int ringPatternBase;
     private int bombPatternBase;
+    private int starsPatternBase;      // For ring sparkle animation
+    private int explosionPatternBase;  // For bomb explosion animation
 
     // Track state for object spawning
     private int lastDrawingIndex = -1;
+
+    // Frame timing diagnostics
+    private long lastFrameTime = 0;
+    private int frameSampleCount = 0;
+    private long frameSampleSum = 0;
+    private static final int FRAME_SAMPLE_SIZE = 60;
 
     private Sonic2SpecialStageManager() {
     }
@@ -211,8 +221,27 @@ public class Sonic2SpecialStageManager {
         LOGGER.fine("Cached " + bombPatterns.length + " bomb patterns at base 0x" +
                    Integer.toHexString(bombPatternBase));
 
+        // Load stars art (for ring sparkle animation)
+        Pattern[] starsPatterns = dataLoader.getStarsArtPatterns();
+        starsPatternBase = bombPatternBase + bombPatterns.length;
+        for (int i = 0; i < starsPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(starsPatterns[i], starsPatternBase + i);
+        }
+        LOGGER.fine("Cached " + starsPatterns.length + " stars patterns at base 0x" +
+                   Integer.toHexString(starsPatternBase));
+
+        // Load explosion art (for bomb explosion animation)
+        Pattern[] explosionPatterns = dataLoader.getExplosionArtPatterns();
+        explosionPatternBase = starsPatternBase + starsPatterns.length;
+        for (int i = 0; i < explosionPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(explosionPatterns[i], explosionPatternBase + i);
+        }
+        LOGGER.fine("Cached " + explosionPatterns.length + " explosion patterns at base 0x" +
+                   Integer.toHexString(explosionPatternBase));
+
         // Pass pattern bases to renderer
         renderer.setObjectPatternBases(ringPatternBase, bombPatternBase);
+        renderer.setEffectPatternBases(starsPatternBase, explosionPatternBase);
         renderer.setObjectManager(objectManager);
         renderer.setPerspectiveData(perspectiveData);
 
@@ -401,6 +430,22 @@ public class Sonic2SpecialStageManager {
             return;
         }
 
+        // Frame timing diagnostic - measure actual FPS
+        long now = System.nanoTime();
+        if (lastFrameTime != 0) {
+            long delta = now - lastFrameTime;
+            frameSampleSum += delta;
+            frameSampleCount++;
+            if (frameSampleCount >= FRAME_SAMPLE_SIZE) {
+                double avgMs = (frameSampleSum / (double) frameSampleCount) / 1_000_000.0;
+                double actualFps = 1000.0 / avgMs;
+                LOGGER.info(String.format("Actual FPS: %.1f (%.2f ms/frame)", actualFps, avgMs));
+                frameSampleCount = 0;
+                frameSampleSum = 0;
+            }
+        }
+        lastFrameTime = now;
+
         frameCounter++;
 
         // Update intro sequence
@@ -448,7 +493,8 @@ public class Sonic2SpecialStageManager {
         // Update all active objects
         int currentFrame = trackAnimator.getCurrentTrackFrameIndex();
         boolean flipped = trackAnimator.getEffectiveFlipState();
-        objectManager.update(currentFrame, flipped);
+        int speedFactor = trackAnimator.getSpeedFactor();
+        objectManager.update(currentFrame, flipped, speedFactor);
 
         // Update screen positions using perspective data
         if (perspectiveData != null) {
@@ -463,12 +509,26 @@ public class Sonic2SpecialStageManager {
 
     /**
      * Checks collisions between players and objects (rings/bombs).
-     * Collision only occurs when object animIndex == 8 (closest perspective size).
+     *
+     * Original game collision (Obj61_TestCollision in s2.asm):
+     * - Only checks when animIndex == 8 (closest perspective)
+     * - Compares player angle to object angle with ±10 threshold
+     * - Uses circular/wraparound arithmetic for angle comparison
+     *
+     * Invulnerability behavior:
+     * - During hurt animation (routineSecondary != 0): NO collision with anything
+     * - During invulnerability (ssDplcTimer > 0, routineSecondary == 0):
+     *   - Rings CAN be collected
+     *   - Bombs CANNOT hit (player is invulnerable)
+     * - Multiple bombs hitting same frame: Each plays sound (accurate to original)
      */
     private void checkObjectCollisions() {
         if (objectManager == null) {
             return;
         }
+
+        // Collision threshold: ±10 angle units (0x0A), matching original game
+        final int ANGLE_THRESHOLD = 10;
 
         for (Sonic2SpecialStageObject obj : objectManager.getActiveObjects()) {
             // Only test collidable objects (animIndex == 8)
@@ -476,25 +536,37 @@ public class Sonic2SpecialStageManager {
                 continue;
             }
 
+            int objAngle = obj.getAngle() & 0xFF;
+
             // Test against each player
             for (Sonic2SpecialStagePlayer player : players) {
-                if (player == null || player.isInvulnerable()) {
+                if (player == null) {
                     continue;
                 }
 
-                // Check collision using screen positions
-                // Objects and players both have screen X/Y coordinates
-                int objX = obj.getScreenX();
-                int objY = obj.getScreenY();
-                int playerX = player.getXPos();
-                int playerY = player.getYPos();
+                // Original game checks routine_secondary != 0 (hurt animation) for ALL objects
+                // During hurt animation, no collision with anything
+                if (player.isHurt()) {
+                    continue;
+                }
 
-                // Simple bounding box collision (16x16 object vs ~16x24 player)
-                int dx = Math.abs(objX - playerX);
-                int dy = Math.abs(objY - playerY);
+                // For bombs only: also skip if invulnerable (ssDplcTimer > 0)
+                // Rings CAN be collected during invulnerability
+                if (obj.isBomb() && player.isInvulnerable()) {
+                    continue;
+                }
 
-                // Collision threshold: within 12 pixels horizontally and 16 vertically
-                if (dx < 12 && dy < 16) {
+                // Original game compares angles, not screen coordinates
+                // Check if player angle is within ±threshold of object angle
+                int playerAngle = player.getAngle() & 0xFF;
+
+                // Calculate angle difference with wraparound handling
+                int diff = (playerAngle - objAngle) & 0xFF;
+
+                // Check if within threshold (accounting for 0/255 wraparound)
+                // diff <= threshold means player is slightly ahead of object
+                // diff >= 256-threshold means player is slightly behind (wrapped)
+                if (diff <= ANGLE_THRESHOLD || diff >= (256 - ANGLE_THRESHOLD)) {
                     handleObjectCollision(obj, player);
                 }
             }
@@ -509,12 +581,19 @@ public class Sonic2SpecialStageManager {
             Sonic2SpecialStageRing ring = (Sonic2SpecialStageRing) obj;
             ring.collect();
             objectManager.collectRing();
+            AudioManager.getInstance().playSfx(GameSound.RING);
             LOGGER.fine("Collected ring! Total: " + objectManager.getRingsCollected());
         } else if (obj.isBomb()) {
             Sonic2SpecialStageBomb bomb = (Sonic2SpecialStageBomb) obj;
             bomb.explode();
             player.triggerHit();
+            // Original game plays SndID_SlowSmash for bomb explosion
+            AudioManager.getInstance().playSfx(GameSound.SLOW_SMASH);
+            // Ring spill sound plays when rings are actually lost
             int ringsLost = objectManager.loseRingsFromBombHit();
+            if (ringsLost > 0) {
+                AudioManager.getInstance().playSfx(GameSound.RING_SPILL);
+            }
             LOGGER.fine("Hit bomb! Lost " + ringsLost + " rings. Remaining: " +
                        objectManager.getRingsCollected());
         }
@@ -702,6 +781,8 @@ public class Sonic2SpecialStageManager {
         perspectiveData = null;
         ringPatternBase = 0;
         bombPatternBase = 0;
+        starsPatternBase = 0;
+        explosionPatternBase = 0;
         lastDrawingIndex = -1;
 
         resultState = ResultState.RUNNING;

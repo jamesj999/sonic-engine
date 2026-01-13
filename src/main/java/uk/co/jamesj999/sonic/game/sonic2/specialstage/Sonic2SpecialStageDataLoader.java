@@ -49,6 +49,8 @@ public class Sonic2SpecialStageDataLoader {
     private Pattern[] hudArtPatterns;
     private Pattern[] startArtPatterns;
     private Pattern[] messagesArtPatterns;
+    private Pattern[] explosionArtPatterns;
+    private Pattern[] starsArtPatterns;
 
     public Sonic2SpecialStageDataLoader(Rom rom) {
         this.rom = rom;
@@ -416,6 +418,34 @@ public class Sonic2SpecialStageDataLoader {
             LOGGER.fine("Loaded Messages art: " + messagesArtPatterns.length + " patterns");
         }
         return messagesArtPatterns;
+    }
+
+    /**
+     * Loads Explosion art patterns (Nemesis compressed).
+     * Used for bomb explosion animation (obj61 routine 6).
+     * This is separate art from the bomb sprites themselves.
+     */
+    public Pattern[] getExplosionArtPatterns() throws IOException {
+        if (explosionArtPatterns == null) {
+            byte[] compressed = rom.readBytes(EXPLOSION_ART_OFFSET, EXPLOSION_ART_SIZE + 16);
+            explosionArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded Explosion art: " + explosionArtPatterns.length + " patterns");
+        }
+        return explosionArtPatterns;
+    }
+
+    /**
+     * Loads Stars art patterns (Nemesis compressed).
+     * Used for ring sparkle animation when rings are collected (obj60 routine 3).
+     * This is separate art from the ring sprites themselves.
+     */
+    public Pattern[] getStarsArtPatterns() throws IOException {
+        if (starsArtPatterns == null) {
+            byte[] compressed = rom.readBytes(STARS_ART_OFFSET, STARS_ART_SIZE + 16);
+            starsArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded Stars art: " + starsArtPatterns.length + " patterns");
+        }
+        return starsArtPatterns;
     }
 
     private byte[] decompressKosinski(byte[] compressed) throws IOException {

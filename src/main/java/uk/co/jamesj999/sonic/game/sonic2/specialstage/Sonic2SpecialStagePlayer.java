@@ -1,5 +1,9 @@
 package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 
+import uk.co.jamesj999.sonic.timer.Timer;
+import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.timer.timers.SSInvulnerabilityTimer;
+
 import java.util.logging.Logger;
 
 /**
@@ -236,6 +240,8 @@ public class Sonic2SpecialStagePlayer {
             default:
                 break;
         }
+
+        // Invulnerability timer is now managed by TimerManager (SSInvulnerabilityTimer)
     }
 
     private void updateControlRecord(int buttons) {
@@ -410,16 +416,21 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void ssObjectMoveAndFall() {
+        // Original 68000 assembly loads y_vel BEFORE adding gravity,
+        // then adds gravity to memory AFTER. This means gravity affects
+        // the NEXT frame's position, not the current frame.
         long d2 = ((long) ssXPos << 16) | (ssXSub & 0xFFFF);
         long d3 = ((long) ssYPos << 16) | (ssYSub & 0xFFFF);
 
         int xVelExt = xVel;
         d2 += ((long) xVelExt) << 8;
 
-        yVel += GRAVITY;
-
+        // Load yVel BEFORE applying gravity (matches original behavior)
         int yVelExt = yVel;
         d3 += ((long) yVelExt) << 8;
+
+        // Apply gravity AFTER using yVel for position update
+        yVel += GRAVITY;
 
         ssXPos = (int) (d2 >> 16);
         ssXSub = (int) (d2 & 0xFFFF);
@@ -688,7 +699,8 @@ public class Sonic2SpecialStagePlayer {
 
         collisionProperty = 0;
 
-        if (ssDplcTimer != 0) {
+        // Check invulnerability using Timer framework
+        if (isInvulnerable()) {
             return;
         }
 
@@ -708,7 +720,11 @@ public class Sonic2SpecialStagePlayer {
         ssHurtTimer = (ssHurtTimer + 8) & 0xFF;
         if (ssHurtTimer == 0) {
             routineSecondary = 0;
-            ssDplcTimer = 0x1E;
+            // Register invulnerability timer (30 frames = 0x1E)
+            // Timer will call clearInvulnerability() when complete
+            String timerCode = getInvulnerabilityTimerCode();
+            TimerManager.getInstance().registerTimer(
+                new SSInvulnerabilityTimer(timerCode, 0x1E, this));
         }
 
         int displayAngle = (ssHurtTimer + angle - 0x10) & 0xFF;
@@ -752,7 +768,40 @@ public class Sonic2SpecialStagePlayer {
     public boolean isRenderYFlip() { return renderYFlip; }
     public boolean isJumping() { return statusJumping; }
     public boolean isHurt() { return routineSecondary == 2; }
-    public boolean isInvulnerable() { return ssDplcTimer > 0; }
+
+    /**
+     * Checks if player is invulnerable (post-hurt invulnerability period).
+     * Uses the Timer framework - invulnerability is active while the timer exists.
+     */
+    public boolean isInvulnerable() {
+        return TimerManager.getInstance().getTimerForCode(getInvulnerabilityTimerCode()) != null;
+    }
+
+    /**
+     * Gets the remaining invulnerability ticks (for flashing effect).
+     * Returns 0 if not invulnerable.
+     */
+    public int getInvulnerabilityTicks() {
+        Timer timer = TimerManager.getInstance().getTimerForCode(getInvulnerabilityTimerCode());
+        return timer != null ? timer.getTicks() : 0;
+    }
+
+    /**
+     * Gets the unique timer code for this player's invulnerability timer.
+     */
+    private String getInvulnerabilityTimerCode() {
+        return "SSInvulnerable-" + playerType.name();
+    }
+
+    /**
+     * Clears the invulnerability state. Called by SSInvulnerabilityTimer when complete.
+     */
+    public void clearInvulnerability() {
+        // Timer is automatically removed by TimerManager when perform() returns true
+        // This method exists for any additional cleanup if needed
+        LOGGER.fine("Invulnerability ended for " + playerType.name());
+    }
+
     public PlayerType getPlayerType() { return playerType; }
     public RoutineState getRoutine() { return routine; }
 

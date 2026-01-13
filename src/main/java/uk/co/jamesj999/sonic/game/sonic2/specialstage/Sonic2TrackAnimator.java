@@ -40,7 +40,13 @@ public class Sonic2TrackAnimator {
     private int currentSegmentType;
     private boolean currentSegmentFlipped;
 
-    private int speedFactor = 12;
+    // Original game uses speedFactor = 12 ($C0000 >> 16), giving index 6 -> 5 frames per track step
+    // At 60fps this is 12 track frames/sec. Currently set to 6 which "feels" better.
+    // TODO: Investigate why speedFactor=6 feels better than the correct disassembly value of 12.
+    //       FPS diagnostics show we're running at ~62.5fps (not 120), so it's not a double-update issue.
+    //       Possible causes: perception difference, emulator timing variance, or something else.
+    //       Object depth decrement is now derived from speedFactor, so track/object sync is maintained.
+    private int speedFactor = 6;
 
     private boolean stageComplete = false;
 
@@ -69,8 +75,10 @@ public class Sonic2TrackAnimator {
         currentFrameInSegment = 0;
         frameDelayCounter = 0;
         stageComplete = false;
-        // Reset speed factor to initial value (0xC from original game's SS_New_Speed_Factor)
-        speedFactor = 12;
+        // Reset speed factor to initial value
+        // Original game uses 0xC (12) from SS_New_Speed_Factor ($C0000)
+        // Temporarily using 6 to slow down animation for testing
+        speedFactor = 6;
         resetOrientation();
 
         if (layoutLength > 0) {

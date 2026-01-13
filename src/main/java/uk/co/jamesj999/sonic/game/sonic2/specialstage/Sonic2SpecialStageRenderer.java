@@ -39,6 +39,8 @@ public class Sonic2SpecialStageRenderer {
     // Object rendering (Phase 4)
     private int ringPatternBase;
     private int bombPatternBase;
+    private int starsPatternBase;      // For ring sparkle animation (uses separate art)
+    private int explosionPatternBase;  // For bomb explosion animation (uses separate art)
     private Sonic2SpecialStageObjectManager objectManager;
     private Sonic2PerspectiveData perspectiveData;
 
@@ -119,6 +121,11 @@ public class Sonic2SpecialStageRenderer {
     public void setObjectPatternBases(int ringBase, int bombBase) {
         this.ringPatternBase = ringBase;
         this.bombPatternBase = bombBase;
+    }
+
+    public void setEffectPatternBases(int starsBase, int explosionBase) {
+        this.starsPatternBase = starsBase;
+        this.explosionPatternBase = explosionBase;
     }
 
     public void setObjectManager(Sonic2SpecialStageObjectManager objectManager) {
@@ -921,6 +928,7 @@ public class Sonic2SpecialStageRenderer {
     /**
      * Renders a ring object using proper sprite mappings.
      * Ring sprites vary in size based on perspective distance.
+     * When in sparkle state (collected), uses different art (SpecialStars).
      */
     private void renderRing(Sonic2SpecialStageRing ring, int screenCenterOffset) {
         int screenX = screenCenterOffset + ring.getScreenX();
@@ -931,8 +939,17 @@ public class Sonic2SpecialStageRenderer {
         Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
             Sonic2SpecialStageSpriteData.getRingPieces(mappingFrame);
 
-        // Rings use palette line 3 (from make_art_tile(ArtTile_ArtNem_SpecialRings,3,0))
-        int paletteIndex = 3;
+        // Determine which art base and palette to use
+        // Sparkle uses SpecialStars art (palette 2), normal uses SpecialRings (palette 3)
+        int patternBase;
+        int paletteIndex;
+        if (ring.isSparkle()) {
+            patternBase = starsPatternBase;
+            paletteIndex = 2;  // From make_art_tile(ArtTile_ArtNem_SpecialStars,2,0)
+        } else {
+            patternBase = ringPatternBase;
+            paletteIndex = 3;  // From make_art_tile(ArtTile_ArtNem_SpecialRings,3,0)
+        }
 
         // Render each sprite piece
         for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
@@ -944,7 +961,7 @@ public class Sonic2SpecialStageRenderer {
                 for (int ty = 0; ty < piece.heightTiles; ty++) {
                     // Column-major index
                     int tileIndex = tx * piece.heightTiles + ty;
-                    int patternId = ringPatternBase + piece.tileIndex + tileIndex;
+                    int patternId = patternBase + piece.tileIndex + tileIndex;
 
                     PatternDesc desc = new PatternDesc();
                     desc.setPriority(ring.isHighPriority());
@@ -965,6 +982,7 @@ public class Sonic2SpecialStageRenderer {
     /**
      * Renders a bomb object using proper sprite mappings.
      * Bomb sprites vary in size based on perspective distance.
+     * When in explosion state (hit), uses different art (SpecialExplosion).
      */
     private void renderBomb(Sonic2SpecialStageBomb bomb, int screenCenterOffset) {
         int screenX = screenCenterOffset + bomb.getScreenX();
@@ -975,8 +993,17 @@ public class Sonic2SpecialStageRenderer {
         Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
             Sonic2SpecialStageSpriteData.getBombPieces(mappingFrame);
 
-        // Bombs use palette line 1 (from make_art_tile(ArtTile_ArtNem_SpecialBomb,1,0))
-        int paletteIndex = 1;
+        // Determine which art base and palette to use
+        // Explosion uses SpecialExplosion art (palette 2), normal uses SpecialBomb (palette 1)
+        int patternBase;
+        int paletteIndex;
+        if (bomb.isExploding()) {
+            patternBase = explosionPatternBase;
+            paletteIndex = 2;  // From make_art_tile(ArtTile_ArtNem_SpecialExplosion,2,0)
+        } else {
+            patternBase = bombPatternBase;
+            paletteIndex = 1;  // From make_art_tile(ArtTile_ArtNem_SpecialBomb,1,0)
+        }
 
         // Render each sprite piece
         for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
@@ -988,7 +1015,7 @@ public class Sonic2SpecialStageRenderer {
                 for (int ty = 0; ty < piece.heightTiles; ty++) {
                     // Column-major index
                     int tileIndex = tx * piece.heightTiles + ty;
-                    int patternId = bombPatternBase + piece.tileIndex + tileIndex;
+                    int patternId = patternBase + piece.tileIndex + tileIndex;
 
                     PatternDesc desc = new PatternDesc();
                     desc.setPriority(bomb.isHighPriority());
