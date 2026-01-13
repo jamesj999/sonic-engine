@@ -40,13 +40,21 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     private static final Logger LOGGER = Logger.getLogger(SpecialStageResultsScreenObjectInstance.class.getName());
 
     // Y positions for text elements (screen coordinates, Y increases downward)
-    private static final int TITLE_Y = 32;
-    private static final int GOT_TEXT_Y = 56;
-    private static final int EMERALD_TEXT_Y = 72;
-    private static final int EMERALDS_Y = 104;
-    private static final int RING_BONUS_Y = 144;
-    private static final int EMERALD_BONUS_Y = 160;
-    private static final int TOTAL_Y = 184;
+    // From Obj6F_SubObjectMetaData in s2.asm
+    private static final int TITLE_Y = 42;           // "SPECIAL STAGE" / "CHAOS EMERALD"
+    private static final int GOT_TEXT_Y = 24;        // "SONIC GOT A" / "SONIC HAS ALL THE" (above TITLE_Y!)
+    private static final int EMERALD_TEXT_Y = 42;    // Same as TITLE_Y (replaces it)
+    private static final int EMERALDS_Y = 92;        // Emerald icons (center is ~92 based on emerald positions)
+    // Bonus tally Y positions - from Obj6F_SubObjectMetaData in s2.asm
+    // Original game positions (2-player mode):
+    // - Y=136: Score line (Frame 12)
+    // - Y=152: Sonic Rings line (Frame 13)
+    // - Y=168: Miles Rings line (Frame 14) - deleted in single-player
+    // - Y=184: Gems Bonus line (Frame 16)
+    // For single-player, we move GEMS BONUS up to Y=168 for consistent 16px spacing
+    private static final int SCORE_LINE_Y = 136;
+    private static final int SONIC_RINGS_Y = 152;
+    private static final int GEMS_BONUS_Y = 168;  // Moved up from 184 for consistent spacing in single-player
 
     // Super Sonic message positions
     private static final int SUPER_MSG_Y = 88;
@@ -81,6 +89,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     private static final int VRAM_END = 0x0710;        // End of HUD region (generous)
 
     private static final int PATTERN_BASE = 0x30000;   // High ID to avoid conflicts with other cached patterns
+    private static final int SOURCE_DIGITS_PATTERN_BASE = 0x31000;  // Separate base for preserved source digits
 
     // Input data
     private final int ringsCollected;
@@ -104,6 +113,29 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
     // Super Sonic sequence tracking
     private int superMsgTimer = 0;
+
+    // Number rendering tracking - cache last values to avoid re-rendering
+    private int lastRingBonus = Integer.MIN_VALUE;
+    private int lastEmeraldBonus = Integer.MIN_VALUE;
+    private final Pattern blankDigit = new Pattern();
+
+    // Source digit patterns (preserved copy, since we modify the combined array in place)
+    private Pattern[] sourceDigitPatterns;
+
+    // Digit pattern offsets in combinedPatterns array
+    // Numbers are at VRAM $520 (VRAM_NUMBERS - VRAM_BASE = 0x51E)
+    // Each digit is 2 tiles (1 wide x 2 tall)
+    // Digits 0-9 occupy tiles 0-19 in the numbers section
+    private static final int DIGIT_TILES_PER_DIGIT = 2;
+    private static final int DIGIT_COUNT = 10;
+
+    // Number display positions in the mapping frames:
+    // Frame 13 (RING_BONUS): numbers at tile $528 - $520 = 8 (offset 8 in numbers area)
+    // Frame 16 (PERFECT_BONUS): numbers at tile $520 - $520 = 0 (offset 0 in numbers area)
+    // Note: Frame 12 (EMERALD_BONUS) doesn't have a numbers piece
+    private static final int RING_BONUS_DIGIT_OFFSET = 8;   // $528 - $520 for Frame 13
+    private static final int PERFECT_DIGIT_OFFSET = 0;      // $520 - $520 for Frame 16
+    private static final int DIGITS_PER_VALUE = 8;          // 4 digits x 2 tiles each
 
     public SpecialStageResultsScreenObjectInstance(int ringsCollected, boolean gotEmerald,
                                                     int stageIndex, int totalEmeraldCount) {
@@ -197,6 +229,18 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             int numbersOffset = VRAM_NUMBERS - VRAM_BASE;
             copyPatterns(numbersPatterns, numbersOffset);
             System.out.println("[SS Results] Copied " + numbersPatterns.length + " number patterns to index " + numbersOffset + " (0x" + Integer.toHexString(numbersOffset) + ")");
+
+            // Preserve a copy of source digit patterns (0-9) before any modifications
+            // These are needed because we modify the combined array in place during tally
+            int numSourceDigits = Math.min(DIGIT_COUNT * DIGIT_TILES_PER_DIGIT, numbersPatterns.length);
+            sourceDigitPatterns = new Pattern[numSourceDigits];
+            for (int i = 0; i < numSourceDigits; i++) {
+                sourceDigitPatterns[i] = new Pattern();
+                if (numbersPatterns[i] != null) {
+                    sourceDigitPatterns[i].copyFrom(numbersPatterns[i]);
+                }
+            }
+            System.out.println("[SS Results] Preserved " + numSourceDigits + " source digit patterns");
 
             // Copy Title Card E,N,O,Z to VRAM $580 (index $580 - $02 = $57E = 1406)
             int titleCardOffset = VRAM_TITLE_CARD - VRAM_BASE;
@@ -437,6 +481,17 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             }
         }
 
+        // Cache the preserved source digit patterns at a separate base
+        // These are used by renderBonusNumber() and won't be overwritten by updateBonusPatterns()
+        if (sourceDigitPatterns != null) {
+            System.out.println("[SS Results] Caching " + sourceDigitPatterns.length + " source digit patterns at base 0x" + Integer.toHexString(SOURCE_DIGITS_PATTERN_BASE));
+            for (int i = 0; i < sourceDigitPatterns.length; i++) {
+                if (sourceDigitPatterns[i] != null) {
+                    graphicsManager.cachePatternTexture(sourceDigitPatterns[i], SOURCE_DIGITS_PATTERN_BASE + i);
+                }
+            }
+        }
+
         // Cache the results palettes
         // The mappings use palette indices 0, 1, 2, 3 - we need to ensure those point to our results palettes
         if (paletteLoaded && resultsPalettes != null) {
@@ -461,6 +516,118 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
         // Total starts at 0 and counts up as bonuses tally
         totalBonus = 0;
+    }
+
+    /**
+     * Updates the digit patterns in the combined pattern array to show current bonus values.
+     * This modifies the patterns at the VRAM offsets referenced by the mapping frames.
+     */
+    private void updateBonusPatterns() {
+        if (combinedPatterns == null || !artLoaded || sourceDigitPatterns == null) {
+            return;
+        }
+
+        // Check if values have changed
+        if (ringBonus == lastRingBonus && emeraldBonus == lastEmeraldBonus) {
+            return;
+        }
+
+        // Use the preserved source digit patterns (not from combinedPatterns which gets modified)
+        int numbersOffset = VRAM_NUMBERS - VRAM_BASE;
+
+        // Update ring bonus digits (at VRAM $528, which is offset 8 in numbers area)
+        // Used by Frame 13 (RING_BONUS) - 4 tiles wide x 2 tall = 8 tiles for 4 digits
+        writeBonusValue(numbersOffset + RING_BONUS_DIGIT_OFFSET, ringBonus, sourceDigitPatterns);
+
+        // Update emerald bonus digits (at VRAM $520, which is offset 0 in numbers area)
+        // Used by Frame 16 (PERFECT_BONUS) when showing gems bonus
+        if (gotEmerald) {
+            writeBonusValue(numbersOffset + PERFECT_DIGIT_OFFSET, emeraldBonus, sourceDigitPatterns);
+        }
+
+        // Re-cache the updated patterns to GPU
+        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        if (graphicsManager != null) {
+            // Re-cache ring bonus digit patterns (offset 8-15)
+            for (int i = 0; i < DIGITS_PER_VALUE; i++) {
+                int patternIndex = numbersOffset + RING_BONUS_DIGIT_OFFSET + i;
+                if (patternIndex < combinedPatterns.length && combinedPatterns[patternIndex] != null) {
+                    graphicsManager.cachePatternTexture(combinedPatterns[patternIndex], PATTERN_BASE + patternIndex);
+                }
+            }
+            // Re-cache emerald bonus digit patterns (offset 0-7)
+            if (gotEmerald) {
+                for (int i = 0; i < DIGITS_PER_VALUE; i++) {
+                    int patternIndex = numbersOffset + PERFECT_DIGIT_OFFSET + i;
+                    if (patternIndex < combinedPatterns.length && combinedPatterns[patternIndex] != null) {
+                        graphicsManager.cachePatternTexture(combinedPatterns[patternIndex], PATTERN_BASE + patternIndex);
+                    }
+                }
+            }
+        }
+
+        lastRingBonus = ringBonus;
+        lastEmeraldBonus = emeraldBonus;
+    }
+
+    /**
+     * Writes a bonus value (up to 4 digits) into the pattern array.
+     * Leading zeros are suppressed except for the ones place.
+     *
+     * @param destIndex Index in combinedPatterns where the first digit tile goes
+     * @param value     The numeric value to display (0-9999)
+     * @param digits    Source digit patterns (0-9, each 2 tiles)
+     */
+    private void writeBonusValue(int destIndex, int value, Pattern[] digits) {
+        int[] divisors = {1000, 100, 10, 1};
+        boolean hasDigit = false;
+
+        for (int i = 0; i < divisors.length; i++) {
+            int divisor = divisors[i];
+            int digit = value / divisor;
+            value %= divisor;
+
+            // Calculate tile index for this digit position
+            // Each digit is 2 tiles (column-major: top tile, bottom tile)
+            int tileIndex = destIndex + (i * DIGIT_TILES_PER_DIGIT);
+
+            // Always show the last digit (ones place), even if value is 0
+            boolean isLastDigit = (i == divisors.length - 1);
+
+            if (digit != 0 || hasDigit || isLastDigit) {
+                hasDigit = true;
+                copyDigit(tileIndex, digit, digits);
+            } else {
+                // Leading zero - write blank patterns
+                if (tileIndex < combinedPatterns.length) {
+                    combinedPatterns[tileIndex] = blankDigit;
+                }
+                if (tileIndex + 1 < combinedPatterns.length) {
+                    combinedPatterns[tileIndex + 1] = blankDigit;
+                }
+            }
+        }
+    }
+
+    /**
+     * Copies a single digit's patterns from the source digit array to the destination.
+     *
+     * @param destIndex Index in combinedPatterns for the digit
+     * @param digit     Digit value (0-9)
+     * @param digits    Source digit patterns
+     */
+    private void copyDigit(int destIndex, int digit, Pattern[] digits) {
+        int srcIndex = digit * DIGIT_TILES_PER_DIGIT;
+        if (srcIndex + 1 >= digits.length || destIndex + 1 >= combinedPatterns.length) {
+            return;
+        }
+        // Copy the two tiles for this digit
+        if (digits[srcIndex] != null) {
+            combinedPatterns[destIndex] = digits[srcIndex];
+        }
+        if (digits[srcIndex + 1] != null) {
+            combinedPatterns[destIndex + 1] = digits[srcIndex + 1];
+        }
     }
 
     @Override
@@ -576,14 +743,16 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             }
         }
 
-        // "SPECIAL STAGE" title - slides from right
+        // "SPECIAL STAGE" title - slides from right (only shown when emerald NOT collected)
         int titleX = SCREEN_CENTER_X + (int) ((1 - slideAlpha) * 200);
-        if (useRomArt) {
-            renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_SPECIAL_STAGE,
-                    titleX, TITLE_Y);
-        } else {
-            renderPlaceholderText(commands, titleX, TITLE_Y,
-                    "SPECIAL STAGE", 1.0f, 0.8f, 0.2f);
+        if (!gotEmerald) {
+            if (useRomArt) {
+                renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_SPECIAL_STAGE,
+                        titleX, TITLE_Y);
+            } else {
+                renderPlaceholderText(commands, titleX, TITLE_Y,
+                        "SPECIAL STAGE", 1.0f, 0.8f, 0.2f);
+            }
         }
 
         // Result text based on emerald count
@@ -627,30 +796,56 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         }
 
         // Bonus displays - only after slide-in complete
+        // From Obj6F_SubObjectMetaData in s2.asm:
+        // - Y=136, routine $14, frame $C (12): First bonus line - SCORE (shows tallying score)
+        // - Y=152, routine $16, frame $D (13): SONIC RINGS (shows ring count)
+        // - Y=168, routine $18, frame $E (14): MILES RINGS (deleted in single player by Obj6F_P2Rings)
+        // - Y=184, routine $1A, frame $10 (16): GEMS BONUS (only if emerald obtained)
+        //
+        // Note: Miles Rings (Y=168, Frame $E=14) is deleted in single-player mode
         if (state >= STATE_TALLY) {
+            // Update digit patterns to show current bonus values
             if (useRomArt) {
-                // Render ring bonus using mapping frame
-                renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_RING_BONUS,
-                        SCREEN_CENTER_X, RING_BONUS_Y);
+                updateBonusPatterns();
+            }
 
+            if (useRomArt) {
+                // Render bonus lines with consistent number positioning
+                // All numbers rendered at X offset 0x38 (56) from center for consistency
+                int numbersXOffset = 0x38;
+
+                // Line 1: Y=136 - "SCORE" label (using Frame 12, which has no numbers piece)
+                // We render the score numbers separately using renderBonusNumber()
+                renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_EMERALD_BONUS,
+                        SCREEN_CENTER_X, SCORE_LINE_Y);
+                renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, SCORE_LINE_Y, totalBonus);
+
+                // Line 2: Y=152 - "SONIC RINGS" with ring count
+                // Frame 13 has numbers at x=0x40 (too far right), so we skip its numbers
+                // and render our own at the correct position (x=0x38)
+                renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_RING_BONUS,
+                        SCREEN_CENTER_X, SONIC_RINGS_Y);
+                renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, SONIC_RINGS_Y, ringBonus);
+
+                // Line 3: Y=184 - "GEMS BONUS" with emerald bonus - only if got emerald
                 if (gotEmerald) {
-                    renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_EMERALD_BONUS,
-                            SCREEN_CENTER_X, EMERALD_BONUS_Y);
+                    // Frame 16 has numbers at correct position (x=0x38), but we render
+                    // separately for consistency with the updateBonusPatterns() logic
+                    renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_PERFECT_BONUS,
+                            SCREEN_CENTER_X, GEMS_BONUS_Y);
+                    renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, GEMS_BONUS_Y, emeraldBonus);
                 }
-
-                renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_TOTAL,
-                        SCREEN_CENTER_X, TOTAL_Y);
             } else {
-                renderPlaceholderText(commands, SCREEN_CENTER_X, RING_BONUS_Y,
-                        "RING BONUS: " + ringBonus, 1.0f, 1.0f, 0.5f);
+                renderPlaceholderText(commands, SCREEN_CENTER_X, SCORE_LINE_Y,
+                        "SCORE: " + totalBonus, 1.0f, 1.0f, 0.5f);
+
+                renderPlaceholderText(commands, SCREEN_CENTER_X, SONIC_RINGS_Y,
+                        "SONIC RINGS: " + ringBonus, 1.0f, 1.0f, 0.5f);
 
                 if (gotEmerald) {
-                    renderPlaceholderText(commands, SCREEN_CENTER_X, EMERALD_BONUS_Y,
-                            "EMERALD BONUS: " + emeraldBonus, 0.5f, 1.0f, 0.5f);
+                    renderPlaceholderText(commands, SCREEN_CENTER_X, GEMS_BONUS_Y,
+                            "GEMS BONUS: " + emeraldBonus, 0.5f, 1.0f, 0.5f);
                 }
-
-                renderPlaceholderText(commands, SCREEN_CENTER_X, TOTAL_Y,
-                        "TOTAL: " + totalBonus, 1.0f, 1.0f, 1.0f);
             }
         }
 
@@ -693,6 +888,26 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
      * @param centerY    Screen Y coordinate for the frame
      */
     private void renderMappingFrame(int frameIndex, int centerX, int centerY) {
+        renderMappingFrameInternal(frameIndex, centerX, centerY, false);
+    }
+
+    /**
+     * Renders a mapping frame but skips any number pieces.
+     * Used when we want to render the label text but render numbers separately
+     * for consistent positioning.
+     *
+     * @param frameIndex Index into Sonic2SpecialStageResultsMappings.FRAMES
+     * @param centerX    Screen X coordinate for center of the frame
+     * @param centerY    Screen Y coordinate for the frame
+     */
+    private void renderMappingFrameWithoutNumbers(int frameIndex, int centerX, int centerY) {
+        renderMappingFrameInternal(frameIndex, centerX, centerY, true);
+    }
+
+    /**
+     * Internal method to render a mapping frame with optional filtering of number pieces.
+     */
+    private void renderMappingFrameInternal(int frameIndex, int centerX, int centerY, boolean skipNumbers) {
         if (!artLoaded || combinedPatterns == null) {
             return;
         }
@@ -708,6 +923,10 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         // Render pieces in reverse order (painter's algorithm - first piece on top)
         for (int i = pieces.length - 1; i >= 0; i--) {
             Sonic2SpecialStageResultsMappings.ResultsPiece piece = pieces[i];
+            // Skip number pieces if requested
+            if (skipNumbers && piece.artType() == Sonic2SpecialStageResultsMappings.ART_TYPE_NUMBERS) {
+                continue;
+            }
             renderMappingPiece(graphicsManager, piece, centerX, centerY);
         }
     }
@@ -871,6 +1090,59 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                             color[0], color[1], color[2]);
                 }
             }
+        }
+    }
+
+    /**
+     * Renders a 4-digit bonus number at the specified screen position.
+     * Used for the score line which has no built-in numbers in Frame 12.
+     *
+     * @param x     Screen X position for the number (right-aligned numbers position)
+     * @param y     Screen Y position for the number
+     * @param value The numeric value to display (0-9999)
+     */
+    private void renderBonusNumber(int x, int y, int value) {
+        if (!artLoaded || combinedPatterns == null || sourceDigitPatterns == null) {
+            return;
+        }
+
+        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        if (graphicsManager == null) {
+            return;
+        }
+
+        int[] divisors = {1000, 100, 10, 1};
+        boolean hasDigit = false;
+
+        for (int i = 0; i < divisors.length; i++) {
+            int divisor = divisors[i];
+            int digit = value / divisor;
+            value %= divisor;
+
+            // Calculate X position for this digit (each digit is 8 pixels wide)
+            int digitX = x + (i * 8);
+
+            // Always show the last digit (ones place), even if value is 0
+            boolean isLastDigit = (i == divisors.length - 1);
+
+            if (digit != 0 || hasDigit || isLastDigit) {
+                hasDigit = true;
+                // Render the two tiles for this digit (column-major: top, bottom)
+                // Use SOURCE_DIGITS_PATTERN_BASE which has the unmodified digit patterns
+                int srcTileIndex = digit * DIGIT_TILES_PER_DIGIT;
+                if (srcTileIndex + 1 < sourceDigitPatterns.length) {
+                    // Top tile - use SOURCE_DIGITS_PATTERN_BASE for preserved digits
+                    int patternId = SOURCE_DIGITS_PATTERN_BASE + srcTileIndex;
+                    PatternDesc desc = new PatternDesc(patternId & 0x7FF);
+                    graphicsManager.renderPatternWithId(patternId, desc, digitX, y);
+
+                    // Bottom tile
+                    patternId = SOURCE_DIGITS_PATTERN_BASE + srcTileIndex + 1;
+                    desc = new PatternDesc(patternId & 0x7FF);
+                    graphicsManager.renderPatternWithId(patternId, desc, digitX, y + 8);
+                }
+            }
+            // Leading zeros are blank (not rendered)
         }
     }
 

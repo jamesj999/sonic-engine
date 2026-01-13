@@ -30,7 +30,7 @@ public final class Sonic2SpecialStageResultsMappings {
     public static final int VRAM_TITLE_CARD = 0x0580;    // Full title card art (E, N, O at start)
     public static final int VRAM_RESULTS_ART = 0x0590;   // Results art (emeralds, bonus graphics)
     public static final int VRAM_HUD = 0x06CA;           // HUD art (SCORE, TIME, RINGS text)
-    public static final int VRAM_NUMBERS = 0x04AC;       // Numbers art (bonus digits)
+    public static final int VRAM_NUMBERS = 0x0520;       // Numbers art (bonus digits) - matches SpecialStageResultsScreenObjectInstance
 
     // Art type constants for pieces
     public static final int ART_TYPE_SS_LETTERS = 0;     // Special stage letters at VRAM $02
