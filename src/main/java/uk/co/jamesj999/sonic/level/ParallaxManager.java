@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.scroll.BackgroundCamera;
 import uk.co.jamesj999.sonic.level.scroll.ParallaxTables;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlMcz;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -67,14 +68,13 @@ public class ParallaxManager {
     private boolean loaded = false;
 
     private SwScrlEhz ehzHandler;
+    private SwScrlMcz mczHandler;
 
     private int currentZone = -1;
     private int currentAct = -1;
-    private boolean screenShakeFlag = false;
 
     // Pre-allocated arrays to avoid per-frame allocations
     private final int[] arzRowSpeeds = new int[16];
-    private final int[] mczSegScroll = new int[24];
     private final int[] wfzOffsets = new int[4];
 
     private static ParallaxManager instance;
@@ -92,6 +92,7 @@ public class ParallaxManager {
         try {
             tables = new ParallaxTables(rom);
             ehzHandler = new SwScrlEhz(tables);
+            mczHandler = new SwScrlMcz(tables);
             loaded = true;
             LOGGER.info("Parallax tables loaded.");
         } catch (IOException e) {
@@ -162,7 +163,9 @@ public class ParallaxManager {
     }
 
     public void setScreenShakeFlag(boolean screenShakeFlag) {
-        this.screenShakeFlag = screenShakeFlag;
+        if (mczHandler != null) {
+            mczHandler.setScreenShakeFlag(screenShakeFlag);
+        }
     }
 
     public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY) {
@@ -214,7 +217,15 @@ public class ParallaxManager {
                 fillHtz(cameraX, bgScrollY);
                 break;
             case ZONE_MCZ:
-                fillMcz(cameraX, cameraY, frameCounter);
+                if (mczHandler != null) {
+                    mczHandler.update(hScroll, cameraX, cameraY, frameCounter, currentAct);
+                    minScroll = mczHandler.getMinScrollOffset();
+                    maxScroll = mczHandler.getMaxScrollOffset();
+                    vscrollFactorBG = mczHandler.getVscrollFactorBG();
+                    vscrollFactorFG = mczHandler.getVscrollFactorFG();
+                    // Update bgCamera for renderer's vertical scroll
+                    bgCamera.setBgYPos(mczHandler.getBgY());
+                }
                 break;
             case ZONE_OOZ:
                 fillOoz(cameraX, bgScrollY, frameCounter);
@@ -462,156 +473,6 @@ public class ParallaxManager {
                 offset = cameraX - (cameraX >> 4);
             }
             setLineWithOffset(screenLine, fgScroll, offset);
-        }
-    }
-
-    /**
-     * MCZ - Mystic Cave Zone
-     * Uses rigorous integer math and fixed-point accumulation from Sonic 2.
-     */
-    private void fillMcz(int cameraX, int cameraY, int frameCounter) {
-        // 1. Calculate BG Y (Act Dependent)
-        int bgY;
-        if (currentAct == 0) {
-            // Act 1: floor(cameraY / 3) - 320
-            bgY = (cameraY / 3) - 320;
-        } else {
-            // Act 2: floor(cameraY / 6) - 16
-            bgY = (cameraY / 6) - 16;
-        }
-
-        // Update logical BG Camera Y
-        bgCamera.setBgYPos(bgY);
-
-        // 2. Screen Shake (Boss)
-        int rippleX = 0;
-        int rippleY = 0;
-
-        if (screenShakeFlag && tables != null) {
-            int idx = frameCounter & 0x3F;
-            byte[] definitions = tables.getRippleData();
-            if (definitions != null && definitions.length >= 66) {
-                // ROM[0xC682 + idx] corresponds to rippleData[idx]
-                rippleY = definitions[idx]; // Java bytes are signed (-128..127)
-                rippleX = definitions[idx + 1]; // Signed byte
-            }
-        }
-
-        // Apply shake to render factors
-        vscrollFactorBG = (short) (bgY + rippleY);
-        vscrollFactorFG = (short) (cameraY + rippleY);
-
-        // 3. Build Segment Scroll Values (Horizontal Parallax)
-        // base = floorSigned( ( (int32)cameraX << 4 ) / 10 )
-        int base = (cameraX << 4) / 10;
-        int baseFixed = base << 12; // 32-bit fixed accumulator step
-
-        int[] segScroll = new int[24];
-        int accFixed = baseFixed;
-
-        // Accumulate 9 steps
-        for (int step = 1; step <= 9; step++) {
-            short stepWord = (short) (accFixed >> 16);
-            int val = stepWord;
-
-            switch (step) {
-                case 1:
-                    segScroll[15] = val;
-                    segScroll[7] = val;
-                    break;
-                case 2:
-                    segScroll[16] = val;
-                    segScroll[6] = val;
-                    break;
-                case 3:
-                    segScroll[17] = val;
-                    segScroll[5] = val;
-                    break;
-                case 4:
-                    segScroll[18] = val;
-                    segScroll[4] = val;
-                    break;
-                case 5:
-                    segScroll[19] = val;
-                    segScroll[3] = val;
-                    segScroll[8] = val;
-                    segScroll[14] = val;
-                    break;
-                case 6:
-                    segScroll[20] = val;
-                    break;
-                case 7:
-                    segScroll[21] = val;
-                    segScroll[2] = val;
-                    segScroll[9] = val;
-                    segScroll[13] = val;
-                    break;
-                case 8:
-                    segScroll[22] = val;
-                    segScroll[1] = val;
-                    segScroll[10] = val;
-                    segScroll[12] = val;
-                    break;
-                case 9:
-                    segScroll[23] = val;
-                    segScroll[0] = val;
-                    segScroll[11] = val;
-                    break;
-            }
-            accFixed += baseFixed;
-        }
-
-        // 4. Expand to Scanlines
-        if (tables == null)
-            return;
-        byte[] rowHeights = tables.getMczRowHeights();
-        if (rowHeights == null)
-            return;
-
-        // Treat bgY as vertical position in 512-pixel cycle
-        // Original S2 hardware behavior: Parallax map is generated based on Unshaken
-        // Camera Y.
-        // Screen shake (VScroll offset) is applied later, causing the texture to
-        // "slide" against the bands.
-        int yInCycle = bgY % 512;
-        if (yInCycle < 0)
-            yInCycle += 512;
-
-        int seg = 0;
-        // Find visible segment
-        while (seg < rowHeights.length) {
-            int h = rowHeights[seg] & 0xFF;
-            if (yInCycle < h)
-                break;
-            yInCycle -= h;
-            seg++;
-        }
-        // Safety clamp
-        if (seg >= rowHeights.length)
-            seg = 0;
-
-        int remainingInSeg = (rowHeights[seg] & 0xFF) - yInCycle;
-
-        // Foreground X scroll (constant per scanline, includes shake)
-        short fgScroll = (short) -(cameraX + rippleX);
-
-        for (int screenLine = 0; screenLine < VISIBLE_LINES; screenLine++) {
-            // bgX[screenLine] = -segScroll[seg]
-            // We pass offset = BG - FG = (-segScroll[seg] - rippleX) - (-(cameraX +
-            // rippleX))
-            // = -segScroll[seg] - rippleX + cameraX + rippleX
-            // = cameraX - segScroll[seg]
-            int bgOffset = cameraX - segScroll[seg];
-
-            setLineWithOffset(screenLine, fgScroll, bgOffset);
-
-            remainingInSeg--;
-            if (remainingInSeg == 0) {
-                seg++;
-                if (seg >= rowHeights.length)
-                    seg = 0; // Wrap 0-23
-                remainingInSeg = rowHeights[seg] & 0xFF;
-            }
         }
     }
 

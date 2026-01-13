@@ -9,9 +9,7 @@ import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Updates Sonic 2 zone animated tiles using the Dynamic_Normal scripts.
@@ -21,62 +19,87 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
     private static final int ANIMATED_EHZ_ADDR = 0x3FF94;
 
     private enum AnimatedListId {
-        EHZ,
-        MTZ,
-        HTZ,
-        HPZ,
-        OOZ,
-        CNZ,
-        CNZ_2P,
-        CPZ,
-        DEZ,
-        ARZ,
-        NULL_LIST
-    }
+        EHZ(0),
+        LEV1(1),
+        WZ(2),
+        LEV3(3),
+        MTZ(4),
+        MTZ3(5),
+        WFZ(6),
+        HTZ(7),
+        HPZ(8),
+        LEV9(9),
+        OOZ(10),
+        MCZ(11),
+        CNZ(12),
+        CNZ_2P(12), // Assumed shared
+        CPZ(13),
+        DEZ(14),
+        ARZ(15),
+        SCZ(16),
+        NULL_LIST(-1);
 
-    private static final AnimatedListId[] LIST_ORDER = {
-            AnimatedListId.EHZ,
-            AnimatedListId.MTZ,
-            AnimatedListId.HTZ,
-            AnimatedListId.HPZ,
-            AnimatedListId.OOZ,
-            AnimatedListId.CNZ,
-            AnimatedListId.CNZ_2P,
-            AnimatedListId.CPZ,
-            AnimatedListId.DEZ,
-            AnimatedListId.ARZ,
-            AnimatedListId.NULL_LIST
-    };
+        final int index;
+
+        AnimatedListId(int index) {
+            this.index = index;
+        }
+    }
 
     // Mirrors PLC_DYNANM table (1P only).
     private static final AnimatedListId[] ZONE_LISTS = {
-            AnimatedListId.EHZ,       // 0 EHZ
-            AnimatedListId.NULL_LIST, // 1 Zone 1 (unused)
-            AnimatedListId.NULL_LIST, // 2 WZ (unused)
-            AnimatedListId.NULL_LIST, // 3 Zone 3 (unused)
-            AnimatedListId.MTZ,       // 4 MTZ
-            AnimatedListId.MTZ,       // 5 MTZ3
-            AnimatedListId.NULL_LIST, // 6 WFZ
-            AnimatedListId.HTZ,       // 7 HTZ
-            AnimatedListId.HPZ,       // 8 HPZ
-            AnimatedListId.NULL_LIST, // 9 Zone 9 (unused)
-            AnimatedListId.OOZ,       // 10 OOZ
-            AnimatedListId.NULL_LIST, // 11 MCZ
-            AnimatedListId.CNZ,       // 12 CNZ
-            AnimatedListId.CPZ,       // 13 CPZ
-            AnimatedListId.DEZ,       // 14 DEZ
-            AnimatedListId.ARZ,       // 15 ARZ
-            AnimatedListId.NULL_LIST  // 16 SCZ
+            AnimatedListId.EHZ, // 0 EHZ
+            AnimatedListId.LEV1, // 1 Zone 1 (unused)
+            AnimatedListId.WZ, // 2 WZ (unused)
+            AnimatedListId.LEV3, // 3 Zone 3 (unused)
+            AnimatedListId.MTZ, // 4 MTZ
+            AnimatedListId.MTZ3, // 5 MTZ Act 3
+            AnimatedListId.WFZ, // 6 WFZ
+            AnimatedListId.HTZ, // 7 HTZ
+            AnimatedListId.HPZ, // 8 HPZ
+            AnimatedListId.LEV9, // 9 Zone 9 (unused)
+            AnimatedListId.OOZ, // 10 OOZ
+            AnimatedListId.MCZ, // 11 MCZ
+            AnimatedListId.CNZ, // 12 CNZ
+            AnimatedListId.CPZ, // 13 CPZ
+            AnimatedListId.DEZ, // 14 DEZ
+            AnimatedListId.ARZ, // 15 ARZ
+            AnimatedListId.SCZ // 16 SCZ
     };
 
     private final Level level;
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final List<ScriptState> scripts;
+    private int tableAddr = -1;
 
     public Sonic2AnimatedPatternManager(Rom rom, Level level, int zoneIndex) throws IOException {
         this.level = level;
         RomByteReader reader = RomByteReader.fromRom(rom);
+        this.tableAddr = scanForTable(reader);
         this.scripts = loadScriptsForZone(reader, zoneIndex);
+    }
+
+    private int scanForTable(RomByteReader reader) {
+        // We know EHZ data is at 0x3FF94.
+        // We seek a table where 'Word[0] + Address == 0x3FF94'.
+        // Scan up to 0x70000 (Cover code and some data banks).
+        for (int addr = 0; addr < 0x70000; addr += 2) {
+            try {
+                int offset = (short) reader.readU16BE(addr); // Read as signed short (offset)
+                if (addr + offset == ANIMATED_EHZ_ADDR) {
+                    // Candidate validation: check Index 4 (MTZ) roughly points to known area?
+                    // MTZ ~ 0x3FFA8.
+                    int offset4 = (short) reader.readU16BE(addr + 4 * 2);
+                    if (addr + offset4 > 0x3FF94 && addr + offset4 < 0x41000) {
+                        return addr;
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore read errors during scan
+            }
+        }
+        System.err.println("Sonic2AnimatedPatternManager: Could not locate PLC_DYNANM table.");
+        return -1;
     }
 
     @Override
@@ -91,22 +114,18 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
 
     private List<ScriptState> loadScriptsForZone(RomByteReader reader, int zoneIndex) {
         AnimatedListId listId = resolveListId(zoneIndex);
-        if (AnimatedListId.NULL_LIST.equals(listId)) {
+        if (AnimatedListId.NULL_LIST.equals(listId) || tableAddr == -1) {
             return List.of();
         }
 
-        int addr = ANIMATED_EHZ_ADDR;
-        Map<AnimatedListId, List<ScriptState>> lists = new EnumMap<>(AnimatedListId.class);
-        for (AnimatedListId id : LIST_ORDER) {
-            if (AnimatedListId.NULL_LIST.equals(id)) {
-                lists.put(id, List.of());
-                break;
-            }
-            ParseResult result = parseList(reader, addr);
-            lists.put(id, result.scripts());
-            addr += result.length();
-        }
-        List<ScriptState> scripts = lists.getOrDefault(listId, List.of());
+        // Calculate absolute address from table
+        int pointerAddr = tableAddr + (listId.index * 2);
+        int offset = (short) reader.readU16BE(pointerAddr);
+        int scriptAddr = tableAddr + offset;
+
+        ParseResult result = parseList(reader, scriptAddr);
+        List<ScriptState> scripts = result.scripts();
+
         ensurePatternCapacity(scripts);
         primeScripts(scripts);
         return scripts;

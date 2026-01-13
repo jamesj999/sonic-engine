@@ -750,6 +750,10 @@ public class LevelManager {
         int screenHeightPixels = SonicConfigurationService.getInstance()
                 .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
 
+        // Use zone-specific vertical scroll from parallax manager
+        // This ensures zones like MCZ use their act-dependent BG Y calculations
+        int actualBgScrollY = parallaxManager.getVscrollFactorBG();
+
         // 1. Resize FBO
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
             bgRenderer.resizeFBO(gl, fboWidth, fboHeight);
@@ -762,7 +766,7 @@ public class LevelManager {
 
         // 3. Draw background tiles to wider FBO
         graphicsManager.beginPatternBatch();
-        drawBackgroundToFBOWide(commands, camera, bgScrollY, fboWidth, fboHeight, extraBuffer);
+        drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidth, fboHeight, extraBuffer);
         graphicsManager.flushPatternBatch();
 
         // 4. End Tile Pass (Unbind FBO)
@@ -788,7 +792,7 @@ public class LevelManager {
             // Calculate vertical scroll offset (sub-chunk) for shader
             // The FBO is rendered aligned to 16-pixel chunk boundaries
             // The shader needs to shift the view by the remaining offset
-            int vOffset = bgScrollY % LevelConstants.CHUNK_HEIGHT;
+            int vOffset = actualBgScrollY % LevelConstants.CHUNK_HEIGHT;
             if (vOffset < 0)
                 vOffset += LevelConstants.CHUNK_HEIGHT; // Handle negative modulo
 
@@ -1033,9 +1037,13 @@ public class LevelManager {
             int baseBgCameraX,
             TilePriorityPass priorityPass) {
         int chunkIndex = chunkDesc.getChunkIndex();
+        if (chunkIndex == 0) {
+            return; // Chunk 0 is always empty/transparent
+        }
         if (chunkIndex >= level.getChunkCount()) {
             LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
             chunkIndex = 0;
+            return; // Since we default to 0, which is empty, we can just return
         }
 
         Chunk chunk = level.getChunk(chunkIndex);
@@ -1778,13 +1786,28 @@ public class LevelManager {
     }
 
     public void setClearColor(GL2 gl) {
-        // In Sonic 2, Palette 1 is the level palette (Palette 0 is character).
-        Palette.Color backgroundColor = level.getPalette(1).getColor(0);
-        gl.glClearColor(
-                Byte.toUnsignedInt(backgroundColor.r) / 255f,
-                Byte.toUnsignedInt(backgroundColor.g) / 255f,
-                Byte.toUnsignedInt(backgroundColor.b) / 255f,
-                1.0f);
+        float r = 0.0f;
+        float g = 0.0f;
+        float b = 0.0f;
+        boolean forceBlack = false;
+
+        if (level instanceof uk.co.jamesj999.sonic.game.sonic2.Sonic2Level) {
+            int zoneId = ((uk.co.jamesj999.sonic.game.sonic2.Sonic2Level) level).getZoneIndex();
+            // Zone 11 (0xB) is MCZ
+            if (zoneId == 11) {
+                forceBlack = true;
+            }
+        }
+
+        if (!forceBlack && level.getPaletteCount() > 1) {
+            // In Sonic 2, Palette 1 is the level palette (Palette 0 is character).
+            Palette.Color backgroundColor = level.getPalette(1).getColor(0);
+            r = Byte.toUnsignedInt(backgroundColor.r) / 255f;
+            g = Byte.toUnsignedInt(backgroundColor.g) / 255f;
+            b = Byte.toUnsignedInt(backgroundColor.b) / 255f;
+        }
+
+        gl.glClearColor(r, g, b, 1.0f);
     }
 
     /**

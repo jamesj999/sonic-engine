@@ -311,6 +311,10 @@ public class Sonic2Level implements Level {
         LOG.fine("Chunk count: " + chunkCount + " (" + chunkBuffer.length + " bytes)");
     }
 
+    public int getZoneIndex() {
+        return zoneIndex;
+    }
+
     private byte[] applyAnimatedPatternMappings(Rom rom, byte[] chunkBuffer) throws IOException {
         if (chunkBuffer == null || chunkBuffer.length == 0) {
             return chunkBuffer;
@@ -407,6 +411,14 @@ public class Sonic2Level implements Level {
 
             blocks[i].fromSegaFormat(subArray);
 
+        }
+
+        // Sanitize Block 0: In Sonic 2, Block 0 is universally defined as "Empty".
+        // If the ROM data for Block 0 contains garbage (or valid but unwanted tiles),
+        // it corrupts "empty" space in the level. Forcing it to a clean empty block
+        // fixes this.
+        if (blockCount > 0) {
+            blocks[0] = new Block();
         }
 
         LOG.fine("Block count: " + blockCount + " (" + blockBuffer.length + " bytes)");
