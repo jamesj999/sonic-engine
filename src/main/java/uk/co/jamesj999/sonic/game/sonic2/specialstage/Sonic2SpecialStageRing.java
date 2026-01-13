@@ -116,6 +116,11 @@ public class Sonic2SpecialStageRing extends Sonic2SpecialStageObject {
         return false;
     }
 
+    @Override
+    public boolean isEmerald() {
+        return false;
+    }
+
     /**
      * Gets the mapping frame index for the current animation state.
      * Used for rendering the correct sprite.

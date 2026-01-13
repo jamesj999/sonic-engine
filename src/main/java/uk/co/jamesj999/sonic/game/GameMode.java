@@ -9,5 +9,8 @@ public enum GameMode {
     LEVEL,
 
     /** Sonic 2 Special Stage (halfpipe ring collection) */
-    SPECIAL_STAGE
+    SPECIAL_STAGE,
+
+    /** Special Stage Results Screen (shown after completing/failing special stage) */
+    SPECIAL_STAGE_RESULTS
 }

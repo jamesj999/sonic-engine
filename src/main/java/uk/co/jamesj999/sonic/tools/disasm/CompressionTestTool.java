@@ -198,6 +198,21 @@ public class CompressionTestTool {
                 "No valid compression detected");
     }
 
+    /**
+     * Read raw bytes from ROM at a specific offset.
+     *
+     * @param offset Start offset
+     * @param length Number of bytes to read
+     * @return Byte array, or null if offset is out of bounds
+     */
+    public byte[] readRomBytes(long offset, int length) throws IOException {
+        byte[] data = getRomData();
+        if (offset < 0 || offset + length > data.length) {
+            return null;
+        }
+        return Arrays.copyOfRange(data, (int) offset, (int) offset + length);
+    }
+
     public void close() {
         if (rom != null) {
             rom.close();

@@ -279,4 +279,9 @@ public abstract class Sonic2SpecialStageObject {
      * Returns whether this object is a bomb.
      */
     public abstract boolean isBomb();
+
+    /**
+     * Returns whether this object is an emerald.
+     */
+    public abstract boolean isEmerald();
 }

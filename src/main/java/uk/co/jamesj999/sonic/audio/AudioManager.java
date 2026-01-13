@@ -158,6 +158,16 @@ public class AudioManager {
         backend.endMusicOverride(musicId);
     }
 
+    /**
+     * Stops all music and sound playback.
+     * Used when exiting special stages or changing game modes.
+     */
+    public void stopMusic() {
+        if (backend != null) {
+            backend.stopPlayback();
+        }
+    }
+
     public void destroy() {
         if (backend != null) {
             backend.destroy();

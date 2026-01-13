@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
+import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
@@ -59,6 +60,13 @@ public class GameLoop {
     // Saved camera position for returning from special stage
     private short savedCameraX = 0;
     private short savedCameraY = 0;
+
+    // Special stage results screen
+    private SpecialStageResultsScreenObjectInstance resultsScreen;
+    private int ssRingsCollected;
+    private boolean ssEmeraldCollected;
+    private int ssStageIndex;
+    private int resultsFrameCounter = 0;
 
     // Listener for game mode changes (used by Engine to update projection)
     private GameModeChangeListener gameModeChangeListener;
@@ -113,19 +121,37 @@ public class GameLoop {
         }
 
         if (currentGameMode == GameMode.SPECIAL_STAGE) {
+            // END: Debug complete special stage with emerald (for testing results screen)
+            if (inputHandler.isKeyPressed(KeyEvent.VK_END)) {
+                debugCompleteSpecialStageWithEmerald();
+            }
+
+            // DEL: Debug fail special stage (for testing results screen without emerald)
+            if (inputHandler.isKeyPressed(KeyEvent.VK_DELETE)) {
+                debugFailSpecialStage();
+            }
+
             // F12: Toggle sprite frame debug viewer (shows all animation frames)
             if (inputHandler.isKeyPressed(KeyEvent.VK_F12)) {
                 specialStageManager.toggleSpriteDebugMode();
             }
 
-            // Handle sprite debug viewer page navigation (Left/Right arrows)
+            // Handle sprite debug viewer navigation
             if (specialStageManager.isSpriteDebugMode()) {
                 DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
+                // Left/Right: Change page within current graphics set
                 if (inputHandler.isKeyPressed(KeyEvent.VK_RIGHT)) {
                     debugSprites.nextPage();
                 }
                 if (inputHandler.isKeyPressed(KeyEvent.VK_LEFT)) {
                     debugSprites.previousPage();
+                }
+                // Up/Down: Cycle between graphics sets
+                if (inputHandler.isKeyPressed(KeyEvent.VK_DOWN)) {
+                    debugSprites.nextSet();
+                }
+                if (inputHandler.isKeyPressed(KeyEvent.VK_UP)) {
+                    debugSprites.previousSet();
                 }
             }
 
@@ -137,7 +163,16 @@ public class GameLoop {
                 var result = specialStageManager.getResultState();
                 boolean completed = (result == Sonic2SpecialStageManager.ResultState.COMPLETED);
                 boolean gotEmerald = completed && specialStageManager.hasEmeraldCollected();
-                exitSpecialStage(completed, gotEmerald);
+                enterResultsScreen(gotEmerald);
+            }
+        } else if (currentGameMode == GameMode.SPECIAL_STAGE_RESULTS) {
+            // Update results screen
+            resultsFrameCounter++;
+            if (resultsScreen != null) {
+                resultsScreen.update(resultsFrameCounter, null);
+                if (resultsScreen.isComplete()) {
+                    exitResultsScreen();
+                }
             }
         } else {
             boolean freezeForArtViewer = DebugOverlayManager.getInstance()
@@ -176,14 +211,127 @@ public class GameLoop {
     /**
      * Handles the special stage debug key (HOME by default).
      * When in level mode, enters the next special stage.
-     * When in special stage mode, exits back to level (as failure).
+     * When in special stage mode, exits to results screen (as failure).
+     * When in results screen mode, skips back to level.
      */
     private void handleSpecialStageDebugKey() {
         if (currentGameMode == GameMode.LEVEL) {
             enterSpecialStage();
         } else if (currentGameMode == GameMode.SPECIAL_STAGE) {
-            exitSpecialStage(false, false);
+            enterResultsScreen(false);
+        } else if (currentGameMode == GameMode.SPECIAL_STAGE_RESULTS) {
+            exitResultsScreen();
         }
+    }
+
+    /**
+     * Debug function: Immediately completes the special stage with emerald collected.
+     * Simulates successful completion with the ring requirement met.
+     * Press END key during special stage to trigger.
+     */
+    private void debugCompleteSpecialStageWithEmerald() {
+        if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        // Force emerald collection state
+        specialStageManager.setEmeraldCollected(true);
+
+        // Get the ring requirement for this stage and set rings to meet it
+        int stageIndex = specialStageManager.getCurrentStage();
+        int ringRequirement = getDebugRingRequirement(stageIndex);
+
+        LOGGER.info("DEBUG: Completing Special Stage " + (stageIndex + 1) +
+                " with emerald (forcing " + ringRequirement + " rings)");
+
+        // Enter results screen with emerald collected and simulated ring count
+        enterResultsScreenWithDebugRings(true, ringRequirement);
+    }
+
+    /**
+     * Debug method to fail special stage and go directly to results screen.
+     * Press DEL key during special stage to trigger.
+     */
+    private void debugFailSpecialStage() {
+        if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        int stageIndex = specialStageManager.getCurrentStage();
+        int smallRingCount = 15; // A small amount of rings to show ring bonus tally
+
+        LOGGER.info("DEBUG: Failing Special Stage " + (stageIndex + 1) +
+                " (with " + smallRingCount + " rings)");
+
+        // Enter results screen without emerald and with small ring count
+        enterResultsScreenWithDebugRings(false, smallRingCount);
+    }
+
+    /**
+     * Gets the ring requirement for a stage (for debug purposes).
+     * Uses the final checkpoint requirement from the original game.
+     */
+    private int getDebugRingRequirement(int stageIndex) {
+        // Ring requirements at final checkpoint (checkpoint 3) for each stage
+        // From s2.asm Ring_Requirement_Table (solo mode)
+        int[][] requirements = {
+                {30, 60, 90, 120},   // Stage 1
+                {40, 80, 120, 160},  // Stage 2
+                {50, 100, 140, 180}, // Stage 3
+                {50, 100, 140, 180}, // Stage 4
+                {60, 110, 160, 200}, // Stage 5
+                {70, 120, 180, 220}, // Stage 6
+                {80, 140, 200, 240}  // Stage 7
+        };
+        if (stageIndex >= 0 && stageIndex < requirements.length) {
+            return requirements[stageIndex][3]; // Final checkpoint requirement
+        }
+        return 100; // Default fallback
+    }
+
+    /**
+     * Enters results screen with a specific ring count (for debug).
+     */
+    private void enterResultsScreenWithDebugRings(boolean emeraldCollected, int ringsCollected) {
+        if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        // Store special stage results for the results screen
+        ssRingsCollected = ringsCollected;
+        ssEmeraldCollected = emeraldCollected;
+        ssStageIndex = specialStageManager.getCurrentStage();
+
+        // Mark emerald as collected now (so it shows in results screen)
+        if (emeraldCollected) {
+            GameStateManager gsm = GameStateManager.getInstance();
+            gsm.markEmeraldCollected(ssStageIndex);
+            LOGGER.info("DEBUG: Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
+        }
+
+        // Reset special stage manager
+        specialStageManager.reset();
+
+        // Transition to results mode
+        GameMode oldMode = currentGameMode;
+        currentGameMode = GameMode.SPECIAL_STAGE_RESULTS;
+        resultsFrameCounter = 0;
+
+        // Create results screen with current emerald count
+        int totalEmeralds = GameStateManager.getInstance().getEmeraldCount();
+        resultsScreen = new SpecialStageResultsScreenObjectInstance(
+                ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
+
+        // Play act clear music
+        AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_ACT_CLEAR);
+
+        // Notify listener of mode change
+        if (gameModeChangeListener != null) {
+            gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
+        }
+
+        LOGGER.info("DEBUG: Entered Special Stage Results Screen (rings=" + ssRingsCollected +
+                ", emerald=" + ssEmeraldCollected + ")");
     }
 
     /**
@@ -227,24 +375,62 @@ public class GameLoop {
     }
 
     /**
-     * Exits the special stage and returns to the level.
-     * @param completed true if the stage was completed (reached end)
+     * Enters the results screen after special stage completion/failure.
      * @param emeraldCollected true if an emerald was collected
      */
-    public void exitSpecialStage(boolean completed, boolean emeraldCollected) {
+    private void enterResultsScreen(boolean emeraldCollected) {
         if (currentGameMode != GameMode.SPECIAL_STAGE) {
             return;
         }
 
+        // Store special stage results for the results screen
+        ssRingsCollected = specialStageManager.getRingsCollected();
+        ssEmeraldCollected = emeraldCollected;
+        ssStageIndex = specialStageManager.getCurrentStage();
+
+        // Mark emerald as collected now (so it shows in results screen)
         if (emeraldCollected) {
             GameStateManager gsm = GameStateManager.getInstance();
-            int emeraldIndex = specialStageManager.getCurrentStage();
-            gsm.markEmeraldCollected(emeraldIndex);
-
-            LOGGER.info("Collected emerald " + (emeraldIndex + 1) + "! Total: " + gsm.getEmeraldCount());
+            gsm.markEmeraldCollected(ssStageIndex);
+            LOGGER.info("Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
         }
 
+        // Reset special stage manager
         specialStageManager.reset();
+
+        // Transition to results mode
+        GameMode oldMode = currentGameMode;
+        currentGameMode = GameMode.SPECIAL_STAGE_RESULTS;
+        resultsFrameCounter = 0;
+
+        // Create results screen with current emerald count
+        int totalEmeralds = GameStateManager.getInstance().getEmeraldCount();
+        resultsScreen = new SpecialStageResultsScreenObjectInstance(
+                ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
+
+        // Play act clear music
+        AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_ACT_CLEAR);
+
+        // Notify listener of mode change
+        if (gameModeChangeListener != null) {
+            gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
+        }
+
+        LOGGER.info("Entered Special Stage Results Screen (rings=" + ssRingsCollected +
+                ", emerald=" + ssEmeraldCollected + ")");
+    }
+
+    /**
+     * Exits the results screen and returns to the level.
+     */
+    private void exitResultsScreen() {
+        if (currentGameMode != GameMode.SPECIAL_STAGE_RESULTS) {
+            return;
+        }
+
+        // Clean up results screen
+        resultsScreen = null;
+
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.LEVEL;
 
@@ -272,12 +458,27 @@ public class GameLoop {
             }
         }
 
+        // Restore zone music
+        int zoneMusicId = levelManager.getCurrentLevelMusicId();
+        if (zoneMusicId >= 0) {
+            AudioManager.getInstance().playMusic(zoneMusicId);
+            LOGGER.fine("Restored zone music: 0x" + Integer.toHexString(zoneMusicId));
+        }
+
         // Notify listener of mode change
         if (gameModeChangeListener != null) {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
         }
 
-        LOGGER.info("Exited Special Stage, returned to level at checkpoint");
+        LOGGER.info("Exited Results Screen, returned to level at checkpoint");
+    }
+
+    /**
+     * Gets the current results screen object (for rendering).
+     * @return the results screen object, or null if not in results mode
+     */
+    public SpecialStageResultsScreenObjectInstance getResultsScreen() {
+        return resultsScreen;
     }
 
     private void updateSpecialStageInput() {

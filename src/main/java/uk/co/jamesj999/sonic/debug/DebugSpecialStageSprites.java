@@ -7,18 +7,21 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 
 /**
- * Debug viewer for Special Stage Sonic sprite animation frames.
- * Displays frames in a paginated grid layout for visual inspection.
+ * Debug viewer for Special Stage graphics (sprites and UI elements).
+ * Displays patterns in a paginated grid layout for visual inspection.
  *
- * Pages show one animation type each, with flipped versions where applicable:
- * - Page 0: UPRIGHT - frames 0-3 normal, then 0-3 flipped (8 total)
- * - Page 1: DIAGONAL - frames 4-11 (8 unique frames)
- * - Page 2: HORIZONTAL - frames 12-15 normal, then 12-15 flipped (8 total)
- * - Page 3: BALL - frames 16-17 normal, then 16-17 flipped (4 total)
+ * Graphics Sets (cycle with Up/Down):
+ * - Set 0: Sonic player sprites (animation frames)
+ * - Set 1: HUD graphics (numbers, text, UI elements)
+ *
+ * Pages within each set (cycle with Left/Right):
+ * - Sonic: UPRIGHT, DIAGONAL, HORIZONTAL, BALL frames
+ * - HUD: Pages of raw patterns
  *
  * Controls (only active during Special Stage):
  * - F12: Toggle sprite frame viewer on/off
- * - Left/Right arrows: Change page
+ * - Up/Down arrows: Change graphics set
+ * - Left/Right arrows: Change page within current set
  */
 public class DebugSpecialStageSprites {
     private static DebugSpecialStageSprites instance;
@@ -28,26 +31,58 @@ public class DebugSpecialStageSprites {
     private static final int FRAME_CELL_HEIGHT = 80;
     private static final int GRID_COLUMNS = 4;
     private static final int SCREEN_HEIGHT = 224;
+    private static final int SCREEN_WIDTH = 320;
 
-    // Animation page definitions: {startFrame, endFrame (exclusive), showFlipped}
-    // If showFlipped is true, we show normal frames on row 1, flipped on row 2
-    private static final int[][] ANIMATION_PAGES = {
+    // Graphics set definitions
+    public enum GraphicsSet {
+        SONIC_SPRITES("Sonic Sprites"),
+        HUD_GRAPHICS("HUD Graphics"),
+        START_BANNER("START Banner"),
+        MESSAGES("Messages");
+
+        private final String label;
+
+        GraphicsSet(String label) {
+            this.label = label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
+
+    // Sonic sprite animation page definitions: {startFrame, endFrame (exclusive), showFlipped}
+    private static final int[][] SONIC_PAGES = {
         {0, 4, 1},    // UPRIGHT: frames 0-3, show flipped versions too
         {4, 12, 0},   // DIAGONAL: frames 4-11, no flip (8 unique frames)
         {12, 16, 1},  // HORIZONTAL: frames 12-15, show flipped versions too
         {16, 18, 1},  // BALL: frames 16-17, show flipped versions too
     };
 
-    private static final String[] PAGE_LABELS = {
+    private static final String[] SONIC_PAGE_LABELS = {
         "UPRIGHT (frames 0-3, + flipped)",
         "DIAGONAL (frames 4-11)",
         "HORIZONTAL (frames 12-15, + flipped)",
         "BALL (frames 16-17, + flipped)"
     };
 
+    // Raw pattern grid settings
+    private static final int RAW_TILE_COLUMNS = 16;
+    private static final int RAW_TILE_ROWS = 12;
+    private static final int RAW_TILES_PER_PAGE = RAW_TILE_COLUMNS * RAW_TILE_ROWS;
+    private static final int RAW_TILE_SPACING = 10; // pixels between tiles
+
     private final GraphicsManager graphicsManager;
     private int playerPatternBase;
+    private int hudPatternBase;
+    private int hudPatternCount;
+    private int startPatternBase;
+    private int startPatternCount;
+    private int messagesPatternBase;
+    private int messagesPatternCount;
+
     private boolean enabled = false;
+    private GraphicsSet currentSet = GraphicsSet.SONIC_SPRITES;
     private int currentPage = 0;
 
     private DebugSpecialStageSprites() {
@@ -63,10 +98,33 @@ public class DebugSpecialStageSprites {
 
     /**
      * Sets the pattern base for player art.
-     * Must be called after special stage patterns are loaded.
      */
     public void setPlayerPatternBase(int base) {
         this.playerPatternBase = base;
+    }
+
+    /**
+     * Sets the pattern base and count for HUD art.
+     */
+    public void setHudPatternBase(int base, int count) {
+        this.hudPatternBase = base;
+        this.hudPatternCount = count;
+    }
+
+    /**
+     * Sets the pattern base and count for START banner art.
+     */
+    public void setStartPatternBase(int base, int count) {
+        this.startPatternBase = base;
+        this.startPatternCount = count;
+    }
+
+    /**
+     * Sets the pattern base and count for Messages art.
+     */
+    public void setMessagesPatternBase(int base, int count) {
+        this.messagesPatternBase = base;
+        this.messagesPatternCount = count;
     }
 
     /**
@@ -75,7 +133,8 @@ public class DebugSpecialStageSprites {
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (enabled) {
-            currentPage = 0;  // Reset to first page when enabling
+            currentSet = GraphicsSet.SONIC_SPRITES;
+            currentPage = 0;
         }
     }
 
@@ -94,6 +153,13 @@ public class DebugSpecialStageSprites {
     }
 
     /**
+     * Gets the current graphics set.
+     */
+    public GraphicsSet getCurrentSet() {
+        return currentSet;
+    }
+
+    /**
      * Gets the current page number (0-indexed).
      */
     public int getCurrentPage() {
@@ -101,10 +167,21 @@ public class DebugSpecialStageSprites {
     }
 
     /**
-     * Gets the total number of pages.
+     * Gets the total number of pages for the current set.
      */
     public int getTotalPages() {
-        return ANIMATION_PAGES.length;
+        switch (currentSet) {
+            case SONIC_SPRITES:
+                return SONIC_PAGES.length;
+            case HUD_GRAPHICS:
+                return hudPatternCount > 0 ? (hudPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case START_BANNER:
+                return startPatternCount > 0 ? (startPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case MESSAGES:
+                return messagesPatternCount > 0 ? (messagesPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            default:
+                return 0;
+        }
     }
 
     /**
@@ -126,30 +203,72 @@ public class DebugSpecialStageSprites {
     }
 
     /**
-     * Renders the current page of sprite frames in a grid layout.
-     * Call this instead of normal special stage rendering when debug mode is active.
-     *
-     * Coordinate system uses Mega Drive convention (Y increases downward).
-     * The graphics layer handles OpenGL Y-axis conversion.
+     * Moves to the next graphics set.
+     */
+    public void nextSet() {
+        GraphicsSet[] sets = GraphicsSet.values();
+        int nextIndex = (currentSet.ordinal() + 1) % sets.length;
+        currentSet = sets[nextIndex];
+        currentPage = 0;
+    }
+
+    /**
+     * Moves to the previous graphics set.
+     */
+    public void previousSet() {
+        GraphicsSet[] sets = GraphicsSet.values();
+        int prevIndex = (currentSet.ordinal() - 1 + sets.length) % sets.length;
+        currentSet = sets[prevIndex];
+        currentPage = 0;
+    }
+
+    /**
+     * Renders the current page based on the active graphics set.
      */
     public void draw() {
-        if (!enabled || playerPatternBase == 0) {
+        if (!enabled) {
             return;
         }
 
+        switch (currentSet) {
+            case SONIC_SPRITES:
+                if (playerPatternBase != 0) {
+                    drawSonicSprites();
+                }
+                break;
+            case HUD_GRAPHICS:
+                if (hudPatternBase != 0 && hudPatternCount > 0) {
+                    drawRawPatterns(hudPatternBase, hudPatternCount, 1);
+                }
+                break;
+            case START_BANNER:
+                if (startPatternBase != 0 && startPatternCount > 0) {
+                    drawRawPatterns(startPatternBase, startPatternCount, 1);
+                }
+                break;
+            case MESSAGES:
+                if (messagesPatternBase != 0 && messagesPatternCount > 0) {
+                    drawRawPatterns(messagesPatternBase, messagesPatternCount, 2);
+                }
+                break;
+        }
+    }
+
+    /**
+     * Draws Sonic sprite animation frames (original implementation).
+     */
+    private void drawSonicSprites() {
         graphicsManager.beginPatternBatch();
 
-        int[] pageInfo = ANIMATION_PAGES[currentPage];
+        int[] pageInfo = SONIC_PAGES[currentPage];
         int startFrame = pageInfo[0];
         int endFrame = pageInfo[1];
         boolean showFlipped = pageInfo[2] != 0;
         int frameCount = endFrame - startFrame;
 
-        // Calculate grid start position
-        // Center the grid horizontally, start near top of screen
         int gridWidth = GRID_COLUMNS * FRAME_CELL_WIDTH;
-        int gridStartX = (320 - gridWidth) / 2;
-        int gridStartY = 40;  // Start 40 pixels from top (in MD coords, Y down)
+        int gridStartX = (SCREEN_WIDTH - gridWidth) / 2;
+        int gridStartY = 40;
 
         // Row 1: Normal frames
         for (int i = 0; i < frameCount; i++) {
@@ -160,12 +279,12 @@ public class DebugSpecialStageSprites {
             int cellCenterX = gridStartX + (gridCol * FRAME_CELL_WIDTH) + (FRAME_CELL_WIDTH / 2);
             int cellCenterY = gridStartY + (gridRow * FRAME_CELL_HEIGHT) + (FRAME_CELL_HEIGHT / 2);
 
-            renderFrame(frameIndex, cellCenterX, cellCenterY, false);
+            renderSonicFrame(frameIndex, cellCenterX, cellCenterY, false);
         }
 
         // Row 2 (if applicable): Flipped versions
         if (showFlipped) {
-            int flipRowStart = ((frameCount + GRID_COLUMNS - 1) / GRID_COLUMNS);  // Next row after normal frames
+            int flipRowStart = ((frameCount + GRID_COLUMNS - 1) / GRID_COLUMNS);
             for (int i = 0; i < frameCount; i++) {
                 int frameIndex = startFrame + i;
                 int gridCol = i % GRID_COLUMNS;
@@ -174,7 +293,7 @@ public class DebugSpecialStageSprites {
                 int cellCenterX = gridStartX + (gridCol * FRAME_CELL_WIDTH) + (FRAME_CELL_WIDTH / 2);
                 int cellCenterY = gridStartY + (gridRow * FRAME_CELL_HEIGHT) + (FRAME_CELL_HEIGHT / 2);
 
-                renderFrame(frameIndex, cellCenterX, cellCenterY, true);
+                renderSonicFrame(frameIndex, cellCenterX, cellCenterY, true);
             }
         }
 
@@ -182,39 +301,26 @@ public class DebugSpecialStageSprites {
     }
 
     /**
-     * Renders a single sprite frame at the given center position.
-     * Position is in Mega Drive screen coordinates (Y increases downward).
-     *
-     * @param frameIndex The sprite frame index to render
-     * @param centerX Center X position in screen coordinates
-     * @param centerY Center Y position in screen coordinates
-     * @param flipX If true, render the frame horizontally flipped
+     * Renders a single Sonic sprite frame.
      */
-    private void renderFrame(int frameIndex, int centerX, int centerY, boolean flipX) {
+    private void renderSonicFrame(int frameIndex, int centerX, int centerY, boolean flipX) {
         SpriteFrame frame = Sonic2SpecialStageSpriteMappings.getSonicFrame(frameIndex);
 
         for (SpritePiece piece : frame.pieces) {
-            // Calculate piece position relative to center, applying player flip
             int pieceX = flipX ? -piece.xOffset - (piece.widthTiles * TILE_SIZE) : piece.xOffset;
             int pieceY = piece.yOffset;
-
-            // Combine piece flip with player flip
             boolean finalHFlip = piece.hFlip ^ flipX;
 
-            // Render all tiles in this piece using column-major ordering
             for (int tx = 0; tx < piece.widthTiles; tx++) {
                 for (int ty = 0; ty < piece.heightTiles; ty++) {
-                    // Determine source tile based on flip state
                     int srcCol = finalHFlip ? (piece.widthTiles - 1 - tx) : tx;
                     int srcRow = piece.vFlip ? (piece.heightTiles - 1 - ty) : ty;
-
-                    // Column-major index: column * height + row
                     int tileIndexInPiece = srcCol * piece.heightTiles + srcRow;
                     int patternId = playerPatternBase + piece.tileIndex + tileIndexInPiece;
 
                     PatternDesc desc = new PatternDesc();
                     desc.setPriority(true);
-                    desc.setPaletteIndex(1); // Sonic uses palette 1
+                    desc.setPaletteIndex(1);
                     desc.setHFlip(finalHFlip);
                     desc.setVFlip(piece.vFlip);
                     desc.setPatternIndex(patternId & 0x7FF);
@@ -229,20 +335,70 @@ public class DebugSpecialStageSprites {
     }
 
     /**
-     * Gets the label for the current page.
+     * Draws raw patterns in a grid layout.
+     *
+     * @param patternBase Base pattern index
+     * @param patternCount Total number of patterns
+     * @param paletteIndex Palette to use for rendering
+     */
+    private void drawRawPatterns(int patternBase, int patternCount, int paletteIndex) {
+        graphicsManager.beginPatternBatch();
+
+        int startIndex = currentPage * RAW_TILES_PER_PAGE;
+        int endIndex = Math.min(startIndex + RAW_TILES_PER_PAGE, patternCount);
+
+        int gridWidth = RAW_TILE_COLUMNS * (TILE_SIZE + RAW_TILE_SPACING);
+        int gridHeight = RAW_TILE_ROWS * (TILE_SIZE + RAW_TILE_SPACING);
+        int gridStartX = (SCREEN_WIDTH - gridWidth) / 2 + RAW_TILE_SPACING / 2;
+        int gridStartY = (SCREEN_HEIGHT - gridHeight) / 2 + RAW_TILE_SPACING / 2;
+
+        for (int i = startIndex; i < endIndex; i++) {
+            int localIndex = i - startIndex;
+            int col = localIndex % RAW_TILE_COLUMNS;
+            int row = localIndex / RAW_TILE_COLUMNS;
+
+            int screenX = gridStartX + col * (TILE_SIZE + RAW_TILE_SPACING);
+            int screenY = gridStartY + row * (TILE_SIZE + RAW_TILE_SPACING);
+
+            int patternId = patternBase + i;
+            PatternDesc desc = new PatternDesc();
+            desc.setPriority(true);
+            desc.setPaletteIndex(paletteIndex);
+            desc.setPatternIndex(patternId & 0x7FF);
+
+            graphicsManager.renderPatternWithId(patternId, desc, screenX, screenY);
+        }
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Gets the label for the current set and page.
+     */
+    public String getCurrentLabel() {
+        String setLabel = currentSet.getLabel();
+        int totalPages = getTotalPages();
+
+        if (currentSet == GraphicsSet.SONIC_SPRITES && currentPage < SONIC_PAGE_LABELS.length) {
+            return setLabel + ": " + SONIC_PAGE_LABELS[currentPage];
+        } else if (totalPages > 0) {
+            return setLabel + " (Page " + (currentPage + 1) + "/" + totalPages + ")";
+        } else {
+            return setLabel + " (No data)";
+        }
+    }
+
+    /**
+     * Gets the label for the current page (legacy method).
      */
     public String getCurrentPageLabel() {
-        if (currentPage < PAGE_LABELS.length) {
-            return PAGE_LABELS[currentPage];
-        }
-        return "Page " + (currentPage + 1);
+        return getCurrentLabel();
     }
 
     /**
      * Gets the expected total height of the debug view.
      */
     public int getTotalHeight() {
-        // Max 2 rows per page (normal + flipped)
         return (2 * FRAME_CELL_HEIGHT) + 80;
     }
 

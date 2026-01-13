@@ -51,12 +51,72 @@ public class RomOffsetCalculator {
     private final Path disasmRoot;
     private List<BincludeEntry> orderedEntries;
 
+    /**
+     * Runtime-discovered anchors from verified offsets.
+     * These supplement the static ANCHOR_OFFSETS map.
+     */
+    private final Map<String, Long> runtimeAnchors = new LinkedHashMap<>();
+
     public RomOffsetCalculator(Path disasmRoot) {
         this.disasmRoot = disasmRoot;
     }
 
     public RomOffsetCalculator(String disasmRootPath) {
         this(Path.of(disasmRootPath));
+    }
+
+    /**
+     * Add a verified anchor offset discovered at runtime.
+     * This helps improve offset calculation accuracy for nearby items.
+     *
+     * @param label The label to add as anchor
+     * @param offset The verified ROM offset
+     */
+    public void addVerifiedAnchor(String label, long offset) {
+        // Don't override static anchors
+        if (!ANCHOR_OFFSETS.containsKey(label)) {
+            runtimeAnchors.put(label, offset);
+        }
+    }
+
+    /**
+     * Get all anchors (static + runtime).
+     */
+    public Map<String, Long> getAllAnchors() {
+        Map<String, Long> all = new LinkedHashMap<>(ANCHOR_OFFSETS);
+        all.putAll(runtimeAnchors);
+        return Collections.unmodifiableMap(all);
+    }
+
+    /**
+     * Get only runtime-discovered anchors.
+     */
+    public Map<String, Long> getRuntimeAnchors() {
+        return Collections.unmodifiableMap(runtimeAnchors);
+    }
+
+    /**
+     * Clear all runtime anchors.
+     */
+    public void clearRuntimeAnchors() {
+        runtimeAnchors.clear();
+    }
+
+    /**
+     * Check if a label is any anchor (static or runtime).
+     */
+    private boolean isAnyAnchor(String label) {
+        return ANCHOR_OFFSETS.containsKey(label) || runtimeAnchors.containsKey(label);
+    }
+
+    /**
+     * Get anchor offset (static or runtime).
+     */
+    private long getAnyAnchorOffset(String label) {
+        if (ANCHOR_OFFSETS.containsKey(label)) {
+            return ANCHOR_OFFSETS.get(label);
+        }
+        return runtimeAnchors.getOrDefault(label, -1L);
     }
 
     /**
@@ -68,9 +128,10 @@ public class RomOffsetCalculator {
     public long calculateOffset(String label) throws IOException {
         ensureEntriesLoaded();
 
-        // First check if this label is a known anchor
-        if (ANCHOR_OFFSETS.containsKey(label)) {
-            return ANCHOR_OFFSETS.get(label);
+        // First check if this label is a known anchor (static or runtime)
+        long anchorOffset = getAnyAnchorOffset(label);
+        if (anchorOffset >= 0) {
+            return anchorOffset;
         }
 
         // Find the target entry
@@ -89,15 +150,14 @@ public class RomOffsetCalculator {
         // Find nearest anchor (prefer before, then after)
         int anchorIndex = -1;
         String anchorLabel = null;
-        long anchorOffset = -1;
 
-        // Search backwards for nearest anchor
+        // Search backwards for nearest anchor (check both static and runtime)
         for (int i = targetIndex - 1; i >= 0; i--) {
             String entryLabel = orderedEntries.get(i).label;
-            if (ANCHOR_OFFSETS.containsKey(entryLabel)) {
+            if (isAnyAnchor(entryLabel)) {
                 anchorIndex = i;
                 anchorLabel = entryLabel;
-                anchorOffset = ANCHOR_OFFSETS.get(entryLabel);
+                anchorOffset = getAnyAnchorOffset(entryLabel);
                 break;
             }
         }
@@ -106,10 +166,10 @@ public class RomOffsetCalculator {
         if (anchorIndex < 0) {
             for (int i = targetIndex + 1; i < orderedEntries.size(); i++) {
                 String entryLabel = orderedEntries.get(i).label;
-                if (ANCHOR_OFFSETS.containsKey(entryLabel)) {
+                if (isAnyAnchor(entryLabel)) {
                     anchorIndex = i;
                     anchorLabel = entryLabel;
-                    anchorOffset = ANCHOR_OFFSETS.get(entryLabel);
+                    anchorOffset = getAnyAnchorOffset(entryLabel);
                     break;
                 }
             }
@@ -160,8 +220,9 @@ public class RomOffsetCalculator {
     public OffsetCalculation getCalculationDetails(String label) throws IOException {
         ensureEntriesLoaded();
 
-        if (ANCHOR_OFFSETS.containsKey(label)) {
-            return new OffsetCalculation(label, ANCHOR_OFFSETS.get(label), label, 0, true);
+        // Check if this is any anchor (static or runtime)
+        if (isAnyAnchor(label)) {
+            return new OffsetCalculation(label, getAnyAnchorOffset(label), label, 0, true);
         }
 
         int targetIndex = -1;
@@ -176,13 +237,13 @@ public class RomOffsetCalculator {
             return null;
         }
 
-        // Find nearest anchor
+        // Find nearest anchor (static or runtime)
         int anchorIndex = -1;
         String anchorLabel = null;
 
         for (int i = targetIndex - 1; i >= 0; i--) {
             String entryLabel = orderedEntries.get(i).label;
-            if (ANCHOR_OFFSETS.containsKey(entryLabel)) {
+            if (isAnyAnchor(entryLabel)) {
                 anchorIndex = i;
                 anchorLabel = entryLabel;
                 break;
@@ -192,7 +253,7 @@ public class RomOffsetCalculator {
         if (anchorIndex < 0) {
             for (int i = targetIndex + 1; i < orderedEntries.size(); i++) {
                 String entryLabel = orderedEntries.get(i).label;
-                if (ANCHOR_OFFSETS.containsKey(entryLabel)) {
+                if (isAnyAnchor(entryLabel)) {
                     anchorIndex = i;
                     anchorLabel = entryLabel;
                     break;

@@ -215,4 +215,42 @@ public class Sonic2SpecialStageSpriteData {
         }
         return BOMB_MAPPINGS[mappingFrame];
     }
+
+    /**
+     * Emerald mapping frames from obj59.asm.
+     * 10 frames for perspective sizes (0-9).
+     * Uses palette line 3 (same as player).
+     */
+    public static final SpritePiece[][] EMERALD_MAPPINGS = {
+        // Frame 0: 1x1 @ tile 0 (smallest, far)
+        { new SpritePiece(-4, -4, 1, 1, 0, false, false) },
+        // Frame 1: 1x1 @ tile 1
+        { new SpritePiece(-4, -4, 1, 1, 1, false, false) },
+        // Frame 2: 1x1 @ tile 2
+        { new SpritePiece(-4, -4, 1, 1, 2, false, false) },
+        // Frame 3: 2x2 @ tile 3
+        { new SpritePiece(-8, -8, 2, 2, 3, false, false) },
+        // Frame 4: 2x2 @ tile 7
+        { new SpritePiece(-8, -8, 2, 2, 7, false, false) },
+        // Frame 5: 2x2 @ tile $B
+        { new SpritePiece(-8, -8, 2, 2, 0x0B, false, false) },
+        // Frame 6: 2x2 @ tile $F
+        { new SpritePiece(-8, -8, 2, 2, 0x0F, false, false) },
+        // Frame 7: 3x3 @ tile $13
+        { new SpritePiece(-12, -12, 3, 3, 0x13, false, false) },
+        // Frame 8: 3x3 @ tile $1C
+        { new SpritePiece(-12, -12, 3, 3, 0x1C, false, false) },
+        // Frame 9: 3x3 @ tile $25 (largest, closest)
+        { new SpritePiece(-12, -12, 3, 3, 0x25, false, false) },
+    };
+
+    /**
+     * Gets the sprite pieces for an emerald at the given mapping frame.
+     */
+    public static SpritePiece[] getEmeraldPieces(int mappingFrame) {
+        if (mappingFrame < 0 || mappingFrame >= EMERALD_MAPPINGS.length) {
+            return EMERALD_MAPPINGS[0]; // Fallback to smallest
+        }
+        return EMERALD_MAPPINGS[mappingFrame];
+    }
 }

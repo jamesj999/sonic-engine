@@ -289,4 +289,28 @@ public final class Sonic2SpecialStageConstants {
         PALETTE_STAGE_6_OFFSET,
         PALETTE_STAGE_7_OFFSET
     };
+
+    // ========== Results Screen Constants ==========
+
+    /** Results screen art - Nemesis compressed (emeralds and text) */
+    public static final long RESULTS_ART_OFFSET = 0x7EB58;  // Verified via RomOffsetFinder
+    public static final int RESULTS_ART_SIZE = 869;
+
+    /** Results screen palette - 128 bytes (4 palette lines) */
+    public static final long RESULTS_PALETTE_OFFSET = 0x003302;  // Calculated from Pal_SS3_2p + 32
+    public static final int RESULTS_PALETTE_SIZE = 128;
+
+    /** VRAM tile bases for results screen (from obj6F mappings) */
+    public static final int VRAM_SS_RESULTS_BASE = 0x0590;      // Results art base
+    public static final int VRAM_TITLE_LETTERS_BASE = 0x0002;   // Title card letters base
+
+    /** Results screen timing (in frames @ 60fps) */
+    public static final int RESULTS_SLIDE_DURATION = 60;    // 1 second slide-in
+    public static final int RESULTS_WAIT_DURATION = 180;    // 3 seconds after tally
+    public static final int RESULTS_TALLY_TICK_INTERVAL = 4; // Sound every 4 frames
+
+    /** Results screen bonus values */
+    public static final int RESULTS_EMERALD_BONUS = 1000;   // Points for collecting emerald
+    public static final int RESULTS_RING_MULTIPLIER = 10;   // Ring count * 10 = ring bonus
+    public static final int RESULTS_TALLY_DECREMENT = 10;   // Points to tally per frame
 }

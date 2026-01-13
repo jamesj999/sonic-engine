@@ -1,7 +1,10 @@
 package uk.co.jamesj999.sonic.tools.disasm;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,10 +28,14 @@ public class RomOffsetFinder {
 
     private final DisassemblySearchTool searchTool;
     private final CompressionTestTool testTool;
+    private final RomOffsetCalculator offsetCalculator;
+    private final String disasmPath;
 
     public RomOffsetFinder(String disasmPath, String romPath) throws IOException {
+        this.disasmPath = disasmPath;
         this.searchTool = new DisassemblySearchTool(disasmPath);
         this.testTool = new CompressionTestTool(romPath);
+        this.offsetCalculator = new RomOffsetCalculator(disasmPath);
     }
 
     /**
@@ -117,6 +124,115 @@ public class RomOffsetFinder {
         return searchTool.listAllIncludes();
     }
 
+    /**
+     * Verify that a calculated ROM offset matches actual ROM data.
+     * Compares the raw ROM bytes with the reference file from disassembly
+     * (which contains the compressed data).
+     *
+     * @param labelPattern Label to verify
+     * @return VerificationResult with status and details
+     */
+    public VerificationResult verify(String labelPattern) throws IOException {
+        // 1. Search for the label
+        List<DisassemblySearchResult> results = searchTool.search(labelPattern);
+        if (results.isEmpty()) {
+            return VerificationResult.notFound(labelPattern, -1, "Label not found in disassembly");
+        }
+
+        DisassemblySearchResult item = results.get(0);
+        String label = item.getLabel();
+        if (label == null) {
+            return VerificationResult.error(labelPattern, "Item has no label");
+        }
+
+        // 2. Calculate offset using the calculator
+        long calculatedOffset = offsetCalculator.calculateOffset(label);
+        if (calculatedOffset < 0) {
+            return VerificationResult.notFound(label, -1, "Could not calculate offset (no anchor nearby)");
+        }
+
+        // 3. Read reference file (this is the compressed/raw data from disassembly)
+        byte[] referenceData;
+        try {
+            referenceData = searchTool.readFileBytes(item.getFilePath());
+        } catch (IOException e) {
+            return VerificationResult.error(label, "Could not read reference file: " + e.getMessage());
+        }
+
+        CompressionType type = item.getCompressionType();
+
+        // 4. Verify by comparing the raw bytes at the calculated offset
+        // The reference file contains the exact bytes that should appear in the ROM
+        byte[] romBytes = testTool.readRomBytes(calculatedOffset, referenceData.length);
+        if (romBytes == null) {
+            return VerificationResult.error(label, "Could not read ROM at offset 0x" +
+                    Long.toHexString(calculatedOffset));
+        }
+
+        if (java.util.Arrays.equals(romBytes, referenceData)) {
+            // Direct byte comparison matches - verified!
+            return VerificationResult.verified(label, calculatedOffset, type, referenceData.length);
+        }
+
+        // 5. Bytes don't match - search nearby for the actual location
+        long searchStart = Math.max(0, calculatedOffset - 0x1000);
+        long searchEnd = calculatedOffset + 0x1000;
+
+        for (long offset = searchStart; offset < searchEnd; offset++) {
+            byte[] testBytes = testTool.readRomBytes(offset, referenceData.length);
+            if (testBytes != null && java.util.Arrays.equals(testBytes, referenceData)) {
+                return VerificationResult.mismatch(label, calculatedOffset, offset, type, referenceData.length);
+            }
+        }
+
+        // Still not found
+        return VerificationResult.notFound(label, calculatedOffset,
+                "Data at calculated offset does not match reference file");
+    }
+
+    /**
+     * Batch verify all items of a given compression type.
+     * Verified offsets are automatically added as runtime anchors.
+     *
+     * @param type Compression type to verify, or null for all
+     * @return List of VerificationResults
+     */
+    public List<VerificationResult> verifyBatch(CompressionType type) throws IOException {
+        List<DisassemblySearchResult> items;
+        if (type != null) {
+            items = searchTool.searchByCompressionType(type);
+        } else {
+            items = searchTool.listAllIncludes();
+        }
+
+        List<VerificationResult> results = new ArrayList<>();
+        for (DisassemblySearchResult item : items) {
+            if (item.getLabel() == null) {
+                continue; // Skip items without labels
+            }
+
+            try {
+                VerificationResult result = verify(item.getLabel());
+                results.add(result);
+
+                // Add verified offsets as runtime anchors for better accuracy
+                if (result.isVerified()) {
+                    offsetCalculator.addVerifiedAnchor(result.getLabel(), result.getCalculatedOffset());
+                }
+            } catch (Exception e) {
+                results.add(VerificationResult.error(item.getLabel(), e.getMessage()));
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Get the offset calculator (for adding runtime anchors).
+     */
+    public RomOffsetCalculator getOffsetCalculator() {
+        return offsetCalculator;
+    }
+
     public void close() {
         testTool.close();
     }
@@ -164,6 +280,29 @@ public class RomOffsetFinder {
                 case "list":
                     String typeFilter = args.length > 1 ? args[1] : null;
                     handleList(finder, typeFilter);
+                    break;
+
+                case "verify":
+                    if (args.length < 2) {
+                        System.out.println("Usage: verify <label>");
+                        return;
+                    }
+                    handleVerify(finder, args[1]);
+                    break;
+
+                case "verify-batch":
+                    String batchTypeFilter = args.length > 1 ? args[1] : null;
+                    handleVerifyBatch(finder, batchTypeFilter);
+                    break;
+
+                case "export":
+                    if (args.length < 2) {
+                        System.out.println("Usage: export <type> [prefix]");
+                        System.out.println("  Exports verified offsets as Java constants");
+                        return;
+                    }
+                    String exportPrefix = args.length > 2 ? args[2] : "";
+                    handleExport(finder, args[1], exportPrefix);
                     break;
 
                 default:
@@ -313,6 +452,128 @@ public class RomOffsetFinder {
         System.out.println("Total: " + results.size() + " items");
     }
 
+    private static void handleVerify(RomOffsetFinder finder, String pattern) throws IOException {
+        System.out.println("Verifying: " + pattern);
+        System.out.println();
+
+        VerificationResult result = finder.verify(pattern);
+
+        switch (result.getStatus()) {
+            case VERIFIED:
+                System.out.println("=== VERIFIED ===");
+                System.out.printf("Label:       %s%n", result.getLabel());
+                System.out.printf("Offset:      0x%X%n", result.getCalculatedOffset());
+                System.out.printf("Type:        %s%n", result.getCompressionType().getDisplayName());
+                System.out.printf("File Size:   %d bytes%n", result.getFileSize());
+                break;
+            case MISMATCH:
+                System.out.println("=== MISMATCH ===");
+                System.out.printf("Label:       %s%n", result.getLabel());
+                System.out.printf("Calculated:  0x%X%n", result.getCalculatedOffset());
+                System.out.printf("Actual:      0x%X%n", result.getVerifiedOffset());
+                System.out.printf("Difference:  %+d bytes%n",
+                        result.getVerifiedOffset() - result.getCalculatedOffset());
+                break;
+            case NOT_FOUND:
+                System.out.println("=== NOT FOUND ===");
+                System.out.printf("Label:       %s%n", result.getLabel());
+                if (result.getCalculatedOffset() >= 0) {
+                    System.out.printf("Calculated:  0x%X%n", result.getCalculatedOffset());
+                }
+                System.out.printf("Message:     %s%n", result.getMessage());
+                break;
+            case ERROR:
+                System.out.println("=== ERROR ===");
+                System.out.printf("Label:       %s%n", result.getLabel());
+                System.out.printf("Message:     %s%n", result.getMessage());
+                break;
+        }
+    }
+
+    private static void handleVerifyBatch(RomOffsetFinder finder, String typeStr) throws IOException {
+        CompressionType type = typeStr != null ? parseCompressionType(typeStr) : null;
+
+        System.out.printf("Batch verifying %s items...%n%n",
+                type != null ? type.getDisplayName() : "all");
+
+        List<VerificationResult> results = finder.verifyBatch(type);
+
+        // Counters
+        int verified = 0, mismatch = 0, notFound = 0, error = 0;
+
+        for (VerificationResult r : results) {
+            String statusChar;
+            switch (r.getStatus()) {
+                case VERIFIED:
+                    statusChar = "[OK]";
+                    verified++;
+                    break;
+                case MISMATCH:
+                    statusChar = "[!!]";
+                    mismatch++;
+                    break;
+                case NOT_FOUND:
+                    statusChar = "[??]";
+                    notFound++;
+                    break;
+                default:
+                    statusChar = "[ER]";
+                    error++;
+                    break;
+            }
+
+            System.out.printf("%s %-40s", statusChar, r.getLabel());
+            switch (r.getStatus()) {
+                case VERIFIED:
+                    System.out.printf(" 0x%X%n", r.getCalculatedOffset());
+                    break;
+                case MISMATCH:
+                    System.out.printf(" calc=0x%X actual=0x%X%n",
+                            r.getCalculatedOffset(), r.getVerifiedOffset());
+                    break;
+                default:
+                    System.out.printf(" %s%n", r.getMessage());
+                    break;
+            }
+        }
+
+        System.out.println();
+        System.out.printf("Summary: %d verified, %d mismatch, %d not found, %d errors%n",
+                verified, mismatch, notFound, error);
+    }
+
+    private static void handleExport(RomOffsetFinder finder, String typeStr, String prefix) throws IOException {
+        CompressionType type = parseCompressionType(typeStr);
+        if (type == null) {
+            System.out.println("Unknown compression type: " + typeStr);
+            System.out.println("Valid types: nem, kos, eni, sax, bin");
+            return;
+        }
+
+        System.out.println("Verifying and exporting " + type.getDisplayName() + " offsets...");
+        System.out.println();
+
+        List<VerificationResult> results = finder.verifyBatch(type);
+
+        // Count results
+        long verifiedCount = results.stream()
+                .filter(r -> r.getStatus() == VerificationResult.Status.VERIFIED)
+                .count();
+
+        if (verifiedCount == 0) {
+            System.out.println("No offsets could be verified for export.");
+            return;
+        }
+
+        System.out.printf("Verified %d offsets, exporting as Java constants:%n%n", verifiedCount);
+
+        // Export to stdout
+        ConstantsExporter exporter = new ConstantsExporter();
+        StringWriter sw = new StringWriter();
+        exporter.exportAsJavaConstants(results, prefix, sw);
+        System.out.println(sw.toString());
+    }
+
     private static long parseOffset(String str) {
         if (str.toLowerCase().startsWith("0x")) {
             return Long.parseLong(str.substring(2), 16);
@@ -355,8 +616,11 @@ public class RomOffsetFinder {
         System.out.println("  find <label> [startOffset]    Find ROM offset for a specific item");
         System.out.println("  test <offset> <type>          Test decompression at offset");
         System.out.println("  list [type]                   List all includes (optionally by type)");
+        System.out.println("  verify <label>                Verify calculated offset against ROM");
+        System.out.println("  verify-batch [type]           Batch verify all items (optionally by type)");
+        System.out.println("  export <type> [prefix]        Export verified offsets as Java constants");
         System.out.println();
-        System.out.println("Compression types: nem, kos, eni, sax, auto");
+        System.out.println("Compression types: nem, kos, eni, sax, bin, auto");
         System.out.println();
         System.out.println("System properties:");
         System.out.println("  -Drom.path=<path>            Path to ROM file");
@@ -367,6 +631,7 @@ public class RomOffsetFinder {
         System.out.println("  find Art_Ring                 Find ROM offset for Art_Ring");
         System.out.println("  test 0x41A4C nem              Test Nemesis decompression at 0x41A4C");
         System.out.println("  list nem                      List all Nemesis-compressed files");
+        System.out.println("  verify ArtNem_SpecialHUD      Verify offset of ArtNem_SpecialHUD");
     }
 
     /**

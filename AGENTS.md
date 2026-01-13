@@ -46,20 +46,39 @@ The project is in a **pre-alpha** state.
 
 ## ROM Offset Finder Tool
 
-If `docs/s2disasm` is present, you can use the **RomOffsetFinder** tool to search for disassembly items and find their ROM offsets. The `search` command automatically calculates ROM offsets using known anchor points.
+If `docs/s2disasm` is present, you can use the **RomOffsetFinder** tool to search for disassembly items, find their ROM offsets, verify them against ROM data, and export as Java constants.
 
 ### Prerequisites
 - `docs/s2disasm/` directory (Sonic 2 disassembly) must be present
-- ROM file `Sonic The Hedgehog 2 (W) (REV01) [!].gen` in the project root (for `test` command)
+- ROM file `Sonic The Hedgehog 2 (W) (REV01) [!].gen` in the project root (for `test`, `verify`, `verify-batch`, `export` commands)
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `search <pattern>` | Search by label/filename, shows calculated offset |
+| `list [type]` | List all includes, optionally filtered by compression type |
+| `test <offset> <type>` | Test decompression at a ROM offset |
+| `verify <label>` | Verify a calculated offset against ROM data |
+| `verify-batch [type]` | Batch verify all offsets (optionally filtered by type) |
+| `export <type> [prefix]` | Export verified offsets as Java constants |
 
 ### Usage via Maven
 
 ```bash
-# Search for items - now includes calculated ROM offset!
+# Search for items - includes calculated ROM offset
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search <pattern>" -q
-# Output includes: ROM Offset: 0xDD8CE (calculated from ArtNem_SpecialStart, 1 files away)
 
-# Test/verify decompression at a ROM offset
+# Verify a calculated offset against ROM data
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="verify <label>" -q
+
+# Batch verify all Nemesis files
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="verify-batch nem" -q
+
+# Export verified offsets as Java constants
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="export nem ART_" -q
+
+# Test decompression at a ROM offset
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test <offset> <type>" -q
 
 # List all files of a compression type
@@ -72,18 +91,42 @@ mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFind
 # Search for special stage stars art (shows ROM offset automatically)
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search SpecialStars" -q
 
-# List all Nemesis-compressed files
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list nem" -q
+# Search for palettes (supports palette macro)
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search Pal_SS" -q
 
-# Verify a calculated offset works (test decompression)
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0xDD8CE nem" -q
+# Verify a specific label's offset
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="verify ArtNem_SpecialHUD" -q
+# Output: [OK] ArtNem_SpecialHUD at 0xDD48A (Nemesis, 774 bytes)
+
+# Batch verify all Nemesis files
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="verify-batch nem" -q
+# Output:
+# [OK] ArtNem_SpecialBack      0xDCD68
+# [OK] ArtNem_SpecialHUD       0xDD48A
+# [!!] ArtNem_SomeAsset        calc=0x12345 actual=0x12350
+# Summary: 45 verified, 1 mismatch, 0 not found, 0 errors
+
+# Export as Java constants
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="export nem ART_" -q
+# Output:
+# public static final long ART_NEM_SPECIAL_HUD_OFFSET = 0x0DD48AL;
+# public static final int ART_NEM_SPECIAL_HUD_SIZE = 774;
 
 # Test with auto-detection
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 auto" -q
 ```
 
+### Verification Status Codes
+
+| Code | Meaning |
+|------|---------|
+| `[OK]` | Calculated offset matches ROM data |
+| `[!!]` | Mismatch - data found at different offset |
+| `[??]` | Not found - couldn't locate data in ROM |
+| `[ER]` | Error during verification |
+
 ### Adding New Anchor Offsets
-The offset calculator uses known anchor points defined in `RomOffsetCalculator.ANCHOR_OFFSETS`. When you verify a new offset (using `test`), add it to the anchors map to improve calculations for nearby items.
+The offset calculator uses known anchor points defined in `RomOffsetCalculator.ANCHOR_OFFSETS`. Verified offsets are automatically added as runtime anchors during a session. To add permanent anchors, update the `ANCHOR_OFFSETS` map.
 
 ### Compression Types
 | Type | Extension | Argument |
@@ -94,27 +137,39 @@ The offset calculator uses known anchor points defined in `RomOffsetCalculator.A
 | Saxman | `.sax` | `sax` |
 | Uncompressed | `.bin` | `bin` |
 
+### Palette Macro Support
+The search also parses `palette` macros from the disassembly:
+```asm
+Pal_SSResult:   palette Special Stage/Results.bin   ; found as art/palettes/Special Stage/Results.bin
+```
+
 ### Programmatic Usage
 
 The tools in `uk.co.jamesj999.sonic.tools.disasm` can also be used programmatically:
 
 ```java
-// Calculate ROM offset for a label (fast - uses anchor-based calculation)
+// Calculate ROM offset for a label
 RomOffsetCalculator calculator = new RomOffsetCalculator("docs/s2disasm");
 long offset = calculator.calculateOffset("ArtNem_SpecialStars");
-// Returns 0xDD8CE
 
-// Search the disassembly
+// Add verified anchor for improved accuracy
+calculator.addVerifiedAnchor("ArtNem_SpecialStars", 0xDD8CE);
+
+// Search the disassembly (includes palette macros)
 DisassemblySearchTool searchTool = new DisassemblySearchTool("docs/s2disasm");
 List<DisassemblySearchResult> results = searchTool.search("Ring");
 
-// Test decompression at a ROM offset
-CompressionTestTool testTool = new CompressionTestTool("path/to/rom.gen");
-CompressionTestResult result = testTool.testDecompression(0x3000, CompressionType.NEMESIS);
-if (result.isSuccess()) {
-    System.out.printf("Decompressed %d bytes from %d compressed bytes%n",
-        result.getDecompressedSize(), result.getCompressedSize());
+// Verify an offset against ROM
+RomOffsetFinder finder = new RomOffsetFinder("docs/s2disasm", "path/to/rom.gen");
+VerificationResult result = finder.verify("ArtNem_SpecialHUD");
+if (result.isVerified()) {
+    System.out.printf("Verified at 0x%X%n", result.getVerifiedOffset());
 }
+
+// Batch verify and export
+List<VerificationResult> results = finder.verifyBatch(CompressionType.NEMESIS);
+ConstantsExporter exporter = new ConstantsExporter();
+exporter.exportAsJavaConstants(results, "ART_", new PrintWriter(System.out));
 ```
 
 ## Audio Engine hints

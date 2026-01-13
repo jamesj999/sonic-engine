@@ -78,11 +78,39 @@ public class Sonic2SpecialStageObjectManager {
     private boolean noCheckpointFlag = false;
     private boolean noCheckpointMsgFlag = false;
 
+    /** Flag to control "rings to go" display - hidden until first $FC marker */
+    private boolean ringsToGoEnabled = false;
+
     /** Whether an emerald was spawned */
     private boolean emeraldSpawned = false;
 
+    /** Callback interface for checkpoint events */
+    public interface CheckpointCallback {
+        /**
+         * Called when a checkpoint marker is encountered.
+         * @param checkpointNumber The checkpoint number (1-4)
+         * @param ringsCollected Current rings collected
+         */
+        void onCheckpoint(int checkpointNumber, int ringsCollected);
+
+        /**
+         * Called when an emerald marker is encountered.
+         */
+        void onEmerald();
+    }
+
+    /** Callback for checkpoint events */
+    private CheckpointCallback checkpointCallback;
+
     public Sonic2SpecialStageObjectManager(Sonic2SpecialStageDataLoader dataLoader) {
         this.dataLoader = dataLoader;
+    }
+
+    /**
+     * Sets the callback for checkpoint events.
+     */
+    public void setCheckpointCallback(CheckpointCallback callback) {
+        this.checkpointCallback = callback;
     }
 
     /**
@@ -235,11 +263,15 @@ public class Sonic2SpecialStageObjectManager {
         }
 
         // $FC and below: No-checkpoint marker
+        // This enables the "rings to go" counter display but does NOT trigger checkpoint animation
         LOGGER.fine("No-checkpoint marker (0x" + Integer.toHexString(marker) + ")");
         noCheckpointFlag = true;
         noCheckpointMsgFlag = false;
-        // Then behave like $FE (spawn message object)
-        handleCheckpoint();
+
+        // Enable the "rings to go" display (matches Obj5A_RingsMessageInit clearing flags)
+        ringsToGoEnabled = true;
+        LOGGER.fine("Rings to go display enabled");
+        // NOTE: Unlike $FE, this does NOT call handleCheckpoint() - it just sets flags
     }
 
     /**
@@ -249,18 +281,45 @@ public class Sonic2SpecialStageObjectManager {
         // Increment the special act counter
         currentSpecialAct++;
 
-        // TODO: Spawn checkpoint message object (Obj5A)
-        // TODO: Check ring requirements
+        LOGGER.info("Checkpoint " + currentSpecialAct + " reached with " + ringsCollected + " rings");
+
+        // Notify callback if set
+        if (checkpointCallback != null) {
+            checkpointCallback.onCheckpoint(currentSpecialAct, ringsCollected);
+        }
     }
 
     /**
      * Handles emerald marker processing.
+     * Spawns the emerald object that appears at the end of the stage.
      */
     private void handleEmerald(List<Sonic2SpecialStageObject> newObjects) {
-        // TODO: Implement emerald spawning
-        // In 1P mode, spawn ObjID_SSEmerald
-        // In 2P mode, use different handling
         emeraldSpawned = true;
+
+        // Create emerald object at depth 54 ($36), angle 0x40 (bottom center)
+        Sonic2SpecialStageEmerald emerald = new Sonic2SpecialStageEmerald();
+        emerald.initialize(54, 0x40);  // Initial values from disassembly
+        activeObjects.add(emerald);  // Add to active list so it gets updated
+        newObjects.add(emerald);
+
+        LOGGER.info("Emerald object spawned at depth 54, angle 0x40");
+
+        // Notify callback if set
+        if (checkpointCallback != null) {
+            checkpointCallback.onEmerald();
+        }
+    }
+
+    /**
+     * Gets the active emerald object if one exists.
+     */
+    public Sonic2SpecialStageEmerald getActiveEmerald() {
+        for (Sonic2SpecialStageObject obj : activeObjects) {
+            if (obj.isEmerald()) {
+                return (Sonic2SpecialStageEmerald) obj;
+            }
+        }
+        return null;
     }
 
     /**
@@ -360,6 +419,22 @@ public class Sonic2SpecialStageObjectManager {
     }
 
     /**
+     * Checks if the "rings to go" display is enabled.
+     * This is false until the first $FC marker is encountered.
+     */
+    public boolean isRingsToGoEnabled() {
+        return ringsToGoEnabled;
+    }
+
+    /**
+     * Resets the "rings to go" display enabled flag.
+     * Called after passing a checkpoint to hide the display until the next $FC marker.
+     */
+    public void resetRingsToGoEnabled() {
+        ringsToGoEnabled = false;
+    }
+
+    /**
      * Resets the manager state.
      */
     public void reset() {
@@ -370,6 +445,7 @@ public class Sonic2SpecialStageObjectManager {
         currentSpecialAct = 0;
         noCheckpointFlag = false;
         noCheckpointMsgFlag = false;
+        ringsToGoEnabled = false;
         emeraldSpawned = false;
         activeObjects.clear();
     }
