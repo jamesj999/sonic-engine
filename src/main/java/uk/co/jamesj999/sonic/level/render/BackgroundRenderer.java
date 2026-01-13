@@ -218,6 +218,7 @@ public class BackgroundRenderer {
         parallaxShader.setScreenDimensions(gl, realWidth, realHeight);
         parallaxShader.setBGTextureDimensions(gl, fboWidth, fboHeight);
         parallaxShader.setVScrollBG(gl, vScrollBG);
+        parallaxShader.setViewportOffset(gl, (float) viewport[0], (float) viewport[1]);
 
         // Bind textures
         gl.glActiveTexture(GL2.GL_TEXTURE0);
@@ -277,10 +278,10 @@ public class BackgroundRenderer {
         parallaxShader.setBGTextureDimensions(gl, fboWidth, fboHeight);
 
         // Pass scroll midpoint and extra buffer to shader
-        // Pass scroll midpoint and extra buffer to shader
         parallaxShader.setScrollMidpoint(gl, scrollMidpoint);
         parallaxShader.setExtraBuffer(gl, extraBuffer);
         parallaxShader.setVScroll(gl, (float) fboVScroll);
+        parallaxShader.setViewportOffset(gl, (float) viewport[0], (float) viewport[1]);
 
         // Bind textures
         gl.glActiveTexture(GL2.GL_TEXTURE0);

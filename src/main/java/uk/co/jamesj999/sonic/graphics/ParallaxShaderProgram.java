@@ -27,6 +27,8 @@ public class ParallaxShaderProgram {
     private int scrollMidpointLocation = -1;
     private int extraBufferLocation = -1;
     private int vScrollLocation = -1;
+    private int viewportOffsetXLocation = -1;
+    private int viewportOffsetYLocation = -1;
 
     /**
      * Creates and links the parallax shader program.
@@ -76,6 +78,8 @@ public class ParallaxShaderProgram {
         scrollMidpointLocation = gl.glGetUniformLocation(programId, "ScrollMidpoint");
         extraBufferLocation = gl.glGetUniformLocation(programId, "ExtraBuffer");
         vScrollLocation = gl.glGetUniformLocation(programId, "VScroll");
+        viewportOffsetXLocation = gl.glGetUniformLocation(programId, "ViewportOffsetX");
+        viewportOffsetYLocation = gl.glGetUniformLocation(programId, "ViewportOffsetY");
 
         uniformsCached = true;
     }
@@ -151,6 +155,15 @@ public class ParallaxShaderProgram {
     public void setVScroll(GL2 gl, float vScroll) {
         if (vScrollLocation >= 0) {
             gl.glUniform1f(vScrollLocation, vScroll);
+        }
+    }
+
+    public void setViewportOffset(GL2 gl, float offsetX, float offsetY) {
+        if (viewportOffsetXLocation >= 0) {
+            gl.glUniform1f(viewportOffsetXLocation, offsetX);
+        }
+        if (viewportOffsetYLocation >= 0) {
+            gl.glUniform1f(viewportOffsetYLocation, offsetY);
         }
     }
 

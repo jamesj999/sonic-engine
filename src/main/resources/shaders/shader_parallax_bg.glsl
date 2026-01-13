@@ -34,10 +34,15 @@ uniform float ExtraBuffer;
 // Vertical scroll offset (sub-chunk alignment)
 uniform float VScroll;
 
+// Viewport offset (for letterboxing/pillarboxing support)
+uniform float ViewportOffsetX;
+uniform float ViewportOffsetY;
+
 void main()
 {
-    // Get normalized screen position
-    vec2 screenPos = gl_FragCoord.xy;
+    // Get viewport-relative position by subtracting viewport offset from window coordinates
+    // gl_FragCoord gives window coordinates, but we need viewport-relative coordinates
+    vec2 screenPos = gl_FragCoord.xy - vec2(ViewportOffsetX, ViewportOffsetY);
     float normX = screenPos.x / ScreenWidth;
     float normY = screenPos.y / ScreenHeight;
     
