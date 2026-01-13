@@ -83,14 +83,25 @@ public class SwScrlEhz implements ZoneScrollHandler {
         }
 
         // ==================== Band 3: Water Surface (21 lines) ====================
-        // Treated as extension of Band 2 (Far Clouds) - No Ripple
+        // Water surface with ripple effect using SwScrl_RippleData
         {
-            short bgScroll = asrWord(d2, 6);
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
+            short baseBgScroll = asrWord(d2, 6);
             int limit = Math.min(VISIBLE_LINES, lineIndex + 21);
+
+            // Ripple animation speed (1 byte every 8 frames) - Slowed down per user
+            // feedback
+            // Using continuous counter, masking lookup to first 32 bytes to avoid
+            // distortion
+            int rippleIndex = (frameCounter >> 3);
+
             for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
+                int wobble = tables.getRippleSigned(rippleIndex & 0x1F);
+                short bgScroll = (short) (baseBgScroll + wobble);
+
+                horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
+                trackOffset(fgScroll, bgScroll);
+
+                rippleIndex++;
             }
         }
 

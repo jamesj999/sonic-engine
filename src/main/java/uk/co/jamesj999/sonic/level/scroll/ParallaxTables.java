@@ -14,7 +14,7 @@ public class ParallaxTables {
 
     // ROM offsets (Rev 01)
     public static final int SWSCRL_RIPPLE_DATA_ADDR = 0xC682;
-    public static final int SWSCRL_RIPPLE_DATA_SIZE = 256;
+    public static final int SWSCRL_RIPPLE_DATA_SIZE = 512; // Expanded to allow linear overflow read
 
     public static final int SWSCRL_WFZ_TRANS_ADDR = 0xC8CA;
     public static final int SWSCRL_WFZ_TRANS_SIZE = 76; // Until normal array
@@ -74,9 +74,9 @@ public class ParallaxTables {
      * Used by EHZ water surface, OOZ sun haze, CPZ ripple effect.
      */
     public byte getRippleByte(int index) {
-        if (rippleData == null || index < 0)
+        if (rippleData == null || index < 0 || index >= rippleData.length)
             return 0;
-        return rippleData[index % rippleData.length];
+        return rippleData[index];
     }
 
     /**

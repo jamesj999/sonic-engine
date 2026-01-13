@@ -144,6 +144,15 @@ public class ParallaxManager {
         return maxScroll;
     }
 
+    /**
+     * Get the raw hScroll buffer for shader-based rendering.
+     * This returns the packed (FG << 16 | BG) format array.
+     * The BackgroundRenderer extracts BG values during upload.
+     */
+    public int[] getHScrollForShader() {
+        return hScroll;
+    }
+
     public short getVscrollFactorFG() {
         return vscrollFactorFG;
     }
@@ -239,7 +248,6 @@ public class ParallaxManager {
      * EHZ - Emerald Hill Zone
      * Pixel-perfect implementation matching SwScrl_EHZ (1P) from S2 disassembly.
      */
-
 
     /**
      * CPZ - Chemical Plant Zone

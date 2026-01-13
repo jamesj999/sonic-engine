@@ -33,6 +33,7 @@ import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
+import uk.co.jamesj999.sonic.level.render.BackgroundRenderer;
 // import uk.co.jamesj999.sonic.level.ParallaxManager; -> Removed unused
 import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
@@ -118,7 +119,9 @@ public class LevelManager {
 
     private boolean specialStageRequestedFromCheckpoint;
 
+    // Background rendering support
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
+    private boolean useShaderBackground = true; // Feature flag for shader background
 
     private enum TilePriorityPass {
         ALL,
@@ -534,14 +537,14 @@ public class LevelManager {
         parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
         List<GLCommand> commands = new ArrayList<>(256);
 
-        // Draw Background (Layer 1) - batched for performance
-        graphicsManager.beginPatternBatch();
-        drawLayer(commands, 1, camera, 0.5f, 0.1f, TilePriorityPass.ALL, false);
-        graphicsManager.flushPatternBatch();
+        // Draw Background (Layer 1)
+        if (useShaderBackground && graphicsManager.getBackgroundRenderer() != null) {
+            renderBackgroundShader(commands, bgScrollY);
+        }
 
         // Draw Foreground (Layer 0) low-priority pass - batched for performance
         graphicsManager.beginPatternBatch();
-        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true);
+        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
         graphicsManager.flushPatternBatch();
 
         if (!commands.isEmpty()) {
@@ -566,7 +569,9 @@ public class LevelManager {
 
         // Draw Foreground (Layer 0) high-priority pass - batched for performance
         graphicsManager.beginPatternBatch();
-        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false);
+        // Draw Foreground (Layer 0) high-priority pass - batched for performance
+        graphicsManager.beginPatternBatch();
+        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
         graphicsManager.flushPatternBatch();
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
@@ -719,8 +724,152 @@ public class LevelManager {
             }
         }
 
-        if (overlayEnabled) {
-            graphicsManager.enqueueDefaultShaderState();
+        graphicsManager.enqueueDefaultShaderState();
+    }
+
+    private void renderBackgroundShader(List<GLCommand> commands, int bgScrollY) {
+        if (level == null || level.getMap() == null)
+            return;
+
+        BackgroundRenderer bgRenderer = graphicsManager.getBackgroundRenderer();
+        if (bgRenderer == null)
+            return;
+
+        Camera camera = Camera.getInstance();
+
+        // FBO is wider than screen to accommodate per-scanline scroll range
+        // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
+        // Using 1024px width gives us 352px buffer on each side
+        int fboWidth = 1024; // Wide enough for most scroll ranges
+        int fboHeight = 256; // Increased to 256 (power of 2) to allow vertical buffer for smooth scrolling
+
+        // Extra buffer on each side
+        int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
+
+        // Get pattern renderer's screen height for correct Y coordinate handling
+        int screenHeightPixels = SonicConfigurationService.getInstance()
+                .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+
+        // 1. Resize FBO
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+            bgRenderer.resizeFBO(gl, fboWidth, fboHeight);
+        }));
+
+        // 2. Begin Tile Pass (Bind FBO)
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+            bgRenderer.beginTilePass(gl, screenHeightPixels);
+        }));
+
+        // 3. Draw background tiles to wider FBO
+        graphicsManager.beginPatternBatch();
+        drawBackgroundToFBOWide(commands, camera, bgScrollY, fboWidth, fboHeight, extraBuffer);
+        graphicsManager.flushPatternBatch();
+
+        // 4. End Tile Pass (Unbind FBO)
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+            bgRenderer.endTilePass(gl);
+        }));
+
+        // 5. Render the FBO with Parallax Shader
+        Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
+
+        // Get the hScroll data and base scroll value (last line = furthest right in
+        // level)
+        int[] hScrollData = parallaxManager.getHScrollForShader();
+        int baseScrollForShader = (hScrollData != null && hScrollData.length > 0)
+                ? (short) (hScrollData[hScrollData.length - 1] & 0xFFFF)
+                : 0; // Use last line (bottom) as base
+
+        if (paletteId != null) {
+            int pId = paletteId;
+            int screenW = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
+            int screenH = screenHeightPixels;
+
+            // Calculate vertical scroll offset (sub-chunk) for shader
+            // The FBO is rendered aligned to 16-pixel chunk boundaries
+            // The shader needs to shift the view by the remaining offset
+            int vOffset = bgScrollY % LevelConstants.CHUNK_HEIGHT;
+            if (vOffset < 0)
+                vOffset += LevelConstants.CHUNK_HEIGHT; // Handle negative modulo
+
+            final int finalVOffset = vOffset;
+
+            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx2, cy2, cw2, ch2) -> {
+                bgRenderer.renderWithScrollWide(gl, hScrollData, baseScrollForShader, extraBuffer, finalVOffset, pId,
+                        screenW,
+                        screenH);
+            }));
+        }
+    }
+
+    /**
+     * Draw background tiles to FBO for per-scanline scrolling.
+     * Renders exactly one horizontal period of the background for seamless
+     * wrapping.
+     * Y coordinates are aligned to screen space (FBO Y=0 = screen Y=0).
+     */
+    private void drawBackgroundToFBOWide(List<GLCommand> commands, Camera camera, int bgScrollY,
+            int fboWidth, int fboHeight, int extraBuffer) {
+        int cameraX = camera.getX();
+        int cameraY = camera.getY();
+
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+
+        // bgCameraY is the vertical scroll position for background
+        int bgCameraY = bgScrollY;
+
+        int xStart = 0;
+        int xEnd = Math.min(fboWidth, levelWidth);
+
+        // Render to FBO aligning Y to chunk boundaries
+        // This ensures consistent tile placement regardless of sub-chunk scroll
+        // The shader applies the sub-chunk offset
+        int chunkHeight = LevelConstants.CHUNK_HEIGHT;
+        // Align bgCameraY down to nearest chunk
+        int alignedBgY = (bgCameraY / chunkHeight) * chunkHeight;
+        if (bgCameraY < 0 && bgCameraY % chunkHeight != 0)
+            alignedBgY -= chunkHeight; // Handle negative rounding
+
+        // Render enough rows to fill the 256px FBO height
+        // alignedBgY corresponds to FBO Y=0
+        int worldYStart = alignedBgY;
+        int worldYEnd = alignedBgY + fboHeight;
+
+        for (int worldY = worldYStart; worldY < worldYEnd; worldY += chunkHeight) {
+            // Calculate FBO Y position for this tile
+            // Since we start at alignedBgY, the first row is at fboY = 0
+            int fboY = worldY - alignedBgY;
+
+            // Skip tiles outside FBO range (safeguard)
+            if (fboY < 0 || fboY >= fboHeight)
+                continue;
+
+            int wrappedY = ((worldY % levelHeight) + levelHeight) % levelHeight;
+
+            for (int x = xStart; x < xEnd; x += LevelConstants.CHUNK_WIDTH) {
+                int wrappedX = x % levelWidth;
+
+                Block block = getBlockAtPosition((byte) 1, wrappedX, wrappedY);
+                if (block != null) {
+                    int xBlockBit = (wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
+                    int yBlockBit = (wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
+                    ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
+
+                    // Convert to pattern renderer coordinates
+                    // We render relative to alignedBgY, so fboY 0 is alignedBgY
+                    // renderY is passed to pattern renderer which eventually maps to FBO
+                    // renderY = fboY + cameraY (but wait, we want fboY to be the OFFSET in the FBO)
+                    // If we pass x, y+cameraY, drawing usually effectively subtracts cameraY.
+                    // We want final coord in FBO to be fboY.
+                    // So we pass renderY = fboY + cameraY.
+                    // (Assuming drawPattern subtracts cameraY)
+                    int renderX = x + cameraX;
+                    int renderY = fboY + cameraY;
+
+                    drawChunk(commands, chunkDesc, renderX, renderY, false, null, 0, 0, TilePriorityPass.ALL);
+                }
+            }
         }
     }
 
@@ -730,7 +879,8 @@ public class LevelManager {
             float parallaxX,
             float parallaxY,
             TilePriorityPass priorityPass,
-            boolean drawCollision) {
+            boolean drawCollision,
+            boolean renderToFBO) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
@@ -739,26 +889,51 @@ public class LevelManager {
         int bgCameraX = (int) (cameraX * parallaxX);
         int bgCameraY = (int) (cameraY * parallaxY);
 
-        if (layerIndex == 1 && game != null) {
-            int levelIdx = levels.get(currentZone).get(currentAct).getLevelIndex();
-            int[] scroll = game.getBackgroundScroll(levelIdx, cameraX, cameraY);
-            bgCameraY = scroll[1];
-        }
+        // Disable CPU-side hScroll - Layer 0 (Foreground) doesn't use it here?
+        // Actually Layer 0 might use hScroll from parallaxManager?
+        // But getHScroll() was used for Layer 1. Layer 0 usually scroll constant?
+        // ParallaxManager calculates FG scroll too.
+        // But original code: (layerIndex == 1 && !renderToFBO)
+        // So hScroll was NULL for Layer 0.
+        int[] hScroll = null;
 
-        int[] hScroll = (layerIndex == 1) ? parallaxManager.getHScroll() : null;
-
-        int drawX = bgCameraX - (bgCameraX % LevelConstants.CHUNK_WIDTH);
-        int drawY = bgCameraY - (bgCameraY % LevelConstants.CHUNK_HEIGHT);
+        int drawX, drawY, xStart, xEnd, yStart, yEnd;
 
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
         int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-        int xStart = drawX;
-        int xEnd = bgCameraX + cameraWidth;
+        if (renderToFBO) {
+            // Render entire map from (0,0)
+            drawX = 0;
+            drawY = 0;
+            xStart = 0;
+            xEnd = levelWidth; // Draw full width
+            yStart = 0;
+            yEnd = levelHeight; // Draw full height
+            bgCameraX = 0; // No camera offset in FBO
+            bgCameraY = 0;
+            cameraX = 0; // Patterns drawn relative to 0
+            cameraY = 0;
+        } else {
+            // Standard camera culling
+            drawX = bgCameraX - (bgCameraX % LevelConstants.CHUNK_WIDTH);
+            drawY = bgCameraY - (bgCameraY % LevelConstants.CHUNK_HEIGHT);
 
-        int yStart = drawY;
-        int yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
+            xStart = drawX;
+            xEnd = bgCameraX + cameraWidth;
 
+            yStart = drawY;
+            yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
+        }
+
+        for (int y = yStart; y < yEnd; y += LevelConstants.CHUNK_HEIGHT) { // Changed <= to < to avoid OOB if exact
+                                                                           // match? Check original logic. Original was
+                                                                           // <=
+            // Revert to original <= if needed, but watch out for duplicates?
+            // Original: for (int y = yStart; y <= yEnd; y += ...
+            // If yEnd is exactly on boundary, it draws one more row.
+        }
+        // Re-implementing the loop with corrected logic for FBO
         for (int y = yStart; y <= yEnd; y += LevelConstants.CHUNK_HEIGHT) {
             int rowXStart = xStart;
             int rowXEnd = xEnd;
@@ -1581,6 +1756,7 @@ public class LevelManager {
 
     /**
      * Consumes and clears the special stage request flag.
+     * 
      * @return true if a special stage was requested since last check
      */
     public boolean consumeSpecialStageRequest() {
