@@ -52,6 +52,7 @@ public class Sonic2SpecialStageDataLoader {
     private Pattern[] explosionArtPatterns;
     private Pattern[] starsArtPatterns;
     private Pattern[] emeraldArtPatterns;
+    private Pattern[] resultsArtPatterns;
 
     public Sonic2SpecialStageDataLoader(Rom rom) {
         this.rom = rom;
@@ -461,6 +462,20 @@ public class Sonic2SpecialStageDataLoader {
             LOGGER.fine("Loaded Emerald art: " + emeraldArtPatterns.length + " patterns");
         }
         return emeraldArtPatterns;
+    }
+
+    /**
+     * Loads Results Screen art patterns (Nemesis compressed).
+     * Contains text for "SONIC GOT A CHAOS EMERALD", emerald icons (7 colors),
+     * ring bonus text, etc. Used by the Obj6F results screen.
+     */
+    public Pattern[] getResultsArtPatterns() throws IOException {
+        if (resultsArtPatterns == null) {
+            byte[] compressed = rom.readBytes(RESULTS_ART_OFFSET, RESULTS_ART_SIZE + 16);
+            resultsArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded Results art: " + resultsArtPatterns.length + " patterns");
+        }
+        return resultsArtPatterns;
     }
 
     private byte[] decompressKosinski(byte[] compressed) throws IOException {

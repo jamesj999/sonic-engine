@@ -1,18 +1,14 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
-import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpriteSheet;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
-import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -29,19 +25,8 @@ import java.util.logging.Logger;
  * 3. WAIT: Brief pause after tally
  * 4. TRANSITION: Load next level
  */
-public class ResultsScreenObjectInstance extends AbstractObjectInstance {
+public class ResultsScreenObjectInstance extends AbstractResultsScreen {
     private static final Logger LOGGER = Logger.getLogger(ResultsScreenObjectInstance.class.getName());
-
-    // States
-    private static final int STATE_SLIDE_IN = 0;
-    private static final int STATE_TALLY = 1;
-    private static final int STATE_WAIT = 2;
-    private static final int STATE_TRANSITION = 3;
-
-    // Timing constants (in frames)
-    private static final int SLIDE_DURATION = 60; // Frames for slide-in animation
-    private static final int WAIT_DURATION = 180; // 3 seconds after tally (B4 hex)
-    private static final int TALLY_DECREMENT = 10; // Amount to subtract per tick
 
     // Time bonus table from s2.asm (TimeBonuses), indexed by (seconds / 15)
     private static final int[] TIME_BONUSES = {
@@ -50,9 +35,6 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
             50, 50, 50, 50, 0
     };
     private static final int PERFECT_BONUS_POINTS = 5000;
-
-    private int state = STATE_SLIDE_IN;
-    private int stateTimer = 0;
 
     // Bonus values
     private int timeBonus;
@@ -68,15 +50,11 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     private final boolean allRingsCollected;
 
     // Screen-space positions for text elements (center of 320x224 screen)
-    private static final int SCREEN_CENTER_X = 160;
     private static final int TEXT_Y_GOT_THROUGH = 56;
     private static final int TEXT_Y_ACT = 74;
     private static final int TEXT_Y_TIME_BONUS = 112;
     private static final int TEXT_Y_RING_BONUS = 128;
     private static final int TEXT_Y_TOTAL = 160;
-
-    // Current slide positions
-    private int slideProgress = 0;
 
     private int lastTimeBonus = Integer.MIN_VALUE;
     private int lastRingBonus = Integer.MIN_VALUE;
@@ -86,7 +64,7 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
 
     public ResultsScreenObjectInstance(int elapsedTimeSeconds, int ringCount, int actNumber,
             boolean allRingsCollected) {
-        super(null, "results_screen");
+        super("results_screen");
         this.elapsedTimeSeconds = elapsedTimeSeconds;
         this.ringCount = ringCount;
         this.actNumber = actNumber;
@@ -120,85 +98,37 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, AbstractPlayableSprite player) {
-        stateTimer++;
-
-        switch (state) {
-            case STATE_SLIDE_IN -> updateSlideIn();
-            case STATE_TALLY -> updateTally();
-            case STATE_WAIT -> updateWait();
-            case STATE_TRANSITION -> triggerLevelTransition();
-        }
-    }
-
-    private void updateSlideIn() {
-        slideProgress = Math.min(stateTimer, SLIDE_DURATION);
-
-        if (stateTimer >= SLIDE_DURATION) {
-            state = STATE_TALLY;
-            stateTimer = 0;
-        }
-    }
-
-    private void updateTally() {
+    protected TallyResult performTallyStep() {
         boolean anyRemaining = false;
         int totalIncrement = 0;
 
         // Decrement time bonus
-        if (timeBonus > 0) {
-            int decrement = Math.min(TALLY_DECREMENT, timeBonus);
-            timeBonus -= decrement;
-            totalIncrement += decrement;
-            anyRemaining = true;
-        }
+        int[] timeResult = decrementBonus(timeBonus);
+        timeBonus = timeResult[0];
+        totalIncrement += timeResult[1];
+        if (timeResult[1] > 0) anyRemaining = true;
 
         // Decrement ring bonus
-        if (ringBonus > 0) {
-            int decrement = Math.min(TALLY_DECREMENT, ringBonus);
-            ringBonus -= decrement;
-            totalIncrement += decrement;
-            anyRemaining = true;
-        }
+        int[] ringResult = decrementBonus(ringBonus);
+        ringBonus = ringResult[0];
+        totalIncrement += ringResult[1];
+        if (ringResult[1] > 0) anyRemaining = true;
 
         // Decrement perfect bonus
-        if (perfectBonusRemaining > 0) {
-            int decrement = Math.min(TALLY_DECREMENT, perfectBonusRemaining);
-            perfectBonusRemaining -= decrement;
-            totalIncrement += decrement;
-            anyRemaining = true;
-        }
+        int[] perfectResult = decrementBonus(perfectBonusRemaining);
+        perfectBonusRemaining = perfectResult[0];
+        totalIncrement += perfectResult[1];
+        if (perfectResult[1] > 0) anyRemaining = true;
 
-        if (totalIncrement > 0) {
-            totalBonus += totalIncrement;
-            uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addScore(totalIncrement);
-        }
+        // Update total
+        totalBonus += totalIncrement;
 
-        // Play tick sound every 4 frames
-        if (anyRemaining && (stateTimer & 3) == 0) {
-            try {
-                AudioManager.getInstance().playSfx(Sonic2Constants.SndID_Blip);
-            } catch (Exception e) {
-                // Ignore audio errors
-            }
-        }
-
-        // Check if tally complete
-        if (!anyRemaining) {
-            // Play tally end sound
-            try {
-                AudioManager.getInstance().playSfx(Sonic2Constants.SndID_TallyEnd);
-            } catch (Exception e) {
-                // Ignore audio errors
-            }
-            state = STATE_WAIT;
-            stateTimer = 0;
-        }
+        return new TallyResult(anyRemaining, totalIncrement);
     }
 
-    private void updateWait() {
-        if (stateTimer >= WAIT_DURATION) {
-            state = STATE_TRANSITION;
-        }
+    @Override
+    protected void onExitReady() {
+        triggerLevelTransition();
     }
 
     private void triggerLevelTransition() {
@@ -247,7 +177,7 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
         int worldBaseY = camera.getY();
 
         // Calculate slide-in progress (0.0 to 1.0)
-        float slideAlpha = (float) slideProgress / SLIDE_DURATION;
+        float slideAlpha = getSlideAlpha();
 
         // Render text elements using ROM art
         // Frame indices from MapUnc_EOLTitleCards:
@@ -393,7 +323,7 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
 
         int worldBaseX = camera.getX();
         int worldBaseY = camera.getY();
-        float slideAlpha = (float) slideProgress / SLIDE_DURATION;
+        float slideAlpha = getSlideAlpha();
 
         // "SONIC GOT THROUGH" placeholder
         int gotThroughX = worldBaseX + (int) (slideAlpha * SCREEN_CENTER_X);
@@ -411,53 +341,6 @@ public class ResultsScreenObjectInstance extends AbstractObjectInstance {
             renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40, worldBaseY + TEXT_Y_TOTAL, 80, 12, 1.0f,
                     0.4f, 0.4f);
         }
-    }
-
-    private void renderPlaceholderBox(List<GLCommand> commands, int x, int y, int width, int height,
-            float r, float g, float b) {
-        // Draw a simple colored rectangle as placeholder
-        // Top edge
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x, y, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x + width, y, 0, 0));
-        // Bottom edge
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x, y + height, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x + width, y + height, 0, 0));
-        // Left edge
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x, y, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x, y + height, 0, 0));
-        // Right edge
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x + width, y, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x + width, y + height, 0, 0));
-    }
-
-    @Override
-    public int getPriorityBucket() {
-        return RenderPriority.clamp(0); // Highest priority - draw on top
-    }
-
-    @Override
-    public boolean isHighPriority() {
-        return true; // Always render on top of other objects
-    }
-
-    @Override
-    public int getX() {
-        Camera camera = Camera.getInstance();
-        return camera != null ? camera.getX() + SCREEN_CENTER_X : SCREEN_CENTER_X;
-    }
-
-    @Override
-    public int getY() {
-        Camera camera = Camera.getInstance();
-        return camera != null ? camera.getY() + 112 : 112;
     }
 
     public int getTimeBonus() {

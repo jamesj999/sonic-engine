@@ -1128,4 +1128,18 @@ public class Sonic2SpecialStageManager {
     public boolean isCheckpointActive() {
         return checkpoint != null && checkpoint.isActive();
     }
+
+    /**
+     * Gets the emerald pattern base for rendering emerald sprites.
+     */
+    public int getEmeraldPatternBase() {
+        return emeraldPatternBase;
+    }
+
+    /**
+     * Gets the data loader for accessing special stage art patterns.
+     */
+    public Sonic2SpecialStageDataLoader getDataLoader() {
+        return dataLoader;
+    }
 }

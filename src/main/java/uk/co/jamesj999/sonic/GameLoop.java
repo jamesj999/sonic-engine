@@ -121,6 +121,16 @@ public class GameLoop {
         }
 
         if (currentGameMode == GameMode.SPECIAL_STAGE) {
+            // END: Debug complete special stage with emerald (for testing results screen)
+            if (inputHandler.isKeyPressed(KeyEvent.VK_END)) {
+                debugCompleteSpecialStageWithEmerald();
+            }
+
+            // DEL: Debug fail special stage (for testing results screen without emerald)
+            if (inputHandler.isKeyPressed(KeyEvent.VK_DELETE)) {
+                debugFailSpecialStage();
+            }
+
             // F12: Toggle sprite frame debug viewer (shows all animation frames)
             if (inputHandler.isKeyPressed(KeyEvent.VK_F12)) {
                 specialStageManager.toggleSpriteDebugMode();
@@ -212,6 +222,116 @@ public class GameLoop {
         } else if (currentGameMode == GameMode.SPECIAL_STAGE_RESULTS) {
             exitResultsScreen();
         }
+    }
+
+    /**
+     * Debug function: Immediately completes the special stage with emerald collected.
+     * Simulates successful completion with the ring requirement met.
+     * Press END key during special stage to trigger.
+     */
+    private void debugCompleteSpecialStageWithEmerald() {
+        if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        // Force emerald collection state
+        specialStageManager.setEmeraldCollected(true);
+
+        // Get the ring requirement for this stage and set rings to meet it
+        int stageIndex = specialStageManager.getCurrentStage();
+        int ringRequirement = getDebugRingRequirement(stageIndex);
+
+        LOGGER.info("DEBUG: Completing Special Stage " + (stageIndex + 1) +
+                " with emerald (forcing " + ringRequirement + " rings)");
+
+        // Enter results screen with emerald collected and simulated ring count
+        enterResultsScreenWithDebugRings(true, ringRequirement);
+    }
+
+    /**
+     * Debug method to fail special stage and go directly to results screen.
+     * Press DEL key during special stage to trigger.
+     */
+    private void debugFailSpecialStage() {
+        if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        int stageIndex = specialStageManager.getCurrentStage();
+        int smallRingCount = 15; // A small amount of rings to show ring bonus tally
+
+        LOGGER.info("DEBUG: Failing Special Stage " + (stageIndex + 1) +
+                " (with " + smallRingCount + " rings)");
+
+        // Enter results screen without emerald and with small ring count
+        enterResultsScreenWithDebugRings(false, smallRingCount);
+    }
+
+    /**
+     * Gets the ring requirement for a stage (for debug purposes).
+     * Uses the final checkpoint requirement from the original game.
+     */
+    private int getDebugRingRequirement(int stageIndex) {
+        // Ring requirements at final checkpoint (checkpoint 3) for each stage
+        // From s2.asm Ring_Requirement_Table (solo mode)
+        int[][] requirements = {
+                {30, 60, 90, 120},   // Stage 1
+                {40, 80, 120, 160},  // Stage 2
+                {50, 100, 140, 180}, // Stage 3
+                {50, 100, 140, 180}, // Stage 4
+                {60, 110, 160, 200}, // Stage 5
+                {70, 120, 180, 220}, // Stage 6
+                {80, 140, 200, 240}  // Stage 7
+        };
+        if (stageIndex >= 0 && stageIndex < requirements.length) {
+            return requirements[stageIndex][3]; // Final checkpoint requirement
+        }
+        return 100; // Default fallback
+    }
+
+    /**
+     * Enters results screen with a specific ring count (for debug).
+     */
+    private void enterResultsScreenWithDebugRings(boolean emeraldCollected, int ringsCollected) {
+        if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        // Store special stage results for the results screen
+        ssRingsCollected = ringsCollected;
+        ssEmeraldCollected = emeraldCollected;
+        ssStageIndex = specialStageManager.getCurrentStage();
+
+        // Mark emerald as collected now (so it shows in results screen)
+        if (emeraldCollected) {
+            GameStateManager gsm = GameStateManager.getInstance();
+            gsm.markEmeraldCollected(ssStageIndex);
+            LOGGER.info("DEBUG: Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
+        }
+
+        // Reset special stage manager
+        specialStageManager.reset();
+
+        // Transition to results mode
+        GameMode oldMode = currentGameMode;
+        currentGameMode = GameMode.SPECIAL_STAGE_RESULTS;
+        resultsFrameCounter = 0;
+
+        // Create results screen with current emerald count
+        int totalEmeralds = GameStateManager.getInstance().getEmeraldCount();
+        resultsScreen = new SpecialStageResultsScreenObjectInstance(
+                ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
+
+        // Play act clear music
+        AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_ACT_CLEAR);
+
+        // Notify listener of mode change
+        if (gameModeChangeListener != null) {
+            gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
+        }
+
+        LOGGER.info("DEBUG: Entered Special Stage Results Screen (rings=" + ssRingsCollected +
+                ", emerald=" + ssEmeraldCollected + ")");
     }
 
     /**
