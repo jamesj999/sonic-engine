@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.scroll.BackgroundCamera;
 import uk.co.jamesj999.sonic.level.scroll.ParallaxTables;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlCpz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlMcz;
 
@@ -68,6 +69,7 @@ public class ParallaxManager {
     private boolean loaded = false;
 
     private SwScrlEhz ehzHandler;
+    private SwScrlCpz cpzHandler;
     private SwScrlMcz mczHandler;
 
     private int currentZone = -1;
@@ -92,6 +94,7 @@ public class ParallaxManager {
         try {
             tables = new ParallaxTables(rom);
             ehzHandler = new SwScrlEhz(tables);
+            cpzHandler = new SwScrlCpz(tables);
             mczHandler = new SwScrlMcz(tables);
             loaded = true;
             LOGGER.info("Parallax tables loaded.");
@@ -108,6 +111,8 @@ public class ParallaxManager {
 
             if (zoneId == ZONE_ARZ) {
                 initArz(actId, cameraX, cameraY);
+            } else if (zoneId == ZONE_CPZ && cpzHandler != null) {
+                cpzHandler.init(cameraX, cameraY);
             }
         }
     }
@@ -205,7 +210,14 @@ public class ParallaxManager {
                 }
                 break;
             case ZONE_CPZ:
-                fillCpz(cameraX, bgScrollY, frameCounter);
+                if (cpzHandler != null) {
+                    cpzHandler.update(hScroll, cameraX, cameraY, frameCounter, actId);
+                    minScroll = cpzHandler.getMinScrollOffset();
+                    maxScroll = cpzHandler.getMaxScrollOffset();
+                    vscrollFactorBG = cpzHandler.getVscrollFactorBG();
+                } else {
+                    fillCpz(cameraX, bgScrollY, frameCounter);
+                }
                 break;
             case ZONE_ARZ:
                 fillArz(cameraX, diffX, diffY);

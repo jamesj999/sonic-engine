@@ -37,8 +37,14 @@ public class ParallaxTables {
     public static final int SWSCRL_ARZ_ROW_HEIGHTS_ADDR = 0xD5CE;
     public static final int SWSCRL_ARZ_ROW_HEIGHTS_SIZE = 16;
 
+    // CPZ camera section map - determines which BG camera applies per block row
+    // ROM offset $DDD0, 65 bytes: 20 entries of 0x02, then 45 entries of 0x04
+    public static final int CPZ_CAMERA_SECTIONS_ADDR = 0xDDD0;
+    public static final int CPZ_CAMERA_SECTIONS_SIZE = 65;
+
     // Loaded tables
     private byte[] rippleData;
+    private byte[] cpzCameraSections;
     private byte[] wfzTransArray;
     private byte[] wfzNormalArray;
     private byte[] mczRowHeights;
@@ -65,6 +71,11 @@ public class ParallaxTables {
         cnzRowHeights = rom.readBytes(SWSCRL_CNZ_ROW_HEIGHTS_ADDR, SWSCRL_CNZ_ROW_HEIGHTS_SIZE);
         dezRowHeights = rom.readBytes(SWSCRL_DEZ_ROW_HEIGHTS_ADDR, SWSCRL_DEZ_ROW_HEIGHTS_SIZE);
         arzRowHeights = rom.readBytes(SWSCRL_ARZ_ROW_HEIGHTS_ADDR, SWSCRL_ARZ_ROW_HEIGHTS_SIZE);
+
+        // CPZ camera sections - determines which BG camera applies per block row
+        cpzCameraSections = rom.readBytes(CPZ_CAMERA_SECTIONS_ADDR, CPZ_CAMERA_SECTIONS_SIZE);
+        LOGGER.fine("Loaded CPZ camera sections: " + cpzCameraSections.length + " bytes from 0x" +
+                Integer.toHexString(CPZ_CAMERA_SECTIONS_ADDR));
 
         LOGGER.info("All parallax tables loaded successfully.");
     }
@@ -120,5 +131,14 @@ public class ParallaxTables {
 
     public byte[] getArzRowHeights() {
         return arzRowHeights;
+    }
+
+    /**
+     * Get CPZ camera sections table.
+     * 65 bytes: 20 entries of 0x02 (BG1), then 45 entries of 0x04 (BG2).
+     * Used to determine which BG camera applies per 16-line block row.
+     */
+    public byte[] getCpzCameraSections() {
+        return cpzCameraSections;
     }
 }
