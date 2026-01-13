@@ -51,14 +51,16 @@ public final class Sonic2SpecialStageConstants {
     public static final int BOMB_ART_SIZE = 1008;
 
     /** Explosion art (for bomb explosions) - Nemesis compressed
-     * Located between shadow vert and bomb art */
+     * Located between shadow vert and bomb art.
+     * Verified via RomOffsetFinder: 819 bytes compressed -> 1536 bytes (48 patterns) */
     public static final long EXPLOSION_ART_OFFSET = 0x0DE188;
-    public static final int EXPLOSION_ART_SIZE = 820;
+    public static final int EXPLOSION_ART_SIZE = 819;
 
     /** Stars art (for ring sparkle) - Nemesis compressed
-     * Located after START banner art */
-    public static final long STARS_ART_OFFSET = 0x0DD8D0;
-    public static final int STARS_ART_SIZE = 200;
+     * Located after START banner art.
+     * Verified via RomOffsetFinder: 250 bytes compressed -> 1184 bytes (37 patterns) */
+    public static final long STARS_ART_OFFSET = 0x0DD8CE;
+    public static final int STARS_ART_SIZE = 250;
 
     /** Emerald art - Nemesis compressed */
     public static final long EMERALD_ART_OFFSET = 0x0DE8AC;
