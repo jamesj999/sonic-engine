@@ -45,18 +45,21 @@ If `docs/s2disasm` is present, use the **RomOffsetFinder** tool to search for di
 ### Quick Reference
 
 ```bash
-# Search for items (by label or filename)
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search ring" -q
+# Search for items (by label or filename) - now includes calculated ROM offset!
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search SpecialStars" -q
+# Output includes: ROM Offset: 0xDD8CE (calculated from ArtNem_SpecialStart, 1 files away)
 
 # List all files of a compression type (nem, kos, eni, sax)
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list nem" -q
 
-# Test decompression at a ROM offset
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 nem" -q
+# Test decompression at a ROM offset (to verify calculated offset)
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0xDD8CE nem" -q
 
 # Auto-detect compression type at offset
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 auto" -q
 ```
+
+The `search` command automatically calculates ROM offsets using known anchor points from `Sonic2SpecialStageConstants`. To add new anchors, update `RomOffsetCalculator.ANCHOR_OFFSETS`.
 
 ### Compression Types
 | Type | Extension | CLI Arg |

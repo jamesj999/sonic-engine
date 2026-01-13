@@ -189,6 +189,10 @@ public class RomOffsetFinder {
         System.out.println("Found " + results.size() + " result(s):");
         System.out.println();
 
+        // Create offset calculator for ROM offset estimation
+        RomOffsetCalculator offsetCalculator = new RomOffsetCalculator(
+                System.getProperty("disasm.path", DEFAULT_DISASM_PATH));
+
         for (DisassemblySearchResult result : results) {
             System.out.printf("Label:       %s%n", result.getLabel() != null ? result.getLabel() : "(none)");
             System.out.printf("File:        %s%n", result.getFilePath());
@@ -200,6 +204,25 @@ public class RomOffsetFinder {
                 System.out.printf("File Size:   %d bytes%n", size);
             } catch (IOException e) {
                 System.out.printf("File Size:   (not found)%n");
+            }
+
+            // Calculate ROM offset from anchors
+            if (result.getLabel() != null) {
+                try {
+                    RomOffsetCalculator.OffsetCalculation calc =
+                            offsetCalculator.getCalculationDetails(result.getLabel());
+                    if (calc != null && calc.offset >= 0) {
+                        System.out.printf("ROM Offset:  0x%X", calc.offset);
+                        if (calc.isAnchor) {
+                            System.out.println(" (anchor)");
+                        } else {
+                            System.out.printf(" (calculated from %s, %d files away)%n",
+                                    calc.anchorLabel, calc.distanceFromAnchor);
+                        }
+                    }
+                } catch (IOException e) {
+                    // Ignore offset calculation errors
+                }
             }
 
             System.out.println();

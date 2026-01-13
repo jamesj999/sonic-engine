@@ -46,43 +46,44 @@ The project is in a **pre-alpha** state.
 
 ## ROM Offset Finder Tool
 
-If `docs/s2disasm` is present, you can use the **RomOffsetFinder** tool to search for disassembly items and find their ROM offsets. This is useful for locating data in the ROM that is defined in the disassembly.
+If `docs/s2disasm` is present, you can use the **RomOffsetFinder** tool to search for disassembly items and find their ROM offsets. The `search` command automatically calculates ROM offsets using known anchor points.
 
 ### Prerequisites
 - `docs/s2disasm/` directory (Sonic 2 disassembly) must be present
-- ROM file `Sonic The Hedgehog 2 (W) (REV01) [!].gen` in the project root
+- ROM file `Sonic The Hedgehog 2 (W) (REV01) [!].gen` in the project root (for `test` command)
 
 ### Usage via Maven
 
 ```bash
-# Search for items by label or filename pattern
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search <pattern>"
+# Search for items - now includes calculated ROM offset!
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search <pattern>" -q
+# Output includes: ROM Offset: 0xDD8CE (calculated from ArtNem_SpecialStart, 1 files away)
 
-# Find ROM offset for a specific disassembly item
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="find <label>"
-
-# Test decompression at a ROM offset
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test <offset> <type>"
+# Test/verify decompression at a ROM offset
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test <offset> <type>" -q
 
 # List all files of a compression type
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list <type>"
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list <type>" -q
 ```
 
 ### Examples
 
 ```bash
-# Search for ring-related items
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search ring" -q
+# Search for special stage stars art (shows ROM offset automatically)
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="search SpecialStars" -q
 
 # List all Nemesis-compressed files
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="list nem" -q
 
-# Test Nemesis decompression at offset 0x3000
-mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 nem" -q
+# Verify a calculated offset works (test decompression)
+mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0xDD8CE nem" -q
 
 # Test with auto-detection
 mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 auto" -q
 ```
+
+### Adding New Anchor Offsets
+The offset calculator uses known anchor points defined in `RomOffsetCalculator.ANCHOR_OFFSETS`. When you verify a new offset (using `test`), add it to the anchors map to improve calculations for nearby items.
 
 ### Compression Types
 | Type | Extension | Argument |
@@ -98,6 +99,11 @@ mvn exec:java -Dexec.mainClass="uk.co.jamesj999.sonic.tools.disasm.RomOffsetFind
 The tools in `uk.co.jamesj999.sonic.tools.disasm` can also be used programmatically:
 
 ```java
+// Calculate ROM offset for a label (fast - uses anchor-based calculation)
+RomOffsetCalculator calculator = new RomOffsetCalculator("docs/s2disasm");
+long offset = calculator.calculateOffset("ArtNem_SpecialStars");
+// Returns 0xDD8CE
+
 // Search the disassembly
 DisassemblySearchTool searchTool = new DisassemblySearchTool("docs/s2disasm");
 List<DisassemblySearchResult> results = searchTool.search("Ring");
