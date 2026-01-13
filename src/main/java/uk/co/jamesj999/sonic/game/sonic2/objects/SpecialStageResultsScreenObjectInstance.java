@@ -12,6 +12,7 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.PatternDesc;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.tools.NemesisReader;
 
 import java.io.ByteArrayInputStream;
@@ -45,6 +46,19 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     private static final int GOT_TEXT_Y = 24;        // "SONIC GOT A" / "SONIC HAS ALL THE" (above TITLE_Y!)
     private static final int EMERALD_TEXT_Y = 42;    // Same as TITLE_Y (replaces it)
     private static final int EMERALDS_Y = 92;        // Emerald icons (center is ~92 based on emerald positions)
+
+    // Emerald positions from Obj6F_SubObjectMetaData in s2.asm
+    // Each emerald has unique X,Y coordinates forming a hexagonal pattern
+    // Emeralds are displayed at their fixed index positions (gaps shown for uncollected)
+    private static final int[][] EMERALD_POSITIONS = {
+        {152, 68},   // Emerald 0: top center
+        {176, 80},   // Emerald 1: top right
+        {176, 104},  // Emerald 2: bottom right
+        {152, 116},  // Emerald 3: bottom center
+        {128, 104},  // Emerald 4: bottom left
+        {128, 80},   // Emerald 5: top left
+        {152, 92}    // Emerald 6: center
+    };
     // Bonus tally Y positions - from Obj6F_SubObjectMetaData in s2.asm
     // Original game positions (2-player mode):
     // - Y=136: Score line (Frame 12)
@@ -56,16 +70,25 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     private static final int SONIC_RINGS_Y = 152;
     private static final int GEMS_BONUS_Y = 168;  // Moved up from 184 for consistent spacing in single-player
 
-    // Super Sonic message positions
-    private static final int SUPER_MSG_Y = 88;
+    // Super Sonic message positions (from Obj6F_InitAndMoveSuperMsg in s2.asm)
+    // The three messages stack vertically at the top of the screen,
+    // replacing the "SONIC HAS ALL THE CHAOS EMERALDS" text.
+    //
+    // Analysis from disassembly:
+    // - Original "Sonic got a" at Y=24, "Special Stage" at Y=42 (metadata uses 128+y internally)
+    // - Obj6F_InitAndMoveSuperMsg subtracts 8 from both: 24-8=16, 42-8=34
+    // - "SUPER SONIC" is created with y_pixel=$B4=180, which is 128+52, so screen Y=52
+    // - Result: 18-pixel spacing between all three lines at top of screen
+    private static final int NOW_SONIC_CAN_Y = 16;
+    private static final int CHANGE_INTO_Y = 34;
+    private static final int SUPER_SONIC_Y = 52;
 
     // States for Super Sonic message sequence
-    private static final int STATE_SUPER_MSG_1 = 10;  // "NOW SONIC CAN"
-    private static final int STATE_SUPER_MSG_2 = 11;  // "CHANGE INTO"
-    private static final int STATE_SUPER_MSG_3 = 12;  // "SUPER SONIC"
-    private static final int STATE_SUPER_DONE = 13;
+    // All three messages display simultaneously, then wait before ending
+    private static final int STATE_SUPER_SONIC_DISPLAY = 10;  // Show all 3 messages
+    private static final int STATE_SUPER_DONE = 11;
 
-    private static final int SUPER_MSG_DURATION = 60;  // Frames per message
+    private static final int SUPER_MSG_DURATION = 180;  // $B4 = 180 frames (~3 seconds) for all messages
 
     // Pattern array layout - UNIFIED VRAM-aligned array:
     // We create a pattern array indexed by VRAM address, just like the normal results screen.
@@ -98,7 +121,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     private final int totalEmeraldCount;
 
     // Bonus values
-    private int ringBonus;
+    private int displayedRingCount;
     private int emeraldBonus;
     private int totalBonus;
 
@@ -115,7 +138,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     private int superMsgTimer = 0;
 
     // Number rendering tracking - cache last values to avoid re-rendering
-    private int lastRingBonus = Integer.MIN_VALUE;
+    private int lastDisplayedRingCount = Integer.MIN_VALUE;
     private int lastEmeraldBonus = Integer.MIN_VALUE;
     private final Pattern blankDigit = new Pattern();
 
@@ -151,7 +174,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
         LOGGER.info("Special Stage Results: rings=" + ringsCollected + ", gotEmerald=" + gotEmerald +
                 ", stage=" + (stageIndex + 1) + ", totalEmeralds=" + totalEmeraldCount +
-                ", ringBonus=" + ringBonus + ", emeraldBonus=" + emeraldBonus);
+                ", displayedRingCount=" + displayedRingCount + ", emeraldBonus=" + emeraldBonus);
     }
 
     /**
@@ -508,8 +531,8 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     }
 
     private void calculateBonuses() {
-        // Ring bonus: rings collected * 10
-        ringBonus = ringsCollected * Sonic2SpecialStageConstants.RESULTS_RING_MULTIPLIER;
+        // Display actual ring count (score tally will multiply by 10 when adding to score)
+        displayedRingCount = ringsCollected;
 
         // Emerald bonus: 1000 if collected an emerald
         emeraldBonus = gotEmerald ? Sonic2SpecialStageConstants.RESULTS_EMERALD_BONUS : 0;
@@ -528,7 +551,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         }
 
         // Check if values have changed
-        if (ringBonus == lastRingBonus && emeraldBonus == lastEmeraldBonus) {
+        if (displayedRingCount == lastDisplayedRingCount && emeraldBonus == lastEmeraldBonus) {
             return;
         }
 
@@ -537,7 +560,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
         // Update ring bonus digits (at VRAM $528, which is offset 8 in numbers area)
         // Used by Frame 13 (RING_BONUS) - 4 tiles wide x 2 tall = 8 tiles for 4 digits
-        writeBonusValue(numbersOffset + RING_BONUS_DIGIT_OFFSET, ringBonus, sourceDigitPatterns);
+        writeBonusValue(numbersOffset + RING_BONUS_DIGIT_OFFSET, displayedRingCount, sourceDigitPatterns);
 
         // Update emerald bonus digits (at VRAM $520, which is offset 0 in numbers area)
         // Used by Frame 16 (PERFECT_BONUS) when showing gems bonus
@@ -566,7 +589,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             }
         }
 
-        lastRingBonus = ringBonus;
+        lastDisplayedRingCount = displayedRingCount;
         lastEmeraldBonus = emeraldBonus;
     }
 
@@ -655,13 +678,15 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         boolean anyRemaining = false;
         int totalIncrement = 0;
 
-        // Decrement ring bonus
-        int[] ringResult = decrementBonus(ringBonus);
-        ringBonus = ringResult[0];
-        totalIncrement += ringResult[1];
-        if (ringResult[1] > 0) anyRemaining = true;
+        // Decrement ring count by 1, add multiplied value (10) to score
+        // This matches original game behavior: display shows ring count, score gets 10 pts per ring
+        if (displayedRingCount > 0) {
+            displayedRingCount--;
+            totalIncrement += Sonic2SpecialStageConstants.RESULTS_RING_MULTIPLIER;
+            anyRemaining = true;
+        }
 
-        // Decrement emerald bonus
+        // Decrement emerald bonus (still uses standard decrement logic)
         int[] emeraldResult = decrementBonus(emeraldBonus);
         emeraldBonus = emeraldResult[0];
         totalIncrement += emeraldResult[1];
@@ -677,7 +702,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     protected void onExitReady() {
         // If all 7 emeralds collected, start Super Sonic message sequence
         if (totalEmeraldCount >= 7 && gotEmerald) {
-            state = STATE_SUPER_MSG_1;
+            state = STATE_SUPER_SONIC_DISPLAY;
             stateTimer = 0;
             superMsgTimer = 0;
         } else {
@@ -686,18 +711,13 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     }
 
     @Override
-    protected void updateWait() {
-        // Handle Super Sonic message sequence states
-        if (state >= STATE_SUPER_MSG_1 && state <= STATE_SUPER_MSG_3) {
-            superMsgTimer++;
-            if (superMsgTimer >= SUPER_MSG_DURATION) {
-                state++;
-                superMsgTimer = 0;
-                if (state > STATE_SUPER_MSG_3) {
-                    state = STATE_SUPER_DONE;
-                    complete = true;
-                }
-            }
+    public void update(int frameCounter, AbstractPlayableSprite player) {
+        this.frameCounter = frameCounter;
+        stateTimer++;
+
+        // Handle Super Sonic message state directly (parent's switch doesn't handle states > 3)
+        if (state == STATE_SUPER_SONIC_DISPLAY) {
+            updateSuperSonicMessages();
             return;
         }
         if (state == STATE_SUPER_DONE) {
@@ -705,7 +725,30 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             return;
         }
 
-        // Normal wait state
+        // Handle normal states via parent
+        switch (state) {
+            case STATE_SLIDE_IN -> updateSlideIn();
+            case STATE_TALLY -> updateTally();
+            case STATE_WAIT -> updateWait();
+            case STATE_EXIT -> complete = true;
+        }
+    }
+
+    /**
+     * Updates the Super Sonic message display timer.
+     * All three messages display simultaneously for SUPER_MSG_DURATION frames.
+     */
+    private void updateSuperSonicMessages() {
+        superMsgTimer++;
+        if (superMsgTimer >= SUPER_MSG_DURATION) {
+            state = STATE_SUPER_DONE;
+            complete = true;
+        }
+    }
+
+    @Override
+    protected void updateWait() {
+        // Normal wait state only - Super Sonic states are now handled in update()
         super.updateWait();
     }
 
@@ -756,7 +799,8 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         }
 
         // Result text based on emerald count
-        if (gotEmerald) {
+        // Hide during Super Sonic message sequence (replaced by the three Super Sonic messages)
+        if (gotEmerald && state < STATE_SUPER_SONIC_DISPLAY) {
             int gotTextX = (int) (slideAlpha * SCREEN_CENTER_X);
 
             if (totalEmeraldCount >= 7) {
@@ -789,10 +833,13 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         }
 
         // Render collected emeralds
-        if (useRomArt) {
-            renderEmeralds(0, 0, slideAlpha);
-        } else {
-            renderEmeraldsPlaceholder(commands, 0, 0, slideAlpha);
+        // Hide during Super Sonic message sequence
+        if (state < STATE_SUPER_SONIC_DISPLAY) {
+            if (useRomArt) {
+                renderEmeralds(0, 0, slideAlpha);
+            } else {
+                renderEmeraldsPlaceholder(commands, 0, 0, slideAlpha);
+            }
         }
 
         // Bonus displays - only after slide-in complete
@@ -825,7 +872,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                 // and render our own at the correct position (x=0x38)
                 renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_RING_BONUS,
                         SCREEN_CENTER_X, SONIC_RINGS_Y);
-                renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, SONIC_RINGS_Y, ringBonus);
+                renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, SONIC_RINGS_Y, displayedRingCount);
 
                 // Line 3: Y=184 - "GEMS BONUS" with emerald bonus - only if got emerald
                 if (gotEmerald) {
@@ -840,7 +887,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                         "SCORE: " + totalBonus, 1.0f, 1.0f, 0.5f);
 
                 renderPlaceholderText(commands, SCREEN_CENTER_X, SONIC_RINGS_Y,
-                        "SONIC RINGS: " + ringBonus, 1.0f, 1.0f, 0.5f);
+                        "SONIC RINGS: " + displayedRingCount, 1.0f, 1.0f, 0.5f);
 
                 if (gotEmerald) {
                     renderPlaceholderText(commands, SCREEN_CENTER_X, GEMS_BONUS_Y,
@@ -849,29 +896,24 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             }
         }
 
-        // Super Sonic message sequence
-        if (state >= STATE_SUPER_MSG_1 && state <= STATE_SUPER_MSG_3) {
+        // Super Sonic message sequence - all three messages display simultaneously
+        if (state == STATE_SUPER_SONIC_DISPLAY) {
             if (useRomArt) {
-                int superMsgFrame = switch (state) {
-                    case STATE_SUPER_MSG_1 -> Sonic2SpecialStageResultsMappings.FRAME_NOW_SONIC_CAN;
-                    case STATE_SUPER_MSG_2 -> Sonic2SpecialStageResultsMappings.FRAME_CHANGE_INTO;
-                    case STATE_SUPER_MSG_3 -> Sonic2SpecialStageResultsMappings.FRAME_SUPER_SONIC;
-                    default -> -1;
-                };
-                if (superMsgFrame >= 0) {
-                    renderMappingFrame(superMsgFrame, SCREEN_CENTER_X, SUPER_MSG_Y);
-                }
+                // Render all three messages at their respective Y positions
+                renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_NOW_SONIC_CAN,
+                        SCREEN_CENTER_X, NOW_SONIC_CAN_Y);
+                renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_CHANGE_INTO,
+                        SCREEN_CENTER_X, CHANGE_INTO_Y);
+                renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_SUPER_SONIC,
+                        SCREEN_CENTER_X, SUPER_SONIC_Y);
             } else {
-                String msg = switch (state) {
-                    case STATE_SUPER_MSG_1 -> "NOW SONIC CAN";
-                    case STATE_SUPER_MSG_2 -> "CHANGE INTO";
-                    case STATE_SUPER_MSG_3 -> "SUPER SONIC";
-                    default -> "";
-                };
-                if (!msg.isEmpty()) {
-                    renderPlaceholderText(commands, SCREEN_CENTER_X, SUPER_MSG_Y,
-                            msg, 1.0f, 0.8f, 0.0f);
-                }
+                // Placeholder text for all three messages
+                renderPlaceholderText(commands, SCREEN_CENTER_X, NOW_SONIC_CAN_Y,
+                        "NOW SONIC CAN", 1.0f, 0.8f, 0.0f);
+                renderPlaceholderText(commands, SCREEN_CENTER_X, CHANGE_INTO_Y,
+                        "CHANGE INTO", 1.0f, 0.8f, 0.0f);
+                renderPlaceholderText(commands, SCREEN_CENTER_X, SUPER_SONIC_Y,
+                        "SUPER SONIC", 1.0f, 0.8f, 0.0f);
             }
         }
 
@@ -1036,18 +1078,16 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                 Sonic2SpecialStageResultsMappings.FRAME_EMERALD_GRAY
         };
 
-        int emeraldSpacing = 28;
-        int startX = SCREEN_CENTER_X - (3 * emeraldSpacing);
-
         for (int i = 0; i < 7; i++) {
             boolean hasThisEmerald = GameStateManager.getInstance().hasEmerald(i);
 
             if (hasThisEmerald) {
                 // Flash effect: show every other 8 frames
                 if ((frameCounter & 4) != 0) {
-                    int emeraldX = baseX + startX + (i * emeraldSpacing);
+                    // Use fixed hexagonal positions from EMERALD_POSITIONS array
                     int slideOffsetY = (int) ((1 - slideAlpha) * 80);
-                    int emeraldY = baseY + EMERALDS_Y + slideOffsetY;
+                    int emeraldX = baseX + EMERALD_POSITIONS[i][0];
+                    int emeraldY = baseY + EMERALD_POSITIONS[i][1] + slideOffsetY;
 
                     renderMappingFrame(emeraldFrames[i], emeraldX, emeraldY);
                 }
@@ -1070,22 +1110,21 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                 {0.6f, 0.6f, 0.6f}    // Gray
         };
 
-        int emeraldSpacing = 28;
-        int startX = SCREEN_CENTER_X - (3 * emeraldSpacing);
-
         for (int i = 0; i < 7; i++) {
             boolean hasThisEmerald = GameStateManager.getInstance().hasEmerald(i);
 
             if (hasThisEmerald) {
                 // Flash effect: show every other 8 frames
                 if ((frameCounter & 4) != 0) {
-                    int emeraldX = startX + (i * emeraldSpacing);
+                    // Use fixed hexagonal positions from EMERALD_POSITIONS array
                     int slideOffsetY = (int) ((1 - slideAlpha) * 80);
+                    int emeraldX = EMERALD_POSITIONS[i][0];
+                    int emeraldY = EMERALD_POSITIONS[i][1] + slideOffsetY;
 
                     float[] color = emeraldColors[i];
                     renderPlaceholderBox(commands,
                             baseX + emeraldX - 8,
-                            baseY + EMERALDS_Y + slideOffsetY - 8,
+                            baseY + emeraldY - 8,
                             16, 16,
                             color[0], color[1], color[2]);
                 }
@@ -1147,7 +1186,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     }
 
     // Getters for testing
-    public int getRingBonus() { return ringBonus; }
+    public int getDisplayedRingCount() { return displayedRingCount; }
     public int getEmeraldBonus() { return emeraldBonus; }
     public int getTotalBonus() { return totalBonus; }
     public boolean didGetEmerald() { return gotEmerald; }

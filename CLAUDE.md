@@ -208,6 +208,25 @@ Normal order:     H-Flipped order:
 [1][3][5]         [5][3][1]
 ```
 
+### VDP Sprite Coordinate Offset (Disassembly Only)
+
+When reading sprite coordinates from the Sonic 2 disassembly, be aware that the VDP hardware adds 128 to both X and Y coordinates. This allows sprites to be positioned partially off-screen (a sprite at VDP X=0 is 128 pixels left of the visible area).
+
+**This only matters when interpreting raw values from the disassembly.** Our Java engine uses direct screen coordinates (0,0 = top-left visible pixel).
+
+Example from `s2.asm`:
+```asm
+; The results_screen_object macro adds 128 automatically:
+results_screen_object macro startx, targetx, y, routine, frame
+    dc.w    128+startx, 128+targetx, 128+y
+    ...
+
+; But direct VDP writes don't:
+move.w  #$B4,y_pixel(a1)  ; $B4 = 180 in VDP space = 52 in screen space
+```
+
+To convert: **screen_position = vdp_value - 128**
+
 ## Sonic 2 Special Stage Implementation
 
 The special stage uses a unique pseudo-3D rendering system. Key files are in `uk.co.jamesj999.sonic.game.sonic2.specialstage`.

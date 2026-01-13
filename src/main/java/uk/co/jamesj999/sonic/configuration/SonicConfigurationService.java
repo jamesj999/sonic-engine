@@ -155,6 +155,9 @@ public class SonicConfigurationService {
 		putDefault(SonicConfiguration.AUDIO_ENABLED, true);
 		putDefault(SonicConfiguration.REGION, "NTSC");
 		putDefault(SonicConfiguration.SPECIAL_STAGE_KEY, java.awt.event.KeyEvent.VK_HOME);
+		putDefault(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY, java.awt.event.KeyEvent.VK_END);
+		putDefault(SonicConfiguration.SPECIAL_STAGE_FAIL_KEY, java.awt.event.KeyEvent.VK_DELETE);
+		putDefault(SonicConfiguration.SPECIAL_STAGE_SPRITE_DEBUG_KEY, java.awt.event.KeyEvent.VK_F12);
 	}
 
 	private void putDefault(SonicConfiguration key, Object value) {
