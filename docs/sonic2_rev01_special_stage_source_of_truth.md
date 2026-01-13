@@ -1284,6 +1284,67 @@ The speed factor is set to `$C0000` at stage start and `$0` when the stage ends 
 
 ---
 
+## VInt timing system (Vint_S2SS) — validated from disassembly
+
+The Special Stage runs on a VInt (vertical interrupt) driven timing system that executes at 60Hz on NTSC systems.
+
+### VInt handler (Vint_S2SS at s2.asm line 837)
+
+The special stage uses its own VInt handler `Vint_S2SS` which:
+1. Increments `SSTrack_drawing_index` each VInt (0→1→2→3→4→0...)
+2. Calls `SSRun_Animation_Timers` to manage track timing
+3. Runs object and player updates via `RunObjects`
+
+### Animation timer management (SSRun_Animation_Timers at line 960)
+
+```assembly
+SSRun_Animation_Timers:
+    subq.b  #1,(SSTrack_duration_timer).w  ; Decrement duration timer
+    bpl.s   +                              ; Branch if not expired
+    ; Timer expired - reload and advance track frame
+    move.b  (SS_player_anim_frame_timer).w,(SSTrack_duration_timer).w
+    ; ... advance track animation
+```
+
+Key timers:
+- `SSTrack_duration_timer` — counts down from base duration, resets when track frame advances
+- `SS_player_anim_frame_timer` — set to `(base_duration - 1)`, used for player sprite animation timing
+
+### Object depth decrement timing (lines 70366-70374)
+
+Object depth (`objoff_30`) decrements happen in object update routines, called via `RunObjects` **each game loop iteration** (60Hz):
+
+```assembly
+    tst.b   (SSTrack_drawing_index).w
+    beq.s   +                    ; Skip if drawing_index == 0
+    cmpi.b  #4,(SSTrack_drawing_index).w
+    beq.s   ++                   ; Different rate at index 4
+    subi.l  #$CCCD,objoff_30(a0) ; Decrement depth by $CCCD
+    bra.s   +++
++   ; ... (index 0 path - no decrement)
+++  subi.l  #$CCCC,objoff_30(a0) ; Decrement depth by $CCCC at index 4
+```
+
+### Timing relationships
+
+| System | Update frequency | Controlled by |
+|--------|------------------|---------------|
+| Track animation | Every N frames (N = base_duration) | `SSTrack_duration_timer` countdown |
+| Object depth | Every frame (60Hz) | `RunObjects` per-VInt |
+| Player movement | Every frame (60Hz) | `RunObjects` per-VInt |
+| Track drawing_index | Every frame (60Hz) | VInt handler increment |
+
+### Implementation note
+
+The track animation rate and object movement rate are both tied to the 60Hz frame rate. When implementing:
+- Track frames advance when `duration_timer` expires (every 5-60 frames depending on speedFactor)
+- Object depth decrements happen every single frame (~$CCCC in 16.16 fixed-point)
+- These two systems are designed to be synchronized at 60Hz NTSC timing
+
+If the engine runs at a different frame rate, both systems will be affected proportionally, maintaining their relative timing. However, if only one system is adjusted (e.g., slowing track animation without slowing object depth), the synchronization breaks.
+
+---
+
 ## START banner sequence timing (validated from disassembly)
 
 The Special Stage has a multi-phase startup sequence before main gameplay begins. During this sequence, the **track animates continuously** while the START banner is displayed. This is critical for timing: the initial STRAIGHT segments in the layout are "consumed" during this intro phase.
