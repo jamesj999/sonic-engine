@@ -21,7 +21,6 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 
-import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.util.logging.Logger;
 
@@ -121,36 +120,36 @@ public class GameLoop {
         }
 
         if (currentGameMode == GameMode.SPECIAL_STAGE) {
-            // END: Debug complete special stage with emerald (for testing results screen)
-            if (inputHandler.isKeyPressed(KeyEvent.VK_END)) {
+            // Debug complete special stage with emerald (for testing results screen)
+            if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY))) {
                 debugCompleteSpecialStageWithEmerald();
             }
 
-            // DEL: Debug fail special stage (for testing results screen without emerald)
-            if (inputHandler.isKeyPressed(KeyEvent.VK_DELETE)) {
+            // Debug fail special stage (for testing results screen without emerald)
+            if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_FAIL_KEY))) {
                 debugFailSpecialStage();
             }
 
-            // F12: Toggle sprite frame debug viewer (shows all animation frames)
-            if (inputHandler.isKeyPressed(KeyEvent.VK_F12)) {
+            // Toggle sprite frame debug viewer (shows all animation frames)
+            if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_SPRITE_DEBUG_KEY))) {
                 specialStageManager.toggleSpriteDebugMode();
             }
 
-            // Handle sprite debug viewer navigation
+            // Handle sprite debug viewer navigation (uses configured movement keys)
             if (specialStageManager.isSpriteDebugMode()) {
                 DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
                 // Left/Right: Change page within current graphics set
-                if (inputHandler.isKeyPressed(KeyEvent.VK_RIGHT)) {
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.RIGHT))) {
                     debugSprites.nextPage();
                 }
-                if (inputHandler.isKeyPressed(KeyEvent.VK_LEFT)) {
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.LEFT))) {
                     debugSprites.previousPage();
                 }
                 // Up/Down: Cycle between graphics sets
-                if (inputHandler.isKeyPressed(KeyEvent.VK_DOWN)) {
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.DOWN))) {
                     debugSprites.nextSet();
                 }
-                if (inputHandler.isKeyPressed(KeyEvent.VK_UP)) {
+                if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.UP))) {
                     debugSprites.previousSet();
                 }
             }

@@ -130,6 +130,21 @@ public enum SonicConfiguration {
 	/**
 	 * Key to toggle Special Stage mode (for testing).
 	 */
-	SPECIAL_STAGE_KEY;
+	SPECIAL_STAGE_KEY,
+
+	/**
+	 * Key to complete Special Stage with emerald (debug).
+	 */
+	SPECIAL_STAGE_COMPLETE_KEY,
+
+	/**
+	 * Key to fail Special Stage (debug).
+	 */
+	SPECIAL_STAGE_FAIL_KEY,
+
+	/**
+	 * Key to toggle Special Stage sprite debug viewer.
+	 */
+	SPECIAL_STAGE_SPRITE_DEBUG_KEY;
 
 }
