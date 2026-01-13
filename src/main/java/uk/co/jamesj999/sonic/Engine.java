@@ -219,10 +219,22 @@ public class Engine extends GLCanvas implements GLEventListener {
 			// Render results screen
 			var resultsScreen = gameLoop.getResultsScreen();
 			if (resultsScreen != null) {
+				// Reset camera to (0,0) for screen-space rendering
+				// Results screen is a full-screen overlay, not world-relative
+				camera.setX((short) 0);
+				camera.setY((short) 0);
+
+				// Begin pattern batch for ROM art rendering
+				graphicsManager.beginPatternBatch();
+
 				java.util.List<uk.co.jamesj999.sonic.graphics.GLCommand> commands = new java.util.ArrayList<>();
 				resultsScreen.appendRenderCommands(commands);
-				graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommandGroup(
-						com.jogamp.opengl.GL2.GL_LINES, commands));
+
+				// Register placeholder commands (for fallback rendering)
+				if (!commands.isEmpty()) {
+					graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommandGroup(
+							com.jogamp.opengl.GL2.GL_LINES, commands));
+				}
 			}
 		} else if (!debugViewEnabled) {
 			levelManager.drawWithSpritePriority(spriteRenderManager);

@@ -293,8 +293,16 @@ public final class Sonic2SpecialStageConstants {
     // ========== Results Screen Constants ==========
 
     /** Results screen art - Nemesis compressed (emeralds and text) */
-    public static final long RESULTS_ART_OFFSET = 0x7ECC0;
+    public static final long RESULTS_ART_OFFSET = 0x7EB58;  // Verified via RomOffsetFinder
     public static final int RESULTS_ART_SIZE = 869;
+
+    /** Results screen palette - 128 bytes (4 palette lines) */
+    public static final long RESULTS_PALETTE_OFFSET = 0x003302;  // Calculated from Pal_SS3_2p + 32
+    public static final int RESULTS_PALETTE_SIZE = 128;
+
+    /** VRAM tile bases for results screen (from obj6F mappings) */
+    public static final int VRAM_SS_RESULTS_BASE = 0x0590;      // Results art base
+    public static final int VRAM_TITLE_LETTERS_BASE = 0x0002;   // Title card letters base
 
     /** Results screen timing (in frames @ 60fps) */
     public static final int RESULTS_SLIDE_DURATION = 60;    // 1 second slide-in
