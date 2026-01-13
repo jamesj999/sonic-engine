@@ -6,6 +6,9 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
 public class GLCommand implements GLCommandable {
         private static final ThreadLocal<Boolean> IN_GROUP = ThreadLocal.withInitial(() -> Boolean.FALSE);
+        // Cached screen height to avoid repeated synchronized getInstance() calls
+        private static final int SCREEN_HEIGHT_PIXELS = SonicConfigurationService.getInstance()
+                        .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
         private final int screenHeight = SonicConfigurationService.getInstance()
                         .getInt(SonicConfiguration.SCREEN_HEIGHT);
 
@@ -77,9 +80,9 @@ public class GLCommand implements GLCommandable {
                 this.colour3 = colour3;
                 this.alpha = 1.0f;
                 this.x1 = x1;
-                this.y1 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y1;
+                this.y1 = SCREEN_HEIGHT_PIXELS - y1;
                 this.x2 = x2;
-                this.y2 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y2;
+                this.y2 = SCREEN_HEIGHT_PIXELS - y2;
                 this.blendMode = defaultBlendMode;
         }
 
@@ -93,9 +96,9 @@ public class GLCommand implements GLCommandable {
                 this.colour3 = colour3;
                 this.alpha = 1.0f;
                 this.x1 = x1;
-                this.y1 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y1;
+                this.y1 = SCREEN_HEIGHT_PIXELS - y1;
                 this.x2 = x2;
-                this.y2 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y2;
+                this.y2 = SCREEN_HEIGHT_PIXELS - y2;
                 this.blendMode = blendType;
         }
 
@@ -109,9 +112,9 @@ public class GLCommand implements GLCommandable {
                 this.colour3 = colour3;
                 this.alpha = alpha;
                 this.x1 = x1;
-                this.y1 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y1;
+                this.y1 = SCREEN_HEIGHT_PIXELS - y1;
                 this.x2 = x2;
-                this.y2 = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS) - y2;
+                this.y2 = SCREEN_HEIGHT_PIXELS - y2;
                 this.blendMode = blendType;
         }
 

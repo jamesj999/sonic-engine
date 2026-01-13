@@ -20,6 +20,10 @@ public class LostRingManager {
     private static final int LIFETIME_FRAMES = 0xFF;
     private static final int RING_TOUCH_SIZE_INDEX = 0x07;
     private static final int SOLIDITY_TOP = 0x0C;
+
+    // Cached singleton references to avoid synchronized getInstance() calls in hot loops
+    private final AudioManager audioManager = AudioManager.getInstance();
+    private final Camera camera = Camera.getInstance();
     private static final short[] SINE_TABLE = {
             0, 6, 12, 18, 25, 31, 37, 43, 49, 56, 62, 68, 74, 80, 86, 92,
             97, 103, 109, 115, 120, 126, 131, 136, 142, 147, 152, 157, 162, 167, 171, 176,
@@ -103,7 +107,7 @@ public class LostRingManager {
         }
 
         player.setRingCount(0);
-        AudioManager.getInstance().playSfx(GameSound.RING_SPILL);
+        audioManager.playSfx(GameSound.RING_SPILL);
     }
 
     public void update(AbstractPlayableSprite player, int frameCounter) {
@@ -153,7 +157,7 @@ public class LostRingManager {
                         && ringOverlapsPlayer(playerX, playerY, playerHeight, ring)) {
                     ring.markCollected(frameCounter);
                     player.addRings(1);
-                    AudioManager.getInstance().playSfx(GameSound.RING);
+                    audioManager.playSfx(GameSound.RING);
                 }
             }
 
@@ -163,7 +167,7 @@ public class LostRingManager {
                 continue;
             }
 
-            int cameraBottom = Camera.getInstance().getMaxY() + 224;
+            int cameraBottom = camera.getMaxY() + 224;
             if (ring.getY() > cameraBottom) {
                 iterator.remove();
             }

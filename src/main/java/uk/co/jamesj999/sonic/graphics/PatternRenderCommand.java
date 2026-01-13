@@ -39,6 +39,16 @@ public class PatternRenderCommand implements GLCommandable {
     private static final int SCREEN_HEIGHT = SonicConfigurationService.getInstance()
             .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
 
+    // Cached GraphicsManager reference to avoid synchronized getInstance() calls
+    private static GraphicsManager graphicsManager;
+
+    private static GraphicsManager getGraphicsManager() {
+        if (graphicsManager == null) {
+            graphicsManager = GraphicsManager.getInstance();
+        }
+        return graphicsManager;
+    }
+
     public PatternRenderCommand(int patternTextureId, int paletteTextureId, PatternDesc desc, int x, int y) {
         this.patternTextureId = patternTextureId;
         this.paletteTextureId = paletteTextureId;
@@ -60,7 +70,7 @@ public class PatternRenderCommand implements GLCommandable {
 
     @Override
     public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
-        ShaderProgram shaderProgram = GraphicsManager.getInstance().getShaderProgram();
+        ShaderProgram shaderProgram = getGraphicsManager().getShaderProgram();
 
         // Initialize persistent state once per batch of patterns
         if (!stateInitialized) {
@@ -155,7 +165,7 @@ public class PatternRenderCommand implements GLCommandable {
         if (stateInitialized) {
             gl.glDisableClientState(GL2.GL_VERTEX_ARRAY);
             gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
-            ShaderProgram shaderProgram = GraphicsManager.getInstance().getShaderProgram();
+            ShaderProgram shaderProgram = getGraphicsManager().getShaderProgram();
             if (shaderProgram != null) {
                 shaderProgram.stop(gl);
             }
