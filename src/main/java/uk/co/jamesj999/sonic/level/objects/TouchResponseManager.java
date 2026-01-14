@@ -13,7 +13,8 @@ public class TouchResponseManager {
     private final TouchResponseTable table;
     private final Set<ObjectInstance> overlapping = Collections.newSetFromMap(new IdentityHashMap<>());
     private final TouchResponseDebugState debugState = new TouchResponseDebugState();
-    private int frameCounter;
+    // Use external frameCounter from LevelManager for consistent timing with ring collection
+    private int currentFrameCounter;
 
     public TouchResponseManager(ObjectManager objectManager, TouchResponseTable table) {
         this.objectManager = objectManager;
@@ -22,11 +23,16 @@ public class TouchResponseManager {
 
     public void reset() {
         overlapping.clear();
-        frameCounter = 0;
+        currentFrameCounter = 0;
     }
 
-    public void update(AbstractPlayableSprite player) {
-        frameCounter++;
+    /**
+     * Updates touch response collision detection.
+     * @param player the player sprite
+     * @param frameCounter the current frame counter from LevelManager (must match the one used for lost ring updates)
+     */
+    public void update(AbstractPlayableSprite player, int frameCounter) {
+        currentFrameCounter = frameCounter;
         if (player == null || objectManager == null || player.getDead()) {
             overlapping.clear();
             debugState.clear();
@@ -117,7 +123,7 @@ public class TouchResponseManager {
             return;
         }
         if (listener != null) {
-            listener.onTouchResponse(player, result, frameCounter);
+            listener.onTouchResponse(player, result, currentFrameCounter);
         }
 
         switch (result.category()) {
@@ -168,7 +174,7 @@ public class TouchResponseManager {
         boolean spikeHit = instance != null && instance.getSpawn().objectId() == 0x36;
         boolean hadRings = player.getRingCount() > 0;
         if (hadRings && !player.hasShield()) {
-            LevelManager.getInstance().spawnLostRings(player, frameCounter);
+            LevelManager.getInstance().spawnLostRings(player, currentFrameCounter);
         }
         player.applyHurtOrDeath(sourceX, spikeHit, hadRings);
     }

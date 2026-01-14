@@ -66,14 +66,17 @@ public class TestCamera {
     }
 
     @Test
-    public void testForceUpdateJumpsToPlayerPosition() {
+    public void testForceUpdateCentersPlayerOnScreen() {
+        // Force update should position camera so player appears at screen position (152, 96)
         when(mockSprite.getCentreX()).thenReturn((short) 1000);
         when(mockSprite.getCentreY()).thenReturn((short) 500);
 
         camera.updatePosition(true);
 
-        assertEquals("Force update should jump X to player centre", 1000, camera.getX());
-        assertEquals("Force update should jump Y to player centre", 500, camera.getY());
+        // Camera position = sprite centre - screen offset
+        // Screen offset for "look at" point is (152, 96)
+        assertEquals("Force update should center player horizontally", 1000 - 152, camera.getX());
+        assertEquals("Force update should center player vertically", 500 - 96, camera.getY());
     }
 
     // ==================== Horizontal Following Tests ====================

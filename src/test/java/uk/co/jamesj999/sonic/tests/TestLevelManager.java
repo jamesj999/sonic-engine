@@ -77,6 +77,7 @@ public class TestLevelManager {
         @Override public int getMaxX() { return 0; }
         @Override public int getMinY() { return 0; }
         @Override public int getMaxY() { return 0; }
+        @Override public int getZoneIndex() { return 0; }
         public short getStartX() { return 0; }
         public short getStartY() { return 0; }
     }

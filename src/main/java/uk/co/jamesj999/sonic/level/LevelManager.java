@@ -234,7 +234,8 @@ public class LevelManager {
             solidObjectManager.update(playable);
         }
         if (touchResponseManager != null) {
-            touchResponseManager.update(playable);
+            // Pass frameCounter + 1 to match lostRingManager.update for consistent ring timing
+            touchResponseManager.update(playable, frameCounter + 1);
         }
         if (ringManager != null) {
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
@@ -1653,15 +1654,20 @@ public class LevelManager {
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
 
             // Use checkpoint position if available, otherwise level start
+            // Note: Spawn Y coordinates from ROM data represent the sprite's CENTER position,
+            // but our setY() sets the top-left. We need to subtract yRadius to convert.
+            int yRadius = 19; // Sonic's standing yRadius
             if (hasCheckpoint) {
                 player.setX((short) checkpointX);
-                player.setY((short) checkpointY);
-                LOGGER.info("Set player position from checkpoint: X=" + checkpointX + ", Y=" + checkpointY);
+                player.setY((short) (checkpointY - yRadius));
+                LOGGER.info("Set player position from checkpoint: X=" + checkpointX + ", Y=" + checkpointY +
+                        " (adjusted by yRadius=" + yRadius + ")");
             } else {
                 player.setX((short) levelData.getStartXPos());
-                player.setY((short) levelData.getStartYPos());
+                player.setY((short) (levelData.getStartYPos() - yRadius));
                 LOGGER.info("Set player position from levelData: X=" + levelData.getStartXPos() +
-                        ", Y=" + levelData.getStartYPos() + " (level: " + levelData.name() + ")");
+                        ", Y=" + levelData.getStartYPos() + " (adjusted by yRadius=" + yRadius +
+                        ", level: " + levelData.name() + ")");
             }
 
             if (player instanceof AbstractPlayableSprite) {
