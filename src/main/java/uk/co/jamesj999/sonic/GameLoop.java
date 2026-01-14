@@ -198,6 +198,23 @@ public class GameLoop {
                 return; // Skip normal level update this frame
             }
 
+            // Check for transition requests that need fade-to-black
+            FadeManager fadeManager = FadeManager.getInstance();
+            if (!fadeManager.isActive()) {
+                if (levelManager.consumeRespawnRequest()) {
+                    startRespawnFade();
+                    return;
+                }
+                if (levelManager.consumeNextActRequest()) {
+                    startNextActFade();
+                    return;
+                }
+                if (levelManager.consumeNextZoneRequest()) {
+                    startNextZoneFade();
+                    return;
+                }
+            }
+
             boolean freezeForArtViewer = DebugOverlayManager.getInstance()
                     .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
             if (!freezeForArtViewer) {
@@ -211,20 +228,13 @@ public class GameLoop {
                 }
             }
 
+            // Debug keys for level transitions (use request system for fade)
             if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ACT))) {
-                try {
-                    levelManager.nextAct();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                levelManager.requestNextAct();
             }
 
             if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.NEXT_ZONE))) {
-                try {
-                    levelManager.nextZone();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                levelManager.requestNextZone();
             }
         }
 
@@ -710,6 +720,98 @@ public class GameLoop {
         if (gameModeChangeListener != null) {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
         }
+    }
+
+    // ==================== Level Transition Methods with Fade ====================
+
+    /**
+     * Starts the fade-to-black transition for death respawn.
+     */
+    private void startRespawnFade() {
+        LOGGER.info("Starting fade-to-black for respawn");
+
+        // Stop current music
+        AudioManager.getInstance().stopMusic();
+
+        // Start fade-to-black, then respawn when complete
+        FadeManager.getInstance().startFadeToBlack(() -> {
+            doRespawn();
+        });
+    }
+
+    /**
+     * Actually performs the respawn after fade-to-black completes.
+     */
+    private void doRespawn() {
+        // Reload the current level (with title card)
+        levelManager.loadCurrentLevel();
+
+        // Start fade-from-black to reveal the title card
+        FadeManager.getInstance().startFadeFromBlack(null);
+
+        LOGGER.info("Respawned player, entering title card");
+    }
+
+    /**
+     * Starts the fade-to-black transition for next act.
+     */
+    private void startNextActFade() {
+        LOGGER.info("Starting fade-to-black for next act");
+
+        // Stop current music
+        AudioManager.getInstance().stopMusic();
+
+        // Start fade-to-black, then load next act when complete
+        FadeManager.getInstance().startFadeToBlack(() -> {
+            doNextAct();
+        });
+    }
+
+    /**
+     * Actually loads the next act after fade-to-black completes.
+     */
+    private void doNextAct() {
+        try {
+            levelManager.nextAct();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load next act", e);
+        }
+
+        // Start fade-from-black to reveal the title card
+        FadeManager.getInstance().startFadeFromBlack(null);
+
+        LOGGER.info("Loaded next act");
+    }
+
+    /**
+     * Starts the fade-to-black transition for next zone.
+     */
+    private void startNextZoneFade() {
+        LOGGER.info("Starting fade-to-black for next zone");
+
+        // Stop current music
+        AudioManager.getInstance().stopMusic();
+
+        // Start fade-to-black, then load next zone when complete
+        FadeManager.getInstance().startFadeToBlack(() -> {
+            doNextZone();
+        });
+    }
+
+    /**
+     * Actually loads the next zone after fade-to-black completes.
+     */
+    private void doNextZone() {
+        try {
+            levelManager.nextZone();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load next zone", e);
+        }
+
+        // Start fade-from-black to reveal the title card
+        FadeManager.getInstance().startFadeFromBlack(null);
+
+        LOGGER.info("Loaded next zone");
     }
 
     /**

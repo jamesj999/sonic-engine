@@ -122,6 +122,11 @@ public class LevelManager {
     private int titleCardZone = -1;
     private int titleCardAct = -1;
 
+    // Transition request flags (for fade-coordinated transitions)
+    private boolean respawnRequested;
+    private boolean nextActRequested;
+    private boolean nextZoneRequested;
+
     // Background rendering support
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
     private boolean useShaderBackground = true; // Feature flag for shader background
@@ -1928,5 +1933,59 @@ public class LevelManager {
             }
         }
         LOGGER.fine("Reloaded " + paletteCount + " level palettes");
+    }
+
+    // ==================== Transition Request Methods ====================
+    // These allow GameLoop to coordinate fades with level transitions
+
+    /**
+     * Request a respawn (death). GameLoop will handle the fade transition.
+     */
+    public void requestRespawn() {
+        this.respawnRequested = true;
+    }
+
+    /**
+     * Check and consume respawn request.
+     * @return true if respawn was requested
+     */
+    public boolean consumeRespawnRequest() {
+        boolean requested = respawnRequested;
+        respawnRequested = false;
+        return requested;
+    }
+
+    /**
+     * Request transition to next act. GameLoop will handle the fade transition.
+     */
+    public void requestNextAct() {
+        this.nextActRequested = true;
+    }
+
+    /**
+     * Check and consume next act request.
+     * @return true if next act was requested
+     */
+    public boolean consumeNextActRequest() {
+        boolean requested = nextActRequested;
+        nextActRequested = false;
+        return requested;
+    }
+
+    /**
+     * Request transition to next zone. GameLoop will handle the fade transition.
+     */
+    public void requestNextZone() {
+        this.nextZoneRequested = true;
+    }
+
+    /**
+     * Check and consume next zone request.
+     * @return true if next zone was requested
+     */
+    public boolean consumeNextZoneRequest() {
+        boolean requested = nextZoneRequested;
+        nextZoneRequested = false;
+        return requested;
     }
 }

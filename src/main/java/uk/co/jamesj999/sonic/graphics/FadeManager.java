@@ -183,7 +183,10 @@ public class FadeManager {
         this.state = FadeState.FADING_TO_BLACK;
         this.fadeType = FadeType.BLACK;
         this.frameCount = 0;
-        this.fadeAlpha = 0f;
+        // For black fade, fadeR/G/B represent "darkness" (0 = full color, 1 = no color)
+        this.fadeR = 0f;
+        this.fadeG = 0f;
+        this.fadeB = 0f;
         this.onFadeComplete = onComplete;
         this.holdDuration = holdFrames;
         this.holdFrameCount = 0;
@@ -199,7 +202,10 @@ public class FadeManager {
         this.state = FadeState.FADING_FROM_BLACK;
         this.fadeType = FadeType.BLACK;
         this.frameCount = 0;
-        this.fadeAlpha = 1f;
+        // Start at full darkness (all channels suppressed)
+        this.fadeR = 1f;
+        this.fadeG = 1f;
+        this.fadeB = 1f;
         this.onFadeComplete = onComplete;
         this.holdDuration = 0;
         this.holdFrameCount = 0;
@@ -304,13 +310,26 @@ public class FadeManager {
     private void updateFadeToBlack() {
         frameCount++;
 
-        // Black fade: all channels darken together (uniform fade)
-        // Increment alpha from 0 to 1 over FADE_DURATION frames
-        fadeAlpha = Math.min(1f, (float) frameCount / FADE_DURATION);
+        // Black fade: RGB channels decrement sequentially (like Sonic 2)
+        // Frames 1-7: Red decreases, Frames 8-14: Green decreases, Frames 15-21: Blue decreases
+        // fadeR/G/B represent "darkness" (0 = full color, 1 = no color)
+        if (frameCount <= FRAMES_PER_CHANNEL) {
+            // Increment red darkness
+            fadeR = Math.min(1f, fadeR + CHANNEL_INCREMENT);
+        } else if (frameCount <= FRAMES_PER_CHANNEL * 2) {
+            // Increment green darkness
+            fadeG = Math.min(1f, fadeG + CHANNEL_INCREMENT);
+        } else if (frameCount <= FADE_DURATION) {
+            // Increment blue darkness
+            fadeB = Math.min(1f, fadeB + CHANNEL_INCREMENT);
+        }
 
         // Check if fade is complete
         if (frameCount >= FADE_DURATION) {
-            fadeAlpha = 1f;
+            // Ensure we're at full black
+            fadeR = 1f;
+            fadeG = 1f;
+            fadeB = 1f;
 
             if (holdDuration > 0) {
                 // Transition to hold state
@@ -332,12 +351,25 @@ public class FadeManager {
     private void updateFadeFromBlack() {
         frameCount++;
 
-        // Reverse: decrement alpha from 1 to 0 over FADE_DURATION frames
-        fadeAlpha = Math.max(0f, 1f - (float) frameCount / FADE_DURATION);
+        // Reverse of fade-to-black: increment colors back (Blue first, then Green, then Red)
+        // Frames 1-7: Blue increases, Frames 8-14: Green increases, Frames 15-21: Red increases
+        if (frameCount <= FRAMES_PER_CHANNEL) {
+            // Decrement blue darkness
+            fadeB = Math.max(0f, fadeB - CHANNEL_INCREMENT);
+        } else if (frameCount <= FRAMES_PER_CHANNEL * 2) {
+            // Decrement green darkness
+            fadeG = Math.max(0f, fadeG - CHANNEL_INCREMENT);
+        } else if (frameCount <= FADE_DURATION) {
+            // Decrement red darkness
+            fadeR = Math.max(0f, fadeR - CHANNEL_INCREMENT);
+        }
 
         // Check if fade is complete
         if (frameCount >= FADE_DURATION) {
-            fadeAlpha = 0f;
+            // Ensure we're at zero (no overlay)
+            fadeR = 0f;
+            fadeG = 0f;
+            fadeB = 0f;
             completeFade();
         }
     }
@@ -430,36 +462,52 @@ public class FadeManager {
     }
 
     /**
-     * Render black fade using alpha blending.
-     * Uses fixed-function pipeline for simplicity.
+     * Render black fade using subtractive blending with shader.
+     * Uses sequential per-channel darkening like Sonic 2:
+     * - Each color's red channel decreases first, then green, then blue
+     * - fadeR/G/B represent how much to subtract from each channel (0 to 1)
      */
     private void renderBlackFade(GL2 gl) {
-        // Skip if alpha is zero (nothing to render)
-        if (fadeAlpha == 0f) {
+        // Skip if no darkness (nothing to render)
+        if (fadeR == 0f && fadeG == 0f && fadeB == 0f) {
+            return;
+        }
+
+        // Skip if no shader available
+        if (fadeShader == null) {
             return;
         }
 
         // Save OpenGL state
         gl.glPushAttrib(GL2.GL_ALL_ATTRIB_BITS);
 
-        // Set up alpha blending: result = src*alpha + dst*(1-alpha)
+        // Set up subtractive blending: result = dst - src
+        // This subtracts our fade color from the screen
         gl.glEnable(GL2.GL_BLEND);
-        gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+        gl.glBlendEquation(GL2.GL_FUNC_REVERSE_SUBTRACT);
+        gl.glBlendFunc(GL2.GL_ONE, GL2.GL_ONE);
 
-        // Disable depth test and texturing, use fixed-function
+        // Disable depth test and texturing
         gl.glDisable(GL2.GL_DEPTH_TEST);
         gl.glDisable(GL2.GL_TEXTURE_2D);
-        gl.glUseProgram(0);
 
-        // Set black color with current alpha
-        gl.glColor4f(0f, 0f, 0f, fadeAlpha);
+        // Use fade shader
+        fadeShader.use(gl);
+
+        // Set the fade color uniform (amount to subtract per channel)
+        if (fadeColorLocation < 0) {
+            fadeColorLocation = gl.glGetUniformLocation(fadeShader.getProgramId(), "FadeColor");
+        }
+        if (fadeColorLocation >= 0) {
+            gl.glUniform3f(fadeColorLocation, fadeR, fadeG, fadeB);
+        }
 
         // Save and reset modelview matrix
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glPushMatrix();
         gl.glLoadIdentity();
 
-        // Draw fullscreen black quad
+        // Draw fullscreen quad
         gl.glBegin(GL2.GL_QUADS);
         gl.glVertex2f(0, 0);
         gl.glVertex2f(320, 0);
@@ -469,6 +517,12 @@ public class FadeManager {
 
         // Restore modelview matrix
         gl.glPopMatrix();
+
+        // Stop using shader
+        fadeShader.stop(gl);
+
+        // Reset blend equation to default (additive)
+        gl.glBlendEquation(GL2.GL_FUNC_ADD);
 
         // Restore OpenGL state
         gl.glPopAttrib();

@@ -798,10 +798,11 @@ public class PlayableSpriteMovementManager extends
 			sprite.startDeathCountdown();
 		}
 
-		// Tick death countdown and trigger level reload when it reaches 0
+		// Tick death countdown and trigger respawn request when it reaches 0
+		// GameLoop will handle the fade-to-black transition before respawning
 		if (sprite.tickDeathCountdown()) {
 			uk.co.jamesj999.sonic.game.GameStateManager.getInstance().loseLife();
-			uk.co.jamesj999.sonic.level.LevelManager.getInstance().loadCurrentLevel();
+			uk.co.jamesj999.sonic.level.LevelManager.getInstance().requestRespawn();
 		}
 	}
 
