@@ -21,6 +21,7 @@ import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.timer.TimerManager;
+import uk.co.jamesj999.sonic.graphics.FadeManager;
 
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -188,7 +189,8 @@ public class GameLoop {
             // This allows Sonic to settle onto the ground while title card is visible,
             // preventing camera jitter when title card ends
             spriteCollisionManager.updateWithoutInput();
-            camera.updatePosition();
+            // Force camera to snap to player position during title card (no smooth scrolling)
+            camera.updatePosition(true);
         } else {
             // Check if a title card was requested (new level loaded)
             if (levelManager.consumeTitleCardRequest()) {
@@ -312,9 +314,16 @@ public class GameLoop {
 
     /**
      * Enters results screen with a specific ring count (for debug).
+     * Uses fade-to-white transition like the normal path.
      */
     private void enterResultsScreenWithDebugRings(boolean emeraldCollected, int ringsCollected) {
         if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        // Don't start another fade if one is already in progress
+        FadeManager fadeManager = FadeManager.getInstance();
+        if (fadeManager.isActive()) {
             return;
         }
 
@@ -330,6 +339,18 @@ public class GameLoop {
             LOGGER.info("DEBUG: Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
         }
 
+        // Start fade-to-white, then show results when complete
+        fadeManager.startFadeToWhite(() -> {
+            doEnterResultsScreenDebug();
+        });
+
+        LOGGER.info("DEBUG: Starting fade-to-white to exit Special Stage");
+    }
+
+    /**
+     * Actually enters the results screen after fade-to-white completes (debug version).
+     */
+    private void doEnterResultsScreenDebug() {
         // Reset special stage manager
         specialStageManager.reset();
 
@@ -351,6 +372,9 @@ public class GameLoop {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
         }
 
+        // Start fade-from-white to reveal the results screen
+        FadeManager.getInstance().startFadeFromWhite(null);
+
         LOGGER.info("DEBUG: Entered Special Stage Results Screen (rings=" + ssRingsCollected +
                 ", emerald=" + ssEmeraldCollected + ")");
     }
@@ -358,20 +382,47 @@ public class GameLoop {
     /**
      * Enters the special stage from level mode.
      * Uses GameStateManager to track which stage to enter (cycles 0-6).
+     * Performs fade-to-white transition before entering.
      */
     public void enterSpecialStage() {
         if (currentGameMode != GameMode.LEVEL) {
             return;
         }
 
+        // Don't start another fade if one is already in progress
+        FadeManager fadeManager = FadeManager.getInstance();
+        if (fadeManager.isActive()) {
+            return;
+        }
+
+        // Play special stage entry sound
+        AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
+
+        // Stop the current music (original game fades it out)
+        AudioManager.getInstance().stopMusic();
+
+        // Save camera position for when we return
+        savedCameraX = camera.getX();
+        savedCameraY = camera.getY();
+
+        // Determine which stage to enter
         GameStateManager gsm = GameStateManager.getInstance();
-        int stageIndex = gsm.consumeCurrentSpecialStageIndexAndAdvance();
+        final int stageIndex = gsm.consumeCurrentSpecialStageIndexAndAdvance();
 
+        // Start fade-to-white, then enter special stage when complete
+        fadeManager.startFadeToWhite(() -> {
+            doEnterSpecialStage(stageIndex);
+        });
+
+        LOGGER.info("Starting fade-to-white for Special Stage " + (stageIndex + 1));
+    }
+
+    /**
+     * Actually enters the special stage after fade-to-white completes.
+     * Called by the fade callback.
+     */
+    private void doEnterSpecialStage(int stageIndex) {
         try {
-            // Save camera position for when we return
-            savedCameraX = camera.getX();
-            savedCameraY = camera.getY();
-
             specialStageManager.reset();
             specialStageManager.initialize(stageIndex);
 
@@ -389,6 +440,9 @@ public class GameLoop {
                 gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
             }
 
+            // Start fade-from-white to reveal the special stage
+            FadeManager.getInstance().startFadeFromWhite(null);
+
             LOGGER.info("Entered Special Stage " + (stageIndex + 1) + " (H32 mode: 256x224)");
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize Special Stage " + (stageIndex + 1), e);
@@ -397,10 +451,17 @@ public class GameLoop {
 
     /**
      * Enters the results screen after special stage completion/failure.
+     * Performs fade-to-white transition before showing results.
      * @param emeraldCollected true if an emerald was collected
      */
     private void enterResultsScreen(boolean emeraldCollected) {
         if (currentGameMode != GameMode.SPECIAL_STAGE) {
+            return;
+        }
+
+        // Don't start another fade if one is already in progress
+        FadeManager fadeManager = FadeManager.getInstance();
+        if (fadeManager.isActive()) {
             return;
         }
 
@@ -416,6 +477,18 @@ public class GameLoop {
             LOGGER.info("Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
         }
 
+        // Start fade-to-white, then show results when complete
+        fadeManager.startFadeToWhite(() -> {
+            doEnterResultsScreen();
+        });
+
+        LOGGER.info("Starting fade-to-white to exit Special Stage");
+    }
+
+    /**
+     * Actually enters the results screen after fade-to-white completes.
+     */
+    private void doEnterResultsScreen() {
         // Reset special stage manager
         specialStageManager.reset();
 
@@ -437,23 +510,52 @@ public class GameLoop {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
         }
 
+        // Start fade-from-white to reveal the results screen
+        FadeManager.getInstance().startFadeFromWhite(null);
+
         LOGGER.info("Entered Special Stage Results Screen (rings=" + ssRingsCollected +
                 ", emerald=" + ssEmeraldCollected + ")");
     }
 
     /**
      * Exits the results screen and shows the title card before returning to the level.
+     * Performs fade-to-black transition before showing title card.
      */
     private void exitResultsScreen() {
         if (currentGameMode != GameMode.SPECIAL_STAGE_RESULTS) {
             return;
         }
 
+        // Don't start another fade if one is already in progress
+        FadeManager fadeManager = FadeManager.getInstance();
+        if (fadeManager.isActive()) {
+            return;
+        }
+
+        // Play the special stage exit sound (same as entry sound)
+        AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
+
+        // Start fade-to-black, then show title card when complete
+        fadeManager.startFadeToBlack(() -> {
+            doExitResultsScreen();
+        });
+
+        LOGGER.info("Starting fade-to-black to exit Results Screen");
+    }
+
+    /**
+     * Actually exits the results screen after fade-to-black completes.
+     */
+    private void doExitResultsScreen() {
         // Clean up results screen
         resultsScreen = null;
 
         // Restore level palettes (special stage overwrites them) - needed for title card
         levelManager.reloadLevelPalettes();
+
+        // Consume any pending title card request to prevent double title card
+        // (we're manually entering the title card below)
+        levelManager.consumeTitleCardRequest();
 
         // Set flag so exitTitleCard knows to restore checkpoint state
         returningFromSpecialStage = true;
@@ -463,19 +565,61 @@ public class GameLoop {
         int actIndex = levelManager.getCurrentAct();
         enterTitleCardFromResults(zoneIndex, actIndex);
 
+        // Start fade-from-black to reveal the title card
+        FadeManager.getInstance().startFadeFromBlack(null);
+
         LOGGER.info("Exited Results Screen, entering Title Card for zone " + zoneIndex + " act " + actIndex);
     }
 
     /**
      * Enters the title card from the results screen context.
      * Similar to enterTitleCard but allows entry from SPECIAL_STAGE_RESULTS mode.
+     * Restores the player to their checkpoint position before showing title card.
      */
     private void enterTitleCardFromResults(int zoneIndex, int actIndex) {
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.TITLE_CARD;
 
+        // Restore camera position saved when entering special stage
+        camera.setX(savedCameraX);
+        camera.setY(savedCameraY);
+
+        // Restore player to checkpoint state BEFORE title card starts
+        // This prevents the player from falling/dying during the title card animation
+        String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+        if (mainCode == null) mainCode = "sonic";
+        var sprite = spriteManager.getSprite(mainCode);
+        if (sprite instanceof AbstractPlayableSprite playable) {
+            CheckpointState checkpointState = levelManager.getCheckpointState();
+
+            if (checkpointState != null && checkpointState.isActive()) {
+                checkpointState.restoreToPlayer(playable, camera);
+            }
+
+            // Freeze all movement during title card
+            playable.setXSpeed((short) 0);
+            playable.setYSpeed((short) 0);
+            playable.setGSpeed((short) 0);
+            playable.setAir(false);
+            // Clear death/hurt state to prevent dying during title card
+            playable.setDead(false);
+            playable.setHurt(false);
+            playable.setDeathCountdown(0);
+            playable.setInvulnerableFrames(0);
+            playable.setRolling(false);
+
+            // Reset rings to 0 when returning from special stage
+            LevelGamestate gamestate = levelManager.getLevelGamestate();
+            if (gamestate != null) {
+                gamestate.setRings(0);
+            }
+        }
+
         // Initialize the title card manager
         titleCardManager.initialize(zoneIndex, actIndex);
+
+        // Snap camera to player position
+        camera.updatePosition(true);
 
         // Start zone music immediately when title card begins (not at the end)
         int zoneMusicId = levelManager.getCurrentLevelMusicId();
@@ -552,31 +696,9 @@ public class GameLoop {
         // Reset title card manager
         titleCardManager.reset();
 
-        String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-        if (mainCode == null) mainCode = "sonic";
-        var sprite = spriteManager.getSprite(mainCode);
-
         if (returningFromSpecialStage) {
-            // Returning from special stage - restore checkpoint state
+            // Returning from special stage - checkpoint was already restored in enterTitleCardFromResults()
             returningFromSpecialStage = false;
-
-            // Restore camera position
-            camera.setX(savedCameraX);
-            camera.setY(savedCameraY);
-
-            if (sprite instanceof AbstractPlayableSprite playable) {
-                CheckpointState checkpointState = levelManager.getCheckpointState();
-
-                if (checkpointState != null && checkpointState.isActive()) {
-                    checkpointState.restoreToPlayer(playable, camera);
-                }
-
-                LevelGamestate gamestate = levelManager.getLevelGamestate();
-                if (gamestate != null) {
-                    gamestate.setRings(0);
-                }
-            }
-
             LOGGER.info("Exited Title Card, returned to level from special stage at checkpoint");
         } else {
             // Normal title card exit (level start)

@@ -34,11 +34,16 @@ public class GraphicsManager {
 	private GL2 graphics;
 	private ShaderProgram shaderProgram;
 	private ShaderProgram debugShaderProgram;
+	private ShaderProgram fadeShaderProgram;
 	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
 	private static final String PARALLAX_SHADER_PATH = "shaders/shader_parallax_bg.glsl";
+	private static final String FADE_SHADER_PATH = "shaders/shader_fade.glsl";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
+
+	// Fade manager for screen transitions
+	private FadeManager fadeManager;
 
 	// Batched rendering support
 	private boolean batchingEnabled = true;
@@ -65,6 +70,11 @@ public class GraphicsManager {
 		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load shaders
 		this.shaderProgram.cacheUniformLocations(gl); // Cache uniform locations for fast access
 		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
+		this.fadeShaderProgram = new ShaderProgram(gl, FADE_SHADER_PATH);
+
+		// Initialize fade manager with shader
+		this.fadeManager = FadeManager.getInstance();
+		this.fadeManager.setFadeShader(this.fadeShaderProgram);
 	}
 
 	/**
@@ -409,6 +419,14 @@ public class GraphicsManager {
 		if (debugShaderProgram != null) {
 			debugShaderProgram.cleanup(graphics);
 		}
+		if (fadeShaderProgram != null) {
+			fadeShaderProgram.cleanup(graphics);
+		}
+		// Reset fade manager
+		if (fadeManager != null) {
+			fadeManager.cancel();
+			fadeManager = null;
+		}
 	}
 
 	/**
@@ -446,6 +464,23 @@ public class GraphicsManager {
 
 	public ShaderProgram getDebugShaderProgram() {
 		return debugShaderProgram;
+	}
+
+	public ShaderProgram getFadeShaderProgram() {
+		return fadeShaderProgram;
+	}
+
+	/**
+	 * Get the fade manager for screen transitions.
+	 */
+	public FadeManager getFadeManager() {
+		if (fadeManager == null) {
+			fadeManager = FadeManager.getInstance();
+			if (fadeShaderProgram != null) {
+				fadeManager.setFadeShader(fadeShaderProgram);
+			}
+		}
+		return fadeManager;
 	}
 
 	public GL2 getGraphics() {

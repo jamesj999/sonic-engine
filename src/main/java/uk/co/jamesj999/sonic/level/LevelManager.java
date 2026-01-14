@@ -1715,8 +1715,9 @@ public class LevelManager {
                 }
             }
 
-            // Request title card for fresh level starts (not from checkpoint, not respawn)
-            if (showTitleCard && !hasCheckpoint) {
+            // Request title card for level starts and death respawns
+            // Original Sonic 2 shows title card on all respawns (with or without checkpoint)
+            if (showTitleCard) {
                 requestTitleCard(currentZone, currentAct);
             }
 

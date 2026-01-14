@@ -12,6 +12,7 @@ import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
 import uk.co.jamesj999.sonic.debug.DebugState;
+import uk.co.jamesj999.sonic.graphics.FadeManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -380,9 +381,21 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glDisable(GL2.GL_COLOR_MATERIAL);
 		gl.glColorMask(true, true, true, true);
 		update();
+
+		// Update fade manager for screen transitions
+		FadeManager fadeManager = graphicsManager.getFadeManager();
+		if (fadeManager != null) {
+			fadeManager.update();
+		}
+
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
+
+		// Render screen fade overlay if active (after all game rendering)
+		if (fadeManager != null && fadeManager.isActive()) {
+			fadeManager.render(gl);
+		}
 
 		// Only show debug overlay in level mode, not during special stage
 		if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
