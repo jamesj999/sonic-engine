@@ -69,6 +69,9 @@ public class GameLoop {
     private int ssStageIndex;
     private int resultsFrameCounter = 0;
 
+    // Flag to track when returning from special stage (for title card exit handling)
+    private boolean returningFromSpecialStage = false;
+
     // Listener for game mode changes (used by Engine to update projection)
     private GameModeChangeListener gameModeChangeListener;
 
@@ -434,7 +437,7 @@ public class GameLoop {
     }
 
     /**
-     * Exits the results screen and returns to the level.
+     * Exits the results screen and shows the title card before returning to the level.
      */
     private void exitResultsScreen() {
         if (currentGameMode != GameMode.SPECIAL_STAGE_RESULTS) {
@@ -444,46 +447,35 @@ public class GameLoop {
         // Clean up results screen
         resultsScreen = null;
 
-        GameMode oldMode = currentGameMode;
-        currentGameMode = GameMode.LEVEL;
-
-        // Restore level palettes (special stage overwrites them)
+        // Restore level palettes (special stage overwrites them) - needed for title card
         levelManager.reloadLevelPalettes();
 
-        // Restore camera position
-        camera.setX(savedCameraX);
-        camera.setY(savedCameraY);
+        // Set flag so exitTitleCard knows to restore checkpoint state
+        returningFromSpecialStage = true;
 
-        String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-        if (mainCode == null) mainCode = "sonic";
-        var sprite = spriteManager.getSprite(mainCode);
+        // Enter title card mode for the current zone/act
+        int zoneIndex = levelManager.getCurrentZone();
+        int actIndex = levelManager.getCurrentAct();
+        enterTitleCardFromResults(zoneIndex, actIndex);
 
-        if (sprite instanceof AbstractPlayableSprite playable) {
-            CheckpointState checkpointState = levelManager.getCheckpointState();
+        LOGGER.info("Exited Results Screen, entering Title Card for zone " + zoneIndex + " act " + actIndex);
+    }
 
-            if (checkpointState != null && checkpointState.isActive()) {
-                checkpointState.restoreToPlayer(playable, camera);
-            }
+    /**
+     * Enters the title card from the results screen context.
+     * Similar to enterTitleCard but allows entry from SPECIAL_STAGE_RESULTS mode.
+     */
+    private void enterTitleCardFromResults(int zoneIndex, int actIndex) {
+        GameMode oldMode = currentGameMode;
+        currentGameMode = GameMode.TITLE_CARD;
 
-            LevelGamestate gamestate = levelManager.getLevelGamestate();
-            if (gamestate != null) {
-                gamestate.setRings(0);
-            }
-        }
-
-        // Restore zone music
-        int zoneMusicId = levelManager.getCurrentLevelMusicId();
-        if (zoneMusicId >= 0) {
-            AudioManager.getInstance().playMusic(zoneMusicId);
-            LOGGER.fine("Restored zone music: 0x" + Integer.toHexString(zoneMusicId));
-        }
+        // Initialize the title card manager
+        titleCardManager.initialize(zoneIndex, actIndex);
 
         // Notify listener of mode change
         if (gameModeChangeListener != null) {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
         }
-
-        LOGGER.info("Exited Results Screen, returned to level at checkpoint");
     }
 
     /**
@@ -544,33 +536,65 @@ public class GameLoop {
         // Reset title card manager
         titleCardManager.reset();
 
-        // Restore camera position to player (title card rendering sets camera to 0,0)
         String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
         if (mainCode == null) mainCode = "sonic";
         var sprite = spriteManager.getSprite(mainCode);
-        if (sprite instanceof AbstractPlayableSprite playable) {
-            // Reset player state again to ensure clean start
-            playable.setXSpeed((short) 0);
-            playable.setYSpeed((short) 0);
-            playable.setGSpeed((short) 0);
-            playable.setAir(false);
-            playable.setDead(false);
-            playable.setHurt(false);
-            playable.setDeathCountdown(0);
-            playable.setInvulnerableFrames(0);
-            playable.setRolling(false);
 
-            // Snap camera to player position
-            camera.setFocusedSprite(playable);
-            camera.updatePosition(true);
+        if (returningFromSpecialStage) {
+            // Returning from special stage - restore checkpoint state
+            returningFromSpecialStage = false;
+
+            // Restore camera position
+            camera.setX(savedCameraX);
+            camera.setY(savedCameraY);
+
+            if (sprite instanceof AbstractPlayableSprite playable) {
+                CheckpointState checkpointState = levelManager.getCheckpointState();
+
+                if (checkpointState != null && checkpointState.isActive()) {
+                    checkpointState.restoreToPlayer(playable, camera);
+                }
+
+                LevelGamestate gamestate = levelManager.getLevelGamestate();
+                if (gamestate != null) {
+                    gamestate.setRings(0);
+                }
+            }
+
+            // Restore zone music
+            int zoneMusicId = levelManager.getCurrentLevelMusicId();
+            if (zoneMusicId >= 0) {
+                AudioManager.getInstance().playMusic(zoneMusicId);
+                LOGGER.fine("Restored zone music: 0x" + Integer.toHexString(zoneMusicId));
+            }
+
+            LOGGER.info("Exited Title Card, returned to level from special stage at checkpoint");
+        } else {
+            // Normal title card exit (level start)
+            if (sprite instanceof AbstractPlayableSprite playable) {
+                // Reset player state to ensure clean start
+                playable.setXSpeed((short) 0);
+                playable.setYSpeed((short) 0);
+                playable.setGSpeed((short) 0);
+                playable.setAir(false);
+                playable.setDead(false);
+                playable.setHurt(false);
+                playable.setDeathCountdown(0);
+                playable.setInvulnerableFrames(0);
+                playable.setRolling(false);
+
+                // Snap camera to player position
+                camera.setFocusedSprite(playable);
+                camera.updatePosition(true);
+            }
+
+            LOGGER.info("Exited Title Card, starting level");
         }
 
         // Notify listener of mode change
         if (gameModeChangeListener != null) {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
         }
-
-        LOGGER.info("Exited Title Card, starting level");
     }
 
     /**
