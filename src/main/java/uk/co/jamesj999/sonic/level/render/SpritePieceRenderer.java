@@ -50,8 +50,7 @@ public final class SpritePieceRenderer {
             }
 
             int pieceX = originX + pieceXOffset;
-            // PatternRenderCommand treats drawY as the bottom of a tile; mapping offsets are top-based.
-            int pieceY = originY + pieceYOffset + Pattern.PATTERN_HEIGHT;
+            int pieceY = originY + pieceYOffset;
             int paletteIndex = piece.paletteIndex() != 0 ? piece.paletteIndex() : defaultPaletteIndex;
 
             for (int ty = 0; ty < heightTiles; ty++) {

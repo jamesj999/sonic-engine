@@ -312,7 +312,7 @@ public class DebugObjectArtViewer {
                     return;
                 }
                 int drawX = baseX + (col * Pattern.PATTERN_WIDTH);
-                int drawY = baseY + (row * Pattern.PATTERN_HEIGHT) + Pattern.PATTERN_HEIGHT;
+                int drawY = baseY + (row * Pattern.PATTERN_HEIGHT);
                 renderer.drawPatternIndex(index, drawX, drawY, paletteIndex);
                 index++;
             }

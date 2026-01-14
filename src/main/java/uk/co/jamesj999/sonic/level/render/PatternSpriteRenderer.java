@@ -182,7 +182,7 @@ public class PatternSpriteRenderer {
                     }
 
                     int drawX = piece.xOffset() + (srcX * Pattern.PATTERN_WIDTH);
-                    int drawY = piece.yOffset() + Pattern.PATTERN_HEIGHT + (srcY * Pattern.PATTERN_HEIGHT);
+                    int drawY = piece.yOffset() + (srcY * Pattern.PATTERN_HEIGHT);
 
                     int tileMinX = patternBounds.minX();
                     int tileMaxX = patternBounds.maxX();
@@ -199,12 +199,16 @@ public class PatternSpriteRenderer {
                     int pieceMaxX = drawX + tileMaxX;
                     int pieceMinY;
                     int pieceMaxY;
+                    // Y coordinates are now top-based (drawY is top of pattern)
                     if (piece.vFlip()) {
-                        pieceMinY = drawY - (Pattern.PATTERN_HEIGHT - 1) + tileMinY;
-                        pieceMaxY = drawY - (Pattern.PATTERN_HEIGHT - 1) + tileMaxY;
+                        // When flipped, row 0 becomes row 7, etc.
+                        int flippedMinY = Pattern.PATTERN_HEIGHT - 1 - tileMaxY;
+                        int flippedMaxY = Pattern.PATTERN_HEIGHT - 1 - tileMinY;
+                        pieceMinY = drawY + flippedMinY;
+                        pieceMaxY = drawY + flippedMaxY;
                     } else {
-                        pieceMinY = drawY - tileMaxY;
-                        pieceMaxY = drawY - tileMinY;
+                        pieceMinY = drawY + tileMinY;
+                        pieceMaxY = drawY + tileMaxY;
                     }
 
                     if (first) {

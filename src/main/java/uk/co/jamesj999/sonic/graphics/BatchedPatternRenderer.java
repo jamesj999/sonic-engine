@@ -91,7 +91,9 @@ public class BatchedPatternRenderer {
         }
 
         // Convert Y to screen coordinates (flip Y axis)
-        int screenY = screenHeight - y;
+        // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height (8)
+        // to get the OpenGL Y coordinate for the bottom of the quad
+        int screenY = screenHeight - y - 8;
 
         // Compute the 4 corners of the quad
         float x0 = x;

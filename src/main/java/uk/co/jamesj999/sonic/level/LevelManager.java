@@ -448,7 +448,7 @@ public class LevelManager {
                     PatternDesc pDesc = new PatternDesc();
                     pDesc.setPaletteIndex(Engine.debugOption.ordinal());
                     pDesc.setPatternIndex(count);
-                    graphicsManager.renderPattern(pDesc, x, y + Pattern.PATTERN_HEIGHT);
+                    graphicsManager.renderPattern(pDesc, x, y);
                     count++;
                 }
             }
@@ -474,9 +474,9 @@ public class LevelManager {
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
 
-        // Calculate drawing bounds, adjusted to include partially visible tiles
+        // Calculate drawing bounds
         int drawX = cameraX;
-        int drawY = cameraY + Pattern.PATTERN_HEIGHT;
+        int drawY = cameraY;
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
         int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
@@ -1075,8 +1075,7 @@ public class LevelManager {
                 PatternDesc newPatternDesc = new PatternDesc(newIndex);
 
                 int drawX = x + (cX * Pattern.PATTERN_WIDTH);
-                // PatternRenderCommand treats drawY as the bottom of a tile.
-                int drawY = y + (cY * Pattern.PATTERN_HEIGHT) + Pattern.PATTERN_HEIGHT;
+                int drawY = y + (cY * Pattern.PATTERN_HEIGHT);
 
                 if (hScroll != null) {
                     int line = screenY + (cY * Pattern.PATTERN_HEIGHT);

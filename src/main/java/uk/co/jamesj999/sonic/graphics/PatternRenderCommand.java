@@ -54,7 +54,9 @@ public class PatternRenderCommand implements GLCommandable {
         this.paletteTextureId = paletteTextureId;
         this.desc = desc;
         this.x = x;
-        this.y = SCREEN_HEIGHT - y;
+        // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height (8)
+        // to get the OpenGL Y coordinate for the bottom of the quad
+        this.y = SCREEN_HEIGHT - y - 8;
     }
 
     /**

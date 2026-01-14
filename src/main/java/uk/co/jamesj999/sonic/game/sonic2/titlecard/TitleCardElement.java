@@ -176,7 +176,6 @@ public class TitleCardElement {
     public static TitleCardElement createZoneName(int zoneIndex) {
         int frameIndex = TitleCardMappings.getZoneFrame(zoneIndex);
         // From disassembly: start=320+128=448 (VDP), target=160, y=56, delay=0x1B (27)
-        // VDP offset of 128 is already removed in plan
         return new TitleCardElement(frameIndex, 448, 160, 56, 0x1B, 0x80);
     }
 
@@ -223,7 +222,6 @@ public class TitleCardElement {
      */
     public static TitleCardElement createLeftSwoosh() {
         // From disassembly: start=0, target=112, y=112, delay=0x15 (21)
-        // Adjusted Y by +8 to match visual reference
-        return new TitleCardElement(TitleCardMappings.FRAME_RED_STRIPES, 0, 112, 120, 0x15, 8);
+        return new TitleCardElement(TitleCardMappings.FRAME_RED_STRIPES, 0, 112, 112, 0x15, 8);
     }
 }
