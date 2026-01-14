@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
+import uk.co.jamesj999.sonic.game.sonic2.titlecard.TitleCardManager;
 import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -52,6 +53,7 @@ public class GameLoop {
     private final TimerManager timerManager = TimerManager.getInstance();
     private final LevelManager levelManager = LevelManager.getInstance();
     private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
+    private final TitleCardManager titleCardManager = TitleCardManager.getInstance();
 
     private InputHandler inputHandler;
     private GameMode currentGameMode = GameMode.LEVEL;
@@ -173,7 +175,19 @@ public class GameLoop {
                     exitResultsScreen();
                 }
             }
+        } else if (currentGameMode == GameMode.TITLE_CARD) {
+            // Update title card animation
+            titleCardManager.update();
+            if (titleCardManager.isComplete()) {
+                exitTitleCard();
+            }
         } else {
+            // Check if a title card was requested (new level loaded)
+            if (levelManager.consumeTitleCardRequest()) {
+                enterTitleCard(levelManager.getTitleCardZone(), levelManager.getTitleCardAct());
+                return; // Skip normal level update this frame
+            }
+
             boolean freezeForArtViewer = DebugOverlayManager.getInstance()
                     .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
             if (!freezeForArtViewer) {
@@ -470,6 +484,101 @@ public class GameLoop {
         }
 
         LOGGER.info("Exited Results Screen, returned to level at checkpoint");
+    }
+
+    /**
+     * Enters the title card for the current zone/act.
+     * Called when a level first loads or after player respawns.
+     *
+     * @param zoneIndex Zone index (0-10)
+     * @param actIndex  Act index (0-2)
+     */
+    public void enterTitleCard(int zoneIndex, int actIndex) {
+        if (currentGameMode != GameMode.LEVEL) {
+            return;
+        }
+
+        GameMode oldMode = currentGameMode;
+        currentGameMode = GameMode.TITLE_CARD;
+
+        // Freeze the player during title card - full state reset
+        String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+        if (mainCode == null) mainCode = "sonic";
+        var sprite = spriteManager.getSprite(mainCode);
+        if (sprite instanceof AbstractPlayableSprite playable) {
+            // Freeze all movement
+            playable.setXSpeed((short) 0);
+            playable.setYSpeed((short) 0);
+            playable.setGSpeed((short) 0);
+            playable.setAir(false);
+            // Clear death/hurt state to prevent dying during title card
+            playable.setDead(false);
+            playable.setHurt(false);
+            playable.setDeathCountdown(0);
+            playable.setInvulnerableFrames(0);
+            playable.setRolling(false);
+        }
+
+        // Initialize the title card manager
+        titleCardManager.initialize(zoneIndex, actIndex);
+
+        // Notify listener of mode change
+        if (gameModeChangeListener != null) {
+            gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
+        }
+
+        LOGGER.info("Entered Title Card for zone " + zoneIndex + " act " + actIndex);
+    }
+
+    /**
+     * Exits the title card and returns to level mode.
+     */
+    private void exitTitleCard() {
+        if (currentGameMode != GameMode.TITLE_CARD) {
+            return;
+        }
+
+        GameMode oldMode = currentGameMode;
+        currentGameMode = GameMode.LEVEL;
+
+        // Reset title card manager
+        titleCardManager.reset();
+
+        // Restore camera position to player (title card rendering sets camera to 0,0)
+        String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+        if (mainCode == null) mainCode = "sonic";
+        var sprite = spriteManager.getSprite(mainCode);
+        if (sprite instanceof AbstractPlayableSprite playable) {
+            // Reset player state again to ensure clean start
+            playable.setXSpeed((short) 0);
+            playable.setYSpeed((short) 0);
+            playable.setGSpeed((short) 0);
+            playable.setAir(false);
+            playable.setDead(false);
+            playable.setHurt(false);
+            playable.setDeathCountdown(0);
+            playable.setInvulnerableFrames(0);
+            playable.setRolling(false);
+
+            // Snap camera to player position
+            camera.setFocusedSprite(playable);
+            camera.updatePosition(true);
+        }
+
+        // Notify listener of mode change
+        if (gameModeChangeListener != null) {
+            gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
+        }
+
+        LOGGER.info("Exited Title Card, starting level");
+    }
+
+    /**
+     * Gets the title card manager (for rendering).
+     * @return the title card manager
+     */
+    public TitleCardManager getTitleCardManager() {
+        return titleCardManager;
     }
 
     /**

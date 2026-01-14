@@ -8,6 +8,9 @@ public enum GameMode {
     /** Normal level gameplay (Emerald Hill, Chemical Plant, etc.) */
     LEVEL,
 
+    /** Title card display before level starts */
+    TITLE_CARD,
+
     /** Sonic 2 Special Stage (halfpipe ring collection) */
     SPECIAL_STAGE,
 

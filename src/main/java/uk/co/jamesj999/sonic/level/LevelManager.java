@@ -118,6 +118,9 @@ public class LevelManager {
     private LevelGamestate levelGamestate;
 
     private boolean specialStageRequestedFromCheckpoint;
+    private boolean titleCardRequested;
+    private int titleCardZone = -1;
+    private int titleCardAct = -1;
 
     // Background rendering support
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
@@ -1610,7 +1613,27 @@ public class LevelManager {
         lostRingManager.spawnLostRings(player, count, frameCounter);
     }
 
+    /**
+     * Loads the current level with title card.
+     * Use this for fresh level starts (zone/act changes).
+     */
     public void loadCurrentLevel() {
+        loadCurrentLevel(true);
+    }
+
+    /**
+     * Loads the current level for death respawn (no title card).
+     */
+    public void respawnPlayer() {
+        loadCurrentLevel(false);
+    }
+
+    /**
+     * Loads the current level with optional title card.
+     *
+     * @param showTitleCard true to show title card on fresh starts, false for death respawns
+     */
+    private void loadCurrentLevel(boolean showTitleCard) {
         try {
             LevelData levelData = levels.get(currentZone).get(currentAct);
 
@@ -1687,6 +1710,11 @@ public class LevelManager {
                     camera.setMinY((short) currentLevel.getMinY());
                     camera.setMaxY((short) currentLevel.getMaxY());
                 }
+            }
+
+            // Request title card for fresh level starts (not from checkpoint, not respawn)
+            if (showTitleCard && !hasCheckpoint) {
+                requestTitleCard(currentZone, currentAct);
             }
 
         } catch (IOException e) {
@@ -1788,6 +1816,57 @@ public class LevelManager {
         boolean requested = specialStageRequestedFromCheckpoint;
         specialStageRequestedFromCheckpoint = false;
         return requested;
+    }
+
+    /**
+     * Requests a title card to be shown for the current zone/act.
+     * Called when a new level is loaded.
+     *
+     * @param zone Zone index (0-10)
+     * @param act  Act index (0-2)
+     */
+    public void requestTitleCard(int zone, int act) {
+        this.titleCardRequested = true;
+        this.titleCardZone = zone;
+        this.titleCardAct = act;
+    }
+
+    /**
+     * Checks if a title card has been requested.
+     *
+     * @return true if a title card was requested since last check
+     */
+    public boolean isTitleCardRequested() {
+        return titleCardRequested;
+    }
+
+    /**
+     * Consumes and clears the title card request flag.
+     *
+     * @return true if a title card was requested since last check
+     */
+    public boolean consumeTitleCardRequest() {
+        boolean requested = titleCardRequested;
+        titleCardRequested = false;
+        return requested;
+    }
+
+    /**
+     * Gets the zone index for the requested title card.
+     *
+     * @return zone index, or -1 if none requested
+     */
+    public int getTitleCardZone() {
+        return titleCardZone;
+    }
+
+    /**
+     * Gets the act index for the requested title card.
+     *
+     * @return act index, or -1 if none requested
+     */
+    public int getTitleCardAct() {
+        return titleCardAct;
     }
 
     /**

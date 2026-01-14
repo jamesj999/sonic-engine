@@ -21,6 +21,7 @@ import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.game.GameMode;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
+import uk.co.jamesj999.sonic.game.sonic2.titlecard.TitleCardManager;
 
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
@@ -236,6 +237,16 @@ public class Engine extends GLCanvas implements GLEventListener {
 							com.jogamp.opengl.GL2.GL_LINES, commands));
 				}
 			}
+		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {
+			// Render title card
+			TitleCardManager titleCardManager = gameLoop.getTitleCardManager();
+			if (titleCardManager != null) {
+				// Reset camera to (0,0) for screen-space rendering
+				camera.setX((short) 0);
+				camera.setY((short) 0);
+
+				titleCardManager.draw();
+			}
 		} else if (!debugViewEnabled) {
 			levelManager.drawWithSpritePriority(spriteRenderManager);
 		} else {
@@ -346,6 +357,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 			gl.glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Black for special stage
 		} else if (getCurrentGameMode() == GameMode.SPECIAL_STAGE_RESULTS) {
 			gl.glClearColor(0.85f, 0.9f, 0.95f, 1.0f); // Light blue/white for results
+		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {
+			// Blue from reference: RGB(48, 87, 206)
+			gl.glClearColor(48.0f/255.0f, 87.0f/255.0f, 206.0f/255.0f, 1.0f);
 		} else {
 			levelManager.setClearColor(gl);
 		}
