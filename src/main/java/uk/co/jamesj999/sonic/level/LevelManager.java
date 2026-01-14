@@ -572,8 +572,6 @@ public class LevelManager {
 
         // Draw Foreground (Layer 0) high-priority pass - batched for performance
         graphicsManager.beginPatternBatch();
-        // Draw Foreground (Layer 0) high-priority pass - batched for performance
-        graphicsManager.beginPatternBatch();
         drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
         graphicsManager.flushPatternBatch();
 

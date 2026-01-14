@@ -166,6 +166,7 @@ public class TitleCardManager {
     private TitleCardElement actNumberElement;
     private TitleCardElement bottomBarElement;
     private TitleCardElement leftSwooshElement;
+    private TitleCardElement blueBackgroundElement;
 
     // Unified VRAM-aligned pattern array
     // Index = VRAM address - VRAM_BASE
@@ -236,11 +237,13 @@ public class TitleCardManager {
         zoneTextElement = TitleCardElement.createZoneText();
         bottomBarElement = TitleCardElement.createBottomBar();
         leftSwooshElement = TitleCardElement.createLeftSwoosh();
+        blueBackgroundElement = TitleCardElement.createBlueBackground();
 
         elements.add(zoneNameElement);
         elements.add(zoneTextElement);
         elements.add(bottomBarElement);
         elements.add(leftSwooshElement);
+        elements.add(blueBackgroundElement);  // Blue background animates with other elements
 
         // Only add act number for multi-act zones
         if (!TitleCardMappings.isSingleActZone(currentZone)) {
@@ -498,6 +501,19 @@ public class TitleCardManager {
             return;
         }
 
+        // Draw black background during SLIDE_IN and DISPLAY states only.
+        // This covers the level graphics until the exit animation begins.
+        // Once SLIDE_OUT starts, the black background is removed so the
+        // level is visible behind the exiting title card elements.
+        if (state == TitleCardState.SLIDE_IN || state == TitleCardState.DISPLAY) {
+            graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
+                    uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
+                    -1,
+                    0.0f, 0.0f, 0.0f,  // Black
+                    0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+            ));
+        }
+
         // Draw background plane elements (yellow bottom, red left)
         // These are drawn before sprites, similar to how the VDP draws planes behind sprites
         drawBackgroundPlanes(graphicsManager);
@@ -533,26 +549,59 @@ public class TitleCardManager {
      * The red block follows the left swoosh animation.
      */
     private void drawBackgroundPlanes(GraphicsManager graphicsManager) {
+        // Draw blue top block - covers Y=0 to Y=152 (above yellow bar)
+        // Animates vertically from above screen
+        if (blueBackgroundElement != null && blueBackgroundElement.isVisible()) {
+            int blueY = blueBackgroundElement.getCurrentY();
+            int blueTop = blueY;
+            int blueBottom = blueY + 152;  // Blue box is 152 pixels tall
+
+            // Only draw if visible on screen
+            if (blueBottom > 0) {
+                // Blue color RGB(48, 87, 206) from original title card
+                graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
+                        uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
+                        -1,
+                        48.0f/255.0f, 87.0f/255.0f, 206.0f/255.0f,  // Title card blue
+                        0, blueTop, SCREEN_WIDTH, blueBottom
+                ));
+            }
+        }
+
         // Draw yellow bottom block - extends from Y=152 to bottom of screen (Y=224)
         // This is the yellow area that "SONIC THE HEDGEHOG" text sits on
-        // Yellow extends behind the left swoosh (from X=0) and has 8px padding above text
+        // Yellow covers full width when bar is at target, slides off with bar during exit
         if (bottomBarElement != null && bottomBarElement.isVisible()) {
             int barX = bottomBarElement.getCurrentX();
+            int targetX = 232;  // Bar's target X position
+            int barWidth = 0x48;  // 72 pixels
 
-            // Yellow extends from left edge to past right edge
-            // It animates with the bottom bar element
-            int yellowLeft = Math.min(0, barX - 0x48);  // From left edge or bar position
-            int yellowRight = SCREEN_WIDTH + 100;  // Extend past right edge during slide-in
-            int yellowTop = 152;  // 8px above text at Y=160
-            int yellowBottom = SCREEN_HEIGHT;  // Extend to bottom of screen
+            // Yellow left edge:
+            // - When bar is at/past target: left edge at 0 (full width)
+            // - When bar is moving out (past target going right): left edge follows bar
+            int yellowLeft;
+            if (barX <= targetX) {
+                // Bar is at or approaching target - full yellow coverage
+                yellowLeft = 0;
+            } else {
+                // Bar is moving out to the right - yellow follows
+                yellowLeft = barX - targetX;
+            }
 
-            // Yellow color (from Sonic 2 palette - bright yellow)
-            graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
-                    uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
-                    -1,
-                    1.0f, 1.0f, 0.0f,  // Bright yellow
-                    yellowLeft, yellowTop, yellowRight, yellowBottom
-            ));
+            // Yellow right edge always extends past screen
+            int yellowRight = SCREEN_WIDTH + 50;
+            int yellowTop = 152;
+            int yellowBottom = SCREEN_HEIGHT;
+
+            // Only draw if visible on screen
+            if (yellowLeft < SCREEN_WIDTH) {
+                graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
+                        uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
+                        -1,
+                        1.0f, 1.0f, 0.0f,  // Bright yellow
+                        yellowLeft, yellowTop, yellowRight, yellowBottom
+                ));
+            }
         }
 
         // Draw red left block - from X=0 to swoosh position, full height
@@ -560,14 +609,17 @@ public class TitleCardManager {
         if (leftSwooshElement != null && leftSwooshElement.isVisible()) {
             int redRight = leftSwooshElement.getCurrentX();
 
-            // Red from palette line 0 index 12 (0x000e): B=0, G=0, R=7
-            // MD format (0-7) to float: R=7/7=1.0, G=0, B=0
-            graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
-                    uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
-                    -1,
-                    1.0f, 0.0f, 0.0f,  // Pure red
-                    0, 0, redRight, SCREEN_HEIGHT
-            ));
+            // Only draw if visible on screen
+            if (redRight > 0) {
+                // Red from palette line 0 index 12 (0x000e): B=0, G=0, R=7
+                // MD format (0-7) to float: R=7/7=1.0, G=0, B=0
+                graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
+                        uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
+                        -1,
+                        1.0f, 0.0f, 0.0f,  // Pure red
+                        0, 0, redRight, SCREEN_HEIGHT
+                ));
+            }
         }
     }
 
@@ -580,6 +632,10 @@ public class TitleCardManager {
         }
 
         int frameIndex = element.getFrameIndex();
+        // Skip background-only elements (frameIndex == -1)
+        if (frameIndex < 0) {
+            return;
+        }
         TitleCardMappings.SpritePiece[] pieces = TitleCardMappings.getFrame(frameIndex);
 
         int centerX = element.getCurrentX();

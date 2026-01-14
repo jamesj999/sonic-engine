@@ -72,6 +72,9 @@ public class GameLoop {
     // Flag to track when returning from special stage (for title card exit handling)
     private boolean returningFromSpecialStage = false;
 
+    // Flag to force camera snap on first frame after title card (prevents jitter)
+    private boolean forceNextCameraUpdate = false;
+
     // Listener for game mode changes (used by Engine to update projection)
     private GameModeChangeListener gameModeChangeListener;
 
@@ -184,6 +187,12 @@ public class GameLoop {
             if (titleCardManager.isComplete()) {
                 exitTitleCard();
             }
+            // Use normal camera update during title card (not forced)
+            // Since the player is frozen, the camera will naturally settle to the correct
+            // position over the title card duration. This ensures no transition jitter
+            // when the title card ends because the camera is already at the exact position
+            // the normal update logic wants it to be.
+            camera.updatePosition();
         } else {
             // Check if a title card was requested (new level loaded)
             if (levelManager.consumeTitleCardRequest()) {
@@ -195,7 +204,13 @@ public class GameLoop {
                     .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
             if (!freezeForArtViewer) {
                 spriteCollisionManager.update(inputHandler);
-                camera.updatePosition();
+                // Force camera snap on first frame after title card to prevent jitter
+                if (forceNextCameraUpdate) {
+                    camera.updatePosition(true);
+                    forceNextCameraUpdate = false;
+                } else {
+                    camera.updatePosition();
+                }
                 levelManager.update();
 
                 // Check if a checkpoint star requested a special stage
@@ -472,6 +487,13 @@ public class GameLoop {
         // Initialize the title card manager
         titleCardManager.initialize(zoneIndex, actIndex);
 
+        // Start zone music immediately when title card begins (not at the end)
+        int zoneMusicId = levelManager.getCurrentLevelMusicId();
+        if (zoneMusicId >= 0) {
+            AudioManager.getInstance().playMusic(zoneMusicId);
+            LOGGER.fine("Started zone music at title card: 0x" + Integer.toHexString(zoneMusicId));
+        }
+
         // Notify listener of mode change
         if (gameModeChangeListener != null) {
             gameModeChangeListener.onGameModeChanged(oldMode, currentGameMode);
@@ -513,6 +535,10 @@ public class GameLoop {
 
         // Initialize the title card manager
         titleCardManager.initialize(zoneIndex, actIndex);
+
+        // Snap camera to player position immediately so it's correct from the start
+        // Normal updates during the title card will keep it settled
+        camera.updatePosition(true);
 
         // Notify listener of mode change
         if (gameModeChangeListener != null) {
@@ -561,33 +587,11 @@ public class GameLoop {
                 }
             }
 
-            // Restore zone music
-            int zoneMusicId = levelManager.getCurrentLevelMusicId();
-            if (zoneMusicId >= 0) {
-                AudioManager.getInstance().playMusic(zoneMusicId);
-                LOGGER.fine("Restored zone music: 0x" + Integer.toHexString(zoneMusicId));
-            }
-
             LOGGER.info("Exited Title Card, returned to level from special stage at checkpoint");
         } else {
             // Normal title card exit (level start)
-            if (sprite instanceof AbstractPlayableSprite playable) {
-                // Reset player state to ensure clean start
-                playable.setXSpeed((short) 0);
-                playable.setYSpeed((short) 0);
-                playable.setGSpeed((short) 0);
-                playable.setAir(false);
-                playable.setDead(false);
-                playable.setHurt(false);
-                playable.setDeathCountdown(0);
-                playable.setInvulnerableFrames(0);
-                playable.setRolling(false);
-
-                // Snap camera to player position
-                camera.setFocusedSprite(playable);
-                camera.updatePosition(true);
-            }
-
+            // Force camera snap on the next frame after physics runs to prevent jitter
+            forceNextCameraUpdate = true;
             LOGGER.info("Exited Title Card, starting level");
         }
 

@@ -101,15 +101,18 @@ public class GraphicsManager {
 	 * Flush all registered commands.
 	 */
 	public void flush() {
+		flushWithCamera(camera.getX(), camera.getY(), camera.getWidth(), camera.getHeight());
+	}
+
+	/**
+	 * Flush all registered commands with a specific camera position.
+	 * Use this for screen-space rendering by passing (0, 0) for camera position.
+	 */
+	public void flushWithCamera(short cameraX, short cameraY, short cameraWidth, short cameraHeight) {
 		if (headlessMode || commands.isEmpty() || graphics == null) {
 			commands.clear();
 			return;
 		}
-
-		short cameraX = camera.getX();
-		short cameraY = camera.getY();
-		short cameraWidth = camera.getWidth();
-		short cameraHeight = camera.getHeight();
 
 		// Reset pattern render state for new batch of commands
 		PatternRenderCommand.resetFrameState();
@@ -122,6 +125,39 @@ public class GraphicsManager {
 		PatternRenderCommand.cleanupFrameState(graphics);
 
 		commands.clear();
+	}
+
+	/**
+	 * Flush all registered commands in screen-space (camera at 0,0).
+	 * Used for overlays like title cards and results screens.
+	 */
+	public void flushScreenSpace() {
+		flushWithCamera((short) 0, (short) 0, camera.getWidth(), camera.getHeight());
+	}
+
+	/**
+	 * Reset OpenGL state for fixed-function rendering.
+	 * Call this between shader-based and fixed-function rendering phases.
+	 */
+	public void resetForFixedFunction() {
+		if (headlessMode || graphics == null) {
+			return;
+		}
+		// Ensure no shader is active
+		graphics.glUseProgram(0);
+		// Reset texture state
+		graphics.glActiveTexture(GL2.GL_TEXTURE0);
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+		graphics.glActiveTexture(GL2.GL_TEXTURE1);
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+		graphics.glActiveTexture(GL2.GL_TEXTURE0);
+		// Disable texturing for solid color drawing
+		graphics.glDisable(GL2.GL_TEXTURE_2D);
+		// Reset color to white
+		graphics.glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+		// Reset matrix
+		graphics.glMatrixMode(GL2.GL_MODELVIEW);
+		graphics.glLoadIdentity();
 	}
 
 	/**

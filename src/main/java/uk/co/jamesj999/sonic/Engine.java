@@ -238,14 +238,21 @@ public class Engine extends GLCanvas implements GLEventListener {
 				}
 			}
 		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {
-			// Render title card
+			// Draw level and sprites behind the title card (Sonic is already placed and frozen)
+			levelManager.drawWithSpritePriority(spriteRenderManager);
+
+			// Flush level commands with level camera position before switching to screen-space
+			graphicsManager.flush();
+
+			// Reset OpenGL state for fixed-function rendering (RECTI commands for background planes)
+			graphicsManager.resetForFixedFunction();
+
+			// Render title card overlay in screen-space (independent of camera)
 			TitleCardManager titleCardManager = gameLoop.getTitleCardManager();
 			if (titleCardManager != null) {
-				// Reset camera to (0,0) for screen-space rendering
-				camera.setX((short) 0);
-				camera.setY((short) 0);
-
 				titleCardManager.draw();
+				// Title card commands will be flushed with screen-space camera
+				graphicsManager.flushScreenSpace();
 			}
 		} else if (!debugViewEnabled) {
 			levelManager.drawWithSpritePriority(spriteRenderManager);
@@ -358,8 +365,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 		} else if (getCurrentGameMode() == GameMode.SPECIAL_STAGE_RESULTS) {
 			gl.glClearColor(0.85f, 0.9f, 0.95f, 1.0f); // Light blue/white for results
 		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {
-			// Blue from reference: RGB(48, 87, 206)
-			gl.glClearColor(48.0f/255.0f, 87.0f/255.0f, 206.0f/255.0f, 1.0f);
+			// Use level background color so the stage is visible behind the title card
+			levelManager.setClearColor(gl);
 		} else {
 			levelManager.setClearColor(gl);
 		}

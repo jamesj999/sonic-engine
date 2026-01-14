@@ -37,8 +37,17 @@ public class Camera {
 
 	public void updatePosition(boolean force) {
 		if (force) {
-			x = focusedSprite.getCentreX();
-			y = focusedSprite.getCentreY();
+			// Position camera so sprite is at the standard target position:
+			// X: 152 pixels from left edge (midpoint between 144-160 window)
+			// Y: 96 pixels from top edge (standard ground camera position)
+			x = (short) (focusedSprite.getCentreX() - 152);
+			y = (short) (focusedSprite.getCentreY() - 96);
+
+			// Apply bounds clamping
+			if (x < 0) x = 0;
+			if (y < 0) y = 0;
+			if (x > maxX) x = maxX;
+			if (y > maxY) y = maxY;
 			return;
 		}
 		if (frozen) {

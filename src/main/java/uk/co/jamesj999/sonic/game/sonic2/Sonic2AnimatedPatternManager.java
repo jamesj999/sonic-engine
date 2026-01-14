@@ -81,16 +81,19 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
 
     private int scanForTable(RomByteReader reader) {
         // We know EHZ data is at 0x3FF94.
-        // We seek a table where 'Word[0] + Address == 0x3FF94'.
+        // PLC_DYNANM has 2 entries per zone: routine pointer + data pointer (4 bytes/zone).
+        // EHZ data pointer is at Word[1] (offset 2), not Word[0].
+        // We seek a table where 'Word[1] + Address == 0x3FF94'.
         // Scan up to 0x70000 (Cover code and some data banks).
         for (int addr = 0; addr < 0x70000; addr += 2) {
             try {
-                int offset = (short) reader.readU16BE(addr); // Read as signed short (offset)
+                // Read the DATA pointer (second word, offset 2) not the routine pointer
+                int offset = (short) reader.readU16BE(addr + 2);
                 if (addr + offset == ANIMATED_EHZ_ADDR) {
-                    // Candidate validation: check Index 4 (MTZ) roughly points to known area?
-                    // MTZ ~ 0x3FFA8.
-                    int offset4 = (short) reader.readU16BE(addr + 4 * 2);
-                    if (addr + offset4 > 0x3FF94 && addr + offset4 < 0x41000) {
+                    // Candidate validation: check MTZ data pointer (zone 4) points to known area
+                    // MTZ data is at offset 4 * 4 + 2 = 18 bytes from table start
+                    int offsetMtz = (short) reader.readU16BE(addr + 4 * 4 + 2);
+                    if (addr + offsetMtz > 0x3FF94 && addr + offsetMtz < 0x41000) {
                         return addr;
                     }
                 }
@@ -119,7 +122,9 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
         }
 
         // Calculate absolute address from table
-        int pointerAddr = tableAddr + (listId.index * 2);
+        // PLC_DYNANM has 4 bytes per zone: routine pointer (2) + data pointer (2)
+        // We want the data pointer, so offset is zoneIndex * 4 + 2
+        int pointerAddr = tableAddr + (listId.index * 4) + 2;
         int offset = (short) reader.readU16BE(pointerAddr);
         int scriptAddr = tableAddr + offset;
 

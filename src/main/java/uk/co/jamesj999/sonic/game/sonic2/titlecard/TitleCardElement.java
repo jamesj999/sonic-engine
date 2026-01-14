@@ -24,18 +24,21 @@ public class TitleCardElement {
     private final int frameIndex;     // Mapping frame to render
     private final int startX;         // X position to start from / exit to
     private final int targetX;        // X position to slide to
-    private final int y;              // Y position (constant)
+    private final int startY;         // Y position to start from / exit to (for vertical animation)
+    private final int targetY;        // Y position to slide to (for vertical animation)
     private final int delayFrames;    // Frames to wait before appearing
     private final int widthPixels;    // Width for calculating exit position
+    private final boolean animatesVertically; // True if element animates in Y direction
 
     private int currentX;             // Current X position
+    private int currentY;             // Current Y position
     private int delayCounter;         // Countdown for appearance delay
     private boolean active;           // Has started animating
     private boolean atTarget;         // Has reached target position
     private boolean exited;           // Has exited screen
 
     /**
-     * Creates a new title card element.
+     * Creates a new title card element with horizontal animation only.
      *
      * @param frameIndex   Mapping frame index from TitleCardMappings
      * @param startX       X position to start from (and exit to)
@@ -46,12 +49,31 @@ public class TitleCardElement {
      */
     public TitleCardElement(int frameIndex, int startX, int targetX, int y,
                             int delayFrames, int widthPixels) {
+        this(frameIndex, startX, targetX, y, y, delayFrames, widthPixels, false);
+    }
+
+    /**
+     * Creates a new title card element with vertical animation.
+     *
+     * @param frameIndex   Mapping frame index from TitleCardMappings
+     * @param startX       X position (constant for vertical animation)
+     * @param targetX      X position (constant for vertical animation)
+     * @param startY       Y position to start from (and exit to)
+     * @param targetY      Y position to slide to
+     * @param delayFrames  Frames to wait before starting animation
+     * @param widthPixels  Width of element in pixels
+     * @param animatesVertically True if element animates vertically
+     */
+    public TitleCardElement(int frameIndex, int startX, int targetX, int startY, int targetY,
+                            int delayFrames, int widthPixels, boolean animatesVertically) {
         this.frameIndex = frameIndex;
         this.startX = startX;
         this.targetX = targetX;
-        this.y = y;
+        this.startY = startY;
+        this.targetY = targetY;
         this.delayFrames = delayFrames;
         this.widthPixels = widthPixels;
+        this.animatesVertically = animatesVertically;
 
         reset();
     }
@@ -61,6 +83,7 @@ public class TitleCardElement {
      */
     public void reset() {
         this.currentX = startX;
+        this.currentY = startY;
         this.delayCounter = delayFrames;
         this.active = false;
         this.atTarget = false;
@@ -84,14 +107,24 @@ public class TitleCardElement {
 
         // Move toward target
         if (!atTarget) {
-            int direction = Integer.compare(targetX, currentX);
-            currentX += direction * SLIDE_SPEED_IN;
-
-            // Check if reached or passed target
-            if ((direction > 0 && currentX >= targetX) ||
-                (direction < 0 && currentX <= targetX)) {
-                currentX = targetX;
-                atTarget = true;
+            if (animatesVertically) {
+                // Vertical animation
+                int direction = Integer.compare(targetY, currentY);
+                currentY += direction * SLIDE_SPEED_IN;
+                if ((direction > 0 && currentY >= targetY) ||
+                    (direction < 0 && currentY <= targetY)) {
+                    currentY = targetY;
+                    atTarget = true;
+                }
+            } else {
+                // Horizontal animation
+                int direction = Integer.compare(targetX, currentX);
+                currentX += direction * SLIDE_SPEED_IN;
+                if ((direction > 0 && currentX >= targetX) ||
+                    (direction < 0 && currentX <= targetX)) {
+                    currentX = targetX;
+                    atTarget = true;
+                }
             }
         }
     }
@@ -103,15 +136,25 @@ public class TitleCardElement {
     public void updateSlideOut() {
         if (exited) return;
 
-        // Move toward start position (exit)
-        int direction = Integer.compare(startX, currentX);
-        currentX += direction * SLIDE_SPEED_OUT;
-
-        // Check if reached or passed exit position
-        if ((direction > 0 && currentX >= startX) ||
-            (direction < 0 && currentX <= startX)) {
-            currentX = startX;
-            exited = true;
+        if (animatesVertically) {
+            // Vertical animation
+            int direction = Integer.compare(startY, currentY);
+            currentY += direction * SLIDE_SPEED_OUT;
+            if ((direction > 0 && currentY >= startY) ||
+                (direction < 0 && currentY <= startY)) {
+                currentY = startY;
+                exited = true;
+            }
+        } else {
+            // Horizontal animation
+            int direction = Integer.compare(startX, currentX);
+            currentX += direction * SLIDE_SPEED_OUT;
+            // Check if reached or passed exit position
+            if ((direction > 0 && currentX >= startX) ||
+                (direction < 0 && currentX <= startX)) {
+                currentX = startX;
+                exited = true;
+            }
         }
     }
 
@@ -151,10 +194,18 @@ public class TitleCardElement {
     }
 
     /**
-     * Gets the Y position.
+     * Gets the current Y position (for animated elements) or target Y (for static).
+     */
+    public int getCurrentY() {
+        return currentY;
+    }
+
+    /**
+     * Gets the target Y position.
+     * For backward compatibility with elements that don't animate vertically.
      */
     public int getY() {
-        return y;
+        return targetY;
     }
 
     /**
@@ -223,5 +274,19 @@ public class TitleCardElement {
     public static TitleCardElement createLeftSwoosh() {
         // From disassembly: start=0, target=112, y=112, delay=0x15 (21)
         return new TitleCardElement(TitleCardMappings.FRAME_RED_STRIPES, 0, 112, 112, 0x15, 8);
+    }
+
+    /**
+     * Creates the blue background element.
+     * Slides from top of screen, covers Y=0 to Y=152 (above yellow bar).
+     * This is a placeholder element - it has no sprite, just controls the blue box position.
+     *
+     * @return Blue background element
+     */
+    public static TitleCardElement createBlueBackground() {
+        // Blue box covers top portion (Y=0 to Y=152)
+        // Animates vertically from above screen (startY=-152) to visible (targetY=0)
+        // frameIndex -1 indicates this is a background-only element with no sprite
+        return new TitleCardElement(-1, 0, 0, -152, 0, 0, 0, true);
     }
 }
