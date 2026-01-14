@@ -3,8 +3,8 @@ package uk.co.jamesj999.sonic.debug;
 import java.awt.event.KeyEvent;
 
 public enum DebugOverlayToggle {
-    OVERLAY("Overlay", KeyEvent.VK_F1, true),
-    SHORTCUTS("Shortcuts", KeyEvent.VK_F2, true),
+    OVERLAY("Overlay", KeyEvent.VK_F1, false),
+    SHORTCUTS("Shortcuts", KeyEvent.VK_F2, false),
     PLAYER_PANEL("Player Panel", KeyEvent.VK_F3, true),
     SENSOR_LABELS("Sensor Labels", KeyEvent.VK_F4, true),
     OBJECT_LABELS("Object Labels", KeyEvent.VK_F5, true),
