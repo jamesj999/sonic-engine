@@ -58,4 +58,10 @@ public interface Level {
     int getMaxX();
     int getMinY();
     int getMaxY();
+
+    /**
+     * Returns the ROM zone index for this level.
+     * This is used by animated pattern/palette managers to look up zone-specific data.
+     */
+    int getZoneIndex();
 }

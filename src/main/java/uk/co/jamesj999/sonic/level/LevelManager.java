@@ -386,7 +386,7 @@ public class LevelManager {
             return;
         }
         try {
-            animatedPatternManager = provider.loadAnimatedPatternManager(level, currentZone);
+            animatedPatternManager = provider.loadAnimatedPatternManager(level, level.getZoneIndex());
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load animated patterns.", e);
             animatedPatternManager = null;
@@ -399,7 +399,7 @@ public class LevelManager {
             return;
         }
         try {
-            animatedPaletteManager = provider.loadAnimatedPaletteManager(level, currentZone);
+            animatedPaletteManager = provider.loadAnimatedPaletteManager(level, level.getZoneIndex());
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load animated palettes.", e);
             animatedPaletteManager = null;

@@ -72,9 +72,6 @@ public class GameLoop {
     // Flag to track when returning from special stage (for title card exit handling)
     private boolean returningFromSpecialStage = false;
 
-    // Flag to force camera snap on first frame after title card (prevents jitter)
-    private boolean forceNextCameraUpdate = false;
-
     // Listener for game mode changes (used by Engine to update projection)
     private GameModeChangeListener gameModeChangeListener;
 
@@ -187,11 +184,10 @@ public class GameLoop {
             if (titleCardManager.isComplete()) {
                 exitTitleCard();
             }
-            // Use normal camera update during title card (not forced)
-            // Since the player is frozen, the camera will naturally settle to the correct
-            // position over the title card duration. This ensures no transition jitter
-            // when the title card ends because the camera is already at the exact position
-            // the normal update logic wants it to be.
+            // Run physics during title card (like original game) but with no input
+            // This allows Sonic to settle onto the ground while title card is visible,
+            // preventing camera jitter when title card ends
+            spriteCollisionManager.updateWithoutInput();
             camera.updatePosition();
         } else {
             // Check if a title card was requested (new level loaded)
@@ -204,13 +200,7 @@ public class GameLoop {
                     .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
             if (!freezeForArtViewer) {
                 spriteCollisionManager.update(inputHandler);
-                // Force camera snap on first frame after title card to prevent jitter
-                if (forceNextCameraUpdate) {
-                    camera.updatePosition(true);
-                    forceNextCameraUpdate = false;
-                } else {
-                    camera.updatePosition();
-                }
+                camera.updatePosition();
                 levelManager.update();
 
                 // Check if a checkpoint star requested a special stage
@@ -590,8 +580,7 @@ public class GameLoop {
             LOGGER.info("Exited Title Card, returned to level from special stage at checkpoint");
         } else {
             // Normal title card exit (level start)
-            // Force camera snap on the next frame after physics runs to prevent jitter
-            forceNextCameraUpdate = true;
+            // Physics has been running during title card, so player is already settled
             LOGGER.info("Exited Title Card, starting level");
         }
 

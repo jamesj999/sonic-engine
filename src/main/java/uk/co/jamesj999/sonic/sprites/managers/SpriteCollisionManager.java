@@ -87,6 +87,30 @@ public class SpriteCollisionManager {
                 }
         }
 
+        /**
+         * Updates sprite physics without processing player input.
+         * Used during title card to let player settle onto ground while controls are locked.
+         * This matches original Sonic 2 behavior where physics runs continuously.
+         */
+        public void updateWithoutInput() {
+                frameCounter++;
+                Collection<Sprite> sprites = spriteManager.getAllSprites();
+
+                for (Sprite sprite : sprites) {
+                        if (sprite instanceof AbstractPlayableSprite) {
+                                AbstractPlayableSprite playable = (AbstractPlayableSprite) sprite;
+
+                                levelManager.applyPlaneSwitchers(playable);
+                                // Run physics with no input - gravity and collision still apply
+                                playable.getMovementManager()
+                                                .handleMovement(false, false, false, false, false, false);
+                                playable.getAnimationManager().update(frameCounter);
+                                playable.tickStatus();
+                                playable.endOfTick();
+                        }
+                }
+        }
+
         public synchronized static SpriteCollisionManager getInstance() {
                 if (spriteCollisionManager == null) {
                         spriteCollisionManager = new SpriteCollisionManager();
