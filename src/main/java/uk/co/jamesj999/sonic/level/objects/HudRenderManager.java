@@ -79,14 +79,14 @@ public class HudRenderManager {
         // GameStateManager.getInstance().getScore());
 
         // Draw Score
-        drawHudString(16, 16, "SCORE", hudPatternDesc);
+        drawHudString(16, 8, "SCORE", hudPatternDesc);
         // Score: Ones digit at 104.
         drawScore(GameStateManager.getInstance().getScore());
 
         // Draw Time
         boolean flashTime = levelGamestate.getTimer().shouldFlash();
-        drawHudString(16, 32, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
-        drawTime(56, 32, levelGamestate.getTimer().getDisplayTime());
+        drawHudString(16, 24, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
+        drawTime(56, 24, levelGamestate.getTimer().getDisplayTime());
 
         drawCores(levelGamestate.getRings(), levelGamestate.getTimer().getFlashCycle());
         drawLives(uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getLives());
@@ -95,8 +95,8 @@ public class HudRenderManager {
     private void drawCores(int rings, boolean flashCycle) {
         boolean flash = (rings == 0);
         PatternDesc desc = (flash && flashCycle) ? iconPatternDesc : hudPatternDesc;
-        drawHudString(16, 48, "RINGS", desc);
-        drawNumberRightAligned(64, 48, rings, 3);
+        drawHudString(16, 40, "RINGS", desc);
+        drawNumberRightAligned(64, 40, rings, 3);
     }
 
     private void drawScore(int score) {
@@ -113,7 +113,7 @@ public class HudRenderManager {
         // Yes, the original code double-drew "SCORE".
         // I will fix this cleanliness issue while I am here.
 
-        drawNumberRightAligned(64, 16, score, 6);
+        drawNumberRightAligned(64, 8, score, 6);
     }
 
     private void drawLives(int lives) {
@@ -122,7 +122,7 @@ public class HudRenderManager {
 
         // Base position for Lives HUD (Bottom Left)
         int baseX = 16;
-        int baseY = 208;
+        int baseY = 200;
 
         // Draw Icon (Sonic) - Palette 0 (iconPatternDesc)
         // 16x16 icon composed of 4 tiles in column-major order (0,1,2,3)
