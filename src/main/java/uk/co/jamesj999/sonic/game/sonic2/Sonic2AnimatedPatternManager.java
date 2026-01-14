@@ -47,24 +47,26 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
     }
 
     // Mirrors PLC_DYNANM table (1P only).
+    // Zones with Dynamic_Null/Animated_Null in the disassembly are marked NULL_LIST
+    // since they have no animated patterns.
     private static final AnimatedListId[] ZONE_LISTS = {
             AnimatedListId.EHZ, // 0 EHZ
-            AnimatedListId.LEV1, // 1 Zone 1 (unused)
-            AnimatedListId.WZ, // 2 WZ (unused)
-            AnimatedListId.LEV3, // 3 Zone 3 (unused)
+            AnimatedListId.NULL_LIST, // 1 Zone 1 (unused) - Dynamic_Null
+            AnimatedListId.NULL_LIST, // 2 WZ (unused) - Dynamic_Null
+            AnimatedListId.NULL_LIST, // 3 Zone 3 (unused) - Dynamic_Null
             AnimatedListId.MTZ, // 4 MTZ
             AnimatedListId.MTZ3, // 5 MTZ Act 3
-            AnimatedListId.WFZ, // 6 WFZ
+            AnimatedListId.NULL_LIST, // 6 WFZ - Dynamic_Null
             AnimatedListId.HTZ, // 7 HTZ
             AnimatedListId.HPZ, // 8 HPZ
-            AnimatedListId.LEV9, // 9 Zone 9 (unused)
+            AnimatedListId.NULL_LIST, // 9 Zone 9 (unused) - Dynamic_Null
             AnimatedListId.OOZ, // 10 OOZ
-            AnimatedListId.MCZ, // 11 MCZ
+            AnimatedListId.NULL_LIST, // 11 MCZ - Dynamic_Null
             AnimatedListId.CNZ, // 12 CNZ
             AnimatedListId.CPZ, // 13 CPZ
             AnimatedListId.DEZ, // 14 DEZ
             AnimatedListId.ARZ, // 15 ARZ
-            AnimatedListId.SCZ // 16 SCZ
+            AnimatedListId.NULL_LIST // 16 SCZ - Dynamic_Null
     };
 
     private final Level level;
