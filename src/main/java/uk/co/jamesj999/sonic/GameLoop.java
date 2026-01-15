@@ -61,10 +61,6 @@ public class GameLoop {
     private InputHandler inputHandler;
     private GameMode currentGameMode = GameMode.LEVEL;
 
-    // Saved camera position for returning from special stage
-    private short savedCameraX = 0;
-    private short savedCameraY = 0;
-
     // Special stage results screen
     private SpecialStageResultsScreenObjectInstance resultsScreen;
     private int ssRingsCollected;
@@ -418,10 +414,6 @@ public class GameLoop {
         // Stop the current music (original game fades it out)
         AudioManager.getInstance().stopMusic();
 
-        // Save camera position for when we return
-        savedCameraX = camera.getX();
-        savedCameraY = camera.getY();
-
         // Determine which stage to enter
         GameStateManager gsm = GameStateManager.getInstance();
         final int stageIndex = gsm.consumeCurrentSpecialStageIndexAndAdvance();
@@ -597,10 +589,6 @@ public class GameLoop {
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.TITLE_CARD;
 
-        // Restore camera position saved when entering special stage
-        camera.setX(savedCameraX);
-        camera.setY(savedCameraY);
-
         // Restore player to checkpoint state BEFORE title card starts
         // This prevents the player from falling/dying during the title card animation
         String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
@@ -610,7 +598,11 @@ public class GameLoop {
             CheckpointState checkpointState = levelManager.getCheckpointState();
 
             if (checkpointState != null && checkpointState.isActive()) {
+                // Restore player and camera position from checkpoint (ROM-accurate)
                 checkpointState.restoreToPlayer(playable, camera);
+            } else {
+                // No checkpoint - camera will follow player at level start position
+                camera.updatePosition(true);
             }
 
             // Freeze all movement during title card
@@ -634,9 +626,6 @@ public class GameLoop {
 
         // Initialize the title card manager
         titleCardManager.initialize(zoneIndex, actIndex);
-
-        // Snap camera to player position
-        camera.updatePosition(true);
 
         // Start zone music immediately when title card begins (not at the end)
         int zoneMusicId = levelManager.getCurrentLevelMusicId();
@@ -885,27 +874,5 @@ public class GameLoop {
         }
 
         specialStageManager.handleInput(heldButtons, pressedButtons);
-    }
-
-    /**
-     * Gets the saved camera X position (for special stage return).
-     */
-    public short getSavedCameraX() {
-        return savedCameraX;
-    }
-
-    /**
-     * Gets the saved camera Y position (for special stage return).
-     */
-    public short getSavedCameraY() {
-        return savedCameraY;
-    }
-
-    /**
-     * Sets the saved camera position. Used when entering special stage.
-     */
-    public void setSavedCameraPosition(short x, short y) {
-        this.savedCameraX = x;
-        this.savedCameraY = y;
     }
 }

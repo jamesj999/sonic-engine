@@ -74,11 +74,11 @@ public class CheckpointState {
         // Clear rings (ROM behavior)
         player.setRingCount(0);
 
-        // Camera position is set via setFocusedSprite which centers on the player
-        // The player position was already set above, so camera will follow
+        // Restore camera position directly from saved values (ROM-accurate)
         if (camera != null) {
+            camera.setX((short) savedCameraX);
+            camera.setY((short) savedCameraY);
             camera.setFocusedSprite(player);
-            camera.updatePosition(true); // Force camera to player position
 
             // Apply camera min X lock if subtype bit 7 was set
             if (cameraLock) {
@@ -106,15 +106,25 @@ public class CheckpointState {
         return savedY;
     }
 
+    public int getSavedCameraX() {
+        return savedCameraX;
+    }
+
+    public int getSavedCameraY() {
+        return savedCameraY;
+    }
+
     /**
-     * Restore checkpoint state from previously saved X/Y values.
+     * Restore checkpoint state from previously saved values.
      * Called after loadLevel() clears the state but we still need checkpoint for
      * respawn.
      */
-    public void restoreFromSaved(int x, int y, int checkpointIndex) {
+    public void restoreFromSaved(int x, int y, int cameraX, int cameraY, int checkpointIndex) {
         this.lastCheckpointIndex = checkpointIndex;
         this.savedX = x;
         this.savedY = y;
+        this.savedCameraX = cameraX;
+        this.savedCameraY = cameraY;
         LOGGER.fine("Restored checkpoint " + checkpointIndex + " state at (" + x + ", " + y + ")");
     }
 }

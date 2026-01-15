@@ -1645,6 +1645,8 @@ public class LevelManager {
             boolean hasCheckpoint = checkpointState != null && checkpointState.isActive();
             int checkpointX = hasCheckpoint ? checkpointState.getSavedX() : 0;
             int checkpointY = hasCheckpoint ? checkpointState.getSavedY() : 0;
+            int checkpointCameraX = hasCheckpoint ? checkpointState.getSavedCameraX() : 0;
+            int checkpointCameraY = hasCheckpoint ? checkpointState.getSavedCameraY() : 0;
             int checkpointIndex = hasCheckpoint ? checkpointState.getLastCheckpointIndex() : -1;
 
             loadLevel(levelData.getLevelIndex());
@@ -1652,7 +1654,7 @@ public class LevelManager {
             // Restore checkpoint state if we had an active checkpoint
             // (loadLevel clears it, but we need it for subsequent respawns)
             if (hasCheckpoint && checkpointState != null) {
-                checkpointState.restoreFromSaved(checkpointX, checkpointY, checkpointIndex);
+                checkpointState.restoreFromSaved(checkpointX, checkpointY, checkpointCameraX, checkpointCameraY, checkpointIndex);
             }
 
             frameCounter = 0;
