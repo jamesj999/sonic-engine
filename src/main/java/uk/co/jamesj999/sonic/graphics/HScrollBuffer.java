@@ -11,6 +11,13 @@ import java.nio.FloatBuffer;
  * 
  * The texture stores 224 entries (one per visible scanline), with each
  * entry containing the background X scroll offset normalized to -1..1.
+ * 
+ * IMPORTANT: Uses R32F format (32-bit float) instead of R16F because:
+ * - 16-bit half-float only has 11 significant bits of mantissa
+ * - At high scroll values (e.g., cameraX=25000), precision loss causes
+ * visible "jitter" as fractional positions are rounded
+ * - 32-bit float provides 23 bits of mantissa, sufficient for sub-pixel
+ * precision across the entire level range
  */
 public class HScrollBuffer {
 
@@ -42,11 +49,12 @@ public class HScrollBuffer {
         // Clamp to edge - shouldn't sample outside valid range
         gl.glTexParameteri(GL2.GL_TEXTURE_1D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
 
-        // Allocate texture with R16F format for normalized float values
+        // Allocate texture with R32F format for full precision
+        // R16F (half-float) only has 11 significant bits, causing jitter at high X
         gl.glTexImage1D(
                 GL2.GL_TEXTURE_1D,
                 0,
-                GL2.GL_R16F,
+                GL2.GL_R32F,
                 VISIBLE_LINES,
                 0,
                 GL2.GL_RED,

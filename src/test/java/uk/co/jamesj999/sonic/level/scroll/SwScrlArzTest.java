@@ -69,6 +69,40 @@ public class SwScrlArzTest {
     }
 
     @Test
+    public void testSmoothScrollingAtVeryHighX() {
+        // This test specifically targets the jitter bug that occurred at far-right
+        // positions due to insufficient GPU texture precision (R16F vs R32F).
+        // At X=25000+, the scroll values are large enough that half-float precision
+        // caused visible per-frame jumps in the background.
+
+        int startX = 25000;
+        handler.init(0, startX, 100);
+        handler.update(horizScrollBuf, startX, 100, 0, 0);
+
+        int lastBg = -1;
+        int maxJump = 0;
+
+        for (int x = startX; x < startX + 100; x++) {
+            handler.update(horizScrollBuf, x, 100, 0, 0);
+
+            // Get BG scroll from line 50 (in a graduated row)
+            int packed = horizScrollBuf[50];
+            short bg = (short) (packed & 0xFFFF);
+
+            if (lastBg != -1) {
+                int jump = Math.abs(bg - lastBg);
+                if (jump > maxJump)
+                    maxJump = jump;
+            }
+            lastBg = bg;
+        }
+
+        // Even at X=25000+, jumps should not exceed 3 pixels per frame
+        assertTrue("Scroll jitter at high X (max jump <= 3 pixels), got: " + maxJump,
+                maxJump <= 3);
+    }
+
+    @Test
     public void testConsistentScrollRatioAtDifferentPositions() {
         // The scroll ratio should be consistent regardless of X position
 
