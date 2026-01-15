@@ -124,6 +124,13 @@ public class Sonic2SpecialStagePalette {
     }
 
     /**
+     * Creates a Palette.Color from a 9-bit Genesis color value.
+     */
+    public static Palette.Color genesisColorToPaletteColor(int genesis) {
+        return genesisColorToRgb(genesis);
+    }
+
+    /**
      * Creates fallback palettes when ROM loading fails.
      * Uses a simple grayscale gradient for visibility.
      */

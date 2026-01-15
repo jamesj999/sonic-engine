@@ -18,6 +18,8 @@ import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObject
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
+
+import java.awt.event.KeyEvent;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.timer.TimerManager;
@@ -838,7 +840,32 @@ public class GameLoop {
     private void updateSpecialStageInput() {
         int leftKey = configService.getInt(SonicConfiguration.LEFT);
         int rightKey = configService.getInt(SonicConfiguration.RIGHT);
+        int upKey = configService.getInt(SonicConfiguration.UP);
+        int downKey = configService.getInt(SonicConfiguration.DOWN);
         int jumpKey = configService.getInt(SonicConfiguration.JUMP);
+
+        if (inputHandler.isKeyPressed(KeyEvent.VK_F4)) {
+            specialStageManager.toggleAlignmentTestMode();
+        }
+
+        if (specialStageManager.isAlignmentTestMode()) {
+            if (inputHandler.isKeyPressed(leftKey)) {
+                specialStageManager.adjustAlignmentOffset(-1);
+            }
+            if (inputHandler.isKeyPressed(rightKey)) {
+                specialStageManager.adjustAlignmentOffset(1);
+            }
+            if (inputHandler.isKeyPressed(upKey)) {
+                specialStageManager.adjustAlignmentSpeed(0.1);
+            }
+            if (inputHandler.isKeyPressed(downKey)) {
+                specialStageManager.adjustAlignmentSpeed(-0.1);
+            }
+            if (inputHandler.isKeyPressed(KeyEvent.VK_SPACE)) {
+                specialStageManager.toggleAlignmentStepMode();
+            }
+            return;
+        }
 
         int heldButtons = 0;
         int pressedButtons = 0;

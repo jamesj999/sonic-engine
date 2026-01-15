@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 
+import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.timer.Timer;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.timer.timers.SSInvulnerabilityTimer;
@@ -396,8 +398,9 @@ public class Sonic2SpecialStagePlayer {
         int sine = calcSine(jumpAngle);
         int cosine = calcCosine(jumpAngle);
 
-        xVel += (sine * JUMP_VELOCITY) >> 8;
-        yVel += (cosine * JUMP_VELOCITY) >> 7;
+        // Matches SSPlayer_Jump: x_vel uses cosine, y_vel uses sine.
+        xVel += (cosine * JUMP_VELOCITY) >> 8;
+        yVel += (sine * JUMP_VELOCITY) >> 7;
 
         statusJumping = true;
         routine = RoutineState.JUMPING;
@@ -412,6 +415,7 @@ public class Sonic2SpecialStagePlayer {
             swapPositionsFlag = !swapPositionsFlag;
         }
 
+        AudioManager.getInstance().playSfx(GameSound.JUMP);
         LOGGER.fine("Player jumped at angle " + angle + ", vel=(" + xVel + "," + yVel + ")");
     }
 
@@ -432,9 +436,9 @@ public class Sonic2SpecialStagePlayer {
         // Apply gravity AFTER using yVel for position update
         yVel += GRAVITY;
 
-        ssXPos = (int) (d2 >> 16);
+        ssXPos = (short) (d2 >> 16);
         ssXSub = (int) (d2 & 0xFFFF);
-        ssYPos = (int) (d3 >> 16);
+        ssYPos = (short) (d3 >> 16);
         ssYSub = (int) (d3 & 0xFFFF);
     }
 
@@ -450,47 +454,74 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void ssPlayerJumpAngle() {
-        int d2 = ssYPos;
-        int d3 = ssXPos;
+        int d2 = (short) ssYPos;
+        int d3 = (short) ssXPos;
 
         if (d2 < 0) {
-            d2 = -d2;
+            d2 = (short) -d2;
+            d3 = (short) ssXPos;
+
             if (d3 < 0) {
-                d3 = -d3;
-                if (d3 >= d2) {
-                    angle = 0x80 + ((d2 << 5) / d3);
-                } else {
-                    angle = 0xC0 - ((d3 << 5) / d2);
+                d3 = (short) -d3;
+                if (d3 < d2) {
+                    int div = divu16((d3 & 0xFFFF) << 5, d2);
+                    int val = (div - 0xC0) & 0xFFFF;
+                    angle = (short) -((short) val) & 0xFF;
+                    return;
                 }
-            } else {
-                if (d3 >= d2) {
-                    angle = 0x100 - ((d2 << 5) / d3);
-                } else {
-                    angle = 0xC0 + ((d3 << 5) / d2);
-                }
-            }
-        } else {
-            if (d2 == 0 && d3 == 0) {
-                angle = 0x40;
+
+                int div = divu16((d2 & 0xFFFF) << 5, d3);
+                angle = (div + 0x80) & 0xFF;
                 return;
             }
 
-            if (d3 < 0) {
-                d3 = -d3;
-                if (d3 >= d2) {
-                    angle = (d2 << 5) / d3;
-                } else {
-                    angle = 0x40 - ((d3 << 5) / d2);
-                }
-            } else {
-                if (d3 >= d2) {
-                    angle = ((d2 << 5) / d3);
-                } else {
-                    angle = 0x40 - ((d3 << 5) / d2);
-                }
+            if (d3 < d2) {
+                int div = divu16((d3 & 0xFFFF) << 5, d2);
+                angle = (div + 0xC0) & 0xFF;
+                return;
             }
+
+            int div = divu16((d2 & 0xFFFF) << 5, d3);
+            int val = (div - 0x100) & 0xFFFF;
+            angle = (short) -((short) val) & 0xFF;
+            return;
         }
-        angle &= 0xFF;
+
+        if (d3 < 0) {
+            d3 = (short) -d3;
+            if (d3 < d2) {
+                int div = divu16((d3 & 0xFFFF) << 5, d2);
+                angle = (div + 0x40) & 0xFF;
+                return;
+            }
+
+            int div = divu16((d2 & 0xFFFF) << 5, d3);
+            int val = (div - 0x80) & 0xFFFF;
+            angle = (short) -((short) val) & 0xFF;
+            return;
+        }
+
+        if (d2 == 0 && d3 == 0) {
+            angle = 0x40;
+            return;
+        }
+
+        if (d3 >= d2) {
+            angle = divu16((d2 & 0xFFFF) << 5, d3) & 0xFF;
+            return;
+        }
+
+        int div = divu16((d3 & 0xFFFF) << 5, d2);
+        int val = (div - 0x40) & 0xFFFF;
+        angle = (short) -((short) val) & 0xFF;
+    }
+
+    private int divu16(int numerator, int denominator) {
+        int denom = denominator & 0xFFFF;
+        if (denom == 0) {
+            return 0;
+        }
+        return (int) (((long) numerator & 0xFFFFFFFFL) / (long) denom);
     }
 
     private void ssPlayerDoLevelCollision() {

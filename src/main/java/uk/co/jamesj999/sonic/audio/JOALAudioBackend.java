@@ -435,6 +435,17 @@ public class JOALAudioBackend implements AudioBackend {
         currentSmps = null;
         currentMusicId = -1;
         clearMusicStack();
+        // Also stop any playing SFX to prevent them persisting across level transitions
+        if (sfxStream instanceof SmpsDriver sfxDriver) {
+            sfxDriver.stopAll();
+        }
+        sfxStream = null;
+        // Stop and cleanup WAV-based SFX sources
+        for (int source : sfxSources) {
+            al.alSourceStop(source);
+            al.alDeleteSources(1, new int[] { source }, 0);
+        }
+        sfxSources.clear();
     }
 
     @Override

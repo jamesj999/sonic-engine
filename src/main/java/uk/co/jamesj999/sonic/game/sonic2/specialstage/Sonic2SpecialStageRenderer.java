@@ -45,6 +45,11 @@ public class Sonic2SpecialStageRenderer {
     private Sonic2SpecialStageObjectManager objectManager;
     private Sonic2PerspectiveData perspectiveData;
 
+    // Shadow rendering (Phase 5)
+    private int shadowFlatPatternBase;   // Horizontal shadow art
+    private int shadowDiagPatternBase;   // Diagonal shadow art
+    private int shadowSidePatternBase;   // Vertical shadow art
+
     // Checkpoint system
     private Sonic2SpecialStageCheckpoint checkpoint;
 
@@ -134,6 +139,12 @@ public class Sonic2SpecialStageRenderer {
 
     public void setEmeraldPatternBase(int emeraldBase) {
         this.emeraldPatternBase = emeraldBase;
+    }
+
+    public void setShadowPatternBases(int flatBase, int diagBase, int sideBase) {
+        this.shadowFlatPatternBase = flatBase;
+        this.shadowDiagPatternBase = diagBase;
+        this.shadowSidePatternBase = sideBase;
     }
 
     public void setObjectManager(Sonic2SpecialStageObjectManager objectManager) {
@@ -539,8 +550,9 @@ public class Sonic2SpecialStageRenderer {
     }
 
     /**
-     * Renders all player sprites.
+     * Renders all player sprites with their shadows.
      * Players are sorted by priority (higher priority = drawn later = on top).
+     * Shadows are rendered first (behind players).
      */
     public void renderPlayers() {
         if (players.isEmpty()) {
@@ -552,6 +564,19 @@ public class Sonic2SpecialStageRenderer {
 
         graphicsManager.beginPatternBatch();
 
+        // Render shadows first (behind players)
+        // Only render shadows if shadow art is loaded (pattern base > 0)
+        if (shadowFlatPatternBase > 0 || shadowDiagPatternBase > 0 || shadowSidePatternBase > 0) {
+            for (Sonic2SpecialStagePlayer player : sortedPlayers) {
+                // Don't render shadow when invulnerability flash is active
+                if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
+                    continue;
+                }
+                renderPlayerShadow(player);
+            }
+        }
+
+        // Render players on top of shadows
         for (Sonic2SpecialStagePlayer player : sortedPlayers) {
             if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
                 continue;
@@ -648,6 +673,92 @@ public class Sonic2SpecialStageRenderer {
     }
 
     /**
+     * Renders the shadow for a single player.
+     * Shadow type and position are determined by player angle.
+     *
+     * Based on Obj63 from s2.asm - the shadow object that follows the player.
+     *
+     * @param player The player to render shadow for
+     */
+    private void renderPlayerShadow(Sonic2SpecialStagePlayer player) {
+        // Add H32 centering offset to match track rendering
+        final int H32_WIDTH = 256;
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
+
+        int playerX = SCREEN_CENTER_OFFSET + player.getXPos();
+        int playerY = player.getYPos();
+
+        // Get shadow info for player's current angle
+        Sonic2SpecialStageSpriteData.ShadowInfo shadowInfo =
+            Sonic2SpecialStageSpriteData.getPlayerShadowInfo(player.getAngle());
+
+        // Calculate shadow position with offsets
+        int shadowX = playerX + shadowInfo.xOffset;
+        int shadowY = playerY + shadowInfo.yOffset;
+
+        // Get the appropriate pattern base for this shadow type
+        int patternBase = getPatternBaseForShadowType(shadowInfo.type);
+
+        // Get shadow sprite pieces
+        Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
+            Sonic2SpecialStageSpriteData.getShadowPieces(shadowInfo.type, shadowInfo.sizeIndex);
+
+        // Shadow uses palette 0 (background palette which has dark colors)
+        // Note: disassembly says palette 3, but that results in white shadows
+        // Palette 0 has proper dark colors at the indices the shadow art uses
+        final int paletteIndex = 0;
+
+        // Render each sprite piece
+        for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
+            int pieceX = shadowInfo.xFlip ?
+                shadowX - piece.xOffset - (piece.widthTiles * TILE_SIZE) :
+                shadowX + piece.xOffset;
+            int pieceY = shadowY + piece.yOffset;
+
+            // Combine piece flip with shadow flip
+            boolean finalHFlip = piece.hFlip ^ shadowInfo.xFlip;
+
+            // Render all tiles in this piece (column-major order)
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    // Determine source tile based on flip state
+                    int srcCol = finalHFlip ? (piece.widthTiles - 1 - tx) : tx;
+                    int tileIndex = srcCol * piece.heightTiles + ty;
+                    int patternId = patternBase + piece.tileIndex + tileIndex;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(false);  // Shadow is low priority (behind player)
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(finalHFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
+    }
+
+    /**
+     * Gets the pattern base for a shadow type.
+     */
+    private int getPatternBaseForShadowType(Sonic2SpecialStageSpriteData.ShadowType type) {
+        switch (type) {
+            case FLAT:
+                return shadowFlatPatternBase;
+            case DIAGONAL:
+                return shadowDiagPatternBase;
+            case SIDE:
+                return shadowSidePatternBase;
+            default:
+                return shadowFlatPatternBase;
+        }
+    }
+
+    /**
      * Renders placeholder player sprites using patterns.
      * Uses distinctive colored patterns to represent each player.
      */
@@ -738,11 +849,18 @@ public class Sonic2SpecialStageRenderer {
 
     /**
      * Renders the START banner sprite using the real Obj5F frame0 sprite pieces.
+     * During WAIT1 phase, renders individual pieces flying off instead of the full banner.
      *
      * Mega Drive coordinate system: Y=0 is at the TOP of the screen.
      * intro.getBannerX()/getBannerY() are in that same space.
      */
     private void renderStartBanner(int screenCenterOffset) {
+        // Check if we should render flying pieces instead of full banner
+        if (intro.isBannerInFlyoutPhase()) {
+            renderBannerFlyout(screenCenterOffset);
+            return;
+        }
+
         int bannerX = intro.getBannerX();
         int bannerY = intro.getBannerY();
 
@@ -786,6 +904,82 @@ public class Sonic2SpecialStageRenderer {
     }
 
     /**
+     * Banner pieces for frames 2-8 (individual pieces that fly off).
+     * From obj5F_a.asm:
+     * - Frame 2: Left checkered at x=-$48 (4x4 tiles, tile 0)
+     * - Frame 3: S at x=-$28 (2x4 tiles, tile $10)
+     * - Frame 4: T at x=-$18 (2x4 tiles, tile $18)
+     * - Frame 5: A at x=-8 (2x4 tiles, tile $20)
+     * - Frame 6: R at x=8 (2x4 tiles, tile $28)
+     * - Frame 7: T at x=$18 (2x4 tiles, tile $18)
+     * - Frame 8: Right checkered at x=$28 (4x4 tiles, tile 0, h-flipped)
+     */
+    private static final SpritePiece[] BANNER_FRAMES = {
+        null, // frame 0 - not used for flyout
+        null, // frame 1 - not used for flyout
+        new SpritePiece(-0x48, 0, 4, 4, 0x00, false, false), // frame 2: left checkered
+        new SpritePiece(-0x28, 0, 2, 4, 0x10, false, false), // frame 3: S
+        new SpritePiece(-0x18, 0, 2, 4, 0x18, false, false), // frame 4: T
+        new SpritePiece(-0x08, 0, 2, 4, 0x20, false, false), // frame 5: A
+        new SpritePiece( 0x08, 0, 2, 4, 0x28, false, false), // frame 6: R
+        new SpritePiece( 0x18, 0, 2, 4, 0x18, false, false), // frame 7: T
+        new SpritePiece( 0x28, 0, 4, 4, 0x00, true,  false), // frame 8: right checkered (h-flipped)
+    };
+
+    /**
+     * Renders the START banner pieces during flyout animation.
+     * Each piece is rendered at its current animated position.
+     */
+    private void renderBannerFlyout(int screenCenterOffset) {
+        int bannerX = intro.getBannerX();
+        int bannerY = intro.getBannerY();
+
+        final int paletteIndex = 1;
+
+        for (Sonic2SpecialStageIntro.BannerLetter letter : intro.getBannerLetters()) {
+            if (!letter.visible) {
+                continue;
+            }
+
+            // Get the sprite piece definition for this frame
+            if (letter.frame < 2 || letter.frame > 8) {
+                continue;
+            }
+            SpritePiece piece = BANNER_FRAMES[letter.frame];
+            if (piece == null) {
+                continue;
+            }
+
+            // Calculate piece position based on animated letter position
+            // letter.x/y are offsets from banner center, plus the animated movement
+            int baseX = screenCenterOffset + bannerX + letter.x;
+            int baseY = bannerY + letter.y;
+
+            // Render the piece
+            for (int ty = 0; ty < piece.heightTiles; ty++) {
+                for (int tx = 0; tx < piece.widthTiles; tx++) {
+                    int localTx = piece.hFlip ? (piece.widthTiles - 1 - tx) : tx;
+                    int localTy = piece.vFlip ? (piece.heightTiles - 1 - ty) : ty;
+                    int patternOffset = piece.tileIndexOffset + localTx * piece.heightTiles + localTy;
+                    int patternId = startPatternBase + patternOffset;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(true);
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(piece.hFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = baseX + tx * TILE_SIZE;
+                    int tileScreenY = baseY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
+    }
+
+    /**
      * Tile offsets in SpecialMessages art for letters.
      * From obj5A.asm Map_obj5A mappings - each is a 1x2 tile piece (8x16 pixels).
      * These are stored interleaved: top tile then bottom tile.
@@ -817,10 +1011,18 @@ public class Sonic2SpecialStageRenderer {
      * Uses HUD patterns for digits (interleaved format like HudRenderManager).
      * Uses SpecialMessages art for text letters.
      *
+     * During flyout phase, renders each letter at its individual animated position.
+     *
      * Mega Drive coordinate system: Y=0 is at the TOP of the screen.
      * Original position from disasm: x=$54 for GET, digits centered, x=$84 for RINGS
      */
     private void renderRingMessage(int screenCenterOffset) {
+        // Check if we should use per-letter flyout rendering
+        if (intro.isInFlyoutPhase()) {
+            renderFlyoutLetters(screenCenterOffset);
+            return;
+        }
+
         int ringReq = intro.getRingRequirement();
 
         // Original positions from Obj5A_CreateRingReqMessage:
@@ -836,14 +1038,17 @@ public class Sonic2SpecialStageRenderer {
         renderMessageLetter(getX + 16, baseY, TILE_T, textPalette);
 
         // Render digits using HUD art (interleaved format like HudRenderManager)
-        // Position depends on digit count
+        // From s2.asm Obj5A_CreateRingReqMessage (line 71603-71606):
+        // - Least digit (ones) positioned at x=$80 for 3-digit, x=$78 for 2-digit
+        // - Digits printed right-to-left, subtracting 8 each time
+        // - Result: digits always start at x=$70 for tens/hundreds position
         int digitX;
         if (ringReq >= 100) {
-            digitX = screenCenterOffset + 0x80 - 12;
+            digitX = screenCenterOffset + 0x70;  // 3 digits: hundreds at 0x70, tens at 0x78, ones at 0x80
         } else if (ringReq >= 10) {
-            digitX = screenCenterOffset + 0x80 - 8;
+            digitX = screenCenterOffset + 0x70;  // 2 digits: tens at 0x70, ones at 0x78
         } else {
-            digitX = screenCenterOffset + 0x80 - 4;
+            digitX = screenCenterOffset + 0x78;  // 1 digit: at 0x78 (ones position)
         }
 
         // Hundreds digit
@@ -873,6 +1078,36 @@ public class Sonic2SpecialStageRenderer {
         renderMessageLetter(ringsX + 16, baseY, TILE_N, textPalette);
         renderMessageLetter(ringsX + 24, baseY, TILE_G, textPalette);
         renderMessageLetter(ringsX + 32, baseY, TILE_S, textPalette);
+    }
+
+    /**
+     * Renders the intro message letters during flyout animation.
+     * Each letter is rendered at its individual animated position.
+     *
+     * @param screenCenterOffset The H32 viewport offset
+     */
+    private void renderFlyoutLetters(int screenCenterOffset) {
+        final int textPalette = 1;   // Palette 1 for message text
+        final int digitPalette = 2;  // Palette 2 for HUD digits
+
+        for (Sonic2SpecialStageIntro.MessageLetter letter : intro.getMessageLetters()) {
+            if (!letter.visible) {
+                continue;
+            }
+
+            int screenX = screenCenterOffset + letter.x;
+            int screenY = letter.y;
+
+            // Check if this is a digit (negative tileOffset encodes digit value)
+            if (letter.tileOffset < 0) {
+                // Decode digit: -1 = 0, -2 = 1, ..., -10 = 9
+                int digit = -(letter.tileOffset + 1);
+                renderHudDigit(screenX, screenY, digit, digitPalette);
+            } else {
+                // Regular letter
+                renderMessageLetter(screenX, screenY, letter.tileOffset, textPalette);
+            }
+        }
     }
 
     /**
@@ -942,8 +1177,34 @@ public class Sonic2SpecialStageRenderer {
     // ========== Ring Counter HUD (Phase 4.6) ==========
 
     /**
+     * SpecialHUD art tile offsets from obj5E.asm mappings:
+     * - Tiles 0-4: " SONIC" label (4x1 + 1x1 tiles) - uses PALETTE 1
+     * - Tiles 5-9: "MILES" label (4x1 + 1x1 tiles) - uses PALETTE 2
+     * - Tiles $A-$11: "RING" part of RINGS (4x2 tiles = 8 tiles) - uses PALETTE 2
+     * - Tiles $3C-$3D: "S" suffix for RINGS (1x2 tiles) - uses PALETTE 2
+     * - Tiles $12-$25: Digits 0-9 (2 tiles each, interleaved)
+     *
+     * From obj5E.asm Map_obj5E_0008 (frame 0 = SONIC left side):
+     *   spritePiece -$60, $10, 4, 1, 0, 0, 0, 1, 1   ; " SON" - palette 1
+     *   spritePiece -$40, $10, 1, 1, 4, 0, 0, 1, 1   ; "IC"   - palette 1
+     *   spritePiece -$68, $18, 4, 2, $A, 0, 0, 2, 1  ; "RING" - palette 2
+     *   spritePiece -$48, $18, 1, 2, $3C, 0, 0, 2, 1 ; "S"    - palette 2
+     */
+    private static final int HUD_TILE_SONIC = 0x00;       // " SONIC" first 4 tiles
+    private static final int HUD_TILE_SONIC_END = 0x04;   // " SONIC" last tile
+    private static final int HUD_TILE_RING = 0x0A;        // "RING" - 4x2 tiles
+    private static final int HUD_TILE_S = 0x3C;           // "S" suffix - 1x2 tiles
+
+    /**
      * Renders the ring counter HUD during gameplay.
-     * Shows current ring count in the top-left area.
+     * Shows " SONIC" label on top with "RINGS XX" below, centered on screen.
+     *
+     * From obj5E.asm and Obj87: The original renders labels as sprites using
+     * Obj5E_MapUnc_7070 mappings, with digits from Obj87 using Obj5F_MapUnc_72D2.
+     *
+     * Palette assignments from spritePiece definitions:
+     * - " SONIC" uses palette 1 (Sonic's blue)
+     * - "RINGS" and digits use palette 2
      *
      * @param ringCount Current number of rings collected
      */
@@ -953,45 +1214,91 @@ public class Sonic2SpecialStageRenderer {
         final int H32_WIDTH = 256;
         final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
 
-        // Position: top-left corner with some padding
-        // Original SS HUD is at approximately y=16 from top
-        int baseX = SCREEN_CENTER_OFFSET + 16;
-        int baseY = 16;
+        // For single-player Sonic, from SSHUDLayout SSHUD_Sonic: X = $D4 (212)
+        // From obj5E mapping, pieces are offset from this center
+        // Adjusted by -6 for better centering in our viewport
+        final int objectCenterX = SCREEN_CENTER_OFFSET + 0xD4 - 6;  // 32 + 212 - 6 = 238
 
-        // Render "RINGS" label using message letters (optional - can be just digits)
-        // For now, just render the digit count
+        // Y positions from obj5E mapping (relative to object, which is at y=0 for HUD)
+        final int sonicY = 0x10;   // 16 - top row for " SONIC"
+        final int ringsY = 0x18;   // 24 - bottom row for "RINGS"
 
-        // Calculate number of digits to display (always at least 1)
-        int digitCount = 1;
-        if (ringCount >= 100) {
-            digitCount = 3;
-        } else if (ringCount >= 10) {
-            digitCount = 2;
-        }
+        // Palette assignments from spritePiece definitions
+        final int sonicPalette = 1;  // " SONIC" uses palette 1 (blue)
+        final int ringsPalette = 2;  // "RINGS" and digits use palette 2
 
-        // Position digits
-        int digitX = baseX;
-        int digitPalette = 2; // Use palette 2 for HUD digits
+        // ===== Render " SONIC" label (palette 1) =====
+        // From mapping: 4x1 at x=-$60 (-96) + 1x1 at x=-$40 (-64)
+        int sonicX1 = objectCenterX - 0x60;  // First 4 tiles at -96 offset
+        int sonicX2 = objectCenterX - 0x40;  // Last tile at -64 offset
+        renderHudLabel(sonicX1, sonicY, HUD_TILE_SONIC, 4, 1, sonicPalette);
+        renderHudLabel(sonicX2, sonicY, HUD_TILE_SONIC_END, 1, 1, sonicPalette);
+
+        // ===== Render "RINGS" label (palette 2) =====
+        // From mapping: "RING" 4x2 at x=-$68 (-104) + "S" 1x2 at x=-$48 (-72)
+        int ringX = objectCenterX - 0x68;    // "RING" at -104 offset
+        int sX = objectCenterX - 0x48;       // "S" at -72 offset
+        renderHudLabel(ringX, ringsY, HUD_TILE_RING, 4, 2, ringsPalette);
+        renderHudLabel(sX, ringsY, HUD_TILE_S, 1, 2, ringsPalette);
+
+        // ===== Render ring count digits (palette 2) =====
+        // Position digits after "RINGS" label with 4px spacer
+        // "S" ends at sX + 8, then add 4px gap
+        int digitX = sX + 8 + 4;  // 4px spacer after "S"
+        int digitY = 0x20;  // 32 - from Obj87
 
         // Hundreds digit
         if (ringCount >= 100) {
             int hundreds = (ringCount / 100) % 10;
-            renderHudDigit(digitX, baseY, hundreds, digitPalette);
+            renderHudDigit(digitX, digitY, hundreds, ringsPalette);
             digitX += 8;
         }
 
-        // Tens digit (show as 0 if >= 10)
+        // Tens digit (show if >= 10)
         if (ringCount >= 10) {
             int tens = (ringCount / 10) % 10;
-            renderHudDigit(digitX, baseY, tens, digitPalette);
+            renderHudDigit(digitX, digitY, tens, ringsPalette);
             digitX += 8;
         }
 
-        // Ones digit
+        // Ones digit (always shown)
         int ones = ringCount % 10;
-        renderHudDigit(digitX, baseY, ones, digitPalette);
+        renderHudDigit(digitX, digitY, ones, ringsPalette);
 
         graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders a HUD label (like " SONIC" or "RINGS") using SpecialHUD art.
+     * Labels are multi-tile sprites rendered as a grid.
+     *
+     * @param x Screen X position
+     * @param y Screen Y position
+     * @param tileOffset Starting tile offset in SpecialHUD art
+     * @param widthTiles Width in tiles
+     * @param heightTiles Height in tiles
+     * @param paletteIndex Palette to use
+     */
+    private void renderHudLabel(int x, int y, int tileOffset, int widthTiles, int heightTiles, int paletteIndex) {
+        // VDP uses column-major tile ordering
+        for (int tx = 0; tx < widthTiles; tx++) {
+            for (int ty = 0; ty < heightTiles; ty++) {
+                int localTileIndex = tx * heightTiles + ty;
+                int patternId = hudPatternBase + tileOffset + localTileIndex;
+
+                PatternDesc desc = new PatternDesc();
+                desc.setPriority(true);
+                desc.setPaletteIndex(paletteIndex);
+                desc.setHFlip(false);
+                desc.setVFlip(false);
+                desc.setPatternIndex(patternId & 0x7FF);
+
+                int tileX = x + tx * TILE_SIZE;
+                int tileY = y + ty * TILE_SIZE;
+
+                graphicsManager.renderPatternWithId(patternId, desc, tileX, tileY);
+            }
+        }
     }
 
     // ========== Rings To Go HUD ==========
@@ -1125,8 +1432,9 @@ public class Sonic2SpecialStageRenderer {
     // ========== Object Rendering (Phase 4) ==========
 
     /**
-     * Renders all special stage objects (rings and bombs).
+     * Renders all special stage objects (rings and bombs) with their shadows.
      * Objects are sorted by depth (furthest first) for correct z-ordering.
+     * Shadows are rendered first (behind objects).
      */
     public void renderObjects() {
         if (objectManager == null) {
@@ -1147,6 +1455,25 @@ public class Sonic2SpecialStageRenderer {
         final int H32_WIDTH = 256;
         final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
 
+        // Render shadows first (behind objects)
+        // Only render shadows if shadow art is loaded
+        if (shadowFlatPatternBase > 0 || shadowDiagPatternBase > 0 || shadowSidePatternBase > 0) {
+            for (Sonic2SpecialStageObject obj : sortedObjects) {
+                if (!obj.isOnScreen()) {
+                    continue;
+                }
+                // Only render shadows for normal rings and bombs, not special states
+                if (obj.isRing() && !((Sonic2SpecialStageRing) obj).isSparkle()) {
+                    renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
+                } else if (obj.isBomb() && !((Sonic2SpecialStageBomb) obj).isExploding()) {
+                    renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
+                } else if (obj.isEmerald()) {
+                    renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
+                }
+            }
+        }
+
+        // Render objects on top of shadows
         for (Sonic2SpecialStageObject obj : sortedObjects) {
             if (!obj.isOnScreen()) {
                 continue;
@@ -1162,6 +1489,86 @@ public class Sonic2SpecialStageRenderer {
         }
 
         graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders a shadow for a special stage object (ring, bomb, or emerald).
+     * Shadow type and size are based on object's angle and perspective size.
+     *
+     * @param obj The object to render shadow for
+     * @param screenCenterOffset H32 viewport center offset
+     */
+    private void renderObjectShadow(Sonic2SpecialStageObject obj, int screenCenterOffset) {
+        int screenX = screenCenterOffset + obj.getScreenX();
+        int screenY = obj.getScreenY();
+
+        // Get object's angle for shadow type determination
+        int angle = obj.getAngle();
+
+        // Get shadow info including type and x-flip from disassembly logic
+        Sonic2SpecialStageSpriteData.ObjectShadowInfo shadowInfo =
+            Sonic2SpecialStageSpriteData.getObjectShadowInfo(angle);
+
+        // Get the appropriate pattern base for this shadow type
+        int patternBase = getPatternBaseForShadowType(shadowInfo.type);
+
+        // Calculate shadow size index based on object's animation index
+        // animIndex goes from 9 (far/small) to 0 (close/large)
+        // But our shadow size goes from 0 (large) to 9 (small)
+        // So we invert: shadowSize = 9 - animIndex
+        int animIndex = obj.getAnimIndex();
+        int shadowSize = 9 - Math.min(animIndex, 9);
+
+        // Get shadow sprite pieces
+        Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
+            Sonic2SpecialStageSpriteData.getShadowPieces(shadowInfo.type, shadowSize);
+
+        // Calculate shadow offset based on type (simplified version)
+        // Objects use a fixed Y offset for shadow (below the object)
+        int shadowOffsetY = 8;  // Shadow appears slightly below object
+        int shadowY = screenY + shadowOffsetY;
+
+        // Shadow uses palette 0 (background palette which has dark colors)
+        // Note: disassembly says palette 3, but that results in white shadows
+        // Palette 0 has proper dark colors at the indices the shadow art uses
+        final int paletteIndex = 0;
+
+        // Render each sprite piece
+        for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
+            // Apply shadow x-flip to piece position
+            int pieceX;
+            if (shadowInfo.xFlip) {
+                pieceX = screenX - piece.xOffset - (piece.widthTiles * TILE_SIZE);
+            } else {
+                pieceX = screenX + piece.xOffset;
+            }
+            int pieceY = shadowY + piece.yOffset;
+
+            // Combine piece flip with shadow flip
+            boolean finalHFlip = piece.hFlip ^ shadowInfo.xFlip;
+
+            // Render all tiles in this piece (column-major order)
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    // Determine source tile based on flip state
+                    int srcCol = finalHFlip ? (piece.widthTiles - 1 - tx) : tx;
+                    int tileIndex = srcCol * piece.heightTiles + ty;
+                    int patternId = patternBase + piece.tileIndex + tileIndex;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(false);  // Shadow is low priority
+                    desc.setPaletteIndex(paletteIndex);
+                    desc.setHFlip(finalHFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
     }
 
     /**
@@ -1326,7 +1733,7 @@ public class Sonic2SpecialStageRenderer {
     // ========== Checkpoint Message Rendering ==========
 
     /**
-     * Renders checkpoint UI elements (message text and hand).
+     * Renders checkpoint UI elements (rainbow rings, message text, and hand).
      * Called when a checkpoint is active.
      */
     public void renderCheckpointUI() {
@@ -1339,6 +1746,10 @@ public class Sonic2SpecialStageRenderer {
         final int H32_WIDTH = 256;
         final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
 
+        if (checkpoint.isRainbowActive()) {
+            renderCheckpointRainbow(SCREEN_CENTER_OFFSET);
+        }
+
         // Render checkpoint message letters
         if (checkpoint.isMessageVisible()) {
             renderCheckpointMessage(SCREEN_CENTER_OFFSET);
@@ -1350,6 +1761,52 @@ public class Sonic2SpecialStageRenderer {
         }
 
         graphicsManager.flushPatternBatch();
+    }
+
+    private void renderCheckpointRainbow(int screenCenterOffset) {
+        for (Sonic2SpecialStageCheckpoint.RainbowRing ring : checkpoint.getRainbowRings()) {
+            if (!ring.isVisible()) {
+                continue;
+            }
+            renderCheckpointRainbowRing(ring, screenCenterOffset);
+        }
+    }
+
+    private void renderCheckpointRainbowRing(Sonic2SpecialStageCheckpoint.RainbowRing ring, int screenCenterOffset) {
+        int mappingFrame = ring.getMappingFrame();
+        if (mappingFrame < 0) {
+            return;
+        }
+
+        int screenX = screenCenterOffset + ring.getX();
+        int screenY = ring.getY();
+
+        Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
+            Sonic2SpecialStageSpriteData.getRingPieces(mappingFrame);
+
+        for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
+            int pieceX = screenX + piece.xOffset;
+            int pieceY = screenY + piece.yOffset;
+
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    int tileIndex = tx * piece.heightTiles + ty;
+                    int patternId = ringPatternBase + piece.tileIndex + tileIndex;
+
+                    PatternDesc desc = new PatternDesc();
+                    desc.setPriority(true);
+                    desc.setPaletteIndex(3);
+                    desc.setHFlip(piece.hFlip);
+                    desc.setVFlip(piece.vFlip);
+                    desc.setPatternIndex(patternId & 0x7FF);
+
+                    int tileScreenX = pieceX + tx * TILE_SIZE;
+                    int tileScreenY = pieceY + ty * TILE_SIZE;
+
+                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
     }
 
     /**

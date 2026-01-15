@@ -8,10 +8,10 @@ import java.util.logging.Logger;
  * Manages checkpoint state and messages in Sonic 2 Special Stage.
  *
  * When the player reaches a checkpoint (marker 0xFE in object data):
- * 1. Rainbow checkpoint animation plays (checkpoint wings + hand)
+ * 1. Rainbow ring animation plays at the top of the track
  * 2. Ring count is compared to the requirement for this checkpoint
- * 3. If rings >= requirement: "COOL!" message displays, player continues
- * 4. If rings < requirement: "NOT ENOUGH RINGS..." displays, stage fails
+ * 3. Winged hand + "COOL!" message displays if rings >= requirement
+ * 4. "NOT ENOUGH RINGS..." displays if rings < requirement, stage fails
  *
  * At the final checkpoint (checkpoint 3), the stage ends and the emerald is awarded
  * if the player met all ring requirements.
@@ -39,8 +39,8 @@ public class Sonic2SpecialStageCheckpoint {
     public enum MessagePhase {
         /** No message displaying */
         NONE,
-        /** Rainbow animation playing (checkpoint wings coming in) */
-        RAINBOW_ANIM,
+        /** Rainbow ring animation playing at top of track */
+        RAINBOW_RINGS,
         /** Main message displaying (COOL! or NOT ENOUGH RINGS...) */
         MESSAGE_DISPLAY,
         /** Message flying off screen */
@@ -49,6 +49,14 @@ public class Sonic2SpecialStageCheckpoint {
         FADE_OUT,
         /** Complete - ready for next state */
         COMPLETE
+    }
+
+    /**
+     * Callback when the checkpoint result is resolved (after rainbow completes).
+     */
+    public interface CheckpointResolvedCallback {
+        void onCheckpointResolved(Result result, int checkpointNumber,
+                                  int ringRequirement, int ringsCollected, boolean isFinalCheckpoint);
     }
 
     /**
@@ -73,11 +81,66 @@ public class Sonic2SpecialStageCheckpoint {
         }
     }
 
+    /**
+     * Represents a single rainbow ring in the checkpoint animation.
+     */
+    public static class RainbowRing {
+        private final int baseIndex;
+        private int frameIndex;
+        private int positionOffset;
+        private int mappingFrame;
+        private int x;
+        private int y;
+        private boolean active;
+
+        private RainbowRing(int baseIndex) {
+            this.baseIndex = baseIndex;
+            this.frameIndex = 0;
+            this.positionOffset = 0;
+            this.mappingFrame = -1;
+            this.active = true;
+        }
+
+        public int getMappingFrame() {
+            return mappingFrame;
+        }
+
+        public int getX() {
+            return x;
+        }
+
+        public int getY() {
+            return y;
+        }
+
+        public boolean isVisible() {
+            return active && mappingFrame >= 0;
+        }
+    }
+
     // Timing constants (from disassembly)
     // Original uses objoff_2A = $46 (70 decimal) for most timers
-    private static final int RAINBOW_ANIM_FRAMES = 70;   // Hand/wings fly in
     private static final int MESSAGE_DISPLAY_FRAMES = 120; // Message visible (longer for readability)
     private static final int FADE_OUT_FRAMES = 48;       // $30 = 48 frames for music fade (from Obj5A_RingCheckTrigger)
+
+    // Checkpoint rainbow animation data (Obj5A_Rainbow_Frames / Obj5A_Rainbow_Positions)
+    private static final int[] RAINBOW_FRAMES = {
+        0, 1, 1, 1, 2, 4, 6, 8, 9, -1
+    };
+    private static final int[] RAINBOW_POSITIONS = {
+        0xF6, 0xF6, 0x70, 0x5E, 0x76, 0x58, 0x7E, 0x56, 0x88, 0x58, 0x8E, 0x5E, 0xF6, 0xF6,
+        0xF6, 0xF6, 0x6D, 0x5A, 0x74, 0x54, 0x7E, 0x50, 0x8A, 0x54, 0x92, 0x5A, 0xF6, 0xF6,
+        0xF6, 0xF6, 0x6A, 0x58, 0x72, 0x50, 0x7E, 0x4C, 0x8C, 0x50, 0x94, 0x58, 0xF6, 0xF6,
+        0xF6, 0xF6, 0x68, 0x56, 0x70, 0x4C, 0x7E, 0x48, 0x8E, 0x4C, 0x96, 0x56, 0xF6, 0xF6,
+        0x62, 0x5E, 0x66, 0x50, 0x70, 0x46, 0x7E, 0x42, 0x8E, 0x46, 0x98, 0x50, 0x9C, 0x5E,
+        0x5C, 0x5A, 0x62, 0x4A, 0x70, 0x3E, 0x7E, 0x38, 0x8E, 0x3E, 0x9C, 0x4A, 0xA2, 0x5A,
+        0x54, 0x54, 0x5A, 0x3E, 0x6A, 0x30, 0x7E, 0x2A, 0x94, 0x30, 0xA4, 0x3E, 0xAA, 0x54,
+        0x42, 0x4A, 0x4C, 0x28, 0x62, 0x12, 0x7E, 0x0A, 0x9C, 0x12, 0xB2, 0x28, 0xBC, 0x4A,
+        0x16, 0x26, 0x28, 0xFC, 0xEC, 0xEC, 0xEC, 0xEC, 0xEC, 0xEC, 0xD6, 0xFC, 0xE8, 0x26
+    };
+    private static final int RAINBOW_RING_COUNT = 7;
+    private static final int RAINBOW_POSITION_STRIDE = 0x0E;
+    private static final int RAINBOW_COMPLETE_TRIGGER_X = 0xE8;
 
     // State
     private MessagePhase phase = MessagePhase.NONE;
@@ -96,8 +159,17 @@ public class Sonic2SpecialStageCheckpoint {
     private boolean handThumbsUp = true;
     private boolean handMovingDown = false;
 
-    // Wing animation
-    private int wingFrame = 0;
+    // Checkpoint rainbow rings
+    private final List<RainbowRing> rainbowRings = new ArrayList<>();
+
+    // Pending checkpoint info (resolved after rainbow completes)
+    private int pendingRingRequirement = 0;
+    private int pendingRingsCollected = 0;
+    private boolean pendingFinalCheckpoint = false;
+
+    // Callbacks
+    private CheckpointResolvedCallback onCheckpointResolved;
+    private boolean rainbowOnly = false;
 
     // Music fade callback
     private Runnable onMusicFadeRequested;
@@ -110,48 +182,57 @@ public class Sonic2SpecialStageCheckpoint {
     }
 
     /**
-     * Triggers a checkpoint with ring requirement check.
+     * Sets a callback for when a checkpoint result is resolved (after rainbow).
+     */
+    public void setOnCheckpointResolved(CheckpointResolvedCallback callback) {
+        this.onCheckpointResolved = callback;
+    }
+
+    /**
+     * Starts the checkpoint sequence (rainbow first, then ring check + message).
      *
-     * @param checkpointNumber The checkpoint number (0-3)
+     * @param checkpointNumber The checkpoint number (1-4)
      * @param ringRequirement Required rings for this checkpoint
      * @param ringsCollected Rings the player has collected
-     * @param isFinalCheckpoint True if this is checkpoint 3 (final)
-     * @return The result of the checkpoint check
+     * @param isFinalCheckpoint True if this is checkpoint 4 (final)
      */
-    public Result triggerCheckpoint(int checkpointNumber, int ringRequirement,
-                                    int ringsCollected, boolean isFinalCheckpoint) {
+    public void beginCheckpoint(int checkpointNumber, int ringRequirement,
+                                int ringsCollected, boolean isFinalCheckpoint) {
+        rainbowOnly = false;
         this.currentCheckpoint = checkpointNumber;
-        this.ringRequirement = ringRequirement;
-        this.ringsCollected = ringsCollected;
+        this.pendingRingRequirement = ringRequirement;
+        this.pendingRingsCollected = ringsCollected;
+        this.pendingFinalCheckpoint = isFinalCheckpoint;
 
-        // Determine result
-        if (ringsCollected >= ringRequirement) {
-            if (isFinalCheckpoint) {
-                lastResult = Result.STAGE_COMPLETE;
-            } else {
-                lastResult = Result.PASSED;
-            }
-        } else {
-            lastResult = Result.FAILED;
-        }
-
-        // Start the checkpoint animation
-        phase = MessagePhase.RAINBOW_ANIM;
+        // Start the checkpoint rainbow animation
+        phase = MessagePhase.RAINBOW_RINGS;
         phaseTimer = 0;
-        showCheckpointHand = true;
-        handThumbsUp = (lastResult != Result.FAILED);
-        handMovingDown = false;
-        handY = 72;  // $48 in original
-        handTargetY = 72;
-
-        // Create the appropriate message
-        createCheckpointMessage();
+        showCheckpointHand = false;
+        messageLetters.clear();
+        startRainbowRings();
 
         LOGGER.info("Checkpoint " + checkpointNumber + " triggered: " +
-                   "required=" + ringRequirement + ", collected=" + ringsCollected +
-                   ", result=" + lastResult);
+                   "required=" + ringRequirement + ", collected=" + ringsCollected);
+    }
 
-        return lastResult;
+    /**
+     * Starts a rainbow-only checkpoint animation (visual only).
+     */
+    public void beginRainbowOnly() {
+        rainbowOnly = true;
+        currentCheckpoint = 0;
+        pendingRingRequirement = 0;
+        pendingRingsCollected = 0;
+        pendingFinalCheckpoint = false;
+        ringRequirement = 0;
+        ringsCollected = 0;
+        lastResult = Result.PASSED;
+
+        phase = MessagePhase.RAINBOW_RINGS;
+        phaseTimer = 0;
+        showCheckpointHand = false;
+        messageLetters.clear();
+        startRainbowRings();
     }
 
     /**
@@ -236,20 +317,21 @@ public class Sonic2SpecialStageCheckpoint {
      *
      * @return true if the checkpoint sequence is complete
      */
-    public boolean update() {
-        phaseTimer++;
-
+    public boolean update(boolean drawingIndex4) {
         switch (phase) {
-            case RAINBOW_ANIM:
-                updateRainbowPhase();
+            case RAINBOW_RINGS:
+                updateRainbowPhase(drawingIndex4);
                 break;
             case MESSAGE_DISPLAY:
+                phaseTimer++;
                 updateMessageDisplayPhase();
                 break;
             case MESSAGE_FLYOUT:
+                phaseTimer++;
                 updateMessageFlyoutPhase();
                 break;
             case FADE_OUT:
+                phaseTimer++;
                 updateFadeOutPhase();
                 break;
             case COMPLETE:
@@ -259,21 +341,27 @@ public class Sonic2SpecialStageCheckpoint {
         }
 
         // Update hand wave animation
-        if (showCheckpointHand) {
+        if (showCheckpointHand && phase != MessagePhase.RAINBOW_RINGS) {
             updateHandAnimation();
         }
 
         return phase == MessagePhase.COMPLETE;
     }
 
-    private void updateRainbowPhase() {
-        // Rainbow animation: checkpoint wings fly in
-        wingFrame++;
-
-        if (phaseTimer >= RAINBOW_ANIM_FRAMES) {
-            phase = MessagePhase.MESSAGE_DISPLAY;
-            phaseTimer = 0;
+    private void updateRainbowPhase(boolean drawingIndex4) {
+        // Rainbow animation: checkpoint rings fly across track top
+        if (!updateRainbowRingsPhase(drawingIndex4)) {
+            return;
         }
+
+        if (rainbowOnly) {
+            phase = MessagePhase.COMPLETE;
+            showCheckpointHand = false;
+            return;
+        }
+
+        resolveCheckpointResult();
+        beginMessagePhase();
     }
 
     private void updateMessageDisplayPhase() {
@@ -297,6 +385,39 @@ public class Sonic2SpecialStageCheckpoint {
         }
     }
 
+    private void beginMessagePhase() {
+        phase = MessagePhase.MESSAGE_DISPLAY;
+        phaseTimer = 0;
+        showCheckpointHand = true;
+        handThumbsUp = (lastResult != Result.FAILED);
+        handMovingDown = false;
+        handY = 72;  // $48 in original
+        handTargetY = 72;
+
+        // Create the appropriate message
+        createCheckpointMessage();
+
+        if (onCheckpointResolved != null) {
+            onCheckpointResolved.onCheckpointResolved(lastResult, currentCheckpoint,
+                    ringRequirement, ringsCollected, pendingFinalCheckpoint);
+        }
+    }
+
+    private void resolveCheckpointResult() {
+        ringRequirement = pendingRingRequirement;
+        ringsCollected = pendingRingsCollected;
+
+        if (ringsCollected >= ringRequirement) {
+            if (pendingFinalCheckpoint) {
+                lastResult = Result.STAGE_COMPLETE;
+            } else {
+                lastResult = Result.PASSED;
+            }
+        } else {
+            lastResult = Result.FAILED;
+        }
+    }
+
     private void updateFadeOutPhase() {
         // Wait for music to fade before completing
         if (phaseTimer >= FADE_OUT_FRAMES) {
@@ -308,12 +429,15 @@ public class Sonic2SpecialStageCheckpoint {
 
     private void initializeFlyout() {
         // Calculate flyout angles for each letter
-        // Original: CalcAngle from letter position to center-top of screen
+        // From s2.asm Obj5A_TextFlyoutInit (line 71447-71450):
+        // The angle is calculated FROM center (0x80, 0x70) TO letter position,
+        // so letters fly AWAY from the center point.
+        // For COOL! at y=0x68 (above center 0x70), dy is negative → letters fly UP
         for (MessageLetter letter : messageLetters) {
-            // Simplified angle calculation
-            int dx = 0x80 - letter.x;  // Distance to center
-            int dy = 0x70 - letter.y;  // Distance to top-center
-            // Use simple angle approximation
+            // Calculate vector from center to letter position
+            int dx = letter.x - 0x80;  // letter pos - center (positive = right of center)
+            int dy = letter.y - 0x70;  // letter pos - center (negative = above center)
+            // Use atan2 to get angle (letters fly in direction away from center)
             letter.flyoutAngle = (int) (Math.atan2(dy, dx) * 128 / Math.PI);
             letter.flyoutSpeed = 8;
         }
@@ -359,6 +483,72 @@ public class Sonic2SpecialStageCheckpoint {
         }
     }
 
+    private void startRainbowRings() {
+        rainbowRings.clear();
+        for (int i = 0; i < RAINBOW_RING_COUNT; i++) {
+            rainbowRings.add(new RainbowRing(i));
+        }
+    }
+
+    private boolean updateRainbowRingsPhase(boolean drawingIndex4) {
+        // If no rings have been spawned yet, treat as complete
+        if (rainbowRings.isEmpty()) {
+            return true;
+        }
+
+        boolean triggerComplete = false;
+
+        if (drawingIndex4) {
+            for (RainbowRing ring : rainbowRings) {
+                if (!ring.active) {
+                    continue;
+                }
+
+                if (ring.frameIndex < 0 || ring.frameIndex >= RAINBOW_FRAMES.length) {
+                    ring.active = false;
+                    ring.mappingFrame = -1;
+                    continue;
+                }
+
+                int frame = RAINBOW_FRAMES[ring.frameIndex];
+                if (frame < 0) {
+                    ring.active = false;
+                    ring.mappingFrame = -1;
+                    if (ring.x == RAINBOW_COMPLETE_TRIGGER_X) {
+                        triggerComplete = true;
+                    }
+                    continue;
+                }
+
+                ring.mappingFrame = frame;
+                ring.frameIndex++;
+
+                int posIndex = ring.baseIndex * 2 + ring.positionOffset;
+                if (posIndex + 1 >= RAINBOW_POSITIONS.length) {
+                    ring.active = false;
+                    ring.mappingFrame = -1;
+                    continue;
+                }
+
+                ring.x = RAINBOW_POSITIONS[posIndex];
+                ring.y = RAINBOW_POSITIONS[posIndex + 1];
+                ring.positionOffset += RAINBOW_POSITION_STRIDE;
+            }
+        }
+
+        if (triggerComplete) {
+            return true;
+        }
+
+        for (RainbowRing ring : rainbowRings) {
+            if (ring.active) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /**
      * Resets the checkpoint state.
      */
@@ -366,8 +556,16 @@ public class Sonic2SpecialStageCheckpoint {
         phase = MessagePhase.NONE;
         phaseTimer = 0;
         messageLetters.clear();
+        rainbowRings.clear();
         showCheckpointHand = false;
         currentCheckpoint = 0;
+        ringRequirement = 0;
+        ringsCollected = 0;
+        pendingRingRequirement = 0;
+        pendingRingsCollected = 0;
+        pendingFinalCheckpoint = false;
+        lastResult = Result.PASSED;
+        rainbowOnly = false;
     }
 
     // ========== Getters for rendering ==========
@@ -381,10 +579,8 @@ public class Sonic2SpecialStageCheckpoint {
     }
 
     public boolean isMessageVisible() {
-        // Message should appear during RAINBOW_ANIM phase (WITH the thumbs up, not after)
-        // as well as MESSAGE_DISPLAY, MESSAGE_FLYOUT, and FADE_OUT
-        return phase == MessagePhase.RAINBOW_ANIM ||
-               phase == MessagePhase.MESSAGE_DISPLAY || phase == MessagePhase.MESSAGE_FLYOUT ||
+        // Message should appear during MESSAGE_DISPLAY, MESSAGE_FLYOUT, and FADE_OUT
+        return phase == MessagePhase.MESSAGE_DISPLAY || phase == MessagePhase.MESSAGE_FLYOUT ||
                phase == MessagePhase.FADE_OUT;
     }
 
@@ -392,10 +588,17 @@ public class Sonic2SpecialStageCheckpoint {
         return messageLetters;
     }
 
+    public boolean isRainbowActive() {
+        return phase == MessagePhase.RAINBOW_RINGS;
+    }
+
+    public List<RainbowRing> getRainbowRings() {
+        return rainbowRings;
+    }
+
     public boolean isHandVisible() {
-        return showCheckpointHand && (phase == MessagePhase.RAINBOW_ANIM ||
-               phase == MessagePhase.MESSAGE_DISPLAY || phase == MessagePhase.MESSAGE_FLYOUT ||
-               phase == MessagePhase.FADE_OUT);
+        return showCheckpointHand && (phase == MessagePhase.MESSAGE_DISPLAY ||
+               phase == MessagePhase.MESSAGE_FLYOUT || phase == MessagePhase.FADE_OUT);
     }
 
     public int getHandX() {

@@ -12,9 +12,12 @@ import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
 
 import com.jogamp.opengl.GL2;
+import com.jogamp.opengl.util.awt.TextRenderer;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 
+import java.awt.Color;
+import java.awt.Font;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -143,12 +146,30 @@ public class Sonic2SpecialStageManager {
     private int starsPatternBase;      // For ring sparkle animation
     private int explosionPatternBase;  // For bomb explosion animation
     private int emeraldPatternBase;    // For chaos emerald
+    private int shadowFlatPatternBase;   // Horizontal shadow art
+    private int shadowDiagPatternBase;   // Diagonal shadow art
+    private int shadowSidePatternBase;   // Vertical shadow art
 
     // Track state for object spawning
     private int lastDrawingIndex = -1;
 
     // Checkpoint system
     private Sonic2SpecialStageCheckpoint checkpoint;
+    private boolean checkpointRainbowPaletteActive = false;
+    private boolean alignmentTestMode = false;
+    private boolean alignmentTestSavedRainbowPalette = false;
+    private Sonic2SpecialStageCheckpoint alignmentCheckpoint;
+    private int alignmentFrameIndex = 0;
+    private int alignmentFrameTimer = 0;
+    private int alignmentTrackFrameIndex = -1;
+    private int alignmentLastDecodedFrameIndex = -1;
+    private int[] alignmentDecodedTrackFrame;
+    private int alignmentDrawingIndex = 0;
+    private int alignmentTriggerOffsetFrames = 0;
+    private double alignmentRainbowSpeedScale = 1.0;
+    private double alignmentRainbowSpeedAccumulator = 0.0;
+    private boolean alignmentStepByTrackFrame = false;
+    private TextRenderer alignmentTextRenderer;
 
     // Current ring requirement for the active checkpoint (for "rings to go" display)
     private int currentRingRequirement = 0;
@@ -199,6 +220,10 @@ public class Sonic2SpecialStageManager {
         4, 4, 1, 2, 2, 2, 2, 2, 2, 5,            // Frames 10-19 (8/2=4, 2/2=1, 4/2=2, 10/2=5)
         6, 7, 9, 8                                // Frames 20-23 (12/2=6, 14/2=7, 18/2=9, 16/2=8)
     };
+
+    // Checkpoint rainbow palette tweaks (SSRainbowPaletteColors)
+    private static final int[] CHECKPOINT_RAINBOW_PALETTE_ON = {0x0EE, 0x0CC, 0x088};
+    private static final int[] CHECKPOINT_RAINBOW_PALETTE_OFF = {0x0EE, 0x088, 0x044};
 
     // Drop frame table indices
     private static final int[] VSCROLL_DROP_TABLE_INDICES = {
@@ -359,10 +384,36 @@ public class Sonic2SpecialStageManager {
         LOGGER.fine("Cached " + emeraldPatterns.length + " emerald patterns at base 0x" +
                    Integer.toHexString(emeraldPatternBase));
 
+        // Load shadow art (3 types: flat, diagonal, side)
+        Pattern[] shadowFlatPatterns = dataLoader.getShadowHorizPatterns();
+        shadowFlatPatternBase = emeraldPatternBase + emeraldPatterns.length;
+        for (int i = 0; i < shadowFlatPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(shadowFlatPatterns[i], shadowFlatPatternBase + i);
+        }
+        LOGGER.fine("Cached " + shadowFlatPatterns.length + " flat shadow patterns at base 0x" +
+                   Integer.toHexString(shadowFlatPatternBase));
+
+        Pattern[] shadowDiagPatterns = dataLoader.getShadowDiagPatterns();
+        shadowDiagPatternBase = shadowFlatPatternBase + shadowFlatPatterns.length;
+        for (int i = 0; i < shadowDiagPatterns.length; i++) {
+            graphicsManager.cachePatternTexture(shadowDiagPatterns[i], shadowDiagPatternBase + i);
+        }
+        LOGGER.fine("Cached " + shadowDiagPatterns.length + " diagonal shadow patterns at base 0x" +
+                   Integer.toHexString(shadowDiagPatternBase));
+
+        Pattern[] shadowSidePatterns = dataLoader.getShadowVertPatterns();
+        shadowSidePatternBase = shadowDiagPatternBase + shadowDiagPatterns.length;
+        for (int i = 0; i < shadowSidePatterns.length; i++) {
+            graphicsManager.cachePatternTexture(shadowSidePatterns[i], shadowSidePatternBase + i);
+        }
+        LOGGER.fine("Cached " + shadowSidePatterns.length + " side shadow patterns at base 0x" +
+                   Integer.toHexString(shadowSidePatternBase));
+
         // Pass pattern bases to renderer
         renderer.setObjectPatternBases(ringPatternBase, bombPatternBase);
         renderer.setEffectPatternBases(starsPatternBase, explosionPatternBase);
         renderer.setEmeraldPatternBase(emeraldPatternBase);
+        renderer.setShadowPatternBases(shadowFlatPatternBase, shadowDiagPatternBase, shadowSidePatternBase);
         renderer.setObjectManager(objectManager);
         renderer.setPerspectiveData(perspectiveData);
 
@@ -386,6 +437,12 @@ public class Sonic2SpecialStageManager {
             // Fade out the special stage music
             AudioManager.getInstance().stopMusic();
             LOGGER.info("Music fade requested - stopping special stage music");
+        });
+
+        checkpoint.setOnCheckpointResolved((result, checkpointNumber, ringRequirement,
+                                            ringsCollected, isFinalCheckpoint) -> {
+            handleCheckpointResolved(result, checkpointNumber, ringRequirement,
+                    ringsCollected, isFinalCheckpoint);
         });
 
         // Set up checkpoint callback
@@ -430,40 +487,10 @@ public class Sonic2SpecialStageManager {
         // Is this the final checkpoint (checkpoint 4 / quarter 3)?
         boolean isFinalCheckpoint = (checkpointNumber >= 4);
 
-        // Trigger the checkpoint animation and check result
-        Sonic2SpecialStageCheckpoint.Result result = checkpoint.triggerCheckpoint(
-                checkpointNumber, ringRequirement, ringsCollected, isFinalCheckpoint);
+        applyCheckpointRainbowPalette(true);
 
-        // Play appropriate sound
-        if (result == Sonic2SpecialStageCheckpoint.Result.FAILED) {
-            // Play error sound for failure (SndID_Error = $ED)
-            AudioManager.getInstance().playSfx(GameSound.ERROR);
-            LOGGER.info("Checkpoint FAILED: needed " + ringRequirement + ", had " + ringsCollected);
-        } else {
-            // Play checkpoint sound for success
-            AudioManager.getInstance().playSfx(GameSound.CHECKPOINT);
-            LOGGER.info("Checkpoint PASSED: needed " + ringRequirement + ", had " + ringsCollected);
-
-            // Update ring requirement for next checkpoint (for "rings to go" display)
-            if (!isFinalCheckpoint) {
-                try {
-                    currentRingRequirement = dataLoader.getRingRequirement(currentStage, quarter + 1, teamMode);
-                    LOGGER.fine("Next checkpoint requirement: " + currentRingRequirement);
-                } catch (IOException e) {
-                    LOGGER.warning("Failed to get next ring requirement: " + e.getMessage());
-                }
-            }
-        }
-
-        // Handle result
-        if (result == Sonic2SpecialStageCheckpoint.Result.STAGE_COMPLETE) {
-            // Final checkpoint passed - will award emerald
-            LOGGER.info("Stage complete! Emerald will be awarded.");
-        } else if (result == Sonic2SpecialStageCheckpoint.Result.FAILED) {
-            // Stage failed - will eject player
-            LOGGER.info("Stage failed! Player will be ejected.");
-            // Note: actual ejection happens after message animation completes
-        }
+        // Trigger the checkpoint rainbow animation (result resolved after rainbow completes)
+        checkpoint.beginCheckpoint(checkpointNumber, ringRequirement, ringsCollected, isFinalCheckpoint);
     }
 
     /**
@@ -482,6 +509,63 @@ public class Sonic2SpecialStageManager {
             emerald.setManager(this);
             LOGGER.info("Emerald configured with ring requirement: " + currentRingRequirement);
         }
+    }
+
+    /**
+     * Handles checkpoint result after the rainbow animation completes.
+     */
+    private void handleCheckpointResolved(Sonic2SpecialStageCheckpoint.Result result, int checkpointNumber,
+                                          int ringRequirement, int ringsCollected, boolean isFinalCheckpoint) {
+        applyCheckpointRainbowPalette(false);
+
+        if (result == Sonic2SpecialStageCheckpoint.Result.FAILED) {
+            // Play error sound for failure (SndID_Error = $ED)
+            AudioManager.getInstance().playSfx(GameSound.ERROR);
+            LOGGER.info("Checkpoint FAILED: needed " + ringRequirement + ", had " + ringsCollected);
+        } else {
+            // Play checkpoint sound for success
+            AudioManager.getInstance().playSfx(GameSound.CHECKPOINT);
+            LOGGER.info("Checkpoint PASSED: needed " + ringRequirement + ", had " + ringsCollected);
+
+            // Update ring requirement for next checkpoint (for "rings to go" display)
+            if (!isFinalCheckpoint) {
+                boolean teamMode = (sonicPlayer != null && tailsPlayer != null);
+                int quarter = Math.max(0, Math.min(3, checkpointNumber - 1));
+                try {
+                    currentRingRequirement = dataLoader.getRingRequirement(currentStage, quarter + 1, teamMode);
+                    LOGGER.fine("Next checkpoint requirement: " + currentRingRequirement);
+                } catch (IOException e) {
+                    LOGGER.warning("Failed to get next ring requirement: " + e.getMessage());
+                }
+            }
+        }
+
+        if (result == Sonic2SpecialStageCheckpoint.Result.STAGE_COMPLETE) {
+            // Final checkpoint passed - will award emerald
+            LOGGER.info("Stage complete! Emerald will be awarded.");
+        } else if (result == Sonic2SpecialStageCheckpoint.Result.FAILED) {
+            // Stage failed - will eject player
+            LOGGER.info("Stage failed! Player will be ejected.");
+            // Note: actual ejection happens after message animation completes
+        }
+    }
+
+    private void applyCheckpointRainbowPalette(boolean bright) {
+        if (palettes == null || graphicsManager == null) {
+            return;
+        }
+        if (checkpointRainbowPaletteActive == bright) {
+            return;
+        }
+
+        int[] colors = bright ? CHECKPOINT_RAINBOW_PALETTE_ON : CHECKPOINT_RAINBOW_PALETTE_OFF;
+        Palette palette = palettes[3];
+        palette.setColor(11, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[0]));
+        palette.setColor(12, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[1]));
+        palette.setColor(13, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[2]));
+
+        graphicsManager.cachePaletteTexture(palette, 3);
+        checkpointRainbowPaletteActive = bright;
     }
 
     private void loadData() throws IOException {
@@ -680,6 +764,11 @@ public class Sonic2SpecialStageManager {
             return;
         }
 
+        if (alignmentTestMode) {
+            updateAlignmentTest();
+            return;
+        }
+
         // Frame timing diagnostic - measure actual FPS
         long now = System.nanoTime();
         if (lastFrameTime != 0) {
@@ -731,7 +820,8 @@ public class Sonic2SpecialStageManager {
 
         // Update checkpoint animation
         if (checkpoint != null && checkpoint.isActive()) {
-            boolean checkpointComplete = checkpoint.update();
+            boolean checkpointStep = frameChanged;
+            boolean checkpointComplete = checkpoint.update(checkpointStep);
             if (checkpointComplete) {
                 handleCheckpointAnimationComplete();
             }
@@ -1065,6 +1155,97 @@ public class Sonic2SpecialStageManager {
         pressedButtons = 0;
     }
 
+    private void enterAlignmentTestMode() {
+        alignmentFrameIndex = 0;
+        alignmentFrameTimer = 0;
+        alignmentTrackFrameIndex = -1;
+        alignmentLastDecodedFrameIndex = -1;
+        alignmentDecodedTrackFrame = null;
+        alignmentDrawingIndex = 0;
+        alignmentRainbowSpeedAccumulator = 0.0;
+
+        alignmentTestSavedRainbowPalette = checkpointRainbowPaletteActive;
+
+        alignmentStepByTrackFrame = true;
+        alignmentCheckpoint = new Sonic2SpecialStageCheckpoint();
+        alignmentCheckpoint.beginRainbowOnly();
+        applyCheckpointRainbowPalette(true);
+
+        if (renderer != null) {
+            renderer.setCheckpoint(alignmentCheckpoint);
+        }
+    }
+
+    private void exitAlignmentTestMode() {
+        alignmentCheckpoint = null;
+        alignmentDecodedTrackFrame = null;
+        alignmentTrackFrameIndex = -1;
+        alignmentLastDecodedFrameIndex = -1;
+        alignmentFrameIndex = 0;
+        alignmentFrameTimer = 0;
+        alignmentDrawingIndex = 0;
+        alignmentRainbowSpeedAccumulator = 0.0;
+        alignmentStepByTrackFrame = false;
+
+        if (renderer != null) {
+            renderer.setCheckpoint(checkpoint);
+        }
+
+        applyCheckpointRainbowPalette(alignmentTestSavedRainbowPalette);
+    }
+
+    private void updateAlignmentTest() {
+        alignmentDrawingIndex = (alignmentDrawingIndex + 1) % 5;
+
+        int duration = getAlignmentFrameDuration();
+        alignmentFrameTimer++;
+        boolean frameAdvanced = false;
+        if (alignmentFrameTimer >= duration) {
+            alignmentFrameTimer = 0;
+            alignmentFrameIndex = (alignmentFrameIndex + 1) % ANIM_STRAIGHT.length;
+            frameAdvanced = true;
+        }
+
+        int triggerFrame = Math.floorMod(alignmentTriggerOffsetFrames, ANIM_STRAIGHT.length);
+        if (alignmentFrameTimer == 0 && alignmentFrameIndex == triggerFrame &&
+                alignmentCheckpoint != null && !alignmentCheckpoint.isActive()) {
+                alignmentCheckpoint.beginRainbowOnly();
+                applyCheckpointRainbowPalette(true);
+                alignmentRainbowSpeedAccumulator = 0.0;
+        }
+
+        alignmentTrackFrameIndex = ANIM_STRAIGHT[alignmentFrameIndex];
+        decodeAlignmentTrackFrame();
+
+        if (alignmentCheckpoint != null && alignmentCheckpoint.isActive()) {
+            boolean shouldStep = alignmentStepByTrackFrame ? frameAdvanced : (alignmentDrawingIndex == 4);
+            if (shouldStep) {
+                alignmentRainbowSpeedAccumulator += alignmentRainbowSpeedScale;
+                while (alignmentRainbowSpeedAccumulator >= 1.0) {
+                    boolean complete = alignmentCheckpoint.update(true);
+                    alignmentRainbowSpeedAccumulator -= 1.0;
+                    if (complete) {
+                        applyCheckpointRainbowPalette(false);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Keep lastFrameTime updated to avoid huge FPS deltas on exit.
+        lastFrameTime = System.nanoTime();
+    }
+
+    private int getAlignmentFrameDuration() {
+        int speedFactor = (trackAnimator != null) ? trackAnimator.getSpeedFactor() : 6;
+        int index = (speedFactor >> 1) & 0x7;
+        if (index < 0 || index >= ANIM_BASE_DURATIONS.length) {
+            return 1;
+        }
+        int duration = ANIM_BASE_DURATIONS[index];
+        return duration > 0 ? duration : 1;
+    }
+
     /**
      * Handles input for the Special Stage.
      * Call this from the input handler with the current button state.
@@ -1075,6 +1256,33 @@ public class Sonic2SpecialStageManager {
     public void handleInput(int held, int pressed) {
         this.heldButtons = held;
         this.pressedButtons |= pressed;
+    }
+
+    public void toggleAlignmentTestMode() {
+        alignmentTestMode = !alignmentTestMode;
+        if (alignmentTestMode) {
+            enterAlignmentTestMode();
+        } else {
+            exitAlignmentTestMode();
+        }
+    }
+
+    public boolean isAlignmentTestMode() {
+        return alignmentTestMode;
+    }
+
+    public void adjustAlignmentOffset(int delta) {
+        alignmentTriggerOffsetFrames += delta;
+        alignmentTriggerOffsetFrames = Math.max(-15, Math.min(15, alignmentTriggerOffsetFrames));
+    }
+
+    public void adjustAlignmentSpeed(double delta) {
+        alignmentRainbowSpeedScale = Math.max(0.1, Math.min(4.0, alignmentRainbowSpeedScale + delta));
+    }
+
+    public void toggleAlignmentStepMode() {
+        alignmentStepByTrackFrame = !alignmentStepByTrackFrame;
+        alignmentRainbowSpeedAccumulator = 0.0;
     }
 
     private boolean diagnosticDone = false;
@@ -1110,11 +1318,32 @@ public class Sonic2SpecialStageManager {
         }
     }
 
+    private void decodeAlignmentTrackFrame() {
+        int frameIndex = alignmentTrackFrameIndex;
+        if (frameIndex < 0) {
+            return;
+        }
+        if (frameIndex == alignmentLastDecodedFrameIndex && alignmentDecodedTrackFrame != null) {
+            return;
+        }
+        if (trackFrames != null && frameIndex >= 0 && frameIndex < trackFrames.length) {
+            byte[] frameData = trackFrames[frameIndex];
+            boolean runDiag = false;
+            alignmentDecodedTrackFrame = Sonic2TrackFrameDecoder.decodeFrame(frameData, false, runDiag);
+            alignmentLastDecodedFrameIndex = frameIndex;
+        }
+    }
+
     /**
      * Renders the Special Stage.
      */
     public void draw() {
         if (!initialized || renderer == null) {
+            return;
+        }
+
+        if (alignmentTestMode) {
+            drawAlignmentTest();
             return;
         }
 
@@ -1188,6 +1417,96 @@ public class Sonic2SpecialStageManager {
         if (checkpoint != null && checkpoint.isActive()) {
             renderer.renderCheckpointUI();
         }
+    }
+
+    private void drawAlignmentTest() {
+        boolean renderPlaneB = planeDebugMode.renderPlaneB();
+        boolean renderPlaneA = planeDebugMode.renderPlaneA();
+
+        if (renderPlaneB) {
+            if (bgRenderer != null && bgRenderer.isInitialized()) {
+                final int currentScrollX = skydomeScrollX;
+                final float currentVScrollBG = (float) vScrollBG;
+
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                    bgRenderer.beginTilePass(gl, H32_HEIGHT);
+                }));
+
+                graphicsManager.beginPatternBatch();
+                renderer.renderBackgroundToFBO(combinedBackgroundMappings);
+                graphicsManager.flushPatternBatch();
+
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                    bgRenderer.endTilePass(gl);
+                }));
+
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                    bgRenderer.setUniformHScroll(currentScrollX);
+                    bgRenderer.renderWithShader(gl, currentVScrollBG);
+                }));
+            } else {
+                renderer.renderBackground(combinedBackgroundMappings, skydomeScrollX, vScrollBG);
+            }
+        }
+
+        if (renderPlaneA) {
+            renderer.renderTrack(alignmentTrackFrameIndex, alignmentDecodedTrackFrame);
+        }
+
+        if (alignmentCheckpoint != null && alignmentCheckpoint.isActive()) {
+            renderer.renderCheckpointUI();
+        }
+    }
+
+    public void renderAlignmentOverlay(int viewportWidth, int viewportHeight) {
+        if (!alignmentTestMode) {
+            return;
+        }
+
+        if (alignmentTextRenderer == null) {
+            alignmentTextRenderer = new TextRenderer(new Font("SansSerif", Font.PLAIN, 12), true, true);
+        }
+
+        alignmentTextRenderer.beginRendering(viewportWidth, viewportHeight);
+
+        int y = viewportHeight - 14;
+        drawOutlined(alignmentTextRenderer, "SS ALIGNMENT TEST (F4 to exit)", 8, y, Color.WHITE);
+        y -= 14;
+        drawOutlined(alignmentTextRenderer,
+                "Offset (frames): " + alignmentTriggerOffsetFrames +
+                        "  Trigger: " + Math.floorMod(alignmentTriggerOffsetFrames, ANIM_STRAIGHT.length) +
+                        "/" + (ANIM_STRAIGHT.length - 1),
+                8, y, Color.WHITE);
+        y -= 14;
+        drawOutlined(alignmentTextRenderer,
+                String.format("Speed scale: %.2fx", alignmentRainbowSpeedScale),
+                8, y, Color.WHITE);
+        y -= 14;
+        drawOutlined(alignmentTextRenderer,
+                "Arrows: LEFT/RIGHT offset, UP/DOWN speed",
+                8, y, Color.WHITE);
+        y -= 14;
+        drawOutlined(alignmentTextRenderer,
+                "Step mode: " + (alignmentStepByTrackFrame ? "TRACK" : "VINT") +
+                        "  TrackFrame: " + alignmentTrackFrameIndex +
+                        "  DrawIdx: " + alignmentDrawingIndex,
+                8, y, Color.WHITE);
+
+        alignmentTextRenderer.endRendering();
+    }
+
+    private void drawOutlined(TextRenderer textRenderer, String text, int x, int y, Color color) {
+        textRenderer.setColor(Color.BLACK);
+        textRenderer.draw(text, x - 1, y);
+        textRenderer.draw(text, x + 1, y);
+        textRenderer.draw(text, x, y - 1);
+        textRenderer.draw(text, x, y + 1);
+        textRenderer.draw(text, x - 1, y - 1);
+        textRenderer.draw(text, x + 1, y - 1);
+        textRenderer.draw(text, x - 1, y + 1);
+        textRenderer.draw(text, x + 1, y + 1);
+        textRenderer.setColor(color);
+        textRenderer.draw(text, x, y);
     }
 
     /**
@@ -1283,6 +1602,9 @@ public class Sonic2SpecialStageManager {
         starsPatternBase = 0;
         explosionPatternBase = 0;
         emeraldPatternBase = 0;
+        shadowFlatPatternBase = 0;
+        shadowDiagPatternBase = 0;
+        shadowSidePatternBase = 0;
         lastDrawingIndex = -1;
 
         // Checkpoint system
@@ -1290,6 +1612,16 @@ public class Sonic2SpecialStageManager {
             checkpoint.reset();
         }
         checkpoint = null;
+        checkpointRainbowPaletteActive = false;
+        alignmentTestMode = false;
+        alignmentCheckpoint = null;
+        alignmentDecodedTrackFrame = null;
+        alignmentTrackFrameIndex = -1;
+        alignmentLastDecodedFrameIndex = -1;
+        alignmentFrameIndex = 0;
+        alignmentFrameTimer = 0;
+        alignmentDrawingIndex = 0;
+        alignmentTestSavedRainbowPalette = false;
         currentRingRequirement = 0;
 
         resultState = ResultState.RUNNING;

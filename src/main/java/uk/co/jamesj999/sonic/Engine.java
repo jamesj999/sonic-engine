@@ -397,6 +397,33 @@ public class Engine extends GLCanvas implements GLEventListener {
 			fadeManager.render(gl);
 		}
 
+		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE && specialStageManager.isAlignmentTestMode()) {
+			// Reset OpenGL state for JOGL's TextRenderer
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+			gl.glUseProgram(0);
+			gl.glDisable(GL2.GL_LIGHTING);
+			gl.glDisable(GL2.GL_COLOR_MATERIAL);
+			gl.glDisable(GL2.GL_DEPTH_TEST);
+			gl.glColor4f(1f, 1f, 1f, 1f);
+			gl.glEnable(GL2.GL_TEXTURE_2D);
+			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+			gl.glActiveTexture(GL2.GL_TEXTURE1);
+			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+			// Reset matrices for 2D rendering
+			gl.glMatrixMode(GL_PROJECTION);
+			gl.glLoadIdentity();
+			glu.gluOrtho2D(0, projectionWidth, 0, realHeight);
+			gl.glMatrixMode(GL_MODELVIEW);
+			gl.glLoadIdentity();
+
+			// Re-enable blending for the TextRenderer
+			gl.glEnable(GL2.GL_BLEND);
+			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+
+			specialStageManager.renderAlignmentOverlay(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+		}
+
 		// Only show debug overlay in level mode, not during special stage
 		if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
 			// Reset OpenGL state for JOGL's TextRenderer
