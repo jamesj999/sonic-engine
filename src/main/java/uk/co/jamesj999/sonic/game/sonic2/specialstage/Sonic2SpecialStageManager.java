@@ -909,8 +909,13 @@ public class Sonic2SpecialStageManager {
 
         frameCounter++;
 
-        // Increment drawing index (0-4, wraps each frame like VInt handler)
-        drawingIndex = (drawingIndex + 1) % 5;
+        // Increment drawing index, cycling based on current frame duration.
+        // In ROM: drawing_index increments each VBlank, resets when >= frame_timer (duration).
+        // At speedFactor=12, duration=5, so drawing_index cycles 0-4.
+        // At speedFactor=6, duration=10, so drawing_index cycles 0-9.
+        // drawingIndex==4 is special: it's when $CCCC is used instead of $CCCD for depth decrement.
+        int duration = getAlignmentFrameDuration();
+        drawingIndex = (drawingIndex + 1) % Math.max(1, duration);
 
         // Update skydome scroll based on current track animation state
         updateSkydomeScroll();
@@ -986,28 +991,33 @@ public class Sonic2SpecialStageManager {
 
     /**
      * Updates objects (rings, bombs) and handles segment transitions.
+     *
+     * IMPORTANT: The drawing index (this.drawingIndex) cycles 0-4 every frame,
+     * matching the ROM's SSTrack_drawing_index behavior. This is used for:
+     * 1. Determining depth decrement value ($CCCC when index==4, $CCCD otherwise)
+     * 2. Triggering segment spawning when index reaches 4
      */
     private void updateObjects() {
         if (objectManager == null || trackAnimator == null) {
             return;
         }
 
-        // Check for segment transition (drawing index reaches 4)
-        int drawingIndex = trackAnimator.getCurrentFrameInSegment() % 5;
+        // Use the class field drawingIndex which cycles 0-4 every frame (like ROM's VBlank handler)
+        // Note: this.drawingIndex is incremented in update() before this method is called
 
         // Process new segment when drawing_index reaches 4 and segment changed
-        if (drawingIndex == 4 && lastDrawingIndex != 4) {
+        if (this.drawingIndex == 4 && lastDrawingIndex != 4) {
             int segmentIndex = trackAnimator.getCurrentSegmentIndex();
             int segmentType = trackAnimator.getCurrentSegmentType();
             objectManager.processSegment(segmentIndex, segmentType);
         }
-        lastDrawingIndex = drawingIndex;
+        lastDrawingIndex = this.drawingIndex;
 
         // Update all active objects
         int currentFrame = trackAnimator.getCurrentTrackFrameIndex();
         boolean flipped = trackAnimator.getEffectiveFlipState();
         int speedFactor = trackAnimator.getSpeedFactor();
-        boolean drawingIndex4 = (drawingIndex == 4);
+        boolean drawingIndex4 = (this.drawingIndex == 4);
         objectManager.update(currentFrame, flipped, speedFactor, drawingIndex4);
 
         // Update screen positions using perspective data

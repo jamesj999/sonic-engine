@@ -178,7 +178,7 @@ public class Sonic2SpecialStageEmerald extends Sonic2SpecialStageObject {
     }
 
     @Override
-    public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor) {
+    public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor, boolean drawingIndex4) {
         if (state == State.REMOVED) {
             return;
         }
@@ -192,7 +192,7 @@ public class Sonic2SpecialStageEmerald extends Sonic2SpecialStageObject {
                 updateInitializing();
                 break;
             case APPROACHING:
-                updateApproaching(speedFactor);
+                updateApproaching(speedFactor, drawingIndex4);
                 break;
             case COLLECTING:
                 updateCollecting();
@@ -216,9 +216,9 @@ public class Sonic2SpecialStageEmerald extends Sonic2SpecialStageObject {
         }
     }
 
-    private void updateApproaching(int speedFactor) {
-        // Decrement depth (emerald approaches)
-        decrementDepth(false, speedFactor);
+    private void updateApproaching(int speedFactor, boolean drawingIndex4) {
+        // Decrement depth (emerald approaches) - ROM uses fixed rate based on drawing index
+        decrementDepth(drawingIndex4, speedFactor);
 
         // Check if emerald has passed the player
         if (getDepth() <= 0) {

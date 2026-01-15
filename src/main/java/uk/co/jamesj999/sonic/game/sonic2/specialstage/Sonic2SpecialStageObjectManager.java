@@ -338,13 +338,14 @@ public class Sonic2SpecialStageObjectManager {
      *
      * @param currentTrackFrame Current track mapping frame (0-55)
      * @param trackFlipped Whether the track is flipped (left turn)
-     * @param speedFactor Current speed factor from track animator (affects depth decrement rate)
+     * @param speedFactor Current speed factor from track animator
+     * @param drawingIndex4 True if SSTrack_drawing_index == 4 (affects depth decrement rate)
      */
-    public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor) {
+    public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor, boolean drawingIndex4) {
         // Update each active object
         for (int i = activeObjects.size() - 1; i >= 0; i--) {
             Sonic2SpecialStageObject obj = activeObjects.get(i);
-            obj.update(currentTrackFrame, trackFlipped, speedFactor);
+            obj.update(currentTrackFrame, trackFlipped, speedFactor, drawingIndex4);
 
             // Remove objects that are done (collected or off-screen)
             if (obj.shouldRemove()) {

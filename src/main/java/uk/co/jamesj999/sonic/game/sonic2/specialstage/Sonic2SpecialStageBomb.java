@@ -31,7 +31,7 @@ public class Sonic2SpecialStageBomb extends Sonic2SpecialStageObject {
     }
 
     @Override
-    public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor) {
+    public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor, boolean drawingIndex4) {
         if (state == State.REMOVED) {
             return;
         }
@@ -42,8 +42,8 @@ public class Sonic2SpecialStageBomb extends Sonic2SpecialStageObject {
             return;
         }
 
-        // Decrement depth (object approaches) - rate derived from speedFactor
-        decrementDepth(false, speedFactor);
+        // Decrement depth (object approaches) - ROM uses fixed rate based on drawing index
+        decrementDepth(drawingIndex4, speedFactor);
 
         // Check if object has passed the player
         if (getDepth() <= 0) {

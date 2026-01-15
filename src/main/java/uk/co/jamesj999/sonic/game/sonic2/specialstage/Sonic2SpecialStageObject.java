@@ -33,13 +33,15 @@ public abstract class Sonic2SpecialStageObject {
 
     /**
      * Depth decrement values from disassembly (loc_3512A in s2.asm).
-     * These are FIXED values - NOT scaled by speed factor.
-     * - $CCCC when SSTrack_drawing_index == 4
-     * - $CCCD when SSTrack_drawing_index != 4
-     * The tiny difference (1 in 16.16 format) may be intentional for timing.
+     * ROM uses FIXED values that do NOT vary with speed factor:
+     * - $CCCC (52428) when SSTrack_drawing_index == 4
+     * - $CCCD (52429) when SSTrack_drawing_index != 4
+     *
+     * The drawing index cycles at different rates based on speed factor, which naturally
+     * creates different total decrements per animation frame. But since there are also
+     * different numbers of animation frames per second, objects approach at the same
+     * real-time rate regardless of speed factor (~48 depth units per second).
      */
-    private static final long DEPTH_DECREMENT_INDEX4 = 0xCCCC;
-    private static final long DEPTH_DECREMENT_OTHER = 0xCCCD;
 
     /** Screen X position (calculated from perspective data) */
     protected int screenX;
@@ -174,8 +176,21 @@ public abstract class Sonic2SpecialStageObject {
      */
     public void decrementDepth(boolean drawingIndex4, int speedFactor) {
         if (depthFixed > 0) {
-            // ROM uses fixed decrement values, NOT scaled by speed factor
-            long decrement = drawingIndex4 ? DEPTH_DECREMENT_INDEX4 : DEPTH_DECREMENT_OTHER;
+            // ROM uses FIXED depth decrement values (from loc_3512A in s2.asm):
+            // - $CCCC when SSTrack_drawing_index == 4
+            // - $CCCD otherwise
+            //
+            // The total decrement per animation frame varies with speed factor:
+            // - speedFactor=12 (duration=5): 4 × $CCCD + 1 × $CCCC = 262144 (~4.0)
+            // - speedFactor=6 (duration=10): 9 × $CCCD + 1 × $CCCC = 524289 (~8.0)
+            //
+            // But since there are fewer animation frames per second at lower speed factors,
+            // the depth decrement per second is the same:
+            // - speedFactor=12: 12 frames/sec × 4.0 = 48.0 depth/sec
+            // - speedFactor=6: 6 frames/sec × 8.0 = 48.0 depth/sec
+            //
+            // This means objects approach at the same real-time rate regardless of speed factor.
+            long decrement = drawingIndex4 ? 0xCCCC : 0xCCCD;
             depthFixed -= decrement;
             if (depthFixed < 0) {
                 depthFixed = 0;
