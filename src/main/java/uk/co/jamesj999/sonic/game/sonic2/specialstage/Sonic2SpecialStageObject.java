@@ -31,12 +31,15 @@ public abstract class Sonic2SpecialStageObject {
     /** Depth value as 16.16 fixed-point (high word = integer part) */
     protected long depthFixed;
 
-    /** Base depth decrement per frame at speedFactor=12 (from disassembly: $CCCC in 16.16 format) */
-    private static final long BASE_DEPTH_DECREMENT = 0xCCCC;
-    private static final int BASE_DURATION = 5;  // Duration at speedFactor=12
-
-    /** Duration table from SSAnim_Base_Duration (ROM offset 0x000B46) */
-    private static final int[] ANIM_BASE_DURATIONS = { 60, 30, 15, 10, 8, 6, 5, 0 };
+    /**
+     * Depth decrement values from disassembly (loc_3512A in s2.asm).
+     * These are FIXED values - NOT scaled by speed factor.
+     * - $CCCC when SSTrack_drawing_index == 4
+     * - $CCCD when SSTrack_drawing_index != 4
+     * The tiny difference (1 in 16.16 format) may be intentional for timing.
+     */
+    private static final long DEPTH_DECREMENT_INDEX4 = 0xCCCC;
+    private static final long DEPTH_DECREMENT_OTHER = 0xCCCD;
 
     /** Screen X position (calculated from perspective data) */
     protected int screenX;
@@ -81,9 +84,10 @@ public abstract class Sonic2SpecialStageObject {
      *
      * @param currentTrackFrame Current track mapping frame (0-55)
      * @param trackFlipped Whether the track is flipped (left turn)
-     * @param speedFactor Current speed factor from track animator (affects depth decrement rate)
+     * @param speedFactor Current speed factor from track animator
+     * @param drawingIndex4 True if SSTrack_drawing_index == 4 (affects depth decrement)
      */
-    public abstract void update(int currentTrackFrame, boolean trackFlipped, int speedFactor);
+    public abstract void update(int currentTrackFrame, boolean trackFlipped, int speedFactor, boolean drawingIndex4);
 
     /**
      * Updates the screen position using perspective data.
@@ -155,51 +159,23 @@ public abstract class Sonic2SpecialStageObject {
     }
 
     /**
-     * Calculates depth decrement based on current speed factor.
-     * This ensures objects move at the correct rate relative to track animation.
-     *
-     * Original game at speedFactor=12, duration=5:
-     * - Objects decrement $CCCC per frame
-     * - Over 5 frames (one track step), depth decreases by ~4 units
-     *
-     * When speedFactor changes, we scale proportionally to maintain this ratio.
-     *
-     * @param speedFactor Current speed factor from track animator (0-14)
-     * @return The depth decrement value in 16.16 fixed-point
-     */
-    public static long calculateDepthDecrement(int speedFactor) {
-        int duration = getFrameDuration(speedFactor);
-        // Scale inversely with duration: slower track (larger duration) = slower objects
-        // At speedFactor=12, duration=5, decrement=$CCCC
-        // At speedFactor=6, duration=10, decrement=$CCCC*5/10=$6666
-        return (BASE_DEPTH_DECREMENT * BASE_DURATION) / duration;
-    }
-
-    /**
-     * Gets the frame duration for a given speed factor.
-     *
-     * @param speedFactor The speed factor (0-14)
-     * @return The number of frames per track animation step
-     */
-    private static int getFrameDuration(int speedFactor) {
-        int index = (speedFactor >> 1) & 0x7;
-        if (index < ANIM_BASE_DURATIONS.length && ANIM_BASE_DURATIONS[index] > 0) {
-            return ANIM_BASE_DURATIONS[index];
-        }
-        return BASE_DURATION; // Default to 5 frames
-    }
-
-    /**
      * Decrements the depth value using fixed-point math.
-     * The rate is derived from the current speed factor to stay synchronized
-     * with track animation.
+     *
+     * From disassembly (loc_3512A in s2.asm):
+     * - When SSTrack_drawing_index == 4: subtract $CCCC
+     * - Otherwise: subtract $CCCD
+     *
+     * Note: The depth decrement is FIXED and does NOT vary with speed factor.
+     * Track animation speed affects how fast the track moves visually, but
+     * objects always approach at the same rate for consistent collision timing.
      *
      * @param drawingIndex4 True if SSTrack_drawing_index == 4
-     * @param speedFactor Current speed factor from track animator
+     * @param speedFactor Unused - kept for API compatibility but ROM doesn't scale by speed
      */
     public void decrementDepth(boolean drawingIndex4, int speedFactor) {
         if (depthFixed > 0) {
-            long decrement = calculateDepthDecrement(speedFactor);
+            // ROM uses fixed decrement values, NOT scaled by speed factor
+            long decrement = drawingIndex4 ? DEPTH_DECREMENT_INDEX4 : DEPTH_DECREMENT_OTHER;
             depthFixed -= decrement;
             if (depthFixed < 0) {
                 depthFixed = 0;

@@ -1457,8 +1457,12 @@ public class Sonic2SpecialStageRenderer {
                     continue;
                 }
                 // Only render shadows for normal rings and bombs, not special states
+                // Skip ring shadows during checkpoint animation (same as ring sprites)
                 if (obj.isRing() && !((Sonic2SpecialStageRing) obj).isSparkle()) {
-                    renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
+                    boolean hideForCheckpoint = checkpoint != null && checkpoint.isActive();
+                    if (!hideForCheckpoint) {
+                        renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
+                    }
                 } else if (obj.isBomb() && !((Sonic2SpecialStageBomb) obj).isExploding()) {
                     renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
                 } else if (obj.isEmerald()) {
@@ -1476,7 +1480,15 @@ public class Sonic2SpecialStageRenderer {
             }
 
             if (obj.isRing()) {
-                renderRing((Sonic2SpecialStageRing) obj, SCREEN_CENTER_OFFSET);
+                // Skip rendering collectible rings (not sparkles) during checkpoint animation.
+                // The checkpoint rainbow palette cycles colors 11-13 of palette 3, which
+                // would affect ring colors if they're visible during the animation.
+                // In the original game, rings should have passed by checkpoint time.
+                Sonic2SpecialStageRing ring = (Sonic2SpecialStageRing) obj;
+                boolean hideForCheckpoint = checkpoint != null && checkpoint.isActive() && !ring.isSparkle();
+                if (!hideForCheckpoint) {
+                    renderRing(ring, SCREEN_CENTER_OFFSET);
+                }
             } else if (obj.isBomb()) {
                 renderBomb((Sonic2SpecialStageBomb) obj, SCREEN_CENTER_OFFSET);
             } else if (obj.isEmerald()) {
@@ -1795,6 +1807,8 @@ public class Sonic2SpecialStageRenderer {
 
                     PatternDesc desc = new PatternDesc();
                     desc.setPriority(true);
+                    // ROM uses palette 3 for checkpoint rainbow rings
+                    // The rainbow cycling modifies colors 11-13, which the ring art uses
                     desc.setPaletteIndex(3);
                     desc.setHFlip(piece.hFlip);
                     desc.setVFlip(piece.vFlip);

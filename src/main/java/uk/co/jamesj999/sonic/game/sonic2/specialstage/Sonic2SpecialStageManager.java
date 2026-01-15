@@ -617,6 +617,8 @@ public class Sonic2SpecialStageManager {
             return;
         }
 
+        // ROM uses palette line 4 (index 3) for checkpoint rainbow, modifying colors 11-13
+        // Ring art intentionally uses only colors 0-10, so rainbow cycling shouldn't affect rings
         int[] colors = bright ? CHECKPOINT_RAINBOW_PALETTE_ON : CHECKPOINT_RAINBOW_PALETTE_OFF;
         Palette palette = palettes[3];
         palette.setColor(11, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[0]));
@@ -652,7 +654,7 @@ public class Sonic2SpecialStageManager {
         int[] colors = CHECKPOINT_RAINBOW_CYCLE_COLORS[rainbowPaletteCycleIndex];
         rainbowPaletteCycleIndex = (rainbowPaletteCycleIndex + 1) & 3; // Wrap 0-3
 
-        // Apply colors to palette line 3, indices 11-13
+        // Apply colors to palette 3, indices 11-13 (ROM-accurate)
         Palette palette = palettes[3];
         palette.setColor(11, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[0]));
         palette.setColor(12, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[1]));
@@ -1005,7 +1007,8 @@ public class Sonic2SpecialStageManager {
         int currentFrame = trackAnimator.getCurrentTrackFrameIndex();
         boolean flipped = trackAnimator.getEffectiveFlipState();
         int speedFactor = trackAnimator.getSpeedFactor();
-        objectManager.update(currentFrame, flipped, speedFactor);
+        boolean drawingIndex4 = (drawingIndex == 4);
+        objectManager.update(currentFrame, flipped, speedFactor, drawingIndex4);
 
         // Update screen positions using perspective data
         if (perspectiveData != null) {

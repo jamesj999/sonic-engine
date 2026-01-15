@@ -179,6 +179,31 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean controlLocked = false;
 
+        /**
+         * Clears all active power-ups (shield, invincibility, speed shoes).
+         * Called when entering special stage to remove power-up effects.
+         */
+        public void clearPowerUps() {
+                // Clear shield
+                this.shield = false;
+                if (this.shieldObject != null) {
+                        this.shieldObject.destroy();
+                        this.shieldObject = null;
+                }
+                // Clear invincibility
+                if (this.invincibilityObject != null) {
+                        this.invincibilityObject.destroy();
+                        this.invincibilityObject = null;
+                }
+                this.invincibleFrames = 0;
+                // Clear speed shoes
+                if (this.speedShoes) {
+                        this.speedShoes = false;
+                        TimerManager.getInstance().removeTimerForCode("SpeedShoes-" + getCode());
+                        defineSpeeds(); // Reset speeds to default
+                }
+        }
+
         public void resetState() {
                 this.shield = false;
                 if (this.shieldObject != null) {

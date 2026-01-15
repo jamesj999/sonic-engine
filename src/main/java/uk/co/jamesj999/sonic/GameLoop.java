@@ -71,6 +71,9 @@ public class GameLoop {
     // Flag to track when returning from special stage (for title card exit handling)
     private boolean returningFromSpecialStage = false;
 
+    // Flag to freeze level updates during special stage entry transition
+    private boolean specialStageTransitionPending = false;
+
     // Listener for game mode changes (used by Engine to update projection)
     private GameModeChangeListener gameModeChangeListener;
 
@@ -220,7 +223,9 @@ public class GameLoop {
 
             boolean freezeForArtViewer = DebugOverlayManager.getInstance()
                     .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
-            if (!freezeForArtViewer) {
+            // Freeze level updates during special stage entry transition
+            boolean freezeForSpecialStage = specialStageTransitionPending;
+            if (!freezeForArtViewer && !freezeForSpecialStage) {
                 spriteCollisionManager.update(inputHandler);
                 camera.updatePosition();
                 levelManager.update();
@@ -408,6 +413,17 @@ public class GameLoop {
             return;
         }
 
+        // Freeze level updates during transition (ROM-accurate: level stops updating)
+        specialStageTransitionPending = true;
+
+        // Clear power-ups before entering special stage
+        String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+        if (mainCode == null) mainCode = "sonic";
+        var sprite = spriteManager.getSprite(mainCode);
+        if (sprite instanceof AbstractPlayableSprite playable) {
+            playable.clearPowerUps();
+        }
+
         // Play special stage entry sound
         AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
 
@@ -431,6 +447,9 @@ public class GameLoop {
      * Called by the fade callback.
      */
     private void doEnterSpecialStage(int stageIndex) {
+        // Clear the transition freeze flag (now we're in special stage mode)
+        specialStageTransitionPending = false;
+
         try {
             specialStageManager.reset();
             specialStageManager.initialize(stageIndex);

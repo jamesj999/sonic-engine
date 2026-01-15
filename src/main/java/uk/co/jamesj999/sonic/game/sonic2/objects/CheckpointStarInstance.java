@@ -34,6 +34,7 @@ public class CheckpointStarInstance extends AbstractObjectInstance {
     private static final int DELETE_AT = 0x200; // Delete when lifetime reaches this
     private static final int ANGLE_INCREMENT = 0xA; // Add to angle each frame
 
+    private final CheckpointObjectInstance parentCheckpoint; // Reference to parent for marking as used
     private final int centerX; // objoff_30
     private final int centerY; // objoff_32
     private int angle; // objoff_34 (starts at angleOffset, increments by 0xA)
@@ -46,6 +47,7 @@ public class CheckpointStarInstance extends AbstractObjectInstance {
 
     public CheckpointStarInstance(CheckpointObjectInstance parent, int angleOffset) {
         super(createDummySpawn(parent), "CheckpointStar");
+        this.parentCheckpoint = parent;
         this.centerX = parent.getCenterX();
         this.centerY = parent.getCenterY() - 0x30; // Y offset from ROM
         this.angle = angleOffset; // Starts at 0, 0x40, 0x80, or 0xC0
@@ -95,6 +97,11 @@ public class CheckpointStarInstance extends AbstractObjectInstance {
         // Check for player collision to trigger special stage entry
         if (collisionEnabled && player != null && isPlayerInRange(player)) {
             LOGGER.info("Player touched special stage star - requesting special stage entry");
+            // Mark the parent checkpoint as used for special stage entry
+            // This prevents stars from respawning when returning from special stage
+            if (parentCheckpoint != null) {
+                parentCheckpoint.markUsedForSpecialStage();
+            }
             LevelManager.getInstance().requestSpecialStageFromCheckpoint();
             setDestroyed(true);
         }
