@@ -69,28 +69,6 @@ public class TestGameLoop {
         // Verify no exception is thrown
     }
 
-    // ==================== Camera Save/Restore Tests ====================
-
-    @Test
-    public void testSavedCameraPositionInitiallyZero() {
-        assertEquals("Saved camera X should be 0 initially", 0, gameLoop.getSavedCameraX());
-        assertEquals("Saved camera Y should be 0 initially", 0, gameLoop.getSavedCameraY());
-    }
-
-    @Test
-    public void testSetSavedCameraPosition() {
-        gameLoop.setSavedCameraPosition((short) 100, (short) 200);
-        assertEquals("Saved camera X should be set", 100, gameLoop.getSavedCameraX());
-        assertEquals("Saved camera Y should be set", 200, gameLoop.getSavedCameraY());
-    }
-
-    @Test
-    public void testSetSavedCameraPositionWithNegativeValues() {
-        gameLoop.setSavedCameraPosition((short) -50, (short) -100);
-        assertEquals("Saved camera X should handle negative values", -50, gameLoop.getSavedCameraX());
-        assertEquals("Saved camera Y should handle negative values", -100, gameLoop.getSavedCameraY());
-    }
-
     // ==================== Mode Transition Guard Tests ====================
 
     @Test

@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
+import uk.co.jamesj999.sonic.graphics.FadeManager;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Pattern;
@@ -128,24 +129,28 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
 
     @Override
     protected void onExitReady() {
-        triggerLevelTransition();
+        triggerFadeToBlack();
     }
 
-    private void triggerLevelTransition() {
-        LOGGER.info("Results screen complete, triggering level transition");
+    private void triggerFadeToBlack() {
+        LOGGER.info("Results screen complete, starting fade to black");
 
-        // Mark this object as done
-        setDestroyed(true);
+        // Start fade to black, then transition to next level when fade completes
+        FadeManager fadeManager = FadeManager.getInstance();
+        fadeManager.startFadeToBlack(() -> {
+            // Mark this object as done
+            setDestroyed(true);
 
-        // Use existing LevelManager helper to advance to next act
-        LevelManager levelManager = LevelManager.getInstance();
-        if (levelManager != null) {
-            try {
-                levelManager.advanceToNextLevel();
-            } catch (java.io.IOException e) {
-                LOGGER.severe("Failed to load next level: " + e.getMessage());
+            // Use existing LevelManager helper to advance to next act
+            LevelManager levelManager = LevelManager.getInstance();
+            if (levelManager != null) {
+                try {
+                    levelManager.advanceToNextLevel();
+                } catch (java.io.IOException e) {
+                    LOGGER.severe("Failed to load next level: " + e.getMessage());
+                }
             }
-        }
+        });
     }
 
     @Override
