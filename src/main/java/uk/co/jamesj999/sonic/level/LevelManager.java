@@ -239,7 +239,8 @@ public class LevelManager {
             solidObjectManager.update(playable);
         }
         if (touchResponseManager != null) {
-            // Pass frameCounter + 1 to match lostRingManager.update for consistent ring timing
+            // Pass frameCounter + 1 to match lostRingManager.update for consistent ring
+            // timing
             touchResponseManager.update(playable, frameCounter + 1);
         }
         if (ringManager != null) {
@@ -593,7 +594,8 @@ public class LevelManager {
         DebugObjectArtViewer.getInstance().draw(objectRenderManager, camera);
 
         if (hudRenderManager != null) {
-            hudRenderManager.draw(levelGamestate);
+            AbstractPlayableSprite focusedPlayer = camera.getFocusedSprite();
+            hudRenderManager.draw(levelGamestate, focusedPlayer);
         }
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
@@ -1634,7 +1636,8 @@ public class LevelManager {
     /**
      * Loads the current level with optional title card.
      *
-     * @param showTitleCard true to show title card on fresh starts, false for death respawns
+     * @param showTitleCard true to show title card on fresh starts, false for death
+     *                      respawns
      */
     private void loadCurrentLevel(boolean showTitleCard) {
         try {
@@ -1654,14 +1657,16 @@ public class LevelManager {
             // Restore checkpoint state if we had an active checkpoint
             // (loadLevel clears it, but we need it for subsequent respawns)
             if (hasCheckpoint && checkpointState != null) {
-                checkpointState.restoreFromSaved(checkpointX, checkpointY, checkpointCameraX, checkpointCameraY, checkpointIndex);
+                checkpointState.restoreFromSaved(checkpointX, checkpointY, checkpointCameraX, checkpointCameraY,
+                        checkpointIndex);
             }
 
             frameCounter = 0;
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
 
             // Use checkpoint position if available, otherwise level start
-            // Note: Spawn Y coordinates from ROM data represent the sprite's CENTER position,
+            // Note: Spawn Y coordinates from ROM data represent the sprite's CENTER
+            // position,
             // but our setY() sets the top-left. We need to subtract yRadius to convert.
             int yRadius = 19; // Sonic's standing yRadius
             if (hasCheckpoint) {
@@ -1723,7 +1728,8 @@ public class LevelManager {
             }
 
             // Request title card for level starts and death respawns
-            // Original Sonic 2 shows title card on all respawns (with or without checkpoint)
+            // Original Sonic 2 shows title card on all respawns (with or without
+            // checkpoint)
             if (showTitleCard) {
                 requestTitleCard(currentZone, currentAct);
             }
@@ -1949,6 +1955,7 @@ public class LevelManager {
 
     /**
      * Check and consume respawn request.
+     * 
      * @return true if respawn was requested
      */
     public boolean consumeRespawnRequest() {
@@ -1966,6 +1973,7 @@ public class LevelManager {
 
     /**
      * Check and consume next act request.
+     * 
      * @return true if next act was requested
      */
     public boolean consumeNextActRequest() {
@@ -1983,6 +1991,7 @@ public class LevelManager {
 
     /**
      * Check and consume next zone request.
+     * 
      * @return true if next zone was requested
      */
     public boolean consumeNextZoneRequest() {

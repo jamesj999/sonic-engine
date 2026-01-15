@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 public class HudRenderManager {
     private static final int DIGIT_ZERO = 0; // Relative to loaded HUD digit patterns
@@ -71,22 +72,55 @@ public class HudRenderManager {
     }
 
     public void draw(LevelGamestate levelGamestate) {
+        draw(levelGamestate, null);
+    }
+
+    public void draw(LevelGamestate levelGamestate, AbstractPlayableSprite player) {
         if (levelGamestate == null)
             return;
 
-        // Debug logging (temporary)
-        // System.out.println("Drawing HUD. Score: " +
-        // GameStateManager.getInstance().getScore());
+        // Check if debug mode is active
+        boolean debugMode = player != null && player.isDebugMode();
 
-        // Draw Score
-        drawHudString(16, 8, "SCORE", hudPatternDesc);
-        // Score: Ones digit at 104.
-        drawScore(GameStateManager.getInstance().getScore());
+        if (debugMode) {
+            // Debug mode: Sonic 2 style coordinate display
+            // "SCOR" text stays, "E" is replaced with smaller hex coordinates
+            // Two rows of 8 hex digits each (using smaller 8x8 lives number font):
+            // Top row: Player X (4 hex digits) + Player Y (4 hex digits)
+            // Bottom row: Camera X (4 hex digits) + Camera Y (4 hex digits)
+            Camera camera = Camera.getInstance();
 
-        // Draw Time
-        boolean flashTime = levelGamestate.getTimer().shouldFlash();
-        drawHudString(16, 24, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
-        drawTime(56, 24, levelGamestate.getTimer().getDisplayTime());
+            // Draw "SCOR" (skip the E) - this uses the normal large HUD text
+            drawHudString(16, 8, "SCOR", hudPatternDesc);
+
+            // Calculate where the hex coordinates start (right after "SCOR")
+            // "SCOR" is 4 characters * 8 pixels = 32 pixels, starting at x=16
+            int hexStartX = 16 + 32; // = 48
+
+            // Player coordinates (top row, at same Y as "SCOR")
+            int playerX = player.getCentreX() & 0xFFFF;
+            int playerY = player.getCentreY() & 0xFFFF;
+            drawSmallHexCoordinates(hexStartX, 8, playerX, playerY);
+
+            // Camera coordinates (second row, below the first)
+            int camX = camera.getX() & 0xFFFF;
+            int camY = camera.getY() & 0xFFFF;
+            drawSmallHexCoordinates(hexStartX, 16, camX, camY);
+
+            // Draw Time below the debug coordinates
+            boolean flashTime = levelGamestate.getTimer().shouldFlash();
+            drawHudString(16, 24, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
+            drawTime(56, 24, levelGamestate.getTimer().getDisplayTime());
+        } else {
+            // Normal gameplay: Draw Score
+            drawHudString(16, 8, "SCORE", hudPatternDesc);
+            drawScore(GameStateManager.getInstance().getScore());
+
+            // Draw Time
+            boolean flashTime = levelGamestate.getTimer().shouldFlash();
+            drawHudString(16, 24, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
+            drawTime(56, 24, levelGamestate.getTimer().getDisplayTime());
+        }
 
         drawCores(levelGamestate.getRings(), levelGamestate.getTimer().getFlashCycle());
         drawLives(uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getLives());
@@ -114,6 +148,62 @@ public class HudRenderManager {
         // I will fix this cleanliness issue while I am here.
 
         drawNumberRightAligned(64, 8, score, 6);
+    }
+
+    /**
+     * Draws hex coordinates using small 8x8 font (like original Sonic 2 debug
+     * mode).
+     * Format: XXXXYYYY (8 hex digits total, no gap between X and Y)
+     * Uses the smaller lives number font for digits 0-9.
+     * 
+     * @param x      Base X position on screen
+     * @param y      Base Y position on screen
+     * @param xCoord X coordinate to display (will be masked to 16-bit)
+     * @param yCoord Y coordinate to display (will be masked to 16-bit)
+     */
+    private void drawSmallHexCoordinates(int x, int y, int xCoord, int yCoord) {
+        int camX = Camera.getInstance().getX();
+        int camY = Camera.getInstance().getY();
+
+        // Draw X coordinate (4 hex digits)
+        for (int i = 0; i < 4; i++) {
+            int nibble = (xCoord >> (12 - i * 4)) & 0xF;
+            drawSmallHexDigit(x + camX + (i * 8), y + camY, nibble);
+        }
+
+        // Draw Y coordinate immediately after X (4 hex digits, no gap)
+        int yStartX = x + 32; // 4 digits * 8 pixels = 32 pixels
+
+        for (int i = 0; i < 4; i++) {
+            int nibble = (yCoord >> (12 - i * 4)) & 0xF;
+            drawSmallHexDigit(yStartX + camX + (i * 8), y + camY, nibble);
+        }
+    }
+
+    /**
+     * Draws a single hex digit (0-F) using the small 8x8 lives number font.
+     * Unlike the large HUD digits which are 16px tall (2 tiles), these are single
+     * 8x8 tiles.
+     * 
+     * @param x     Screen X position
+     * @param y     Screen Y position
+     * @param digit Hex digit value (0-15)
+     */
+    private void drawSmallHexDigit(int x, int y, int digit) {
+        // Fallback: use lives numbers for 0-9, approximations for A-F
+        if (livesNumbersPatternIndex <= 0) {
+            return;
+        }
+
+        if (digit < 10) {
+            renderSafe(livesNumbersPatternIndex + digit, iconPatternDesc, x, y);
+        } else {
+            // Fallback for A-F when debug font not available
+            int fallbackDigit = digit - 9;
+            if (fallbackDigit >= 0 && fallbackDigit <= 9) {
+                renderSafe(livesNumbersPatternIndex + fallbackDigit, iconPatternDesc, x, y);
+            }
+        }
     }
 
     private void drawLives(int lives) {

@@ -37,6 +37,7 @@ public class ObjectArtData {
         private final Pattern[] hudTextPatterns;
         private final Pattern[] hudLivesPatterns;
         private final Pattern[] hudLivesNumbers;
+        private final Pattern[] debugFontPatterns;
         private final List<SpriteMappingFrame> obj26Mappings;
         private final List<SpriteMappingFrame> obj41Mappings;
         private final List<SpriteMappingFrame> obj79Mappings;
@@ -73,6 +74,7 @@ public class ObjectArtData {
                         Pattern[] hudTextPatterns,
                         Pattern[] hudLivesPatterns,
                         Pattern[] hudLivesNumbers,
+                        Pattern[] debugFontPatterns,
                         List<SpriteMappingFrame> obj26Mappings,
                         List<SpriteMappingFrame> obj41Mappings,
                         List<SpriteMappingFrame> obj79Mappings,
@@ -107,6 +109,7 @@ public class ObjectArtData {
                 this.hudTextPatterns = hudTextPatterns;
                 this.hudLivesPatterns = hudLivesPatterns;
                 this.hudLivesNumbers = hudLivesNumbers;
+                this.debugFontPatterns = debugFontPatterns;
                 this.obj26Mappings = obj26Mappings;
                 this.obj41Mappings = obj41Mappings;
                 this.obj79Mappings = obj79Mappings;
@@ -222,6 +225,10 @@ public class ObjectArtData {
 
         public Pattern[] getHudLivesNumbers() {
                 return hudLivesNumbers;
+        }
+
+        public Pattern[] getDebugFontPatterns() {
+                return debugFontPatterns;
         }
 
         public SpriteAnimationSet monitorAnimations() {
