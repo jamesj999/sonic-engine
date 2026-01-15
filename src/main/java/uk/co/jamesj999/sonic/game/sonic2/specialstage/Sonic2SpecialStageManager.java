@@ -156,6 +156,7 @@ public class Sonic2SpecialStageManager {
     // Checkpoint system
     private Sonic2SpecialStageCheckpoint checkpoint;
     private boolean checkpointRainbowPaletteActive = false;
+    private int rainbowPaletteCycleIndex = 0; // Cycles 0-3 for color cycling
     private boolean pendingCheckpoint = false;
     private int pendingCheckpointNumber = 0;
     private int pendingRingRequirement = 0;
@@ -227,9 +228,20 @@ public class Sonic2SpecialStageManager {
         6, 7, 9, 8                                // Frames 20-23 (12/2=6, 14/2=7, 18/2=9, 16/2=8)
     };
 
-    // Checkpoint rainbow palette tweaks (SSRainbowPaletteColors)
+    // Checkpoint rainbow palette - static states (SSRainbowPaletteColors at word_35548)
+    // OFF: dark red when no checkpoint active, ON: bright red when entering checkpoint
     private static final int[] CHECKPOINT_RAINBOW_PALETTE_ON = {0x0EE, 0x0CC, 0x088};
     private static final int[] CHECKPOINT_RAINBOW_PALETTE_OFF = {0x0EE, 0x088, 0x044};
+
+    // Checkpoint rainbow palette cycling colors (PalCycle_SS at word_54C4-word_54C8)
+    // Cycles every 8 frames through: Red -> Green -> Yellow -> Magenta
+    private static final int[][] CHECKPOINT_RAINBOW_CYCLE_COLORS = {
+        {0x0EE, 0x0CC, 0x088},  // Index 0: Red shades
+        {0x0E0, 0x0C0, 0x080},  // Index 1: Green shades
+        {0xEE0, 0xCC0, 0x880},  // Index 2: Yellow shades
+        {0xE0E, 0xC0C, 0x808}   // Index 3: Magenta shades
+    };
+    private static final int RAINBOW_CYCLE_FRAME_INTERVAL = 8; // Cycles every 8 frames
     // Checkpoint gate trigger uses MapSpec_Straight4..MapSpec_Drop1 range (Obj5A_Init).
     private static final int CHECKPOINT_TRIGGER_FRAME = 0x14; // Straight4
     private static final int CHECKPOINT_TRIGGER_OFFSET = 1;   // Offset within straight animation (alignment tuned)
@@ -613,6 +625,40 @@ public class Sonic2SpecialStageManager {
 
         graphicsManager.cachePaletteTexture(palette, 3);
         checkpointRainbowPaletteActive = bright;
+
+        // Reset cycle index when rainbow state changes
+        if (bright) {
+            rainbowPaletteCycleIndex = 0;
+        }
+    }
+
+    /**
+     * Updates the checkpoint rainbow palette cycling.
+     * Based on PalCycle_SS in s2.asm (lines 6859-6873).
+     * Cycles through Red -> Green -> Yellow -> Magenta every 8 frames
+     * while the checkpoint rainbow animation is active.
+     */
+    private void updateRainbowPaletteCycle() {
+        if (!checkpointRainbowPaletteActive || palettes == null || graphicsManager == null) {
+            return;
+        }
+
+        // Only update every 8 frames (matches original: andi.b #7,d0; bne.s +)
+        if ((frameCounter & 7) != 0) {
+            return;
+        }
+
+        // Get current cycle colors and advance index
+        int[] colors = CHECKPOINT_RAINBOW_CYCLE_COLORS[rainbowPaletteCycleIndex];
+        rainbowPaletteCycleIndex = (rainbowPaletteCycleIndex + 1) & 3; // Wrap 0-3
+
+        // Apply colors to palette line 3, indices 11-13
+        Palette palette = palettes[3];
+        palette.setColor(11, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[0]));
+        palette.setColor(12, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[1]));
+        palette.setColor(13, Sonic2SpecialStagePalette.genesisColorToPaletteColor(colors[2]));
+
+        graphicsManager.cachePaletteTexture(palette, 3);
     }
 
     private void tryStartPendingCheckpoint() {
@@ -902,6 +948,9 @@ public class Sonic2SpecialStageManager {
                 handleCheckpointAnimationComplete();
             }
         }
+
+        // Update rainbow palette cycling (runs every frame, but only changes every 8 frames)
+        updateRainbowPaletteCycle();
     }
 
     /**
@@ -1714,6 +1763,7 @@ public class Sonic2SpecialStageManager {
         }
         checkpoint = null;
         checkpointRainbowPaletteActive = false;
+        rainbowPaletteCycleIndex = 0;
         pendingCheckpoint = false;
         pendingCheckpointNumber = 0;
         pendingRingRequirement = 0;

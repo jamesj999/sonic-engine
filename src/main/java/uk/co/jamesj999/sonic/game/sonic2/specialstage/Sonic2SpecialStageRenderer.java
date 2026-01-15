@@ -1522,13 +1522,13 @@ public class Sonic2SpecialStageRenderer {
         // Calculate shadow Y position
         // The shadow should appear below the object on the track surface.
         // For the emerald, which floats above the track, the shadow needs a larger
-        // offset to appear on the track below. The emerald sprite is centered with
-        // yOffset=-12, so it extends from y-12 to y+12. Shadow should be below that.
+        // offset to appear on the track below.
         int shadowOffsetY;
         if (obj.isEmerald()) {
             // Emerald shadow offset scales with size (animIndex 9=small/far, 0=large/close)
-            // When close (animIndex low), shadow is further below due to perspective
-            int sizeOffset = 12 + (9 - Math.min(animIndex, 9)) * 2;  // 12 to 30
+            // When close (animIndex low), shadow is much further below due to perspective
+            // The emerald floats high above the track at close range
+            int sizeOffset = 16 + (9 - Math.min(animIndex, 9)) * 5;  // 16 to 61
             shadowOffsetY = sizeOffset;
         } else {
             shadowOffsetY = 8;

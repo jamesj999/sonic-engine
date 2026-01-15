@@ -14,3 +14,4 @@ Last updated: 2026-01-15
 - [ ] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
 - [ ] Finishing a special stage puts you at your last coordinates, instead of the coordinates of the last signpost (or, if none, fall back to act start position).
 - [ ] Both special stage and end of act cards shouldn't start counting the score until a set delay.
+- [ ] Special stage results ending should fade to white (verify!)
