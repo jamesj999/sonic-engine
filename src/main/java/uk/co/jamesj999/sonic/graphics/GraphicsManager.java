@@ -527,4 +527,27 @@ public class GraphicsManager {
 			}
 		}
 	}
+
+	/**
+	 * Enables scissor test with the specified rectangle.
+	 * Coordinates are in OpenGL screen space (Y=0 at bottom).
+	 *
+	 * @param x Left edge of scissor rectangle
+	 * @param y Bottom edge of scissor rectangle
+	 * @param width Width of scissor rectangle
+	 * @param height Height of scissor rectangle
+	 */
+	public void enableScissor(int x, int y, int width, int height) {
+		if (headlessMode || graphics == null) return;
+		graphics.glScissor(x, y, width, height);
+		graphics.glEnable(GL2.GL_SCISSOR_TEST);
+	}
+
+	/**
+	 * Disables scissor test.
+	 */
+	public void disableScissor() {
+		if (headlessMode || graphics == null) return;
+		graphics.glDisable(GL2.GL_SCISSOR_TEST);
+	}
 }

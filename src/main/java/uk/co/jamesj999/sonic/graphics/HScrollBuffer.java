@@ -2,7 +2,7 @@ package uk.co.jamesj999.sonic.graphics;
 
 import com.jogamp.opengl.GL2;
 
-import java.nio.ShortBuffer;
+import java.nio.FloatBuffer;
 
 /**
  * GPU-side horizontal scroll buffer for per-scanline parallax scrolling.
@@ -10,14 +10,14 @@ import java.nio.ShortBuffer;
  * in a 1D texture that the parallax shader samples.
  * 
  * The texture stores 224 entries (one per visible scanline), with each
- * entry containing the background X scroll offset as a signed 16-bit value.
+ * entry containing the background X scroll offset normalized to -1..1.
  */
 public class HScrollBuffer {
 
     public static final int VISIBLE_LINES = 224;
 
     private int textureId = -1;
-    private final short[] scrollData = new short[VISIBLE_LINES];
+    private final float[] scrollData = new float[VISIBLE_LINES];
     private boolean initialized = false;
 
     /**
@@ -42,8 +42,7 @@ public class HScrollBuffer {
         // Clamp to edge - shouldn't sample outside valid range
         gl.glTexParameteri(GL2.GL_TEXTURE_1D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
 
-        // Allocate texture with R16 format for signed 16-bit integers
-        // Using GL_R16F as a compatible format with GLSL 1.10
+        // Allocate texture with R16F format for normalized float values
         gl.glTexImage1D(
                 GL2.GL_TEXTURE_1D,
                 0,
@@ -51,7 +50,7 @@ public class HScrollBuffer {
                 VISIBLE_LINES,
                 0,
                 GL2.GL_RED,
-                GL2.GL_SHORT,
+                GL2.GL_FLOAT,
                 null);
 
         gl.glBindTexture(GL2.GL_TEXTURE_1D, 0);
@@ -69,12 +68,19 @@ public class HScrollBuffer {
             return;
         }
 
-        // Extract BG scroll values (lower 16 bits) from packed format
+        // Extract BG scroll values (lower 16 bits) and normalize to -1..1
         for (int i = 0; i < VISIBLE_LINES && i < hScroll.length; i++) {
-            scrollData[i] = (short) (hScroll[i] & 0xFFFF);
+            int raw = (short) (hScroll[i] & 0xFFFF);
+            float normalized = raw / 32767.0f;
+            if (normalized > 1.0f) {
+                normalized = 1.0f;
+            } else if (normalized < -1.0f) {
+                normalized = -1.0f;
+            }
+            scrollData[i] = normalized;
         }
 
-        ShortBuffer buffer = ShortBuffer.wrap(scrollData);
+        FloatBuffer buffer = FloatBuffer.wrap(scrollData);
 
         gl.glBindTexture(GL2.GL_TEXTURE_1D, textureId);
         gl.glTexSubImage1D(
@@ -83,7 +89,7 @@ public class HScrollBuffer {
                 0,
                 VISIBLE_LINES,
                 GL2.GL_RED,
-                GL2.GL_SHORT,
+                GL2.GL_FLOAT,
                 buffer);
         gl.glBindTexture(GL2.GL_TEXTURE_1D, 0);
     }

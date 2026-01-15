@@ -145,6 +145,11 @@ public enum SonicConfiguration {
 	/**
 	 * Key to toggle Special Stage sprite debug viewer.
 	 */
-	SPECIAL_STAGE_SPRITE_DEBUG_KEY;
+	SPECIAL_STAGE_SPRITE_DEBUG_KEY,
+
+	/**
+	 * Key to cycle Special Stage plane visibility debug modes.
+	 */
+	SPECIAL_STAGE_PLANE_DEBUG_KEY;
 
 }

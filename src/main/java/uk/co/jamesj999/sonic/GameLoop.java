@@ -141,6 +141,11 @@ public class GameLoop {
                 specialStageManager.toggleSpriteDebugMode();
             }
 
+            // Cycle special stage plane visibility (A/B/both/off)
+            if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_PLANE_DEBUG_KEY))) {
+                specialStageManager.cyclePlaneDebugMode();
+            }
+
             // Handle sprite debug viewer navigation (uses configured movement keys)
             if (specialStageManager.isSpriteDebugMode()) {
                 DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();

@@ -152,10 +152,14 @@ public class Sonic2SpecialStageRenderer {
      * Renders the background plane (Plane B).
      *
      * The background mapping buffer is 32 tiles wide × 32 tiles tall.
-     * - Rows 0-15: Lower/upper sky portion (from MapEng_SpecialBackBottom)
-     * - Rows 16-31: Main background portion (from MapEng_SpecialBack)
+     * From disassembly SSPlaneB_Background (s2.asm line 9155):
+     * - Rows 0-15: MapEng_SpecialBackBottom (top of screen)
+     * - Rows 16-31: MapEng_SpecialBack (bottom of screen)
      *
-     * Only rows that fit on screen (28 rows in H32 mode) are rendered.
+     * The plane is 32 rows tall (256px). We render all rows and clip to the
+     * 28-row visible window to preserve wrap behavior during vertical scroll.
+     * H32 mode uses a 256-pixel wide viewport centered on the 320-pixel screen.
+     * Tiles are clipped to prevent rendering outside the H32 viewport.
      *
      * @param mappings Enigma-decoded mapping data (16-bit words)
      * @param scrollX  Horizontal scroll offset
@@ -167,21 +171,24 @@ public class Sonic2SpecialStageRenderer {
             return;
         }
 
-        graphicsManager.beginPatternBatch();
-
         // Screen parameters for H32 mode emulation
         final int H32_WIDTH = 256;
-        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2; // Center 256px image on 320px screen
+        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2; // Center 256px viewport on 320px screen
+
+        graphicsManager.beginPatternBatch();
 
         int wordCount = mappings.length / 2;
         int mapWidth = H32_TILES_X; // 32 tiles wide
         int mapTotalHeight = 32; // Background is 32 tiles tall
         int mapHeight = Math.min(wordCount / mapWidth, mapTotalHeight);
+        int planeHeightPx = mapTotalHeight * TILE_SIZE; // 256 pixels
+        int normalizedScrollY = ((scrollY % planeHeightPx) + planeHeightPx) % planeHeightPx;
 
-        // Only render the visible portion (28 rows fit on screen)
-        int visibleRows = Math.min(mapHeight, H32_TILES_Y);
+        // Normalize scroll to positive value within tile range
+        // The scroll value wraps every 256 pixels (32 tiles * 8 pixels)
+        int normalizedScrollX = ((scrollX % H32_WIDTH) + H32_WIDTH) % H32_WIDTH;
 
-        for (int ty = 0; ty < visibleRows; ty++) {
+        for (int ty = 0; ty < mapHeight; ty++) {
             for (int tx = 0; tx < mapWidth; tx++) {
                 int wordIndex = ty * mapWidth + tx;
                 if (wordIndex * 2 + 1 >= mappings.length)
@@ -196,12 +203,85 @@ public class Sonic2SpecialStageRenderer {
 
                 PatternDesc desc = new PatternDesc(word);
 
-                // Calculate screen position with H32 offset centered
-                // Background wraps horizontally every 256 pixels
-                int screenX = SCREEN_CENTER_OFFSET + ((tx * TILE_SIZE - scrollX) & 0xFF);
-                int screenY = ((H32_TILES_Y - 1 - ty) * TILE_SIZE + scrollY);
+                // Calculate position within H32 viewport (0-255 range)
+                // The background is 32 tiles (256px) wide and wraps horizontally
+                int tilePos = tx * TILE_SIZE - normalizedScrollX;
+                // Wrap to 0-255 range (Java modulo can be negative, so normalize)
+                int h32X = ((tilePos % H32_WIDTH) + H32_WIDTH) % H32_WIDTH;
+
+                int tilePosY = ty * TILE_SIZE - normalizedScrollY;
+                if (tilePosY < -TILE_SIZE) {
+                    tilePosY += planeHeightPx;
+                } else if (tilePosY >= H32_HEIGHT) {
+                    tilePosY -= planeHeightPx;
+                }
+                if (tilePosY < -TILE_SIZE || tilePosY >= H32_HEIGHT) {
+                    continue;
+                }
+                int screenY = tilePosY;
+                int patternId = desc.getPatternIndex() + backgroundPatternBase;
+
+                // Render tile within H32 viewport
+                // Only render if tile starts within the viewport (h32X < 256)
+                // Tiles are exactly aligned to 8-pixel boundaries, so with 32 tiles
+                // covering 256 pixels exactly, there's no partial tile at edges
+                int screenX = SCREEN_CENTER_OFFSET + h32X;
+                graphicsManager.renderPatternWithId(patternId, desc, screenX, screenY);
+            }
+        }
+
+        graphicsManager.flushPatternBatch();
+    }
+
+    /**
+     * Renders the background to an FBO for shader-based processing.
+     *
+     * Unlike renderBackground(), this renders tiles at their natural positions
+     * without scroll wrapping or letterbox offset. The shader handles:
+     * - Per-scanline horizontal scrolling
+     * - H32 viewport clipping (256px centered on 320px)
+     * - Vertical scrolling for parallax
+     *
+     * The FBO is 256x256 pixels (32x32 tiles), matching the background plane size.
+     *
+     * @param mappings Enigma-decoded mapping data (16-bit words)
+     */
+    public void renderBackgroundToFBO(byte[] mappings) {
+        if (mappings == null || mappings.length < 2) {
+            return;
+        }
+
+        graphicsManager.beginPatternBatch();
+
+        int wordCount = mappings.length / 2;
+        int mapWidth = H32_TILES_X; // 32 tiles wide
+        int mapTotalHeight = 32;    // Background is 32 tiles tall
+        int mapHeight = Math.min(wordCount / mapWidth, mapTotalHeight);
+
+        for (int ty = 0; ty < mapHeight; ty++) {
+            for (int tx = 0; tx < mapWidth; tx++) {
+                int wordIndex = ty * mapWidth + tx;
+                if (wordIndex * 2 + 1 >= mappings.length)
+                    continue;
+
+                int word = ((mappings[wordIndex * 2] & 0xFF) << 8) |
+                        (mappings[wordIndex * 2 + 1] & 0xFF);
+
+                // Skip empty tiles
+                if (word == 0)
+                    continue;
+
+                PatternDesc desc = new PatternDesc(word);
+
+                // Calculate position in FBO space (256x256)
+                // No scroll offset - rendered at natural tile positions
+                int screenX = tx * TILE_SIZE;
+                // Y coordinate: ty=0 is top of background in Genesis coords
+                // Pass Genesis Y directly - the pattern renderer handles Y-flip for OpenGL
+                int screenY = ty * TILE_SIZE;
 
                 int patternId = desc.getPatternIndex() + backgroundPatternBase;
+
                 graphicsManager.renderPatternWithId(patternId, desc, screenX, screenY);
             }
         }

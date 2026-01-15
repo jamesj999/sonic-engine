@@ -158,6 +158,7 @@ public class SonicConfigurationService {
 		putDefault(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY, java.awt.event.KeyEvent.VK_END);
 		putDefault(SonicConfiguration.SPECIAL_STAGE_FAIL_KEY, java.awt.event.KeyEvent.VK_DELETE);
 		putDefault(SonicConfiguration.SPECIAL_STAGE_SPRITE_DEBUG_KEY, java.awt.event.KeyEvent.VK_F12);
+		putDefault(SonicConfiguration.SPECIAL_STAGE_PLANE_DEBUG_KEY, java.awt.event.KeyEvent.VK_F3);
 	}
 
 	private void putDefault(SonicConfiguration key, Object value) {

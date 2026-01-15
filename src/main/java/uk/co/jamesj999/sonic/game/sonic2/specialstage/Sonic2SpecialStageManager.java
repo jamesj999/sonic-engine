@@ -11,6 +11,10 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
 
+import com.jogamp.opengl.GL2;
+
+import uk.co.jamesj999.sonic.graphics.GLCommand;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -79,7 +83,40 @@ public class Sonic2SpecialStageManager {
     private boolean spriteDebugMode = false;
 
     private Sonic2SpecialStageRenderer renderer;
+    private SpecialStageBackgroundRenderer bgRenderer;
     private int frameCounter = 0;
+
+    private enum PlaneDebugMode {
+        BOTH("Plane A + Plane B"),
+        PLANE_A_ONLY("Plane A only"),
+        PLANE_B_ONLY("Plane B only"),
+        NONE("Planes off");
+
+        private final String label;
+
+        PlaneDebugMode(String label) {
+            this.label = label;
+        }
+
+        String label() {
+            return label;
+        }
+
+        PlaneDebugMode next() {
+            int nextIndex = (ordinal() + 1) % values().length;
+            return values()[nextIndex];
+        }
+
+        boolean renderPlaneA() {
+            return this == BOTH || this == PLANE_A_ONLY;
+        }
+
+        boolean renderPlaneB() {
+            return this == BOTH || this == PLANE_B_ONLY;
+        }
+    }
+
+    private PlaneDebugMode planeDebugMode = PlaneDebugMode.BOTH;
 
     private int[] decodedTrackFrame;
     private int lastDecodedFrameIndex = -1;
@@ -121,6 +158,70 @@ public class Sonic2SpecialStageManager {
     private int frameSampleCount = 0;
     private long frameSampleSum = 0;
     private static final int FRAME_SAMPLE_SIZE = 60;
+
+    // Skydome scroll state (accumulated horizontal scroll for background)
+    private int skydomeScrollX = 0;
+    private boolean alternateScrollBuffer = false;      // SS_Alternate_HorizScroll_Buf
+    private boolean lastAlternateScrollBuffer = false;  // SS_Last_Alternate_HorizScroll_Buf
+    private int drawingIndex = 0;      // SSTrack_drawing_index (0-4, increments each frame)
+    private int lastAnimFrame = 0;     // SSTrack_last_anim_frame - frame index at last update
+
+    // Vertical scroll state (Vscroll_Factor_BG)
+    private int vScrollBG = 0;
+
+    // Debug tracking for H-scroll
+    private int hScrollDebugTotal = 0;
+    private int hScrollDebugFrames = 0;
+    private int lastDebugSegmentIndex = -1;
+
+    // Background scroll delta lookup table (off_6DEE from disassembly)
+    // Each entry is 5 values corresponding to drawing_index 0-4
+    // Index is byte offset / 2 into the word-sized offset table
+    private static final int[][] BG_SCROLL_DELTA_TABLE = {
+        {2, 2, 2, 2, 2},      // Index 0 (byte_6E04)
+        {4, 4, 5, 4, 5},      // Index 1 (byte_6E09)
+        {11, 11, 11, 11, 12}, // Index 2 (byte_6E0E)
+        {0, 0, 1, 0, 0},      // Index 3 (byte_6E13)
+        {1, 1, 1, 1, 1},      // Index 4 (byte_6E18)
+        {9, 9, 8, 9, 9},      // Index 5 (byte_6E1D)
+        {9, 9, 9, 9, 10},     // Index 6 (byte_6E22)
+        {7, 7, 6, 7, 7},      // Index 7 (byte_6E27)
+        {0, 1, 1, 1, 0},      // Index 8 (byte_6E2C)
+        {4, 3, 3, 3, 4},      // Index 9 (byte_6E31)
+        {0, 0, -1, 0, 0}      // Index 10 (byte_6E36) - $FF = -1 for wrapping effect
+    };
+
+    // Maps byte offset to table index: offset / 2
+    // Rise frame table indices (byte offsets into off_6DEE)
+    // -1 means skip (no scroll this frame)
+    private static final int[] VSCROLL_RISE_TABLE_INDICES = {
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,  // Frames 0-9: skip
+        4, 4, 1, 2, 2, 2, 2, 2, 2, 5,            // Frames 10-19 (8/2=4, 2/2=1, 4/2=2, 10/2=5)
+        6, 7, 9, 8                                // Frames 20-23 (12/2=6, 14/2=7, 18/2=9, 16/2=8)
+    };
+
+    // Drop frame table indices
+    private static final int[] VSCROLL_DROP_TABLE_INDICES = {
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,  // Frames 0-10: skip
+        8, 9, 7, 6, 5, 2, 2, 2, 2, 2, 2, 1, 0        // Frames 11-23 (16/2=8, 18/2=9, etc.)
+    };
+
+    // Straight frame table indices - pattern {6, 6, $14, $14} = {3, 3, 10, 10}
+    // (byte offset 6 / 2 = 3, byte offset $14 / 2 = 10)
+    private static final int[] VSCROLL_STRAIGHT_TABLE_INDICES = {
+        3, 3, 10, 10, 3, 3, 10, 10, 3, 3, 10, 10, 3, 3, 10, 10
+    };
+
+    // H-scroll table indices for turn segments (frames 0-11)
+    // Based on disassembly d1 values: 0, 2, 4 which map to table indices 0, 1, 2
+    // Frame 0: d1=0 → index 0
+    // Frame 1: d1=2 → index 1
+    // Frames 2-9: d1=4 → index 2
+    // Frame 10: d1=2 → index 1
+    // Frame 11: d1=0 → index 0
+    private static final int[] HSCROLL_TURN_TABLE_INDICES = {
+        0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0
+    };
 
     private Sonic2SpecialStageManager() {
     }
@@ -398,21 +499,22 @@ public class Sonic2SpecialStageManager {
         backgroundLowerMappings = dataLoader.getBackgroundLowerMappings();
         LOGGER.fine("Background lower mappings: " + backgroundLowerMappings.length + " bytes");
 
-        // Combine background mappings: Main goes first (rows 0-15), then Lower (rows
-        // 16-31)
-        // Correct order per s2.asm: MapEng_SpecialBack ($A000) then
-        // MapEng_SpecialBackBottom
-        int expectedMainSize = 32 * 16 * 2; // 1024 bytes for rows 0-15
-        int expectedLowerSize = 32 * 16 * 2; // 1024 bytes for rows 16-31
-        combinedBackgroundMappings = new byte[expectedMainSize + expectedLowerSize];
+        // Combine background mappings for 32-row VRAM plane:
+        // From disassembly SSPlaneB_Background (line 9155):
+        //   MapEng_SpecialBackBottom -> planeLoc(32,0,0)  = row 0 (TOP of VRAM)
+        //   MapEng_SpecialBack       -> planeLoc(32,0,16) = row 16 (BOTTOM of VRAM)
+        // VDP row 0 is at the TOP of the screen.
+        int expectedLowerSize = 32 * 16 * 2; // 1024 bytes for rows 0-15 (Lower/Bottom)
+        int expectedMainSize = 32 * 16 * 2;  // 1024 bytes for rows 16-31 (Main)
+        combinedBackgroundMappings = new byte[expectedLowerSize + expectedMainSize];
 
-        // Copy Main mappings to rows 0-15
-        int mainCopyLen = Math.min(backgroundMainMappings.length, expectedMainSize);
-        System.arraycopy(backgroundMainMappings, 0, combinedBackgroundMappings, 0, mainCopyLen);
-
-        // Copy Lower mappings to rows 16-31
+        // Copy Lower (Bottom) mappings to rows 0-15 (top of screen)
         int lowerCopyLen = Math.min(backgroundLowerMappings.length, expectedLowerSize);
-        System.arraycopy(backgroundLowerMappings, 0, combinedBackgroundMappings, expectedMainSize, lowerCopyLen);
+        System.arraycopy(backgroundLowerMappings, 0, combinedBackgroundMappings, 0, lowerCopyLen);
+
+        // Copy Main mappings to rows 16-31 (bottom of screen)
+        int mainCopyLen = Math.min(backgroundMainMappings.length, expectedMainSize);
+        System.arraycopy(backgroundMainMappings, 0, combinedBackgroundMappings, expectedLowerSize, mainCopyLen);
 
         LOGGER.fine("Combined background mappings: " + combinedBackgroundMappings.length + " bytes");
 
@@ -496,9 +598,20 @@ public class Sonic2SpecialStageManager {
         debugSprites.setMessagesPatternBase(messagesPatternBase, messagesPatterns.length);
     }
 
-    private void setupRenderer() {
+    private void setupRenderer() throws IOException {
         renderer = new Sonic2SpecialStageRenderer(graphicsManager);
         // Pattern bases are set in setupPatterns() after they have valid values
+
+        // Initialize shader-based background renderer
+        GL2 gl = graphicsManager.getGraphics();
+        if (gl != null) {
+            bgRenderer = new SpecialStageBackgroundRenderer();
+            bgRenderer.init(gl);
+            LOGGER.fine("Special Stage background renderer initialized with shader");
+        } else {
+            LOGGER.warning("GL context not available, background renderer not initialized");
+        }
+
         LOGGER.fine("Special Stage renderer initialized");
     }
 
@@ -584,6 +697,15 @@ public class Sonic2SpecialStageManager {
         lastFrameTime = now;
 
         frameCounter++;
+
+        // Increment drawing index (0-4, wraps each frame like VInt handler)
+        drawingIndex = (drawingIndex + 1) % 5;
+
+        // Update skydome scroll based on current track animation state
+        updateSkydomeScroll();
+
+        // Update vertical scroll for parallax effects (bobbing, rise/drop)
+        updateVScroll();
 
         // Update intro sequence
         if (intro != null) {
@@ -773,6 +895,155 @@ public class Sonic2SpecialStageManager {
         }
     }
 
+    /**
+     * Updates the skydome scroll offset based on track animation state.
+     * Implements SSPlaneB_SetHorizOffset from the original game (s2.asm line 9238).
+     *
+     * The scroll delta is applied during turning segments to create the illusion
+     * of the background dome rotating as the track curves.
+     */
+    private void updateSkydomeScroll() {
+        if (trackAnimator == null) {
+            return;
+        }
+
+        // Get CURRENT flip state - this is what the original checks in SS_Alternate_HorizScroll_Buf
+        boolean currentFlipState = trackAnimator.getEffectiveFlipState();
+
+        int segmentType = trackAnimator.getCurrentSegmentType();
+
+        // Debug: Track segment changes and log H-scroll totals
+        int currentSegmentIndex = trackAnimator.getCurrentSegmentIndex();
+        if (currentSegmentIndex != lastDebugSegmentIndex) {
+            if (lastDebugSegmentIndex >= 0 && hScrollDebugFrames > 0) {
+                LOGGER.info(String.format("H-SCROLL SEGMENT %d: total=%d, frames=%d, scrollX=%d",
+                        lastDebugSegmentIndex, hScrollDebugTotal, hScrollDebugFrames, skydomeScrollX));
+            }
+            lastDebugSegmentIndex = currentSegmentIndex;
+            hScrollDebugTotal = 0;
+            hScrollDebugFrames = 0;
+        }
+
+        // Only apply scroll during turning segments (types 0, 1, 2)
+        // Straight (3) and StraightThenTurn (4) return immediately
+        if (segmentType == SEGMENT_STRAIGHT || segmentType == SEGMENT_STRAIGHT_THEN_TURN) {
+            // Save current state for next frame
+            lastAlternateScrollBuffer = alternateScrollBuffer;
+            alternateScrollBuffer = currentFlipState;
+            lastAnimFrame = trackAnimator.getCurrentFrameInSegment();
+            return;
+        }
+
+        // Get current frame (matches SSTrack_last_anim_frame in the original loop)
+        int currentFrame = trackAnimator.getCurrentFrameInSegment();
+
+        // Only apply scroll during turn portion (frames 0-11)
+        // Frames >= 12 are rise/drop/exit which don't get H-scroll
+        // Use CURRENT frame for boundary check to avoid off-by-one at transitions
+        if (currentFrame >= HSCROLL_TURN_TABLE_INDICES.length) {
+            // No scroll for frames >= 12
+            lastAlternateScrollBuffer = alternateScrollBuffer;
+            alternateScrollBuffer = currentFlipState;
+            lastAnimFrame = currentFrame;
+            return;
+        }
+
+        // Use CURRENT animation frame for table lookup (matches SSTrack_last_anim_frame in ROM loop)
+        int tableIndex = HSCROLL_TURN_TABLE_INDICES[currentFrame];
+
+        // Get delta from the pre-defined table using drawingIndex
+        int deltaIndex = drawingIndex % 5;
+        int delta = BG_SCROLL_DELTA_TABLE[tableIndex][deltaIndex];
+
+        // Negate delta when using alternate buffer (flipped/left turn)
+        // From disassembly: negate is applied when SS_Alternate_HorizScroll_Buf is set
+        // This is the CURRENT flip state, not the previous frame's
+        if (currentFlipState) {
+            delta = -delta;
+        }
+
+        // Apply delta - the original subtracts from scroll value
+        skydomeScrollX -= delta;
+
+        // Debug: track total delta for this segment
+        hScrollDebugTotal += delta;  // Track the raw delta (before subtraction)
+        hScrollDebugFrames++;
+
+        // Save current state for next frame
+        lastAlternateScrollBuffer = alternateScrollBuffer;
+        alternateScrollBuffer = currentFlipState;
+        lastAnimFrame = currentFrame;
+    }
+
+    /**
+     * Updates the vertical scroll (vScrollBG) based on track animation state.
+     * Implements SSTrack_SetVscroll from the original game (s2.asm line 9316).
+     *
+     * The original uses a two-level lookup:
+     * 1. Animation frame determines table index (into BG_SCROLL_DELTA_TABLE)
+     * 2. Drawing index (0-4) selects specific delta from the 5-entry table
+     *
+     * Effects:
+     * - STRAIGHT segments: Subtle bobbing up/down (~1-2 pixels)
+     * - TURN_THEN_RISE: Background scrolls up (vScrollBG decreases)
+     * - TURN_THEN_DROP: Background scrolls down (vScrollBG increases)
+     * - Other segments: No vertical scroll
+     */
+    private void updateVScroll() {
+        if (trackAnimator == null) {
+            return;
+        }
+
+        int segmentType = trackAnimator.getCurrentSegmentType();
+        int frameInSegment = trackAnimator.getCurrentFrameInSegment();
+        // drawingIndex cycles 0-4, selecting which delta value from the 5-entry table
+        int deltaIndex = drawingIndex % 5;
+
+        int tableIndex = -1;  // -1 = skip this frame
+
+        switch (segmentType) {
+            case SEGMENT_TURN_THEN_RISE:
+                if (frameInSegment >= 0 && frameInSegment < VSCROLL_RISE_TABLE_INDICES.length) {
+                    tableIndex = VSCROLL_RISE_TABLE_INDICES[frameInSegment];
+                }
+                if (tableIndex >= 0 && tableIndex < BG_SCROLL_DELTA_TABLE.length) {
+                    int delta = BG_SCROLL_DELTA_TABLE[tableIndex][deltaIndex];
+                    vScrollBG -= delta;  // Rise = subtract (background moves up)
+                }
+                break;
+
+            case SEGMENT_TURN_THEN_DROP:
+                if (frameInSegment >= 0 && frameInSegment < VSCROLL_DROP_TABLE_INDICES.length) {
+                    tableIndex = VSCROLL_DROP_TABLE_INDICES[frameInSegment];
+                }
+                if (tableIndex >= 0 && tableIndex < BG_SCROLL_DELTA_TABLE.length) {
+                    int delta = BG_SCROLL_DELTA_TABLE[tableIndex][deltaIndex];
+                    vScrollBG += delta;  // Drop = add (background moves down)
+                }
+                break;
+
+            case SEGMENT_STRAIGHT:
+                // Straight: Subtle bobbing effect using small delta values
+                // Table index 3 = {0,0,1,0,0}, table index 10 = {0,0,-1,0,0}
+                // The -1 wraps in 256-pixel space to effectively add 1
+                // Net effect: very subtle oscillation of ~1-2 pixels
+                if (frameInSegment >= 0 && frameInSegment < VSCROLL_STRAIGHT_TABLE_INDICES.length) {
+                    tableIndex = VSCROLL_STRAIGHT_TABLE_INDICES[frameInSegment];
+                }
+                if (tableIndex >= 0 && tableIndex < BG_SCROLL_DELTA_TABLE.length) {
+                    int delta = BG_SCROLL_DELTA_TABLE[tableIndex][deltaIndex];
+                    vScrollBG -= delta;  // Straight always subtracts
+                }
+                break;
+
+            case SEGMENT_TURN_THEN_STRAIGHT:
+            case SEGMENT_STRAIGHT_THEN_TURN:
+            default:
+                // No vertical scroll for transition segments
+                break;
+        }
+    }
+
     private void updatePlayers() {
         // Get the global animation frame timer from the track animator
         int animTimer = trackAnimator.getPlayerAnimFrameTimer();
@@ -847,10 +1118,46 @@ public class Sonic2SpecialStageManager {
             return;
         }
 
-        renderer.renderBackground(combinedBackgroundMappings, 0, 0);
+        boolean renderPlaneB = planeDebugMode.renderPlaneB();
+        boolean renderPlaneA = planeDebugMode.renderPlaneA();
 
-        int trackFrameIndex = trackAnimator.getCurrentTrackFrameIndex();
-        renderer.renderTrack(trackFrameIndex, decodedTrackFrame);
+        if (renderPlaneB) {
+            // Use shader-based background rendering if available
+            if (bgRenderer != null && bgRenderer.isInitialized()) {
+                // Capture current scroll values for use in lambda
+                final int currentScrollX = skydomeScrollX;
+                final float currentVScrollBG = (float) vScrollBG;
+
+                // 1. Begin Tile Pass (Bind FBO) - queued as command for proper ordering
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                    bgRenderer.beginTilePass(gl, H32_HEIGHT);
+                }));
+
+                // 2. Render background tiles to FBO
+                graphicsManager.beginPatternBatch();
+                renderer.renderBackgroundToFBO(combinedBackgroundMappings);
+                graphicsManager.flushPatternBatch();
+
+                // 3. End Tile Pass (Unbind FBO)
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                    bgRenderer.endTilePass(gl);
+                }));
+
+                // 4. Update H-scroll and render with shader (vScrollBG applies vertical parallax)
+                graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                    bgRenderer.setUniformHScroll(currentScrollX);
+                    bgRenderer.renderWithShader(gl, currentVScrollBG);
+                }));
+            } else {
+                // Fallback to CPU-based rendering
+                renderer.renderBackground(combinedBackgroundMappings, skydomeScrollX, vScrollBG);
+            }
+        }
+
+        if (renderPlaneA) {
+            int trackFrameIndex = trackAnimator.getCurrentTrackFrameIndex();
+            renderer.renderTrack(trackFrameIndex, decodedTrackFrame);
+        }
 
         // Render objects (rings, bombs) between track and players
         renderer.renderObjects();
@@ -989,6 +1296,29 @@ public class Sonic2SpecialStageManager {
         emeraldCollected = false;
         diagnosticDone = false;
         flipDiagnosticDone = false;
+
+        // Shader-based background renderer cleanup
+        if (bgRenderer != null) {
+            GL2 gl = graphicsManager.getGraphics();
+            if (gl != null) {
+                bgRenderer.cleanup(gl);
+            }
+            bgRenderer = null;
+        }
+
+        // Skydome scroll state
+        skydomeScrollX = 0;
+        vScrollBG = 0;
+        alternateScrollBuffer = false;
+        lastAlternateScrollBuffer = false;
+        drawingIndex = 0;
+        lastAnimFrame = 0;
+        planeDebugMode = PlaneDebugMode.BOTH;
+    }
+
+    public void cyclePlaneDebugMode() {
+        planeDebugMode = planeDebugMode.next();
+        LOGGER.info("Special Stage plane debug: " + planeDebugMode.label());
     }
 
     /**

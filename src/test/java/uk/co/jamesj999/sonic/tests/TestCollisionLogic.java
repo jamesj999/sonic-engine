@@ -16,18 +16,29 @@ public class TestCollisionLogic {
     public void testCollisionLogic() throws IOException {
         String ehzPriColPath = "EHZ and HTZ primary 16x16 collision index.kos";
         Path path = Path.of(ehzPriColPath);
-        Assume.assumeTrue("Test data not available", path.toFile().exists());
-        FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE);
+        byte[] collisionBuffer = null;
+
+        if (path.toFile().exists()) {
+            try (FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ)) {
+                collisionBuffer = KosinskiReader.decompress(fileChannel, true);
+            }
+        } else {
+            // Fallback: Try to read from ROM
+            Path romPath = Path.of("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+            Assume.assumeTrue("Test data not available (neither .kos file nor ROM found)", romPath.toFile().exists());
+
+            try (FileChannel romChannel = FileChannel.open(romPath, StandardOpenOption.READ)) {
+                romChannel.position(0x44E50); // Offset for EHZ and HTZ primary from collisionindexes.txt
+                collisionBuffer = KosinskiReader.decompress(romChannel, true);
+            }
+        }
 
         int[] collisionArray = new int[0x300];
 
-        byte[] collisionBuffer = KosinskiReader.decompress(fileChannel, true);
-
-        for (int i=0; i< collisionBuffer.length; i++) {
+        for (int i = 0; i < collisionBuffer.length; i++) {
             collisionArray[i] = Byte.toUnsignedInt(collisionBuffer[i]);
         }
 
     }
-
 
 }
