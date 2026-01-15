@@ -714,6 +714,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     public void update(int frameCounter, AbstractPlayableSprite player) {
         this.frameCounter = frameCounter;
         stateTimer++;
+        totalFrames++;
 
         // Handle Super Sonic message state directly (parent's switch doesn't handle states > 3)
         if (state == STATE_SUPER_SONIC_DISPLAY) {
@@ -728,6 +729,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         // Handle normal states via parent
         switch (state) {
             case STATE_SLIDE_IN -> updateSlideIn();
+            case STATE_PRE_TALLY_DELAY -> updatePreTallyDelay();
             case STATE_TALLY -> updateTally();
             case STATE_WAIT -> updateWait();
             case STATE_EXIT -> complete = true;
@@ -786,8 +788,13 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             }
         }
 
+        // All elements use ROM-accurate 16 pixels/frame slide speed
+        // From Obj6F_SubObjectMetaData in s2.asm - all elements start sliding at frame 0
+
         // "SPECIAL STAGE" title - slides from right (only shown when emerald NOT collected)
-        int titleX = SCREEN_CENTER_X + (int) ((1 - slideAlpha) * 200);
+        // start=320+128=448, target=160, distance=288
+        int titleOffset = getSlideOffset(288);
+        int titleX = SCREEN_CENTER_X + titleOffset;
         if (!gotEmerald) {
             if (useRomArt) {
                 renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_SPECIAL_STAGE,
@@ -801,7 +808,9 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         // Result text based on emerald count
         // Hide during Super Sonic message sequence (replaced by the three Super Sonic messages)
         if (gotEmerald && state < STATE_SUPER_SONIC_DISPLAY) {
-            int gotTextX = (int) (slideAlpha * SCREEN_CENTER_X);
+            // "Sonic got a" slides from left: start=-128, target=160, distance=288
+            int gotTextOffset = getSlideOffset(288);
+            int gotTextX = SCREEN_CENTER_X - gotTextOffset;
 
             if (totalEmeraldCount >= 7) {
                 // "SONIC HAS ALL THE" + "CHAOS EMERALDS"
@@ -842,57 +851,62 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             }
         }
 
-        // Bonus displays - only after slide-in complete
+        // Bonus displays - all start sliding at frame 0 along with title elements
         // From Obj6F_SubObjectMetaData in s2.asm:
-        // - Y=136, routine $14, frame $C (12): First bonus line - SCORE (shows tallying score)
-        // - Y=152, routine $16, frame $D (13): SONIC RINGS (shows ring count)
-        // - Y=168, routine $18, frame $E (14): MILES RINGS (deleted in single player by Obj6F_P2Rings)
-        // - Y=184, routine $1A, frame $10 (16): GEMS BONUS (only if emerald obtained)
-        //
-        // Note: Miles Rings (Y=168, Frame $E=14) is deleted in single-player mode
-        if (state >= STATE_TALLY) {
-            // Update digit patterns to show current bonus values
-            if (useRomArt) {
-                updateBonusPatterns();
+        // - Y=136, routine $14, frame $C (12): SCORE - starts at 320+368, target=160, distance=528
+        // - Y=152, routine $16, frame $D (13): SONIC RINGS - starts at 320+384, target=160, distance=544
+        // - Y=184, routine $1A, frame $10 (16): GEMS BONUS - starts at 320+416, target=160, distance=576
+
+        // Update digit patterns for display (numbers show initial values until tally changes them)
+        if (useRomArt) {
+            updateBonusPatterns();
+        }
+
+        if (useRomArt) {
+            // Render bonus lines with slide-in animation
+            // All numbers rendered at X offset 0x38 (56) from center for consistency
+            int numbersXOffset = 0x38;
+
+            // Line 1: Y=136 - "SCORE" - distance = 528 (688 - 160)
+            int scoreOffset = getSlideOffset(528);
+            int scoreX = SCREEN_CENTER_X + scoreOffset;
+            renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_EMERALD_BONUS,
+                    scoreX, SCORE_LINE_Y);
+            // Numbers always visible with the label
+            renderBonusNumber(scoreX + numbersXOffset, SCORE_LINE_Y, totalBonus);
+
+            // Line 2: Y=152 - "SONIC RINGS" - distance = 544 (704 - 160)
+            int ringsOffset = getSlideOffset(544);
+            int ringsX = SCREEN_CENTER_X + ringsOffset;
+            renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_RING_BONUS,
+                    ringsX, SONIC_RINGS_Y);
+            // Numbers always visible with the label
+            renderBonusNumber(ringsX + numbersXOffset, SONIC_RINGS_Y, displayedRingCount);
+
+            // Line 3: Y=184 - "GEMS BONUS" - distance = 576 (736 - 160)
+            if (gotEmerald) {
+                int gemsOffset = getSlideOffset(576);
+                int gemsX = SCREEN_CENTER_X + gemsOffset;
+                renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_PERFECT_BONUS,
+                        gemsX, GEMS_BONUS_Y);
+                // Numbers always visible with the label
+                renderBonusNumber(gemsX + numbersXOffset, GEMS_BONUS_Y, emeraldBonus);
             }
+        } else {
+            // Placeholder rendering with slide-in
+            int scoreOffset = getSlideOffset(528);
+            int ringsOffset = getSlideOffset(544);
 
-            if (useRomArt) {
-                // Render bonus lines with consistent number positioning
-                // All numbers rendered at X offset 0x38 (56) from center for consistency
-                int numbersXOffset = 0x38;
+            renderPlaceholderText(commands, SCREEN_CENTER_X + scoreOffset, SCORE_LINE_Y,
+                    "SCORE: " + totalBonus, 1.0f, 1.0f, 0.5f);
 
-                // Line 1: Y=136 - "SCORE" label (using Frame 12, which has no numbers piece)
-                // We render the score numbers separately using renderBonusNumber()
-                renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_EMERALD_BONUS,
-                        SCREEN_CENTER_X, SCORE_LINE_Y);
-                renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, SCORE_LINE_Y, totalBonus);
+            renderPlaceholderText(commands, SCREEN_CENTER_X + ringsOffset, SONIC_RINGS_Y,
+                    "SONIC RINGS: " + displayedRingCount, 1.0f, 1.0f, 0.5f);
 
-                // Line 2: Y=152 - "SONIC RINGS" with ring count
-                // Frame 13 has numbers at x=0x40 (too far right), so we skip its numbers
-                // and render our own at the correct position (x=0x38)
-                renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_RING_BONUS,
-                        SCREEN_CENTER_X, SONIC_RINGS_Y);
-                renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, SONIC_RINGS_Y, displayedRingCount);
-
-                // Line 3: Y=184 - "GEMS BONUS" with emerald bonus - only if got emerald
-                if (gotEmerald) {
-                    // Frame 16 has numbers at correct position (x=0x38), but we render
-                    // separately for consistency with the updateBonusPatterns() logic
-                    renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_PERFECT_BONUS,
-                            SCREEN_CENTER_X, GEMS_BONUS_Y);
-                    renderBonusNumber(SCREEN_CENTER_X + numbersXOffset, GEMS_BONUS_Y, emeraldBonus);
-                }
-            } else {
-                renderPlaceholderText(commands, SCREEN_CENTER_X, SCORE_LINE_Y,
-                        "SCORE: " + totalBonus, 1.0f, 1.0f, 0.5f);
-
-                renderPlaceholderText(commands, SCREEN_CENTER_X, SONIC_RINGS_Y,
-                        "SONIC RINGS: " + displayedRingCount, 1.0f, 1.0f, 0.5f);
-
-                if (gotEmerald) {
-                    renderPlaceholderText(commands, SCREEN_CENTER_X, GEMS_BONUS_Y,
-                            "GEMS BONUS: " + emeraldBonus, 0.5f, 1.0f, 0.5f);
-                }
+            if (gotEmerald) {
+                int gemsOffset = getSlideOffset(576);
+                renderPlaceholderText(commands, SCREEN_CENTER_X + gemsOffset, GEMS_BONUS_Y,
+                        "GEMS BONUS: " + emeraldBonus, 0.5f, 1.0f, 0.5f);
             }
         }
 
@@ -1065,6 +1079,11 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
     /**
      * Renders collected emeralds using ROM art.
+     * From s2.asm Obj6F_Emerald0:
+     *   btst #0,(Vint_runcount+3).w  ; test bit 0 of frame counter
+     *   beq.s +                       ; skip display on even frames
+     *   bsr.w DisplaySprite           ; display on odd frames only
+     * Emeralds are at fixed positions (no sliding) and flash on/off every frame.
      */
     private void renderEmeralds(int baseX, int baseY, float slideAlpha) {
         // Emerald frame indices from mappings
@@ -1082,12 +1101,11 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             boolean hasThisEmerald = GameStateManager.getInstance().hasEmerald(i);
 
             if (hasThisEmerald) {
-                // Flash effect: show every other 8 frames
-                if ((frameCounter & 4) != 0) {
-                    // Use fixed hexagonal positions from EMERALD_POSITIONS array
-                    int slideOffsetY = (int) ((1 - slideAlpha) * 80);
+                // ROM-accurate flash: display on odd frames only (btst #0)
+                if ((totalFrames & 1) != 0) {
+                    // Fixed positions from EMERALD_POSITIONS - no sliding
                     int emeraldX = baseX + EMERALD_POSITIONS[i][0];
-                    int emeraldY = baseY + EMERALD_POSITIONS[i][1] + slideOffsetY;
+                    int emeraldY = baseY + EMERALD_POSITIONS[i][1];
 
                     renderMappingFrame(emeraldFrames[i], emeraldX, emeraldY);
                 }
@@ -1097,6 +1115,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
     /**
      * Renders collected emeralds as placeholder colored boxes (fallback).
+     * Emeralds are at fixed positions (no sliding) and flash on/off every frame.
      */
     private void renderEmeraldsPlaceholder(List<GLCommand> commands, int baseX, int baseY, float slideAlpha) {
         // Emerald colors (approximating the original colors)
@@ -1114,12 +1133,11 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             boolean hasThisEmerald = GameStateManager.getInstance().hasEmerald(i);
 
             if (hasThisEmerald) {
-                // Flash effect: show every other 8 frames
-                if ((frameCounter & 4) != 0) {
-                    // Use fixed hexagonal positions from EMERALD_POSITIONS array
-                    int slideOffsetY = (int) ((1 - slideAlpha) * 80);
+                // ROM-accurate flash: display on odd frames only (btst #0)
+                if ((totalFrames & 1) != 0) {
+                    // Fixed positions from EMERALD_POSITIONS - no sliding
                     int emeraldX = EMERALD_POSITIONS[i][0];
-                    int emeraldY = EMERALD_POSITIONS[i][1] + slideOffsetY;
+                    int emeraldY = EMERALD_POSITIONS[i][1];
 
                     float[] color = emeraldColors[i];
                     renderPlaceholderBox(commands,

@@ -26,15 +26,21 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance {
 
     // States
     protected static final int STATE_SLIDE_IN = 0;
-    protected static final int STATE_TALLY = 1;
-    protected static final int STATE_WAIT = 2;
-    protected static final int STATE_EXIT = 3;
+    protected static final int STATE_PRE_TALLY_DELAY = 1;  // ROM: $B4 (180) frame delay before tally
+    protected static final int STATE_TALLY = 2;
+    protected static final int STATE_WAIT = 3;
+    protected static final int STATE_EXIT = 4;
 
     // Default timing constants (can be overridden)
+    // From s2.asm: move.w #$B4,anim_frame_duration(a0) = 180 frames
     protected static final int DEFAULT_SLIDE_DURATION = 60;
+    protected static final int DEFAULT_PRE_TALLY_DELAY = 180;  // $B4 frames - ROM-accurate delay before tally starts
     protected static final int DEFAULT_WAIT_DURATION = 180;
     protected static final int DEFAULT_TALLY_DECREMENT = 10;
     protected static final int DEFAULT_TALLY_TICK_INTERVAL = 4;
+
+    // Movement speed from s2.asm Obj34_MoveTowardsTargetPosition: moveq #$10,d0 = 16 pixels/frame
+    protected static final int SLIDE_SPEED_PIXELS_PER_FRAME = 16;
 
     // Screen dimensions
     protected static final int SCREEN_WIDTH = 320;
@@ -45,6 +51,10 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance {
     protected int state = STATE_SLIDE_IN;
     protected int stateTimer = 0;
     protected int frameCounter = 0;
+
+    // Total frames elapsed since results screen started (never resets)
+    // Used for consistent slide-in animation across state changes
+    protected int totalFrames = 0;
 
     // Slide animation
     protected int slideProgress = 0;
@@ -60,9 +70,11 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance {
     public void update(int frameCounter, AbstractPlayableSprite player) {
         this.frameCounter = frameCounter;
         stateTimer++;
+        totalFrames++;
 
         switch (state) {
             case STATE_SLIDE_IN -> updateSlideIn();
+            case STATE_PRE_TALLY_DELAY -> updatePreTallyDelay();
             case STATE_TALLY -> updateTally();
             case STATE_WAIT -> updateWait();
             case STATE_EXIT -> complete = true;
@@ -73,6 +85,28 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance {
         slideProgress = Math.min(stateTimer, getSlideDuration());
 
         if (stateTimer >= getSlideDuration()) {
+            state = STATE_PRE_TALLY_DELAY;
+            stateTimer = 0;
+            onSlideInComplete();
+        }
+    }
+
+    /**
+     * Override to perform actions when slide-in completes (before pre-tally delay).
+     */
+    protected void onSlideInComplete() {
+        // Default: no action
+    }
+
+    /**
+     * ROM-accurate delay before tally begins.
+     * From s2.asm loc_1419C / Obj6F_TimedDisplay:
+     *   subq.w #1,anim_frame_duration(a0)
+     *   bne.s BranchTo18_DisplaySprite
+     *   addq.b #2,routine(a0)
+     */
+    protected void updatePreTallyDelay() {
+        if (stateTimer >= getPreTallyDelay()) {
             state = STATE_TALLY;
             stateTimer = 0;
             onTallyStart();
@@ -137,6 +171,10 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance {
         return DEFAULT_SLIDE_DURATION;
     }
 
+    protected int getPreTallyDelay() {
+        return DEFAULT_PRE_TALLY_DELAY;
+    }
+
     protected int getWaitDuration() {
         return DEFAULT_WAIT_DURATION;
     }
@@ -166,9 +204,21 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance {
         }
     }
 
-    // Slide animation helper
+    // Slide animation helper (legacy - uses duration-based alpha)
     protected float getSlideAlpha() {
         return (float) slideProgress / getSlideDuration();
+    }
+
+    /**
+     * Calculate remaining offset for an element sliding in from off-screen.
+     * Uses ROM-accurate 16 pixels/frame speed.
+     *
+     * @param startOffset The initial distance from target (e.g., 352 for element starting at 320+352)
+     * @return The current offset from target (0 when element has reached its position)
+     */
+    protected int getSlideOffset(int startOffset) {
+        int pixelsMoved = totalFrames * SLIDE_SPEED_PIXELS_PER_FRAME;
+        return Math.max(0, startOffset - pixelsMoved);
     }
 
     // Rendering priority

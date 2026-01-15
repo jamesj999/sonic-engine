@@ -176,48 +176,58 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
         int worldBaseX = camera.getX();
         int worldBaseY = camera.getY();
 
-        // Calculate slide-in progress (0.0 to 1.0)
-        float slideAlpha = getSlideAlpha();
+        // All elements use ROM-accurate 16 pixels/frame slide speed
+        // From Obj3A_SubObjectMetadata in s2.asm - all elements start sliding at frame 0
+        // Elements sliding from LEFT move right (+16/frame)
+        // Elements sliding from RIGHT move left (-16/frame, calculated as offset reduction)
 
         // Render text elements using ROM art
         // Frame indices from MapUnc_EOLTitleCards:
         // 0 = "SONIC GOT", 3 = "THROUGH", 4 = "ACT", 6-8 = act numbers
         // 10 = "TIME BONUS", 11 = "RING BONUS", 9 = "TOTAL", 14 = "PERFECT"
 
-        // "SONIC GOT" - slides from left (frame 0)
-        int gotX = (int) (slideAlpha * SCREEN_CENTER_X);
+        // "SONIC GOT" (frame 0) - slides from left: start=-96, target=160, distance=256
+        int gotOffset = getSlideOffset(256);  // starts 256 pixels left of target
+        int gotX = SCREEN_CENTER_X - gotOffset;
         renderer.drawFrameIndex(0, worldBaseX + gotX, worldBaseY + TEXT_Y_GOT_THROUGH, false, false);
 
-        // "THROUGH" - slides from left (frame 3)
-        int throughX = (int) (slideAlpha * (SCREEN_CENTER_X - 32));
+        // "THROUGH" (frame 3) - slides from right: start=384, target=128, distance=256
+        int throughOffset = getSlideOffset(256);
+        int throughX = (SCREEN_CENTER_X - 32) + throughOffset;
         renderer.drawFrameIndex(3, worldBaseX + throughX, worldBaseY + TEXT_Y_ACT, false, false);
 
-        // "ACT" - slides from right (frame 4)
-        int actX = SCREEN_CENTER_X + 32 + (int) ((1 - slideAlpha) * 120);
+        // "ACT" (frame 4) - slides from right: start=448, target=192, distance=256
+        int actOffset = getSlideOffset(256);
+        int actX = (SCREEN_CENTER_X + 32) + actOffset;
         renderer.drawFrameIndex(4, worldBaseX + actX, worldBaseY + TEXT_Y_ACT, false, false);
 
-        // Act number (frame 6 = "1", 7 = "2", 8 = "3")
+        // Act number (frame 6-8) - slides from right: start=504, target=248, distance=256
         int actFrame = 5 + actNumber; // actNumber is 1-based, so act 1 = frame 6
-        int actNumX = SCREEN_CENTER_X + 88 + (int) ((1 - slideAlpha) * 120);
+        int actNumOffset = getSlideOffset(256);
+        int actNumX = (SCREEN_CENTER_X + 88) + actNumOffset;
         renderer.drawFrameIndex(actFrame, worldBaseX + actNumX, worldBaseY + 62, false, false);
 
-        // Bonus display - only show after slide-in complete
-        if (state >= STATE_TALLY) {
-            updateBonusPatterns(renderManager);
-            // "TIME BONUS" (frame 10)
-            renderer.drawFrameIndex(10, worldBaseX + SCREEN_CENTER_X, worldBaseY + TEXT_Y_TIME_BONUS, false, false);
+        // Bonus displays - all start sliding at frame 0 along with title elements
+        // Update bonus patterns for display (numbers show initial values until tally changes them)
+        updateBonusPatterns(renderManager);
 
-            // "RING BONUS" (frame 11)
-            renderer.drawFrameIndex(11, worldBaseX + SCREEN_CENTER_X, worldBaseY + TEXT_Y_RING_BONUS, false, false);
+        // "TIME BONUS" (frame 10) - slides from right: start=672, target=160, distance=512
+        int timeBonusOffset = getSlideOffset(512);
+        renderer.drawFrameIndex(10, worldBaseX + SCREEN_CENTER_X + timeBonusOffset, worldBaseY + TEXT_Y_TIME_BONUS, false, false);
 
-            // "TOTAL" (frame 9)
-            renderer.drawFrameIndex(9, worldBaseX + SCREEN_CENTER_X, worldBaseY + TEXT_Y_TOTAL, false, false);
+        // "RING BONUS" (frame 11) - slides from right: start=688, target=160, distance=528
+        int ringBonusOffset = getSlideOffset(528);
+        renderer.drawFrameIndex(11, worldBaseX + SCREEN_CENTER_X + ringBonusOffset, worldBaseY + TEXT_Y_RING_BONUS, false, false);
 
-            // "PERFECT" (frame 14) - only show if perfect bonus earned
-            if (perfectBonus) {
-                renderer.drawFrameIndex(14, worldBaseX + SCREEN_CENTER_X, worldBaseY + 144, false, false);
-            }
+        // "PERFECT" (frame 14) - slides from right: start=704, target=160, distance=544
+        if (perfectBonus) {
+            int perfectOffset = getSlideOffset(544);
+            renderer.drawFrameIndex(14, worldBaseX + SCREEN_CENTER_X + perfectOffset, worldBaseY + 144, false, false);
         }
+
+        // "TOTAL" (frame 9) - slides from right: start=720, target=160, distance=560
+        int totalOffset = getSlideOffset(560);
+        renderer.drawFrameIndex(9, worldBaseX + SCREEN_CENTER_X + totalOffset, worldBaseY + TEXT_Y_TOTAL, false, false);
     }
 
     private void updateBonusPatterns(ObjectRenderManager renderManager) {
@@ -323,24 +333,27 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
 
         int worldBaseX = camera.getX();
         int worldBaseY = camera.getY();
-        float slideAlpha = getSlideAlpha();
 
-        // "SONIC GOT THROUGH" placeholder
-        int gotThroughX = worldBaseX + (int) (slideAlpha * SCREEN_CENTER_X);
+        // All elements use ROM-accurate 16 pixels/frame slide, starting at frame 0
+
+        // "SONIC GOT THROUGH" placeholder - slides from left
+        int gotOffset = getSlideOffset(256);
+        int gotThroughX = worldBaseX + SCREEN_CENTER_X - gotOffset;
         renderPlaceholderBox(commands, gotThroughX, worldBaseY + TEXT_Y_GOT_THROUGH, 80, 16, 0.2f, 0.6f, 1.0f);
 
-        // "ACT X" placeholder
-        int actX = worldBaseX + SCREEN_CENTER_X + (int) ((1 - slideAlpha) * 120);
+        // "ACT X" placeholder - slides from right
+        int actOffset = getSlideOffset(256);
+        int actX = worldBaseX + SCREEN_CENTER_X + actOffset;
         renderPlaceholderBox(commands, actX, worldBaseY + TEXT_Y_ACT, 48, 16, 0.2f, 0.8f, 0.4f);
 
-        if (state >= STATE_TALLY) {
-            renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40, worldBaseY + TEXT_Y_TIME_BONUS, 80, 12,
-                    1.0f, 1.0f, 0.4f);
-            renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40, worldBaseY + TEXT_Y_RING_BONUS, 80, 12,
-                    1.0f, 0.8f, 0.2f);
-            renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40, worldBaseY + TEXT_Y_TOTAL, 80, 12, 1.0f,
-                    0.4f, 0.4f);
-        }
+        // Bonus text - all slide from right starting at frame 0
+        int timeBonusOffset = getSlideOffset(512);
+        int ringBonusOffset = getSlideOffset(528);
+        int totalOffset = getSlideOffset(560);
+
+        renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40 + timeBonusOffset, worldBaseY + TEXT_Y_TIME_BONUS, 80, 12, 1.0f, 1.0f, 0.4f);
+        renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40 + ringBonusOffset, worldBaseY + TEXT_Y_RING_BONUS, 80, 12, 1.0f, 0.8f, 0.2f);
+        renderPlaceholderBox(commands, worldBaseX + SCREEN_CENTER_X - 40 + totalOffset, worldBaseY + TEXT_Y_TOTAL, 80, 12, 1.0f, 0.4f, 0.4f);
     }
 
     public int getTimeBonus() {
