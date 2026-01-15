@@ -57,6 +57,26 @@ public class PlayableSpriteMovementManager extends
 
 	@Override
 	public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
+		// DEBUG MODE: When debug mode is active, use simple directional movement
+		// with no collision, physics, or damage.
+		if (sprite.isDebugMode()) {
+			int debugMoveSpeed = 3; // pixels per frame
+			if (left) {
+				sprite.setX((short) (sprite.getX() - debugMoveSpeed));
+			}
+			if (right) {
+				sprite.setX((short) (sprite.getX() + debugMoveSpeed));
+			}
+			if (up) {
+				sprite.setY((short) (sprite.getY() - debugMoveSpeed));
+			}
+			if (down) {
+				sprite.setY((short) (sprite.getY() + debugMoveSpeed));
+			}
+			// Skip all physics, collision, and damage processing
+			return;
+		}
+
 		// A simple way to test our running modes...
 		if (testKey && !testKeyPressed) {
 			testKeyPressed = true;

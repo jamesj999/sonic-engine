@@ -38,6 +38,13 @@ public class SolidObjectManager {
             ridingObject = null;
             return;
         }
+
+        // Skip all solid object collision in debug mode
+        if (player.isDebugMode()) {
+            ridingObject = null;
+            return;
+        }
+
         player.setPushing(false);
 
         Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();

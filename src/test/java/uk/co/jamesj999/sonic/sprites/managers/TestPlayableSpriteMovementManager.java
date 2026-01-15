@@ -19,7 +19,7 @@ public class TestPlayableSpriteMovementManager {
 
         @Before
         public void setUp() {
-                mockSprite = new AbstractPlayableSprite("sonic", (short) 0, (short) 0, false) {
+                mockSprite = new AbstractPlayableSprite("sonic", (short) 0, (short) 0) {
                         @Override
                         protected void defineSpeeds() {
                                 this.max = 1536; // 6 pixels * 256

@@ -9,8 +9,8 @@ import com.jogamp.opengl.GL2;
 
 public class Tails extends AbstractPlayableSprite {
 
-	public Tails(String code, short x, short y, boolean debug) {
-		super(code, x, y, debug);
+	public Tails(String code, short x, short y) {
+		super(code, x, y);
 		setWidth(20);
 		setHeight(runHeight);
 		setRenderOffsets((short) 0, (short) 0);

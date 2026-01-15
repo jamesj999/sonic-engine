@@ -75,7 +75,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private double projectionWidth = realWidth;
 
 	private boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
-	private boolean debugModeEnabled = configService.getBoolean(SonicConfiguration.DEBUG_MODE);
 
 	// TODO move this into a manager
 	private final LevelManager levelManager = LevelManager.getInstance();
@@ -120,9 +119,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 		String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
 		AbstractPlayableSprite mainSprite;
 		if ("tails".equalsIgnoreCase(mainCode)) {
-			mainSprite = new Tails(mainCode, (short) 100, (short) 624, debugModeEnabled);
+			mainSprite = new Tails(mainCode, (short) 100, (short) 624);
 		} else {
-			mainSprite = new Sonic(mainCode, (short) 100, (short) 624, debugModeEnabled);
+			mainSprite = new Sonic(mainCode, (short) 100, (short) 624);
 		}
 		spriteManager.addSprite(mainSprite);
 
@@ -239,13 +238,16 @@ public class Engine extends GLCanvas implements GLEventListener {
 				}
 			}
 		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {
-			// Draw level and sprites behind the title card (Sonic is already placed and frozen)
+			// Draw level and sprites behind the title card (Sonic is already placed and
+			// frozen)
 			levelManager.drawWithSpritePriority(spriteRenderManager);
 
-			// Flush level commands with level camera position before switching to screen-space
+			// Flush level commands with level camera position before switching to
+			// screen-space
 			graphicsManager.flush();
 
-			// Reset OpenGL state for fixed-function rendering (RECTI commands for background planes)
+			// Reset OpenGL state for fixed-function rendering (RECTI commands for
+			// background planes)
 			graphicsManager.resetForFixedFunction();
 
 			// Render title card overlay in screen-space (independent of camera)
@@ -353,7 +355,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 		// Set the viewport to the aspect-ratio-correct area for game rendering
 		gl.glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
 
-		// Update projection matrix for current mode (H40=320 for levels, H32=256 for special stages)
+		// Update projection matrix for current mode (H40=320 for levels, H32=256 for
+		// special stages)
 		// This must be done each frame since we can switch modes at runtime
 		gl.glMatrixMode(GL_PROJECTION);
 		gl.glLoadIdentity();

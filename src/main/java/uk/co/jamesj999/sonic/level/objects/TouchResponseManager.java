@@ -13,7 +13,8 @@ public class TouchResponseManager {
     private final TouchResponseTable table;
     private final Set<ObjectInstance> overlapping = Collections.newSetFromMap(new IdentityHashMap<>());
     private final TouchResponseDebugState debugState = new TouchResponseDebugState();
-    // Use external frameCounter from LevelManager for consistent timing with ring collection
+    // Use external frameCounter from LevelManager for consistent timing with ring
+    // collection
     private int currentFrameCounter;
 
     public TouchResponseManager(ObjectManager objectManager, TouchResponseTable table) {
@@ -28,12 +29,21 @@ public class TouchResponseManager {
 
     /**
      * Updates touch response collision detection.
-     * @param player the player sprite
-     * @param frameCounter the current frame counter from LevelManager (must match the one used for lost ring updates)
+     * 
+     * @param player       the player sprite
+     * @param frameCounter the current frame counter from LevelManager (must match
+     *                     the one used for lost ring updates)
      */
     public void update(AbstractPlayableSprite player, int frameCounter) {
         currentFrameCounter = frameCounter;
         if (player == null || objectManager == null || player.getDead()) {
+            overlapping.clear();
+            debugState.clear();
+            return;
+        }
+
+        // Skip all collision detection in debug mode
+        if (player.isDebugMode()) {
             overlapping.clear();
             debugState.clear();
             return;

@@ -86,10 +86,10 @@ public enum SonicConfiguration {
 	 * Code of the sprite of the main playable character.
 	 */
 	MAIN_CHARACTER_CODE,
-    /**
-     * Whether to display debugging information on screen.
-     */
-    DEBUG_VIEW_ENABLED,
+	/**
+	 * Whether to display debugging information on screen.
+	 */
+	DEBUG_VIEW_ENABLED,
 
 	/**
 	 * Whether to display debugging collision information on screen.
@@ -102,9 +102,9 @@ public enum SonicConfiguration {
 	ROM_FILENAME,
 
 	/**
-	 * Whether to enable Debug Movement Mode
+	 * Key to toggle Debug Movement Mode at runtime.
 	 */
-	DEBUG_MODE,
+	DEBUG_MODE_KEY,
 
 	/**
 	 * Whether to enable Audio (Music/SFX)

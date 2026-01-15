@@ -22,7 +22,7 @@
   "DEBUG_VIEW_ENABLED": true,
   "DEBUG_COLLISION_VIEW_ENABLED": false,
   "ROM_FILENAME": "Sonic The Hedgehog 2 (W) (REV01) [!].gen",
-  "DEBUG_MODE": false,
+  "DEBUG_MODE_KEY": 68,
   "AUDIO_ENABLED": true,
   "REGION": "NTSC",
   "DAC_INTERPOLATE": true,

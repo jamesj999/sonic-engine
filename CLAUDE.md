@@ -156,7 +156,7 @@ The codebase uses singletons extensively via `getInstance()`:
 ### Configuration
 `SonicConfigurationService` loads from `config.json`. Key settings:
 - `DEBUG_VIEW_ENABLED` - Overlays sensor/collision info (default: true)
-- `DEBUG_MODE` - Enables debug movement controls
+- `DEBUG_MODE_KEY` - Key to toggle debug movement mode (default: 68 = 'D' key). When active, Sonic can fly freely with arrow keys, ignoring collision/physics.
 - `AUDIO_ENABLED` - Sound on/off
 - `ROM_FILENAME` - ROM path
 

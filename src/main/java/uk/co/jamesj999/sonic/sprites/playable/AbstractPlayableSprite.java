@@ -12,7 +12,6 @@ import uk.co.jamesj999.sonic.game.sonic2.objects.ShieldObjectInstance;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
-import uk.co.jamesj999.sonic.sprites.managers.DebugSpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteAnimationManager;
@@ -482,7 +481,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public boolean getInvulnerable() {
-                return invulnerableFrames > 0 || invincibleFrames > 0 || hurt;
+                // Debug mode makes player completely invulnerable
+                return debugMode || invulnerableFrames > 0 || invincibleFrames > 0 || hurt;
         }
 
         public int getInvulnerableFrames() {
@@ -815,7 +815,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected short renderXOffset = 0;
         protected short renderYOffset = 0;
 
-        protected AbstractPlayableSprite(String code, short x, short y, boolean debug) {
+        /**
+         * When true, debug movement mode is active.
+         * Player can fly freely with direction keys, ignores collision/damage.
+         */
+        protected boolean debugMode = false;
+
+        protected AbstractPlayableSprite(String code, short x, short y) {
                 super(code, x, y);
                 // Must define speeds before creating Manager (it will read speeds upon
                 // instantiation).
@@ -829,12 +835,30 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         xHistory[i] = x;
                         yHistory[i] = y;
                 }
-                if (debug) {
-                        movementManager = new DebugSpriteMovementManager(this);
-                } else {
-                        movementManager = new PlayableSpriteMovementManager(this);
-                }
+                // Always use PlayableSpriteMovementManager - it checks debugMode internally
+                movementManager = new PlayableSpriteMovementManager(this);
                 animationManager = new PlayableSpriteAnimationManager(this);
+        }
+
+        /**
+         * Returns whether debug movement mode is active.
+         */
+        public boolean isDebugMode() {
+                return debugMode;
+        }
+
+        /**
+         * Toggles debug movement mode on/off.
+         */
+        public void toggleDebugMode() {
+                debugMode = !debugMode;
+        }
+
+        /**
+         * Sets debug movement mode.
+         */
+        public void setDebugMode(boolean debugMode) {
+                this.debugMode = debugMode;
         }
 
         public short getGSpeed() {

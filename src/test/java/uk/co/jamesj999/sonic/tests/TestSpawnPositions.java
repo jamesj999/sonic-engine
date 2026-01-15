@@ -24,7 +24,8 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 /**
- * Tests that Sonic's spawn positions for all levels place him correctly on the ground,
+ * Tests that Sonic's spawn positions for all levels place him correctly on the
+ * ground,
  * not inside the floor. This helps identify misconfigured spawn Y coordinates.
  */
 public class TestSpawnPositions {
@@ -60,7 +61,7 @@ public class TestSpawnPositions {
      * Creates a mock sprite at the given position for testing ground sensors.
      */
     private AbstractPlayableSprite createTestSprite(short x, short y) {
-        AbstractPlayableSprite sprite = new AbstractPlayableSprite("test", x, y, false) {
+        AbstractPlayableSprite sprite = new AbstractPlayableSprite("test", x, y) {
             // Use Sonic's radii
             {
                 standXRadius = 9;
@@ -87,7 +88,7 @@ public class TestSpawnPositions {
 
         sprite.setGroundMode(GroundMode.GROUND);
         sprite.setLayer((byte) 0);
-        sprite.setWidth(19);  // Sonic's width
+        sprite.setWidth(19); // Sonic's width
         sprite.setHeight(39); // Sonic's standing height
 
         return sprite;
@@ -119,7 +120,8 @@ public class TestSpawnPositions {
         levelField.set(levelManager, level);
 
         // Create sprite at spawn position
-        // Note: Spawn Y from ROM data is the CENTER position, but our sprite Y is top-left
+        // Note: Spawn Y from ROM data is the CENTER position, but our sprite Y is
+        // top-left
         // We need to subtract yRadius (19) to convert, matching what LevelManager does
         short spawnX = (short) levelData.getStartXPos();
         short spawnY = (short) levelData.getStartYPos();
@@ -186,14 +188,17 @@ public class TestSpawnPositions {
             }
         }
 
-        // Note: The original Sonic 2 game intentionally spawns players ~3 pixels inside the ground.
-        // The physics system pushes them up to the correct position during the title card.
+        // Note: The original Sonic 2 game intentionally spawns players ~3 pixels inside
+        // the ground.
+        // The physics system pushes them up to the correct position during the title
+        // card.
         // This is expected behavior, not a bug. The test documents this for reference.
         //
-        // If you need to enforce strict spawn positioning, uncomment the assertion below:
+        // If you need to enforce strict spawn positioning, uncomment the assertion
+        // below:
         // assertTrue("Some levels have spawn positions inside ground: " +
-        //         failures.stream().map(f -> f.levelData.name()).toList(),
-        //         failures.isEmpty());
+        // failures.stream().map(f -> f.levelData.name()).toList(),
+        // failures.isEmpty());
     }
 
     @Test
@@ -211,7 +216,8 @@ public class TestSpawnPositions {
         }
 
         // This test documents the current behavior - uncomment to enforce:
-        // assertTrue("Spawn should not be inside ground", result.distance0 >= 0 && result.distance1 >= 0);
+        // assertTrue("Spawn should not be inside ground", result.distance0 >= 0 &&
+        // result.distance1 >= 0);
     }
 
     /**

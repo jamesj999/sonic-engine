@@ -82,7 +82,7 @@ public class TestRingManager {
 
     private static final class TestPlayableSprite extends AbstractPlayableSprite {
         private TestPlayableSprite(short x, short y) {
-            super("TEST", x, y, true);
+            super("TEST", x, y);
             setWidth(20);
             setHeight(20);
         }

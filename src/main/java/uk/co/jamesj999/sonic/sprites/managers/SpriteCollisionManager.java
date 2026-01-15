@@ -28,6 +28,7 @@ public class SpriteCollisionManager {
         private int rightKey;
         private int jumpKey;
         private int testKey;
+        private int debugModeKey;
         private int frameCounter;
 
         private SpriteCollisionManager() {
@@ -37,6 +38,7 @@ public class SpriteCollisionManager {
                 rightKey = configService.getInt(SonicConfiguration.RIGHT);
                 jumpKey = configService.getInt(SonicConfiguration.JUMP);
                 testKey = configService.getInt(SonicConfiguration.TEST);
+                debugModeKey = configService.getInt(SonicConfiguration.DEBUG_MODE_KEY);
         }
 
         /**
@@ -53,11 +55,19 @@ public class SpriteCollisionManager {
                 boolean space = handler.isKeyDown(jumpKey);
                 boolean testButton = handler.isKeyDown(testKey);
 
+                // Check for debug mode toggle (edge-triggered: only on key press, not hold)
+                boolean debugModePressed = handler.isKeyPressed(debugModeKey);
+
                 // Iterate our Sprites:
                 for (Sprite sprite : sprites) {
                         // Check we're dealing with a playable sprite:
                         if (sprite instanceof AbstractPlayableSprite) {
                                 AbstractPlayableSprite playable = (AbstractPlayableSprite) sprite;
+
+                                // Toggle debug mode when the debug key is pressed
+                                if (debugModePressed) {
+                                        playable.toggleDebugMode();
+                                }
 
                                 // Check if player is being forced to walk right (end-of-act)
                                 boolean controlLocked = playable.isControlLocked();
@@ -89,7 +99,8 @@ public class SpriteCollisionManager {
 
         /**
          * Updates sprite physics without processing player input.
-         * Used during title card to let player settle onto ground while controls are locked.
+         * Used during title card to let player settle onto ground while controls are
+         * locked.
          * This matches original Sonic 2 behavior where physics runs continuously.
          */
         public void updateWithoutInput() {

@@ -57,7 +57,7 @@ public class TestGroundSensor {
 
         GroundSensor.setLevelManager(mockLevelManager);
 
-        mockSprite = new AbstractPlayableSprite("sonic", (short) 0, (short) 0, false) {
+        mockSprite = new AbstractPlayableSprite("sonic", (short) 0, (short) 0) {
             @Override
             protected void defineSpeeds() {
             }
