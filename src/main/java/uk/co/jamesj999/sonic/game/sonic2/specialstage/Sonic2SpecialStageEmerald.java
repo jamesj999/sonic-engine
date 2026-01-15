@@ -103,6 +103,80 @@ public class Sonic2SpecialStageEmerald extends Sonic2SpecialStageObject {
         this.manager = manager;
     }
 
+    /**
+     * Override screen position calculation to use emerald-specific 0.75 radius scaling.
+     *
+     * The emerald uses loc_3603C in the original game which scales x_radius and y_radius
+     * by 3/4 (0.75) before calculating screen position. This differs from regular objects
+     * which use the full radius values.
+     */
+    @Override
+    public void updateScreenPosition(Sonic2PerspectiveData perspectiveData, int currentTrackFrame, boolean trackFlipped) {
+        int depth = getDepth();
+        if (depth <= 0) {
+            onScreen = false;
+            return;
+        }
+
+        // Get perspective entry for current frame and depth
+        Sonic2PerspectiveData.PerspectiveEntry entry =
+            perspectiveData.getEntry(currentTrackFrame, depth);
+
+        if (entry == null) {
+            onScreen = false;
+            return;
+        }
+
+        // Check visibility angle range
+        if (!entry.isAngleVisible(angle, trackFlipped)) {
+            onScreen = false;
+            return;
+        }
+
+        // Calculate screen position with 0.75 radius scaling (from loc_36088)
+        // This matches the original: d4 = d4 * 3 / 4, d5 = d5 * 3 / 4
+        int[] pos = calculateEmeraldScreenPosition(entry, angle, trackFlipped);
+        screenX = pos[0];
+        screenY = pos[1];
+        onScreen = true;
+
+        // Determine animation index based on depth
+        animIndex = calculateAnimIndex();
+    }
+
+    /**
+     * Calculates emerald screen position with 0.75 radius scaling.
+     * This matches the original loc_36088 code which scales x_radius and y_radius
+     * to 75% of their values before the sine/cosine multiplication.
+     */
+    private int[] calculateEmeraldScreenPosition(Sonic2PerspectiveData.PerspectiveEntry entry,
+                                                  int angle, boolean trackFlipped) {
+        // Cosine/Sine tables matching the Mega Drive CalcSine
+        double radians = (angle / 256.0) * 2 * Math.PI;
+        int cos = (int) Math.round(Math.cos(radians) * 256);
+        int sin = (int) Math.round(Math.sin(radians) * 256);
+
+        // Scale radius by 0.75 (multiply by 3, divide by 4)
+        int scaledXRadius = (entry.xRadius * 3) / 4;
+        int scaledYRadius = (entry.yRadius * 3) / 4;
+
+        // Calculate position offsets using scaled radius
+        int xOffset = (cos * scaledXRadius) >> 8;
+        int yOffset = (sin * scaledYRadius) >> 8;
+
+        // Calculate base X (flipped if track is flipped)
+        int effectiveXBase = entry.xBase;
+        if (trackFlipped) {
+            effectiveXBase = 0x100 - entry.xBase;
+        }
+
+        // Final screen position (no VDP offset - emerald uses raw coordinates)
+        int x = effectiveXBase + xOffset;
+        int y = entry.yBase + yOffset;
+
+        return new int[] { x, y };
+    }
+
     @Override
     public void update(int currentTrackFrame, boolean trackFlipped, int speedFactor) {
         if (state == State.REMOVED) {

@@ -156,9 +156,15 @@ public class Sonic2SpecialStageManager {
     // Checkpoint system
     private Sonic2SpecialStageCheckpoint checkpoint;
     private boolean checkpointRainbowPaletteActive = false;
+    private boolean pendingCheckpoint = false;
+    private int pendingCheckpointNumber = 0;
+    private int pendingRingRequirement = 0;
+    private int pendingRingsCollected = 0;
+    private boolean pendingFinalCheckpoint = false;
     private boolean alignmentTestMode = false;
     private boolean alignmentTestSavedRainbowPalette = false;
     private Sonic2SpecialStageCheckpoint alignmentCheckpoint;
+    private boolean alignmentPendingCheckpoint = false;
     private int alignmentFrameIndex = 0;
     private int alignmentFrameTimer = 0;
     private int alignmentTrackFrameIndex = -1;
@@ -224,6 +230,9 @@ public class Sonic2SpecialStageManager {
     // Checkpoint rainbow palette tweaks (SSRainbowPaletteColors)
     private static final int[] CHECKPOINT_RAINBOW_PALETTE_ON = {0x0EE, 0x0CC, 0x088};
     private static final int[] CHECKPOINT_RAINBOW_PALETTE_OFF = {0x0EE, 0x088, 0x044};
+    // Checkpoint gate trigger uses MapSpec_Straight4..MapSpec_Drop1 range (Obj5A_Init).
+    private static final int CHECKPOINT_TRIGGER_FRAME = 0x14; // Straight4
+    private static final int CHECKPOINT_TRIGGER_OFFSET = 1;   // Offset within straight animation (alignment tuned)
 
     // Drop frame table indices
     private static final int[] VSCROLL_DROP_TABLE_INDICES = {
@@ -488,18 +497,26 @@ public class Sonic2SpecialStageManager {
         // Is this the final checkpoint (checkpoint 4 / quarter 3)?
         boolean isFinalCheckpoint = (checkpointNumber >= 4);
 
-        applyCheckpointRainbowPalette(true);
-
-        // Trigger the checkpoint rainbow animation (result resolved after rainbow completes)
-        checkpoint.beginCheckpoint(checkpointNumber, ringRequirement, ringsCollected, isFinalCheckpoint);
+        pendingCheckpoint = true;
+        pendingCheckpointNumber = checkpointNumber;
+        pendingRingRequirement = ringRequirement;
+        pendingRingsCollected = ringsCollected;
+        pendingFinalCheckpoint = isFinalCheckpoint;
+        LOGGER.fine("Queued checkpoint " + checkpointNumber + " until straight gate frame");
     }
 
     /**
      * Handles emerald reached event from the object manager.
      * Configures the spawned emerald object with ring requirements and manager reference.
+     * Also loads the per-stage emerald palette colors.
      */
     private void handleEmeraldReached() {
         LOGGER.info("Emerald marker reached - configuring emerald object");
+
+        // Load and apply the per-stage emerald palette colors
+        // From disassembly: loc_35F76 loads 3 colors from SS Emerald.bin into palette line 3
+        // at offsets $16, $18, $1A (color indices 11, 12, 13)
+        applyEmeraldPalette();
 
         // Get the emerald object that was just spawned
         Sonic2SpecialStageEmerald emerald = objectManager.getActiveEmerald();
@@ -510,6 +527,35 @@ public class Sonic2SpecialStageManager {
             emerald.setManager(this);
             LOGGER.info("Emerald configured with ring requirement: " + currentRingRequirement);
         }
+    }
+
+    /**
+     * Applies the per-stage emerald palette colors to palette line 3.
+     * The emerald art uses colors 11-13 of palette line 3, which are loaded
+     * from SS Emerald.bin per-stage when the emerald spawns.
+     */
+    private void applyEmeraldPalette() {
+        if (palettes == null || graphicsManager == null) {
+            return;
+        }
+
+        int[] emeraldColors = Sonic2SpecialStagePalette.getEmeraldColors(currentStage);
+        if (emeraldColors == null || emeraldColors.length != 3) {
+            LOGGER.warning("Failed to load emerald palette colors for stage " + (currentStage + 1));
+            return;
+        }
+
+        // Apply the 3 emerald colors to palette line 3 at indices 11, 12, 13
+        Palette palette = palettes[3];
+        palette.setColor(11, Sonic2SpecialStagePalette.genesisColorToPaletteColor(emeraldColors[0]));
+        palette.setColor(12, Sonic2SpecialStagePalette.genesisColorToPaletteColor(emeraldColors[1]));
+        palette.setColor(13, Sonic2SpecialStagePalette.genesisColorToPaletteColor(emeraldColors[2]));
+
+        // Update the cached palette texture
+        graphicsManager.cachePaletteTexture(palette, 3);
+
+        LOGGER.info("Applied emerald palette for stage " + (currentStage + 1) + ": " +
+                   String.format("%04X, %04X, %04X", emeraldColors[0], emeraldColors[1], emeraldColors[2]));
     }
 
     /**
@@ -567,6 +613,33 @@ public class Sonic2SpecialStageManager {
 
         graphicsManager.cachePaletteTexture(palette, 3);
         checkpointRainbowPaletteActive = bright;
+    }
+
+    private void tryStartPendingCheckpoint() {
+        if (!pendingCheckpoint || checkpoint == null || checkpoint.isActive() || trackAnimator == null) {
+            return;
+        }
+
+        if (trackAnimator.getCurrentSegmentType() != SEGMENT_STRAIGHT) {
+            return;
+        }
+
+        int gateIndexBase = 0;
+        for (int i = 0; i < ANIM_STRAIGHT.length; i++) {
+            if (ANIM_STRAIGHT[i] == CHECKPOINT_TRIGGER_FRAME) {
+                gateIndexBase = i;
+                break;
+            }
+        }
+        int gateIndex = Math.floorMod(gateIndexBase + CHECKPOINT_TRIGGER_OFFSET, ANIM_STRAIGHT.length);
+        if (trackAnimator.getCurrentFrameInSegment() != gateIndex) {
+            return;
+        }
+
+        applyCheckpointRainbowPalette(true);
+        checkpoint.beginCheckpoint(pendingCheckpointNumber, pendingRingRequirement,
+                pendingRingsCollected, pendingFinalCheckpoint);
+        pendingCheckpoint = false;
     }
 
     private void loadData() throws IOException {
@@ -818,6 +891,8 @@ public class Sonic2SpecialStageManager {
             updatePlayers();
             updateObjects();
         }
+
+        tryStartPendingCheckpoint();
 
         // Update checkpoint animation
         if (checkpoint != null && checkpoint.isActive()) {
@@ -1164,13 +1239,13 @@ public class Sonic2SpecialStageManager {
         alignmentDecodedTrackFrame = null;
         alignmentDrawingIndex = 0;
         alignmentRainbowSpeedAccumulator = 0.0;
+        alignmentPendingCheckpoint = true;
+        alignmentTriggerOffsetFrames = CHECKPOINT_TRIGGER_OFFSET;
 
         alignmentTestSavedRainbowPalette = checkpointRainbowPaletteActive;
 
         alignmentStepByTrackFrame = true;
         alignmentCheckpoint = new Sonic2SpecialStageCheckpoint();
-        alignmentCheckpoint.beginRainbowOnly();
-        applyCheckpointRainbowPalette(true);
 
         if (renderer != null) {
             renderer.setCheckpoint(alignmentCheckpoint);
@@ -1187,6 +1262,7 @@ public class Sonic2SpecialStageManager {
         alignmentDrawingIndex = 0;
         alignmentRainbowSpeedAccumulator = 0.0;
         alignmentStepByTrackFrame = false;
+        alignmentPendingCheckpoint = false;
 
         if (renderer != null) {
             renderer.setCheckpoint(checkpoint);
@@ -1207,12 +1283,28 @@ public class Sonic2SpecialStageManager {
             frameAdvanced = true;
         }
 
-        int triggerFrame = Math.floorMod(alignmentTriggerOffsetFrames, ANIM_STRAIGHT.length);
-        if (alignmentFrameTimer == 0 && alignmentFrameIndex == triggerFrame &&
+        int gateIndexBase = 0;
+        for (int i = 0; i < ANIM_STRAIGHT.length; i++) {
+            if (ANIM_STRAIGHT[i] == CHECKPOINT_TRIGGER_FRAME) {
+                gateIndexBase = i;
+                break;
+            }
+        }
+        int gateIndex = Math.floorMod(gateIndexBase + alignmentTriggerOffsetFrames, ANIM_STRAIGHT.length);
+
+        if (frameAdvanced && alignmentFrameIndex == 0 &&
+                alignmentCheckpoint != null && !alignmentCheckpoint.isActive() &&
+                !alignmentPendingCheckpoint) {
+            alignmentPendingCheckpoint = true;
+        }
+
+        if (frameAdvanced && alignmentPendingCheckpoint &&
+                alignmentFrameIndex == gateIndex &&
                 alignmentCheckpoint != null && !alignmentCheckpoint.isActive()) {
-                alignmentCheckpoint.beginRainbowOnly();
-                applyCheckpointRainbowPalette(true);
-                alignmentRainbowSpeedAccumulator = 0.0;
+            alignmentPendingCheckpoint = false;
+            alignmentCheckpoint.beginRainbowOnly();
+            applyCheckpointRainbowPalette(true);
+            alignmentRainbowSpeedAccumulator = 0.0;
         }
 
         alignmentTrackFrameIndex = ANIM_STRAIGHT[alignmentFrameIndex];
@@ -1473,10 +1565,18 @@ public class Sonic2SpecialStageManager {
         int y = viewportHeight - 14;
         drawOutlined(alignmentTextRenderer, "SS ALIGNMENT TEST (F4 to exit)", 8, y, Color.WHITE);
         y -= 14;
+        int gateIndexBase = 0;
+        for (int i = 0; i < ANIM_STRAIGHT.length; i++) {
+            if (ANIM_STRAIGHT[i] == CHECKPOINT_TRIGGER_FRAME) {
+                gateIndexBase = i;
+                break;
+            }
+        }
+        int gateIndex = Math.floorMod(gateIndexBase + alignmentTriggerOffsetFrames, ANIM_STRAIGHT.length);
         drawOutlined(alignmentTextRenderer,
-                "Offset (frames): " + alignmentTriggerOffsetFrames +
-                        "  Trigger: " + Math.floorMod(alignmentTriggerOffsetFrames, ANIM_STRAIGHT.length) +
-                        "/" + (ANIM_STRAIGHT.length - 1),
+                "Gate offset (frames): " + alignmentTriggerOffsetFrames +
+                        "  Gate frame: " + gateIndex + "/" + (ANIM_STRAIGHT.length - 1) +
+                        "  Map: 0x" + String.format("%02X", ANIM_STRAIGHT[gateIndex]),
                 8, y, Color.WHITE);
         y -= 14;
         drawOutlined(alignmentTextRenderer,
@@ -1484,7 +1584,7 @@ public class Sonic2SpecialStageManager {
                 8, y, Color.WHITE);
         y -= 14;
         drawOutlined(alignmentTextRenderer,
-                "Arrows: LEFT/RIGHT offset, UP/DOWN speed",
+                "Arrows: LEFT/RIGHT gate offset, UP/DOWN speed",
                 8, y, Color.WHITE);
         y -= 14;
         drawOutlined(alignmentTextRenderer,
@@ -1614,6 +1714,11 @@ public class Sonic2SpecialStageManager {
         }
         checkpoint = null;
         checkpointRainbowPaletteActive = false;
+        pendingCheckpoint = false;
+        pendingCheckpointNumber = 0;
+        pendingRingRequirement = 0;
+        pendingRingsCollected = 0;
+        pendingFinalCheckpoint = false;
         alignmentTestMode = false;
         alignmentCheckpoint = null;
         alignmentDecodedTrackFrame = null;

@@ -290,6 +290,16 @@ public final class Sonic2SpecialStageConstants {
         PALETTE_STAGE_7_OFFSET
     };
 
+    // ========== Emerald per-stage palette (SS Emerald.bin) ==========
+
+    /**
+     * Per-stage emerald palette - 42 bytes (7 stages x 6 bytes = 3 colors per stage)
+     * Loaded to palette line 3 at color indices 11-13 when emerald spawns.
+     * ROM offset verified: 0x35F92 (label word_35F92 in s2.asm)
+     */
+    public static final long PALETTE_EMERALD_OFFSET = 0x35F92;
+    public static final int PALETTE_EMERALD_SIZE = 42;  // 7 stages x 3 colors x 2 bytes
+
     // ========== Results Screen Constants ==========
 
     /** Results screen art - Nemesis compressed (emeralds and text) */

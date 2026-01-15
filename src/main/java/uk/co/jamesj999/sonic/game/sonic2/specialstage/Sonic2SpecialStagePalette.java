@@ -30,6 +30,7 @@ public class Sonic2SpecialStagePalette {
 
     private static byte[] cachedMainPalette;
     private static byte[][] cachedStagePalettes;
+    private static byte[] cachedEmeraldPalette;
 
     /**
      * Creates a set of 4 palettes for the specified special stage by loading from ROM.
@@ -147,11 +148,54 @@ public class Sonic2SpecialStagePalette {
     }
 
     /**
+     * Gets the per-stage emerald colors for loading into palette line 3.
+     * Each stage has 3 colors (6 bytes) that replace colors 11-13 in palette line 3.
+     *
+     * @param stageIndex Stage index (0-6)
+     * @return Array of 3 Genesis color values, or null on error
+     */
+    public static int[] getEmeraldColors(int stageIndex) {
+        try {
+            loadEmeraldPaletteDataIfNeeded();
+
+            int safeStageIndex = Math.max(0, Math.min(stageIndex, SPECIAL_STAGE_COUNT - 1));
+            int offset = safeStageIndex * 6; // 6 bytes per stage (3 colors x 2 bytes)
+
+            int[] colors = new int[3];
+            for (int i = 0; i < 3; i++) {
+                int byteOffset = offset + (i * 2);
+                colors[i] = ((cachedEmeraldPalette[byteOffset] & 0xFF) << 8) |
+                            (cachedEmeraldPalette[byteOffset + 1] & 0xFF);
+            }
+
+            LOGGER.fine("Loaded emerald colors for stage " + (stageIndex + 1) + ": " +
+                       String.format("%04X, %04X, %04X", colors[0], colors[1], colors[2]));
+            return colors;
+        } catch (IOException e) {
+            LOGGER.warning("Failed to load emerald palette: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Loads the emerald palette data from ROM if not already cached.
+     */
+    private static void loadEmeraldPaletteDataIfNeeded() throws IOException {
+        if (cachedEmeraldPalette == null) {
+            Rom rom = RomManager.getInstance().getRom();
+            cachedEmeraldPalette = rom.readBytes(PALETTE_EMERALD_OFFSET, PALETTE_EMERALD_SIZE);
+            LOGGER.fine("Loaded emerald palette from ROM offset 0x" +
+                       Long.toHexString(PALETTE_EMERALD_OFFSET) + " (" + cachedEmeraldPalette.length + " bytes)");
+        }
+    }
+
+    /**
      * Clears cached palette data. Call this when ROM changes or on reset.
      */
     public static void clearCache() {
         cachedMainPalette = null;
         cachedStagePalettes = null;
+        cachedEmeraldPalette = null;
     }
 
     /**

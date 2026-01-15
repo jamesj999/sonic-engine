@@ -186,6 +186,12 @@ public class Sonic2PerspectiveData {
         /**
          * Calculates screen position for an object at this depth and angle.
          *
+         * The original game uses VDP coordinates where screen Y = VDP Y - 128.
+         * The perspective data y_base values appear to be relative to a track center
+         * point, and the original loc_351F8 adds +$80 (128) to convert to VDP Y.
+         * Since we use screen coordinates directly, we add 128 to match the original
+         * VDP output, then rendering will produce the correct visual position.
+         *
          * @param angle Object angle (0-255)
          * @param trackFlipped Whether the track is flipped
          * @return int array [x, y]

@@ -1519,9 +1519,20 @@ public class Sonic2SpecialStageRenderer {
         Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
             Sonic2SpecialStageSpriteData.getShadowPieces(shadowInfo.type, shadowSize);
 
-        // Calculate shadow offset based on type (simplified version)
-        // Objects use a fixed Y offset for shadow (below the object)
-        int shadowOffsetY = 8;  // Shadow appears slightly below object
+        // Calculate shadow Y position
+        // The shadow should appear below the object on the track surface.
+        // For the emerald, which floats above the track, the shadow needs a larger
+        // offset to appear on the track below. The emerald sprite is centered with
+        // yOffset=-12, so it extends from y-12 to y+12. Shadow should be below that.
+        int shadowOffsetY;
+        if (obj.isEmerald()) {
+            // Emerald shadow offset scales with size (animIndex 9=small/far, 0=large/close)
+            // When close (animIndex low), shadow is further below due to perspective
+            int sizeOffset = 12 + (9 - Math.min(animIndex, 9)) * 2;  // 12 to 30
+            shadowOffsetY = sizeOffset;
+        } else {
+            shadowOffsetY = 8;
+        }
         int shadowY = screenY + shadowOffsetY;
 
         // Render each sprite piece using shadow batch (VDP shadow/highlight mode)
