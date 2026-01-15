@@ -562,11 +562,10 @@ public class Sonic2SpecialStageRenderer {
         List<Sonic2SpecialStagePlayer> sortedPlayers = new ArrayList<>(players);
         sortedPlayers.sort(Comparator.comparingInt(Sonic2SpecialStagePlayer::getPriority));
 
-        graphicsManager.beginPatternBatch();
-
-        // Render shadows first (behind players)
-        // Only render shadows if shadow art is loaded (pattern base > 0)
+        // Render shadows first using shadow batch (VDP shadow/highlight mode)
+        // Shadows must render before players so they appear behind them
         if (shadowFlatPatternBase > 0 || shadowDiagPatternBase > 0 || shadowSidePatternBase > 0) {
+            graphicsManager.beginShadowBatch();
             for (Sonic2SpecialStagePlayer player : sortedPlayers) {
                 // Don't render shadow when invulnerability flash is active
                 if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
@@ -574,9 +573,11 @@ public class Sonic2SpecialStageRenderer {
                 }
                 renderPlayerShadow(player);
             }
+            graphicsManager.flushShadowBatch();
         }
 
-        // Render players on top of shadows
+        // Render players on top of shadows using normal pattern batch
+        graphicsManager.beginPatternBatch();
         for (Sonic2SpecialStagePlayer player : sortedPlayers) {
             if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
                 continue;
@@ -703,12 +704,8 @@ public class Sonic2SpecialStageRenderer {
         Sonic2SpecialStageSpriteData.SpritePiece[] pieces =
             Sonic2SpecialStageSpriteData.getShadowPieces(shadowInfo.type, shadowInfo.sizeIndex);
 
-        // Shadow uses palette 0 (background palette which has dark colors)
-        // Note: disassembly says palette 3, but that results in white shadows
-        // Palette 0 has proper dark colors at the indices the shadow art uses
-        final int paletteIndex = 0;
-
-        // Render each sprite piece
+        // Render each sprite piece using shadow batch (VDP shadow/highlight mode)
+        // Shadow batch uses multiplicative blending to darken the background
         for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
             int pieceX = shadowInfo.xFlip ?
                 shadowX - piece.xOffset - (piece.widthTiles * TILE_SIZE) :
@@ -727,8 +724,6 @@ public class Sonic2SpecialStageRenderer {
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
                     PatternDesc desc = new PatternDesc();
-                    desc.setPriority(false);  // Shadow is low priority (behind player)
-                    desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(finalHFlip);
                     desc.setVFlip(piece.vFlip);
                     desc.setPatternIndex(patternId & 0x7FF);
@@ -736,7 +731,7 @@ public class Sonic2SpecialStageRenderer {
                     int tileScreenX = pieceX + tx * TILE_SIZE;
                     int tileScreenY = pieceY + ty * TILE_SIZE;
 
-                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                    graphicsManager.addShadowPattern(patternId, desc, tileScreenX, tileScreenY);
                 }
             }
         }
@@ -1450,14 +1445,13 @@ public class Sonic2SpecialStageRenderer {
         List<Sonic2SpecialStageObject> sortedObjects = new ArrayList<>(objects);
         sortedObjects.sort((a, b) -> Integer.compare(b.getDepth(), a.getDepth()));
 
-        graphicsManager.beginPatternBatch();
-
         final int H32_WIDTH = 256;
         final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
 
-        // Render shadows first (behind objects)
+        // Render shadows first using shadow batch (VDP shadow/highlight mode)
         // Only render shadows if shadow art is loaded
         if (shadowFlatPatternBase > 0 || shadowDiagPatternBase > 0 || shadowSidePatternBase > 0) {
+            graphicsManager.beginShadowBatch();
             for (Sonic2SpecialStageObject obj : sortedObjects) {
                 if (!obj.isOnScreen()) {
                     continue;
@@ -1471,9 +1465,11 @@ public class Sonic2SpecialStageRenderer {
                     renderObjectShadow(obj, SCREEN_CENTER_OFFSET);
                 }
             }
+            graphicsManager.flushShadowBatch();
         }
 
-        // Render objects on top of shadows
+        // Render objects on top of shadows using normal pattern batch
+        graphicsManager.beginPatternBatch();
         for (Sonic2SpecialStageObject obj : sortedObjects) {
             if (!obj.isOnScreen()) {
                 continue;
@@ -1528,12 +1524,7 @@ public class Sonic2SpecialStageRenderer {
         int shadowOffsetY = 8;  // Shadow appears slightly below object
         int shadowY = screenY + shadowOffsetY;
 
-        // Shadow uses palette 0 (background palette which has dark colors)
-        // Note: disassembly says palette 3, but that results in white shadows
-        // Palette 0 has proper dark colors at the indices the shadow art uses
-        final int paletteIndex = 0;
-
-        // Render each sprite piece
+        // Render each sprite piece using shadow batch (VDP shadow/highlight mode)
         for (Sonic2SpecialStageSpriteData.SpritePiece piece : pieces) {
             // Apply shadow x-flip to piece position
             int pieceX;
@@ -1556,8 +1547,6 @@ public class Sonic2SpecialStageRenderer {
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
                     PatternDesc desc = new PatternDesc();
-                    desc.setPriority(false);  // Shadow is low priority
-                    desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(finalHFlip);
                     desc.setVFlip(piece.vFlip);
                     desc.setPatternIndex(patternId & 0x7FF);
@@ -1565,7 +1554,7 @@ public class Sonic2SpecialStageRenderer {
                     int tileScreenX = pieceX + tx * TILE_SIZE;
                     int tileScreenY = pieceY + ty * TILE_SIZE;
 
-                    graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                    graphicsManager.addShadowPattern(patternId, desc, tileScreenX, tileScreenY);
                 }
             }
         }

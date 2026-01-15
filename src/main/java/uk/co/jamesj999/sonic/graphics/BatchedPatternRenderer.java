@@ -47,6 +47,9 @@ public class BatchedPatternRenderer {
     // Track whether a batch is currently active
     private boolean batchActive = false;
 
+    // Track whether a shadow batch is active (uses different shader and blend mode)
+    private boolean shadowBatchActive = false;
+
     // Singleton instance
     private static BatchedPatternRenderer instance;
 
@@ -303,6 +306,118 @@ public class BatchedPatternRenderer {
         return command;
     }
 
+    // =====================================================================
+    // Shadow Batch Methods - for VDP shadow/highlight mode
+    // =====================================================================
+
+    /**
+     * Begin a new shadow rendering batch.
+     * Shadow batches use multiplicative blending to darken the background
+     * where shadow pixels are rendered (VDP shadow/highlight mode).
+     */
+    public void beginShadowBatch() {
+        patternCount = 0;
+        shadowBatchActive = true;
+        batchActive = false;  // Ensure normal batch is not active
+    }
+
+    /**
+     * Check if a shadow batch is currently active.
+     */
+    public boolean isShadowBatchActive() {
+        return shadowBatchActive;
+    }
+
+    /**
+     * Add a pattern to the current shadow batch.
+     * Uses the same buffer management as normal batches.
+     */
+    public boolean addShadowPattern(int patternTextureId, PatternDesc desc, int x, int y) {
+        if (!shadowBatchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
+            return false;
+        }
+
+        // Convert Y to screen coordinates (flip Y axis)
+        int screenY = screenHeight - y - 8;
+
+        // Compute the 4 corners of the quad
+        float x0 = x;
+        float y0 = screenY;
+        float x1 = x + 8;
+        float y1 = screenY + 8;
+
+        // Handle flips by adjusting texture coordinates
+        float u0, u1, v0, v1;
+        if (desc.getHFlip()) {
+            u0 = 1.0f;
+            u1 = 0.0f;
+        } else {
+            u0 = 0.0f;
+            u1 = 1.0f;
+        }
+        if (desc.getVFlip()) {
+            v0 = 0.0f;
+            v1 = 1.0f;
+        } else {
+            v0 = 1.0f;
+            v1 = 0.0f;
+        }
+
+        // Calculate array offsets
+        int vertOffset = patternCount * FLOATS_PER_PATTERN_VERTS;
+        int texOffset = patternCount * FLOATS_PER_PATTERN_TEXCOORDS;
+
+        // Add vertices (quad: bottom-left, bottom-right, top-right, top-left)
+        vertexData[vertOffset + 0] = x0;
+        vertexData[vertOffset + 1] = y0;
+        vertexData[vertOffset + 2] = x1;
+        vertexData[vertOffset + 3] = y0;
+        vertexData[vertOffset + 4] = x1;
+        vertexData[vertOffset + 5] = y1;
+        vertexData[vertOffset + 6] = x0;
+        vertexData[vertOffset + 7] = y1;
+
+        // Add texture coordinates
+        texCoordData[texOffset + 0] = u0;
+        texCoordData[texOffset + 1] = v0;
+        texCoordData[texOffset + 2] = u1;
+        texCoordData[texOffset + 3] = v0;
+        texCoordData[texOffset + 4] = u1;
+        texCoordData[texOffset + 5] = v1;
+        texCoordData[texOffset + 6] = u0;
+        texCoordData[texOffset + 7] = v1;
+
+        // Store texture ID (palette is not used for shadow rendering)
+        patternTextureIds[patternCount] = patternTextureId;
+        paletteIndices[patternCount] = 0;  // Not used for shadows
+        patternCount++;
+
+        return true;
+    }
+
+    /**
+     * End the current shadow batch and return a command that can be queued.
+     */
+    public GLCommandable endShadowBatch() {
+        if (patternCount == 0) {
+            shadowBatchActive = false;
+            return null;
+        }
+
+        // Create a shadow-specific command with copied data
+        ShadowBatchRenderCommand command = new ShadowBatchRenderCommand(
+                Arrays.copyOf(vertexData, patternCount * FLOATS_PER_PATTERN_VERTS),
+                Arrays.copyOf(texCoordData, patternCount * FLOATS_PER_PATTERN_TEXCOORDS),
+                Arrays.copyOf(patternTextureIds, patternCount),
+                patternCount);
+
+        // Reset for next batch
+        patternCount = 0;
+        shadowBatchActive = false;
+
+        return command;
+    }
+
     /**
      * Command that renders a batch of patterns.
      * This is a snapshot of batch data that can be queued for later execution.
@@ -408,6 +523,103 @@ public class BatchedPatternRenderer {
 
             // Reset PatternRenderCommand state tracking so subsequent patterns
             // will properly reinitialize GL state (since we just disabled everything)
+            PatternRenderCommand.resetFrameState();
+        }
+    }
+
+    /**
+     * Command that renders a batch of shadow patterns.
+     * Uses the shadow shader and multiplicative blending to darken the background.
+     * This implements VDP shadow/highlight mode where palette index 14 darkens pixels.
+     */
+    private static class ShadowBatchRenderCommand implements GLCommandable {
+        private final float[] vertexData;
+        private final float[] texCoordData;
+        private final int[] patternTextureIds;
+        private final int patternCount;
+
+        // Direct buffers for OpenGL - allocated once per command
+        private FloatBuffer vertexBuffer;
+        private FloatBuffer texCoordBuffer;
+
+        ShadowBatchRenderCommand(float[] vertexData, float[] texCoordData,
+                int[] patternTextureIds, int patternCount) {
+            this.vertexData = vertexData;
+            this.texCoordData = texCoordData;
+            this.patternTextureIds = patternTextureIds;
+            this.patternCount = patternCount;
+        }
+
+        @Override
+        public void execute(GL2 gl, int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
+            if (patternCount == 0) {
+                return;
+            }
+
+            // Allocate direct buffers on first use
+            if (vertexBuffer == null) {
+                vertexBuffer = GLBuffers.newDirectFloatBuffer(vertexData.length);
+                texCoordBuffer = GLBuffers.newDirectFloatBuffer(texCoordData.length);
+                vertexBuffer.put(vertexData).flip();
+                texCoordBuffer.put(texCoordData).flip();
+            }
+
+            GraphicsManager gm = GraphicsManager.getInstance();
+            ShaderProgram shadowShader = gm.getShadowShaderProgram();
+
+            // Setup state for shadow rendering
+            gl.glEnable(GL2.GL_BLEND);
+            // Multiplicative blending: result = dest * src
+            // Shadow shader outputs 0.5 for index 14, which will halve (darken) the background
+            gl.glBlendFunc(GL2.GL_ZERO, GL2.GL_SRC_COLOR);
+
+            shadowShader.use(gl);
+            shadowShader.cacheUniformLocations(gl);
+
+            // Set texture unit uniform (shadow shader only needs the indexed texture)
+            int indexedTexLoc = shadowShader.getIndexedColorTextureLocation();
+            if (indexedTexLoc >= 0) {
+                gl.glUniform1i(indexedTexLoc, 0);
+            }
+
+            // Enable vertex arrays
+            gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
+            gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+
+            int lastTextureId = -1;
+
+            gl.glPushMatrix();
+            gl.glTranslatef(-cameraX, cameraY, 0);
+
+            for (int i = 0; i < patternCount; i++) {
+                // Change pattern texture if needed
+                if (patternTextureIds[i] != lastTextureId) {
+                    gl.glActiveTexture(GL2.GL_TEXTURE0);
+                    gl.glBindTexture(GL2.GL_TEXTURE_2D, patternTextureIds[i]);
+                    lastTextureId = patternTextureIds[i];
+                }
+
+                // Set buffer position for this pattern's data
+                int vertOffset = i * 8;
+                int texOffset = i * 8;
+
+                vertexBuffer.position(vertOffset);
+                texCoordBuffer.position(texOffset);
+
+                gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
+                gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
+
+                gl.glDrawArrays(GL2.GL_QUADS, 0, 4);
+            }
+
+            gl.glPopMatrix();
+
+            // Cleanup state
+            gl.glDisableClientState(GL2.GL_VERTEX_ARRAY);
+            gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+            shadowShader.stop(gl);
+            gl.glDisable(GL2.GL_BLEND);
+
             PatternRenderCommand.resetFrameState();
         }
     }

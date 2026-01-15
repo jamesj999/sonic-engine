@@ -385,6 +385,7 @@ public class Sonic2SpecialStageManager {
                    Integer.toHexString(emeraldPatternBase));
 
         // Load shadow art (3 types: flat, diagonal, side)
+        // Shadow uses palette line 3 as per original game (obj63.asm: make_art_tile with pal=3)
         Pattern[] shadowFlatPatterns = dataLoader.getShadowHorizPatterns();
         shadowFlatPatternBase = emeraldPatternBase + emeraldPatterns.length;
         for (int i = 0; i < shadowFlatPatterns.length; i++) {

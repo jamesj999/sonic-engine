@@ -35,9 +35,11 @@ public class GraphicsManager {
 	private ShaderProgram shaderProgram;
 	private ShaderProgram debugShaderProgram;
 	private ShaderProgram fadeShaderProgram;
+	private ShaderProgram shadowShaderProgram;
 	private static final String DEBUG_SHADER_PATH = "shaders/shader_debug_color.glsl";
 	private static final String PARALLAX_SHADER_PATH = "shaders/shader_parallax_bg.glsl";
 	private static final String FADE_SHADER_PATH = "shaders/shader_fade.glsl";
+	private static final String SHADOW_SHADER_PATH = "shaders/shader_shadow.glsl";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
@@ -71,6 +73,8 @@ public class GraphicsManager {
 		this.shaderProgram.cacheUniformLocations(gl); // Cache uniform locations for fast access
 		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
 		this.fadeShaderProgram = new ShaderProgram(gl, FADE_SHADER_PATH);
+		this.shadowShaderProgram = new ShaderProgram(gl, SHADOW_SHADER_PATH);
+		this.shadowShaderProgram.cacheUniformLocations(gl);
 
 		// Initialize fade manager with shader
 		this.fadeManager = FadeManager.getInstance();
@@ -369,6 +373,52 @@ public class GraphicsManager {
 	}
 
 	/**
+	 * Begin a new shadow batch. Shadow batches use VDP shadow/highlight mode
+	 * where palette index 14 darkens the background.
+	 */
+	public void beginShadowBatch() {
+		if (headlessMode) {
+			return;
+		}
+		if (batchedRenderer == null) {
+			batchedRenderer = BatchedPatternRenderer.getInstance();
+		}
+		batchedRenderer.beginShadowBatch();
+	}
+
+	/**
+	 * Add a shadow pattern to the current shadow batch.
+	 */
+	public void addShadowPattern(int patternIndex, PatternDesc desc, int x, int y) {
+		if (headlessMode) {
+			return;
+		}
+		Integer patternTextureId = patternTextureMap.get("pattern_" + patternIndex);
+		if (patternTextureId == null) {
+			return;
+		}
+		if (batchedRenderer != null && batchedRenderer.isShadowBatchActive()) {
+			batchedRenderer.addShadowPattern(patternTextureId, desc, x, y);
+		}
+	}
+
+	/**
+	 * Flush the current shadow batch. This queues the shadow command for
+	 * execution with multiplicative blending.
+	 */
+	public void flushShadowBatch() {
+		if (headlessMode) {
+			return;
+		}
+		if (batchedRenderer != null) {
+			GLCommandable batchCommand = batchedRenderer.endShadowBatch();
+			if (batchCommand != null) {
+				registerCommand(batchCommand);
+			}
+		}
+	}
+
+	/**
 	 * Enable or disable pattern batching.
 	 */
 	public void setBatchingEnabled(boolean enabled) {
@@ -422,6 +472,9 @@ public class GraphicsManager {
 		if (fadeShaderProgram != null) {
 			fadeShaderProgram.cleanup(graphics);
 		}
+		if (shadowShaderProgram != null) {
+			shadowShaderProgram.cleanup(graphics);
+		}
 		// Reset fade manager
 		if (fadeManager != null) {
 			fadeManager.cancel();
@@ -468,6 +521,10 @@ public class GraphicsManager {
 
 	public ShaderProgram getFadeShaderProgram() {
 		return fadeShaderProgram;
+	}
+
+	public ShaderProgram getShadowShaderProgram() {
+		return shadowShaderProgram;
 	}
 
 	/**

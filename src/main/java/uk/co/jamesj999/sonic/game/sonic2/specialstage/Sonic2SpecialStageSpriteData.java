@@ -358,27 +358,29 @@ public class Sonic2SpecialStageSpriteData {
      * Diagonal shadow mapping frames from obj63.asm.
      * Indexed by size: 0 = largest (closest), 9 = smallest (furthest).
      * Each uses tiles from ArtNem_SpecialDiagShadow.
+     *
+     * From obj63.asm table entries 1, 4, 7, 10, 13, 16, 19, 22, 25, 28.
      */
     public static final SpritePiece[][] SHADOW_DIAG_MAPPINGS = {
-        // Size 0 (largest): 4x4 @ tile $2A (frame 1 in obj63)
+        // Size 0 (largest): Map_obj63_00FA - 4x4 @ tile $2A
         { new SpritePiece(-16, -16, 4, 4, 0x2A, false, false) },
-        // Size 1: 3x3 @ tile $21 (frame 4) - note different offset
+        // Size 1: Map_obj63_00F0 - 3x3 @ tile $21
         { new SpritePiece(-8, -16, 3, 3, 0x21, false, false) },
-        // Size 2: 3x3 @ tile $18 (frame 7)
+        // Size 2: Map_obj63_00E6 - 3x3 @ tile $18
         { new SpritePiece(-12, -12, 3, 3, 0x18, false, false) },
-        // Size 3: 3x3 @ tile $F (frame 10)
+        // Size 3: Map_obj63_00DC - 3x3 @ tile $F
         { new SpritePiece(-12, -12, 3, 3, 0x0F, false, false) },
-        // Size 4: 2x2 @ tile $B (frame 13) - note different offset
+        // Size 4: Map_obj63_00D2 - 2x2 @ tile $B
         { new SpritePiece(-4, -12, 2, 2, 0x0B, false, false) },
-        // Size 5: 2x2 @ tile $7 (frame 16)
+        // Size 5: Map_obj63_00C8 - 2x2 @ tile $7
         { new SpritePiece(-8, -8, 2, 2, 0x07, false, false) },
-        // Size 6: 2x2 @ tile $3 (frame 19)
+        // Size 6: Map_obj63_00BE - 2x2 @ tile $3
         { new SpritePiece(-8, -8, 2, 2, 0x03, false, false) },
-        // Size 7: 1x1 @ tile $2 (frame 22)
+        // Size 7: Map_obj63_00B4 - 1x1 @ tile $2
         { new SpritePiece(-4, -4, 1, 1, 0x02, false, false) },
-        // Size 8: 1x1 @ tile $1 (frame 25)
+        // Size 8: Map_obj63_00AA - 1x1 @ tile $1
         { new SpritePiece(-4, -4, 1, 1, 0x01, false, false) },
-        // Size 9 (smallest): 1x1 @ tile $0 (frame 28)
+        // Size 9 (smallest): Map_obj63_00A0 - 1x1 @ tile $0
         { new SpritePiece(-4, -4, 1, 1, 0x00, false, false) },
     };
 
@@ -386,27 +388,29 @@ public class Sonic2SpecialStageSpriteData {
      * Side (vertical) shadow mapping frames from obj63.asm.
      * Indexed by size: 0 = largest (closest), 9 = smallest (furthest).
      * Each uses tiles from ArtNem_SpecialSideShadow.
+     *
+     * From obj63.asm table entries 2, 5, 8, 11, 14, 17, 20, 23, 26, 29.
      */
     public static final SpritePiece[][] SHADOW_SIDE_MAPPINGS = {
-        // Size 0 (largest): 1x4 @ tile $15 (frame 2 in obj63)
+        // Size 0 (largest): Map_obj63_015E - 1x4 @ tile $15
         { new SpritePiece(-4, -16, 1, 4, 0x15, false, false) },
-        // Size 1: 1x4 @ tile $11 (frame 5)
+        // Size 1: Map_obj63_0154 - 1x4 @ tile $11
         { new SpritePiece(-4, -16, 1, 4, 0x11, false, false) },
-        // Size 2: 1x3 @ tile $E (frame 8)
+        // Size 2: Map_obj63_014A - 1x3 @ tile $E
         { new SpritePiece(-4, -12, 1, 3, 0x0E, false, false) },
-        // Size 3: 1x3 @ tile $B (frame 11)
+        // Size 3: Map_obj63_0140 - 1x3 @ tile $B
         { new SpritePiece(-4, -12, 1, 3, 0x0B, false, false) },
-        // Size 4: 1x3 @ tile $8 (frame 14)
+        // Size 4: Map_obj63_0136 - 1x3 @ tile $8
         { new SpritePiece(-4, -12, 1, 3, 0x08, false, false) },
-        // Size 5: 1x2 @ tile $6 (frame 17)
+        // Size 5: Map_obj63_012C - 1x2 @ tile $6
         { new SpritePiece(-4, -8, 1, 2, 0x06, false, false) },
-        // Size 6: 1x2 @ tile $4 (frame 20)
+        // Size 6: Map_obj63_0122 - 1x2 @ tile $4
         { new SpritePiece(-4, -8, 1, 2, 0x04, false, false) },
-        // Size 7: 1x2 @ tile $2 (frame 23)
+        // Size 7: Map_obj63_0118 - 1x2 @ tile $2
         { new SpritePiece(-4, -8, 1, 2, 0x02, false, false) },
-        // Size 8: 1x1 @ tile $1 (frame 26)
+        // Size 8: Map_obj63_010E - 1x1 @ tile $1
         { new SpritePiece(-4, -4, 1, 1, 0x01, false, false) },
-        // Size 9 (smallest): 1x1 @ tile $0 (frame 29)
+        // Size 9 (smallest): Map_obj63_0104 - 1x1 @ tile $0
         { new SpritePiece(-4, -4, 1, 1, 0x00, false, false) },
     };
 
