@@ -173,6 +173,14 @@ public class TitleCardManager {
     private int stateTimer = 0;
     private int frameCounter = 0;
 
+    /**
+     * Flag to delay TEXT_EXIT -> COMPLETE transition by one frame.
+     * This ensures elements are drawn at their final positions before
+     * the state transitions, matching the original game's behavior where
+     * DisplaySprite is called before DeleteObject.
+     */
+    private boolean textExitTransitionPending = false;
+
     // Current zone/act
     private int currentZone = 0;
     private int currentAct = 0;
@@ -221,6 +229,7 @@ public class TitleCardManager {
         this.state = TitleCardState.SLIDE_IN;
         this.stateTimer = 0;
         this.frameCounter = 0;
+        this.textExitTransitionPending = false;
 
         // Load base art if needed
         if (!artLoaded) {
@@ -573,18 +582,31 @@ public class TitleCardManager {
      * Exit phase 3: Background scrolls out.
      * From disassembly: Obj34_BackgroundOut (routine $14)
      * When complete, starts the text wait period.
+     *
+     * <p>In the original game, the background object is deleted when its internal
+     * location counter reaches -$30, and the main loop (lines 5061-5062) checks
+     * on the NEXT VBlank whether the object is gone. This creates a 1-frame delay
+     * between the background finishing and the text timer starting.
+     *
+     * <p>We also verify the background is completely off-screen (blueBottom <= 0)
+     * before transitioning, to ensure no visual remnant remains.
      */
     private void updateExitBackground() {
         if (blueBackgroundElement != null) {
             blueBackgroundElement.updateSlideOut();
 
             if (blueBackgroundElement.hasExited()) {
-                // Background is gone - now text gets its wait timer
-                // From disassembly lines 5065-5072:
-                // move.w #$2D,TitleCard_ZoneName-TitleCard+anim_frame_duration(a1)
-                state = TitleCardState.TEXT_WAIT;
-                stateTimer = 0;
-                LOGGER.fine("Title card entered TEXT_WAIT state at frame " + frameCounter);
+                // Verify background is completely off-screen (blueY + 152 <= 0)
+                int blueBottom = blueBackgroundElement.getCurrentY() + 152;
+                if (blueBottom <= 0) {
+                    // Background is fully gone - now text gets its wait timer
+                    // From disassembly lines 5065-5072:
+                    // move.w #$2D,TitleCard_ZoneName-TitleCard+anim_frame_duration(a1)
+                    state = TitleCardState.TEXT_WAIT;
+                    stateTimer = 0;
+                    LOGGER.fine("Title card entered TEXT_WAIT state at frame " + frameCounter);
+                }
+                // If blueBottom > 0, wait another frame for it to fully disappear
             }
         } else {
             // No background element, skip to text wait
@@ -597,9 +619,17 @@ public class TitleCardManager {
      * Exit phase 4: Text waits for 45 frames ($2D) before exiting.
      * From disassembly: Obj34_WaitAndGoAway (routine $16)
      * The level is visible behind the text during this phase.
+     *
+     * <p>Original behavior: anim_frame_duration starts at $2D (45), decrements each
+     * frame, and exits when it reaches 0. This means 45 frames of display before
+     * the exit animation starts.
+     *
+     * <p>Our stateTimer is incremented before the check, so we use > instead of >=
+     * to ensure exactly 45 frames of waiting (stateTimer values 1-45, transition
+     * when stateTimer becomes 46).
      */
     private void updateTextWait() {
-        if (stateTimer >= TEXT_WAIT_DURATION) {
+        if (stateTimer > TEXT_WAIT_DURATION) {
             state = TitleCardState.TEXT_EXIT;
             stateTimer = 0;
             // Start text element exits
@@ -613,8 +643,29 @@ public class TitleCardManager {
     /**
      * Exit phase 5: Text elements slide out.
      * From disassembly: Obj34_WaitAndGoAway continues after wait expires.
+     *
+     * <p>The original game's behavior is:
+     * <ol>
+     *   <li>Move sprite toward titlecard_x_source at 32 pixels/frame</li>
+     *   <li>Display sprite via DisplaySprite</li>
+     *   <li>Delete object when x == titlecard_x_source OR x > $200</li>
+     * </ol>
+     *
+     * <p>This means the sprite is displayed at its final position BEFORE deletion.
+     * To match this, we delay the COMPLETE transition by one frame after all
+     * elements finish their animation, ensuring they're drawn at their final
+     * (off-screen) positions.
      */
     private void updateTextExit() {
+        // Check if we should transition (delayed by one frame)
+        if (textExitTransitionPending) {
+            state = TitleCardState.COMPLETE;
+            stateTimer = 0;
+            textExitTransitionPending = false;
+            LOGGER.fine("Title card COMPLETE at frame " + frameCounter);
+            return;
+        }
+
         // Update text elements
         if (zoneNameElement != null) zoneNameElement.updateSlideOut();
         if (zoneTextElement != null) zoneTextElement.updateSlideOut();
@@ -626,9 +677,10 @@ public class TitleCardManager {
         boolean actNumberExited = (actNumberElement == null || actNumberElement.hasExited());
 
         if (zoneNameExited && zoneTextExited && actNumberExited) {
-            state = TitleCardState.COMPLETE;
-            stateTimer = 0;
-            LOGGER.fine("Title card COMPLETE at frame " + frameCounter);
+            // Mark transition as pending - actual transition happens next frame
+            // This ensures elements are drawn at their final positions first
+            textExitTransitionPending = true;
+            LOGGER.fine("Title card text exit complete, transition pending at frame " + frameCounter);
         }
     }
 
@@ -895,6 +947,7 @@ public class TitleCardManager {
         state = TitleCardState.COMPLETE;
         stateTimer = 0;
         frameCounter = 0;
+        textExitTransitionPending = false;
         elements.clear();
     }
 

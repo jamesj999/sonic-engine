@@ -207,18 +207,46 @@ public class TitleCardElement {
     }
 
     /**
-     * Returns true if this element has exited the screen.
+     * Returns true if this element has completed its exit animation.
+     * Note: This indicates animation completion, not visibility.
+     * Elements remain visible until truly off-screen to match original behavior.
      */
     public boolean hasExited() {
         return exited;
     }
 
     /**
-     * Returns true if this element is visible (active and not exited).
+     * Returns true if this element is visible (active).
+     * Elements remain visible throughout their entire animation, including
+     * the exit animation, matching the original game's behavior where
+     * sprites are displayed at their final position before deletion.
      */
     public boolean isVisible() {
-        return active && !exited;
+        return active;
     }
+
+    /**
+     * Returns true if this element is completely off-screen.
+     * Used to determine when an element can safely be considered "gone"
+     * for state transition purposes.
+     *
+     * <p>Based on original game's safety check: cmpi.w #$200,x_pixel(a0)
+     * which deletes sprites when x > 512 ($200).
+     */
+    public boolean isOffScreen() {
+        if (animatesVertically) {
+            // Off-screen if completely above or below visible area
+            // Blue background is 152 pixels tall
+            return currentY > SCREEN_HEIGHT || (currentY + 152 < 0);
+        } else {
+            // Off-screen if right edge is left of screen, or left edge is right of screen
+            return currentX >= SCREEN_WIDTH || (currentX + widthPixels <= 0);
+        }
+    }
+
+    // Screen dimensions for off-screen calculations
+    private static final int SCREEN_WIDTH = 320;
+    private static final int SCREEN_HEIGHT = 224;
 
     /**
      * Gets the mapping frame index for this element.
@@ -308,13 +336,18 @@ public class TitleCardElement {
 
     /**
      * Creates the left red stripes element.
-     * Slides from left.
+     * Slides from left (off-screen) to visible position.
+     *
+     * <p>The swoosh needs to start from off-screen left so that during exit,
+     * it slides completely off-screen. With startX=-16 and sprite width ~8px,
+     * the right edge will be at x=-8 when fully exited (completely invisible).
      *
      * @return Left swoosh element
      */
     public static TitleCardElement createLeftSwoosh() {
-        // From disassembly: start=0, target=112, y=112, delay=0x15 (21)
-        return new TitleCardElement(TitleCardMappings.FRAME_RED_STRIPES, 0, 112, 112, 0x15, 8);
+        // Original disassembly: start=0, target=112, y=112, delay=0x15 (21)
+        // Changed startX from 0 to -16 to ensure swoosh exits fully off-screen
+        return new TitleCardElement(TitleCardMappings.FRAME_RED_STRIPES, -16, 112, 112, 0x15, 16);
     }
 
     /**

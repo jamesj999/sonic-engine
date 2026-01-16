@@ -1,14 +1,14 @@
 # Bug List
 
-Last updated: 2026-01-15
+Last updated: 2026-01-16
 
 ## Open Bugs
 
 - [ ] If a sound is playing when the level is switched, it gets stuck looping that part of the sound.
 - [ ] If you're standing to the left of a monitor and the ground is tilted slightly towards it, Sonic fails to jump.
 - [ ] Some spikes kill you from the side when you jump next to them while holding direction into them.
-- [ ] There's a small collision hole on the left side of the EHZ bridges.
-- [ ] EHZ bridges cause you to move from rolling to running when you move over them.
+- [x] There's a small collision hole on the left side of the EHZ bridges. (Fixed: Bridge collision anchor now uses ROM-style x_pos-8 offset; slope sampling aligned to collision space.)
+- [x] EHZ bridges cause you to move from rolling to running when you move over them. (Fixed: Terrain no longer forces air if solid contact exists; object landing preserves roll state.)
 - [ ] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct).
 - [ ] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
 - [x] Objects still have collision in debug movement mode. (Fixed: Debug mode now skips all physics, collision, and damage processing. Toggled via configurable keybind - default 'D' key)
@@ -27,8 +27,8 @@ Each fix must be verified against the original `docs/s2disasm/` disassembly (REV
 | Sound looping on level switch | `GameMode` transitions, `sndDriverInput`, Z80 driver reset/init | Match 68K→Z80 command stream timing; verify bus reset behavior matches ROM |
 | Jump fails near monitor | `Sonic_Jump`, `SolidObject`, `ChkFloorEdge`, `AnglePos` | Compare per-frame ground flag, push status, and jump input timing order |
 | Spikes side-kill | `objects/Spikes.asm`, `TouchResponse`, `HurtSonic` | Match hitbox dimensions + directional check (player Y vs spike top) |
-| Bridge collision hole | `objects/EHZbridge.asm` segment loop bounds | Check 0-based vs 1-based indexing; verify leftmost segment X offset |
-| Bridge cancels roll | Bridge collision handler + `Status` bits | Verify bridge standing logic doesn't modify roll flag |
+| Bridge collision hole | `objects/EHZbridge.asm` segment loop bounds | Fixed: aligned bridge render/collision anchor to ROM x_pos-8 offset |
+| Bridge cancels roll | Bridge collision handler + `Status` bits | Fixed: avoid terrain detaching when solid contact exists; preserve roll on object landing |
 | Double spiral fails | `objects/Spiral.asm`, control lock, gravity disable flags | Track substate transitions, timer values, position clamps |
 | Debug mode collision | `Debug_mode_flag` checks in collision dispatch | Match ROM's exact early-out conditions per interaction type |
 | Instant ring recollect | `objects/RingLoss.asm`, spill routine, collect lockout | Spilled rings need N-frame inert period before becoming collectible |
