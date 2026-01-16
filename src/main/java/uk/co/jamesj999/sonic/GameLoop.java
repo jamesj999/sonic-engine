@@ -578,12 +578,12 @@ public class GameLoop {
         // Play the special stage exit sound (same as entry sound)
         AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
 
-        // Start fade-to-black, then show title card when complete
-        fadeManager.startFadeToBlack(() -> {
+        // Start fade-to-white, then show title card when complete
+        fadeManager.startFadeToWhite(() -> {
             doExitResultsScreen();
         });
 
-        LOGGER.info("Starting fade-to-black to exit Results Screen");
+        LOGGER.info("Starting fade-to-white to exit Results Screen");
     }
 
     /**
@@ -607,9 +607,6 @@ public class GameLoop {
         int zoneIndex = levelManager.getCurrentZone();
         int actIndex = levelManager.getCurrentAct();
         enterTitleCardFromResults(zoneIndex, actIndex);
-
-        // Start fade-from-black to reveal the title card
-        FadeManager.getInstance().startFadeFromBlack(null);
 
         LOGGER.info("Exited Results Screen, entering Title Card for zone " + zoneIndex + " act " + actIndex);
     }
