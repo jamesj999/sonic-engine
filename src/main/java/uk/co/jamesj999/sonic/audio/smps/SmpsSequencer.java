@@ -1197,24 +1197,27 @@ public class SmpsSequencer implements AudioStream {
             block = (packed >> 11) & 7;
             fnum = packed & 0x7FF;
 
-            boolean forceKeyOn = isSfx && t.type == TrackType.FM;
             int chVal = (port == 0) ? ch : (ch + 4); // YM2612 0x28: bit2 selects upper port
 
-            if (!t.tieNext || forceKeyOn) {
+            // SMPSPlay DoNoteOn: skip KEY_OFF and KEY_ON when tieNext (HOLD) is set.
+            // This allows smpsNoAttack (E7) to work correctly for both music and SFX.
+            if (!t.tieNext) {
                 // [not in driver] turn DAC off when playing a note on FM6
                 if (fm6DacOff && hwCh == 5) {
                     synth.writeFm(this, 0, 0x2B, 0x00);
                 }
 
-                synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key On/Off is always on Port 0
+                synth.writeFm(this, 0, 0x28, 0x00 | chVal); // Key Off before frequency change
             }
 
             writeFmFreq(port, ch, fnum, block);
             applyFmPanAmsFms(t);
 
-            synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Always key on after latching frequency/pan
-            LOGGER.fine("FM KEY ON: chVal=" + Integer.toHexString(chVal) + " port=" + port + " fnum="
-                    + Integer.toHexString(fnum) + " block=" + block + " note=" + Integer.toHexString(t.note));
+            if (!t.tieNext) {
+                synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Key On after latching frequency/pan
+                LOGGER.fine("FM KEY ON: chVal=" + Integer.toHexString(chVal) + " port=" + port + " fnum="
+                        + Integer.toHexString(fnum) + " block=" + block + " note=" + Integer.toHexString(t.note));
+            }
             t.tieNext = false;
 
         } else {

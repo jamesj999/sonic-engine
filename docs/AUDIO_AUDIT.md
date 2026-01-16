@@ -1087,6 +1087,7 @@ When extending to **Sonic 1** or **Sonic 3 & Knuckles**, the following will need
 | **P3** | PSG white noise amplitude | Noise too quiet | ✅ **FIXED** |
 | **P3** | PSG high-freq cutoff behavior | DC offset clicks | ✅ **FIXED** |
 | **P3** | PSG mix level | Balance with FM | ✅ **ADJUSTED** (50% attenuation) |
+| **P2** | smpsNoAttack (E7) ignored | Spring SFX reverb bug | ✅ **FIXED** (KEY_ON was unconditional) |
 | **Defer** | ED/EE implementation | None for S2 | Defer to S1/S3K work |
 | **Defer** | Extended flags (FA-FF) | None for S2 | Defer to S3K work |
 
@@ -1100,3 +1101,5 @@ When extending to **Sonic 1** or **Sonic 3 & Knuckles**, the following will need
 | 2026-01-16 | Amp AI | Added cross-reference analysis; reclassified ED/EE/FA-FF as not needed for S2 |
 | 2026-01-16 | Amp AI | Added implementation strategy addendum with YM2612.java.example guidance |
 | 2026-01-16 | Claude | **P2/P3 Fixes Applied:** DAC timing (295 cycles), update order (PSG envelope before modulation, note fill early exit), return stack (4→16), SFX priority system (full Z80 driver priority table), PSG noise flip-flop init. Verified E6 volume timing was already correct (audit error). Verified SSG-EG matches libvgm. |
+| 2026-01-16 | Claude | **PSG Noise Quality Fixes:** LFSR shift timing (was half rate due to flip-flop gating - MAME shifts every underflow), white noise amplitude (removed incorrect 0.5x scaling), high-freq cutoff (proper muting instead of DC offset), PSG mix level (50% attenuation to match SMPSPlay). |
+| 2026-01-16 | Claude | **smpsNoAttack (E7) Fix:** KEY_ON was unconditionally sent even when tieNext was set, causing Spring SFX (0xCC) to have reverb-like attack transients. Fixed by making KEY_ON conditional on `!tieNext`, matching SMPSPlay's `DoNoteOn` behavior. Also removed incorrect `forceKeyOn` flag that overrode tieNext for SFX. |
