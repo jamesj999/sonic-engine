@@ -387,6 +387,16 @@ public class Sonic2SpecialStageManager {
         objectManager = new Sonic2SpecialStageObjectManager(dataLoader);
         objectManager.initialize(currentStage);
 
+        // Pre-spawn segment 0 objects immediately at stage start
+        // In the original game, objects are already in the pipeline when the stage begins.
+        // Without this, objects don't spawn until the first drawingIndex==4 transition,
+        // causing them to appear too late.
+        if (trackAnimator != null) {
+            int segmentType = trackAnimator.getCurrentSegmentType();
+            objectManager.processSegment(0, segmentType);
+            LOGGER.fine("Pre-spawned segment 0 objects at initialization");
+        }
+
         // Load ring and bomb art
         Pattern[] ringPatterns = dataLoader.getRingArtPatterns();
         ringPatternBase = messagesPatternBase + dataLoader.getMessagesArtPatterns().length;

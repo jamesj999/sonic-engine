@@ -18,8 +18,16 @@ public class TitleCardElement {
     /** Slide speed during entry: 16 pixels per frame */
     public static final int SLIDE_SPEED_IN = 16;
 
-    /** Slide speed during exit: 32 pixels per frame */
+    /** Slide speed during exit: 32 pixels per frame (default) */
     public static final int SLIDE_SPEED_OUT = 32;
+
+    /**
+     * Background exit speed: 17 pixels per frame.
+     * Original game scrolls background VRAM by $20 (32) per frame over 9 frames,
+     * covering $F0 to -$30 (240 to -48 = 288 units). Our background travels
+     * 152 pixels, so 152/9 ≈ 17 pixels/frame to match the 9-frame timing.
+     */
+    public static final int BACKGROUND_EXIT_SPEED = 17;
 
     private final int frameIndex;     // Mapping frame to render
     private final int startX;         // X position to start from / exit to
@@ -29,6 +37,7 @@ public class TitleCardElement {
     private final int delayFrames;    // Frames to wait before appearing
     private final int widthPixels;    // Width for calculating exit position
     private final boolean animatesVertically; // True if element animates in Y direction
+    private final int exitSpeed;      // Custom exit speed (pixels per frame)
 
     private int currentX;             // Current X position
     private int currentY;             // Current Y position
@@ -49,7 +58,7 @@ public class TitleCardElement {
      */
     public TitleCardElement(int frameIndex, int startX, int targetX, int y,
                             int delayFrames, int widthPixels) {
-        this(frameIndex, startX, targetX, y, y, delayFrames, widthPixels, false);
+        this(frameIndex, startX, targetX, y, y, delayFrames, widthPixels, false, SLIDE_SPEED_OUT);
     }
 
     /**
@@ -66,6 +75,26 @@ public class TitleCardElement {
      */
     public TitleCardElement(int frameIndex, int startX, int targetX, int startY, int targetY,
                             int delayFrames, int widthPixels, boolean animatesVertically) {
+        this(frameIndex, startX, targetX, startY, targetY, delayFrames, widthPixels,
+             animatesVertically, SLIDE_SPEED_OUT);
+    }
+
+    /**
+     * Creates a new title card element with full customization including exit speed.
+     *
+     * @param frameIndex   Mapping frame index from TitleCardMappings
+     * @param startX       X position to start from (and exit to)
+     * @param targetX      X position to slide to
+     * @param startY       Y position to start from (and exit to)
+     * @param targetY      Y position to slide to
+     * @param delayFrames  Frames to wait before starting animation
+     * @param widthPixels  Width of element in pixels
+     * @param animatesVertically True if element animates vertically
+     * @param exitSpeed    Custom exit speed in pixels per frame
+     */
+    public TitleCardElement(int frameIndex, int startX, int targetX, int startY, int targetY,
+                            int delayFrames, int widthPixels, boolean animatesVertically,
+                            int exitSpeed) {
         this.frameIndex = frameIndex;
         this.startX = startX;
         this.targetX = targetX;
@@ -74,6 +103,7 @@ public class TitleCardElement {
         this.delayFrames = delayFrames;
         this.widthPixels = widthPixels;
         this.animatesVertically = animatesVertically;
+        this.exitSpeed = exitSpeed;
 
         reset();
     }
@@ -131,24 +161,24 @@ public class TitleCardElement {
 
     /**
      * Updates the element during the slide-out phase.
-     * Elements slide back to their start position.
+     * Elements slide back to their start position using their configured exit speed.
      */
     public void updateSlideOut() {
         if (exited) return;
 
         if (animatesVertically) {
-            // Vertical animation
+            // Vertical animation - use configured exit speed
             int direction = Integer.compare(startY, currentY);
-            currentY += direction * SLIDE_SPEED_OUT;
+            currentY += direction * exitSpeed;
             if ((direction > 0 && currentY >= startY) ||
                 (direction < 0 && currentY <= startY)) {
                 currentY = startY;
                 exited = true;
             }
         } else {
-            // Horizontal animation
+            // Horizontal animation - use configured exit speed
             int direction = Integer.compare(startX, currentX);
-            currentX += direction * SLIDE_SPEED_OUT;
+            currentX += direction * exitSpeed;
             // Check if reached or passed exit position
             if ((direction > 0 && currentX >= startX) ||
                 (direction < 0 && currentX <= startX)) {
@@ -156,6 +186,17 @@ public class TitleCardElement {
                 exited = true;
             }
         }
+    }
+
+    /**
+     * Marks this element as ready to begin its exit animation.
+     * Called when the cascading exit sequence reaches this element.
+     * The element won't actually move until updateSlideOut() is called.
+     */
+    public void startExit() {
+        // Element is now in exit mode - ready for updateSlideOut() calls
+        // This method exists to support the cascading exit where elements
+        // start their exits at different times
     }
 
     /**
@@ -281,12 +322,17 @@ public class TitleCardElement {
      * Slides from top of screen, covers Y=0 to Y=152 (above yellow bar).
      * This is a placeholder element - it has no sprite, just controls the blue box position.
      *
+     * <p>Exit timing: Original game's Obj34_BackgroundOut scrolls VRAM from $F0 to -$30
+     * (subtracting $20 per frame), taking 9 frames. We use BACKGROUND_EXIT_SPEED to
+     * match this 9-frame duration.
+     *
      * @return Blue background element
      */
     public static TitleCardElement createBlueBackground() {
         // Blue box covers top portion (Y=0 to Y=152)
         // Animates vertically from above screen (startY=-152) to visible (targetY=0)
         // frameIndex -1 indicates this is a background-only element with no sprite
-        return new TitleCardElement(-1, 0, 0, -152, 0, 0, 0, true);
+        // Uses BACKGROUND_EXIT_SPEED (17 px/frame) to match original 9-frame exit timing
+        return new TitleCardElement(-1, 0, 0, -152, 0, 0, 0, true, BACKGROUND_EXIT_SPEED);
     }
 }
