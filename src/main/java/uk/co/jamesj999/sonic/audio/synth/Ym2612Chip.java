@@ -229,7 +229,10 @@ public class Ym2612Chip {
     private double dacStep = 1.0;
     private boolean dacEnabled;
     private boolean dacHasLatched;
-    private static final double DAC_BASE_CYCLES = 288.0;
+    // DAC timing from s2.sounddriver.asm:314,727-728:
+    // "295 cycles for two samples. dpcmLoopCounter should use 295 divided by 2."
+    // Base overhead = 295 cycles per 2 samples, djnz loops add 13*2=26 cycles per rateByte
+    private static final double DAC_BASE_CYCLES = 295.0;
     private static final double DAC_LOOP_CYCLES = 26.0;
     private static final double DAC_LOOP_SAMPLES = 2.0;
     private static final double Z80_CLOCK = 3579545.0;

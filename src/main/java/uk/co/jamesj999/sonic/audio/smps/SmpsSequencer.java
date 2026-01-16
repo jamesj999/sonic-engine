@@ -40,9 +40,18 @@ public class SmpsSequencer implements AudioStream {
     private boolean fm6DacOff = false;
     private int maxTicks = Integer.MAX_VALUE;
     private float pitch = 1.0f;
+    private int sfxPriority = 0x70; // Default SFX priority (Z80 driver uses 0x70 as common)
 
     public void setPitch(float pitch) {
         this.pitch = pitch;
+    }
+
+    public void setSfxPriority(int priority) {
+        this.sfxPriority = priority;
+    }
+
+    public int getSfxPriority() {
+        return sfxPriority;
     }
 
     private static class FadeState {
@@ -59,13 +68,8 @@ public class SmpsSequencer implements AudioStream {
 
     private static final double SAMPLE_RATE = 44100.0;
     // Base tempo weight is game/driver-specific (configured externally).
-    // Fixed-point 16.16 phase accumulator for sample-to-frame timing (prevents drift)
-    private static final int FRAME_FRAC_BITS = 16;
-    private static final int FRAME_FRAC_ONE = 1 << FRAME_FRAC_BITS;
-    // NTSC: 44100 / 60 = 735 samples/frame -> phase increment = 65536 / 735 ≈ 89
-    // We store samplesPerFrame as fixed-point: (frameRate << 16) / sampleRate
-    private int framePhaseInc = (int) ((60.0 * FRAME_FRAC_ONE) / SAMPLE_RATE); // ~89 for NTSC
-    private int framePhaseAcc = 0; // 16.16 fixed-point accumulator
+    private double samplesPerFrame = 44100.0 / 60.0;
+    private double sampleCounter = 0;
     private int tempoWeight;
     private int tempoAccumulator;
     private int dividingTiming = 1;
@@ -120,7 +124,9 @@ public class SmpsSequencer implements AudioStream {
         int baseBlock;
         int[] loopCounters = new int[4];
         int loopTarget = -1;
-        final int[] returnStack = new int[4];
+        // Z80 driver: Stack shares space with loop counters, grows down from offset 0x2A.
+        // No hard limit but collision possible after ~5 calls. Using 16 for safety margin.
+        final int[] returnStack = new int[16];
         int returnSp = 0;
         int dividingTiming = 1;
         // Modulation (F0)
@@ -312,8 +318,7 @@ public class SmpsSequencer implements AudioStream {
 
     public void setRegion(Region region) {
         this.region = region;
-        // Fixed-point phase increment: (frameRate << 16) / sampleRate
-        this.framePhaseInc = (int) ((region.frameRate * FRAME_FRAC_ONE) / SAMPLE_RATE);
+        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
         calculateTempo();
     }
 
@@ -342,7 +347,7 @@ public class SmpsSequencer implements AudioStream {
         }
         // SFX tick every tempo frame; keep frame pacing tied to region to avoid
         // double-speed playback.
-        this.framePhaseInc = (int) ((region.frameRate * FRAME_FRAC_ONE) / SAMPLE_RATE);
+        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
         calculateTempo();
 
         // Safety: cap SFX to a reasonable tick budget so bad data doesn't hang forever.
@@ -592,12 +597,9 @@ public class SmpsSequencer implements AudioStream {
     }
 
     public void advance(double samples) {
-        // Fixed-point 16.16 accumulator: add (samples * framePhaseInc) to accumulator
-        // When accumulator >= 1.0 (FRAME_FRAC_ONE), process a frame
-        int samplesInt = (int) samples;
-        framePhaseAcc += samplesInt * framePhaseInc;
-        while (framePhaseAcc >= FRAME_FRAC_ONE) {
-            framePhaseAcc -= FRAME_FRAC_ONE;
+        sampleCounter += samples;
+        while (sampleCounter >= samplesPerFrame) {
+            sampleCounter -= samplesPerFrame;
             processTempoFrame();
         }
     }
@@ -621,11 +623,12 @@ public class SmpsSequencer implements AudioStream {
                 }
 
                 if (t.duration > 0) {
-                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled) {
-                        applyModulation(t);
-                    }
+                    // Z80 driver order: PSG envelope (zPSGUpdateVolFX) THEN modulation (zDoModulation)
                     if (t.type == TrackType.PSG) {
                         processPsgEnvelope(t);
+                    }
+                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled) {
+                        applyModulation(t);
                     }
                     continue;
                 }
