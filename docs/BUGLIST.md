@@ -16,7 +16,7 @@ Last updated: 2026-01-16
 - [ ] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
 - [x] Finishing a special stage puts you at your last coordinates, instead of the coordinates of the last signpost (or, if none, fall back to act start position). (Fixed: CheckpointState now saves/restores camera position with checkpoint data, matching ROM's Obj79_SaveData/LoadData behavior)
 - [x] Both special stage and end of act cards shouldn't start counting the score until a set delay. (Fixed: Added STATE_PRE_TALLY_DELAY with ROM-accurate $B4/180 frame delay)
-- [ ] Special stage results ending should fade to white (verify!)
+- [x] Special stage results ending should fade to white (verify!)
 
 ## ROM-Accurate Investigation Plan
 
