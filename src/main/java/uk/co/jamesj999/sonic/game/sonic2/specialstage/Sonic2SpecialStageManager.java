@@ -177,6 +177,7 @@ public class Sonic2SpecialStageManager {
     private double alignmentRainbowSpeedAccumulator = 0.0;
     private boolean alignmentStepByTrackFrame = false;
     private TextRenderer alignmentTextRenderer;
+    private TextRenderer lagCompensationTextRenderer;
 
     // Current ring requirement for the active checkpoint (for "rings to go" display)
     private int currentRingRequirement = 0;
@@ -186,6 +187,31 @@ public class Sonic2SpecialStageManager {
     private int frameSampleCount = 0;
     private long frameSampleSum = 0;
     private static final int FRAME_SAMPLE_SIZE = 60;
+
+    // Lag compensation diagnostics (wall-clock based)
+    private long diagnosticWallStartTime = 0;
+    private int diagnosticUpdateCount = 0;
+    private int diagnosticTrackAdvances = 0;
+
+    /**
+     * Lag compensation factor to simulate original hardware lag frames.
+     *
+     * The original Mega Drive special stage VBlank handler (Vint_S2SS) does heavy
+     * DMA transfers (~3500 bytes: palette, sprites, H-scroll, 1/4 plane table).
+     * When this can't complete in one VBlank period, Vint_Lag runs instead,
+     * which does NOT run the main game loop - effectively skipping that entire frame.
+     *
+     * Our Java implementation runs at consistent 60fps with no lag, making the
+     * entire simulation appear ~35% faster than the original hardware. This factor
+     * compensates by skipping a proportional number of update frames entirely.
+     *
+     * Value of 0.35 means ~35% of frames are "lag frames" (entire update skipped):
+     * - Original theoretical: 60 updates/sec
+     * - Original with lag: ~39 effective updates/sec
+     * - This affects track animation, player movement, object speed, everything
+     */
+    private double lagCompensation = 0.35;
+    private double lagAccumulator = 0.0;
 
     // Skydome scroll state (accumulated horizontal scroll for background)
     private int skydomeScrollX = 0;
@@ -880,6 +906,11 @@ public class Sonic2SpecialStageManager {
 
     /**
      * Updates the Special Stage state for one frame.
+     *
+     * Lag compensation: The original Mega Drive experiences lag frames during
+     * the special stage due to heavy VBlank processing. When a lag frame occurs,
+     * the entire game update is skipped. We simulate this by skipping a proportional
+     * number of update calls entirely.
      */
     public void update() {
         if (!initialized) {
@@ -889,6 +920,16 @@ public class Sonic2SpecialStageManager {
         if (alignmentTestMode) {
             updateAlignmentTest();
             return;
+        }
+
+        // Lag compensation: simulate original hardware lag frames
+        // by skipping entire update frames proportionally
+        lagAccumulator += lagCompensation;
+        if (lagAccumulator >= 1.0) {
+            lagAccumulator -= 1.0;
+            // Still update lastFrameTime to avoid FPS diagnostic skew
+            lastFrameTime = System.nanoTime();
+            return; // Skip this entire frame (simulate lag)
         }
 
         // Frame timing diagnostic - measure actual FPS
@@ -908,6 +949,12 @@ public class Sonic2SpecialStageManager {
         lastFrameTime = now;
 
         frameCounter++;
+
+        // Lag compensation diagnostics - track actual timing
+        if (diagnosticWallStartTime == 0) {
+            diagnosticWallStartTime = System.currentTimeMillis();
+        }
+        diagnosticUpdateCount++;
 
         // Increment drawing index, cycling based on current frame duration.
         // In ROM: drawing_index increments each VBlank, resets when >= frame_timer (duration).
@@ -930,6 +977,31 @@ public class Sonic2SpecialStageManager {
 
         // Track animation always runs (even during intro)
         boolean frameChanged = trackAnimator.update();
+
+        // Track advances for diagnostic
+        if (frameChanged) {
+            diagnosticTrackAdvances++;
+        }
+
+        // Log diagnostic every 5 seconds
+        long elapsedMs = System.currentTimeMillis() - diagnosticWallStartTime;
+        if (elapsedMs >= 5000) {
+            double seconds = elapsedMs / 1000.0;
+            double updatesPerSec = diagnosticUpdateCount / seconds;
+            double trackPerSec = diagnosticTrackAdvances / seconds;
+
+            LOGGER.warning(String.format(
+                "DIAGNOSTIC: %.1f updates/sec (expect 60), %.1f track/sec (expect 12), " +
+                "speedFactor=%d, duration=%d",
+                updatesPerSec, trackPerSec,
+                trackAnimator.getSpeedFactor(),
+                getAlignmentFrameDuration()));
+
+            // Reset counters
+            diagnosticWallStartTime = System.currentTimeMillis();
+            diagnosticUpdateCount = 0;
+            diagnosticTrackAdvances = 0;
+        }
 
         if (frameChanged || decodedTrackFrame == null) {
             decodeCurrentTrackFrame();
@@ -1673,6 +1745,34 @@ public class Sonic2SpecialStageManager {
     }
 
     /**
+     * Renders the lag compensation overlay showing current settings.
+     * Displayed when not in alignment test mode.
+     */
+    public void renderLagCompensationOverlay(int viewportWidth, int viewportHeight) {
+        if (alignmentTestMode) {
+            return;
+        }
+
+        if (lagCompensationTextRenderer == null) {
+            lagCompensationTextRenderer = new TextRenderer(new Font("SansSerif", Font.PLAIN, 12), true, true);
+        }
+
+        lagCompensationTextRenderer.beginRendering(viewportWidth, viewportHeight);
+
+        // Position at bottom-left of screen
+        int y = 14;
+
+        // Calculate effective updates per second: base 60 * (1 - lagComp)
+        double effectiveUpdates = 60.0 * (1.0 - lagCompensation);
+
+        drawOutlined(lagCompensationTextRenderer,
+                String.format("Lag: %.0f%% (~%.0f upd/s)  F6/F7", lagCompensation * 100, effectiveUpdates),
+                8, y, Color.YELLOW);
+
+        lagCompensationTextRenderer.endRendering();
+    }
+
+    /**
      * Gets the current track frame index (0-55).
      */
     public int getCurrentTrackFrameIndex() {
@@ -1696,6 +1796,23 @@ public class Sonic2SpecialStageManager {
 
     public boolean isInitialized() {
         return initialized;
+    }
+
+    /**
+     * Gets the lag compensation factor.
+     * @return Value between 0.0 and 0.5 representing proportion of frames skipped
+     */
+    public double getLagCompensation() {
+        return lagCompensation;
+    }
+
+    /**
+     * Sets the lag compensation factor.
+     * Value of 0.35 means ~35% of frames are "lag frames" (entire update skipped).
+     * Range: 0.0 (no compensation) to 0.5 (half the frames are lag).
+     */
+    public void setLagCompensation(double factor) {
+        this.lagCompensation = Math.max(0.0, Math.min(0.5, factor));
     }
 
     public int getCurrentStage() {
@@ -1727,6 +1844,7 @@ public class Sonic2SpecialStageManager {
 
         initialized = false;
         currentStage = 0;
+        lagAccumulator = 0.0;
 
         trackAnimator = null;
         decodedTrackFrame = null;

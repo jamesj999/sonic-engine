@@ -856,6 +856,14 @@ public class GameLoop {
             specialStageManager.toggleAlignmentTestMode();
         }
 
+        // Lag compensation adjustment (F6 decrease, F7 increase)
+        if (inputHandler.isKeyPressed(KeyEvent.VK_F6)) {
+            adjustLagCompensation(-0.05);
+        }
+        if (inputHandler.isKeyPressed(KeyEvent.VK_F7)) {
+            adjustLagCompensation(0.05);
+        }
+
         if (specialStageManager.isAlignmentTestMode()) {
             if (inputHandler.isKeyPressed(leftKey)) {
                 specialStageManager.adjustAlignmentOffset(-1);
@@ -893,5 +901,29 @@ public class GameLoop {
         }
 
         specialStageManager.handleInput(heldButtons, pressedButtons);
+    }
+
+    /**
+     * Adjusts the lag compensation factor for the entire special stage simulation.
+     * The lag compensation simulates original Mega Drive hardware lag frames,
+     * affecting track animation, player movement, object speed, and all other timing.
+     *
+     * @param delta Amount to adjust (positive = more lag compensation = slower simulation)
+     */
+    private void adjustLagCompensation(double delta) {
+        if (!specialStageManager.isInitialized()) {
+            return;
+        }
+
+        double current = specialStageManager.getLagCompensation();
+        double newValue = current + delta;
+        specialStageManager.setLagCompensation(newValue);
+
+        // Calculate effective simulation rate for display
+        // Base is 60 fps. With lag compensation, effective = 60 * (1 - lagComp)
+        double effectiveUpdates = 60.0 * (1.0 - specialStageManager.getLagCompensation());
+
+        LOGGER.info(String.format("Lag compensation: %.0f%% (effective ~%.1f updates/sec)",
+                specialStageManager.getLagCompensation() * 100, effectiveUpdates));
     }
 }
