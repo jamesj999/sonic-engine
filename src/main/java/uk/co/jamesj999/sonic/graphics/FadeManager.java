@@ -376,6 +376,15 @@ public class FadeManager {
 
     private void completeFade() {
         FadeState previousState = state;
+        if ((previousState == FadeState.FADING_TO_BLACK || previousState == FadeState.FADING_TO_WHITE)
+                && holdDuration == 0) {
+            state = (previousState == FadeState.FADING_TO_BLACK)
+                    ? FadeState.HOLD_BLACK
+                    : FadeState.HOLD_WHITE;
+            holdDuration = 1;
+            holdFrameCount = 0;
+            return;
+        }
         state = FadeState.NONE;
 
         if (onFadeComplete != null) {
