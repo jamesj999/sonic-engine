@@ -188,16 +188,31 @@ public class GameLoop {
         } else if (currentGameMode == GameMode.TITLE_CARD) {
             // Update title card animation
             titleCardManager.update();
-            if (titleCardManager.isComplete()) {
+
+            // From disassembly lines 5073-5078: control is released at the START of TEXT_WAIT,
+            // not when the title card is complete. This allows the player to move while the
+            // text is still visible on screen.
+            if (titleCardManager.shouldReleaseControl()) {
                 exitTitleCard();
+                // Continue to LEVEL mode processing this frame (fall through)
+            } else {
+                // Still in locked phase - run physics without input
+                // This allows Sonic to settle onto the ground while title card is visible,
+                // preventing camera jitter when title card ends
+                spriteCollisionManager.updateWithoutInput();
+                // Force camera to snap to player position during title card (no smooth scrolling)
+                camera.updatePosition(true);
+                return; // Don't process LEVEL mode logic yet
             }
-            // Run physics during title card (like original game) but with no input
-            // This allows Sonic to settle onto the ground while title card is visible,
-            // preventing camera jitter when title card ends
-            spriteCollisionManager.updateWithoutInput();
-            // Force camera to snap to player position during title card (no smooth scrolling)
-            camera.updatePosition(true);
-        } else {
+        }
+
+        // LEVEL mode (or just transitioned from TITLE_CARD)
+        if (currentGameMode == GameMode.LEVEL) {
+            // Continue updating title card overlay if still active
+            // (TEXT_WAIT and TEXT_EXIT phases where player can move but text is still visible)
+            if (titleCardManager.isOverlayActive()) {
+                titleCardManager.update();
+            }
             // Check if a title card was requested (new level loaded)
             if (levelManager.consumeTitleCardRequest()) {
                 enterTitleCard(levelManager.getTitleCardZone(), levelManager.getTitleCardAct());
@@ -563,12 +578,12 @@ public class GameLoop {
         // Play the special stage exit sound (same as entry sound)
         AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
 
-        // Start fade-to-black, then show title card when complete
-        fadeManager.startFadeToBlack(() -> {
+        // Start fade-to-white, then show title card when complete
+        fadeManager.startFadeToWhite(() -> {
             doExitResultsScreen();
         });
 
-        LOGGER.info("Starting fade-to-black to exit Results Screen");
+        LOGGER.info("Starting fade-to-white to exit Results Screen");
     }
 
     /**
@@ -592,9 +607,6 @@ public class GameLoop {
         int zoneIndex = levelManager.getCurrentZone();
         int actIndex = levelManager.getCurrentAct();
         enterTitleCardFromResults(zoneIndex, actIndex);
-
-        // Start fade-from-black to reveal the title card
-        FadeManager.getInstance().startFadeFromBlack(null);
 
         LOGGER.info("Exited Results Screen, entering Title Card for zone " + zoneIndex + " act " + actIndex);
     }
@@ -709,6 +721,10 @@ public class GameLoop {
 
     /**
      * Exits the title card and returns to level mode.
+     * Note: We do NOT reset the title card manager here because the overlay
+     * (TEXT_WAIT and TEXT_EXIT phases) still needs to run. The title card
+     * will reset itself when it reaches COMPLETE state, or when a new
+     * title card is initialized.
      */
     private void exitTitleCard() {
         if (currentGameMode != GameMode.TITLE_CARD) {
@@ -718,8 +734,8 @@ public class GameLoop {
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.LEVEL;
 
-        // Reset title card manager
-        titleCardManager.reset();
+        // Don't reset title card - overlay phases (TEXT_WAIT, TEXT_EXIT) still need to run
+        // titleCardManager.reset();
 
         if (returningFromSpecialStage) {
             // Returning from special stage - checkpoint was already restored in enterTitleCardFromResults()
@@ -856,6 +872,14 @@ public class GameLoop {
             specialStageManager.toggleAlignmentTestMode();
         }
 
+        // Lag compensation adjustment (F6 decrease, F7 increase)
+        if (inputHandler.isKeyPressed(KeyEvent.VK_F6)) {
+            adjustLagCompensation(-0.05);
+        }
+        if (inputHandler.isKeyPressed(KeyEvent.VK_F7)) {
+            adjustLagCompensation(0.05);
+        }
+
         if (specialStageManager.isAlignmentTestMode()) {
             if (inputHandler.isKeyPressed(leftKey)) {
                 specialStageManager.adjustAlignmentOffset(-1);
@@ -893,5 +917,29 @@ public class GameLoop {
         }
 
         specialStageManager.handleInput(heldButtons, pressedButtons);
+    }
+
+    /**
+     * Adjusts the lag compensation factor for the entire special stage simulation.
+     * The lag compensation simulates original Mega Drive hardware lag frames,
+     * affecting track animation, player movement, object speed, and all other timing.
+     *
+     * @param delta Amount to adjust (positive = more lag compensation = slower simulation)
+     */
+    private void adjustLagCompensation(double delta) {
+        if (!specialStageManager.isInitialized()) {
+            return;
+        }
+
+        double current = specialStageManager.getLagCompensation();
+        double newValue = current + delta;
+        specialStageManager.setLagCompensation(newValue);
+
+        // Calculate effective simulation rate for display
+        // Base is 60 fps. With lag compensation, effective = 60 * (1 - lagComp)
+        double effectiveUpdates = 60.0 * (1.0 - specialStageManager.getLagCompensation());
+
+        LOGGER.info(String.format("Lag compensation: %.0f%% (effective ~%.1f updates/sec)",
+                specialStageManager.getLagCompensation() * 100, effectiveUpdates));
     }
 }

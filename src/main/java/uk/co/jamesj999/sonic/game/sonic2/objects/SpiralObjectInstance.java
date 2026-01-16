@@ -102,8 +102,6 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         if (!active && player != null) {
             checkActivation(frameCounter, player);
         } else if (active) {
-            updateMovement(player);
-
             // Bounds check for falling off
             // loc_215C0
             // logic normally uses inertia, but since we force air state, gSpeed isn't
@@ -115,7 +113,7 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
             }
             // ROM uses inertia threshold 0x600
             if (inertia < 0x600) {
-                fallOff(player);
+                fallOff(player, frameCounter);
                 return;
             }
 
@@ -129,8 +127,11 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
             int offset = dx + 0xD0;
 
             if (offset < 0 || offset >= 0x1A0) {
-                fallOff(player);
+                fallOff(player, frameCounter);
+                return;
             }
+
+            updateMovement(player, frameCounter);
         }
     }
 
@@ -138,14 +139,15 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         int dx = player.getCentreX() - spawn.x();
 
         // loc_21512 checks:
-        if (player.getAir()) {
+        boolean wasOnSpiral = player.wasSpiralActive(frameCounter);
+        if (player.getAir() && !wasOnSpiral) {
             return;
         }
 
         // Initial range checks for "locking on"
         int vx = player.getXSpeed();
         SolidObjectManager solidManager = LevelManager.getInstance().getSolidObjectManager();
-        boolean onObject = solidManager != null && solidManager.isRidingObject();
+        boolean onObject = (solidManager != null && solidManager.isRidingObject()) || wasOnSpiral;
 
         // Debug range
         if (Math.abs(dx) < 250 && frameCounter % 30 == 0) {
@@ -192,10 +194,11 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         // Match RideObject_SetRide behavior: zero vertical speed and keep inertia.
         player.setYSpeed((short) 0);
         player.setGSpeed(player.getXSpeed());
+        player.markSpiralActive(frameCounter);
         LOGGER.fine("Spiral Activated: Player engaged at dx=" + (player.getCentreX() - spawn.x()));
     }
 
-    private void updateMovement(AbstractPlayableSprite player) {
+    private void updateMovement(AbstractPlayableSprite player, int frameCounter) {
         // Obj06_Spiral_MoveCharacter:
 
         // Index into cosine table is based on X position relative to object
@@ -259,17 +262,20 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
 
         int angleIndex = ((dx + 0xD0) >> 3) & 0x3F;
         if (angleIndex >= 0 && angleIndex < FLIP_ANGLE_TABLE.length) {
-            // angle is byte, so 0-255 mapped to 0-360 deg roughly
-            player.setAngle((byte) (FLIP_ANGLE_TABLE[angleIndex] & 0xFF));
+            player.setFlipAngle(FLIP_ANGLE_TABLE[angleIndex] & 0xFF);
         }
+        player.markSpiralActive(frameCounter);
     }
 
-    private void fallOff(AbstractPlayableSprite player) {
+    private void fallOff(AbstractPlayableSprite player, int frameCounter) {
         active = false;
         player.setAir(true);
-        // Reset angle?
-        player.setAngle((byte) 0);
-        // "move.b #0,flips_remaining(a1)" - disable flip behavior
+        // Reset angle if no other spiral updated this frame.
+        if (!player.isSpiralActiveThisFrame(frameCounter)) {
+            player.setAngle((byte) 0);
+        }
+        player.setFlipsRemaining(0);
+        player.setFlipSpeed(4);
     }
 
     @Override

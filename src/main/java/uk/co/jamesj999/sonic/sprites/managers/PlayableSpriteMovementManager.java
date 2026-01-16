@@ -431,7 +431,8 @@ public class PlayableSpriteMovementManager extends
 			if (lowestResult == null || lowestResult.distance() >= 14) {
 				// Check if player is standing on a solid object before setting to air
 				var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
-				if (solidManager != null && solidManager.isRidingObject()) {
+				if (solidManager != null && (solidManager.isRidingObject()
+						|| solidManager.hasStandingContact(sprite))) {
 					// Player is on an object, don't detach based on terrain
 					return;
 				}

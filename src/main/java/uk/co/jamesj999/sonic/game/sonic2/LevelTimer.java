@@ -10,6 +10,7 @@ public class LevelTimer {
 
     // 60 frames per second
     private long totalFrames;
+    private boolean paused;
 
     public LevelTimer() {
         reset();
@@ -17,9 +18,25 @@ public class LevelTimer {
 
     public void reset() {
         totalFrames = 0;
+        paused = false;
+    }
+
+    /**
+     * Pauses the timer. Time will not increment until a new level is loaded.
+     * This is called when Sonic passes the end-of-stage signpost.
+     */
+    public void pause() {
+        paused = true;
+    }
+
+    public boolean isPaused() {
+        return paused;
     }
 
     public void update() {
+        if (paused) {
+            return;
+        }
         // Technically we can keep counting beyond 10 mins if needed,
         // but the display logic clamps it.
         totalFrames++;

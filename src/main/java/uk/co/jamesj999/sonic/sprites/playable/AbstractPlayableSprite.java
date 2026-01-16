@@ -178,6 +178,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * When true, user inputs are ignored (Control_Locked in ROM).
          */
         protected boolean controlLocked = false;
+        private int spiralActiveFrame = Integer.MIN_VALUE;
+        private byte flipAngle = 0;
+        private byte flipSpeed = 0;
+        private byte flipsRemaining = 0;
+        private boolean flipTurned = false;
 
         /**
          * Whether this sprite is currently underwater.
@@ -247,6 +252,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
                 this.controlLocked = false;
+                this.spiralActiveFrame = Integer.MIN_VALUE;
+                this.flipAngle = 0;
+                this.flipSpeed = 0;
+                this.flipsRemaining = 0;
+                this.flipTurned = false;
                 this.inWater = false;
                 this.wasInWater = false;
                 defineSpeeds(); // Reset speeds to default
@@ -758,6 +768,54 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setControlLocked(boolean controlLocked) {
                 this.controlLocked = controlLocked;
+        }
+
+        public void markSpiralActive(int frameCounter) {
+                spiralActiveFrame = frameCounter;
+        }
+
+        public boolean wasSpiralActive(int frameCounter) {
+                return spiralActiveFrame == frameCounter || spiralActiveFrame == frameCounter - 1;
+        }
+
+        public boolean isSpiralActiveThisFrame(int frameCounter) {
+                return spiralActiveFrame == frameCounter;
+        }
+
+        public void clearSpiralActive() {
+                spiralActiveFrame = Integer.MIN_VALUE;
+        }
+
+        public int getFlipAngle() {
+                return flipAngle & 0xFF;
+        }
+
+        public void setFlipAngle(int value) {
+                this.flipAngle = (byte) (value & 0xFF);
+        }
+
+        public int getFlipSpeed() {
+                return flipSpeed & 0xFF;
+        }
+
+        public void setFlipSpeed(int value) {
+                this.flipSpeed = (byte) (value & 0xFF);
+        }
+
+        public int getFlipsRemaining() {
+                return flipsRemaining & 0xFF;
+        }
+
+        public void setFlipsRemaining(int value) {
+                this.flipsRemaining = (byte) (value & 0xFF);
+        }
+
+        public boolean isFlipTurned() {
+                return flipTurned;
+        }
+
+        public void setFlipTurned(boolean flipTurned) {
+                this.flipTurned = flipTurned;
         }
 
         public short getXSpeed() {
@@ -1305,7 +1363,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         /**
          * Updates water state based on player Y position relative to water level.
-         * 
+         *
          * @param waterLevelY Water surface Y position in world coordinates (pixels)
          */
         public void updateWaterState(int waterLevelY) {

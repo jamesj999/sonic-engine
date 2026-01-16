@@ -259,12 +259,31 @@ public class Engine extends GLCanvas implements GLEventListener {
 			}
 		} else if (!debugViewEnabled) {
 			levelManager.drawWithSpritePriority(spriteRenderManager);
+
+			// Draw title card text overlay if still active (TEXT_WAIT/TEXT_EXIT phases)
+			// Player control has been released but text is still sliding off
+			TitleCardManager levelTitleCardManager = gameLoop.getTitleCardManager();
+			if (levelTitleCardManager != null && levelTitleCardManager.isOverlayActive()) {
+				graphicsManager.flush();
+				graphicsManager.resetForFixedFunction();
+				levelTitleCardManager.draw();
+				graphicsManager.flushScreenSpace();
+			}
 		} else {
 			switch (debugState) {
 				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
 				case CHUNKS_VIEW -> levelManager.drawAllChunks();
 				case BLOCKS_VIEW -> levelManager.draw();
 				case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
+			}
+
+			// Draw title card text overlay if still active (even in debug view)
+			TitleCardManager debugTitleCardManager = gameLoop.getTitleCardManager();
+			if (debugTitleCardManager != null && debugTitleCardManager.isOverlayActive()) {
+				graphicsManager.flush();
+				graphicsManager.resetForFixedFunction();
+				debugTitleCardManager.draw();
+				graphicsManager.flushScreenSpace();
 			}
 		}
 	}
@@ -427,8 +446,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 			specialStageManager.renderAlignmentOverlay(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
 		}
 
-		// Only show debug overlay in level mode, not during special stage
-		if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
+		// Render lag compensation overlay in special stage (when not in alignment test mode)
+		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE && !specialStageManager.isAlignmentTestMode()) {
 			// Reset OpenGL state for JOGL's TextRenderer
 			gl.glActiveTexture(GL2.GL_TEXTURE0);
 			gl.glUseProgram(0);
@@ -452,7 +471,39 @@ public class Engine extends GLCanvas implements GLEventListener {
 			gl.glEnable(GL2.GL_BLEND);
 			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
 
-			debugRenderer.updateViewport(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+			specialStageManager.renderLagCompensationOverlay(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+		}
+
+		// Only show debug overlay in level mode, not during special stage
+		if (debugViewEnabled && getCurrentGameMode() != GameMode.SPECIAL_STAGE) {
+			// Reset OpenGL state for JOGL's TextRenderer
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+			gl.glUseProgram(0);
+			gl.glDisable(GL2.GL_LIGHTING);
+			gl.glDisable(GL2.GL_COLOR_MATERIAL);
+			gl.glDisable(GL2.GL_DEPTH_TEST);
+			gl.glColor4f(1f, 1f, 1f, 1f);
+			gl.glEnable(GL2.GL_TEXTURE_2D);
+			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+			gl.glActiveTexture(GL2.GL_TEXTURE1);
+			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+			gl.glActiveTexture(GL2.GL_TEXTURE0);
+
+			// Set viewport to match aspect-ratio-correct game viewport
+			gl.glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+
+			// Reset matrices for 2D rendering
+			gl.glMatrixMode(GL_PROJECTION);
+			gl.glLoadIdentity();
+			glu.gluOrtho2D(0, projectionWidth, 0, realHeight);
+			gl.glMatrixMode(GL_MODELVIEW);
+			gl.glLoadIdentity();
+
+			// Re-enable blending for the TextRenderer
+			gl.glEnable(GL2.GL_BLEND);
+			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
+
+			debugRenderer.updateViewport(viewportWidth, viewportHeight);
 			debugRenderer.renderDebugInfo();
 		}
 	}
