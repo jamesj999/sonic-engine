@@ -94,7 +94,8 @@ public class BatchedPatternRenderer {
         }
 
         // Convert Y to screen coordinates (flip Y axis)
-        // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height (8)
+        // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height
+        // (8)
         // to get the OpenGL Y coordinate for the bottom of the quad
         int screenY = screenHeight - y - 8;
 
@@ -158,19 +159,21 @@ public class BatchedPatternRenderer {
      * Add a strip pattern to the current batch for special stage track rendering.
      *
      * The Sonic 2 special stage track uses per-scanline horizontal scroll to create
-     * a pseudo-3D halfpipe effect. Each 8x8 tile is shown as 4 strips of 2 scanlines
+     * a pseudo-3D halfpipe effect. Each 8x8 tile is shown as 4 strips of 2
+     * scanlines
      * each. This method renders a single strip (8 wide × 2 high).
      *
      * @param patternTextureId The pattern texture ID
-     * @param paletteIndex The palette line to use
-     * @param desc The pattern descriptor (handles H/V flip)
-     * @param x Screen X position
-     * @param y Screen Y position (of the strip, not the full tile)
-     * @param stripIndex Which 2-scanline strip to render (0-3, where 0 is top of tile)
+     * @param paletteIndex     The palette line to use
+     * @param desc             The pattern descriptor (handles H/V flip)
+     * @param x                Screen X position
+     * @param y                Screen Y position (of the strip, not the full tile)
+     * @param stripIndex       Which 2-scanline strip to render (0-3, where 0 is top
+     *                         of tile)
      * @return true if the pattern was added, false if batch is full or not active
      */
     public boolean addStripPattern(int patternTextureId, int paletteIndex, PatternDesc desc,
-                                   int x, int y, int stripIndex) {
+            int x, int y, int stripIndex) {
         if (!batchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
             return false;
         }
@@ -178,17 +181,18 @@ public class BatchedPatternRenderer {
         // Convert Y to screen coordinates (flip Y axis)
         // Genesis Y=0 is top of screen, OpenGL Y=0 is bottom
         // For a 2-pixel strip at Genesis Y, the OpenGL bottom should be:
-        //   screenHeight - y - stripHeight = 224 - y - 2
+        // screenHeight - y - stripHeight = 224 - y - 2
         // This ensures Genesis Y=0 maps to OpenGL Y=222-224 (visible top of screen)
         int screenY = screenHeight - y - 2;
 
         // Compute the 4 corners of the quad (8 wide × 2 high)
         float x0 = x;
-        float y0 = screenY;          // Bottom of quad in OpenGL
+        float y0 = screenY; // Bottom of quad in OpenGL
         float x1 = x + 8;
-        float y1 = screenY + 2;      // Top of quad in OpenGL
+        float y1 = screenY + 2; // Top of quad in OpenGL
 
-        // Calculate texture V coordinates for this strip using PIXEL-CENTER coordinates.
+        // Calculate texture V coordinates for this strip using PIXEL-CENTER
+        // coordinates.
         // Strip 0 = rows 0-1 (top), Strip 3 = rows 6-7 (bottom)
         //
         // CRITICAL: With GL_NEAREST, we must sample at pixel centers, not edges!
@@ -196,18 +200,18 @@ public class BatchedPatternRenderer {
         // potentially sample the wrong texture row due to floating-point precision.
         //
         // For an 8-pixel tall texture:
-        //   Row 0 center: v = 0.5/8 = 0.0625
-        //   Row 1 center: v = 1.5/8 = 0.1875
-        //   Row 2 center: v = 2.5/8 = 0.3125
-        //   ...etc
+        // Row 0 center: v = 0.5/8 = 0.0625
+        // Row 1 center: v = 1.5/8 = 0.1875
+        // Row 2 center: v = 2.5/8 = 0.3125
+        // ...etc
         //
         // Each strip shows 2 rows. We sample at the center of each row:
         // Strip 0 (rows 0-1): top=0.0625, bottom=0.1875
         // Strip 1 (rows 2-3): top=0.3125, bottom=0.4375
         // Strip 2 (rows 4-5): top=0.5625, bottom=0.6875
         // Strip 3 (rows 6-7): top=0.8125, bottom=0.9375
-        float firstRowCenter = (stripIndex * 2 + 0.5f) / 8.0f;   // Center of first row of strip
-        float secondRowCenter = (stripIndex * 2 + 1.5f) / 8.0f;  // Center of second row of strip
+        float firstRowCenter = (stripIndex * 2 + 0.5f) / 8.0f; // Center of first row of strip
+        float secondRowCenter = (stripIndex * 2 + 1.5f) / 8.0f; // Center of second row of strip
         float stripTop = firstRowCenter;
         float stripBottom = secondRowCenter;
 
@@ -223,15 +227,15 @@ public class BatchedPatternRenderer {
 
         // V coordinates for the strip
         // Default (VFlip=false): flip texture so row 0 is at top of quad
-        //   Bottom of quad gets stripBottom, top gets stripTop
+        // Bottom of quad gets stripBottom, top gets stripTop
         // VFlip=true: don't flip, so row 0 is at bottom of quad
-        //   Bottom of quad gets stripTop, top gets stripBottom
+        // Bottom of quad gets stripTop, top gets stripBottom
         if (desc.getVFlip()) {
-            v0 = stripTop;      // Bottom of quad
-            v1 = stripBottom;   // Top of quad
+            v0 = stripTop; // Bottom of quad
+            v1 = stripBottom; // Top of quad
         } else {
-            v0 = stripBottom;   // Bottom of quad
-            v1 = stripTop;      // Top of quad
+            v0 = stripBottom; // Bottom of quad
+            v1 = stripTop; // Top of quad
         }
 
         // Calculate array offsets
@@ -318,7 +322,7 @@ public class BatchedPatternRenderer {
     public void beginShadowBatch() {
         patternCount = 0;
         shadowBatchActive = true;
-        batchActive = false;  // Ensure normal batch is not active
+        batchActive = false; // Ensure normal batch is not active
     }
 
     /**
@@ -389,7 +393,7 @@ public class BatchedPatternRenderer {
 
         // Store texture ID (palette is not used for shadow rendering)
         patternTextureIds[patternCount] = patternTextureId;
-        paletteIndices[patternCount] = 0;  // Not used for shadows
+        paletteIndices[patternCount] = 0; // Not used for shadows
         patternCount++;
 
         return true;
@@ -473,11 +477,37 @@ public class BatchedPatternRenderer {
             gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
             gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
 
-            // Bind combined palette texture
+            // Bind palette texture (use underwater palette if flag is set for background
+            // rendering)
             gl.glActiveTexture(GL2.GL_TEXTURE0);
-            Integer paletteTextureId = gm.getCombinedPaletteTextureId();
+            Integer paletteTextureId;
+            if (gm.isUseUnderwaterPaletteForBackground()) {
+                // Use underwater palette for entire background when Sonic is underwater
+                paletteTextureId = gm.getUnderwaterPaletteTextureId();
+                if (paletteTextureId == null) {
+                    // Fallback to normal palette if underwater palette not available
+                    paletteTextureId = gm.getCombinedPaletteTextureId();
+                }
+            } else {
+                paletteTextureId = gm.getCombinedPaletteTextureId();
+            }
             if (paletteTextureId != null) {
                 gl.glBindTexture(GL2.GL_TEXTURE_2D, paletteTextureId);
+            }
+
+            // If using water shader, bind underwater palette to texture unit 2
+            if (shader instanceof WaterShaderProgram) {
+                WaterShaderProgram waterShader = (WaterShaderProgram) shader;
+                Integer underwaterPaletteId = gm.getUnderwaterPaletteTextureId();
+                if (underwaterPaletteId != null) {
+                    gl.glActiveTexture(GL2.GL_TEXTURE2);
+                    gl.glBindTexture(GL2.GL_TEXTURE_2D, underwaterPaletteId);
+                    int loc = waterShader.getUnderwaterPaletteLocation();
+                    if (loc != -1) {
+                        gl.glUniform1i(loc, 2);
+                    }
+                    gl.glActiveTexture(GL2.GL_TEXTURE0);
+                }
             }
 
             int lastTextureId = -1;
@@ -530,7 +560,8 @@ public class BatchedPatternRenderer {
     /**
      * Command that renders a batch of shadow patterns.
      * Uses the shadow shader and multiplicative blending to darken the background.
-     * This implements VDP shadow/highlight mode where palette index 14 darkens pixels.
+     * This implements VDP shadow/highlight mode where palette index 14 darkens
+     * pixels.
      */
     private static class ShadowBatchRenderCommand implements GLCommandable {
         private final float[] vertexData;
@@ -570,7 +601,8 @@ public class BatchedPatternRenderer {
             // Setup state for shadow rendering
             gl.glEnable(GL2.GL_BLEND);
             // Multiplicative blending: result = dest * src
-            // Shadow shader outputs 0.5 for index 14, which will halve (darken) the background
+            // Shadow shader outputs 0.5 for index 14, which will halve (darken) the
+            // background
             gl.glBlendFunc(GL2.GL_ZERO, GL2.GL_SRC_COLOR);
 
             shadowShader.use(gl);

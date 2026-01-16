@@ -180,6 +180,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean controlLocked = false;
 
         /**
+         * Whether this sprite is currently underwater.
+         * Affects physics constants and triggers entry/exit speed changes.
+         */
+        protected boolean inWater = false;
+        /**
+         * Previous frame's water state, used for detecting transitions.
+         */
+        protected boolean wasInWater = false;
+
+        /**
          * Clears all active power-ups (shield, invincibility, speed shoes).
          * Called when entering special stage to remove power-up effects.
          */
@@ -237,6 +247,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
                 this.controlLocked = false;
+                this.inWater = false;
+                this.wasInWater = false;
                 defineSpeeds(); // Reset speeds to default
         }
 
@@ -478,6 +490,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public short getJump() {
+                // Water: reduced jump force (0x300 vs normal ~0x680)
+                if (inWater) {
+                        return 0x300;
+                }
                 return jump;
         }
 
@@ -895,12 +911,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public short getRunAccel() {
-                // SPG Sonic 2: Speed shoes double acceleration
-                return hasSpeedShoes() ? (short) (runAccel * 2) : runAccel;
+                // Water: halved, Speed shoes: doubled
+                short value = runAccel;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                if (hasSpeedShoes()) {
+                        value = (short) (value * 2);
+                }
+                return value;
         }
 
         public short getRunDecel() {
-                return runDecel;
+                // Water: halved (speed shoes don't affect decel)
+                return inWater ? (short) (runDecel / 2) : runDecel;
         }
 
         public short getSlopeRunning() {
@@ -916,13 +940,40 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public short getFriction() {
-                // SPG Sonic 2: Speed shoes double friction
-                return hasSpeedShoes() ? (short) (friction * 2) : friction;
+                // Water: halved, Speed shoes: doubled
+                short value = friction;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                if (hasSpeedShoes()) {
+                        value = (short) (value * 2);
+                }
+                return value;
         }
 
         public short getMax() {
-                // SPG Sonic 2: Speed shoes double top speed
-                return hasSpeedShoes() ? (short) (max * 2) : max;
+                // Water: halved, Speed shoes: doubled
+                short value = max;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                if (hasSpeedShoes()) {
+                        value = (short) (value * 2);
+                }
+                return value;
+        }
+
+        /**
+         * Override gravity to reduce it underwater.
+         * Normal: 0x38 (56 subpixels)
+         * Underwater: 0x10 (16 subpixels)
+         */
+        @Override
+        public float getGravity() {
+                if (inWater) {
+                        return 0x10; // Reduced underwater gravity
+                }
+                return gravity; // Normal gravity (0x38)
         }
 
         public byte getAngle() {
@@ -1248,5 +1299,188 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         public void setRenderOffsets(short xOffset, short yOffset) {
                 this.renderXOffset = xOffset;
                 this.renderYOffset = yOffset;
+        }
+
+        // ==================== Water Physics ====================
+
+        /**
+         * Updates water state based on player Y position relative to water level.
+         * 
+         * @param waterLevelY Water surface Y position in world coordinates (pixels)
+         */
+        public void updateWaterState(int waterLevelY) {
+                wasInWater = inWater;
+
+                // Check if player's center Y is below water surface
+                // Original uses player's Y position, not center - checking bottom of sprite
+                int playerBottomY = yPixel + height;
+                inWater = playerBottomY > waterLevelY;
+
+                // Detect transitions
+                if (!wasInWater && inWater) {
+                        onEnterWater();
+                } else if (wasInWater && !inWater) {
+                        onExitWater();
+                }
+        }
+
+        /**
+         * Called when player enters water.
+         * Applies instantaneous velocity changes per original game logic.
+         */
+        protected void onEnterWater() {
+                LOGGER.fine("Player entered water");
+
+                // Halve horizontal velocity (xSpeed and gSpeed)
+                xSpeed = (short) (xSpeed / 2);
+                gSpeed = (short) (gSpeed / 2);
+
+                // Reduce downward velocity more significantly
+                if (ySpeed > 0) {
+                        ySpeed = (short) (ySpeed / 4);
+                } else {
+                        // Upward velocity halved
+                        ySpeed = (short) (ySpeed / 2);
+                }
+
+                // TODO: Play splash sound
+                // TODO: Spawn splash object
+        }
+
+        /**
+         * Called when player exits water.
+         * Applies velocity boost per original game logic.
+         */
+        protected void onExitWater() {
+                LOGGER.fine("Player exited water");
+
+                // Double horizontal velocity
+                xSpeed = (short) Math.min(xSpeed * 2, max);
+                gSpeed = (short) Math.min(gSpeed * 2, max);
+
+                // Boost upward velocity (only if moving upward)
+                if (ySpeed < 0) {
+                        ySpeed = (short) (ySpeed * 2);
+                        // Cap to reasonable value
+                        if (ySpeed < -0x1000) {
+                                ySpeed = -0x1000;
+                        }
+                }
+
+                // TODO: Play splash sound
+                // TODO: Spawn splash object
+        }
+
+        /**
+         * Returns true if player is currently underwater.
+         */
+        public boolean isInWater() {
+                return inWater;
+        }
+
+        /**
+         * Sets water state directly (for loading checkpoints, testing, etc.).
+         */
+        public void setInWater(boolean inWater) {
+                this.inWater = inWater;
+                this.wasInWater = inWater;
+        }
+
+        // ==================== Physics Constant Getters with Modifiers
+        // ====================
+        // These apply underwater and speed shoes modifiers dynamically
+
+        /**
+         * Returns effective run acceleration, accounting for underwater and speed
+         * shoes.
+         * Underwater: halved
+         * Speed shoes: doubled
+         */
+        public short getEffectiveRunAccel() {
+                short value = runAccel;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                if (speedShoes) {
+                        value = (short) (value * 2);
+                }
+                return value;
+        }
+
+        /**
+         * Returns effective run deceleration, accounting for modifiers.
+         */
+        public short getEffectiveRunDecel() {
+                short value = runDecel;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                // Speed shoes don't affect decel in original
+                return value;
+        }
+
+        /**
+         * Returns effective friction, accounting for modifiers.
+         */
+        public short getEffectiveFriction() {
+                short value = friction;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                if (speedShoes) {
+                        value = (short) (value * 2);
+                }
+                return value;
+        }
+
+        /**
+         * Returns effective max speed, accounting for modifiers.
+         * Underwater: halved
+         * Speed shoes: doubled
+         */
+        public short getEffectiveMax() {
+                short value = max;
+                if (inWater) {
+                        value = (short) (value / 2);
+                }
+                if (speedShoes) {
+                        value = (short) (value * 2);
+                }
+                return value;
+        }
+
+        /**
+         * Returns effective jump force, accounting for underwater modifier.
+         * Underwater: reduced (0x300 in original vs normal 0x680)
+         */
+        public short getEffectiveJump() {
+                if (inWater) {
+                        return 0x300; // Reduced underwater jump
+                }
+                return jump;
+        }
+
+        /**
+         * Returns effective gravity value.
+         * Normal: 0x38 (56 subpixels)
+         * Underwater: 0x10 (16 subpixels)
+         */
+        public short getEffectiveGravity() {
+                if (inWater) {
+                        return 0x10; // Reduced underwater gravity
+                }
+                return 0x38; // Normal gravity
+        }
+
+        /**
+         * Returns effective air drag threshold.
+         * Normal: -0x400
+         * Underwater: -0x200
+         */
+        public short getEffectiveAirDragThreshold() {
+                if (inWater) {
+                        return -0x200;
+                }
+                return -0x400;
         }
 }

@@ -33,6 +33,10 @@ public class GraphicsManager {
 	private final Camera camera = Camera.getInstance();
 	private GL2 graphics;
 	private ShaderProgram shaderProgram;
+	private ShaderProgram defaultShaderProgram;
+	private WaterShaderProgram waterShaderProgram;
+	private ShaderProgram currentShaderProgram;
+
 	private ShaderProgram debugShaderProgram;
 	private ShaderProgram fadeShaderProgram;
 	private ShaderProgram shadowShaderProgram;
@@ -40,6 +44,7 @@ public class GraphicsManager {
 	private static final String PARALLAX_SHADER_PATH = "shaders/shader_parallax_bg.glsl";
 	private static final String FADE_SHADER_PATH = "shaders/shader_fade.glsl";
 	private static final String SHADOW_SHADER_PATH = "shaders/shader_shadow.glsl";
+	private static final String WATER_SHADER_PATH = "shaders/shader_water.glsl";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
@@ -57,6 +62,13 @@ public class GraphicsManager {
 	 */
 	private boolean headlessMode = false;
 
+	/**
+	 * When true, the batch renderer will use the underwater palette texture
+	 * instead of the normal palette texture. Used for background rendering
+	 * when Sonic is underwater (original game behavior).
+	 */
+	private boolean useUnderwaterPaletteForBackground = false;
+
 	public void registerCommand(GLCommandable command) {
 		commands.add(command);
 	}
@@ -69,8 +81,14 @@ public class GraphicsManager {
 			return;
 		}
 		this.graphics = gl;
-		this.shaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load shaders
-		this.shaderProgram.cacheUniformLocations(gl); // Cache uniform locations for fast access
+		this.defaultShaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load default shader
+		this.defaultShaderProgram.cacheUniformLocations(gl);
+
+		this.waterShaderProgram = new WaterShaderProgram(gl, WATER_SHADER_PATH); // Load water shader
+		this.waterShaderProgram.cacheUniformLocations(gl);
+
+		this.currentShaderProgram = this.defaultShaderProgram; // Start with default
+		this.shaderProgram = this.currentShaderProgram; // Compatibility
 		this.debugShaderProgram = new ShaderProgram(gl, DEBUG_SHADER_PATH);
 		this.fadeShaderProgram = new ShaderProgram(gl, FADE_SHADER_PATH);
 		this.shadowShaderProgram = new ShaderProgram(gl, SHADOW_SHADER_PATH);
@@ -443,6 +461,59 @@ public class GraphicsManager {
 		return patternTextureMap.get("pattern_" + patternIndex);
 	}
 
+	private Integer underwaterPaletteTextureId;
+
+	public Integer getUnderwaterPaletteTextureId() {
+		return underwaterPaletteTextureId;
+	}
+
+	public void cacheUnderwaterPaletteTexture(Palette[] palettes) {
+		if (headlessMode)
+			return;
+
+		if (underwaterPaletteTextureId == null) {
+			underwaterPaletteTextureId = glGenTexture();
+			graphics.glBindTexture(GL2.GL_TEXTURE_2D, underwaterPaletteTextureId);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
+			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
+		}
+
+		// Upload 64 colors (16x4)
+		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(64 * 4); // 64 cols * 4 bytes (RGBA)
+
+		for (int pIndex = 0; pIndex < 4; pIndex++) {
+			Palette p = (palettes != null && pIndex < palettes.length) ? palettes[pIndex] : null;
+			for (int i = 0; i < 16; i++) {
+				try {
+					if (p != null) {
+						Palette.Color color = p.getColor(i);
+						paletteBuffer.put((byte) Byte.toUnsignedInt(color.r));
+						paletteBuffer.put((byte) Byte.toUnsignedInt(color.g));
+						paletteBuffer.put((byte) Byte.toUnsignedInt(color.b));
+						if (i == 0) {
+							paletteBuffer.put((byte) 0);
+						} else {
+							paletteBuffer.put((byte) 255);
+						}
+					} else {
+						// Empty/Black for missing palette lines
+						paletteBuffer.put((byte) 0).put((byte) 0).put((byte) 0).put((byte) 0);
+					}
+				} catch (Exception e) {
+					// Fallback
+					paletteBuffer.put((byte) 0).put((byte) 0).put((byte) 0).put((byte) 0);
+				}
+			}
+		}
+		paletteBuffer.flip();
+
+		graphics.glBindTexture(GL2.GL_TEXTURE_2D, underwaterPaletteTextureId);
+		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RGBA, 16, 4, 0, GL2.GL_RGBA, GL2.GL_UNSIGNED_BYTE,
+				paletteBuffer);
+	}
+
 	/**
 	 * Cleanup method to delete textures and release resources.
 	 */
@@ -463,8 +534,11 @@ public class GraphicsManager {
 			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
 		}
 		// Cleanup shader program
-		if (shaderProgram != null) {
-			shaderProgram.cleanup(graphics);
+		if (defaultShaderProgram != null) {
+			defaultShaderProgram.cleanup(graphics);
+		}
+		if (waterShaderProgram != null) {
+			waterShaderProgram.cleanup(graphics);
 		}
 		if (debugShaderProgram != null) {
 			debugShaderProgram.cleanup(graphics);
@@ -512,7 +586,40 @@ public class GraphicsManager {
 	}
 
 	public ShaderProgram getShaderProgram() {
-		return shaderProgram;
+		return currentShaderProgram;
+	}
+
+	public WaterShaderProgram getWaterShaderProgram() {
+		return waterShaderProgram;
+	}
+
+	public void setUseWaterShader(boolean use) {
+		if (use) {
+			currentShaderProgram = waterShaderProgram;
+		} else {
+			currentShaderProgram = defaultShaderProgram;
+		}
+		this.shaderProgram = currentShaderProgram;
+	}
+
+	/**
+	 * Sets whether to use the underwater palette for background rendering.
+	 * When true, all patterns rendered will use the underwater palette instead of
+	 * the normal palette.
+	 * This mirrors the original game's behavior where the entire background changes
+	 * palette
+	 * when Sonic is underwater.
+	 */
+	public void setUseUnderwaterPaletteForBackground(boolean use) {
+		this.useUnderwaterPaletteForBackground = use;
+	}
+
+	/**
+	 * Returns whether the underwater palette should be used for background
+	 * rendering.
+	 */
+	public boolean isUseUnderwaterPaletteForBackground() {
+		return useUnderwaterPaletteForBackground;
 	}
 
 	public ShaderProgram getDebugShaderProgram() {
@@ -589,13 +696,14 @@ public class GraphicsManager {
 	 * Enables scissor test with the specified rectangle.
 	 * Coordinates are in OpenGL screen space (Y=0 at bottom).
 	 *
-	 * @param x Left edge of scissor rectangle
-	 * @param y Bottom edge of scissor rectangle
-	 * @param width Width of scissor rectangle
+	 * @param x      Left edge of scissor rectangle
+	 * @param y      Bottom edge of scissor rectangle
+	 * @param width  Width of scissor rectangle
 	 * @param height Height of scissor rectangle
 	 */
 	public void enableScissor(int x, int y, int width, int height) {
-		if (headlessMode || graphics == null) return;
+		if (headlessMode || graphics == null)
+			return;
 		graphics.glScissor(x, y, width, height);
 		graphics.glEnable(GL2.GL_SCISSOR_TEST);
 	}
@@ -604,7 +712,8 @@ public class GraphicsManager {
 	 * Disables scissor test.
 	 */
 	public void disableScissor() {
-		if (headlessMode || graphics == null) return;
+		if (headlessMode || graphics == null)
+			return;
 		graphics.glDisable(GL2.GL_SCISSOR_TEST);
 	}
 }

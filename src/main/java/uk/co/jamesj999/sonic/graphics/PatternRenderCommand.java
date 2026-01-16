@@ -54,7 +54,8 @@ public class PatternRenderCommand implements GLCommandable {
         this.paletteTextureId = paletteTextureId;
         this.desc = desc;
         this.x = x;
-        // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height (8)
+        // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height
+        // (8)
         // to get the OpenGL Y coordinate for the bottom of the quad
         this.y = SCREEN_HEIGHT - y - 8;
     }
@@ -84,6 +85,22 @@ public class PatternRenderCommand implements GLCommandable {
             gl.glUniform1i(shaderProgram.getIndexedColorTextureLocation(), 1);
             gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
             gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+
+            // If using water shader, bind underwater palette to texture unit 2
+            if (shaderProgram instanceof WaterShaderProgram) {
+                WaterShaderProgram waterShader = (WaterShaderProgram) shaderProgram;
+                Integer underwaterPaletteId = getGraphicsManager().getUnderwaterPaletteTextureId();
+                if (underwaterPaletteId != null) {
+                    gl.glActiveTexture(GL2.GL_TEXTURE2);
+                    gl.glBindTexture(GL2.GL_TEXTURE_2D, underwaterPaletteId);
+                    int loc = waterShader.getUnderwaterPaletteLocation();
+                    if (loc != -1) {
+                        gl.glUniform1i(loc, 2);
+                    }
+                    gl.glActiveTexture(GL2.GL_TEXTURE0);
+                }
+            }
+
             stateInitialized = true;
         }
 

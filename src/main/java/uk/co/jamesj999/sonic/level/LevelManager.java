@@ -30,6 +30,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
+import uk.co.jamesj999.sonic.graphics.WaterShaderProgram;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
@@ -213,6 +214,12 @@ public class LevelManager {
             }
             checkpointState.clear();
             levelGamestate = new LevelGamestate();
+
+            // Initialize water system for this level
+            // Use level.getZoneIndex() which returns the ROM zone ID (e.g., 0x0D for CPZ,
+            // 0x0F for ARZ)
+            WaterSystem waterSystem = WaterSystem.getInstance();
+            waterSystem.loadForLevel(rom, level.getZoneIndex(), currentAct, level.getObjects());
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -254,6 +261,14 @@ public class LevelManager {
             if (levelGamestate.getTimer().isTimeOver() && playable != null && !playable.getDead()) {
                 playable.applyHurtOrDeath(0, AbstractPlayableSprite.DamageCause.TIME_OVER, false);
             }
+        }
+
+        // Update water state for player
+        // Use level.getZoneIndex() which returns the ROM zone ID
+        WaterSystem waterSystem = WaterSystem.getInstance();
+        if (level != null && playable != null && waterSystem.hasWater(level.getZoneIndex(), currentAct)) {
+            int waterY = waterSystem.getWaterLevelY(level.getZoneIndex(), currentAct);
+            playable.updateWaterState(waterY);
         }
     }
 
@@ -547,6 +562,9 @@ public class LevelManager {
         parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
         List<GLCommand> commands = new ArrayList<>(256);
 
+        // Update water shader state before rendering level
+        updateWaterShaderState(camera);
+
         // Draw Background (Layer 1)
         if (useShaderBackground && graphicsManager.getBackgroundRenderer() != null) {
             renderBackgroundShader(commands, bgScrollY);
@@ -592,6 +610,12 @@ public class LevelManager {
         }
 
         DebugObjectArtViewer.getInstance().draw(objectRenderManager, camera);
+
+        // Revert to default shader for HUD rendering to avoid distortion
+        // IMPORTANT: Must be queued as a command so it executes AFTER pattern batches
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+            graphicsManager.setUseWaterShader(false);
+        }));
 
         if (hudRenderManager != null) {
             AbstractPlayableSprite focusedPlayer = camera.getFocusedSprite();
@@ -732,8 +756,55 @@ public class LevelManager {
                 }
             }
         }
-
         graphicsManager.enqueueDefaultShaderState();
+    }
+
+    private void updateWaterShaderState(Camera camera) {
+        WaterSystem waterSystem = WaterSystem.getInstance();
+        int zoneId = level.getZoneIndex();
+
+        if (waterSystem.hasWater(zoneId, currentAct)) {
+            // Set uniforms via custom command - this also enables the water shader
+            int waterLevel = waterSystem.getWaterLevelY(zoneId, currentAct);
+            float waterlineScreenY = (float) (waterLevel - camera.getY()); // Pixels from top
+
+            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                // Enable water shader at execution time
+                graphicsManager.setUseWaterShader(true);
+
+                WaterShaderProgram shader = graphicsManager.getWaterShaderProgram();
+                shader.use(gl);
+
+                // Query actual window height from GL state to correct shader coordinates
+                int[] viewport = new int[4];
+                gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
+                float windowHeight = (float) viewport[3];
+                shader.setWindowHeight(gl, windowHeight);
+                shader.setWaterlineScreenY(gl, waterlineScreenY);
+                shader.setFrameCounter(gl, frameCounter);
+                shader.setDistortionAmplitude(gl, 2.0f);
+                shader.setScreenDimensions(gl, (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
+                        (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
+
+                // Underwater Palette
+                Palette[] underwater = waterSystem.getUnderwaterPalette(zoneId, currentAct);
+                if (underwater != null) {
+                    graphicsManager.cacheUnderwaterPaletteTexture(underwater);
+                    Integer texId = graphicsManager.getUnderwaterPaletteTextureId();
+                    int loc = shader.getUnderwaterPaletteLocation();
+
+                    if (texId != null && loc != -1) {
+                        // Bind to TU2
+                        gl.glActiveTexture(GL2.GL_TEXTURE2);
+                        gl.glBindTexture(GL2.GL_TEXTURE_2D, texId);
+                        gl.glUniform1i(loc, 2);
+                        gl.glActiveTexture(GL2.GL_TEXTURE0);
+                    }
+                }
+            }));
+        }
+        // Note: We don't disable water shader here - that's done later before HUD
+        // rendering
     }
 
     private void renderBackgroundShader(List<GLCommand> commands, int bgScrollY) {
@@ -769,18 +840,80 @@ public class LevelManager {
         }));
 
         // 2. Begin Tile Pass (Bind FBO)
+        // Use water shader in screen-space mode for FBO, with adjusted waterline
+        WaterSystem waterSystem = WaterSystem.getInstance();
+        boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
+        int waterLevelWorldY = hasWater ? waterSystem.getWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
+
+        // Calculate waterline for FBO - use SCREEN-SPACE waterline PLUS parallax offset
+        // The parallax shader shifts the FBO sampling by (actualBgScrollY - alignedBgY)
+        // so we must shift the waterline by the same amount to keep it steady on screen
+
+        int chunkHeight = LevelConstants.CHUNK_HEIGHT;
+        int alignedBgY = (actualBgScrollY / chunkHeight) * chunkHeight;
+        if (actualBgScrollY < 0 && actualBgScrollY % chunkHeight != 0) {
+            alignedBgY -= chunkHeight; // Handle negative rounding
+        }
+
+        int vOffset = actualBgScrollY - alignedBgY;
+        final float fboWaterlineY = (float) ((waterLevelWorldY - camera.getY()) + vOffset);
+
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
             bgRenderer.beginTilePass(gl, screenHeightPixels);
+
+            if (hasWater) {
+                // Use water shader in screen-space mode with FBO dimensions
+                graphicsManager.setUseWaterShader(true);
+                WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
+                waterShader.use(gl);
+                // Use screen-space mode (not world-space) with FBO-adjusted waterline
+                waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
+                waterShader.setWindowHeight(gl, (float) fboHeight);
+                waterShader.setScreenDimensions(gl, (float) fboWidth, (float) fboHeight);
+                waterShader.setWaterlineScreenY(gl, fboWaterlineY);
+            } else {
+                graphicsManager.setUseWaterShader(false);
+            }
+            // Clear underwater palette for background flag usage - explicitly control it
+            // Force underwater palette for background if we are fully submerged relative to
+            // FBO
+            // This ensures consistent behavior for deep water levels like ARZ
+            boolean fullyUnderwater = hasWater && fboWaterlineY <= 0;
+            graphicsManager.setUseUnderwaterPaletteForBackground(fullyUnderwater);
         }));
 
-        // 3. Draw background tiles to wider FBO
+        // 3. Draw background tiles to wider FBO (uses water shader in world-space mode)
         graphicsManager.beginPatternBatch();
         drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidth, fboHeight, extraBuffer);
         graphicsManager.flushPatternBatch();
 
-        // 4. End Tile Pass (Unbind FBO)
+        // 4. End Tile Pass (Unbind FBO) and switch water shader back to screen-space
+        // mode
+        int waterLevel = hasWater ? waterSystem.getWaterLevelY(level.getZoneIndex(), currentAct) : 0;
+        float waterlineScreenY = (float) (waterLevel - camera.getY()); // Pixels from top
+
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
             bgRenderer.endTilePass(gl);
+
+            // Always reset background palette flag to avoid affecting foreground
+            graphicsManager.setUseUnderwaterPaletteForBackground(false);
+
+            if (hasWater) {
+                // Switch water shader back to screen-space mode for foreground rendering
+                WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
+                waterShader.use(gl);
+                waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
+
+                // Restore screen-space uniforms
+                int[] viewport = new int[4];
+                gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
+                float windowHeight = (float) viewport[3];
+                waterShader.setWindowHeight(gl, windowHeight);
+                waterShader.setWaterlineScreenY(gl, waterlineScreenY);
+                waterShader.setScreenDimensions(gl,
+                        (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
+                        (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
+            }
         }));
 
         // 5. Render the FBO with Parallax Shader
@@ -801,11 +934,11 @@ public class LevelManager {
             // Calculate vertical scroll offset (sub-chunk) for shader
             // The FBO is rendered aligned to 16-pixel chunk boundaries
             // The shader needs to shift the view by the remaining offset
-            int vOffset = actualBgScrollY % LevelConstants.CHUNK_HEIGHT;
-            if (vOffset < 0)
-                vOffset += LevelConstants.CHUNK_HEIGHT; // Handle negative modulo
+            int shaderVOffset = actualBgScrollY % LevelConstants.CHUNK_HEIGHT;
+            if (shaderVOffset < 0)
+                shaderVOffset += LevelConstants.CHUNK_HEIGHT; // Handle negative modulo
 
-            final int finalVOffset = vOffset;
+            final int finalVOffset = shaderVOffset;
 
             graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx2, cy2, cw2, ch2) -> {
                 bgRenderer.renderWithScrollWide(gl, hScrollData, baseScrollForShader, extraBuffer, finalVOffset, pId,

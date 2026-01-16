@@ -155,19 +155,19 @@ public class SwScrlCpz implements ZoneScrollHandler {
         int lineInBlock = bgYpx & 0xF;
         // How many lines remain in this block before moving to the next
         int remainingInBlock = LINES_PER_BLOCK - lineInBlock;
-        // Current block index (0..63, wraps every 1024px)
-        int currentBlockIdx = ((bgYpx & 0x3F0) >> 4);
+        // Current block index (unwrapped to support deep levels)
+        int currentBlockIdx = (bgYpx >> 4);
 
         // ==================== Step 6: Build Per-Scanline Scroll Buffer
         // ====================
         // FG scroll is constant for all lines
-        short fgScroll = negWord(cameraX);
+        short fgScroll = M68KMath.negWord(cameraX);
 
         int screenLine = 0;
 
         while (screenLine < VISIBLE_LINES) {
-            // Wrap block index to 0..63 range
-            int blockIdx = currentBlockIdx & 0x3F;
+            // Use current block index directly for logic
+            int blockIdx = currentBlockIdx;
 
             // How many lines to fill for this block (limited by screen end)
             int linesToFill = Math.min(remainingInBlock, VISIBLE_LINES - screenLine);
@@ -177,18 +177,18 @@ public class SwScrlCpz implements ZoneScrollHandler {
 
             if (blockIdx < SEAM_BLOCK_INDEX) {
                 // Above seam: use BG1 (slow scroll)
-                bgScroll = negWord(bg1Xpx);
+                bgScroll = M68KMath.negWord(bg1Xpx);
                 // Fill linesToFill lines with same value
-                int packed = packScrollWords(fgScroll, bgScroll);
+                int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
                 trackOffset(fgScroll, bgScroll);
                 for (int i = 0; i < linesToFill; i++) {
                     horizScrollBuf[screenLine++] = packed;
                 }
             } else if (blockIdx > SEAM_BLOCK_INDEX) {
                 // Below seam: use BG2 (fast scroll)
-                bgScroll = negWord(bg2Xpx);
+                bgScroll = M68KMath.negWord(bg2Xpx);
                 // Fill linesToFill lines with same value
-                int packed = packScrollWords(fgScroll, bgScroll);
+                int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
                 trackOffset(fgScroll, bgScroll);
                 for (int i = 0; i < linesToFill; i++) {
                     horizScrollBuf[screenLine++] = packed;
@@ -213,8 +213,8 @@ public class SwScrlCpz implements ZoneScrollHandler {
                     }
 
                     // Apply ripple: bgScrollXpx = baseBg1Xpx + ripple
-                    bgScroll = negWord(baseBg1Xpx + ripple);
-                    horizScrollBuf[screenLine++] = packScrollWords(fgScroll, bgScroll);
+                    bgScroll = M68KMath.negWord(baseBg1Xpx + ripple);
+                    horizScrollBuf[screenLine++] = M68KMath.packScrollWords(fgScroll, bgScroll);
                     trackOffset(fgScroll, bgScroll);
                 }
             }

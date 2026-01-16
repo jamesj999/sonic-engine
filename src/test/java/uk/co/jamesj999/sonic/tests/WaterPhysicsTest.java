@@ -1,0 +1,185 @@
+package uk.co.jamesj999.sonic.tests;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+/**
+ * Tests for water physics state transitions and velocity changes.
+ * These tests verify the water entry/exit behavior matches original game logic.
+ */
+public class WaterPhysicsTest {
+
+    // Mock playable sprite for testing water physics
+    private TestablePlayableSprite sprite;
+
+    @Before
+    public void setUp() {
+        sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
+    }
+
+    @Test
+    public void testWaterEntry_HalvesHorizontalVelocity() {
+        // Set initial velocity
+        sprite.setXSpeed((short) 1000);
+        sprite.setGSpeed((short) 1000);
+        sprite.setYSpeed((short) 0);
+
+        // Simulate water entry - move player below water level
+        sprite.setTestY((short) 500); // Player at Y=500
+        sprite.updateWaterState(400); // Water at Y=400, player is below
+
+        assertTrue("Player should be in water", sprite.isInWater());
+        assertEquals("XSpeed should be halved", 500, sprite.getXSpeed());
+        assertEquals("GSpeed should be halved", 500, sprite.getGSpeed());
+    }
+
+    @Test
+    public void testWaterEntry_ReducesDownwardVelocity() {
+        // Set initial downward velocity
+        sprite.setXSpeed((short) 0);
+        sprite.setYSpeed((short) 400); // Moving down
+
+        // Simulate water entry
+        sprite.setTestY((short) 500);
+        sprite.updateWaterState(400);
+
+        assertTrue("Player should be in water", sprite.isInWater());
+        // Downward velocity should be quartered (400 / 4 = 100)
+        assertEquals("YSpeed should be quartered when positive", 100, sprite.getYSpeed());
+    }
+
+    @Test
+    public void testWaterEntry_HalvesUpwardVelocity() {
+        // Set initial upward velocity
+        sprite.setXSpeed((short) 0);
+        sprite.setYSpeed((short) -400); // Moving up
+
+        // Simulate water entry
+        sprite.setTestY((short) 500);
+        sprite.updateWaterState(400);
+
+        assertTrue("Player should be in water", sprite.isInWater());
+        // Upward velocity should be halved (-400 / 2 = -200)
+        assertEquals("YSpeed should be halved when negative", -200, sprite.getYSpeed());
+    }
+
+    @Test
+    public void testWaterExit_DoublesHorizontalVelocity() {
+        // Start in water
+        sprite.setInWater(true);
+        sprite.setXSpeed((short) 500);
+        sprite.setGSpeed((short) 500);
+        sprite.setYSpeed((short) -200); // Moving up
+
+        // Simulate water exit - move player above water level
+        sprite.setTestY((short) 300); // Player at Y=300
+        sprite.updateWaterState(400); // Water at Y=400, player is above
+
+        assertFalse("Player should be out of water", sprite.isInWater());
+        assertEquals("XSpeed should be doubled", 1000, sprite.getXSpeed());
+        assertEquals("GSpeed should be doubled", 1000, sprite.getGSpeed());
+    }
+
+    @Test
+    public void testWaterExit_BoostsUpwardVelocity() {
+        // Start in water moving up
+        sprite.setInWater(true);
+        sprite.setXSpeed((short) 0);
+        sprite.setYSpeed((short) -300); // Moving up
+
+        // Simulate water exit
+        sprite.setTestY((short) 300);
+        sprite.updateWaterState(400);
+
+        assertFalse("Player should be out of water", sprite.isInWater());
+        // Upward velocity should be doubled (-300 * 2 = -600)
+        assertEquals("YSpeed should be doubled when exiting upward", -600, sprite.getYSpeed());
+    }
+
+    @Test
+    public void testUnderwaterConstants_ReducedValues() {
+        // Not in water
+        sprite.setInWater(false);
+        short normalAccel = sprite.getRunAccel();
+        short normalMax = sprite.getMax();
+        short normalJump = sprite.getJump();
+        float normalGravity = sprite.getGravity();
+
+        // In water
+        sprite.setInWater(true);
+        short waterAccel = sprite.getRunAccel();
+        short waterMax = sprite.getMax();
+        short waterJump = sprite.getJump();
+        float waterGravity = sprite.getGravity();
+
+        // Verify underwater constants are reduced
+        assertEquals("Underwater accel should be half", normalAccel / 2, waterAccel);
+        assertEquals("Underwater max should be half", normalMax / 2, waterMax);
+        assertTrue("Underwater jump should be reduced", waterJump < normalJump);
+        assertTrue("Underwater gravity should be reduced", waterGravity < normalGravity);
+    }
+
+    @Test
+    public void testNoTransition_WhenStayingAboveWater() {
+        // Player above water
+        sprite.setTestY((short) 300);
+        sprite.setXSpeed((short) 1000);
+
+        // Update water state - player stays above
+        sprite.updateWaterState(400);
+        sprite.updateWaterState(400); // Second update should not change anything
+
+        assertFalse("Player should not be in water", sprite.isInWater());
+        assertEquals("Velocity should be unchanged", 1000, sprite.getXSpeed());
+    }
+
+    @Test
+    public void testNoTransition_WhenStayingUnderwater() {
+        // Player starts underwater
+        sprite.setInWater(true);
+        sprite.setTestY((short) 500);
+        sprite.setXSpeed((short) 500);
+
+        // Simulate frame update while staying underwater
+        sprite.updateWaterState(400);
+
+        assertTrue("Player should still be in water", sprite.isInWater());
+        assertEquals("Velocity should be unchanged", 500, sprite.getXSpeed());
+    }
+
+    /**
+     * Minimal test subclass of AbstractPlayableSprite for physics testing.
+     */
+    private static class TestablePlayableSprite extends uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite {
+
+        public TestablePlayableSprite(String code, short x, short y) {
+            super(code, x, y);
+        }
+
+        @Override
+        public void draw() {
+            // No-op for testing
+        }
+
+        @Override
+        public void defineSpeeds() {
+            // Set standard Sonic values
+            runAccel = 12;
+            runDecel = 128;
+            friction = 12;
+            max = 1536;
+            jump = 1664;
+        }
+
+        @Override
+        protected void createSensorLines() {
+            // No-op for testing
+        }
+
+        public void setTestY(short y) {
+            this.yPixel = y;
+        }
+    }
+}
