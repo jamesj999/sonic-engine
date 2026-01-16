@@ -1080,7 +1080,7 @@ When extending to **Sonic 1** or **Sonic 3 & Knuckles**, the following will need
 | **P2** | E6 volume timing | Wrong dynamics | ✅ **ALREADY CORRECT** (audit was wrong) |
 | **P2** | Update order | Timing errors | ⚠️ **PARTIAL** (PSG order fixed, note fill exit reverted) |
 | **P3** | Return stack size | Edge case crashes | ✅ **FIXED** (expanded to 16) |
-| **P3** | KEY_ON envelope conversion | Attack transients | ⏳ Pending |
+| **P3** | KEY_ON envelope conversion | Attack transients | ✅ **ALREADY IMPLEMENTED** |
 | **P3** | SSG-EG behavior | Rare FM sounds | ✅ **VERIFIED CORRECT** |
 | **P3** | SFX priority system | SFX conflicts | ✅ **FIXED** |
 | **P2** | PSG noise LFSR shift timing | Noise missing high-freq | ✅ **FIXED** (was half rate!) |
