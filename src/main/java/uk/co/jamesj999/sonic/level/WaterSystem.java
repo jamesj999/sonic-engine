@@ -94,7 +94,7 @@ public class WaterSystem {
         String key = makeKey(zoneId, actId);
 
         // Extract water height from object layout
-        Integer waterHeight = extractWaterHeight(zoneId, actId, objects);
+        Integer waterHeight = extractWaterHeight(zoneId, actId, objects, rom);
 
         if (waterHeight == null) {
             // No water in this level
@@ -126,7 +126,7 @@ public class WaterSystem {
      * @param objects List of object spawns
      * @return Water surface Y position, or null if no water
      */
-    private Integer extractWaterHeight(int zoneId, int actId, List<ObjectSpawn> objects) {
+    private Integer extractWaterHeight(int zoneId, int actId, List<ObjectSpawn> objects, Rom rom) {
         // First, try to find from object data
         if (objects != null) {
             for (ObjectSpawn spawn : objects) {
@@ -139,23 +139,42 @@ public class WaterSystem {
             }
         }
 
-        // Fallback to known hardcoded water levels for Sonic 2
-        // These are the default water heights for each level
-        // Chemical Plant Zone Act 2
-        if (zoneId == ZONE_ID_CPZ && actId == 1) {
-            System.out.println("  Using hardcoded water height for CPZ Act 2");
-            return CPZ_ACT_2_WATER_HEIGHT; // 710 (0x2C6)
+        // Fallback to reading from ROM for known levels
+        // Addresses identified in code (Rev01):
+        // CPZ2: 0xE92FA (Value 0x0720)
+        // ARZ2: 0xE930E (Value 0x0510)
+        // ARZ1: 0xE9314 (Value 0x0430)
+        try {
+            // Chemical Plant Zone Act 2
+            if (zoneId == ZONE_ID_CPZ && actId == 1) {
+                int height = rom.readByte(0xE92FA) << 8 | (rom.readByte(0xE92FB) & 0xFF);
+                System.out.printf("  Loaded CPZ Act 2 water height from ROM (0xE92FA): 0x%X (%d)%n", height, height);
+                return height;
+            }
+            // Aquatic Ruin Zone Act 2
+            if (zoneId == ZONE_ID_ARZ && actId == 1) {
+                int height = rom.readByte(0xE930C) << 8 | (rom.readByte(0xE930D) & 0xFF);
+                System.out.printf("  Loaded ARZ Act 2 water height from ROM (0xE930C): 0x%X (%d)%n", height, height);
+                return height;
+            }
+            // Aquatic Ruin Zone Act 1
+            if (zoneId == ZONE_ID_ARZ && actId == 0) {
+                int height = rom.readByte(0xE9312) << 8 | (rom.readByte(0xE9313) & 0xFF);
+                System.out.printf("  Loaded ARZ Act 1 water height from ROM (0xE9312): 0x%X (%d)%n", height, height);
+                return height;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Failed to read water height from ROM: " + e.getMessage());
         }
-        // Aquatic Ruin Zone Act 1
-        if (zoneId == ZONE_ID_ARZ && actId == 0) {
-            System.out.println("  Using hardcoded water height for ARZ Act 1");
-            return ARZ_ACT_1_WATER_HEIGHT; // 410 (0x19A)
-        }
-        // Aquatic Ruin Zone Act 2
-        if (zoneId == ZONE_ID_ARZ && actId == 1) {
-            System.out.println("  Using hardcoded water height for ARZ Act 2");
-            return ARZ_ACT_2_WATER_HEIGHT; // 510 (0x1FE)
-        }
+
+        // Hardcoded legacy fallbacks (should not be reached for CPZ2/ARZ2/ARZ1 if above
+        // works)
+        if (zoneId == ZONE_ID_CPZ && actId == 1)
+            return CPZ_ACT_2_WATER_HEIGHT;
+        if (zoneId == ZONE_ID_ARZ && actId == 0)
+            return ARZ_ACT_1_WATER_HEIGHT;
+        if (zoneId == ZONE_ID_ARZ && actId == 1)
+            return ARZ_ACT_2_WATER_HEIGHT;
 
         return null;
     }
