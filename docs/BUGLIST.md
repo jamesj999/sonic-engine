@@ -10,7 +10,7 @@ Last updated: 2026-01-16
 - [x] There's a small collision hole on the left side of the EHZ bridges. (Fixed: Bridge collision anchor now uses ROM-style x_pos-8 offset; slope sampling aligned to collision space.)
 - [x] EHZ bridges cause you to move from rolling to running when you move over them. (Fixed: Terrain no longer forces air if solid contact exists; object landing preserves roll state.)
 - [ ] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct).
-- [ ] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
+- [x] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
 - [x] Objects still have collision in debug movement mode. (Fixed: Debug mode now skips all physics, collision, and damage processing. Toggled via configurable keybind - default 'D' key)
 - [ ] Camera maximum height is not yet implemented.
 - [ ] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.

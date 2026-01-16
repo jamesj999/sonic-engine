@@ -178,6 +178,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * When true, user inputs are ignored (Control_Locked in ROM).
          */
         protected boolean controlLocked = false;
+        private int spiralActiveFrame = Integer.MIN_VALUE;
 
         /**
          * Clears all active power-ups (shield, invincibility, speed shoes).
@@ -237,6 +238,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
                 this.controlLocked = false;
+                this.spiralActiveFrame = Integer.MIN_VALUE;
                 defineSpeeds(); // Reset speeds to default
         }
 
@@ -742,6 +744,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setControlLocked(boolean controlLocked) {
                 this.controlLocked = controlLocked;
+        }
+
+        public void markSpiralActive(int frameCounter) {
+                spiralActiveFrame = frameCounter;
+        }
+
+        public boolean wasSpiralActive(int frameCounter) {
+                return spiralActiveFrame == frameCounter || spiralActiveFrame == frameCounter - 1;
+        }
+
+        public boolean isSpiralActiveThisFrame(int frameCounter) {
+                return spiralActiveFrame == frameCounter;
+        }
+
+        public void clearSpiralActive() {
+                spiralActiveFrame = Integer.MIN_VALUE;
         }
 
         public short getXSpeed() {
