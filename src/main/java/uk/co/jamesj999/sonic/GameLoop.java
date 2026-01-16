@@ -188,16 +188,31 @@ public class GameLoop {
         } else if (currentGameMode == GameMode.TITLE_CARD) {
             // Update title card animation
             titleCardManager.update();
-            if (titleCardManager.isComplete()) {
+
+            // From disassembly lines 5073-5078: control is released at the START of TEXT_WAIT,
+            // not when the title card is complete. This allows the player to move while the
+            // text is still visible on screen.
+            if (titleCardManager.shouldReleaseControl()) {
                 exitTitleCard();
+                // Continue to LEVEL mode processing this frame (fall through)
+            } else {
+                // Still in locked phase - run physics without input
+                // This allows Sonic to settle onto the ground while title card is visible,
+                // preventing camera jitter when title card ends
+                spriteCollisionManager.updateWithoutInput();
+                // Force camera to snap to player position during title card (no smooth scrolling)
+                camera.updatePosition(true);
+                return; // Don't process LEVEL mode logic yet
             }
-            // Run physics during title card (like original game) but with no input
-            // This allows Sonic to settle onto the ground while title card is visible,
-            // preventing camera jitter when title card ends
-            spriteCollisionManager.updateWithoutInput();
-            // Force camera to snap to player position during title card (no smooth scrolling)
-            camera.updatePosition(true);
-        } else {
+        }
+
+        // LEVEL mode (or just transitioned from TITLE_CARD)
+        if (currentGameMode == GameMode.LEVEL) {
+            // Continue updating title card overlay if still active
+            // (TEXT_WAIT and TEXT_EXIT phases where player can move but text is still visible)
+            if (titleCardManager.isOverlayActive()) {
+                titleCardManager.update();
+            }
             // Check if a title card was requested (new level loaded)
             if (levelManager.consumeTitleCardRequest()) {
                 enterTitleCard(levelManager.getTitleCardZone(), levelManager.getTitleCardAct());

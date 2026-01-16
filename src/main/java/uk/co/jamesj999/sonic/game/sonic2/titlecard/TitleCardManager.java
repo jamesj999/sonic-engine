@@ -37,8 +37,26 @@ public class TitleCardManager {
 
     private static TitleCardManager instance;
 
-    /** Display duration in frames (increased for better visibility) */
-    private static final int DISPLAY_DURATION = 60;
+    /**
+     * Display hold duration in frames before starting the exit sequence.
+     *
+     * On original hardware, the title card would remain visible while the console
+     * performed expensive operations: decompressing Nemesis/Kosinski art, loading
+     * level layout data, initializing objects, etc. This created a natural pause
+     * where the title card was fully visible before exiting.
+     *
+     * Our engine loads data much faster (often in a single frame), so we add an
+     * artificial hold period to simulate the original timing and give players
+     * time to read the zone name. 60 frames ≈ 1 second at 60fps.
+     */
+    private static final int DISPLAY_HOLD_DURATION = 60;
+
+    /**
+     * Text wait duration in frames before sliding out.
+     * From disassembly: $2D = 45 frames (lines 5066-5072 in s2.asm).
+     * This wait starts AFTER the background has fully exited.
+     */
+    private static final int TEXT_WAIT_DURATION = 0x2D;  // 45 frames
 
     /** Screen dimensions */
     private static final int SCREEN_WIDTH = 320;
@@ -446,7 +464,11 @@ public class TitleCardManager {
         switch (state) {
             case SLIDE_IN -> updateSlideIn();
             case DISPLAY -> updateDisplay();
-            case SLIDE_OUT -> updateSlideOut();
+            case EXIT_LEFT_SWOOSH -> updateExitLeftSwoosh();
+            case EXIT_BOTTOM_BAR -> updateExitBottomBar();
+            case EXIT_BACKGROUND -> updateExitBackground();
+            case TEXT_WAIT -> updateTextWait();
+            case TEXT_EXIT -> updateTextExit();
             case COMPLETE -> {}
         }
     }
@@ -467,22 +489,143 @@ public class TitleCardManager {
     }
 
     private void updateDisplay() {
-        if (stateTimer >= DISPLAY_DURATION) {
-            state = TitleCardState.SLIDE_OUT;
+        // Hold the title card visible for DISPLAY_HOLD_DURATION frames.
+        //
+        // On original hardware, the Mega Drive would spend significant time here
+        // decompressing art (Nemesis, Kosinski), loading level layouts, and
+        // initializing game objects. The title card naturally stayed visible
+        // during this loading period.
+        //
+        // Our engine completes these operations nearly instantly, so we add an
+        // artificial hold to match the original game's pacing and give players
+        // time to see which zone they're entering.
+        if (stateTimer >= DISPLAY_HOLD_DURATION) {
+            state = TitleCardState.EXIT_LEFT_SWOOSH;
             stateTimer = 0;
-            LOGGER.fine("Title card entered SLIDE_OUT state at frame " + frameCounter);
+            // Initialize left swoosh exit - from disassembly line 5054:
+            // move.w #$A,(TitleCard_Left+titlecard_location).w
+            if (leftSwooshElement != null) {
+                leftSwooshElement.startExit();
+            }
+            LOGGER.fine("Title card entered EXIT_LEFT_SWOOSH state at frame " + frameCounter);
         }
     }
 
-    private void updateSlideOut() {
-        // Update all elements
-        for (TitleCardElement element : elements) {
-            element.updateSlideOut();
-        }
+    /**
+     * Exit phase 1: Left swoosh (red stripes) slides out.
+     * From disassembly: Obj34_LeftPartOut (routine $E)
+     * When complete, triggers bottom bar exit.
+     */
+    private void updateExitLeftSwoosh() {
+        if (leftSwooshElement != null) {
+            leftSwooshElement.updateSlideOut();
 
-        // Check if all elements have exited
-        boolean allExited = elements.stream().allMatch(TitleCardElement::hasExited);
-        if (allExited) {
+            if (leftSwooshElement.hasExited()) {
+                // Trigger bottom bar exit - from disassembly line 27303:
+                // move.b #$10,TitleCard_Bottom-TitleCard_Left+routine(a0)
+                state = TitleCardState.EXIT_BOTTOM_BAR;
+                stateTimer = 0;
+                if (bottomBarElement != null) {
+                    bottomBarElement.startExit();
+                }
+                LOGGER.fine("Title card entered EXIT_BOTTOM_BAR state at frame " + frameCounter);
+            }
+        } else {
+            // No left swoosh, skip to bottom bar
+            state = TitleCardState.EXIT_BOTTOM_BAR;
+            stateTimer = 0;
+            if (bottomBarElement != null) {
+                bottomBarElement.startExit();
+            }
+        }
+    }
+
+    /**
+     * Exit phase 2: Bottom bar slides out.
+     * From disassembly: Obj34_BottomPartOut (routine $10)
+     * When complete, triggers background exit.
+     */
+    private void updateExitBottomBar() {
+        if (bottomBarElement != null) {
+            bottomBarElement.updateSlideOut();
+
+            if (bottomBarElement.hasExited()) {
+                // Trigger background exit - from disassembly line 27328:
+                // move.b #$12,TitleCard_Background-TitleCard_Bottom+routine(a0)
+                state = TitleCardState.EXIT_BACKGROUND;
+                stateTimer = 0;
+                if (blueBackgroundElement != null) {
+                    blueBackgroundElement.startExit();
+                }
+                LOGGER.fine("Title card entered EXIT_BACKGROUND state at frame " + frameCounter);
+            }
+        } else {
+            // No bottom bar, skip to background
+            state = TitleCardState.EXIT_BACKGROUND;
+            stateTimer = 0;
+            if (blueBackgroundElement != null) {
+                blueBackgroundElement.startExit();
+            }
+        }
+    }
+
+    /**
+     * Exit phase 3: Background scrolls out.
+     * From disassembly: Obj34_BackgroundOut (routine $14)
+     * When complete, starts the text wait period.
+     */
+    private void updateExitBackground() {
+        if (blueBackgroundElement != null) {
+            blueBackgroundElement.updateSlideOut();
+
+            if (blueBackgroundElement.hasExited()) {
+                // Background is gone - now text gets its wait timer
+                // From disassembly lines 5065-5072:
+                // move.w #$2D,TitleCard_ZoneName-TitleCard+anim_frame_duration(a1)
+                state = TitleCardState.TEXT_WAIT;
+                stateTimer = 0;
+                LOGGER.fine("Title card entered TEXT_WAIT state at frame " + frameCounter);
+            }
+        } else {
+            // No background element, skip to text wait
+            state = TitleCardState.TEXT_WAIT;
+            stateTimer = 0;
+        }
+    }
+
+    /**
+     * Exit phase 4: Text waits for 45 frames ($2D) before exiting.
+     * From disassembly: Obj34_WaitAndGoAway (routine $16)
+     * The level is visible behind the text during this phase.
+     */
+    private void updateTextWait() {
+        if (stateTimer >= TEXT_WAIT_DURATION) {
+            state = TitleCardState.TEXT_EXIT;
+            stateTimer = 0;
+            // Start text element exits
+            if (zoneNameElement != null) zoneNameElement.startExit();
+            if (zoneTextElement != null) zoneTextElement.startExit();
+            if (actNumberElement != null) actNumberElement.startExit();
+            LOGGER.fine("Title card entered TEXT_EXIT state at frame " + frameCounter);
+        }
+    }
+
+    /**
+     * Exit phase 5: Text elements slide out.
+     * From disassembly: Obj34_WaitAndGoAway continues after wait expires.
+     */
+    private void updateTextExit() {
+        // Update text elements
+        if (zoneNameElement != null) zoneNameElement.updateSlideOut();
+        if (zoneTextElement != null) zoneTextElement.updateSlideOut();
+        if (actNumberElement != null) actNumberElement.updateSlideOut();
+
+        // Check if all text elements have exited
+        boolean zoneNameExited = (zoneNameElement == null || zoneNameElement.hasExited());
+        boolean zoneTextExited = (zoneTextElement == null || zoneTextElement.hasExited());
+        boolean actNumberExited = (actNumberElement == null || actNumberElement.hasExited());
+
+        if (zoneNameExited && zoneTextExited && actNumberExited) {
             state = TitleCardState.COMPLETE;
             stateTimer = 0;
             LOGGER.fine("Title card COMPLETE at frame " + frameCounter);
@@ -501,11 +644,11 @@ public class TitleCardManager {
             return;
         }
 
-        // Draw black background during SLIDE_IN and DISPLAY states only.
-        // This covers the level graphics until the exit animation begins.
-        // Once SLIDE_OUT starts, the black background is removed so the
-        // level is visible behind the exiting title card elements.
-        if (state == TitleCardState.SLIDE_IN || state == TitleCardState.DISPLAY) {
+        // Draw black background during SLIDE_IN state only.
+        // This covers the level graphics until the title card elements are in place.
+        // Once exit begins (EXIT_LEFT_SWOOSH and beyond), the level becomes visible
+        // behind the remaining title card elements, matching the original behavior.
+        if (state == TitleCardState.SLIDE_IN) {
             graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommand(
                     uk.co.jamesj999.sonic.graphics.GLCommand.CommandType.RECTI,
                     -1,
@@ -706,10 +849,36 @@ public class TitleCardManager {
     }
 
     /**
-     * Returns true if the title card animation is complete.
+     * Returns true if the title card animation is fully complete.
+     * Use this to determine when to stop drawing the title card.
      */
     public boolean isComplete() {
         return state == TitleCardState.COMPLETE;
+    }
+
+    /**
+     * Returns true if player control should be released.
+     * From disassembly lines 5073-5078: control is unlocked and the title card
+     * game mode flag is cleared at the START of TEXT_WAIT, not when the title
+     * card is complete. This allows the player to move while the text is still
+     * visible on screen.
+     */
+    public boolean shouldReleaseControl() {
+        return state == TitleCardState.TEXT_WAIT ||
+               state == TitleCardState.TEXT_EXIT ||
+               state == TitleCardState.COMPLETE;
+    }
+
+    /**
+     * Returns true if the title card overlay should still be drawn.
+     * The overlay remains visible during TEXT_WAIT and TEXT_EXIT phases,
+     * even though player control has been released and the game mode has
+     * returned to LEVEL. This creates the effect of the text floating over
+     * the level while the player can already move.
+     */
+    public boolean isOverlayActive() {
+        return state == TitleCardState.TEXT_WAIT ||
+               state == TitleCardState.TEXT_EXIT;
     }
 
     /**

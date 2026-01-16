@@ -49,6 +49,9 @@ public abstract class Sonic2SpecialStageObject {
     /** Screen Y position (calculated from perspective data) */
     protected int screenY;
 
+    /** Track floor Y position (for shadow placement) - bottom of perspective ellipse */
+    protected int trackFloorY;
+
     /** Current animation index (0-9 for sizes, 10 for effects) */
     protected int animIndex;
 
@@ -122,6 +125,10 @@ public abstract class Sonic2SpecialStageObject {
         screenX = pos[0];
         screenY = pos[1];
         onScreen = true;
+
+        // Calculate track floor Y position (bottom of perspective ellipse)
+        // This is where shadows should be rendered, at yBase + yRadius
+        trackFloorY = entry.yBase + entry.yRadius;
 
         // Determine animation index based on depth
         // Lower depth = closer = larger sprite (higher anim index)
@@ -243,6 +250,10 @@ public abstract class Sonic2SpecialStageObject {
 
     public int getScreenY() {
         return screenY;
+    }
+
+    public int getTrackFloorY() {
+        return trackFloorY;
     }
 
     public int getAnimIndex() {

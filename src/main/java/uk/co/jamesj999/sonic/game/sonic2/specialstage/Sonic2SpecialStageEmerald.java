@@ -140,6 +140,12 @@ public class Sonic2SpecialStageEmerald extends Sonic2SpecialStageObject {
         screenY = pos[1];
         onScreen = true;
 
+        // Calculate track floor Y position (bottom of perspective ellipse, UNSCALED)
+        // This is where the emerald's shadow should be rendered.
+        // The emerald floats above the track (due to 0.75 radius scaling),
+        // but the shadow goes on the actual track surface.
+        trackFloorY = entry.yBase + entry.yRadius;
+
         // Determine animation index based on depth
         animIndex = calculateAnimIndex();
     }

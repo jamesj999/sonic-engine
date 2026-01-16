@@ -22,6 +22,7 @@ import java.util.List;
 public class BridgeObjectInstance extends BoxObjectInstance implements SlopedSolidProvider, SolidObjectListener {
     private static final int LOG_WIDTH = 16; // pixels per log segment
     private static final int LOG_HALF_HEIGHT = 8; // half-height for collision (sprite is 16px tall)
+    private static final int COLLISION_X_OFFSET = -8; // ROM PlatformObject11_cont uses x_pos - 8 for bounds
 
     // Sagging physics fields
     private byte[] slopeData; // Cache for slope collision
@@ -59,7 +60,7 @@ public class BridgeObjectInstance extends BoxObjectInstance implements SlopedSol
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(getHalfWidth(), 0x04, 0x04);
+        return new SolidObjectParams(getHalfWidth(), 0x04, 0x04, COLLISION_X_OFFSET, 0);
     }
 
     @Override
@@ -86,11 +87,11 @@ public class BridgeObjectInstance extends BoxObjectInstance implements SlopedSol
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
         int logCount = getLogCount();
-        int totalWidth = logCount * 16;
+        int slopeWidth = getHalfWidth() + 1;
 
         // Initialize arrays if needed
-        if (slopeData == null || slopeData.length != totalWidth) {
-            slopeData = new byte[totalWidth];
+        if (slopeData == null || slopeData.length != slopeWidth) {
+            slopeData = new byte[slopeWidth];
             targetLogOffsets = new int[logCount];
             currentLogOffsets = new int[logCount];
         }
@@ -128,33 +129,23 @@ public class BridgeObjectInstance extends BoxObjectInstance implements SlopedSol
             currentLogOffsets[i] = current;
         }
 
-        // Fill Slope Data
-        // Collision Box Start = spawn.x - halfWidth.
-        // Visual Box Start = spawn.x - halfWidth - 8. (Shifted Left)
-        // Therefore, Collision Pixel 0 corresponds to Visual Pixel 8 (Log 0 Center).
+        int samplesPerLog = LOG_WIDTH / 2;
         for (int k = 0; k < slopeData.length; k++) {
-            // k is pixel index relative to Collision Start.
-            // visualPixel is relative to Visual Start (which is 8px Left of Collision).
-            // visualPixel = k + 8.
-            int visualPixel = k + 8;
-            int logIndex = visualPixel / 16;
-
-            if (logIndex >= 0 && logIndex < logCount) {
-                int sag = currentLogOffsets[logIndex];
-                slopeData[k] = (byte) -sag;
-            } else {
-                slopeData[k] = 0;
+            int logIndex = k / samplesPerLog;
+            if (logIndex >= logCount) {
+                logIndex = logCount - 1;
             }
+            int sag = currentLogOffsets[logIndex];
+            slopeData[k] = (byte) -sag;
         }
     }
 
     private void calculateTargetSag(AbstractPlayableSprite player, int logCount) {
-        // Visual Start = spawn.x - halfWidth - 8.
-        int startX = spawn.x() - getHalfWidth() - 8;
-        int playerRelX = player.getX() - startX;
+        int leftEdge = (spawn.x() + COLLISION_X_OFFSET) - getHalfWidth();
+        int playerRelX = player.getCentreX() - leftEdge;
 
         // Find which log index the player is on
-        int playerLogIndex = playerRelX / 16;
+        int playerLogIndex = playerRelX / LOG_WIDTH;
         if (playerLogIndex < 0)
             playerLogIndex = 0;
         if (playerLogIndex >= logCount)
@@ -197,12 +188,11 @@ public class BridgeObjectInstance extends BoxObjectInstance implements SlopedSol
         ObjectSpriteSheet bridgeSheet = renderManager.getBridgeSheet();
 
         if (bridgeRenderer != null && bridgeSheet != null && bridgeRenderer.isReady()) {
-            // Visual Offset: Shift left by 8px based on user feedback.
-            int startX = spawn.x() - getHalfWidth() - 8;
             int numLogs = getLogCount();
+            int startX = spawn.x() - ((numLogs >> 1) * LOG_WIDTH);
 
             for (int i = 0; i < numLogs; i++) {
-                int x = startX + (i * 16) + 8; // +8 to center the 16px log
+                int x = startX + (i * LOG_WIDTH);
                 int y = spawn.y();
 
                 if (currentLogOffsets != null && i < currentLogOffsets.length) {

@@ -259,12 +259,31 @@ public class Engine extends GLCanvas implements GLEventListener {
 			}
 		} else if (!debugViewEnabled) {
 			levelManager.drawWithSpritePriority(spriteRenderManager);
+
+			// Draw title card text overlay if still active (TEXT_WAIT/TEXT_EXIT phases)
+			// Player control has been released but text is still sliding off
+			TitleCardManager levelTitleCardManager = gameLoop.getTitleCardManager();
+			if (levelTitleCardManager != null && levelTitleCardManager.isOverlayActive()) {
+				graphicsManager.flush();
+				graphicsManager.resetForFixedFunction();
+				levelTitleCardManager.draw();
+				graphicsManager.flushScreenSpace();
+			}
 		} else {
 			switch (debugState) {
 				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
 				case CHUNKS_VIEW -> levelManager.drawAllChunks();
 				case BLOCKS_VIEW -> levelManager.draw();
 				case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
+			}
+
+			// Draw title card text overlay if still active (even in debug view)
+			TitleCardManager debugTitleCardManager = gameLoop.getTitleCardManager();
+			if (debugTitleCardManager != null && debugTitleCardManager.isOverlayActive()) {
+				graphicsManager.flush();
+				graphicsManager.resetForFixedFunction();
+				debugTitleCardManager.draw();
+				graphicsManager.flushScreenSpace();
 			}
 		}
 	}
