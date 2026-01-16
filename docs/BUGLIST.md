@@ -9,7 +9,7 @@ Last updated: 2026-01-16
 - [ ] Some spikes kill you from the side when you jump next to them while holding direction into them.
 - [x] There's a small collision hole on the left side of the EHZ bridges. (Fixed: Bridge collision anchor now uses ROM-style x_pos-8 offset; slope sampling aligned to collision space.)
 - [x] EHZ bridges cause you to move from rolling to running when you move over them. (Fixed: Terrain no longer forces air if solid contact exists; object landing preserves roll state.)
-- [ ] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct).
+- [x] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct). (Fixed: Made KEY_ON conditional on !t.tieNext, same as KEY_OFF. Fixed PSG mix volume after fixing PSG noise volume)
 - [x] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
 - [x] Objects still have collision in debug movement mode. (Fixed: Debug mode now skips all physics, collision, and damage processing. Toggled via configurable keybind - default 'D' key)
 - [x] Camera maximum height is not yet implemented. (Fixed: Added LevelEventManager for dynamic boundary updates with 2px/frame easing toward targets. Camera class now supports target-based boundaries matching ROM's Camera_Max_Y_pos_target system.)
