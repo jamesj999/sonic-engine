@@ -30,6 +30,8 @@ public class ObjectArtData {
         private final ObjectSpriteSheet buzzerSheet;
         private final ObjectSpriteSheet coconutsSheet;
         private final ObjectSpriteSheet animalSheet;
+        private final int animalTypeA;
+        private final int animalTypeB;
         private final ObjectSpriteSheet pointsSheet;
         private final ObjectSpriteSheet signpostSheet;
         private final ObjectSpriteSheet resultsSheet;
@@ -67,6 +69,8 @@ public class ObjectArtData {
                         ObjectSpriteSheet buzzerSheet,
                         ObjectSpriteSheet coconutsSheet,
                         ObjectSpriteSheet animalSheet,
+                        int animalTypeA,
+                        int animalTypeB,
                         ObjectSpriteSheet pointsSheet,
                         ObjectSpriteSheet signpostSheet,
                         ObjectSpriteSheet resultsSheet,
@@ -102,6 +106,8 @@ public class ObjectArtData {
                 this.buzzerSheet = buzzerSheet;
                 this.coconutsSheet = coconutsSheet;
                 this.animalSheet = animalSheet;
+                this.animalTypeA = animalTypeA;
+                this.animalTypeB = animalTypeB;
                 this.pointsSheet = pointsSheet;
                 this.signpostSheet = signpostSheet;
                 this.resultsSheet = resultsSheet;
@@ -197,6 +203,14 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet animalSheet() {
                 return animalSheet;
+        }
+
+        public int getAnimalTypeA() {
+                return animalTypeA;
+        }
+
+        public int getAnimalTypeB() {
+                return animalTypeB;
         }
 
         public ObjectSpriteSheet pointsSheet() {

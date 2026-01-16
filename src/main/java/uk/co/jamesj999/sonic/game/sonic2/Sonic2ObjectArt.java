@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.AnimalType;
 
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
@@ -18,7 +19,9 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -27,10 +30,31 @@ import java.util.logging.Logger;
  */
 public class Sonic2ObjectArt {
     private static final Logger LOGGER = Logger.getLogger(Sonic2ObjectArt.class.getName());
+    private static final int ANIMAL_TILE_OFFSET = 0x14;
+    private static final AnimalType[] DEFAULT_ANIMALS = { AnimalType.RABBIT, AnimalType.RABBIT };
+    private static final AnimalType[][] ZONE_ANIMALS = {
+            { AnimalType.SQUIRREL, AnimalType.FLICKY }, // 0 EHZ
+            { AnimalType.SQUIRREL, AnimalType.FLICKY }, // 1 Zone 1
+            { AnimalType.SQUIRREL, AnimalType.FLICKY }, // 2 WZ
+            { AnimalType.SQUIRREL, AnimalType.FLICKY }, // 3 Zone 3
+            { AnimalType.MONKEY, AnimalType.EAGLE }, // 4 MTZ1/2
+            { AnimalType.MONKEY, AnimalType.EAGLE }, // 5 MTZ3
+            { AnimalType.MONKEY, AnimalType.EAGLE }, // 6 WFZ
+            { AnimalType.MONKEY, AnimalType.EAGLE }, // 7 HTZ
+            { AnimalType.MOUSE, AnimalType.SEAL }, // 8 HPZ
+            { AnimalType.MOUSE, AnimalType.SEAL }, // 9 Zone 9
+            { AnimalType.PENGUIN, AnimalType.SEAL }, // 10 OOZ
+            { AnimalType.MOUSE, AnimalType.CHICKEN }, // 11 MCZ
+            { AnimalType.BEAR, AnimalType.FLICKY }, // 12 CNZ
+            { AnimalType.RABBIT, AnimalType.EAGLE }, // 13 CPZ
+            { AnimalType.PIG, AnimalType.CHICKEN }, // 14 DEZ
+            { AnimalType.PENGUIN, AnimalType.FLICKY }, // 15 ARZ
+            { AnimalType.TURTLE, AnimalType.CHICKEN } // 16 SCZ
+    };
 
     private final Rom rom;
     private final RomByteReader reader;
-    private ObjectArtData cached;
+    private final Map<Integer, ObjectArtData> cachedByZone = new HashMap<>();
 
     public Sonic2ObjectArt(Rom rom, RomByteReader reader) {
         this.rom = rom;
@@ -38,9 +62,19 @@ public class Sonic2ObjectArt {
     }
 
     public ObjectArtData load() throws IOException {
+        return loadForZone(-1);
+    }
+
+    public ObjectArtData loadForZone(int zoneIndex) throws IOException {
+        Integer cacheKey = zoneIndex;
+        ObjectArtData cached = cachedByZone.get(cacheKey);
         if (cached != null) {
             return cached;
         }
+
+        AnimalType[] zoneAnimals = resolveZoneAnimals(zoneIndex);
+        AnimalType animalTypeA = zoneAnimals[0];
+        AnimalType animalTypeB = zoneAnimals[1];
 
         // Load Monitor Art (base art)
         Pattern[] monitorBasePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR, "Monitor");
@@ -179,7 +213,7 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> coconutsMappings = createCoconutsMappings();
         ObjectSpriteSheet coconutsSheet = new ObjectSpriteSheet(coconutsPatterns, coconutsMappings, 0, 1);
 
-        Pattern[] animalPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ANIMAL_ADDR, "Animal");
+        Pattern[] animalPatterns = loadAnimalPatterns(animalTypeA, animalTypeB);
         List<SpriteMappingFrame> animalMappings = createAnimalMappings();
         ObjectSpriteSheet animalSheet = new ObjectSpriteSheet(animalPatterns, animalMappings, 0, 1);
 
@@ -232,7 +266,7 @@ public class Sonic2ObjectArt {
         Pattern[] hudLivesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SONIC_LIFE_ADDR, "SonicLife");
         Pattern[] hudLivesNumbers = safeLoadUncompressedPatterns(Sonic2Constants.ART_UNC_LIVES_NUMBERS_ADDR,
                 Sonic2Constants.ART_UNC_LIVES_NUMBERS_SIZE, "LivesNumbers");
-        cached = new ObjectArtData(
+        ObjectArtData artData = new ObjectArtData(
                 monitorSheet,
                 spikeSheet,
                 spikeSideSheet,
@@ -253,6 +287,8 @@ public class Sonic2ObjectArt {
                 buzzerSheet,
                 coconutsSheet,
                 animalSheet,
+                animalTypeA.ordinal(),
+                animalTypeB.ordinal(),
                 pointsSheet,
                 signpostSheet,
                 resultsSheet,
@@ -269,7 +305,8 @@ public class Sonic2ObjectArt {
                 checkpointAnimations,
                 signpostAnimations);
 
-        return cached;
+        cachedByZone.put(cacheKey, artData);
+        return artData;
     }
 
     private Pattern[] loadNemesisPatterns(int artAddr) throws IOException {
@@ -352,6 +389,37 @@ public class Sonic2ObjectArt {
                     String.format("Failed to load uncompressed art '%s' at 0x%06X", assetName, artAddr), e);
             return new Pattern[0];
         }
+    }
+
+    private AnimalType[] resolveZoneAnimals(int zoneIndex) {
+        if (zoneIndex < 0 || zoneIndex >= ZONE_ANIMALS.length) {
+            return DEFAULT_ANIMALS;
+        }
+        return ZONE_ANIMALS[zoneIndex];
+    }
+
+    private Pattern[] loadAnimalPatterns(AnimalType animalTypeA, AnimalType animalTypeB) {
+        Pattern[] animalPatternsA = safeLoadNemesisPatterns(animalTypeA.artAddr(),
+                "Animal-" + animalTypeA.displayName());
+        Pattern[] animalPatternsB = safeLoadNemesisPatterns(animalTypeB.artAddr(),
+                "Animal-" + animalTypeB.displayName());
+        int minLength = ANIMAL_TILE_OFFSET * 2;
+        int combinedLength = Math.max(Math.max(animalPatternsA.length, ANIMAL_TILE_OFFSET + animalPatternsB.length),
+                minLength);
+        Pattern[] combined = new Pattern[combinedLength];
+        if (animalPatternsA.length > 0) {
+            System.arraycopy(animalPatternsA, 0, combined, 0, Math.min(animalPatternsA.length, combined.length));
+        }
+        if (animalPatternsB.length > 0 && ANIMAL_TILE_OFFSET < combined.length) {
+            int copyLength = Math.min(animalPatternsB.length, combined.length - ANIMAL_TILE_OFFSET);
+            System.arraycopy(animalPatternsB, 0, combined, ANIMAL_TILE_OFFSET, copyLength);
+        }
+        for (int i = 0; i < combined.length; i++) {
+            if (combined[i] == null) {
+                combined[i] = new Pattern();
+            }
+        }
+        return combined;
     }
 
     private List<SpriteMappingFrame> loadMappingFrames(int mappingAddr) {
@@ -839,22 +907,59 @@ public class Sonic2ObjectArt {
     }
 
     /**
-     * Creates mappings for Animal (Obj28) - Rabbit (Pocky).
-     * Based on obj28_e.asm (Rabbit).
+     * Creates mappings for Animal (Obj28) - all animal variants.
+     * Based on obj28_a-e.asm (S2 disassembly).
      */
     private List<SpriteMappingFrame> createAnimalMappings() {
         List<SpriteMappingFrame> frames = new ArrayList<>();
+        final int tileOffset = ANIMAL_TILE_OFFSET; // ArtTile_ArtNem_Animal_2 - ArtTile_ArtNem_Animal_1
 
-        // Frame 0: Map_obj28_e_0010 (-8, -12, 2x3, tile 6)
-        frames.add(createSimpleFrame(-8, -12, 2, 3, 6));
-
-        // Frame 1: Map_obj28_e_001A (-8, -12, 2x3, tile 12 ($C))
-        frames.add(createSimpleFrame(-8, -12, 2, 3, 12));
-
-        // Frame 2: Map_obj28_e_0006 (-8, -12, 2x3, tile 0)
-        frames.add(createSimpleFrame(-8, -12, 2, 3, 0));
-
+        addAnimalMappingSet(frames, 0); // Map_obj28_a (Animal_1)
+        addAnimalMappingSet(frames, tileOffset); // Map_obj28_a (Animal_2)
+        addAnimalMappingSetB(frames, 0);
+        addAnimalMappingSetB(frames, tileOffset);
+        addAnimalMappingSetC(frames, 0);
+        addAnimalMappingSetC(frames, tileOffset);
+        addAnimalMappingSetD(frames, 0);
+        addAnimalMappingSetD(frames, tileOffset);
+        addAnimalMappingSetE(frames, 0);
+        addAnimalMappingSetE(frames, tileOffset);
         return frames;
+    }
+
+    private void addAnimalMappingSet(List<SpriteMappingFrame> frames, int tileOffset) {
+        // Map_obj28_a: 0010, 001A, 0006
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 8 + tileOffset));
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0x0C + tileOffset));
+        frames.add(createSimpleFrame(-8, -0x14, 2, 4, 0 + tileOffset));
+    }
+
+    private void addAnimalMappingSetB(List<SpriteMappingFrame> frames, int tileOffset) {
+        // Map_obj28_b: 0010, 001A, 0006
+        frames.add(createSimpleFrame(-0x0C, -8, 3, 2, 8 + tileOffset));
+        frames.add(createSimpleFrame(-0x0C, -8, 3, 2, 0x0E + tileOffset));
+        frames.add(createSimpleFrame(-8, -0x14, 2, 4, 0 + tileOffset));
+    }
+
+    private void addAnimalMappingSetC(List<SpriteMappingFrame> frames, int tileOffset) {
+        // Map_obj28_c: 0010, 001A, 0006
+        frames.add(createSimpleFrame(-0x0C, -8, 3, 2, 6 + tileOffset));
+        frames.add(createSimpleFrame(-0x0C, -8, 3, 2, 0x0C + tileOffset));
+        frames.add(createSimpleFrame(-8, -0x0C, 2, 3, 0 + tileOffset));
+    }
+
+    private void addAnimalMappingSetD(List<SpriteMappingFrame> frames, int tileOffset) {
+        // Map_obj28_d: 0010, 001A, 0006
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 6 + tileOffset));
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0x0A + tileOffset));
+        frames.add(createSimpleFrame(-8, -0x0C, 2, 3, 0 + tileOffset));
+    }
+
+    private void addAnimalMappingSetE(List<SpriteMappingFrame> frames, int tileOffset) {
+        // Map_obj28_e: 0010, 001A, 0006
+        frames.add(createSimpleFrame(-8, -0x0C, 2, 3, 6 + tileOffset));
+        frames.add(createSimpleFrame(-8, -0x0C, 2, 3, 0x0C + tileOffset));
+        frames.add(createSimpleFrame(-8, -0x0C, 2, 3, 0 + tileOffset));
     }
 
     /**

@@ -9,6 +9,7 @@ import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.AnimatedPaletteProvider;
 import uk.co.jamesj999.sonic.data.AnimatedPatternProvider;
 import uk.co.jamesj999.sonic.data.ObjectArtProvider;
+import uk.co.jamesj999.sonic.data.ZoneAwareObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -16,14 +17,16 @@ import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
-import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
+import uk.co.jamesj999.sonic.game.LevelEventProvider;
+import uk.co.jamesj999.sonic.game.LevelState;
+import uk.co.jamesj999.sonic.game.RespawnState;
 import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
-import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
 import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
+import uk.co.jamesj999.sonic.level.objects.ObjectArtData;
 import uk.co.jamesj999.sonic.level.objects.HudRenderManager;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
@@ -80,6 +83,7 @@ public class LevelManager {
     private static final float SWITCHER_DEBUG_G = 0.55f;
     private static final float SWITCHER_DEBUG_B = 0.1f;
     private static final float SWITCHER_DEBUG_ALPHA = 0.35f;
+    private static final int OBJECT_PATTERN_BASE = 0x20000;
     private static LevelManager levelManager;
     private Level level;
     private Game game;
@@ -114,8 +118,8 @@ public class LevelManager {
     private HudRenderManager hudRenderManager;
     private AnimatedPatternManager animatedPatternManager;
     private AnimatedPaletteManager animatedPaletteManager;
-    private CheckpointState checkpointState;
-    private LevelGamestate levelGamestate;
+    private RespawnState checkpointState;
+    private LevelState levelGamestate;
 
     private boolean specialStageRequestedFromCheckpoint;
     private boolean titleCardRequested;
@@ -209,10 +213,10 @@ public class LevelManager {
             resetPlayerState();
             // Initialize checkpoint state for new level
             if (checkpointState == null) {
-                checkpointState = new CheckpointState();
+                checkpointState = gameModule.createRespawnState();
             }
             checkpointState.clear();
-            levelGamestate = new LevelGamestate();
+            levelGamestate = gameModule.createLevelState();
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -251,7 +255,7 @@ public class LevelManager {
         }
         if (levelGamestate != null) {
             levelGamestate.update();
-            if (levelGamestate.getTimer().isTimeOver() && playable != null && !playable.getDead()) {
+            if (levelGamestate.isTimeOver() && playable != null && !playable.getDead()) {
                 playable.applyHurtOrDeath(0, AbstractPlayableSprite.DamageCause.TIME_OVER, false);
             }
         }
@@ -264,7 +268,7 @@ public class LevelManager {
         planeSwitcherManager.update(player);
     }
 
-    public LevelGamestate getLevelGamestate() {
+    public LevelState getLevelGamestate() {
         return levelGamestate;
     }
 
@@ -333,19 +337,19 @@ public class LevelManager {
             return;
         }
         try {
-            var artData = provider.loadObjectArt();
+            ObjectArtData artData;
+            if (provider instanceof ZoneAwareObjectArtProvider zoneProvider && level != null) {
+                artData = zoneProvider.loadObjectArt(level.getZoneIndex());
+            } else {
+                artData = provider.loadObjectArt();
+            }
             if (artData == null) {
                 objectRenderManager = null;
                 return;
             }
             objectRenderManager = new ObjectRenderManager(artData);
-            int baseIndex = level != null ? level.getPatternCount() : 0;
-            RingSpriteSheet ringSpriteSheet = level != null ? level.getRingSpriteSheet() : null;
-            if (ringSpriteSheet != null) {
-                baseIndex += ringSpriteSheet.getPatterns().length;
-            }
-            LOGGER.info("Initializing Object Art. Base Index: " + baseIndex);
-            int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, baseIndex);
+            LOGGER.info("Initializing Object Art. Base Index: " + OBJECT_PATTERN_BASE);
+            int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, OBJECT_PATTERN_BASE);
 
             hudRenderManager = new HudRenderManager(graphicsManager);
 
@@ -1725,6 +1729,12 @@ public class LevelManager {
                     camera.setMinY((short) currentLevel.getMinY());
                     camera.setMaxY((short) currentLevel.getMaxY());
                 }
+
+                // Initialize level events for dynamic boundary updates (game-specific)
+                LevelEventProvider levelEvents = GameModuleRegistry.getCurrent().getLevelEventProvider();
+                if (levelEvents != null) {
+                    levelEvents.initLevel(currentZone, currentAct);
+                }
             }
 
             // Request title card for level starts and death respawns
@@ -1812,7 +1822,7 @@ public class LevelManager {
         return solidObjectManager;
     }
 
-    public CheckpointState getCheckpointState() {
+    public RespawnState getCheckpointState() {
         return checkpointState;
     }
 

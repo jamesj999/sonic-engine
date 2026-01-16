@@ -45,10 +45,9 @@ public class BuzzerBadnikInstance extends AbstractBadnikInstance {
         this.currentX = spawn.x();
         this.currentY = spawn.y();
 
-        // Initial direction based on render flags (like disassembly)
-        this.facingLeft = (spawn.renderFlags() & 0x01) != 0;
-        // facingLeft = true means moving left (negative X), so xVelocity should be
-        // negative
+        // ROM: x_vel starts at -$100 and is negated when x_flip is set.
+        boolean xFlip = (spawn.renderFlags() & 0x01) != 0;
+        this.facingLeft = !xFlip;
         this.xVelocity = facingLeft ? -X_VEL : X_VEL;
 
         this.state = State.ROAMING;

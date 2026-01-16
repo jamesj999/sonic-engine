@@ -12,7 +12,7 @@ Last updated: 2026-01-16
 - [ ] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct).
 - [x] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
 - [x] Objects still have collision in debug movement mode. (Fixed: Debug mode now skips all physics, collision, and damage processing. Toggled via configurable keybind - default 'D' key)
-- [ ] Camera maximum height is not yet implemented.
+- [x] Camera maximum height is not yet implemented. (Fixed: Added LevelEventManager for dynamic boundary updates with 2px/frame easing toward targets. Camera class now supports target-based boundaries matching ROM's Camera_Max_Y_pos_target system.)
 - [ ] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
 - [x] Finishing a special stage puts you at your last coordinates, instead of the coordinates of the last signpost (or, if none, fall back to act start position). (Fixed: CheckpointState now saves/restores camera position with checkpoint data, matching ROM's Obj79_SaveData/LoadData behavior)
 - [x] Both special stage and end of act cards shouldn't start counting the score until a set delay. (Fixed: Added STATE_PRE_TALLY_DELAY with ROM-accurate $B4/180 frame delay)
@@ -35,7 +35,7 @@ Each fix must be verified against the original `docs/s2disasm/` disassembly (REV
 | Special stage exit coords | Starpost save variables (`Saved_X/Y`), `GM_Special` exit | Distinguish starpost X/Y from entry X/Y; verify fallback logic |
 | Score tally delay | Results screen routine, frame counter before tally | Find exact delay value (likely ~120 frames) |
 | SS fade to white | `GM_Special` exit, palette fade routine | Verify fade direction (to white vs to black) |
-| Camera max height | Camera boundary routines, level header limits | Find vertical clamp values per zone |
+| Camera max height | Camera boundary routines, level header limits | Fixed: LevelEventManager + Camera target-based easing |
 | Sound discrepancies | FM operator levels, envelope handling, SFX priority | Compare against SMPSPlay reference per `docs/AudioParityPlan.md` |
 
 ## Verification Approach

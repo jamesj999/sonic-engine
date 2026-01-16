@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.titlecard;
 
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
+import uk.co.jamesj999.sonic.game.TitleCardProvider;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Pattern;
@@ -32,7 +33,7 @@ import java.util.logging.Logger;
  * SLIDE_IN → DISPLAY → SLIDE_OUT → COMPLETE
  * </pre>
  */
-public class TitleCardManager {
+public class TitleCardManager implements TitleCardProvider {
     private static final Logger LOGGER = Logger.getLogger(TitleCardManager.class.getName());
 
     private static TitleCardManager instance;

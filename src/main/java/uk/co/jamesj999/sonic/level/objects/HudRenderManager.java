@@ -1,7 +1,7 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import uk.co.jamesj999.sonic.game.GameStateManager;
-import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
+import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 import uk.co.jamesj999.sonic.camera.Camera;
@@ -71,11 +71,11 @@ public class HudRenderManager {
         this.livesNumbersPatternIndex = livesNumbersPatternIndex;
     }
 
-    public void draw(LevelGamestate levelGamestate) {
+    public void draw(LevelState levelGamestate) {
         draw(levelGamestate, null);
     }
 
-    public void draw(LevelGamestate levelGamestate, AbstractPlayableSprite player) {
+    public void draw(LevelState levelGamestate, AbstractPlayableSprite player) {
         if (levelGamestate == null)
             return;
 
@@ -108,21 +108,21 @@ public class HudRenderManager {
             drawSmallHexCoordinates(hexStartX, 16, camX, camY);
 
             // Draw Time below the debug coordinates
-            boolean flashTime = levelGamestate.getTimer().shouldFlash();
+            boolean flashTime = levelGamestate.shouldFlashTimer();
             drawHudString(16, 24, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
-            drawTime(56, 24, levelGamestate.getTimer().getDisplayTime());
+            drawTime(56, 24, levelGamestate.getDisplayTime());
         } else {
             // Normal gameplay: Draw Score
             drawHudString(16, 8, "SCORE", hudPatternDesc);
             drawScore(GameStateManager.getInstance().getScore());
 
             // Draw Time
-            boolean flashTime = levelGamestate.getTimer().shouldFlash();
+            boolean flashTime = levelGamestate.shouldFlashTimer();
             drawHudString(16, 24, "TIME", flashTime ? iconPatternDesc : hudPatternDesc);
-            drawTime(56, 24, levelGamestate.getTimer().getDisplayTime());
+            drawTime(56, 24, levelGamestate.getDisplayTime());
         }
 
-        drawCores(levelGamestate.getRings(), levelGamestate.getTimer().getFlashCycle());
+        drawCores(levelGamestate.getRings(), levelGamestate.getFlashCycle());
         drawLives(uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getLives());
     }
 

@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.game.RespawnState;
 import uk.co.jamesj999.sonic.game.sonic2.objects.CheckpointObjectInstance;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -12,7 +13,7 @@ import java.util.logging.Logger;
  * Based on the Sonic 2 disassembly's Saved_* variables.
  * </p>
  */
-public class CheckpointState {
+public class CheckpointState implements RespawnState {
     private static final Logger LOGGER = Logger.getLogger(CheckpointState.class.getName());
 
     private int lastCheckpointIndex = -1;

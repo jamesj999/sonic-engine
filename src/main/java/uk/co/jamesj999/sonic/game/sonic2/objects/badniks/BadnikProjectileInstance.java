@@ -24,8 +24,9 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         COCONUT
     }
 
-    private static final int COLLISION_SIZE_INDEX = 0x08; // From disassembly $98 & 0x3F
-    private static final int GRAVITY = 0x18; // Standard gravity
+    private static final int COLLISION_SIZE_STINGER = 0x18; // From disassembly $98 & 0x3F
+    private static final int COLLISION_SIZE_COCONUT = 0x0B; // From disassembly $8B & 0x3F
+    private static final int GRAVITY_COCONUT = 0x20; // Obj98_CoconutFall
 
     private final ProjectileType type;
     private int currentX;
@@ -33,6 +34,8 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
     private int xVelocity; // In subpixels
     private int yVelocity; // In subpixels
     private boolean applyGravity;
+    private int gravity;
+    private int collisionSizeIndex;
     private int animFrame;
     private boolean hFlip;
 
@@ -59,13 +62,23 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         this.applyGravity = gravity;
         this.animFrame = 0;
         this.hFlip = hFlip;
+        switch (type) {
+            case BUZZER_STINGER -> {
+                this.gravity = 0;
+                this.collisionSizeIndex = COLLISION_SIZE_STINGER;
+            }
+            case COCONUT -> {
+                this.gravity = GRAVITY_COCONUT;
+                this.collisionSizeIndex = COLLISION_SIZE_COCONUT;
+            }
+        }
     }
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
         // Apply gravity if enabled
         if (applyGravity) {
-            yVelocity += GRAVITY;
+            yVelocity += gravity;
         }
 
         // Update position (velocities are in subpixels, shift by 8)
@@ -73,7 +86,7 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         currentY += (yVelocity >> 8);
 
         // Check if off-screen and destroy
-        if (isOffScreen()) {
+        if (!isOnScreen()) {
             setDestroyed(true);
         }
 
@@ -81,17 +94,23 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         animFrame = ((frameCounter >> 2) & 1);
     }
 
-    private boolean isOffScreen() {
-        // Destroy if too far from spawn point or below screen
-        int distX = Math.abs(currentX - spawn.x());
-        int distY = currentY - spawn.y();
-        return distX > 400 || distY > 400 || currentY > 2000;
+    private boolean isOnScreen() {
+        uk.co.jamesj999.sonic.camera.Camera camera = uk.co.jamesj999.sonic.camera.Camera.getInstance();
+        int camX = camera.getX();
+        int camY = camera.getY();
+        int width = camera.getWidth();
+        int height = camera.getHeight();
+        int margin = 32;
+        return currentX >= camX - margin
+                && currentX <= camX + width + margin
+                && currentY >= camY - margin
+                && currentY <= camY + height + margin;
     }
 
     @Override
     public int getCollisionFlags() {
         // HURT category (0x80) + size index
-        return 0x80 | (COLLISION_SIZE_INDEX & 0x3F);
+        return 0x80 | (collisionSizeIndex & 0x3F);
     }
 
     @Override

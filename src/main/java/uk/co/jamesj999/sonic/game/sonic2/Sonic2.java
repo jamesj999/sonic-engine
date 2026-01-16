@@ -6,7 +6,7 @@ import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.data.AnimatedPaletteProvider;
 import uk.co.jamesj999.sonic.data.AnimatedPatternProvider;
 import uk.co.jamesj999.sonic.data.Game;
-import uk.co.jamesj999.sonic.data.ObjectArtProvider;
+import uk.co.jamesj999.sonic.data.ZoneAwareObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -28,7 +28,7 @@ import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants.*
 import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants.*;
 
 public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDustArtProvider,
-        ObjectArtProvider, AnimatedPatternProvider, AnimatedPaletteProvider {
+        ZoneAwareObjectArtProvider, AnimatedPatternProvider, AnimatedPaletteProvider {
 
     private final Rom rom;
     private RomByteReader romReader;
@@ -308,11 +308,16 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
 
     @Override
     public ObjectArtData loadObjectArt() throws IOException {
+        return loadObjectArt(-1);
+    }
+
+    @Override
+    public ObjectArtData loadObjectArt(int zoneIndex) throws IOException {
         ensurePlacementHelpers();
         if (objectArt == null) {
             return null;
         }
-        return objectArt.load();
+        return objectArt.loadForZone(zoneIndex);
     }
 
     @Override
