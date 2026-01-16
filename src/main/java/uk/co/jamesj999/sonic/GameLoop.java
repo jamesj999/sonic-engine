@@ -724,6 +724,10 @@ public class GameLoop {
 
     /**
      * Exits the title card and returns to level mode.
+     * Note: We do NOT reset the title card manager here because the overlay
+     * (TEXT_WAIT and TEXT_EXIT phases) still needs to run. The title card
+     * will reset itself when it reaches COMPLETE state, or when a new
+     * title card is initialized.
      */
     private void exitTitleCard() {
         if (currentGameMode != GameMode.TITLE_CARD) {
@@ -733,8 +737,8 @@ public class GameLoop {
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.LEVEL;
 
-        // Reset title card manager
-        titleCardManager.reset();
+        // Don't reset title card - overlay phases (TEXT_WAIT, TEXT_EXIT) still need to run
+        // titleCardManager.reset();
 
         if (returningFromSpecialStage) {
             // Returning from special stage - checkpoint was already restored in enterTitleCardFromResults()
