@@ -5,10 +5,15 @@ import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.game.GameModule;
+import uk.co.jamesj999.sonic.game.LevelEventProvider;
+import uk.co.jamesj999.sonic.game.LevelState;
+import uk.co.jamesj999.sonic.game.RespawnState;
+import uk.co.jamesj999.sonic.game.TitleCardProvider;
 import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2AudioProfile;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectConstants;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
 import uk.co.jamesj999.sonic.game.sonic2.objects.Sonic2ObjectRegistry;
+import uk.co.jamesj999.sonic.game.sonic2.titlecard.TitleCardManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRegistry;
 import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherConfig;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
@@ -55,5 +60,25 @@ public class Sonic2GameModule implements GameModule {
                 Sonic2ObjectConstants.PATH0_LRB_SOLID_BIT,
                 Sonic2ObjectConstants.PATH1_TOP_SOLID_BIT,
                 Sonic2ObjectConstants.PATH1_LRB_SOLID_BIT);
+    }
+
+    @Override
+    public LevelEventProvider getLevelEventProvider() {
+        return LevelEventManager.getInstance();
+    }
+
+    @Override
+    public RespawnState createRespawnState() {
+        return new CheckpointState();
+    }
+
+    @Override
+    public LevelState createLevelState() {
+        return new LevelGamestate();
+    }
+
+    @Override
+    public TitleCardProvider getTitleCardProvider() {
+        return TitleCardManager.getInstance();
     }
 }

@@ -15,6 +15,19 @@ public class Camera {
 	private short maxX;
 	private short maxY;
 
+	// Target boundaries for smooth easing (ROM: Camera_Max_Y_pos_target, etc.)
+	private short minXTarget;
+	private short minYTarget;
+	private short maxXTarget;
+	private short maxYTarget;
+
+	// ROM uses 2 pixels per frame for boundary easing
+	private static final short BOUNDARY_EASE_STEP = 2;
+
+	// Flag indicating boundary is actively changing (ROM: Camera_Max_Y_Pos_Changing)
+	// When true, normal vertical scroll rules may be modified
+	private boolean maxYChanging = false;
+
 	private int framesBehind = 0;
 
 	private boolean frozen = false;
@@ -178,6 +191,88 @@ public class Camera {
 		return frozen;
 	}
 
+	/**
+	 * Updates boundary easing - call once per frame.
+	 * ROM behavior from RunDynamicLevelEvents (s2.asm:20297-20332):
+	 * - Eases maxY toward target at 2px/frame (or 8px if accelerated)
+	 * - When decreasing: if camera Y > target, snap maxY to camera Y first, then subtract
+	 * - When increasing: if camera Y+8 >= maxY AND player airborne, use 4x speed (8px/frame)
+	 * - Sets maxYChanging flag while boundary is transitioning
+	 */
+	public void updateBoundaryEasing() {
+		maxYChanging = false;
+
+		// Ease maxY toward target (ROM: s2.asm:20303-20332)
+		if (maxY != maxYTarget) {
+			short step = BOUNDARY_EASE_STEP; // d1 = 2
+			short diff = (short) (maxYTarget - maxY);
+
+			if (diff < 0) {
+				// Decreasing max Y (target < current) - ROM lines 20308-20316
+				step = (short) -BOUNDARY_EASE_STEP; // neg.w d1
+
+				// If camera Y > target, snap maxY to camera Y first
+				if (y > maxYTarget) {
+					maxY = (short) (y & 0xFFFE); // Align to even pixels
+				}
+				// Always add step (subtract 2) after potential snap
+				maxY += step;
+			} else {
+				// Increasing max Y (target > current) - ROM lines 20320-20331
+				// Check for acceleration: camera Y + 8 >= maxY AND player airborne
+				if (focusedSprite != null && (y + 8) >= maxY && focusedSprite.getAir()) {
+					step = (short) (BOUNDARY_EASE_STEP * 4); // 8 pixels/frame
+				}
+				maxY += step;
+			}
+
+			// Clamp to target if we overshot
+			if ((diff > 0 && maxY > maxYTarget) || (diff < 0 && maxY < maxYTarget)) {
+				maxY = maxYTarget;
+			}
+
+			maxYChanging = true;
+		}
+
+		// Ease minY toward target (simple 2px/frame, no acceleration)
+		if (minY != minYTarget) {
+			short diff = (short) (minYTarget - minY);
+			if (diff > 0) {
+				minY += Math.min(diff, BOUNDARY_EASE_STEP);
+			} else {
+				minY += Math.max(diff, -BOUNDARY_EASE_STEP);
+			}
+		}
+
+		// Ease maxX toward target
+		if (maxX != maxXTarget) {
+			short diff = (short) (maxXTarget - maxX);
+			if (diff > 0) {
+				maxX += Math.min(diff, BOUNDARY_EASE_STEP);
+			} else {
+				maxX += Math.max(diff, -BOUNDARY_EASE_STEP);
+			}
+		}
+
+		// Ease minX toward target
+		if (minX != minXTarget) {
+			short diff = (short) (minXTarget - minX);
+			if (diff > 0) {
+				minX += Math.min(diff, BOUNDARY_EASE_STEP);
+			} else {
+				minX += Math.max(diff, -BOUNDARY_EASE_STEP);
+			}
+		}
+	}
+
+	/**
+	 * Returns true if maxY is currently easing toward its target.
+	 * ROM: Camera_Max_Y_Pos_Changing flag
+	 */
+	public boolean isMaxYChanging() {
+		return maxYChanging;
+	}
+
 	public boolean isOnScreen(Sprite sprite) {
 		int xLower = x;
 		int yLower = y;
@@ -227,32 +322,101 @@ public class Camera {
 		return minX;
 	}
 
+	/**
+	 * Sets minX immediately (both current and target).
+	 * Use setMinXTarget() for smooth easing.
+	 */
 	public void setMinX(short minX) {
 		this.minX = minX;
+		this.minXTarget = minX;
+	}
+
+	/**
+	 * Sets minX target for smooth easing.
+	 * Current minX will ease toward this value at 2px/frame.
+	 */
+	public void setMinXTarget(short minXTarget) {
+		this.minXTarget = minXTarget;
+	}
+
+	public short getMinXTarget() {
+		return minXTarget;
 	}
 
 	public short getMinY() {
 		return minY;
 	}
 
+	/**
+	 * Sets minY immediately (both current and target).
+	 * Use setMinYTarget() for smooth easing.
+	 */
 	public void setMinY(short minY) {
 		this.minY = minY;
+		this.minYTarget = minY;
+	}
+
+	/**
+	 * Sets minY target for smooth easing.
+	 * Current minY will ease toward this value at 2px/frame.
+	 */
+	public void setMinYTarget(short minYTarget) {
+		this.minYTarget = minYTarget;
+	}
+
+	public short getMinYTarget() {
+		return minYTarget;
 	}
 
 	public short getMaxX() {
 		return maxX;
 	}
 
+	/**
+	 * Sets maxX immediately (both current and target).
+	 * Use setMaxXTarget() for smooth easing.
+	 */
 	public void setMaxX(short maxX) {
 		this.maxX = maxX;
+		this.maxXTarget = maxX;
+	}
+
+	/**
+	 * Sets maxX target for smooth easing.
+	 * Current maxX will ease toward this value at 2px/frame.
+	 */
+	public void setMaxXTarget(short maxXTarget) {
+		this.maxXTarget = maxXTarget;
+	}
+
+	public short getMaxXTarget() {
+		return maxXTarget;
 	}
 
 	public short getMaxY() {
 		return maxY;
 	}
 
+	/**
+	 * Sets maxY immediately (both current and target).
+	 * Use setMaxYTarget() for smooth easing.
+	 */
 	public void setMaxY(short maxY) {
 		this.maxY = maxY;
+		this.maxYTarget = maxY;
+	}
+
+	/**
+	 * Sets maxY target for smooth easing.
+	 * Current maxY will ease toward this value at 2px/frame.
+	 * ROM: Camera_Max_Y_pos_target
+	 */
+	public void setMaxYTarget(short maxYTarget) {
+		this.maxYTarget = maxYTarget;
+	}
+
+	public short getMaxYTarget() {
+		return maxYTarget;
 	}
 
 	public void incrementX(short amount) {

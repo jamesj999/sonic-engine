@@ -47,6 +47,8 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet coconutsSheet;
     private final ObjectSpriteSheet animalSheet;
     private final ObjectSpriteSheet pointsSheet;
+    private final int animalTypeA;
+    private final int animalTypeB;
 
     // Signpost
     private final ObjectSpriteSheet signpostSheet;
@@ -116,6 +118,8 @@ public class ObjectRenderManager {
         this.coconutsSheet = artData.coconutsSheet();
         this.animalSheet = artData.animalSheet();
         this.pointsSheet = artData.pointsSheet();
+        this.animalTypeA = artData.getAnimalTypeA();
+        this.animalTypeB = artData.getAnimalTypeB();
 
         // Signpost
         this.signpostSheet = artData.signpostSheet();
@@ -317,6 +321,14 @@ public class ObjectRenderManager {
 
     public PatternSpriteRenderer getPointsRenderer() {
         return pointsRenderer;
+    }
+
+    public int getAnimalTypeA() {
+        return animalTypeA;
+    }
+
+    public int getAnimalTypeB() {
+        return animalTypeB;
     }
 
     public PatternSpriteRenderer getSignpostRenderer() {

@@ -66,7 +66,7 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
         this.cameraLockFlag = (spawn.subtype() & 0x80) != 0;
 
         // Check if already activated (respawn persistence)
-        CheckpointState checkpointState = LevelManager.getInstance().getCheckpointState();
+        var checkpointState = LevelManager.getInstance().getCheckpointState();
         if (checkpointState != null && checkpointState.getLastCheckpointIndex() >= this.checkpointIndex) {
             this.activated = true;
             this.animId = ANIM_BLINKING;
@@ -117,7 +117,7 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
 
     private void checkActivation(AbstractPlayableSprite player) {
         // Guard: don't activate if a higher/equal checkpoint was already hit
-        CheckpointState checkpointState = LevelManager.getInstance().getCheckpointState();
+        var checkpointState = LevelManager.getInstance().getCheckpointState();
         if (checkpointState == null) {
             return;
         }
@@ -149,7 +149,9 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
         }
 
         // Activate!
-        activate(player, checkpointState);
+        if (checkpointState instanceof CheckpointState cs) {
+            activate(player, cs);
+        }
     }
 
     private void activate(AbstractPlayableSprite player, CheckpointState checkpointState) {

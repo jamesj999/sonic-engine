@@ -13,110 +13,178 @@ import java.util.List;
 
 public class AnimalObjectInstance extends uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance {
     private static final int GRAVITY = 0x38;
-    private static final int JUMP_VELOCITY = -0x400; // -4.0
-    private static final int MOVE_VELOCITY = 0x200; // 2.0 (Direction dependant)
+    private static final int FLY_GRAVITY = 0x18;
+    private static final int INITIAL_POP_VEL = -0x400;
+    private static final int ANIM_TIMER_INIT = 7;
+    private static final int FRAMES_PER_MAPPING = 3;
+    private static final int ART_VARIANT_COUNT = 2;
+
+    private enum State {
+        MAIN,
+        WALK,
+        FLY
+    }
 
     private final PatternSpriteRenderer renderer;
     private final LevelManager levelManager;
     private int currentX;
     private int currentY;
-    private short xVelocity;
-    private short yVelocity;
-    private int animTimer;
+    private int xVelocity;
+    private int yVelocity;
+    private int groundXVelocity;
+    private int groundYVelocity;
+    private int animFrameTimer;
     private int animFrame;
+    private int mappingSetIndex;
+    private int artVariant;
+    private State state;
+    private AnimalType definition;
 
     public AnimalObjectInstance(ObjectSpawn spawn, LevelManager levelManager) {
         super(spawn, "Animal");
         this.levelManager = levelManager;
         ObjectRenderManager renderManager = levelManager.getObjectRenderManager();
-        this.renderer = renderManager.getAnimalRenderer();
+        this.renderer = renderManager != null ? renderManager.getAnimalRenderer() : null;
         this.currentX = spawn.x();
         this.currentY = spawn.y();
+        this.animFrameTimer = ANIM_TIMER_INIT;
+        this.animFrame = 2;
+        this.state = State.MAIN;
 
-        // Initial setup
-        this.yVelocity = -0x400; // Initial pop up
-        this.xVelocity = (short) (Math.random() > 0.5 ? MOVE_VELOCITY : -MOVE_VELOCITY);
+        int typeA = AnimalType.RABBIT.ordinal();
+        int typeB = AnimalType.RABBIT.ordinal();
+        if (renderManager != null) {
+            typeA = renderManager.getAnimalTypeA();
+            typeB = renderManager.getAnimalTypeB();
+        }
+
+        this.artVariant = java.util.concurrent.ThreadLocalRandom.current().nextInt(ART_VARIANT_COUNT);
+        int animalIndex = artVariant == 0 ? typeA : typeB;
+        this.definition = AnimalType.fromIndex(animalIndex);
+        this.mappingSetIndex = definition.mappingSet().ordinal();
+        this.groundXVelocity = definition.xVel();
+        this.groundYVelocity = definition.yVel();
+        this.xVelocity = 0;
+        this.yVelocity = INITIAL_POP_VEL;
     }
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        // Physics
-        yVelocity += GRAVITY;
-
-        // Apply movement
-        currentX += (xVelocity >> 8);
-        currentY += (yVelocity >> 8);
-
-        // Floor Collision
-        if (yVelocity >= 0) { // Only check when falling
-            checkFloorCollision();
+        switch (state) {
+            case MAIN -> updateMain();
+            case WALK -> updateWalk();
+            case FLY -> updateFly();
         }
+    }
 
-        // Animation
-        animTimer--;
-        if (animTimer <= 0) {
-            animTimer = 4; // Fast cycle
-            animFrame = (animFrame + 1) % 2; // Cycle 0, 1
+    private void updateMain() {
+        objectMoveAndFall();
+        if (yVelocity >= 0 && checkFloorCollision()) {
+            xVelocity = groundXVelocity;
+            yVelocity = groundYVelocity;
+            animFrame = 1;
+            state = definition.flying() ? State.FLY : State.WALK;
         }
-
-        // Despawn
         if (!onScreen(64)) {
             setDestroyed(true);
         }
     }
 
-    private void checkFloorCollision() {
-        // Simple check at bottom center
-        int checkX = currentX;
-        int checkY = currentY + 12; // Radius approx 12 (offset from center)
-
-        // Access Level Data
-        uk.co.jamesj999.sonic.level.ChunkDesc chunk = levelManager.getChunkDescAt((byte) 0, checkX, checkY);
-        if (chunk == null)
-            return;
-
-        // Check for solid tile (using generic index 0 for top solidity)
-        // This is a simplification. Real animals check specific solidity bits.
-        // But for visual effect, standard top-solidity is enough.
-        int solidityBit = 0; // Top solidity
-        if (chunk.isSolidityBitSet(solidityBit)) {
-            uk.co.jamesj999.sonic.level.SolidTile tile = levelManager.getSolidTileForChunkDesc(chunk, solidityBit);
-            if (tile != null) {
-                // Found solid ground! Bounce!
-                // Reset Y to align with block?
-                // (Simplified: Just bounce and adjust slightly up to avoid sticking)
-
-                // Get block top Y
-                int blockTop = (checkY & ~15); // Round down to 16x16 grid
-                // Adjust Y relative to tile height would be better, but simple bounce works
-
-                // Check if actually inside the solid part (height map)
-                int indexInBlock = checkX & 15;
-                if (chunk.getHFlip())
-                    indexInBlock = 15 - indexInBlock;
-                int height = tile.getHeightAt((byte) indexInBlock);
-
-                if (height > 0) {
-                    int surfaceY = (blockTop + 16 - height);
-                    if (checkY >= surfaceY) {
-                        // Landed
-                        currentY = surfaceY - 12; // Reposition
-                        yVelocity = JUMP_VELOCITY; // Bounce
-                        // Update X velocity (hacky friction/randomness or standard bounce?)
-                        // Standard animals just keep X velocity usually, or stop if wall.
-                        // We keep X velocity.
-                    }
-                }
+    private void updateWalk() {
+        objectMoveAndFall();
+        animFrame = 1;
+        if (yVelocity >= 0) {
+            animFrame = 0;
+            if (checkFloorCollision()) {
+                yVelocity = groundYVelocity;
             }
         }
+        if (!onScreen(64)) {
+            setDestroyed(true);
+        }
+    }
+
+    private void updateFly() {
+        objectMove();
+        yVelocity += FLY_GRAVITY;
+        if (yVelocity >= 0 && checkFloorCollision()) {
+            yVelocity = groundYVelocity;
+        }
+
+        animFrameTimer--;
+        if (animFrameTimer < 0) {
+            animFrameTimer = 1;
+            animFrame = (animFrame + 1) & 1;
+        }
+
+        if (!onScreen(64)) {
+            setDestroyed(true);
+        }
+    }
+
+    private void objectMoveAndFall() {
+        yVelocity += GRAVITY;
+        objectMove();
+    }
+
+    private void objectMove() {
+        currentX += (xVelocity >> 8);
+        currentY += (yVelocity >> 8);
+    }
+
+    private boolean checkFloorCollision() {
+        int checkX = currentX;
+        int checkY = currentY + 12;
+
+        uk.co.jamesj999.sonic.level.ChunkDesc chunk = levelManager.getChunkDescAt((byte) 0, checkX, checkY);
+        if (chunk == null) {
+            return false;
+        }
+
+        int solidityBit = 0;
+        if (!chunk.isSolidityBitSet(solidityBit)) {
+            return false;
+        }
+
+        uk.co.jamesj999.sonic.level.SolidTile tile = levelManager.getSolidTileForChunkDesc(chunk, solidityBit);
+        if (tile == null) {
+            return false;
+        }
+
+        int blockTop = (checkY & ~15);
+        int indexInBlock = checkX & 15;
+        if (chunk.getHFlip()) {
+            indexInBlock = 15 - indexInBlock;
+        }
+        int height = tile.getHeightAt((byte) indexInBlock);
+        if (height <= 0) {
+            return false;
+        }
+
+        int surfaceY = blockTop + 16 - height;
+        if (checkY < surfaceY) {
+            return false;
+        }
+
+        currentY = surfaceY - 12;
+        return true;
+    }
+
+    private int getFrameIndex() {
+        int base = ((mappingSetIndex * ART_VARIANT_COUNT) + artVariant) * FRAMES_PER_MAPPING;
+        return base + animFrame;
     }
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (isDestroyed())
+        if (isDestroyed()) {
             return;
+        }
+        if (renderer == null || !renderer.isReady()) {
+            return;
+        }
         boolean hFlip = xVelocity < 0;
-        renderer.drawFrameIndex(animFrame, currentX, currentY, hFlip, false);
+        renderer.drawFrameIndex(getFrameIndex(), currentX, currentY, hFlip, false);
     }
 
     private boolean onScreen(int margin) {

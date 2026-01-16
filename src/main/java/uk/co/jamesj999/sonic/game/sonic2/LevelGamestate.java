@@ -1,12 +1,14 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
+import uk.co.jamesj999.sonic.game.LevelState;
+
 /**
  * Manages transient state for a single level execution, such as Rings and Time.
  * Typically reset when a level is loaded or restarted (except checkpoints?).
  * Rings are always reset on level load/respawn (unless specialized checkout
  * logic exists, but normally 0).
  */
-public class LevelGamestate {
+public class LevelGamestate implements LevelState {
     private final LevelTimer timer;
     private int rings;
 
@@ -50,5 +52,30 @@ public class LevelGamestate {
                 }
             }
         }
+    }
+
+    @Override
+    public boolean isTimeOver() {
+        return timer.isTimeOver();
+    }
+
+    @Override
+    public String getDisplayTime() {
+        return timer.getDisplayTime();
+    }
+
+    @Override
+    public boolean shouldFlashTimer() {
+        return timer.shouldFlash();
+    }
+
+    @Override
+    public boolean getFlashCycle() {
+        return timer.getFlashCycle();
+    }
+
+    @Override
+    public void pauseTimer() {
+        timer.pause();
     }
 }

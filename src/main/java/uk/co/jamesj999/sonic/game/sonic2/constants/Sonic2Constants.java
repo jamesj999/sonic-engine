@@ -129,7 +129,21 @@ public class Sonic2Constants {
     public static final int ART_NEM_BUZZER_ADDR = 0x8316A; // 28 blocks
     public static final int ART_NEM_MASHER_ADDR = 0x839EA; // 22 blocks
     public static final int ART_NEM_COCONUTS_ADDR = 0x8A87A; // 38 blocks
-    public static final int ART_NEM_ANIMAL_ADDR = 0x7FDD2; // Rabbit (Pocky)
+    public static final int ART_NEM_ANIMAL_ADDR = 0x7FDD2; // Rabbit (Pocky) fallback
+
+    // Animal art (Nemesis compressed, verified offsets)
+    public static final int ART_NEM_FLICKY_ADDR = 0x7EF60;
+    public static final int ART_NEM_SQUIRREL_ADDR = 0x7F0A2;
+    public static final int ART_NEM_MOUSE_ADDR = 0x7F206;
+    public static final int ART_NEM_CHICKEN_ADDR = 0x7F340;
+    public static final int ART_NEM_MONKEY_ADDR = 0x7F4A2;
+    public static final int ART_NEM_EAGLE_ADDR = 0x7F5E2;
+    public static final int ART_NEM_PIG_ADDR = 0x7F710;
+    public static final int ART_NEM_SEAL_ADDR = 0x7F846;
+    public static final int ART_NEM_PENGUIN_ADDR = 0x7F962;
+    public static final int ART_NEM_TURTLE_ADDR = 0x7FADE;
+    public static final int ART_NEM_BEAR_ADDR = 0x7FC90;
+    public static final int ART_NEM_RABBIT_ADDR = 0x7FDD2;
 
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)

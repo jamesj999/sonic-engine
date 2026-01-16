@@ -15,78 +15,164 @@ import java.util.List;
  * Climbs up and down a tree and throws coconut projectiles at the player.
  */
 public class CoconutsBadnikInstance extends AbstractBadnikInstance {
-    private static final int COLLISION_SIZE_INDEX = 0x0B;
-    private static final int CLIMB_SPEED = 1; // Pixels per frame
-    private static final int CLIMB_RANGE = 64; // Distance to climb up/down
-    private static final int THROW_INTERVAL = 120; // Frames between throws
-    private static final int ANIM_SPEED = 8;
+    private static final int COLLISION_SIZE_INDEX = 0x09;
+    private static final int IDLE_TIMER_INIT = 0x10;
+    private static final int ATTACK_TIMER_RESET = 0x20;
+    private static final int THROW_TIMER_INIT = 0x08;
+    private static final int THROW_RANGE = 0x60;
+    private static final int THROW_X_OFFSET = 0x0B;
+    private static final int THROW_Y_OFFSET = -0x0D;
+    private static final int THROW_X_VEL = 0x100;
+    private static final int THROW_Y_VEL = -0x100;
+    private static final int CLIMB_ANIM_SPEED = 5;
+    private static final int[][] CLIMB_DATA = {
+            { -1, 0x20 },
+            { 1, 0x18 },
+            { -1, 0x10 },
+            { 1, 0x28 },
+            { -1, 0x20 },
+            { 1, 0x10 }
+    };
 
-    private final int baseY;
-    private int climbDirection; // 1 = down, -1 = up
-    private int throwTimer;
+    private enum State {
+        IDLE,
+        CLIMBING,
+        THROWING
+    }
+
+    private enum ThrowState {
+        HAND_RAISED,
+        HAND_LOWERED
+    }
+
+    private int timer;
+    private int climbTableIndex;
+    private int attackTimer;
+    private int yVelocity;
+    private State state;
+    private ThrowState throwState;
 
     public CoconutsBadnikInstance(ObjectSpawn spawn, LevelManager levelManager) {
         super(spawn, levelManager, "Coconuts");
-        this.baseY = spawn.y();
-        this.currentY = baseY;
+        this.currentY = spawn.y();
         this.currentX = spawn.x();
-        this.climbDirection = -1; // Start climbing up
-        this.throwTimer = THROW_INTERVAL;
+        this.timer = IDLE_TIMER_INIT;
+        this.climbTableIndex = 0;
+        this.attackTimer = 0;
+        this.yVelocity = 0;
+        this.state = State.IDLE;
+        this.throwState = ThrowState.HAND_RAISED;
     }
 
     @Override
     protected void updateMovement(int frameCounter, AbstractPlayableSprite player) {
-        // Climb up and down
-        currentY += climbDirection * CLIMB_SPEED;
-
-        // Check if we've reached the climbing limits
-        if (climbDirection < 0 && currentY <= baseY - CLIMB_RANGE) {
-            // Reached top, start going down
-            climbDirection = 1;
-        } else if (climbDirection > 0 && currentY >= baseY) {
-            // Reached bottom, start going up
-            climbDirection = -1;
-        }
-
-        // Throw projectiles periodically
-        throwTimer--;
-        if (throwTimer <= 0 && player != null) {
-            throwCoconut(player);
-            throwTimer = THROW_INTERVAL;
-        }
-
-        // X position stays fixed
         currentX = spawn.x();
+        switch (state) {
+            case IDLE -> updateIdle(player);
+            case CLIMBING -> updateClimbing();
+            case THROWING -> updateThrowing();
+        }
     }
 
-    private void throwCoconut(AbstractPlayableSprite player) {
-        // Coconut arcs toward player
-        int xDiff = player.getCentreX() - currentX;
-        int xVel = xDiff > 0 ? 0x100 : -0x100; // Throw toward player
-        int yVel = -0x200; // Throw upward, gravity will arc it down
-        boolean hFlip = xDiff < 0;
+    private void updateIdle(AbstractPlayableSprite player) {
+        if (player != null) {
+            facingLeft = player.getCentreX() < currentX;
+            int distance = Math.abs(player.getCentreX() - currentX);
+            if (distance < THROW_RANGE) {
+                if (attackTimer == 0) {
+                    startThrowing();
+                    return;
+                }
+                attackTimer--;
+            }
+        }
+
+        timer--;
+        if (timer < 0) {
+            state = State.CLIMBING;
+            setClimbingDirection();
+        }
+    }
+
+    private void updateClimbing() {
+        timer--;
+        if (timer <= 0) {
+            state = State.IDLE;
+            timer = IDLE_TIMER_INIT;
+            return;
+        }
+
+        currentY += (yVelocity >> 8);
+    }
+
+    private void updateThrowing() {
+        timer--;
+        if (timer >= 0) {
+            return;
+        }
+
+        if (throwState == ThrowState.HAND_RAISED) {
+            throwState = ThrowState.HAND_LOWERED;
+            timer = THROW_TIMER_INIT;
+            animFrame = 2;
+            throwCoconut();
+            return;
+        }
+
+        throwState = ThrowState.HAND_RAISED;
+        state = State.CLIMBING;
+        setClimbingDirection();
+    }
+
+    private void startThrowing() {
+        state = State.THROWING;
+        throwState = ThrowState.HAND_RAISED;
+        animFrame = 1;
+        timer = THROW_TIMER_INIT;
+        attackTimer = ATTACK_TIMER_RESET;
+    }
+
+    private void setClimbingDirection() {
+        if (climbTableIndex >= CLIMB_DATA.length) {
+            climbTableIndex = 0;
+        }
+        int[] entry = CLIMB_DATA[climbTableIndex++];
+        yVelocity = entry[0] << 8;
+        timer = entry[1];
+    }
+
+    private void throwCoconut() {
+        int xOffset;
+        int xVel;
+        if (facingLeft) {
+            xOffset = THROW_X_OFFSET;
+            xVel = -THROW_X_VEL;
+        } else {
+            xOffset = -THROW_X_OFFSET;
+            xVel = THROW_X_VEL;
+        }
 
         BadnikProjectileInstance projectile = new BadnikProjectileInstance(
                 spawn,
                 BadnikProjectileInstance.ProjectileType.COCONUT,
-                currentX + (hFlip ? -8 : 8),
-                currentY - 8,
+                currentX + xOffset,
+                currentY + THROW_Y_OFFSET,
                 xVel,
-                yVel,
-                true, // Gravity affects coconuts
-                hFlip);
+                THROW_Y_VEL,
+                true,
+                !facingLeft);
 
         LevelManager.getInstance().getObjectManager().addDynamicObject(projectile);
     }
 
     @Override
     protected void updateAnimation(int frameCounter) {
-        // Alternate between climbing frames 0 and 1
-        // Frame 2 is used when throwing
-        if (throwTimer > THROW_INTERVAL - 10) {
-            animFrame = 2; // Throwing frame
-        } else {
-            animFrame = ((frameCounter / ANIM_SPEED) & 1);
+        if (state == State.THROWING) {
+            animFrame = (throwState == ThrowState.HAND_RAISED) ? 1 : 2;
+            return;
+        }
+        if (state == State.CLIMBING) {
+            animFrame = ((frameCounter / CLIMB_ANIM_SPEED) & 1);
         }
     }
 
@@ -97,7 +183,7 @@ public class CoconutsBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public int getPriorityBucket() {
-        return RenderPriority.clamp(4);
+        return RenderPriority.clamp(5);
     }
 
     @Override
@@ -116,8 +202,7 @@ public class CoconutsBadnikInstance extends AbstractBadnikInstance {
             return;
         }
 
-        // Coconuts always faces right (toward player typically)
-        boolean hFlip = false;
+        boolean hFlip = !facingLeft;
         boolean vFlip = false;
         renderer.drawFrameIndex(animFrame, currentX, currentY, hFlip, vFlip);
     }

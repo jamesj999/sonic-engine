@@ -21,8 +21,8 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.game.GameMode;
+import uk.co.jamesj999.sonic.game.TitleCardProvider;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
-import uk.co.jamesj999.sonic.game.sonic2.titlecard.TitleCardManager;
 
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
@@ -251,9 +251,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 			graphicsManager.resetForFixedFunction();
 
 			// Render title card overlay in screen-space (independent of camera)
-			TitleCardManager titleCardManager = gameLoop.getTitleCardManager();
-			if (titleCardManager != null) {
-				titleCardManager.draw();
+			TitleCardProvider titleCardProvider = gameLoop.getTitleCardProvider();
+			if (titleCardProvider != null) {
+				titleCardProvider.draw();
 				// Title card commands will be flushed with screen-space camera
 				graphicsManager.flushScreenSpace();
 			}
@@ -262,11 +262,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 			// Draw title card text overlay if still active (TEXT_WAIT/TEXT_EXIT phases)
 			// Player control has been released but text is still sliding off
-			TitleCardManager levelTitleCardManager = gameLoop.getTitleCardManager();
-			if (levelTitleCardManager != null && levelTitleCardManager.isOverlayActive()) {
+			TitleCardProvider levelTitleCardProvider = gameLoop.getTitleCardProvider();
+			if (levelTitleCardProvider != null && levelTitleCardProvider.isOverlayActive()) {
 				graphicsManager.flush();
 				graphicsManager.resetForFixedFunction();
-				levelTitleCardManager.draw();
+				levelTitleCardProvider.draw();
 				graphicsManager.flushScreenSpace();
 			}
 		} else {
@@ -278,11 +278,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 			}
 
 			// Draw title card text overlay if still active (even in debug view)
-			TitleCardManager debugTitleCardManager = gameLoop.getTitleCardManager();
-			if (debugTitleCardManager != null && debugTitleCardManager.isOverlayActive()) {
+			TitleCardProvider debugTitleCardProvider = gameLoop.getTitleCardProvider();
+			if (debugTitleCardProvider != null && debugTitleCardProvider.isOverlayActive()) {
 				graphicsManager.flush();
 				graphicsManager.resetForFixedFunction();
-				debugTitleCardManager.draw();
+				debugTitleCardProvider.draw();
 				graphicsManager.flushScreenSpace();
 			}
 		}

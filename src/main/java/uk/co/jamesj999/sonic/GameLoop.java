@@ -9,11 +9,13 @@ import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
 import uk.co.jamesj999.sonic.game.GameMode;
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.GameStateManager;
-import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
-import uk.co.jamesj999.sonic.game.sonic2.LevelGamestate;
+import uk.co.jamesj999.sonic.game.LevelEventProvider;
+import uk.co.jamesj999.sonic.game.LevelState;
+import uk.co.jamesj999.sonic.game.RespawnState;
+import uk.co.jamesj999.sonic.game.TitleCardProvider;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
-import uk.co.jamesj999.sonic.game.sonic2.titlecard.TitleCardManager;
 import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -56,7 +58,9 @@ public class GameLoop {
     private final TimerManager timerManager = TimerManager.getInstance();
     private final LevelManager levelManager = LevelManager.getInstance();
     private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
-    private final TitleCardManager titleCardManager = TitleCardManager.getInstance();
+
+    // Title card provider - lazily initialized when GameModule is available
+    private TitleCardProvider titleCardProvider;
 
     private InputHandler inputHandler;
     private GameMode currentGameMode = GameMode.LEVEL;
@@ -93,6 +97,17 @@ public class GameLoop {
 
     public void setInputHandler(InputHandler inputHandler) {
         this.inputHandler = inputHandler;
+    }
+
+    /**
+     * Gets the title card provider, lazily initializing it from the current GameModule.
+     * @return the title card provider
+     */
+    private TitleCardProvider getTitleCardProviderLazy() {
+        if (titleCardProvider == null) {
+            titleCardProvider = GameModuleRegistry.getCurrent().getTitleCardProvider();
+        }
+        return titleCardProvider;
     }
 
     public InputHandler getInputHandler() {
@@ -187,12 +202,12 @@ public class GameLoop {
             }
         } else if (currentGameMode == GameMode.TITLE_CARD) {
             // Update title card animation
-            titleCardManager.update();
+            getTitleCardProviderLazy().update();
 
             // From disassembly lines 5073-5078: control is released at the START of TEXT_WAIT,
             // not when the title card is complete. This allows the player to move while the
             // text is still visible on screen.
-            if (titleCardManager.shouldReleaseControl()) {
+            if (getTitleCardProviderLazy().shouldReleaseControl()) {
                 exitTitleCard();
                 // Continue to LEVEL mode processing this frame (fall through)
             } else {
@@ -210,8 +225,8 @@ public class GameLoop {
         if (currentGameMode == GameMode.LEVEL) {
             // Continue updating title card overlay if still active
             // (TEXT_WAIT and TEXT_EXIT phases where player can move but text is still visible)
-            if (titleCardManager.isOverlayActive()) {
-                titleCardManager.update();
+            if (getTitleCardProviderLazy().isOverlayActive()) {
+                getTitleCardProviderLazy().update();
             }
             // Check if a title card was requested (new level loaded)
             if (levelManager.consumeTitleCardRequest()) {
@@ -242,6 +257,15 @@ public class GameLoop {
             boolean freezeForSpecialStage = specialStageTransitionPending;
             if (!freezeForArtViewer && !freezeForSpecialStage) {
                 spriteCollisionManager.update(inputHandler);
+
+                // Dynamic level events update boundary targets (game-specific)
+                LevelEventProvider levelEvents = GameModuleRegistry.getCurrent().getLevelEventProvider();
+                if (levelEvents != null) {
+                    levelEvents.update();
+                }
+                // Ease boundaries toward targets at 2px/frame
+                camera.updateBoundaryEasing();
+
                 camera.updatePosition();
                 levelManager.update();
 
@@ -626,7 +650,7 @@ public class GameLoop {
         if (mainCode == null) mainCode = "sonic";
         var sprite = spriteManager.getSprite(mainCode);
         if (sprite instanceof AbstractPlayableSprite playable) {
-            CheckpointState checkpointState = levelManager.getCheckpointState();
+            RespawnState checkpointState = levelManager.getCheckpointState();
 
             if (checkpointState != null && checkpointState.isActive()) {
                 // Restore player and camera position from checkpoint (ROM-accurate)
@@ -649,14 +673,14 @@ public class GameLoop {
             playable.setRolling(false);
 
             // Reset rings to 0 when returning from special stage
-            LevelGamestate gamestate = levelManager.getLevelGamestate();
+            LevelState gamestate = levelManager.getLevelGamestate();
             if (gamestate != null) {
                 gamestate.setRings(0);
             }
         }
 
         // Initialize the title card manager
-        titleCardManager.initialize(zoneIndex, actIndex);
+        getTitleCardProviderLazy().initialize(zoneIndex, actIndex);
 
         // Start zone music immediately when title card begins (not at the end)
         int zoneMusicId = levelManager.getCurrentLevelMusicId();
@@ -705,7 +729,7 @@ public class GameLoop {
         }
 
         // Initialize the title card manager
-        titleCardManager.initialize(zoneIndex, actIndex);
+        getTitleCardProviderLazy().initialize(zoneIndex, actIndex);
 
         // Snap camera to player position immediately so it's correct from the start
         // Normal updates during the title card will keep it settled
@@ -735,7 +759,7 @@ public class GameLoop {
         currentGameMode = GameMode.LEVEL;
 
         // Don't reset title card - overlay phases (TEXT_WAIT, TEXT_EXIT) still need to run
-        // titleCardManager.reset();
+        // getTitleCardProviderLazy().reset();
 
         if (returningFromSpecialStage) {
             // Returning from special stage - checkpoint was already restored in enterTitleCardFromResults()
@@ -846,11 +870,11 @@ public class GameLoop {
     }
 
     /**
-     * Gets the title card manager (for rendering).
-     * @return the title card manager
+     * Gets the title card provider (for rendering).
+     * @return the title card provider
      */
-    public TitleCardManager getTitleCardManager() {
-        return titleCardManager;
+    public TitleCardProvider getTitleCardProvider() {
+        return getTitleCardProviderLazy();
     }
 
     /**

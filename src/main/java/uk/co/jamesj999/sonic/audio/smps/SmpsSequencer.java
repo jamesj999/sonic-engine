@@ -59,11 +59,16 @@ public class SmpsSequencer implements AudioStream {
 
     private static final double SAMPLE_RATE = 44100.0;
     // Base tempo weight is game/driver-specific (configured externally).
-    private double samplesPerFrame = 44100.0 / 60.0;
+    // Fixed-point 16.16 phase accumulator for sample-to-frame timing (prevents drift)
+    private static final int FRAME_FRAC_BITS = 16;
+    private static final int FRAME_FRAC_ONE = 1 << FRAME_FRAC_BITS;
+    // NTSC: 44100 / 60 = 735 samples/frame -> phase increment = 65536 / 735 ≈ 89
+    // We store samplesPerFrame as fixed-point: (frameRate << 16) / sampleRate
+    private int framePhaseInc = (int) ((60.0 * FRAME_FRAC_ONE) / SAMPLE_RATE); // ~89 for NTSC
+    private int framePhaseAcc = 0; // 16.16 fixed-point accumulator
     private int tempoWeight;
     private int tempoAccumulator;
     private int dividingTiming = 1;
-    private double sampleCounter = 0;
     private boolean primed;
 
     // Speed-up tempos and channel orders are game/driver-specific (configurable).
@@ -307,7 +312,8 @@ public class SmpsSequencer implements AudioStream {
 
     public void setRegion(Region region) {
         this.region = region;
-        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
+        // Fixed-point phase increment: (frameRate << 16) / sampleRate
+        this.framePhaseInc = (int) ((region.frameRate * FRAME_FRAC_ONE) / SAMPLE_RATE);
         calculateTempo();
     }
 
@@ -336,7 +342,7 @@ public class SmpsSequencer implements AudioStream {
         }
         // SFX tick every tempo frame; keep frame pacing tied to region to avoid
         // double-speed playback.
-        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
+        this.framePhaseInc = (int) ((region.frameRate * FRAME_FRAC_ONE) / SAMPLE_RATE);
         calculateTempo();
 
         // Safety: cap SFX to a reasonable tick budget so bad data doesn't hang forever.
@@ -586,9 +592,12 @@ public class SmpsSequencer implements AudioStream {
     }
 
     public void advance(double samples) {
-        sampleCounter += samples;
-        while (sampleCounter >= samplesPerFrame) {
-            sampleCounter -= samplesPerFrame;
+        // Fixed-point 16.16 accumulator: add (samples * framePhaseInc) to accumulator
+        // When accumulator >= 1.0 (FRAME_FRAC_ONE), process a frame
+        int samplesInt = (int) samples;
+        framePhaseAcc += samplesInt * framePhaseInc;
+        while (framePhaseAcc >= FRAME_FRAC_ONE) {
+            framePhaseAcc -= FRAME_FRAC_ONE;
             processTempoFrame();
         }
     }

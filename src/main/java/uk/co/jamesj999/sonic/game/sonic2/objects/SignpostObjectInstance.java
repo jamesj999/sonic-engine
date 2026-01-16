@@ -124,7 +124,7 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         // Freeze the level timer when passing the signpost
         var levelGamestate = LevelManager.getInstance().getLevelGamestate();
         if (levelGamestate != null) {
-            levelGamestate.getTimer().pause();
+            levelGamestate.pauseTimer();
         }
 
         routineState = STATE_SPINNING;
