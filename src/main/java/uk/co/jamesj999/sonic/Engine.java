@@ -488,6 +488,10 @@ public class Engine extends GLCanvas implements GLEventListener {
 			gl.glActiveTexture(GL2.GL_TEXTURE1);
 			gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
 			gl.glActiveTexture(GL2.GL_TEXTURE0);
+
+			// Set viewport to match aspect-ratio-correct game viewport
+			gl.glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+
 			// Reset matrices for 2D rendering
 			gl.glMatrixMode(GL_PROJECTION);
 			gl.glLoadIdentity();
@@ -499,7 +503,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 			gl.glEnable(GL2.GL_BLEND);
 			gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
 
-			debugRenderer.updateViewport(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
+			debugRenderer.updateViewport(viewportWidth, viewportHeight);
 			debugRenderer.renderDebugInfo();
 		}
 	}
