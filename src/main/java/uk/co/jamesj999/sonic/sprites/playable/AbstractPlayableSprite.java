@@ -179,6 +179,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean controlLocked = false;
         private int spiralActiveFrame = Integer.MIN_VALUE;
+        private byte flipAngle = 0;
+        private byte flipSpeed = 0;
+        private byte flipsRemaining = 0;
+        private boolean flipTurned = false;
 
         /**
          * Clears all active power-ups (shield, invincibility, speed shoes).
@@ -239,6 +243,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.forceInputRight = false;
                 this.controlLocked = false;
                 this.spiralActiveFrame = Integer.MIN_VALUE;
+                this.flipAngle = 0;
+                this.flipSpeed = 0;
+                this.flipsRemaining = 0;
+                this.flipTurned = false;
                 defineSpeeds(); // Reset speeds to default
         }
 
@@ -760,6 +768,38 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void clearSpiralActive() {
                 spiralActiveFrame = Integer.MIN_VALUE;
+        }
+
+        public int getFlipAngle() {
+                return flipAngle & 0xFF;
+        }
+
+        public void setFlipAngle(int value) {
+                this.flipAngle = (byte) (value & 0xFF);
+        }
+
+        public int getFlipSpeed() {
+                return flipSpeed & 0xFF;
+        }
+
+        public void setFlipSpeed(int value) {
+                this.flipSpeed = (byte) (value & 0xFF);
+        }
+
+        public int getFlipsRemaining() {
+                return flipsRemaining & 0xFF;
+        }
+
+        public void setFlipsRemaining(int value) {
+                this.flipsRemaining = (byte) (value & 0xFF);
+        }
+
+        public boolean isFlipTurned() {
+                return flipTurned;
+        }
+
+        public void setFlipTurned(boolean flipTurned) {
+                this.flipTurned = flipTurned;
         }
 
         public short getXSpeed() {

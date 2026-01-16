@@ -262,8 +262,7 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
 
         int angleIndex = ((dx + 0xD0) >> 3) & 0x3F;
         if (angleIndex >= 0 && angleIndex < FLIP_ANGLE_TABLE.length) {
-            // angle is byte, so 0-255 mapped to 0-360 deg roughly
-            player.setAngle((byte) (FLIP_ANGLE_TABLE[angleIndex] & 0xFF));
+            player.setFlipAngle(FLIP_ANGLE_TABLE[angleIndex] & 0xFF);
         }
         player.markSpiralActive(frameCounter);
     }
@@ -275,7 +274,8 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
         if (!player.isSpiralActiveThisFrame(frameCounter)) {
             player.setAngle((byte) 0);
         }
-        // "move.b #0,flips_remaining(a1)" - disable flip behavior
+        player.setFlipsRemaining(0);
+        player.setFlipSpeed(4);
     }
 
     @Override

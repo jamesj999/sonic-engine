@@ -22,6 +22,7 @@ public class PlayableSpriteAnimationManager {
         if (sprite == null) {
             return;
         }
+        updateFlipAngle(frameCounter);
         boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
         sprite.setRenderFlips(facingLeft, false);
         if (sprite.getSpindashDustManager() != null) {
@@ -84,6 +85,11 @@ public class PlayableSpriteAnimationManager {
     }
 
     private void updateWalkRun(SpriteAnimationScript baseScript) {
+        int flipAngle = sprite.getFlipAngle();
+        if (flipAngle != 0) {
+            updateTumble(flipAngle);
+            return;
+        }
         int speed = Math.abs(sprite.getGSpeed());
         ScriptedVelocityAnimationProfile profile = resolveVelocityProfile();
         int runThreshold = resolveRunThreshold(profile);
@@ -98,6 +104,83 @@ public class PlayableSpriteAnimationManager {
         int slopeOffset = resolveSlopeOffset(speed >= runThreshold);
         int delay = computeSpeedDelay(speed, 0x800, 8);
         updateScriptWithDelay(active, delay, slopeOffset);
+    }
+
+    private void updateTumble(int flipAngle) {
+        int d0 = flipAngle & 0xFF;
+        boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
+        if (!facingLeft) {
+            sprite.setRenderFlips(false, false);
+            int frame = ((d0 + 0x0B) & 0xFF) / 0x16;
+            sprite.setMappingFrame(frame + 0x5F);
+            sprite.setAnimationTick(0);
+            return;
+        }
+
+        boolean flipTurned = sprite.isFlipTurned();
+        int adjusted;
+        boolean hFlip = true;
+        boolean vFlip;
+        if (flipTurned) {
+            vFlip = false;
+            adjusted = (d0 + 0x0B) & 0xFF;
+        } else {
+            vFlip = true;
+            adjusted = (0x100 - d0) & 0xFF;
+            adjusted = (adjusted + 0x8F) & 0xFF;
+        }
+        int frame = (adjusted / 0x16) + 0x5F;
+        sprite.setRenderFlips(hFlip, vFlip);
+        sprite.setMappingFrame(frame);
+        sprite.setAnimationTick(0);
+    }
+
+    private void updateFlipAngle(int frameCounter) {
+        int flipAngle = sprite.getFlipAngle();
+        if (flipAngle == 0) {
+            return;
+        }
+        if (sprite.wasSpiralActive(frameCounter)) {
+            return;
+        }
+        int flipSpeed = sprite.getFlipSpeed();
+        if (flipSpeed == 0) {
+            return;
+        }
+        int inertia = sprite.getGSpeed();
+        if (inertia == 0) {
+            inertia = sprite.getXSpeed();
+        }
+        boolean movingLeft = inertia < 0;
+        int flipsRemaining = sprite.getFlipsRemaining();
+        if (!movingLeft || sprite.isFlipTurned()) {
+            int newAngle = flipAngle + flipSpeed;
+            if (newAngle > 0xFF) {
+                flipsRemaining -= 1;
+                if (flipsRemaining < 0) {
+                    flipsRemaining = 0;
+                    newAngle = 0;
+                } else {
+                    newAngle &= 0xFF;
+                }
+            }
+            sprite.setFlipAngle(newAngle);
+            sprite.setFlipsRemaining(flipsRemaining);
+            return;
+        }
+
+        int newAngle = flipAngle - flipSpeed;
+        if (newAngle < 0) {
+            flipsRemaining -= 1;
+            if (flipsRemaining < 0) {
+                flipsRemaining = 0;
+                newAngle = 0;
+            } else {
+                newAngle = (newAngle + 0x100) & 0xFF;
+            }
+        }
+        sprite.setFlipAngle(newAngle);
+        sprite.setFlipsRemaining(flipsRemaining);
     }
 
     private void updateRoll(SpriteAnimationScript baseScript) {
