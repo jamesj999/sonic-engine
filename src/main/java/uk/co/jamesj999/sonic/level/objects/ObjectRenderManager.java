@@ -54,6 +54,13 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet signpostSheet;
     private final SpriteAnimationSet signpostAnimations;
 
+    // CNZ Bumpers
+    private final ObjectSpriteSheet bumperSheet;
+    private final ObjectSpriteSheet hexBumperSheet;
+    private final ObjectSpriteSheet bonusBlockSheet;
+    private final ObjectSpriteSheet flipperSheet;
+    private final SpriteAnimationSet flipperAnimations;
+
     // Results screen
     private final ObjectSpriteSheet resultsSheet;
     private final Pattern[] resultsHudDigitPatterns;
@@ -84,6 +91,12 @@ public class ObjectRenderManager {
 
     // Signpost renderer
     private final PatternSpriteRenderer signpostRenderer;
+
+    // CNZ Bumper renderers
+    private final PatternSpriteRenderer bumperRenderer;
+    private final PatternSpriteRenderer hexBumperRenderer;
+    private final PatternSpriteRenderer bonusBlockRenderer;
+    private final PatternSpriteRenderer flipperRenderer;
 
     // Results screen renderer
     private final PatternSpriteRenderer resultsRenderer;
@@ -124,6 +137,13 @@ public class ObjectRenderManager {
         // Signpost
         this.signpostSheet = artData.signpostSheet();
         this.signpostAnimations = artData.signpostAnimations();
+
+        // CNZ Bumpers
+        this.bumperSheet = artData.bumperSheet();
+        this.hexBumperSheet = artData.hexBumperSheet();
+        this.bonusBlockSheet = artData.bonusBlockSheet();
+        this.flipperSheet = artData.flipperSheet();
+        this.flipperAnimations = artData.flipperAnimations();
 
         // Results screen
         this.resultsSheet = artData.resultsSheet();
@@ -178,6 +198,16 @@ public class ObjectRenderManager {
         // Signpost renderer
         this.signpostRenderer = new PatternSpriteRenderer(signpostSheet);
         register(signpostSheet, signpostRenderer);
+
+        // CNZ Bumper renderers
+        this.bumperRenderer = new PatternSpriteRenderer(bumperSheet);
+        register(bumperSheet, bumperRenderer);
+        this.hexBumperRenderer = new PatternSpriteRenderer(hexBumperSheet);
+        register(hexBumperSheet, hexBumperRenderer);
+        this.bonusBlockRenderer = new PatternSpriteRenderer(bonusBlockSheet);
+        register(bonusBlockSheet, bonusBlockRenderer);
+        this.flipperRenderer = new PatternSpriteRenderer(flipperSheet);
+        register(flipperSheet, flipperRenderer);
 
         // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
@@ -341,6 +371,42 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getSignpostAnimations() {
         return signpostAnimations;
+    }
+
+    public PatternSpriteRenderer getBumperRenderer() {
+        return bumperRenderer;
+    }
+
+    public ObjectSpriteSheet getBumperSheet() {
+        return bumperSheet;
+    }
+
+    public PatternSpriteRenderer getHexBumperRenderer() {
+        return hexBumperRenderer;
+    }
+
+    public ObjectSpriteSheet getHexBumperSheet() {
+        return hexBumperSheet;
+    }
+
+    public PatternSpriteRenderer getBonusBlockRenderer() {
+        return bonusBlockRenderer;
+    }
+
+    public ObjectSpriteSheet getBonusBlockSheet() {
+        return bonusBlockSheet;
+    }
+
+    public PatternSpriteRenderer getFlipperRenderer() {
+        return flipperRenderer;
+    }
+
+    public ObjectSpriteSheet getFlipperSheet() {
+        return flipperSheet;
+    }
+
+    public SpriteAnimationSet getFlipperAnimations() {
+        return flipperAnimations;
     }
 
     public PatternSpriteRenderer getResultsRenderer() {

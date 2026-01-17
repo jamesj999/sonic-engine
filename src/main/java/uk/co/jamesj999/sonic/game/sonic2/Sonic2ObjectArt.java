@@ -228,6 +228,27 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet signpostSheet = new ObjectSpriteSheet(signpostPatterns, signpostMappings, 0, 1);
         SpriteAnimationSet signpostAnimations = createSignpostAnimations();
 
+        // CNZ Round Bumper art (Object 0x44)
+        Pattern[] bumperPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUMPER_ADDR, "Bumper");
+        List<SpriteMappingFrame> bumperMappings = createBumperMappings();
+        ObjectSpriteSheet bumperSheet = new ObjectSpriteSheet(bumperPatterns, bumperMappings, 2, 1);
+
+        // CNZ Hexagonal Bumper art (Object 0xD7)
+        Pattern[] hexBumperPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_HEX_BUMPER_ADDR, "HexBumper");
+        List<SpriteMappingFrame> hexBumperMappings = createHexBumperMappings();
+        ObjectSpriteSheet hexBumperSheet = new ObjectSpriteSheet(hexBumperPatterns, hexBumperMappings, 2, 1);
+
+        // CNZ Bonus Block / Drop Target art (Object 0xD8)
+        Pattern[] bonusBlockPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BONUS_BLOCK_ADDR, "BonusBlock");
+        List<SpriteMappingFrame> bonusBlockMappings = createBonusBlockMappings();
+        ObjectSpriteSheet bonusBlockSheet = new ObjectSpriteSheet(bonusBlockPatterns, bonusBlockMappings, 2, 1);
+
+        // CNZ Flipper art (Object 0x86)
+        Pattern[] flipperPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_FLIPPER_ADDR, "Flipper");
+        List<SpriteMappingFrame> flipperMappings = createFlipperMappings();
+        ObjectSpriteSheet flipperSheet = new ObjectSpriteSheet(flipperPatterns, flipperMappings, 2, 1);
+        SpriteAnimationSet flipperAnimations = createFlipperAnimations();
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -291,6 +312,10 @@ public class Sonic2ObjectArt {
                 animalTypeB.ordinal(),
                 pointsSheet,
                 signpostSheet,
+                bumperSheet,
+                hexBumperSheet,
+                bonusBlockSheet,
+                flipperSheet,
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
@@ -303,7 +328,8 @@ public class Sonic2ObjectArt {
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations,
-                signpostAnimations);
+                signpostAnimations,
+                flipperAnimations);
 
         cachedByZone.put(cacheKey, artData);
         return artData;
@@ -610,6 +636,119 @@ public class Sonic2ObjectArt {
         frames.add(createSimpleFrame(-8, -8, 2, 2, 4));
         // Frame 1: -8, -8, 2x2, tile 0
         frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        return frames;
+    }
+
+    /**
+     * Creates bumper mappings based on obj44.asm (Round Bumper from CNZ).
+     * Frame 0: Normal state - 2x(2x4) tiles at -16,-16 with horizontal flip (32x32
+     * px)
+     * Frame 1: Compressed state - 2x(3x4) + 2x(2x2) tiles (48x44 px)
+     */
+    private List<SpriteMappingFrame> createBumperMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_obj44_0004 - Normal state
+        // spritePiece -$10, -$10, 2, 4, 0, 0, 0, 0, 0
+        // spritePiece 0, -$10, 2, 4, 0, 1, 0, 0, 0 (hFlip)
+        List<SpriteMappingPiece> frame0Pieces = new ArrayList<>();
+        frame0Pieces.add(new SpriteMappingPiece(-16, -16, 2, 4, 0, false, false, 0));
+        frame0Pieces.add(new SpriteMappingPiece(0, -16, 2, 4, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame0Pieces));
+
+        // Frame 1: Map_obj44_0016 - Compressed (triggered) state
+        // spritePiece -$18, -$14, 3, 4, 8, 0, 0, 0, 0
+        // spritePiece 0, -$14, 3, 4, 8, 1, 0, 0, 0 (hFlip)
+        // spritePiece -$10, $C, 2, 2, $14, 0, 0, 0, 0
+        // spritePiece 0, $C, 2, 2, $14, 1, 0, 0, 0 (hFlip)
+        List<SpriteMappingPiece> frame1Pieces = new ArrayList<>();
+        frame1Pieces.add(new SpriteMappingPiece(-24, -20, 3, 4, 8, false, false, 0));
+        frame1Pieces.add(new SpriteMappingPiece(0, -20, 3, 4, 8, true, false, 0));
+        frame1Pieces.add(new SpriteMappingPiece(-16, 12, 2, 2, 0x14, false, false, 0));
+        frame1Pieces.add(new SpriteMappingPiece(0, 12, 2, 2, 0x14, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame1Pieces));
+
+        return frames;
+    }
+
+    /**
+     * Creates hex bumper mappings based on objD7.asm (Hexagonal Bumper from CNZ).
+     * <p>
+     * Frame 0: Normal state - 4 pieces (3x2 tiles each), 48x32 px total
+     * Frame 1: Vertical squeeze - 4 pieces squeezed vertically (bounce up/down)
+     * Frame 2: Horizontal squeeze - 4 pieces squeezed horizontally (bounce left/right)
+     * <p>
+     * Each frame uses mirrored pieces (hFlip, vFlip) to create symmetry.
+     */
+    private List<SpriteMappingFrame> createHexBumperMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_objD7_0006 - Normal state
+        // 4 pieces: top-left, top-right (hFlip), bottom-left (vFlip), bottom-right (h+vFlip)
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-24, -16, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -16, 3, 2, 0, true, false, 0));
+        frame0.add(new SpriteMappingPiece(-24, 0, 3, 2, 0, false, true, 0));
+        frame0.add(new SpriteMappingPiece(0, 0, 3, 2, 0, true, true, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Map_objD7_0028 - Vertical squeeze (used for up/down bounce)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-24, -12, 3, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -12, 3, 2, 0, true, false, 0));
+        frame1.add(new SpriteMappingPiece(-24, 4, 3, 2, 0, false, true, 0));
+        frame1.add(new SpriteMappingPiece(0, 4, 3, 2, 0, true, true, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Map_objD7_004A - Horizontal squeeze (used for left/right bounce)
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-20, -16, 3, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(4, -16, 3, 2, 0, true, false, 0));
+        frame2.add(new SpriteMappingPiece(-20, 0, 3, 2, 0, false, true, 0));
+        frame2.add(new SpriteMappingPiece(4, 0, 3, 2, 0, true, true, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        return frames;
+    }
+
+    /**
+     * Creates bonus block mappings based on objD8.asm (Drop Target from CNZ).
+     * <p>
+     * 6 frames total - 3 orientations x 2 states (normal/hit):
+     * <ul>
+     *   <li>Frames 0,3: Horizontal (32x16 px) - 4 tiles wide, 2 tiles high</li>
+     *   <li>Frames 1,4: Vertical (24x32 px) - 3 tiles wide, 4 tiles high</li>
+     *   <li>Frames 2,5: Vertical narrow (16x32 px) - 2 tiles wide, 4 tiles high</li>
+     * </ul>
+     * Hit frames have slightly adjusted offsets for the "bounce" animation.
+     */
+    private List<SpriteMappingFrame> createBonusBlockMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Map_objD8_000C - Horizontal normal (32x16)
+        frames.add(createSimpleFrame(-16, -8, 4, 2, 0));
+
+        // Frame 1: Map_objD8_0016 - Vertical normal (24x32)
+        frames.add(createSimpleFrame(-12, -16, 3, 4, 8));
+
+        // Frame 2: Map_objD8_0020 - Vertical narrow normal (16x32)
+        frames.add(createSimpleFrame(-8, -16, 2, 4, 20));
+
+        // Frame 3: Map_objD8_002A - Horizontal hit (32x16, y offset -6)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-16, -6, 4, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Map_objD8_0034 - Vertical hit (24x32, offset adjusted)
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-14, -14, 3, 4, 8, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Map_objD8_003E - Vertical narrow hit (16x32, offset adjusted)
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-10, -16, 2, 4, 20, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
         return frames;
     }
 
@@ -1094,6 +1233,90 @@ public class Sonic2ObjectArt {
 
         // Anim 4: Hold Tails face (frame 1 in current mapping order)
         set.addScript(4, new SpriteAnimationScript(0x0F, List.of(1), SpriteAnimationEndAction.LOOP, 0));
+
+        return set;
+    }
+
+    /**
+     * Creates mappings for CNZ Flipper (Obj86).
+     * Based on obj86.asm mappings.
+     * Frames 0-2: Vertical flipper states
+     * Frames 3-5: Horizontal flipper states
+     */
+    private List<SpriteMappingFrame> createFlipperMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Vertical idle (Map_obj86_000C)
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-25, -9, 3, 4, 0x0C, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-1, -2, 1, 2, 0x18, false, false, 0));
+        frame0.add(new SpriteMappingPiece(7, 1, 2, 2, 0x1A, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Vertical triggered 1 (Map_obj86_0026)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-24, -8, 4, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(8, -8, 2, 2, 8, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Vertical triggered 2 (Map_obj86_0038) - v-flipped pieces
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-25, -23, 3, 4, 0x0C, false, true, 0));
+        frame2.add(new SpriteMappingPiece(-1, -14, 1, 2, 0x18, false, true, 0));
+        frame2.add(new SpriteMappingPiece(7, -17, 2, 2, 0x1A, false, true, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: Horizontal idle (Map_obj86_0052)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-15, -25, 3, 2, 0x24, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-17, -9, 3, 2, 0x2A, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-17, 7, 2, 2, 0x30, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Horizontal mid (Map_obj86_006C) - mirrored pieces
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-8, -24, 1, 4, 0x1E, false, false, 0));
+        frame4.add(new SpriteMappingPiece(0, -24, 1, 4, 0x1E, true, false, 0));
+        frame4.add(new SpriteMappingPiece(-8, 8, 1, 2, 0x22, false, false, 0));
+        frame4.add(new SpriteMappingPiece(0, 8, 1, 2, 0x22, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Horizontal activated (Map_obj86_008E) - h-flipped
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-9, -25, 3, 2, 0x24, true, false, 0));
+        frame5.add(new SpriteMappingPiece(-7, -9, 3, 2, 0x2A, true, false, 0));
+        frame5.add(new SpriteMappingPiece(1, 7, 2, 2, 0x30, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        return frames;
+    }
+
+    /**
+     * Creates animations for CNZ Flipper (Obj86).
+     * Based on Ani_obj86 in s2.asm.
+     */
+    private SpriteAnimationSet createFlipperAnimations() {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+
+        // Anim 0: Vertical idle - hold frame 0 ($0F, 0, $FF)
+        set.addScript(0, new SpriteAnimationScript(0x0F, List.of(0),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 1: Vertical trigger ($03, 1, 2, 1, $FD, 0)
+        set.addScript(1, new SpriteAnimationScript(0x03, List.of(1, 2, 1),
+                SpriteAnimationEndAction.SWITCH, 0));
+
+        // Anim 2: Horizontal idle - hold frame 4 ($0F, 4, $FF)
+        set.addScript(2, new SpriteAnimationScript(0x0F, List.of(4),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 3: Horizontal trigger left ($00, 5, 4, 3, 3, 3, 3, $FD, 2)
+        set.addScript(3, new SpriteAnimationScript(0x00, List.of(5, 4, 3, 3, 3, 3),
+                SpriteAnimationEndAction.SWITCH, 2));
+
+        // Anim 4: Horizontal trigger right ($00, 3, 4, 5, 5, 5, 5, $FD, 2)
+        set.addScript(4, new SpriteAnimationScript(0x00, List.of(3, 4, 5, 5, 5, 5),
+                SpriteAnimationEndAction.SWITCH, 2));
 
         return set;
     }
