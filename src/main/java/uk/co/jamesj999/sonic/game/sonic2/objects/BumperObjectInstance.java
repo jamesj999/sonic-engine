@@ -2,6 +2,9 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.GameStateManager;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.PointsObjectInstance;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -230,8 +233,13 @@ public class BumperObjectInstance extends AbstractObjectInstance {
         // Play sound
         AudioManager.getInstance().playSfx(GameSound.BUMPER);
 
-        // TODO: Award points (10 points via AddPoints2 with d0=1)
-        // TODO: Increment respawn table counter
+        // Award 10 points and spawn points display (ROM: lines 44675-44683)
+        GameStateManager.getInstance().addScore(10);
+        LevelManager levelManager = LevelManager.getInstance();
+        PointsObjectInstance pointsObj = new PointsObjectInstance(
+                new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
+                levelManager, 10);
+        levelManager.getObjectManager().addDynamicObject(pointsObj);
     }
 
     @Override

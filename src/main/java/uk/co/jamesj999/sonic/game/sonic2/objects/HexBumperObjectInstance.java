@@ -159,6 +159,7 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
 
     // Moving subtype state
     private int baseX;
+    private int currentX;
     private int minX;
     private int maxX;
     private int movementDirection = 1; // 1 = right, -1 = left
@@ -170,6 +171,7 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
 
     private void initMovement() {
         baseX = spawn.x();
+        currentX = baseX;
         minX = baseX - MOVEMENT_RANGE;
         maxX = baseX + MOVEMENT_RANGE;
         // ROM: x_flip status determines initial direction
@@ -206,8 +208,16 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
     }
 
     private void updateMovement() {
-        // TODO: Implement oscillating movement
-        // ROM: Moves 1 pixel per frame, reverses at bounds
+        // ROM Reference: s2.asm lines 59432-59456
+        // Moves 1 pixel per frame, reverses direction at bounds
+        currentX += movementDirection;
+        if (currentX <= minX) {
+            currentX = minX;
+            movementDirection = 1;
+        } else if (currentX >= maxX) {
+            currentX = maxX;
+            movementDirection = -1;
+        }
     }
 
     /**
@@ -232,9 +242,9 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
     }
 
     private int getCurrentX() {
-        // For moving subtype, return current position
-        // For stationary, return spawn position
-        return spawn.x(); // TODO: Track actual position for moving subtype
+        // For moving subtype, return tracked current position
+        // For stationary, return spawn position (currentX == spawn.x())
+        return currentX;
     }
 
     /**

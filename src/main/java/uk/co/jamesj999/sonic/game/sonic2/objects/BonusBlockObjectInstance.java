@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.GameStateManager;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.PointsObjectInstance;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -59,8 +61,8 @@ import java.util.List;
  * <ul>
  *   <li>Uses CNZ_saucer_data array (64 bytes max)</li>
  *   <li>Each instance tracks hits independently via subtype index</li>
- *   <li>Points awarded: 1st hit = 1pt, 2nd hit = 4pt, 3rd hit = 50pt</li>
- *   <li>Block deletes after 3rd hit</li>
+ *   <li>Points awarded: 1st hit = 10pts, 2nd hit = 10pts, 3rd hit = 500pts</li>
+ *   <li>Block deletes after 3rd hit (no explosion)</li>
  *   <li>Palette changes with each hit</li>
  * </ul>
  *
@@ -112,9 +114,10 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
     /**
      * Points awarded per hit (index = hit count - 1).
      * <p>
-     * ROM Reference: s2.asm lines 59669-59679
+     * ROM Reference: s2.asm lines 59671, 59684
+     * Hits 1-2 use d0=1 (10 pts), hit 3 uses d0=50 (500 pts).
      */
-    private static final int[] POINTS_PER_HIT = {1, 4, 50};
+    private static final int[] POINTS_PER_HIT = {10, 10, 500};
 
     // ========================================================================
     // Animation Constants
@@ -233,6 +236,11 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
      * Handle a hit on this bonus block.
      * <p>
      * ROM Reference: ObjD8_Hit at s2.asm line 59606
+     * <p>
+     * Behavior:
+     * - Sound plays on every hit (line 59667)
+     * - Color changes via palette line decrement (line 59672)
+     * - After 3 hits, block deletes via animation (no explosion)
      */
     private void handleHit(AbstractPlayableSprite player) {
         hitCount++;
@@ -241,25 +249,31 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         // Apply bounce
         applyBounce(player);
 
-        // Award points
+        // Play sound on every hit (ROM: line 59667)
+        AudioManager.getInstance().playSfx(GameSound.BONUS_BUMPER);
+
+        // Award points and spawn points display (ROM: lines 59687-59694)
         if (hitCount <= POINTS_PER_HIT.length) {
             int points = POINTS_PER_HIT[hitCount - 1];
-            // TODO: Award points via GameStateManager
+            GameStateManager.getInstance().addScore(points);
+
+            // Spawn floating points display
+            LevelManager levelManager = LevelManager.getInstance();
+            PointsObjectInstance pointsObj = new PointsObjectInstance(
+                    new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
+                    levelManager, points);
+            levelManager.getObjectManager().addDynamicObject(pointsObj);
         }
 
-        // Check for destruction
+        // Check for destruction (ROM: sets routine 4, deletes via animation)
         if (hitCount >= MAX_HITS) {
             destroyed = true;
-            // TODO: Spawn explosion/deletion effect
             return;
         }
 
-        // Trigger hit animation
+        // Trigger hit animation (color changes via palette in ROM)
         animFrame = baseAnimFrame + HIT_FRAME_OFFSET;
         animTimer = ANIM_DURATION;
-
-        // Play sound
-        AudioManager.getInstance().playSfx(GameSound.BONUS_BUMPER);
     }
 
     /**
