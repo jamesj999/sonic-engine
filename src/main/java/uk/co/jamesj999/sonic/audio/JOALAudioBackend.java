@@ -455,6 +455,14 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     @Override
+    public void fadeOutMusic(int steps, int delay) {
+        // Fade only music, not SFX - delegated to the music sequencer
+        if (currentSmps != null) {
+            currentSmps.triggerFadeOut(steps, delay);
+        }
+    }
+
+    @Override
     public void endMusicOverride(int musicId) {
         if (currentSmps != null && currentMusicId == musicId) {
             restoreMusic();

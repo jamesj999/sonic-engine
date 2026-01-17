@@ -466,8 +466,9 @@ public class GameLoop {
         // Play special stage entry sound
         AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
 
-        // Stop the current music (original game fades it out)
-        AudioManager.getInstance().stopMusic();
+        // Fade out the current music gradually (ROM: MusID_FadeOut / zFadeOutMusic)
+        // This preserves the SFX we just started, unlike stopMusic() which silences all
+        AudioManager.getInstance().fadeOutMusic();
 
         // Determine which stage to enter
         GameStateManager gsm = GameStateManager.getInstance();
@@ -785,8 +786,8 @@ public class GameLoop {
     private void startRespawnFade() {
         LOGGER.info("Starting fade-to-black for respawn");
 
-        // Stop current music
-        AudioManager.getInstance().stopMusic();
+        // Fade out current music (ROM: s2.asm:4757 - level entry with title card)
+        AudioManager.getInstance().fadeOutMusic();
 
         // Start fade-to-black, then respawn when complete
         FadeManager.getInstance().startFadeToBlack(() -> {
@@ -813,8 +814,8 @@ public class GameLoop {
     private void startNextActFade() {
         LOGGER.info("Starting fade-to-black for next act");
 
-        // Stop current music
-        AudioManager.getInstance().stopMusic();
+        // Fade out current music (ROM: s2.asm:4757 - level entry with title card)
+        AudioManager.getInstance().fadeOutMusic();
 
         // Start fade-to-black, then load next act when complete
         FadeManager.getInstance().startFadeToBlack(() -> {
@@ -844,8 +845,8 @@ public class GameLoop {
     private void startNextZoneFade() {
         LOGGER.info("Starting fade-to-black for next zone");
 
-        // Stop current music
-        AudioManager.getInstance().stopMusic();
+        // Fade out current music (ROM: s2.asm:4757 - level entry with title card)
+        AudioManager.getInstance().fadeOutMusic();
 
         // Start fade-to-black, then load next zone when complete
         FadeManager.getInstance().startFadeToBlack(() -> {

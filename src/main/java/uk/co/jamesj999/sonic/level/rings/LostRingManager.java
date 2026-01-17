@@ -154,6 +154,7 @@ public class LostRingManager {
                 }
 
                 if (player != null && ring.canBeCollected(frameCounter)
+                        && !player.getDead()
                         && player.getInvulnerableFrames() < 90
                         && ringOverlapsPlayer(playerX, playerY, playerHeight, ring)) {
                     ring.markCollected(frameCounter);

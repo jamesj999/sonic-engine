@@ -41,6 +41,9 @@ public class RingManager {
         if (player == null) {
             return;
         }
+        if (player.getDead()) {
+            return;
+        }
         if (renderManager == null) {
             return;
         }

@@ -1620,6 +1620,35 @@ public class SmpsSequencer implements AudioStream {
     }
 
     /**
+     * Trigger a music fade-out. ROM equivalent: zFadeOutMusic.
+     * Gradually increases volume attenuation over 'steps' frames with 'delay' frames between each step.
+     * DAC track is stopped immediately (no volume control available).
+     *
+     * @param steps total number of volume steps (ROM default: 0x28 = 40)
+     * @param delay frames between each volume step (ROM default: 3)
+     */
+    public void triggerFadeOut(int steps, int delay) {
+        if (steps <= 0) {
+            return;
+        }
+        fadeState.steps = steps;
+        fadeState.delayInit = delay;
+        fadeState.addFm = 1;
+        fadeState.addPsg = 1;
+        fadeState.delayCounter = delay;
+        fadeState.active = true;
+        fadeState.fadeOut = true;
+
+        // Stop DAC track immediately (can't fade it) - matches ROM zFadeOutMusic
+        for (Track track : tracks) {
+            if (track.type == TrackType.DAC) {
+                track.active = false;
+                stopNote(track);
+            }
+        }
+    }
+
+    /**
      * Refresh all FM voice settings after being paused/restored.
      * This reloads instruments and pan/ams/fms settings to the hardware.
      */

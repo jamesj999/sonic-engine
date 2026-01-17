@@ -492,9 +492,9 @@ public class Sonic2SpecialStageManager {
 
         // Set up music fade callback for when checkpoint fails
         checkpoint.setOnMusicFadeRequested(() -> {
-            // Fade out the special stage music
-            AudioManager.getInstance().stopMusic();
-            LOGGER.info("Music fade requested - stopping special stage music");
+            // Fade out the special stage music gradually (preserves any SFX playing)
+            AudioManager.getInstance().fadeOutMusic();
+            LOGGER.info("Music fade requested - fading special stage music");
         });
 
         checkpoint.setOnCheckpointResolved((result, checkpointNumber, ringRequirement,

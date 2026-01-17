@@ -238,7 +238,7 @@ public class Sonic2SpecialStageEmerald extends Sonic2SpecialStageObject {
 
         // At anim 3+: Fade out music
         if (anim >= 3 && !musicFaded) {
-            AudioManager.getInstance().stopMusic();
+            AudioManager.getInstance().fadeOutMusic();
             musicFaded = true;
             LOGGER.fine("Emerald at anim " + anim + ", fading music");
         }
