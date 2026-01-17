@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.sonic2.CheckpointState;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -67,6 +68,16 @@ public class CheckpointStarInstance extends AbstractObjectInstance {
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
+        // If checkpoint was used for special stage entry, destroy remaining stars.
+        // In the original ROM, the level is fully reloaded when returning from special
+        // stage, so stars don't persist. We simulate this by having stars self-destruct
+        // when the usedForSpecialStage flag is set.
+        var checkpointState = LevelManager.getInstance().getCheckpointState();
+        if (checkpointState instanceof CheckpointState cs && cs.isUsedForSpecialStage()) {
+            setDestroyed(true);
+            return;
+        }
+
         // Line 44411: addi.w #$A, objoff_34(a0)
         angle = (angle + ANGLE_INCREMENT) & 0xFFFF;
 
@@ -96,6 +107,11 @@ public class CheckpointStarInstance extends AbstractObjectInstance {
 
         // Check for player collision to trigger special stage entry
         if (collisionEnabled && player != null && isPlayerInRange(player)) {
+            // Safety check: verify player still has 50+ rings
+            // (in case rings were lost between star spawn and touch, e.g. from damage)
+            if (player.getRingCount() < 50) {
+                return;
+            }
             LOGGER.info("Player touched special stage star - requesting special stage entry");
             // Mark the parent checkpoint as used for special stage entry
             // This prevents stars from respawning when returning from special stage
