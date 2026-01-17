@@ -5,7 +5,7 @@ Last updated: 2026-01-16
 ## Open Bugs
 
 - [x] If a sound is playing when the level is switched, it gets stuck looping that part of the sound.
-- [ ] If you're standing to the left of a monitor and the ground is tilted slightly towards it, Sonic fails to jump.
+- [x] If you're standing to the left of a monitor and the ground is tilted slightly towards it, Sonic fails to jump.
 - [ ] Some spikes kill you from the side when you jump next to them while holding direction into them.
 - [x] There's a small collision hole on the left side of the EHZ bridges. (Fixed: Bridge collision anchor now uses ROM-style x_pos-8 offset; slope sampling aligned to collision space.)
 - [x] EHZ bridges cause you to move from rolling to running when you move over them. (Fixed: Terrain no longer forces air if solid contact exists; object landing preserves roll state.)
