@@ -86,6 +86,25 @@ public class ObjectDiscoveryTool {
             0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x5D, 0x89, 0xC5, 0xC6, 0xC7
     );
 
+    // Bosses spawned dynamically (not in placement data) - mapped by zone short name
+    // These are triggered programmatically when reaching end of Act 2 (or final act)
+    private static final Map<String, List<DynamicBoss>> DYNAMIC_BOSSES = Map.of(
+            "EHZ", List.of(new DynamicBoss(0x56, "EHZBoss", "Drill car boss")),
+            "CPZ", List.of(new DynamicBoss(0x5D, "CPZBoss", "Water dropper boss")),
+            "ARZ", List.of(new DynamicBoss(0x89, "ARZBoss", "Hammer/arrow boss")),
+            "CNZ", List.of(new DynamicBoss(0x51, "CNZBoss", "Catcher boss")),
+            "HTZ", List.of(new DynamicBoss(0x52, "HTZBoss", "Lava-mobile boss")),
+            "MCZ", List.of(new DynamicBoss(0x57, "MCZBoss", "Drill boss")),
+            "OOZ", List.of(new DynamicBoss(0x55, "OOZBoss", "Laser/spike boss")),
+            "MTZ", List.of(
+                    new DynamicBoss(0x53, "MTZBossOrb", "Bouncing orb projectiles"),
+                    new DynamicBoss(0x54, "MTZBoss", "Eggman's balloon machine")
+            ),
+            "SCZ", List.of()  // No boss in Sky Chase (transitions to WFZ)
+    );
+
+    public record DynamicBoss(int objectId, String name, String description) {}
+
     private final RomByteReader rom;
     private final Sonic2ObjectPlacement placementLoader;
     private final Map<Integer, List<String>> objectNames;
@@ -175,6 +194,14 @@ public class ObjectDiscoveryTool {
         return "Object";
     }
 
+    private static boolean isFinalAct(LevelConfig level) {
+        return switch (level.shortName) {
+            case "MTZ" -> level.act == 3;
+            case "SCZ", "WFZ", "DEZ" -> level.act == 1;  // Single-act zones
+            default -> level.act == 2;
+        };
+    }
+
     /**
      * Generate markdown report.
      */
@@ -240,9 +267,19 @@ public class ObjectDiscoveryTool {
 
             for (String category : List.of("Badnik", "Boss", "Object")) {
                 List<ObjectUsage> items = byCategory.getOrDefault(category, List.of());
-                if (items.isEmpty()) continue;
 
-                sb.append("**").append(category).append("s:**\n");
+                // For Boss category, also check for dynamic bosses in final act
+                List<DynamicBoss> dynamicBosses = List.of();
+                if (category.equals("Boss") && isFinalAct(zr.level)) {
+                    dynamicBosses = DYNAMIC_BOSSES.getOrDefault(zr.level.shortName, List.of());
+                }
+
+                if (items.isEmpty() && dynamicBosses.isEmpty()) continue;
+
+                String plural = category.equals("Boss") ? "Bosses" : category + "s";
+                sb.append("**").append(plural).append(":**\n");
+
+                // Placement-data bosses first
                 for (ObjectUsage u : items) {
                     String check = u.implemented ? "x" : " ";
                     String subtypeStr = u.subtypes.size() <= 3
@@ -251,6 +288,14 @@ public class ObjectDiscoveryTool {
                     sb.append(String.format("- [%s] 0x%02X %s (x%d) [%s]%n",
                             check, u.objectId, u.name, u.count, subtypeStr));
                 }
+
+                // Dynamic bosses (spawned programmatically)
+                for (DynamicBoss boss : dynamicBosses) {
+                    String check = isImplemented(boss.objectId) ? "x" : " ";
+                    sb.append(String.format("- [%s] 0x%02X %s *(dynamic)* - %s%n",
+                            check, boss.objectId, boss.name, boss.description));
+                }
+
                 sb.append("\n");
             }
         }

@@ -1,6 +1,6 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-17 20:04:16
+Generated: 2026-01-17 20:13:55
 
 ## Summary
 
@@ -175,6 +175,9 @@ Total: 158 objects | Implemented: 14 | Unimplemented: 1
 - [x] 0x5C Masher (x8) [0x00]
 - [x] 0x9D Coconuts (x9) [0x1E]
 
+**Bosses:**
+- [ ] 0x56 EHZBoss *(dynamic)* - Drill car boss
+
 **Objects:**
 - [x] 0x03 LayerSwitcher (x34) [10 subtypes]
 - [x] 0x06 Spiral (x4) [0x00]
@@ -226,6 +229,9 @@ Total: 202 objects | Implemented: 6 | Unimplemented: 15
 - [ ] 0xA5 Spiny (x1) [0x32]
 - [ ] 0xA6 SpinyOnWall (x1) [0x32]
 - [ ] 0xA7 Grabber (x3) [0x36]
+
+**Bosses:**
+- [ ] 0x5D CPZBoss *(dynamic)* - Water dropper boss
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x59) [21 subtypes]
@@ -287,6 +293,9 @@ Total: 222 objects | Implemented: 6 | Unimplemented: 14
 - [ ] 0x8E GrounderInWall2 (x9) [0x02]
 - [ ] 0x91 ChopChop (x21) [0x08]
 
+**Bosses:**
+- [ ] 0x89 ARZBoss *(dynamic)* - Hammer/arrow boss
+
 **Objects:**
 - [x] 0x03 LayerSwitcher (x28) [17 subtypes]
 - [x] 0x15 SwingingPlatform (x4) [4 subtypes]
@@ -340,6 +349,9 @@ Total: 254 objects | Implemented: 5 | Unimplemented: 14
 
 **Badniks:**
 - [ ] 0xC8 Crawl (x6) [0xAC]
+
+**Bosses:**
+- [ ] 0x51 CNZBoss *(dynamic)* - Catcher boss
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x9) [0x50, 0xD0, 0x52]
@@ -400,6 +412,9 @@ Total: 259 objects | Implemented: 7 | Unimplemented: 13
 - [ ] 0x95 Sol (x2) [0x00]
 - [ ] 0x96 Rexon2 (x4) [0x0E]
 
+**Bosses:**
+- [ ] 0x52 HTZBoss *(dynamic)* - Lava-mobile boss
+
 **Objects:**
 - [x] 0x03 LayerSwitcher (x35) [19 subtypes]
 - [ ] 0x14 Seesaw (x4) [0x00]
@@ -456,6 +471,9 @@ Total: 148 objects | Implemented: 6 | Unimplemented: 14
 - [ ] 0x9E Crawlton (x6) [0x22]
 - [ ] 0xA3 Flasher (x14) [0x2C]
 
+**Bosses:**
+- [ ] 0x57 MCZBoss *(dynamic)* - Drill boss
+
 **Objects:**
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x15 SwingingPlatform (x2) [0x18, 0x38]
@@ -507,6 +525,9 @@ Total: 189 objects | Implemented: 7 | Unimplemented: 7
 **Badniks:**
 - [ ] 0x4A Octus (x14) [0x00]
 - [ ] 0x50 Aquis (x8) [0x00]
+
+**Bosses:**
+- [ ] 0x55 OOZBoss *(dynamic)* - Laser/spike boss
 
 **Objects:**
 - [x] 0x0D GoalPlate (x1) [0x00]
@@ -598,6 +619,10 @@ Total: 270 objects | Implemented: 6 | Unimplemented: 23
 - [ ] 0xA1 Slicer (x13) [0x28]
 - [ ] 0xA4 Asteron (x42) [0x2E]
 
+**Bosses:**
+- [ ] 0x53 MTZBossOrb *(dynamic)* - Bouncing orb projectiles
+- [ ] 0x54 MTZBoss *(dynamic)* - Eggman's balloon machine
+
 **Objects:**
 - [x] 0x06 Spiral (x2) [0x80]
 - [x] 0x1C Scenery (x1) [0x03]
@@ -654,7 +679,7 @@ Total: 157 objects | Implemented: 3 | Unimplemented: 22
 - [ ] 0xAD CluckerBase (x10) [0x42]
 - [ ] 0xAE Clucker (x10) [0x44]
 
-**Bosss:**
+**Bosses:**
 - [ ] 0xC5 WFZBoss (x1) [0x92]
 
 **Objects:**
@@ -687,7 +712,7 @@ Total: 157 objects | Implemented: 3 | Unimplemented: 22
 
 Total: 5 objects | Implemented: 0 | Unimplemented: 3
 
-**Bosss:**
+**Bosses:**
 - [ ] 0xC6 Eggman (x1) [0xA6]
 - [ ] 0xC7 Eggrobo (x1) [0x02]
 
