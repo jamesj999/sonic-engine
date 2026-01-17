@@ -13,7 +13,7 @@ Last updated: 2026-01-16
 - [x] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
 - [x] Objects still have collision in debug movement mode. (Fixed: Debug mode now skips all physics, collision, and damage processing. Toggled via configurable keybind - default 'D' key)
 - [x] Camera maximum height is not yet implemented. (Fixed: Added LevelEventManager for dynamic boundary updates with 2px/frame easing toward targets. Camera class now supports target-based boundaries matching ROM's Camera_Max_Y_pos_target system.)
-- [ ] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
+- [x] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
 - [x] Finishing a special stage puts you at your last coordinates, instead of the coordinates of the last signpost (or, if none, fall back to act start position). (Fixed: CheckpointState now saves/restores camera position with checkpoint data, matching ROM's Obj79_SaveData/LoadData behavior)
 - [x] Both special stage and end of act cards shouldn't start counting the score until a set delay. (Fixed: Added STATE_PRE_TALLY_DELAY with ROM-accurate $B4/180 frame delay)
 - [x] Special stage results ending should fade to white (verify!)
