@@ -391,6 +391,25 @@ public class Ym2612Chip {
         if (ch >= 0 && ch < 6) mutes[ch] = mute;
     }
 
+    /**
+     * Silence all FM channels (ROM: zFMSilenceAll).
+     * Key-off all channels, then write 0xFF to registers 0x30-0x8F on both ports.
+     */
+    public void silenceAll() {
+        // Key-off all 6 channels (reg 0x28, value = channel with no operator keys)
+        for (int ch = 0; ch < 3; ch++) {
+            write(0, 0x28, ch);         // Part I channels 0-2
+            write(0, 0x28, ch | 0x04);  // Part II channels 3-5
+        }
+        // Write 0xFF to registers 0x30-0x8F on both ports to kill all operator params
+        for (int reg = 0x30; reg < 0x90; reg++) {
+            write(0, reg, 0xFF);
+            write(1, reg, 0xFF);
+        }
+        // Stop DAC playback
+        stopDac();
+    }
+
     public void setDacInterpolate(boolean interpolate) {
         this.dacInterpolate = interpolate;
     }

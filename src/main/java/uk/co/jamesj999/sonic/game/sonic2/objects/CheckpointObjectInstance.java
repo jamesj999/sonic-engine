@@ -58,7 +58,6 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
     private int animFrameIndex;
     private boolean activated;
     private boolean dongleActive;
-    private boolean usedForSpecialStage; // Prevents stars from respawning after SS entry
 
     public CheckpointObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, 8, 24, 0.25f, 0.9f, 0.35f, false);
@@ -190,7 +189,8 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
 
     private boolean shouldSpawnStars(AbstractPlayableSprite player) {
         // ROM: not 2P, emeralds < 7, rings >= 50, AND not already used for SS entry
-        if (usedForSpecialStage) {
+        var checkpointState = LevelManager.getInstance().getCheckpointState();
+        if (checkpointState instanceof CheckpointState cs && cs.isUsedForSpecialStage()) {
             return false;
         }
         int emeralds = uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getEmeraldCount();
@@ -207,7 +207,10 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
      * Prevents stars from respawning when returning from special stage.
      */
     public void markUsedForSpecialStage() {
-        this.usedForSpecialStage = true;
+        var checkpointState = LevelManager.getInstance().getCheckpointState();
+        if (checkpointState instanceof CheckpointState cs) {
+            cs.markUsedForSpecialStage();
+        }
         LOGGER.fine("Checkpoint " + checkpointIndex + " marked as used for special stage entry");
     }
 

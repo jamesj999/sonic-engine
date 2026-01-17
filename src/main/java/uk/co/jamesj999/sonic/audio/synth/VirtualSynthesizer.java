@@ -93,4 +93,10 @@ public class VirtualSynthesizer implements Synthesizer {
     public void setDacInterpolate(boolean interpolate) {
         ym.setDacInterpolate(interpolate);
     }
+
+    @Override
+    public void silenceAll() {
+        ym.silenceAll();
+        psg.silenceAll();
+    }
 }

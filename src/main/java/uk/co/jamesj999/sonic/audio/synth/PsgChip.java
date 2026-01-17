@@ -54,6 +54,17 @@ public class PsgChip {
         }
     }
 
+    /**
+     * Silence all PSG channels (ROM: zPSGSilenceAll).
+     * Writes 0x9F, 0xBF, 0xDF, 0xFF to set all volumes to max attenuation.
+     */
+    public void silenceAll() {
+        write(0x9F); // Channel 0 volume = 0xF (silence)
+        write(0xBF); // Channel 1 volume = 0xF (silence)
+        write(0xDF); // Channel 2 volume = 0xF (silence)
+        write(0xFF); // Channel 3 (noise) volume = 0xF (silence)
+    }
+
     public void write(int val) {
         if ((val & 0x80) != 0) {
             int channel = (val >> 5) & 0x03;

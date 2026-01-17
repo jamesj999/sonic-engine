@@ -42,6 +42,8 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         for (int i = 0; i < 4; i++)
             psgLocks[i] = null;
         psgLatches.clear();
+        // Silence hardware (ROM: zFMSilenceAll + zPSGSilenceAll)
+        silenceAll();
     }
 
     @Override

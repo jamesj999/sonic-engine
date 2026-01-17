@@ -12,4 +12,5 @@ public interface Synthesizer {
     void setFmMute(int channel, boolean mute);
     void setPsgMute(int channel, boolean mute);
     void setDacInterpolate(boolean interpolate);
+    void silenceAll();
 }
