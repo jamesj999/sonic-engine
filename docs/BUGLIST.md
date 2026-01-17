@@ -18,6 +18,7 @@ Last updated: 2026-01-16
 - [x] Both special stage and end of act cards shouldn't start counting the score until a set delay. (Fixed: Added STATE_PRE_TALLY_DELAY with ROM-accurate $B4/180 frame delay)
 - [x] Special stage results ending should fade to white (verify!)
 - [x] When a Special stage ends, the star post still has the special stage entry stars above it, allowing you to re-enter the special stage, even though rings are reset to zero. (Fixed: Stars now self-destruct when usedForSpecialStage flag is set; added ring count check before allowing special stage entry)
+- [ ] Buzzer badnik shoots projectile from wrong location (under body, instead of tail tip)
 
 ## ROM-Accurate Investigation Plan
 
