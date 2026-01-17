@@ -258,9 +258,9 @@ public class SignpostObjectInstance extends BoxObjectInstance {
             LOGGER.warning("Failed to play stage clear music: " + e.getMessage());
         }
 
-        // Calculate elapsed time (simple approximation: frames / 60)
         LevelManager levelManager = LevelManager.getInstance();
-        int elapsedSeconds = levelManager.getCurrentAct() > 0 ? 45 : 30; // Placeholder - TODO: implement proper timer
+        var levelGamestate = levelManager.getLevelGamestate();
+        int elapsedSeconds = levelGamestate != null ? levelGamestate.getElapsedSeconds() : 0;
         int ringCount = player.getRingCount();
         int actNumber = levelManager.getCurrentAct() + 1; // 1-indexed for display
         boolean allRingsCollected = levelManager != null && levelManager.areAllRingsCollected();

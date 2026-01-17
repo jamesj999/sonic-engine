@@ -97,4 +97,12 @@ public class LevelTimer {
         // Simple blink: ON for 8 frames, OFF for 8 frames (faster blink)
         return (totalFrames / 8) % 2 == 0;
     }
+
+    /**
+     * Gets the total elapsed time in seconds.
+     * @return elapsed seconds (truncated, not rounded)
+     */
+    public int getElapsedSeconds() {
+        return (int) (totalFrames / 60);
+    }
 }
