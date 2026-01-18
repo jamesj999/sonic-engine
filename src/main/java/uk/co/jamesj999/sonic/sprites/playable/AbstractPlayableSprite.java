@@ -178,6 +178,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * When true, user inputs are ignored (Control_Locked in ROM).
          */
         protected boolean controlLocked = false;
+        /**
+         * Tracks whether the jump button is currently pressed this frame.
+         * Set by movement manager, used by objects (like flippers) to detect jump input.
+         */
+        protected boolean jumpInputPressed = false;
         private int spiralActiveFrame = Integer.MIN_VALUE;
         private byte flipAngle = 0;
         private byte flipSpeed = 0;
@@ -769,6 +774,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setControlLocked(boolean controlLocked) {
                 this.controlLocked = controlLocked;
+        }
+
+        /**
+         * Returns whether the jump button is currently pressed.
+         * Used by objects (like CNZ flippers) to detect jump input for triggering.
+         */
+        public boolean isJumpPressed() {
+                return jumpInputPressed;
+        }
+
+        /**
+         * Sets the jump input state for this frame.
+         * Called by movement manager each frame with the current jump button state.
+         */
+        public void setJumpInputPressed(boolean pressed) {
+                this.jumpInputPressed = pressed;
         }
 
         public void markSpiralActive(int frameCounter) {

@@ -3,7 +3,6 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.audio.AudioManager;
-import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
@@ -246,14 +245,5 @@ public class SpikeObjectInstance extends BoxObjectInstance implements SolidObjec
         } catch (Exception e) {
             // Prevent audio failure from breaking game logic.
         }
-    }
-
-    private boolean isOnScreen() {
-        Camera camera = Camera.getInstance();
-        int left = camera.getX();
-        int top = camera.getY();
-        int right = left + camera.getWidth();
-        int bottom = top + camera.getHeight();
-        return currentX >= left && currentX <= right && currentY >= top && currentY <= bottom;
     }
 }

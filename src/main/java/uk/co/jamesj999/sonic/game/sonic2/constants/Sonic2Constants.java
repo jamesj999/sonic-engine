@@ -166,6 +166,30 @@ public class Sonic2Constants {
     // ARZ has distinct water surface art (natural blue water)
     public static final int ART_NEM_WATER_SURFACE_ARZ_ADDR = 0x82E02; // Top of water in ARZ (16 blocks)
 
+    // CPZ Speed Booster (Object 0x1B)
+    public static final int ART_NEM_SPEED_BOOSTER_ADDR = 0x824D4;  // ArtNem_CPZBooster (verified)
+    public static final int MAP_UNC_SPEED_BOOSTER_ADDR = 0x223E2;  // Obj1B_MapUnc
+
+    // CPZ BlueBalls (Object 0x1D) - Bouncing water droplet hazard
+    public static final int ART_NEM_CPZ_DROPLET_ADDR = 0x8253C;  // ArtNem_CPZDroplet (verified)
+
+    // Breakable Block (Object 0x32) - CPZ metal blocks / HTZ rocks
+    public static final int ART_NEM_CPZ_METAL_BLOCK_ADDR = 0x827B8;  // ArtNem_CPZMetalBlock (verified)
+
+    // CPZ/OOZ/WFZ Moving Platform (Object 0x19)
+    public static final int MAP_UNC_OBJ19_ADDR = 0x2222A;  // Obj19_MapUnc_2222A
+    public static final int ART_NEM_CPZ_ELEVATOR_ADDR = 0x82216;    // ArtNem_CPZElevator (verified)
+    public static final int ART_NEM_OOZ_ELEVATOR_ADDR = 0x810B8;    // ArtNem_OOZElevator (verified)
+    public static final int ART_NEM_WFZ_PLATFORM_ADDR = 0x8D96E;    // ArtNem_WfzFloatingPlatform (verified)
+    public static final int ART_TILE_CPZ_ELEVATOR = 0x03A0;  // palette 3
+    public static final int ART_TILE_OOZ_ELEVATOR = 0x02F4;  // palette 3
+    public static final int ART_TILE_WFZ_PLATFORM = 0x046D;  // palette 1, priority
+
+    // Zone indices (from s2.constants.asm zoneID macro)
+    public static final int ZONE_CHEMICAL_PLANT = 0x0D;  // chemical_plant_zone
+    public static final int ZONE_OIL_OCEAN = 0x0A;       // oil_ocean_zone
+    public static final int ZONE_WING_FORTRESS = 0x06;   // wing_fortress_zone
+
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)
             { 0x0060, 0x02AF }, // 1 Emerald Hill 2 (EHZ_2.bin)

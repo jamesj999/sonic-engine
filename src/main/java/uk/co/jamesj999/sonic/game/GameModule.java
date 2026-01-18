@@ -119,4 +119,12 @@ public interface GameModule {
      * @return the debug overlay provider, or null if using default overlays
      */
     DebugOverlayProvider getDebugOverlayProvider();
+
+    /**
+     * Returns the zone art provider for this game.
+     * Provides zone-specific art configurations for objects.
+     *
+     * @return the zone art provider, or null if no zone-specific art
+     */
+    ZoneArtProvider getZoneArtProvider();
 }

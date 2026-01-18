@@ -62,6 +62,9 @@ public class PlayableSpriteMovementManager extends
 
 	@Override
 	public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
+		// Store jump input state for objects (like flippers) to query
+		sprite.setJumpInputPressed(jump);
+
 		// DEBUG MODE: When debug mode is active, use simple directional movement
 		// with no collision, physics, or damage.
 		if (sprite.isDebugMode()) {

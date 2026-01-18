@@ -64,15 +64,22 @@ public class ObjectDiscoveryTool {
             0x15,  // SwingingPlatform
             0x18,  // ARZPlatform/EHZPlatform
             0x19,  // CPZPlatform/OOZMovingPform/WFZPlatform
+            0x1B,  // SpeedBooster (CPZ)
             0x1C,  // BridgeStake
+            0x1D,  // BlueBalls (CPZ)
+            0x1E,  // CPZSpinTube
             0x26,  // Monitor
+            0x32,  // BreakableBlock (CPZ metal blocks / HTZ rocks)
             0x36,  // Spikes
             0x41,  // Spring
+            0x44,  // Bumper
             0x49,  // EHZWaterfall
             0x4B,  // Buzzer
             0x5C,  // Masher
+            0x74,  // InvisibleBlock
             0x79,  // Checkpoint
-            0x9D   // Coconuts
+            0x9D,  // Coconuts
+            0xD8   // BonusBlock
     );
 
     // Object categories for organized output

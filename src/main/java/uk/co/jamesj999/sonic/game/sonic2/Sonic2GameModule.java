@@ -17,6 +17,7 @@ import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
 import uk.co.jamesj999.sonic.game.RomOffsetProvider;
 import uk.co.jamesj999.sonic.game.DebugModeProvider;
 import uk.co.jamesj999.sonic.game.DebugOverlayProvider;
+import uk.co.jamesj999.sonic.game.ZoneArtProvider;
 import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2DebugModeProvider;
 import uk.co.jamesj999.sonic.game.sonic2.scroll.Sonic2ScrollHandlerProvider;
 import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2AudioProfile;
@@ -135,5 +136,10 @@ public class Sonic2GameModule implements GameModule {
         // Debug overlay content is currently handled by the generic DebugRenderer
         // Future: Create Sonic2DebugOverlayProvider for game-specific overlay content
         return null;
+    }
+
+    @Override
+    public ZoneArtProvider getZoneArtProvider() {
+        return new Sonic2ZoneArtProvider();
     }
 }

@@ -126,6 +126,16 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.CHECKPOINT,
                 (spawn, registry) -> new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // CPZ Objects
+        registerFactory(Sonic2ObjectIds.SPEED_BOOSTER,
+                (spawn, registry) -> new SpeedBoosterObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.CPZ_SPIN_TUBE,
+                (spawn, registry) -> new CPZSpinTubeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.BLUE_BALLS,
+                (spawn, registry) -> new BlueBallsObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.BREAKABLE_BLOCK,
+                (spawn, registry) -> new BreakableBlockObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         // CNZ Objects
         registerFactory(Sonic2ObjectIds.BUMPER,
                 (spawn, registry) -> new BumperObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
@@ -163,7 +173,8 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
 
         registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_A,
                 (spawn, registry) -> new ARZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
-        registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_B, platformFactory);
+        registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_B,
+                (spawn, registry) -> new CPZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
         registerFactory(Sonic2ObjectIds.INVISIBLE_BLOCK,
                 (spawn, registry) -> new InvisibleBlockObjectInstance(spawn,

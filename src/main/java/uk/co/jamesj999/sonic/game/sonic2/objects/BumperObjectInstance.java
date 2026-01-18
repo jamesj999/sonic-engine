@@ -191,16 +191,16 @@ public class BumperObjectInstance extends AbstractObjectInstance {
         int dy = spawn.y() - player.getCentreY();
 
         // Calculate angle in radians
-        double angle = Math.atan2(dy, dx);
+        double angle = StrictMath.atan2(dy, dx);
 
         // If player is exactly at center, push them up
         if (dx == 0 && dy == 0) {
-            angle = Math.PI / 2; // 90 degrees up
+            angle = StrictMath.PI / 2; // 90 degrees up
         }
 
         // Add wobble: ROM adds (Timer_frames & 3) to the 0-255 angle
         // Convert to radians: (frameCounter & 3) * (2*PI/256)
-        double wobble = (frameCounter & 3) * (2.0 * Math.PI / 256.0);
+        double wobble = (frameCounter & 3) * (2.0 * StrictMath.PI / 256.0);
         angle += wobble;
 
         // Calculate velocity components
@@ -208,8 +208,8 @@ public class BumperObjectInstance extends AbstractObjectInstance {
         // ROM: y_vel = -cos(angle) * $700 >> 8
         // Note: ROM uses CalcSine which returns (sin, cos) in (d0, d1)
         // We negate because we want to push AWAY from bumper
-        int xVel = (int) (-Math.cos(angle) * BOUNCE_VELOCITY);
-        int yVel = (int) (-Math.sin(angle) * BOUNCE_VELOCITY);
+        int xVel = (int) (-StrictMath.sin(angle) * BOUNCE_VELOCITY);
+        int yVel = (int) (-StrictMath.cos(angle) * BOUNCE_VELOCITY);
 
         player.setXSpeed((short) xVel);
         player.setYSpeed((short) yVel);

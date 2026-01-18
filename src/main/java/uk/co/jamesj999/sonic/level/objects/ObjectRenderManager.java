@@ -61,6 +61,18 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet flipperSheet;
     private final SpriteAnimationSet flipperAnimations;
 
+    // CPZ Speed Booster
+    private final ObjectSpriteSheet speedBoosterSheet;
+
+    // CPZ BlueBalls
+    private final ObjectSpriteSheet blueBallsSheet;
+
+    // CPZ Breakable Block
+    private final ObjectSpriteSheet breakableBlockSheet;
+
+    // CPZ/OOZ/WFZ Moving Platform
+    private final ObjectSpriteSheet cpzPlatformSheet;
+
     // Results screen
     private final ObjectSpriteSheet resultsSheet;
     private final Pattern[] resultsHudDigitPatterns;
@@ -97,6 +109,18 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer hexBumperRenderer;
     private final PatternSpriteRenderer bonusBlockRenderer;
     private final PatternSpriteRenderer flipperRenderer;
+
+    // CPZ Speed Booster renderer
+    private final PatternSpriteRenderer speedBoosterRenderer;
+
+    // CPZ BlueBalls renderer
+    private final PatternSpriteRenderer blueBallsRenderer;
+
+    // CPZ Breakable Block renderer
+    private final PatternSpriteRenderer breakableBlockRenderer;
+
+    // CPZ/OOZ/WFZ Moving Platform renderer
+    private final PatternSpriteRenderer cpzPlatformRenderer;
 
     // Results screen renderer
     private final PatternSpriteRenderer resultsRenderer;
@@ -144,6 +168,18 @@ public class ObjectRenderManager {
         this.bonusBlockSheet = artData.bonusBlockSheet();
         this.flipperSheet = artData.flipperSheet();
         this.flipperAnimations = artData.flipperAnimations();
+
+        // CPZ Speed Booster
+        this.speedBoosterSheet = artData.speedBoosterSheet();
+
+        // CPZ BlueBalls
+        this.blueBallsSheet = artData.blueBallsSheet();
+
+        // CPZ Breakable Block
+        this.breakableBlockSheet = artData.breakableBlockSheet();
+
+        // CPZ/OOZ/WFZ Moving Platform
+        this.cpzPlatformSheet = artData.cpzPlatformSheet();
 
         // Results screen
         this.resultsSheet = artData.resultsSheet();
@@ -208,6 +244,22 @@ public class ObjectRenderManager {
         register(bonusBlockSheet, bonusBlockRenderer);
         this.flipperRenderer = new PatternSpriteRenderer(flipperSheet);
         register(flipperSheet, flipperRenderer);
+
+        // CPZ Speed Booster renderer
+        this.speedBoosterRenderer = new PatternSpriteRenderer(speedBoosterSheet);
+        register(speedBoosterSheet, speedBoosterRenderer);
+
+        // CPZ BlueBalls renderer
+        this.blueBallsRenderer = new PatternSpriteRenderer(blueBallsSheet);
+        register(blueBallsSheet, blueBallsRenderer);
+
+        // CPZ Breakable Block renderer
+        this.breakableBlockRenderer = new PatternSpriteRenderer(breakableBlockSheet);
+        register(breakableBlockSheet, breakableBlockRenderer);
+
+        // CPZ/OOZ/WFZ Moving Platform renderer
+        this.cpzPlatformRenderer = new PatternSpriteRenderer(cpzPlatformSheet);
+        register(cpzPlatformSheet, cpzPlatformRenderer);
 
         // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
@@ -407,6 +459,38 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getFlipperAnimations() {
         return flipperAnimations;
+    }
+
+    public PatternSpriteRenderer getSpeedBoosterRenderer() {
+        return speedBoosterRenderer;
+    }
+
+    public ObjectSpriteSheet getSpeedBoosterSheet() {
+        return speedBoosterSheet;
+    }
+
+    public PatternSpriteRenderer getBlueBallsRenderer() {
+        return blueBallsRenderer;
+    }
+
+    public ObjectSpriteSheet getBlueBallsSheet() {
+        return blueBallsSheet;
+    }
+
+    public PatternSpriteRenderer getBreakableBlockRenderer() {
+        return breakableBlockRenderer;
+    }
+
+    public ObjectSpriteSheet getBreakableBlockSheet() {
+        return breakableBlockSheet;
+    }
+
+    public PatternSpriteRenderer getCpzPlatformRenderer() {
+        return cpzPlatformRenderer;
+    }
+
+    public ObjectSpriteSheet getCpzPlatformSheet() {
+        return cpzPlatformSheet;
     }
 
     public PatternSpriteRenderer getResultsRenderer() {

@@ -1,6 +1,10 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
+import uk.co.jamesj999.sonic.game.ZoneArtProvider;
+import uk.co.jamesj999.sonic.game.ZoneArtProvider.ObjectArtConfig;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.AnimalType;
 
 import uk.co.jamesj999.sonic.data.Rom;
@@ -249,6 +253,30 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet flipperSheet = new ObjectSpriteSheet(flipperPatterns, flipperMappings, 2, 1);
         SpriteAnimationSet flipperAnimations = createFlipperAnimations();
 
+        // CPZ Speed Booster art (Object 0x1B)
+        Pattern[] speedBoosterPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPEED_BOOSTER_ADDR, "SpeedBooster");
+        List<SpriteMappingFrame> speedBoosterMappings = createSpeedBoosterMappings();
+        ObjectSpriteSheet speedBoosterSheet = new ObjectSpriteSheet(speedBoosterPatterns, speedBoosterMappings, 3, 1);
+
+        // CPZ BlueBalls art (Object 0x1D) - water droplet hazard
+        Pattern[] blueBallsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_DROPLET_ADDR, "CPZDroplet");
+        List<SpriteMappingFrame> blueBallsMappings = createBlueBallsMappings();
+        ObjectSpriteSheet blueBallsSheet = new ObjectSpriteSheet(blueBallsPatterns, blueBallsMappings, 3, 0);
+
+        // CPZ Breakable Block art (Object 0x32) - metal blocks that shatter when rolled into
+        Pattern[] breakableBlockPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_METAL_BLOCK_ADDR, "CPZMetalBlock");
+        List<SpriteMappingFrame> breakableBlockMappings = createBreakableBlockMappings();
+        ObjectSpriteSheet breakableBlockSheet = new ObjectSpriteSheet(breakableBlockPatterns, breakableBlockMappings, 3, 1);
+
+        // CPZ/OOZ/WFZ Moving Platform art (Object 0x19)
+        // Load art based on zone via ZoneArtProvider
+        ObjectArtConfig platformArtConfig = getObjectArtConfig(Sonic2ObjectIds.GENERIC_PLATFORM_B, zoneIndex);
+        int cpzPlatformArtAddr = platformArtConfig != null ? platformArtConfig.artAddress() : Sonic2Constants.ART_NEM_CPZ_ELEVATOR_ADDR;
+        int cpzPlatformPalette = platformArtConfig != null ? platformArtConfig.palette() : 3;
+        Pattern[] cpzPlatformPatterns = safeLoadNemesisPatterns(cpzPlatformArtAddr, "CPZPlatform");
+        List<SpriteMappingFrame> cpzPlatformMappings = createCPZPlatformMappings();
+        ObjectSpriteSheet cpzPlatformSheet = new ObjectSpriteSheet(cpzPlatformPatterns, cpzPlatformMappings, cpzPlatformPalette, 0);
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -316,12 +344,16 @@ public class Sonic2ObjectArt {
                 hexBumperSheet,
                 bonusBlockSheet,
                 flipperSheet,
+                speedBoosterSheet,
+                blueBallsSheet,
+                breakableBlockSheet,
+                cpzPlatformSheet,
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
                 hudLivesPatterns,
                 hudLivesNumbers,
-                null, // debugFontPatterns
+                (Pattern[]) null, // debugFontPatterns
                 monitorMappings,
                 springMappings,
                 checkpointMappings,
@@ -1348,6 +1380,129 @@ public class Sonic2ObjectArt {
     }
 
     /**
+     * Creates mappings for CPZ Speed Booster (Obj1B).
+     * Based on obj1B.asm mappings.
+     * Frame 0: Visible - Two 2x2 pieces at (-24,-8) and (8,-8)
+     * Frame 1: Same as frame 0 (duplicate in ROM)
+     * Frame 2: Empty (for blinking effect)
+     */
+    private List<SpriteMappingFrame> createSpeedBoosterMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 & 1: Visible state - two 2x2 tile pieces
+        List<SpriteMappingPiece> visiblePieces = new ArrayList<>();
+        visiblePieces.add(new SpriteMappingPiece(-24, -8, 2, 2, 0, false, false, 0));
+        visiblePieces.add(new SpriteMappingPiece(8, -8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(visiblePieces));
+        frames.add(new SpriteMappingFrame(visiblePieces)); // Frame 1 = same as frame 0
+
+        // Frame 2: Empty (creates blinking effect)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ BlueBalls (Obj1D).
+     * Based on obj1D.asm - single 2x2 tile frame at -8,-8.
+     */
+    private List<SpriteMappingFrame> createBlueBallsMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        // Frame 0: Single 2x2 piece centered at -8,-8 (16x16 pixels)
+        // spritePiece -8, -8, 2, 2, 0, 0, 0, 0, 0
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ Breakable Block (Obj32).
+     * Based on obj32_b.asm - 4 pieces in a 2x2 grid (32x32 pixels total).
+     * Frame 0: Intact block (4 pieces)
+     * Frames 1-4: Individual fragment pieces for when block breaks
+     */
+    private List<SpriteMappingFrame> createBreakableBlockMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Intact block - 4 pieces in 2x2 arrangement
+        // spritePiece -$10, -$10, 2, 2, 0, 0, 0, 0, 0  ; top-left
+        // spritePiece 0, -$10, 2, 2, 0, 1, 0, 0, 0     ; top-right (H-flipped)
+        // spritePiece -$10, 0, 2, 2, 0, 0, 0, 0, 0     ; bottom-left
+        // spritePiece 0, 0, 2, 2, 0, 1, 0, 0, 0        ; bottom-right (H-flipped)
+        List<SpriteMappingPiece> intactPieces = new ArrayList<>();
+        intactPieces.add(new SpriteMappingPiece(-16, -16, 2, 2, 0, false, false, 0)); // top-left
+        intactPieces.add(new SpriteMappingPiece(0, -16, 2, 2, 0, true, false, 0));    // top-right, H-flip
+        intactPieces.add(new SpriteMappingPiece(-16, 0, 2, 2, 0, false, false, 0));   // bottom-left
+        intactPieces.add(new SpriteMappingPiece(0, 0, 2, 2, 0, true, false, 0));      // bottom-right, H-flip
+        frames.add(new SpriteMappingFrame(intactPieces));
+
+        // Frames 1-4: Individual fragment pieces (each is 16x16)
+        // Fragment 0: top-left (no flip)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        // Fragment 1: top-right (H-flip)
+        List<SpriteMappingPiece> frag1 = new ArrayList<>();
+        frag1.add(new SpriteMappingPiece(-8, -8, 2, 2, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frag1));
+        // Fragment 2: bottom-left (no flip)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 0));
+        // Fragment 3: bottom-right (H-flip)
+        List<SpriteMappingPiece> frag3 = new ArrayList<>();
+        frag3.add(new SpriteMappingPiece(-8, -8, 2, 2, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frag3));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ/OOZ/WFZ Moving Platform (Obj19).
+     * Based on obj19.asm - 4 frames with different platform sizes.
+     * Frame 0: Large (32px wide) - 2 x 4x4 tile pieces
+     * Frame 1: Small (24px wide) - 2 x 3x4 tile pieces
+     * Frame 2: Wide (64px wide) - 4 x 4x3 tile pieces
+     * Frame 3: Medium (32px wide) - 2 x 4x3 tile pieces
+     */
+    private List<SpriteMappingFrame> createCPZPlatformMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj19_0008): Large platform - 2 pieces, 4x4 tiles each
+        // spritePiece -$20, -$10, 4, 4, 0, 0, 0, 0, 0 (left half)
+        // spritePiece 0, -$10, 4, 4, 0, 1, 0, 0, 0 (right half, H-flipped)
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x20, -0x10, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -0x10, 4, 4, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Map_obj19_001A): Smaller platform - 2 pieces, 3x4 tiles each
+        // spritePiece -$18, -$10, 3, 4, 0, 0, 0, 0, 0 (left half)
+        // spritePiece 0, -$10, 3, 4, 0, 1, 0, 0, 0 (right half, H-flipped)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x18, -0x10, 3, 4, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -0x10, 3, 4, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (Map_obj19_002C): Wide platform - 4 pieces, 4x3 tiles each
+        // spritePiece -$40, -$10, 4, 3, 0, 0, 0, 0, 0
+        // spritePiece -$20, -$10, 4, 3, $C, 0, 0, 0, 0
+        // spritePiece 0, -$10, 4, 3, $C, 1, 0, 0, 0
+        // spritePiece $20, -$10, 4, 3, 0, 1, 0, 0, 0
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-0x40, -0x10, 4, 3, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-0x20, -0x10, 4, 3, 0x0C, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0, -0x10, 4, 3, 0x0C, true, false, 0));
+        frame2.add(new SpriteMappingPiece(0x20, -0x10, 4, 3, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (Map_obj19_004E): Medium platform - 2 pieces, 4x3 tiles each
+        // spritePiece -$20, -$10, 4, 3, 0, 0, 0, 0, 0
+        // spritePiece 0, -$10, 4, 3, 0, 1, 0, 0, 0
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-0x20, -0x10, 4, 3, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0, -0x10, 4, 3, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        return frames;
+    }
+
+    /**
      * Creates a pattern array matching the fixed VRAM layout for the results
      * screen.
      * Each art chunk is placed at its exact VRAM tile base (relative to
@@ -1434,5 +1589,20 @@ public class Sonic2ObjectArt {
         }
         int copyLen = Math.min(src.length, dest.length - destPos);
         System.arraycopy(src, 0, dest, destPos, copyLen);
+    }
+
+    /**
+     * Gets the art configuration for an object from the ZoneArtProvider.
+     *
+     * @param objectId the object type ID
+     * @param zoneIndex the current zone index
+     * @return the art configuration, or null if not available
+     */
+    private ObjectArtConfig getObjectArtConfig(int objectId, int zoneIndex) {
+        ZoneArtProvider provider = GameModuleRegistry.getCurrent().getZoneArtProvider();
+        if (provider == null) {
+            return null;
+        }
+        return provider.getObjectArt(objectId, zoneIndex);
     }
 }

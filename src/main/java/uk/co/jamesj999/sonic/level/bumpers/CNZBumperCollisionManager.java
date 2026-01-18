@@ -473,13 +473,18 @@ public class CNZBumperCollisionManager {
     }
 
     /**
-     * Apply velocity based on an angle in Mega Drive format (0-255 = 0-360 degrees).
+     * Apply velocity based on reflection physics in Mega Drive format.
      * <p>
-     * ROM Reference: loc_175EA at s2.asm line 32429
+     * ROM Reference: loc_175EA at s2.asm lines 32429-32453
      * <p>
-     * The ROM calculates the incoming angle, compares it to the target angle,
-     * and reflects if the difference is too large. For simplicity, we directly
-     * apply the target angle.
+     * The ROM algorithm:
+     * <ol>
+     *   <li>Calculate incoming angle from player's current velocity</li>
+     *   <li>Compute delta = incomingAngle - surfaceAngle</li>
+     *   <li>If |delta| < $38 (56): reflect around surface (outAngle = -delta + surfaceAngle)</li>
+     *   <li>If |delta| >= $38: force redirect to surface angle</li>
+     *   <li>Apply velocity using CalcSine with magnitude $A00</li>
+     * </ol>
      * <p>
      * Mega Drive angle convention:
      * <ul>
@@ -490,23 +495,80 @@ public class CNZBumperCollisionManager {
      * </ul>
      *
      * @param player The player sprite
-     * @param targetAngle The target bounce angle (0-255)
+     * @param surfaceAngle The target surface/bounce angle (0-255)
      */
-    private void applyAngleBounce(AbstractPlayableSprite player, int targetAngle) {
-        // Convert Mega Drive angle to radians
-        // MD angle 0 = right, increases clockwise
-        // 0x40 = down, 0x80 = left, 0xC0 = up
-        double radians = (targetAngle / 256.0) * 2.0 * Math.PI;
+    private void applyAngleBounce(AbstractPlayableSprite player, int surfaceAngle) {
+        // Step 1: Calculate incoming angle from player velocity
+        // ROM: move.w x_vel(a0),d1 / move.w y_vel(a0),d2 / jsr CalcAngle
+        int xVel = player.getXSpeed();
+        int yVel = player.getYSpeed();
 
-        // ROM: x_vel = -cos(angle) * $A00 >> 8
-        // ROM: y_vel = -sin(angle) * $A00 >> 8
-        // Note: ROM's CalcSine returns (sin, cos) and uses different angle convention
-        // We negate because we want to push AWAY from the surface
+        // Convert velocity to MD angle (0-255)
+        // CalcAngle returns angle where 0=right, 0x40=down, 0x80=left, 0xC0=up
+        int incomingAngle = calcAngleMD(xVel, yVel);
 
-        int xVel = (int) (-Math.cos(radians) * BOUNCE_VELOCITY);
-        int yVel = (int) (-Math.sin(radians) * BOUNCE_VELOCITY);
+        // Step 2: Calculate delta from surface angle
+        // ROM: sub.w d3,d0  (d0 = incomingAngle - surfaceAngle)
+        int delta = (incomingAngle - surfaceAngle) & 0xFF;
 
-        player.setXSpeed((short) xVel);
-        player.setYSpeed((short) yVel);
+        // Handle signed comparison (convert to signed -128..127 range)
+        int signedDelta = (delta > 127) ? delta - 256 : delta;
+        int absDelta = StrictMath.abs(signedDelta);
+
+        // Step 3: Determine output angle
+        // ROM: cmpi.b #$38,d1 / blo.s loc_17618 / move.w d3,d0
+        int outAngle;
+        if (absDelta < 0x38) {
+            // Reflect: outAngle = -delta + surfaceAngle
+            // ROM: neg.w d0 / add.w d3,d0
+            outAngle = (-signedDelta + surfaceAngle) & 0xFF;
+        } else {
+            // Too steep - force redirect to surface angle
+            outAngle = surfaceAngle & 0xFF;
+        }
+
+        // Step 4: Apply velocity using CalcSine
+        // ROM: jsr CalcSine / muls.w #-$A00,d1 / asr.l #8,d1
+        // CalcSine returns sin in d0, cos in d1
+        double radians = (outAngle / 256.0) * 2.0 * StrictMath.PI;
+
+        // ROM formula: x_vel = -sin(angle) * $A00 >> 8, y_vel = -cos(angle) * $A00 >> 8
+        int newXVel = (int) (-StrictMath.sin(radians) * BOUNCE_VELOCITY);
+        int newYVel = (int) (-StrictMath.cos(radians) * BOUNCE_VELOCITY);
+
+        player.setXSpeed((short) newXVel);
+        player.setYSpeed((short) newYVel);
+    }
+
+    /**
+     * Calculate Mega Drive-style angle from velocity components.
+     * <p>
+     * Approximates ROM CalcAngle behavior:
+     * <ul>
+     *   <li>0x00 = right (+X)</li>
+     *   <li>0x40 = down (+Y)</li>
+     *   <li>0x80 = left (-X)</li>
+     *   <li>0xC0 = up (-Y)</li>
+     * </ul>
+     *
+     * @param dx X component (positive = right)
+     * @param dy Y component (positive = down)
+     * @return Angle in 0-255 range
+     */
+    private int calcAngleMD(int dx, int dy) {
+        if (dx == 0 && dy == 0) {
+            return 0;
+        }
+
+        // atan2 returns radians where 0=right, PI/2=up, PI=left, -PI/2=down
+        // MD convention: 0=right, 0x40=down, 0x80=left, 0xC0=up
+        // So we need to negate Y for the MD y-down coordinate system
+        double radians = StrictMath.atan2(dy, dx);
+
+        // Convert to 0-255 range
+        int angle = (int) ((radians / (2.0 * StrictMath.PI)) * 256.0);
+
+        // Normalize to 0-255
+        return angle & 0xFF;
     }
 }
