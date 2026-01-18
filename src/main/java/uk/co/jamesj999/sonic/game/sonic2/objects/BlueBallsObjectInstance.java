@@ -343,11 +343,12 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Spawns sibling balls at staggered Y velocities and wait timers.
+     * Spawns sibling balls with staggered wait timers.
      * ROM: Obj1D_LoadBall loop at line 47870
      * <p>
-     * ROM sets wait timer (objoff_32) with: move.w d2,objoff_32(a1) then addq.w #3,d2
-     * So siblings get timers: 3, 6, 9, 12, 15, etc. (parent gets 0)
+     * All siblings share the SAME y_vel as the parent (line 47894: move.w y_vel(a0),y_vel(a1)).
+     * Only the wait timer (objoff_32) is staggered: 3, 6, 9, 12, 15, etc.
+     * This creates evenly-spaced balls that bounce identically but offset in time.
      */
     private void spawnSiblings() {
         LevelManager levelManager = LevelManager.getInstance();
@@ -355,12 +356,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             return;
         }
 
-        int currentYVel = INITIAL_Y_VEL;
-        int velIncrement = 0x80; // Velocity increment per sibling
-
         for (int i = 0; i < siblingCount; i++) {
-            currentYVel += velIncrement;
-
             // Staggered wait timer: 3, 6, 9, 12, etc.
             // (i+1) because parent already took timer 0
             int siblingWaitTimer = (i + 1) * SIBLING_WAIT_STAGGER;
@@ -372,8 +368,10 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
                     false, spawn.rawYWord()
             );
 
+            // All siblings use the SAME y_vel as parent (-$480)
+            // The disassembly does NOT increment velocity per sibling
             BlueBallsObjectInstance sibling = new BlueBallsObjectInstance(
-                    siblingSpawn, name, currentYVel, xVelDelta, xDistance, arcMotion,
+                    siblingSpawn, name, INITIAL_Y_VEL, xVelDelta, xDistance, arcMotion,
                     siblingWaitTimer
             );
 
