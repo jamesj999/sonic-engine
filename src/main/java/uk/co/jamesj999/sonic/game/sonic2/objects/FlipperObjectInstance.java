@@ -29,6 +29,7 @@ public class FlipperObjectInstance extends BoxObjectInstance
     private static final int TYPE_VERTICAL = 0;
     private static final int TYPE_HORIZONTAL = 1;
 
+    // Slope curves from s2.asm byte_2B3C6, byte_2B3EA, byte_2B40E
     private static final byte[] SLOPE_CURVE_0 = {
             7, 7, 7, 7, 7, 7, 7, 8, 9, 10, 11, 10, 9, 8, 7, 6,
             5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10,
@@ -58,6 +59,11 @@ public class FlipperObjectInstance extends BoxObjectInstance
     private int mappingFrame;
     private int launchCooldown = 0;
 
+    // Vertical flipper state tracking (per loc_2B20A in s2.asm)
+    // 0 = not standing, 1 = standing/rolling on flipper
+    private int playerFlipperState = 0;
+    private boolean launchPending = false;
+
     public FlipperObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, 8, 8, 0.8f, 0.4f, 0.2f, false);
         this.idleAnimId = isHorizontal() ? ANIM_HORIZONTAL_IDLE : ANIM_VERTICAL_IDLE;
@@ -77,14 +83,60 @@ public class FlipperObjectInstance extends BoxObjectInstance
         }
 
         if (isHorizontal()) {
+            // Horizontal flipper: launch on push (loc_2B35C)
             if (contact.pushing()) {
                 applyHorizontalLaunch(player);
             }
         } else {
-            if (contact.standing() && player.getAir()) {
+            // Vertical flipper state machine (loc_2B20A - loc_2B288)
+            if (contact.standing()) {
+                if (playerFlipperState == 0) {
+                    // First frame standing: enter rolling state (loc_2B20A)
+                    // setRolling(true) handles radius change and Y adjustment internally
+                    boolean wasRolling = player.getRolling();
+                    player.setRolling(true);
+                    if (!wasRolling) {
+                        player.setY((short)(player.getY() + 5));
+                    }
+                    playerFlipperState = 1;
+                } else {
+                    // Already on flipper: check for jump button (loc_2B23C)
+                    if (player.isJumpPressed()) {
+                        launchPending = true;
+                    } else {
+                        // Slide player based on animation frame (loc_2B254)
+                        applyFlipperSlide(player);
+                    }
+                }
+            } else {
+                // Player left flipper without jumping
+                playerFlipperState = 0;
+            }
+
+            // Process pending launch (loc_2B290)
+            if (launchPending) {
+                launchPending = false;
                 applyVerticalLaunch(player);
             }
         }
+    }
+
+    /**
+     * Slides the player along the flipper surface based on animation frame.
+     * ROM: loc_2B254 - applies small X velocity based on mapping_frame
+     */
+    private void applyFlipperSlide(AbstractPlayableSprite player) {
+        int slideAmount = mappingFrame - 1;
+        if (!isFlippedHorizontal()) {
+            slideAmount = -slideAmount;
+            player.setDirection(Direction.LEFT);
+        } else {
+            player.setDirection(Direction.RIGHT);
+        }
+        player.setX((short)(player.getX() + slideAmount));
+        player.setXSpeed((short)(slideAmount << 8));
+        player.setGSpeed((short)(slideAmount << 8));
+        player.setYSpeed((short) 0);
     }
 
     private void applyVerticalLaunch(AbstractPlayableSprite player) {
@@ -113,6 +165,9 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setXSpeed((short) xVel);
         player.setAir(true);
         player.setGSpeed((short) 0);
+
+        // Reset flipper state
+        playerFlipperState = 0;
 
         triggerVerticalAnimation();
         playFlipperSound();
@@ -180,8 +235,10 @@ public class FlipperObjectInstance extends BoxObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         if (isHorizontal()) {
-            return new SolidObjectParams(24, 25, 25);
+            // ROM: d1=#$13 (19), d2=#$18 (24), d3=#$19 (25) at loc_2B312
+            return new SolidObjectParams(19, 24, 25);
         }
+        // ROM: d1=#$23 (35), d2=#6 at loc_2B1B6
         return new SolidObjectParams(35, 6, 6);
     }
 
