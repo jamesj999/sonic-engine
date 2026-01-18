@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.data;
 
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -89,6 +90,9 @@ public class RomManager implements AutoCloseable {
 
         initialized = true;
         LOGGER.info("ROM opened successfully: " + rom.readDomesticName());
+
+        // Auto-detect game type and set appropriate module
+        GameModuleRegistry.detectAndSetModule(rom);
     }
 
     /**

@@ -819,6 +819,9 @@ public class PlayableSpriteMovementManager extends
 		if (quadrant == 0x80) {
 			int minDistance = Integer.MAX_VALUE;
 			Sensor[] ceilingSensors = sprite.getCeilingSensors();
+			if (ceilingSensors == null) {
+				return Integer.MAX_VALUE;
+			}
 			for (Sensor sensor : ceilingSensors) {
 				boolean wasActive = sensor.isActive();
 				sensor.setActive(true);

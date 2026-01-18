@@ -148,19 +148,19 @@ public class LevelManager {
 
     /**
      * Private constructor for Singleton pattern.
+     * Zone list is lazily initialized from the current GameModule's ZoneRegistry.
      */
     protected LevelManager() {
-        levels.add(List.of(LevelData.EMERALD_HILL_1, LevelData.EMERALD_HILL_2));
-        levels.add(List.of(LevelData.CHEMICAL_PLANT_1, LevelData.CHEMICAL_PLANT_2));
-        levels.add(List.of(LevelData.AQUATIC_RUIN_1, LevelData.AQUATIC_RUIN_2));
-        levels.add(List.of(LevelData.CASINO_NIGHT_1, LevelData.CASINO_NIGHT_2));
-        levels.add(List.of(LevelData.HILL_TOP_1, LevelData.HILL_TOP_2));
-        levels.add(List.of(LevelData.MYSTIC_CAVE_1, LevelData.MYSTIC_CAVE_2));
-        levels.add(List.of(LevelData.OIL_OCEAN_1, LevelData.OIL_OCEAN_2));
-        levels.add(List.of(LevelData.METROPOLIS_1, LevelData.METROPOLIS_2, LevelData.METROPOLIS_3));
-        levels.add(List.of(LevelData.SKY_CHASE));
-        levels.add(List.of(LevelData.WING_FORTRESS));
-        levels.add(List.of(LevelData.DEATH_EGG));
+        // Zones are loaded from ZoneRegistry in refreshZoneList()
+    }
+
+    /**
+     * Refreshes the zone list from the current GameModule's ZoneRegistry.
+     * Called during level loading to ensure zones match the current game.
+     */
+    private void refreshZoneList() {
+        levels.clear();
+        levels.addAll(gameModule.getZoneRegistry().getAllZones());
     }
 
     /**
@@ -174,6 +174,7 @@ public class LevelManager {
             Rom rom = RomManager.getInstance().getRom();
             parallaxManager.load(rom);
             gameModule = GameModuleRegistry.getCurrent();
+            refreshZoneList();
             game = gameModule.createGame(rom);
             AudioManager audioManager = AudioManager.getInstance();
             audioManager.setAudioProfile(gameModule.getAudioProfile());
@@ -1695,6 +1696,11 @@ public class LevelManager {
      */
     private void loadCurrentLevel(boolean showTitleCard) {
         try {
+            // Ensure zone list is populated before accessing it
+            if (levels.isEmpty()) {
+                gameModule = GameModuleRegistry.getCurrent();
+                refreshZoneList();
+            }
             LevelData levelData = levels.get(currentZone).get(currentAct);
 
             // Check if we have an active checkpoint BEFORE reloading

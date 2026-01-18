@@ -7,7 +7,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
-import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
+import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2SpecialStageSpriteDebug;
 import uk.co.jamesj999.sonic.game.GameMode;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.GameStateManager;
@@ -57,6 +57,8 @@ public class GameLoop {
     private final Camera camera = Camera.getInstance();
     private final TimerManager timerManager = TimerManager.getInstance();
     private final LevelManager levelManager = LevelManager.getInstance();
+    // Direct reference to Sonic2SpecialStageManager for debug features and Sonic 2-specific logic.
+    // Future games should use GameModule.getSpecialStageProvider() for game-agnostic code.
     private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
 
     // Title card provider - lazily initialized when GameModule is available
@@ -164,7 +166,7 @@ public class GameLoop {
 
             // Handle sprite debug viewer navigation (uses configured movement keys)
             if (specialStageManager.isSpriteDebugMode()) {
-                DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
+                Sonic2SpecialStageSpriteDebug debugSprites = Sonic2SpecialStageSpriteDebug.getInstance();
                 // Left/Right: Change page within current graphics set
                 if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.RIGHT))) {
                     debugSprites.nextPage();

@@ -10,7 +10,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
-import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
+import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2SpecialStageSpriteDebug;
 import uk.co.jamesj999.sonic.debug.DebugState;
 import uk.co.jamesj999.sonic.graphics.FadeManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
@@ -78,6 +78,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	// TODO move this into a manager
 	private final LevelManager levelManager = LevelManager.getInstance();
+	// Direct reference to Sonic2SpecialStageManager for debug overlay features.
+	// Core special stage logic uses SpecialStageProvider interface via GameModule.
 	private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
 
 	private GLU glu;
@@ -212,7 +214,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
 			// Check if sprite debug mode is active
 			if (specialStageManager.isSpriteDebugMode()) {
-				DebugSpecialStageSprites.getInstance().draw();
+				Sonic2SpecialStageSpriteDebug.getInstance().draw();
 			} else {
 				specialStageManager.draw();
 			}
