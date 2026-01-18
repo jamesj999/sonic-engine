@@ -85,26 +85,13 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         currentX += (xVelocity >> 8);
         currentY += (yVelocity >> 8);
 
-        // Check if off-screen and destroy
-        if (!isOnScreen()) {
+        // Check if off-screen (with margin) and destroy
+        if (!isOnScreen(32)) {
             setDestroyed(true);
         }
 
         // Simple animation cycling
         animFrame = ((frameCounter >> 2) & 1);
-    }
-
-    private boolean isOnScreen() {
-        uk.co.jamesj999.sonic.camera.Camera camera = uk.co.jamesj999.sonic.camera.Camera.getInstance();
-        int camX = camera.getX();
-        int camY = camera.getY();
-        int width = camera.getWidth();
-        int height = camera.getHeight();
-        int margin = 32;
-        return currentX >= camX - margin
-                && currentX <= camX + width + margin
-                && currentY >= camY - margin
-                && currentY <= camY + height + margin;
     }
 
     @Override

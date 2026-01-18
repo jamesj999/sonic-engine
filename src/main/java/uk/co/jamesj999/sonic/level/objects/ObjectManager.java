@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import com.jogamp.opengl.GL2;
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
@@ -38,6 +39,7 @@ public class ObjectManager {
     public void update(int cameraX, AbstractPlayableSprite player) {
         placementManager.update(cameraX);
         frameCounter++;
+        updateCameraBounds();
         syncActiveSpawns();
 
         Iterator<ObjectInstance> dynamicIterator = dynamicObjects.iterator();
@@ -133,4 +135,18 @@ public class ObjectManager {
             }
         }
     }
+
+    /**
+     * Computes camera bounds once per frame and caches them for all objects.
+     * ROM equivalent: Objects read Camera_X_pos/Camera_Y_pos in MarkObjGone.
+     */
+    private void updateCameraBounds() {
+        Camera camera = Camera.getInstance();
+        int left = camera.getX();
+        int top = camera.getY();
+        int right = left + camera.getWidth();
+        int bottom = top + camera.getHeight();
+        AbstractObjectInstance.updateCameraBounds(new CameraBounds(left, top, right, bottom));
+    }
 }
+

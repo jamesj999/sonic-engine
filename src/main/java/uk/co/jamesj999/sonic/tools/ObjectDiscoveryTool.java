@@ -63,10 +63,13 @@ public class ObjectDiscoveryTool {
             0x11,  // Bridge
             0x15,  // SwingingPlatform
             0x18,  // ARZPlatform/EHZPlatform
-            //0x19,  // CPZPlatform/OOZMovingPform/WFZPlatform (NOT implemented - verify/validate)
+            0x19,  // CPZPlatform/OOZMovingPform/WFZPlatform
             0x1B,  // SpeedBooster (CPZ)
             0x1C,  // BridgeStake
+            0x1D,  // BlueBalls (CPZ)
+            0x1E,  // CPZSpinTube
             0x26,  // Monitor
+            0x32,  // BreakableBlock (CPZ metal blocks / HTZ rocks)
             0x36,  // Spikes
             0x41,  // Spring
             0x44,  // Bumper

@@ -39,6 +39,9 @@ public class ObjectArtData {
         private final ObjectSpriteSheet bonusBlockSheet;
         private final ObjectSpriteSheet flipperSheet;
         private final ObjectSpriteSheet speedBoosterSheet;
+        private final ObjectSpriteSheet blueBallsSheet;
+        private final ObjectSpriteSheet breakableBlockSheet;
+        private final ObjectSpriteSheet cpzPlatformSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
@@ -84,6 +87,9 @@ public class ObjectArtData {
                         ObjectSpriteSheet bonusBlockSheet,
                         ObjectSpriteSheet flipperSheet,
                         ObjectSpriteSheet speedBoosterSheet,
+                        ObjectSpriteSheet blueBallsSheet,
+                        ObjectSpriteSheet breakableBlockSheet,
+                        ObjectSpriteSheet cpzPlatformSheet,
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
@@ -127,6 +133,9 @@ public class ObjectArtData {
                 this.bonusBlockSheet = bonusBlockSheet;
                 this.flipperSheet = flipperSheet;
                 this.speedBoosterSheet = speedBoosterSheet;
+                this.blueBallsSheet = blueBallsSheet;
+                this.breakableBlockSheet = breakableBlockSheet;
+                this.cpzPlatformSheet = cpzPlatformSheet;
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
@@ -257,6 +266,18 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet speedBoosterSheet() {
                 return speedBoosterSheet;
+        }
+
+        public ObjectSpriteSheet blueBallsSheet() {
+                return blueBallsSheet;
+        }
+
+        public ObjectSpriteSheet breakableBlockSheet() {
+                return breakableBlockSheet;
+        }
+
+        public ObjectSpriteSheet cpzPlatformSheet() {
+                return cpzPlatformSheet;
         }
 
         public ObjectSpriteSheet resultsSheet() {
