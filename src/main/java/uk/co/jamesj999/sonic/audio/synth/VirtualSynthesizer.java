@@ -40,14 +40,15 @@ public class VirtualSynthesizer implements Synthesizer {
         int[] rightPsg = new int[frames];
         psg.renderStereo(leftPsg, rightPsg);
 
-        // No Boost for PSG.
-        // PsgChip is now Bipolar +/- 1.0 (Max Table 4096)
-        // PSG Peak ~4k.
-        // FM Peak ~12k.
-        // Ratio FM:PSG is ~3:1.
+        // Attenuate PSG by 50% (>> 1) to match SMPSPlay levels.
+        // SMPSPlay uses volume 0x80 for PSG vs 0x100 for YM2612.
+        // PsgChip is Bipolar +/- 1.0 (Max Table 4096)
+        // PSG Peak ~4k -> ~2k after attenuation.
+        // FM Peak ~12k (after YM attenuation above).
+        // Ratio FM:PSG is now ~6:1, matching SMPSPlay's 2:1 volume ratio.
         for (int i = 0; i < frames; i++) {
-            left[i] += leftPsg[i];
-            right[i] += rightPsg[i];
+            left[i] += leftPsg[i] >> 1;
+            right[i] += rightPsg[i] >> 1;
         }
 
         for (int i = 0; i < frames; i++) {
@@ -91,5 +92,11 @@ public class VirtualSynthesizer implements Synthesizer {
     @Override
     public void setDacInterpolate(boolean interpolate) {
         ym.setDacInterpolate(interpolate);
+    }
+
+    @Override
+    public void silenceAll() {
+        ym.silenceAll();
+        psg.silenceAll();
     }
 }

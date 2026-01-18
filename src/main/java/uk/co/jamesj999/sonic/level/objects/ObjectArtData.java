@@ -34,6 +34,10 @@ public class ObjectArtData {
         private final int animalTypeB;
         private final ObjectSpriteSheet pointsSheet;
         private final ObjectSpriteSheet signpostSheet;
+        private final ObjectSpriteSheet bumperSheet;
+        private final ObjectSpriteSheet hexBumperSheet;
+        private final ObjectSpriteSheet bonusBlockSheet;
+        private final ObjectSpriteSheet flipperSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
@@ -47,6 +51,7 @@ public class ObjectArtData {
         private final SpriteAnimationSet springAnimations;
         private final SpriteAnimationSet checkpointAnimations;
         private final SpriteAnimationSet signpostAnimations;
+        private final SpriteAnimationSet flipperAnimations;
 
         public ObjectArtData(
                         ObjectSpriteSheet monitorSheet,
@@ -73,6 +78,10 @@ public class ObjectArtData {
                         int animalTypeB,
                         ObjectSpriteSheet pointsSheet,
                         ObjectSpriteSheet signpostSheet,
+                        ObjectSpriteSheet bumperSheet,
+                        ObjectSpriteSheet hexBumperSheet,
+                        ObjectSpriteSheet bonusBlockSheet,
+                        ObjectSpriteSheet flipperSheet,
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
@@ -85,7 +94,8 @@ public class ObjectArtData {
                         SpriteAnimationSet monitorAnimations,
                         SpriteAnimationSet springAnimations,
                         SpriteAnimationSet checkpointAnimations,
-                        SpriteAnimationSet signpostAnimations) {
+                        SpriteAnimationSet signpostAnimations,
+                        SpriteAnimationSet flipperAnimations) {
                 this.monitorSheet = monitorSheet;
                 this.spikeSheet = spikeSheet;
                 this.spikeSideSheet = spikeSideSheet;
@@ -110,6 +120,10 @@ public class ObjectArtData {
                 this.animalTypeB = animalTypeB;
                 this.pointsSheet = pointsSheet;
                 this.signpostSheet = signpostSheet;
+                this.bumperSheet = bumperSheet;
+                this.hexBumperSheet = hexBumperSheet;
+                this.bonusBlockSheet = bonusBlockSheet;
+                this.flipperSheet = flipperSheet;
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
@@ -123,6 +137,7 @@ public class ObjectArtData {
                 this.springAnimations = springAnimations;
                 this.checkpointAnimations = checkpointAnimations;
                 this.signpostAnimations = signpostAnimations;
+                this.flipperAnimations = flipperAnimations;
         }
 
         public ObjectSpriteSheet monitorSheet() {
@@ -221,6 +236,22 @@ public class ObjectArtData {
                 return signpostSheet;
         }
 
+        public ObjectSpriteSheet bumperSheet() {
+                return bumperSheet;
+        }
+
+        public ObjectSpriteSheet hexBumperSheet() {
+                return hexBumperSheet;
+        }
+
+        public ObjectSpriteSheet bonusBlockSheet() {
+                return bonusBlockSheet;
+        }
+
+        public ObjectSpriteSheet flipperSheet() {
+                return flipperSheet;
+        }
+
         public ObjectSpriteSheet resultsSheet() {
                 return resultsSheet;
         }
@@ -259,5 +290,9 @@ public class ObjectArtData {
 
         public SpriteAnimationSet signpostAnimations() {
                 return signpostAnimations;
+        }
+
+        public SpriteAnimationSet flipperAnimations() {
+                return flipperAnimations;
         }
 }

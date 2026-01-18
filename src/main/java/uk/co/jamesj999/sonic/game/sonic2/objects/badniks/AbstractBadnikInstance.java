@@ -8,8 +8,7 @@ import uk.co.jamesj999.sonic.level.objects.TouchResponseProvider;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseResult;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.game.sonic2.objects.ExplosionObjectInstance;
-import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.AnimalObjectInstance;
-import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.PointsObjectInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.PointsObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 
 /**

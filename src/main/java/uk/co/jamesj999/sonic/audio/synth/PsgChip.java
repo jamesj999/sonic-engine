@@ -24,6 +24,9 @@ public class PsgChip {
     // Intermediate position for anti-aliasing (Bipolar: -1.0 to 1.0)
     private final double[] intermediatePos = new double[3];
 
+    // High-frequency cutoff flag - mute channels above Nyquist (MAME behavior)
+    private final boolean[] highFreqCutoff = new boolean[3];
+
     private double clock = 0;
     private int latch = 0;
     private int lfsr = 0x8000; // 16-bit noise register
@@ -40,7 +43,8 @@ public class PsgChip {
             counters[ch] = 0;
             intermediatePos[ch] = -2.0; // Sentinel value (valid range -1.0 to 1.0)
         }
-        outputs[3] = (lfsr & 1) == 1;
+        // Match libvgm: ToneFreqPos[3] = 1, independent of LFSR state
+        outputs[3] = true;
         counters[3] = 0;
     }
 
@@ -48,6 +52,17 @@ public class PsgChip {
         if (ch >= 0 && ch < 4) {
             mutes[ch] = mute;
         }
+    }
+
+    /**
+     * Silence all PSG channels (ROM: zPSGSilenceAll).
+     * Writes 0x9F, 0xBF, 0xDF, 0xFF to set all volumes to max attenuation.
+     */
+    public void silenceAll() {
+        write(0x9F); // Channel 0 volume = 0xF (silence)
+        write(0xBF); // Channel 1 volume = 0xF (silence)
+        write(0xDF); // Channel 2 volume = 0xF (silence)
+        write(0xFF); // Channel 3 (noise) volume = 0xF (silence)
     }
 
     public void write(int val) {
@@ -91,7 +106,9 @@ public class PsgChip {
         for (int j = 0; j < len; j++) {
             // Tone Channels (0-2)
             for (int i = 0; i <= 2; i++) {
-                if (!mutes[i]) {
+                if (!mutes[i] && !highFreqCutoff[i]) {
+                    // MAME: High-frequency tones (period <= FNumLimit) are muted via vol[i] = 0
+                    // We skip output entirely when highFreqCutoff is true
                     double sample;
                     if (intermediatePos[i] != -2.0) {
                         sample = intermediatePos[i];
@@ -119,11 +136,10 @@ public class PsgChip {
                 int noiseVol = registers[7] & 0x0F;
                 double amp = VOLUME_TABLE[noiseVol];
 
-                // White Noise is half amplitude in sn76489.c
-                int noiseReg = registers[6];
-                if ((noiseReg & 0x04) != 0) {
-                    amp *= 0.5;
-                }
+                // Note: Maxim's sn76489.c halves white noise amplitude with a comment
+                // "due to the way the white noise works here, it seems twice as loud".
+                // However, MAME's sn76496.c (used by SMPSPlay) does NOT halve it.
+                // We match MAME/SMPSPlay behavior for consistency.
 
                 double noiseVoice = noiseSample * amp;
                 left[j] += noiseVoice;
@@ -162,10 +178,13 @@ public class PsgChip {
                         intermediatePos[i] = intermediate;
 
                         outputs[i] = !outputs[i];
+                        highFreqCutoff[i] = false;
                     } else {
-                        // Stuck Value (Cutoff)
+                        // High-frequency cutoff: mute channel (MAME behavior)
+                        // MAME sets vol[i] = 0 for periods <= FNumLimit
                         outputs[i] = true;
                         intermediatePos[i] = -2.0;
+                        highFreqCutoff[i] = true;
                     }
 
                     counters[i] += period * (Math.floor(numClocksForSample / period) + 1);
@@ -175,8 +194,21 @@ public class PsgChip {
             }
 
             // Process Noise Transitions
+            // MAME sn76496.c shifts LFSR on EVERY counter underflow (no flip-flop gating)
+            // Maxim sn76489.c only shifts on positive edge of flip-flop (half rate)
+            // We use MAME behavior for accurate noise spectrum
             if (counters[3] <= 0) {
-                outputs[3] = !outputs[3];
+                // Shift LFSR on every underflow (MAME behavior)
+                int bit0 = lfsr & 1;
+                int feedback;
+                if ((noiseReg & 0x04) != 0) { // White Noise
+                    int bit3 = (lfsr >> 3) & 1;
+                    feedback = bit0 ^ bit3;
+                } else { // Periodic
+                    feedback = bit0;
+                }
+                lfsr = (lfsr >> 1) | (feedback << 15);
+
                 // Only reload counter if NOT in sync mode (Tone 2 handles the effective rate otherwise)
                 if ((noiseReg & 0x3) != 3) {
                     double noiseRate;
@@ -187,18 +219,6 @@ public class PsgChip {
                         default: noiseRate = 0x10; break;
                     }
                     counters[3] += noiseRate * (Math.floor(numClocksForSample / noiseRate) + 1);
-                }
-
-                if (outputs[3]) { // Positive Edge
-                     int bit0 = lfsr & 1;
-                     int feedback;
-                     if ((noiseReg & 0x04) != 0) { // White Noise
-                         int bit3 = (lfsr >> 3) & 1;
-                         feedback = bit0 ^ bit3;
-                     } else { // Periodic
-                         feedback = bit0;
-                     }
-                     lfsr = (lfsr >> 1) | (feedback << 15);
                 }
             }
         }

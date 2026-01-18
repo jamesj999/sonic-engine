@@ -78,4 +78,9 @@ public class LevelGamestate implements LevelState {
     public void pauseTimer() {
         timer.pause();
     }
+
+    @Override
+    public int getElapsedSeconds() {
+        return timer.getElapsedSeconds();
+    }
 }

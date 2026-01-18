@@ -3,8 +3,10 @@ package uk.co.jamesj999.sonic.level.objects;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.Collection;
+import java.util.logging.Logger;
 
 public class SolidObjectManager {
+    private static final Logger LOGGER = Logger.getLogger(SolidObjectManager.class.getName());
     private final ObjectManager objectManager;
     private int frameCounter;
     private ObjectInstance ridingObject;
@@ -32,11 +34,25 @@ public class SolidObjectManager {
         return ridingObject == instance;
     }
 
+    /**
+     * Clears the riding object state. Should be called when the player jumps
+     * to prevent the sticky snapping tolerance from keeping them grounded.
+     */
+    public void clearRidingObject() {
+        ridingObject = null;
+    }
+
     public boolean hasStandingContact(AbstractPlayableSprite player) {
         if (player == null || objectManager == null || player.getDead()) {
             return false;
         }
         if (player.isDebugMode()) {
+            return false;
+        }
+        // Disasm (SolidObject_Landed): If Sonic is moving upwards, he cannot be
+        // standing on an object. This prevents the hasStandingContact check from
+        // keeping the player grounded when they should be jumping.
+        if (player.getYSpeed() < 0) {
             return false;
         }
         Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
@@ -69,6 +85,124 @@ public class SolidObjectManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Checks if there's enough headroom for the player to jump.
+     * Based on the original game's CalcRoomOverHead routine, this checks for
+     * solid objects in the "overhead" direction relative to the current ground angle.
+     *
+     * The original game requires at least 6 pixels of room overhead to allow a jump.
+     * The overhead direction is determined by adding 0x80 to the current angle:
+     * - Angles 0x20-0x5F (after +0x80): check LEFT
+     * - Angles 0x60-0x9F (after +0x80): check UP (ceiling)
+     * - Angles 0xA0-0xDF (after +0x80): check RIGHT
+     * - Angles 0xE0-0x1F (after +0x80): check DOWN (floor, unlikely on ground)
+     *
+     * @param player The player sprite
+     * @param hexAngle The current ground angle in hex format (0-255)
+     * @return The distance to the nearest solid object in the overhead direction,
+     *         or Integer.MAX_VALUE if no obstruction is found
+     */
+    public int getHeadroomDistance(AbstractPlayableSprite player, int hexAngle) {
+        if (player == null || objectManager == null || player.getDead()) {
+            return Integer.MAX_VALUE;
+        }
+        if (player.isDebugMode()) {
+            return Integer.MAX_VALUE;
+        }
+
+        int overheadAngle = (hexAngle + 0x80) & 0xFF;
+        int quadrant = (overheadAngle + 0x20) & 0xC0;
+
+        int minDistance = Integer.MAX_VALUE;
+        int playerCenterX = player.getCentreX();
+        int playerCenterY = player.getCentreY();
+        int playerXRadius = player.getXRadius();
+        int playerYRadius = player.getYRadius();
+
+        Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
+        for (ObjectInstance instance : activeObjects) {
+            if (!(instance instanceof SolidObjectProvider provider)) {
+                continue;
+            }
+            if (!provider.isSolidFor(player)) {
+                continue;
+            }
+            if (provider.isTopSolidOnly()) {
+                continue;
+            }
+            SolidObjectParams params = provider.getSolidParams();
+            int anchorX = instance.getSpawn().x() + params.offsetX();
+            int anchorY = instance.getSpawn().y() + params.offsetY();
+            int halfWidth = params.halfWidth();
+            int halfHeight = params.groundHalfHeight();
+
+            int distance = calculateOverheadDistance(quadrant, playerCenterX, playerCenterY,
+                    playerXRadius, playerYRadius, anchorX, anchorY, halfWidth, halfHeight);
+            if (distance >= 0 && distance < minDistance) {
+                minDistance = distance;
+            }
+        }
+        return minDistance;
+    }
+
+    private int calculateOverheadDistance(int quadrant, int playerCenterX, int playerCenterY,
+            int playerXRadius, int playerYRadius, int objX, int objY, int objHalfWidth, int objHalfHeight) {
+        switch (quadrant) {
+            case 0x40 -> {
+                // Check LEFT (overhead is to the left)
+                int objRight = objX + objHalfWidth;
+                int playerLeft = playerCenterX - playerXRadius;
+                if (playerLeft < objRight) {
+                    return -1;
+                }
+                int objTop = objY - objHalfHeight;
+                int objBottom = objY + objHalfHeight;
+                int playerTop = playerCenterY - playerYRadius;
+                int playerBottom = playerCenterY + playerYRadius;
+                if (playerBottom < objTop || playerTop > objBottom) {
+                    return -1;
+                }
+                return playerLeft - objRight;
+            }
+            case 0x80 -> {
+                // Check UP (overhead is above - standard ceiling check)
+                int objBottom = objY + objHalfHeight;
+                int playerTop = playerCenterY - playerYRadius;
+                if (playerTop < objBottom) {
+                    return -1;
+                }
+                int objLeft = objX - objHalfWidth;
+                int objRight = objX + objHalfWidth;
+                int playerLeft = playerCenterX - playerXRadius;
+                int playerRight = playerCenterX + playerXRadius;
+                if (playerRight < objLeft || playerLeft > objRight) {
+                    return -1;
+                }
+                return playerTop - objBottom;
+            }
+            case 0xC0 -> {
+                // Check RIGHT (overhead is to the right)
+                int objLeft = objX - objHalfWidth;
+                int playerRight = playerCenterX + playerXRadius;
+                if (playerRight > objLeft) {
+                    return -1;
+                }
+                int objTop = objY - objHalfHeight;
+                int objBottom = objY + objHalfHeight;
+                int playerTop = playerCenterY - playerYRadius;
+                int playerBottom = playerCenterY + playerYRadius;
+                if (playerBottom < objTop || playerTop > objBottom) {
+                    return -1;
+                }
+                return objLeft - playerRight;
+            }
+            default -> {
+                // 0x00: Check DOWN (floor) - unlikely when on ground, return no obstruction
+                return Integer.MAX_VALUE;
+            }
+        }
     }
 
     public void update(AbstractPlayableSprite player) {
@@ -264,9 +398,9 @@ public class SolidObjectManager {
 
         // If distY is positive (penetration) OR negative within sticky tolerance
         if (distY >= 0 || (sticky && distY >= -16)) {
-            // If we are sticking (distY < 0) but we are in the air and moving up, break the
-            // stick.
-            if (distY < 0 && player.getAir() && player.getYSpeed() < 0) {
+            // Disasm (SolidObject_Landed): If Sonic is moving upwards, don't land on object.
+            // This prevents landing on objects when jumping, even if slightly overlapping.
+            if (player.getYSpeed() < 0) {
                 return null;
             }
 
@@ -292,6 +426,8 @@ public class SolidObjectManager {
                     player.setYSpeed((short) 0);
                 }
                 if (player.getAir()) {
+                    LOGGER.fine(() -> "Solid object landing at (" + player.getX() + "," + player.getY() +
+                        ") distY=" + distY);
                     player.setGSpeed(player.getXSpeed());
                     player.setAir(false);
                     player.setRolling(false);
@@ -304,11 +440,13 @@ public class SolidObjectManager {
             return null;
         }
 
+        // This is CEILING collision (hit from below)
         if (apply) {
             int newCenterY = playerCenterY - distY;
             int newY = newCenterY - (player.getHeight() / 2);
             player.setY((short) newY);
             if (player.getYSpeed() < 0) {
+                LOGGER.fine(() -> "Solid object ceiling hit, zeroing ySpeed from " + player.getYSpeed());
                 player.setYSpeed((short) 0);
             }
         }

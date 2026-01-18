@@ -41,6 +41,10 @@ public class NullAudioBackend implements AudioBackend {
     }
 
     @Override
+    public void fadeOutMusic(int steps, int delay) {
+    }
+
+    @Override
     public void toggleMute(ChannelType type, int channel) {
     }
 

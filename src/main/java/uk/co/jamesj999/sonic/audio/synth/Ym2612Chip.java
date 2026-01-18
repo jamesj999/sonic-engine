@@ -229,7 +229,10 @@ public class Ym2612Chip {
     private double dacStep = 1.0;
     private boolean dacEnabled;
     private boolean dacHasLatched;
-    private static final double DAC_BASE_CYCLES = 288.0;
+    // DAC timing from s2.sounddriver.asm:314,727-728:
+    // "295 cycles for two samples. dpcmLoopCounter should use 295 divided by 2."
+    // Base overhead = 295 cycles per 2 samples, djnz loops add 13*2=26 cycles per rateByte
+    private static final double DAC_BASE_CYCLES = 295.0;
     private static final double DAC_LOOP_CYCLES = 26.0;
     private static final double DAC_LOOP_SAMPLES = 2.0;
     private static final double Z80_CLOCK = 3579545.0;
@@ -386,6 +389,25 @@ public class Ym2612Chip {
 
     public void setMute(int ch, boolean mute) {
         if (ch >= 0 && ch < 6) mutes[ch] = mute;
+    }
+
+    /**
+     * Silence all FM channels (ROM: zFMSilenceAll).
+     * Key-off all channels, then write 0xFF to registers 0x30-0x8F on both ports.
+     */
+    public void silenceAll() {
+        // Key-off all 6 channels (reg 0x28, value = channel with no operator keys)
+        for (int ch = 0; ch < 3; ch++) {
+            write(0, 0x28, ch);         // Part I channels 0-2
+            write(0, 0x28, ch | 0x04);  // Part II channels 3-5
+        }
+        // Write 0xFF to registers 0x30-0x8F on both ports to kill all operator params
+        for (int reg = 0x30; reg < 0x90; reg++) {
+            write(0, reg, 0xFF);
+            write(1, reg, 0xFF);
+        }
+        // Stop DAC playback
+        stopDac();
     }
 
     public void setDacInterpolate(boolean interpolate) {

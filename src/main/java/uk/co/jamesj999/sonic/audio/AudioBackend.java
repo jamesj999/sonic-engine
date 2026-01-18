@@ -35,6 +35,16 @@ public interface AudioBackend {
      */
     void stopPlayback();
 
+    /**
+     * Fade out the currently playing music over time.
+     * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
+     * Does not affect SFX - only music channels fade.
+     *
+     * @param steps total number of volume steps (ROM default: 0x28 = 40)
+     * @param delay frames between each volume step (ROM default: 3)
+     */
+    void fadeOutMusic(int steps, int delay);
+
     void toggleMute(ChannelType type, int channel);
 
     void toggleSolo(ChannelType type, int channel);

@@ -63,4 +63,10 @@ public interface LevelState {
      * Called when passing the end-of-stage signpost.
      */
     void pauseTimer();
+
+    /**
+     * Gets the total elapsed time in seconds.
+     * @return elapsed seconds
+     */
+    int getElapsedSeconds();
 }

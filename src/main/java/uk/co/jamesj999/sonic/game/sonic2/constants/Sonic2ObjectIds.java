@@ -26,6 +26,13 @@ public final class Sonic2ObjectIds {
 
     // Level completion
     public static final int SIGNPOST = 0x0D; // End of level signpost
+    public static final int INVISIBLE_BLOCK = 0x74;
+
+    // CNZ Objects
+    public static final int BUMPER = 0x44;       // Round Bumper (Obj44)
+    public static final int HEX_BUMPER = 0xD7;   // Hexagonal Bumper (ObjD7)
+    public static final int BONUS_BLOCK = 0xD8; // Bonus Block / Drop Target (ObjD8)
+    public static final int FLIPPER = 0x86;    // CNZ Flipper (Obj86)
 
     private Sonic2ObjectIds() {
     }

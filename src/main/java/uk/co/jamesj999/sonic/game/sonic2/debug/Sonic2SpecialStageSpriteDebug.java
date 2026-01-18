@@ -1,4 +1,4 @@
-package uk.co.jamesj999.sonic.debug;
+package uk.co.jamesj999.sonic.game.sonic2.debug;
 
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageSpriteMappings;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageSpriteMappings.SpriteFrame;
@@ -7,24 +7,26 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 
 /**
- * Debug viewer for Special Stage graphics (sprites and UI elements).
+ * Debug viewer for Sonic 2 Special Stage graphics (sprites and UI elements).
  * Displays patterns in a paginated grid layout for visual inspection.
  *
- * Graphics Sets (cycle with Up/Down):
- * - Set 0: Sonic player sprites (animation frames)
- * - Set 1: HUD graphics (numbers, text, UI elements)
+ * <p>This is a Sonic 2-specific debug tool that displays:
+ * <ul>
+ *   <li>Sonic player sprites (animation frames)</li>
+ *   <li>HUD graphics (numbers, text, UI elements)</li>
+ *   <li>START banner</li>
+ *   <li>Message graphics</li>
+ * </ul>
  *
- * Pages within each set (cycle with Left/Right):
- * - Sonic: UPRIGHT, DIAGONAL, HORIZONTAL, BALL frames
- * - HUD: Pages of raw patterns
- *
- * Controls (only active during Special Stage):
- * - F12: Toggle sprite frame viewer on/off
- * - Up/Down arrows: Change graphics set
- * - Left/Right arrows: Change page within current set
+ * <p>Controls (only active during Special Stage):
+ * <ul>
+ *   <li>F12: Toggle sprite frame viewer on/off</li>
+ *   <li>Up/Down arrows: Change graphics set</li>
+ *   <li>Left/Right arrows: Change page within current set</li>
+ * </ul>
  */
-public class DebugSpecialStageSprites {
-    private static DebugSpecialStageSprites instance;
+public class Sonic2SpecialStageSpriteDebug {
+    private static Sonic2SpecialStageSpriteDebug instance;
 
     private static final int TILE_SIZE = 8;
     private static final int FRAME_CELL_WIDTH = 72;
@@ -33,7 +35,6 @@ public class DebugSpecialStageSprites {
     private static final int SCREEN_HEIGHT = 224;
     private static final int SCREEN_WIDTH = 320;
 
-    // Graphics set definitions
     public enum GraphicsSet {
         SONIC_SPRITES("Sonic Sprites"),
         HUD_GRAPHICS("HUD Graphics"),
@@ -70,7 +71,7 @@ public class DebugSpecialStageSprites {
     private static final int RAW_TILE_COLUMNS = 16;
     private static final int RAW_TILE_ROWS = 12;
     private static final int RAW_TILES_PER_PAGE = RAW_TILE_COLUMNS * RAW_TILE_ROWS;
-    private static final int RAW_TILE_SPACING = 10; // pixels between tiles
+    private static final int RAW_TILE_SPACING = 10;
 
     private final GraphicsManager graphicsManager;
     private int playerPatternBase;
@@ -85,51 +86,36 @@ public class DebugSpecialStageSprites {
     private GraphicsSet currentSet = GraphicsSet.SONIC_SPRITES;
     private int currentPage = 0;
 
-    private DebugSpecialStageSprites() {
+    private Sonic2SpecialStageSpriteDebug() {
         this.graphicsManager = GraphicsManager.getInstance();
     }
 
-    public static synchronized DebugSpecialStageSprites getInstance() {
+    public static synchronized Sonic2SpecialStageSpriteDebug getInstance() {
         if (instance == null) {
-            instance = new DebugSpecialStageSprites();
+            instance = new Sonic2SpecialStageSpriteDebug();
         }
         return instance;
     }
 
-    /**
-     * Sets the pattern base for player art.
-     */
     public void setPlayerPatternBase(int base) {
         this.playerPatternBase = base;
     }
 
-    /**
-     * Sets the pattern base and count for HUD art.
-     */
     public void setHudPatternBase(int base, int count) {
         this.hudPatternBase = base;
         this.hudPatternCount = count;
     }
 
-    /**
-     * Sets the pattern base and count for START banner art.
-     */
     public void setStartPatternBase(int base, int count) {
         this.startPatternBase = base;
         this.startPatternCount = count;
     }
 
-    /**
-     * Sets the pattern base and count for Messages art.
-     */
     public void setMessagesPatternBase(int base, int count) {
         this.messagesPatternBase = base;
         this.messagesPatternCount = count;
     }
 
-    /**
-     * Enables or disables the debug viewer.
-     */
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (enabled) {
@@ -138,73 +124,46 @@ public class DebugSpecialStageSprites {
         }
     }
 
-    /**
-     * Toggles the debug viewer on/off.
-     */
     public void toggle() {
         setEnabled(!this.enabled);
     }
 
-    /**
-     * Checks if the debug viewer is enabled.
-     */
     public boolean isEnabled() {
         return enabled;
     }
 
-    /**
-     * Gets the current graphics set.
-     */
     public GraphicsSet getCurrentSet() {
         return currentSet;
     }
 
-    /**
-     * Gets the current page number (0-indexed).
-     */
     public int getCurrentPage() {
         return currentPage;
     }
 
-    /**
-     * Gets the total number of pages for the current set.
-     */
     public int getTotalPages() {
-        switch (currentSet) {
-            case SONIC_SPRITES:
-                return SONIC_PAGES.length;
-            case HUD_GRAPHICS:
-                return hudPatternCount > 0 ? (hudPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
-            case START_BANNER:
-                return startPatternCount > 0 ? (startPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
-            case MESSAGES:
-                return messagesPatternCount > 0 ? (messagesPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
-            default:
-                return 0;
-        }
+        return switch (currentSet) {
+            case SONIC_SPRITES -> SONIC_PAGES.length;
+            case HUD_GRAPHICS -> hudPatternCount > 0 ?
+                    (hudPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case START_BANNER -> startPatternCount > 0 ?
+                    (startPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case MESSAGES -> messagesPatternCount > 0 ?
+                    (messagesPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+        };
     }
 
-    /**
-     * Moves to the next page if available.
-     */
     public void nextPage() {
         if (currentPage < getTotalPages() - 1) {
             currentPage++;
         }
     }
 
-    /**
-     * Moves to the previous page if available.
-     */
     public void previousPage() {
         if (currentPage > 0) {
             currentPage--;
         }
     }
 
-    /**
-     * Moves to the next graphics set.
-     */
     public void nextSet() {
         GraphicsSet[] sets = GraphicsSet.values();
         int nextIndex = (currentSet.ordinal() + 1) % sets.length;
@@ -212,9 +171,6 @@ public class DebugSpecialStageSprites {
         currentPage = 0;
     }
 
-    /**
-     * Moves to the previous graphics set.
-     */
     public void previousSet() {
         GraphicsSet[] sets = GraphicsSet.values();
         int prevIndex = (currentSet.ordinal() - 1 + sets.length) % sets.length;
@@ -222,41 +178,35 @@ public class DebugSpecialStageSprites {
         currentPage = 0;
     }
 
-    /**
-     * Renders the current page based on the active graphics set.
-     */
     public void draw() {
         if (!enabled) {
             return;
         }
 
         switch (currentSet) {
-            case SONIC_SPRITES:
+            case SONIC_SPRITES -> {
                 if (playerPatternBase != 0) {
                     drawSonicSprites();
                 }
-                break;
-            case HUD_GRAPHICS:
+            }
+            case HUD_GRAPHICS -> {
                 if (hudPatternBase != 0 && hudPatternCount > 0) {
                     drawRawPatterns(hudPatternBase, hudPatternCount, 1);
                 }
-                break;
-            case START_BANNER:
+            }
+            case START_BANNER -> {
                 if (startPatternBase != 0 && startPatternCount > 0) {
                     drawRawPatterns(startPatternBase, startPatternCount, 1);
                 }
-                break;
-            case MESSAGES:
+            }
+            case MESSAGES -> {
                 if (messagesPatternBase != 0 && messagesPatternCount > 0) {
                     drawRawPatterns(messagesPatternBase, messagesPatternCount, 2);
                 }
-                break;
+            }
         }
     }
 
-    /**
-     * Draws Sonic sprite animation frames (original implementation).
-     */
     private void drawSonicSprites() {
         graphicsManager.beginPatternBatch();
 
@@ -300,9 +250,6 @@ public class DebugSpecialStageSprites {
         graphicsManager.flushPatternBatch();
     }
 
-    /**
-     * Renders a single Sonic sprite frame.
-     */
     private void renderSonicFrame(int frameIndex, int centerX, int centerY, boolean flipX) {
         SpriteFrame frame = Sonic2SpecialStageSpriteMappings.getSonicFrame(frameIndex);
 
@@ -334,13 +281,6 @@ public class DebugSpecialStageSprites {
         }
     }
 
-    /**
-     * Draws raw patterns in a grid layout.
-     *
-     * @param patternBase Base pattern index
-     * @param patternCount Total number of patterns
-     * @param paletteIndex Palette to use for rendering
-     */
     private void drawRawPatterns(int patternBase, int patternCount, int paletteIndex) {
         graphicsManager.beginPatternBatch();
 
@@ -372,9 +312,6 @@ public class DebugSpecialStageSprites {
         graphicsManager.flushPatternBatch();
     }
 
-    /**
-     * Gets the label for the current set and page.
-     */
     public String getCurrentLabel() {
         String setLabel = currentSet.getLabel();
         int totalPages = getTotalPages();
@@ -386,26 +323,5 @@ public class DebugSpecialStageSprites {
         } else {
             return setLabel + " (No data)";
         }
-    }
-
-    /**
-     * Gets the label for the current page (legacy method).
-     */
-    public String getCurrentPageLabel() {
-        return getCurrentLabel();
-    }
-
-    /**
-     * Gets the expected total height of the debug view.
-     */
-    public int getTotalHeight() {
-        return (2 * FRAME_CELL_HEIGHT) + 80;
-    }
-
-    /**
-     * Gets the expected total width of the debug view.
-     */
-    public int getTotalWidth() {
-        return GRID_COLUMNS * FRAME_CELL_WIDTH + 32;
     }
 }

@@ -42,6 +42,8 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         for (int i = 0; i < 4; i++)
             psgLocks[i] = null;
         psgLatches.clear();
+        // Silence hardware (ROM: zFMSilenceAll + zPSGSilenceAll)
+        silenceAll();
     }
 
     @Override
@@ -262,12 +264,20 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         if (!isSfx(currentLock))
             return true; // Challenger is SFX, current is Music -> Steal
 
-        // Both are SFX. Priority: Newer wins.
-        // Index in list: higher is newer.
-        int currentIdx = sequencers.indexOf(currentLock);
-        int challengerIdx = sequencers.indexOf(challenger);
+        // Both are SFX. Use Z80 driver priority system:
+        // Higher priority always wins. For equal priority, newer SFX (added later) wins.
+        int currentPriority = currentLock.getSfxPriority();
+        int challengerPriority = challenger.getSfxPriority();
 
-        return challengerIdx > currentIdx;
+        if (challengerPriority > currentPriority) {
+            return true; // Higher priority always steals
+        } else if (challengerPriority == currentPriority) {
+            // Equal priority: newer SFX wins (prevents old SFX from stealing back)
+            int currentIdx = sequencers.indexOf(currentLock);
+            int challengerIdx = sequencers.indexOf(challenger);
+            return challengerIdx > currentIdx;
+        }
+        return false; // Lower priority cannot steal
     }
 
     @Override

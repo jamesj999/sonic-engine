@@ -55,4 +55,68 @@ public interface GameModule {
      * @return the title card provider
      */
     TitleCardProvider getTitleCardProvider();
+
+    /**
+     * Returns the zone registry for this game.
+     * The zone registry provides metadata about zones, acts, and levels.
+     *
+     * @return the zone registry
+     */
+    ZoneRegistry getZoneRegistry();
+
+    /**
+     * Returns the special stage provider for this game.
+     * Special stages award Chaos Emeralds when completed.
+     *
+     * @return the special stage provider, or null if this game has no special stages
+     */
+    SpecialStageProvider getSpecialStageProvider();
+
+    /**
+     * Returns the bonus stage provider for this game.
+     * Bonus stages are accessed via checkpoints and award rings, shields, etc.
+     *
+     * @return the bonus stage provider, or null if this game has no bonus stages
+     */
+    BonusStageProvider getBonusStageProvider();
+
+    /**
+     * Returns the scroll handler provider for this game.
+     * Provides zone-specific parallax scroll handlers.
+     *
+     * @return the scroll handler provider, or null if using default scrolling
+     */
+    ScrollHandlerProvider getScrollHandlerProvider();
+
+    /**
+     * Returns the zone feature provider for this game.
+     * Provides zone-specific mechanics like bumpers, water, etc.
+     *
+     * @return the zone feature provider, or null if no zone features
+     */
+    ZoneFeatureProvider getZoneFeatureProvider();
+
+    /**
+     * Returns the ROM offset provider for this game.
+     * Provides type-safe access to game-specific ROM addresses.
+     *
+     * @return the ROM offset provider
+     */
+    RomOffsetProvider getRomOffsetProvider();
+
+    /**
+     * Returns the debug mode provider for this game.
+     * Provides game-specific debug modes and controls.
+     *
+     * @return the debug mode provider, or null if no game-specific debug modes
+     */
+    DebugModeProvider getDebugModeProvider();
+
+    /**
+     * Returns the debug overlay provider for this game.
+     * Provides game-specific debug overlay content.
+     *
+     * @return the debug overlay provider, or null if using default overlays
+     */
+    DebugOverlayProvider getDebugOverlayProvider();
 }

@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.sprites.managers;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.physics.Direction;
+import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.physics.TrigLookupTable;
@@ -15,8 +16,12 @@ import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.timer.timers.ControlLockTimer;
 import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
+import java.util.logging.Logger;
+
 public class PlayableSpriteMovementManager extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
+	private static final Logger LOGGER = Logger.getLogger(PlayableSpriteMovementManager.class.getName());
+
 	private final TerrainCollisionManager terrainCollisionManager = TerrainCollisionManager
 			.getInstance();
 	private final AudioManager audioManager = AudioManager.getInstance();
@@ -396,10 +401,20 @@ public class PlayableSpriteMovementManager extends
 				// occurred.
 				return;
 			} else {
+				// Disasm (SolidObject_Landed): If Sonic is moving upwards, don't land.
+				// This is a critical check from the original game that prevents landing
+				// while jumping, even if sensors detect terrain penetration.
+				if (sprite.getYSpeed() < 0) {
+					return;
+				}
+
 				// Work out the ySpeed threshold required to land.
 				// REV01 uses the *pixel* y-speed (high byte) with a +8 buffer,
 				// then negates it to compare against the signed floor distance.
-				short ySpeedPixels = (short) (sprite.getYSpeed() / 256);
+				// CRITICAL: Must use arithmetic right shift (>>8) not division,
+				// because Java division rounds toward zero, but M68K move.b gets
+				// the actual high byte. For negative values, >>8 gives correct result.
+				short ySpeedPixels = (short) (sprite.getYSpeed() >> 8);
 				short requiredSpeed = (short) (-(ySpeedPixels + 8));
 				// Check whether
 				if (results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
@@ -726,6 +741,21 @@ public class PlayableSpriteMovementManager extends
 		// the angle to 0. We need the terrain angle from the current ground position
 		// to calculate the correct jump direction for slopes in all ground modes.
 		int hexAngle = getHexAngle(sprite);
+
+		// SPG/Disasm: CalcRoomOverHead check - ensure there's at least 6 pixels of
+		// headroom in the "overhead" direction (perpendicular to ground) before jumping.
+		// This prevents jumping when pressed against a solid object on a slope.
+		if (!hasEnoughHeadroom(sprite, hexAngle)) {
+			return;
+		}
+
+		// Clear solid object riding state to prevent the 16-pixel sticky tolerance
+		// from keeping the player grounded on the next frame after jumping.
+		var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
+		if (solidManager != null) {
+			solidManager.clearRidingObject();
+		}
+
 		// SPG: In S1/S2/S3K, air control is locked when jumping while rolling.
 		// Must capture this BEFORE setAir(true) which could affect state.
 		boolean wasRolling = sprite.getRolling();
@@ -742,6 +772,75 @@ public class PlayableSpriteMovementManager extends
 				* TrigLookupTable.sinHexNormalized(hexAngle)));
 		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
 				* TrigLookupTable.cosHexNormalized(hexAngle)));
+	}
+
+	/**
+	 * Checks if there's enough headroom for the sprite to jump.
+	 * Based on the original game's CalcRoomOverHead routine.
+	 * The original game requires at least 6 pixels of room in the "overhead"
+	 * direction (perpendicular to the current ground angle) to allow a jump.
+	 *
+	 * This checks BOTH terrain collision AND solid objects.
+	 *
+	 * @param sprite The sprite attempting to jump
+	 * @param hexAngle The current ground angle in hex format (0-255)
+	 * @return true if there's enough headroom, false otherwise
+	 */
+	private boolean hasEnoughHeadroom(AbstractPlayableSprite sprite, int hexAngle) {
+		// Check terrain headroom using ceiling sensors
+		int terrainDistance = getTerrainHeadroomDistance(sprite, hexAngle);
+
+		// Check solid object headroom
+		var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
+		int objectDistance = (solidManager != null)
+				? solidManager.getHeadroomDistance(sprite, hexAngle)
+				: Integer.MAX_VALUE;
+
+		// Require at least 6 pixels of clearance from BOTH
+		return Math.min(terrainDistance, objectDistance) >= 6;
+	}
+
+	/**
+	 * Gets terrain headroom distance by scanning ceiling sensors.
+	 * Based on the original CalcRoomOverHead routine which uses FindFloor/FindWall
+	 * to check terrain in the "overhead" direction.
+	 *
+	 * @param sprite The playable sprite
+	 * @param hexAngle The current ground angle (0-255)
+	 * @return Distance in pixels to nearest terrain overhead, or Integer.MAX_VALUE if none
+	 */
+	private int getTerrainHeadroomDistance(AbstractPlayableSprite sprite, int hexAngle) {
+		// Determine overhead direction quadrant like the original game:
+		// CalcRoomOverHead: add 0x80 to get overhead angle, then add 0x20 and mask to 0xC0
+		int overheadAngle = (hexAngle + 0x80) & 0xFF;
+		int quadrant = (overheadAngle + 0x20) & 0xC0;
+
+		// For standard ground (quadrant 0x80 = UP), use ceiling sensors
+		if (quadrant == 0x80) {
+			int minDistance = Integer.MAX_VALUE;
+			Sensor[] ceilingSensors = sprite.getCeilingSensors();
+			if (ceilingSensors == null) {
+				return Integer.MAX_VALUE;
+			}
+			for (Sensor sensor : ceilingSensors) {
+				boolean wasActive = sensor.isActive();
+				sensor.setActive(true);
+				SensorResult result = sensor.scan();
+				sensor.setActive(wasActive);
+				if (result != null) {
+					// Positive distance = clearance above, negative = penetrating terrain
+					int clearance = result.distance() >= 0 ? result.distance() : 0;
+					if (clearance < minDistance) {
+						minDistance = clearance;
+					}
+				}
+			}
+			return minDistance;
+		}
+
+		// For slopes (quadrant 0x40 = LEFT, 0xC0 = RIGHT), could add push sensor checks
+		// For now, return max value (no terrain obstruction) for edge cases
+		return Integer.MAX_VALUE;
 	}
 
 	/**

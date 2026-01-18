@@ -446,10 +446,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public void setAir(boolean air) {
-                // If landing from hurt state, set invulnerability and clear hurt
+                // If landing from hurt state, clear hurt flag
+                // (invulnerableFrames already set in applyHurt() per ROM behavior)
                 if (!air && this.air && hurt) {
                         hurt = false;
-                        setInvulnerableFrames(0x78); // 120 frames invulnerability on landing
                 }
                 // Reset rolling jump flag when landing
                 if (!air && this.air) {
@@ -672,7 +672,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         LOGGER.fine("DEBUG: applyHurt called. No shield.");
                 }
 
-                hurt = true; // Set hurt state - invulnerability is applied on landing (ROM behavior)
+                hurt = true;
+                setInvulnerableFrames(0x78); // Set invulnerability immediately (ROM: s2.asm line 84954)
                 setSpringing(0);
                 setSpindash(false);
                 setRolling(false);

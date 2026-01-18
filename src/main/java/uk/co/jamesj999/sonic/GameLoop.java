@@ -7,7 +7,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
-import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
+import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2SpecialStageSpriteDebug;
 import uk.co.jamesj999.sonic.game.GameMode;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.GameStateManager;
@@ -57,6 +57,8 @@ public class GameLoop {
     private final Camera camera = Camera.getInstance();
     private final TimerManager timerManager = TimerManager.getInstance();
     private final LevelManager levelManager = LevelManager.getInstance();
+    // Direct reference to Sonic2SpecialStageManager for debug features and Sonic 2-specific logic.
+    // Future games should use GameModule.getSpecialStageProvider() for game-agnostic code.
     private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
 
     // Title card provider - lazily initialized when GameModule is available
@@ -164,7 +166,7 @@ public class GameLoop {
 
             // Handle sprite debug viewer navigation (uses configured movement keys)
             if (specialStageManager.isSpriteDebugMode()) {
-                DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
+                Sonic2SpecialStageSpriteDebug debugSprites = Sonic2SpecialStageSpriteDebug.getInstance();
                 // Left/Right: Change page within current graphics set
                 if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.RIGHT))) {
                     debugSprites.nextPage();
@@ -466,8 +468,9 @@ public class GameLoop {
         // Play special stage entry sound
         AudioManager.getInstance().playSfx(Sonic2AudioConstants.SFX_SPECIAL_STAGE_ENTRY);
 
-        // Stop the current music (original game fades it out)
-        AudioManager.getInstance().stopMusic();
+        // Fade out the current music gradually (ROM: MusID_FadeOut / zFadeOutMusic)
+        // This preserves the SFX we just started, unlike stopMusic() which silences all
+        AudioManager.getInstance().fadeOutMusic();
 
         // Determine which stage to enter
         GameStateManager gsm = GameStateManager.getInstance();
@@ -785,8 +788,8 @@ public class GameLoop {
     private void startRespawnFade() {
         LOGGER.info("Starting fade-to-black for respawn");
 
-        // Stop current music
-        AudioManager.getInstance().stopMusic();
+        // Fade out current music (ROM: s2.asm:4757 - level entry with title card)
+        AudioManager.getInstance().fadeOutMusic();
 
         // Start fade-to-black, then respawn when complete
         FadeManager.getInstance().startFadeToBlack(() -> {
@@ -813,8 +816,8 @@ public class GameLoop {
     private void startNextActFade() {
         LOGGER.info("Starting fade-to-black for next act");
 
-        // Stop current music
-        AudioManager.getInstance().stopMusic();
+        // Fade out current music (ROM: s2.asm:4757 - level entry with title card)
+        AudioManager.getInstance().fadeOutMusic();
 
         // Start fade-to-black, then load next act when complete
         FadeManager.getInstance().startFadeToBlack(() -> {
@@ -844,8 +847,8 @@ public class GameLoop {
     private void startNextZoneFade() {
         LOGGER.info("Starting fade-to-black for next zone");
 
-        // Stop current music
-        AudioManager.getInstance().stopMusic();
+        // Fade out current music (ROM: s2.asm:4757 - level entry with title card)
+        AudioManager.getInstance().fadeOutMusic();
 
         // Start fade-to-black, then load next zone when complete
         FadeManager.getInstance().startFadeToBlack(() -> {

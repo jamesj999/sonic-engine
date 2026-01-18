@@ -14,6 +14,7 @@ import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencerConfig;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsConstants;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;
@@ -209,6 +210,9 @@ public class JOALAudioBackend implements AudioBackend {
         boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
+        // Look up SFX priority from Z80 driver priority table
+        int sfxPriority = Sonic2SmpsConstants.getSfxPriority(data.getId());
+
         if (smpsDriver != null && currentStream == smpsDriver) {
             // Mix into current driver
             // Note: DAC interpolation is global on the driver/synth.
@@ -217,6 +221,7 @@ public class JOALAudioBackend implements AudioBackend {
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
+            seq.setSfxPriority(sfxPriority);
             if (currentSmps != null) {
                 seq.setFallbackVoiceData(currentSmps.getSmpsData());
             }
@@ -235,6 +240,7 @@ public class JOALAudioBackend implements AudioBackend {
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
+            seq.setSfxPriority(sfxPriority);
             if (currentSmps != null) {
                 seq.setFallbackVoiceData(currentSmps.getSmpsData());
             }
@@ -446,6 +452,14 @@ public class JOALAudioBackend implements AudioBackend {
             al.alDeleteSources(1, new int[] { source }, 0);
         }
         sfxSources.clear();
+    }
+
+    @Override
+    public void fadeOutMusic(int steps, int delay) {
+        // Fade only music, not SFX - delegated to the music sequencer
+        if (currentSmps != null) {
+            currentSmps.triggerFadeOut(steps, delay);
+        }
     }
 
     @Override

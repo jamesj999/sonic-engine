@@ -47,6 +47,10 @@ import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
 import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
+import uk.co.jamesj999.sonic.level.bumpers.CNZBumperCollisionManager;
+import uk.co.jamesj999.sonic.level.bumpers.CNZBumperDataLoader;
+import uk.co.jamesj999.sonic.level.bumpers.CNZBumperPlacementManager;
+import uk.co.jamesj999.sonic.level.bumpers.CNZBumperSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
@@ -115,6 +119,7 @@ public class LevelManager {
     private RingRenderManager ringRenderManager;
     private RingManager ringManager;
     private LostRingManager lostRingManager;
+    private CNZBumperCollisionManager cnzBumperManager;
     private ObjectRenderManager objectRenderManager;
     private HudRenderManager hudRenderManager;
     private AnimatedPatternManager animatedPatternManager;
@@ -144,19 +149,19 @@ public class LevelManager {
 
     /**
      * Private constructor for Singleton pattern.
+     * Zone list is lazily initialized from the current GameModule's ZoneRegistry.
      */
     protected LevelManager() {
-        levels.add(List.of(LevelData.EMERALD_HILL_1, LevelData.EMERALD_HILL_2));
-        levels.add(List.of(LevelData.CHEMICAL_PLANT_1, LevelData.CHEMICAL_PLANT_2));
-        levels.add(List.of(LevelData.AQUATIC_RUIN_1, LevelData.AQUATIC_RUIN_2));
-        levels.add(List.of(LevelData.CASINO_NIGHT_1, LevelData.CASINO_NIGHT_2));
-        levels.add(List.of(LevelData.HILL_TOP_1, LevelData.HILL_TOP_2));
-        levels.add(List.of(LevelData.MYSTIC_CAVE_1, LevelData.MYSTIC_CAVE_2));
-        levels.add(List.of(LevelData.OIL_OCEAN_1, LevelData.OIL_OCEAN_2));
-        levels.add(List.of(LevelData.METROPOLIS_1, LevelData.METROPOLIS_2, LevelData.METROPOLIS_3));
-        levels.add(List.of(LevelData.SKY_CHASE));
-        levels.add(List.of(LevelData.WING_FORTRESS));
-        levels.add(List.of(LevelData.DEATH_EGG));
+        // Zones are loaded from ZoneRegistry in refreshZoneList()
+    }
+
+    /**
+     * Refreshes the zone list from the current GameModule's ZoneRegistry.
+     * Called during level loading to ensure zones match the current game.
+     */
+    private void refreshZoneList() {
+        levels.clear();
+        levels.addAll(gameModule.getZoneRegistry().getAllZones());
     }
 
     /**
@@ -170,6 +175,7 @@ public class LevelManager {
             Rom rom = RomManager.getInstance().getRom();
             parallaxManager.load(rom);
             gameModule = GameModuleRegistry.getCurrent();
+            refreshZoneList();
             game = gameModule.createGame(rom);
             AudioManager audioManager = AudioManager.getInstance();
             audioManager.setAudioProfile(gameModule.getAudioProfile());
@@ -209,6 +215,7 @@ public class LevelManager {
             }
             ringManager = new RingManager(ringPlacementManager, ringRenderManager);
             lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
+            initCNZBumpers(rom, level.getZoneIndex(), currentAct, camera.getX());
             initObjectArt();
             initPlayerSpriteArt();
             resetPlayerState();
@@ -259,6 +266,11 @@ public class LevelManager {
         }
         if (lostRingManager != null) {
             lostRingManager.update(playable, frameCounter + 1);
+        }
+        if (cnzBumperManager != null && level != null) {
+            // Use level.getZoneIndex() which is the actual ROM zone index (e.g., 3 for CNZ)
+            // NOT currentZone which is just the menu/list index
+            cnzBumperManager.update(playable, Camera.getInstance().getX(), level.getZoneIndex());
         }
         if (levelGamestate != null) {
             levelGamestate.update();
@@ -343,6 +355,45 @@ public class LevelManager {
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load spindash dust art.", e);
             playable.setSpindashDustManager(null);
+        }
+    }
+
+    /**
+     * Initialize CNZ map bumpers if the current zone is Casino Night Zone.
+     * <p>
+     * These are the triangular bumpers embedded in level tiles that use
+     * SndID_LargeBumper (0xD9) and have $A00 velocity.
+     *
+     * @param rom The ROM to read bumper data from
+     * @param zoneIndex Current zone index
+     * @param actIndex Current act index (0 or 1)
+     * @param cameraX Current camera X position for initial windowing
+     */
+    private void initCNZBumpers(Rom rom, int zoneIndex, int actIndex, int cameraX) {
+        // Only initialize for Casino Night Zone (zone index 3)
+        if (zoneIndex != CNZBumperCollisionManager.ZONE_CNZ) {
+            cnzBumperManager = null;
+            return;
+        }
+
+        try {
+            CNZBumperDataLoader loader = new CNZBumperDataLoader();
+            java.util.List<CNZBumperSpawn> bumpers = loader.load(rom, actIndex);
+
+            if (bumpers.isEmpty()) {
+                LOGGER.warning("No CNZ bumpers loaded for Act " + (actIndex + 1));
+                cnzBumperManager = null;
+                return;
+            }
+
+            CNZBumperPlacementManager placementManager = new CNZBumperPlacementManager(bumpers);
+            placementManager.reset(cameraX);
+            cnzBumperManager = new CNZBumperCollisionManager(placementManager);
+
+            LOGGER.info("Initialized CNZ bumper system with " + bumpers.size() + " bumpers");
+        } catch (IOException e) {
+            LOGGER.log(SEVERE, "Failed to load CNZ bumper data", e);
+            cnzBumperManager = null;
         }
     }
 
@@ -1778,6 +1829,11 @@ public class LevelManager {
      */
     private void loadCurrentLevel(boolean showTitleCard) {
         try {
+            // Ensure zone list is populated before accessing it
+            if (levels.isEmpty()) {
+                gameModule = GameModuleRegistry.getCurrent();
+                refreshZoneList();
+            }
             LevelData levelData = levels.get(currentZone).get(currentAct);
 
             // Check if we have an active checkpoint BEFORE reloading

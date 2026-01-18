@@ -4,19 +4,21 @@ Last updated: 2026-01-16
 
 ## Open Bugs
 
-- [ ] If a sound is playing when the level is switched, it gets stuck looping that part of the sound.
-- [ ] If you're standing to the left of a monitor and the ground is tilted slightly towards it, Sonic fails to jump.
-- [ ] Some spikes kill you from the side when you jump next to them while holding direction into them.
+- [x] If a sound is playing when the level is switched, it gets stuck looping that part of the sound.
+- [x] If you're standing to the left of a monitor and the ground is tilted slightly towards it, Sonic fails to jump.
+- [x] Some spikes kill you from the side when you jump next to them while holding direction into them.
 - [x] There's a small collision hole on the left side of the EHZ bridges. (Fixed: Bridge collision anchor now uses ROM-style x_pos-8 offset; slope sampling aligned to collision space.)
 - [x] EHZ bridges cause you to move from rolling to running when you move over them. (Fixed: Terrain no longer forces air if solid contact exists; object landing preserves roll state.)
-- [ ] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct).
+- [x] Some sound engine discrepancies (some instruments have volume issues, springs don't sound correct). (Fixed: Made KEY_ON conditional on !t.tieNext, same as KEY_OFF. Fixed PSG mix volume after fixing PSG noise volume)
 - [x] Double-length spirals in EHZ don't work (Sonic only completes the first half then falls out).
 - [x] Objects still have collision in debug movement mode. (Fixed: Debug mode now skips all physics, collision, and damage processing. Toggled via configurable keybind - default 'D' key)
 - [x] Camera maximum height is not yet implemented. (Fixed: Added LevelEventManager for dynamic boundary updates with 2px/frame easing toward targets. Camera class now supports target-based boundaries matching ROM's Camera_Max_Y_pos_target system.)
-- [ ] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
+- [x] Some situations (ring loss on spikes in MCZ) result in rings being instantly recollected.
 - [x] Finishing a special stage puts you at your last coordinates, instead of the coordinates of the last signpost (or, if none, fall back to act start position). (Fixed: CheckpointState now saves/restores camera position with checkpoint data, matching ROM's Obj79_SaveData/LoadData behavior)
 - [x] Both special stage and end of act cards shouldn't start counting the score until a set delay. (Fixed: Added STATE_PRE_TALLY_DELAY with ROM-accurate $B4/180 frame delay)
 - [x] Special stage results ending should fade to white (verify!)
+- [x] When a Special stage ends, the star post still has the special stage entry stars above it, allowing you to re-enter the special stage, even though rings are reset to zero. (Fixed: Stars now self-destruct when usedForSpecialStage flag is set; added ring count check before allowing special stage entry)
+- [ ] Buzzer badnik shoots projectile from wrong location (under body, instead of tail tip)
 
 ## ROM-Accurate Investigation Plan
 

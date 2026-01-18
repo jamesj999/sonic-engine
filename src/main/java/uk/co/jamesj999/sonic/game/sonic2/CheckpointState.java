@@ -22,6 +22,7 @@ public class CheckpointState implements RespawnState {
     private int savedCameraX;
     private int savedCameraY;
     private boolean cameraLock;
+    private boolean usedForSpecialStage; // Prevents stars from respawning after SS entry
 
     /**
      * Clear checkpoint state (called on level start/change).
@@ -33,6 +34,7 @@ public class CheckpointState implements RespawnState {
         savedCameraX = 0;
         savedCameraY = 0;
         cameraLock = false;
+        usedForSpecialStage = false;
     }
 
     /**
@@ -113,6 +115,15 @@ public class CheckpointState implements RespawnState {
 
     public int getSavedCameraY() {
         return savedCameraY;
+    }
+
+    public boolean isUsedForSpecialStage() {
+        return usedForSpecialStage;
+    }
+
+    public void markUsedForSpecialStage() {
+        this.usedForSpecialStage = true;
+        LOGGER.fine("Checkpoint " + lastCheckpointIndex + " marked as used for special stage entry");
     }
 
     /**

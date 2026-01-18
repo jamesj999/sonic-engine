@@ -6,7 +6,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
-import uk.co.jamesj999.sonic.debug.DebugSpecialStageSprites;
+import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2SpecialStageSpriteDebug;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
@@ -492,9 +492,9 @@ public class Sonic2SpecialStageManager {
 
         // Set up music fade callback for when checkpoint fails
         checkpoint.setOnMusicFadeRequested(() -> {
-            // Fade out the special stage music
-            AudioManager.getInstance().stopMusic();
-            LOGGER.info("Music fade requested - stopping special stage music");
+            // Fade out the special stage music gradually (preserves any SFX playing)
+            AudioManager.getInstance().fadeOutMusic();
+            LOGGER.info("Music fade requested - fading special stage music");
         });
 
         checkpoint.setOnCheckpointResolved((result, checkpointNumber, ringRequirement,
@@ -833,7 +833,7 @@ public class Sonic2SpecialStageManager {
                 messagesPatterns.length + " Messages patterns");
 
         // Update debug sprite viewer with all pattern bases
-        DebugSpecialStageSprites debugSprites = DebugSpecialStageSprites.getInstance();
+        Sonic2SpecialStageSpriteDebug debugSprites = Sonic2SpecialStageSpriteDebug.getInstance();
         debugSprites.setPlayerPatternBase(playerPatternBase);
         debugSprites.setHudPatternBase(hudPatternBase, hudPatterns.length);
         debugSprites.setStartPatternBase(startPatternBase, startPatterns.length);
@@ -2014,7 +2014,7 @@ public class Sonic2SpecialStageManager {
      */
     public void toggleSpriteDebugMode() {
         spriteDebugMode = !spriteDebugMode;
-        DebugSpecialStageSprites.getInstance().setEnabled(spriteDebugMode);
+        Sonic2SpecialStageSpriteDebug.getInstance().setEnabled(spriteDebugMode);
         LOGGER.info("Sprite debug mode: " + (spriteDebugMode ? "ON" : "OFF"));
     }
 

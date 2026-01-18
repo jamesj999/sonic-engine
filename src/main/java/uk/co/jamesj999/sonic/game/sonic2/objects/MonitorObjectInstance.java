@@ -15,9 +15,11 @@ import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 public class MonitorObjectInstance extends BoxObjectInstance implements TouchResponseProvider, TouchResponseListener,
         SolidObjectProvider, SolidObjectListener {
+    private static final Logger LOGGER = Logger.getLogger(MonitorObjectInstance.class.getName());
     private static final int HALF_RADIUS = 0x0E;
     private static final int ICON_INITIAL_VELOCITY = -0x300;
     private static final int ICON_RISE_ACCEL = 0x18;
@@ -77,9 +79,19 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         }
 
         // Hitting from below (Moving Up)
+        // Only bounce if player is actually BELOW the monitor (player center Y > monitor Y)
+        // This prevents bouncing when the player jumps near the monitor from the side
         if (player.getYSpeed() < 0) {
-            // Bounce player down, but DO NOT break monitor
-            player.setYSpeed((short) -player.getYSpeed());
+            int playerCenterY = player.getCentreY();
+            int monitorY = spawn.y();
+
+            // Player must be below the monitor to trigger the "hit from below" bounce
+            if (playerCenterY > monitorY) {
+                LOGGER.fine(() -> "Monitor bounce: player at (" + player.getX() + "," + player.getY() +
+                    ") ySpeed=" + player.getYSpeed() + " monitor at (" + spawn.x() + "," + spawn.y() + ")");
+                // Bounce player down, but DO NOT break monitor
+                player.setYSpeed((short) -player.getYSpeed());
+            }
             return;
         }
 

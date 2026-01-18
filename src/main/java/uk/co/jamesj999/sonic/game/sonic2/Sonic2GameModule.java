@@ -9,6 +9,16 @@ import uk.co.jamesj999.sonic.game.LevelEventProvider;
 import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.game.RespawnState;
 import uk.co.jamesj999.sonic.game.TitleCardProvider;
+import uk.co.jamesj999.sonic.game.ZoneRegistry;
+import uk.co.jamesj999.sonic.game.SpecialStageProvider;
+import uk.co.jamesj999.sonic.game.BonusStageProvider;
+import uk.co.jamesj999.sonic.game.ScrollHandlerProvider;
+import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
+import uk.co.jamesj999.sonic.game.RomOffsetProvider;
+import uk.co.jamesj999.sonic.game.DebugModeProvider;
+import uk.co.jamesj999.sonic.game.DebugOverlayProvider;
+import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2DebugModeProvider;
+import uk.co.jamesj999.sonic.game.sonic2.scroll.Sonic2ScrollHandlerProvider;
 import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2AudioProfile;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectConstants;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
@@ -80,5 +90,50 @@ public class Sonic2GameModule implements GameModule {
     @Override
     public TitleCardProvider getTitleCardProvider() {
         return TitleCardManager.getInstance();
+    }
+
+    @Override
+    public ZoneRegistry getZoneRegistry() {
+        return Sonic2ZoneRegistry.getInstance();
+    }
+
+    @Override
+    public SpecialStageProvider getSpecialStageProvider() {
+        // Return a new provider each time to avoid state issues
+        // The underlying manager is a singleton
+        return new Sonic2SpecialStageProvider();
+    }
+
+    @Override
+    public BonusStageProvider getBonusStageProvider() {
+        // Sonic 2 does not have bonus stages (uses special stages via checkpoints instead)
+        return null;
+    }
+
+    @Override
+    public ScrollHandlerProvider getScrollHandlerProvider() {
+        return new Sonic2ScrollHandlerProvider();
+    }
+
+    @Override
+    public ZoneFeatureProvider getZoneFeatureProvider() {
+        return new Sonic2ZoneFeatureProvider();
+    }
+
+    @Override
+    public RomOffsetProvider getRomOffsetProvider() {
+        return new Sonic2RomOffsetProvider();
+    }
+
+    @Override
+    public DebugModeProvider getDebugModeProvider() {
+        return new Sonic2DebugModeProvider();
+    }
+
+    @Override
+    public DebugOverlayProvider getDebugOverlayProvider() {
+        // Debug overlay content is currently handled by the generic DebugRenderer
+        // Future: Create Sonic2DebugOverlayProvider for game-specific overlay content
+        return null;
     }
 }

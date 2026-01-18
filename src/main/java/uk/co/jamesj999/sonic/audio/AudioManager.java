@@ -168,6 +168,43 @@ public class AudioManager {
         }
     }
 
+    /**
+     * Fade out the currently playing music using ROM default timing.
+     * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
+     * Does not affect SFX - only music channels fade.
+     *
+     * <p>ROM uses fadeOutMusic() in these situations (for future implementation):
+     * <ul>
+     *   <li>Special stage entry (s2.asm:6540) - IMPLEMENTED</li>
+     *   <li>Special stage checkpoint fail (Obj5A, s2.asm:71358, 71878) - IMPLEMENTED</li>
+     *   <li>Level entry - before entering a level with title card (s2.asm:4757) - IMPLEMENTED</li>
+     *   <li>Boss area triggers - when approaching end-of-act boss fights
+     *       (EHZ:20404, MTZ:20512, HTZ:21230, HPZ:21332, ARZ:21421, MCZ:21529, OOZ:21613, CNZ:21760)</li>
+     *   <li>Title screen - starting new game (s2.asm:4526)</li>
+     *   <li>Demo playback - before playing a demo (s2.asm:4581)</li>
+     *   <li>WFZ/DEZ boss setup (s2.asm:77011, 80751)</li>
+     *   <li>Ending sequence - final boss defeated, going to credits (s2.asm:82064, 82525)</li>
+     * </ul>
+     */
+    public void fadeOutMusic() {
+        // ROM default: 0x28 (40) steps, delay of 3 frames between steps
+        fadeOutMusic(0x28, 3);
+    }
+
+    /**
+     * Fade out the currently playing music over time.
+     * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
+     * Does not affect SFX - only music channels fade.
+     *
+     * @param steps total number of volume steps (ROM default: 0x28 = 40)
+     * @param delay frames between each volume step (ROM default: 3)
+     */
+    public void fadeOutMusic(int steps, int delay) {
+        if (backend != null) {
+            backend.fadeOutMusic(steps, delay);
+        }
+    }
+
     public void destroy() {
         if (backend != null) {
             backend.destroy();
