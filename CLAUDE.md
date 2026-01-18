@@ -142,10 +142,15 @@ The codebase uses singletons extensively via `getInstance()`:
 | `sprites.playable` | Sonic/Tails player logic, physics |
 | `physics` | Terrain collision, sensors |
 | `level` | Level structures, rendering, scrolling |
-| `level.objects` | Game object management and rendering |
+| `level.objects` | Game object management, rendering, factories |
 | `audio` | SMPS driver, YM2612/PSG chip emulation |
 | `data` | ROM loading, decompression (Kosinski, Nemesis, Saxman) |
+| `game` | Core game-agnostic interfaces and providers |
 | `game.sonic2` | Sonic 2-specific implementations |
+| `game.sonic2.objects` | Object factories and instance classes |
+| `game.sonic2.objects.badniks` | Badnik AI implementations |
+| `game.sonic2.scroll` | Zone-specific parallax scroll handlers |
+| `game.sonic2.constants` | ROM offsets, object IDs, audio constants |
 | `tools` | Compression utilities (KosinskiReader, etc.) |
 
 ### Terminology (differs from standard Sonic 2 naming)
@@ -159,6 +164,171 @@ The codebase uses singletons extensively via `getInstance()`:
 - `DEBUG_MODE_KEY` - Key to toggle debug movement mode (default: 68 = 'D' key). When active, Sonic can fly freely with arrow keys, ignoring collision/physics.
 - `AUDIO_ENABLED` - Sound on/off
 - `ROM_FILENAME` - ROM path
+
+## Multi-Game Support Architecture
+
+The engine supports multiple Sonic games (Sonic 1, Sonic 2, Sonic 3&K) through a provider-based abstraction layer. Game-specific behavior is isolated behind interfaces, allowing the engine core to remain game-agnostic.
+
+### Core Components
+
+| Class/Interface | Purpose |
+|-----------------|---------|
+| `GameModule` | Central interface defining all game-specific providers |
+| `GameModuleRegistry` | Singleton holding the current game module |
+| `RomDetectionService` | Auto-detects ROM type and sets appropriate module |
+| `RomDetector` | Interface for game-specific ROM detection logic |
+
+### GameModule Interface
+
+The `GameModule` interface is the entry point for all game-specific functionality:
+
+```java
+// Access the current game module
+GameModule module = GameModuleRegistry.getCurrent();
+
+// Get game-specific providers
+ObjectRegistry objects = module.createObjectRegistry();
+ZoneRegistry zones = module.getZoneRegistry();
+SpecialStageProvider specialStage = module.getSpecialStageProvider();
+ScrollHandlerProvider scroll = module.getScrollHandlerProvider();
+```
+
+### Provider Interfaces
+
+| Provider | Purpose |
+|----------|---------|
+| `ZoneRegistry` | Zone/level metadata (names, act counts, start positions) |
+| `ObjectRegistry` | Object creation factories and ID mappings |
+| `SpecialStageProvider` | Chaos Emerald special stage logic |
+| `BonusStageProvider` | Checkpoint bonus stage logic (S3K) |
+| `ScrollHandlerProvider` | Per-zone parallax scroll handlers |
+| `ZoneFeatureProvider` | Zone-specific mechanics (CNZ bumpers, water) |
+| `RomOffsetProvider` | Type-safe ROM address access |
+| `LevelEventProvider` | Dynamic camera boundaries, boss arenas |
+| `TitleCardProvider` | Zone/act title card rendering |
+| `DebugModeProvider` | Game-specific debug features |
+
+### ROM Auto-Detection
+
+The engine automatically detects the loaded ROM and configures the appropriate game module:
+
+```java
+// Automatic detection (called during ROM load)
+GameModuleRegistry.detectAndSetModule(rom);
+
+// Manual module setting
+GameModuleRegistry.setCurrent(new Sonic2GameModule());
+```
+
+Detection is performed by `RomDetector` implementations registered with `RomDetectionService`. Each detector examines ROM headers/checksums to identify its game.
+
+## Object & Badnik System
+
+Game objects (springs, monitors, badniks, platforms) use a factory pattern with game-specific registries.
+
+### Object Registration
+
+```java
+// ObjectRegistry interface
+ObjectInstance create(ObjectSpawn spawn);
+String getPrimaryName(int objectId);
+
+// ObjectFactory functional interface
+ObjectInstance create(ObjectSpawn spawn, ObjectRegistry registry);
+```
+
+Objects are registered in `Sonic2ObjectRegistry.registerDefaultFactories()`:
+
+```java
+registerFactory(Sonic2ObjectIds.SPRING,
+    (spawn, registry) -> new SpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+```
+
+### Key Object Classes
+
+| Class | Purpose |
+|-------|---------|
+| `Sonic2ObjectRegistry` | Factory registry for Sonic 2 objects |
+| `Sonic2ObjectRegistryData` | Static name mappings for object IDs |
+| `AbstractObjectInstance` | Base class for all game objects |
+| `PlaceholderObjectInstance` | Fallback for unimplemented objects |
+
+### Badnik System
+
+Badniks (enemies) extend `AbstractBadnikInstance` which provides:
+- Common collision handling via `TouchResponseProvider`
+- Destruction behavior (explosion, animal spawn, points)
+- Movement/animation framework
+
+```java
+public abstract class AbstractBadnikInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, TouchResponseAttackable {
+
+    // Subclasses implement AI logic
+    protected abstract void updateMovement(int frameCounter, AbstractPlayableSprite player);
+
+    // Collision size for touch response
+    protected abstract int getCollisionSizeIndex();
+}
+```
+
+Example badniks: `MasherBadnikInstance`, `BuzzerBadnikInstance`, `CoconutsBadnikInstance`
+
+### Adding New Objects
+
+1. Add the object ID to `Sonic2ObjectIds.java`
+2. Create an instance class extending `AbstractObjectInstance` (or `AbstractBadnikInstance` for enemies)
+3. Register the factory in `Sonic2ObjectRegistry.registerDefaultFactories()`
+4. Add collision data to `Sonic2ObjectConstants.java` if needed
+
+## Constants Files
+
+Game-specific constants are organized in the `game.sonic2.constants` package:
+
+| File | Contents |
+|------|----------|
+| `Sonic2Constants.java` | Primary ROM offsets (level data, palettes, collision) |
+| `Sonic2ObjectIds.java` | Object type IDs (0x41 = Spring, 0x26 = Monitor, etc.) |
+| `Sonic2ObjectConstants.java` | Touch collision table address and size data |
+| `Sonic2AnimationIds.java` | Animation script IDs for player sprites |
+| `Sonic2AudioConstants.java` | Music and SFX IDs |
+
+## Adding New Game Support
+
+To add support for a new game (e.g., Sonic 1):
+
+1. **Create the GameModule implementation**
+   ```java
+   public class Sonic1GameModule implements GameModule {
+       // Implement all provider methods
+   }
+   ```
+
+2. **Create a RomDetector**
+   ```java
+   public class Sonic1RomDetector implements RomDetector {
+       public boolean canHandle(Rom rom) {
+           // Check ROM header for "SONIC THE HEDGEHOG"
+       }
+       public GameModule createModule() {
+           return new Sonic1GameModule();
+       }
+   }
+   ```
+
+3. **Implement required providers**
+   - `ZoneRegistry` - Zone names, act counts, start positions
+   - `ObjectRegistry` - Object factories for game-specific objects
+   - Audio profile with correct SFX/music mappings
+
+4. **Register the detector**
+   Add to `RomDetectionService.registerBuiltInDetectors()`:
+   ```java
+   Class<?> sonic1DetectorClass = Class.forName(
+       "uk.co.jamesj999.sonic.game.sonic1.Sonic1RomDetector");
+   ```
+
+Optional providers can return `null` if the game doesn't use that feature (e.g., `getBonusStageProvider()` for Sonic 2).
 
 ## Audio Engine
 
