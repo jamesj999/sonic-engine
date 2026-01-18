@@ -131,7 +131,10 @@ public class ObjectManager {
         while (iterator.hasNext()) {
             Map.Entry<ObjectSpawn, ObjectInstance> entry = iterator.next();
             if (!activeSpawns.contains(entry.getKey())) {
-                iterator.remove();
+                // Don't remove persistent objects (e.g., spin tubes controlling a player)
+                if (!entry.getValue().isPersistent()) {
+                    iterator.remove();
+                }
             }
         }
     }

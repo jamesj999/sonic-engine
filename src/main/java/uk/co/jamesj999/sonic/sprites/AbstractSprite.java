@@ -77,7 +77,7 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public void setCentreY(short y) {
-		this.yPixel = (short) (y + (width / 2));
+		this.yPixel = (short) (y - (height / 2));
 		this.ySubpixel = (short) 0;
 	}
 

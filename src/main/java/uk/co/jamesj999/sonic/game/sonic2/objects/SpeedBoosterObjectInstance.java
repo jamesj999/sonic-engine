@@ -67,8 +67,9 @@ public class SpeedBoosterObjectInstance extends AbstractObjectInstance {
 
         int objX = spawn.x();
         int objY = spawn.y();
-        int playerX = player.getX();
-        int playerY = player.getY();
+        // ROM uses x_pos/y_pos which are CENTER positions
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
 
         // ROM collision check: x_pos ±16, y_pos ±16
         int leftBound = objX - COLLISION_HALF_SIZE;

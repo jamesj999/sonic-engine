@@ -85,6 +85,15 @@ public class PlayableSpriteMovementManager extends
 			return;
 		}
 
+		// OBJECT CONTROLLED MODE: When an object has full control (like spin tubes,
+		// corkscrews), skip all physics processing. The controlling object handles
+		// position updates directly. This matches ROM's obj_control = $81 behavior.
+		if (sprite.isObjectControlled()) {
+			// Skip all physics, collision, and movement processing
+			// The controlling object is responsible for moving the player
+			return;
+		}
+
 		// A simple way to test our running modes...
 		if (testKey && !testKeyPressed) {
 			testKeyPressed = true;

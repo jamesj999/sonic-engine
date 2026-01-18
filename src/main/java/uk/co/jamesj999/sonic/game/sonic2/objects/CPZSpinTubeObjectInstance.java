@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -176,6 +177,12 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     // Game timer second value (used for path variant selection)
     private int timerSecond = 0;
 
+    // Current frame counter (stored from update for use in sub-methods)
+    private int currentFrameCounter = 0;
+
+    // Number of frames to wait before allowing another tube to grab the player
+    private static final int TUBE_EXIT_COOLDOWN_FRAMES = 8;
+
     public CPZSpinTubeObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
 
@@ -191,6 +198,8 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
+        // Store frame counter for use in sub-methods
+        this.currentFrameCounter = frameCounter;
         // Update timer second (used for path variant selection)
         timerSecond = (frameCounter / 60) & 0xFF;
 
@@ -200,6 +209,9 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     }
 
     private void updateCharacter(AbstractPlayableSprite player) {
+        if (mainCharState != 0) {
+            LOGGER.fine("updateCharacter: state=" + mainCharState);
+        }
         switch (mainCharState) {
             case 0:
                 checkEntryCollision(player);
@@ -225,8 +237,9 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
 
         int objX = spawn.x();
         int objY = spawn.y();
-        int playerX = player.getX();
-        int playerY = player.getY();
+        // ROM uses center-based coordinates (x_pos, y_pos)
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
 
         // Check X range: player must be within collisionDistance of object
         int dx = playerX - objX;
@@ -241,8 +254,21 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         }
 
         // Don't grab player if already rolling (anim 0x20)
-        // This prevents re-triggering
+        // This prevents re-triggering - matches ROM behavior
         if (player.getRolling()) {
+            LOGGER.fine("Tube at (" + objX + "," + objY + ") skipping - player is rolling");
+            return;
+        }
+
+        // Skip if player is currently being controlled by another object
+        if (player.isObjectControlled()) {
+            return;
+        }
+
+        // Skip if player was just released from object control (cooldown)
+        // This prevents chain-grabbing between nearby tubes
+        if (player.wasRecentlyObjectControlled(currentFrameCounter, TUBE_EXIT_COOLDOWN_FRAMES)) {
+            LOGGER.fine("Tube at (" + objX + "," + objY + ") skipping - player recently exited a tube");
             return;
         }
 
@@ -297,11 +323,11 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         mainCharPathIndex = 0;
         mainCharDuration = (mainCharPath.length / 2) - 2;  // -2 for start position
 
-        // Position player at first waypoint
+        // Position player at first waypoint (center-based)
         int startX = mainCharPath[0] + objX;
         int startY = mainCharPath[1] + objY;
-        player.setX((short) startX);
-        player.setY((short) startY);
+        player.setCentreX((short) startX);
+        player.setCentreY((short) startY);
 
         // Move to second waypoint for velocity calculation
         mainCharPathIndex = 2;
@@ -310,12 +336,17 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
 
         // Set player state for tube traversal
         // ROM: move.b #$81,obj_control(a1) - locks player to object control
+        // This disables normal physics - the tube controls the player completely
+        player.setObjectControlled(true);
         player.setControlLocked(true);
         player.setRolling(true);
         player.setAir(true);
         player.setGSpeed((short) TUBE_SPEED);
         player.setXSpeed((short) 0);
         player.setYSpeed((short) 0);
+        // ROM: bclr #high_priority_bit,art_tile(a1) - render behind tube graphics
+        player.setHighPriority(false);
+        player.setPriorityBucket(RenderPriority.MIN);
 
         // Calculate velocity to next waypoint
         calculateVelocity(player, nextX, nextY, TUBE_SPEED);
@@ -326,7 +357,10 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Advance to entry path mode
         mainCharState = 2;
 
-        LOGGER.fine("Player entered spin tube at entry path " + pathIndex);
+        LOGGER.info("Player entered spin tube: subtype=0x" + Integer.toHexString(spawn.subtype()) +
+                ", entryFrame=" + mainCharFrame + ", pathIndex=" + pathIndex +
+                ", collisionDist=0x" + Integer.toHexString(collisionDistance) +
+                ", objPos=(" + objX + "," + objY + ")");
     }
 
     /**
@@ -348,15 +382,16 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         int nextX = mainCharPath[mainCharPathIndex] + objX;
         int nextY = mainCharPath[mainCharPathIndex + 1] + objY;
 
-        // Set player position to current target
-        player.setX((short) nextX);
-        player.setY((short) nextY);
+        // Set player position to current target (center-based)
+        player.setCentreX((short) nextX);
+        player.setCentreY((short) nextY);
 
         // Check if we've reached the end of entry path
         mainCharPathIndex += 2;
 
-        if (mainCharPathIndex >= mainCharPath.length - 2) {
+        if (mainCharPathIndex >= mainCharPath.length) {
             // End of entry path - transition to main path
+            // Exit velocity is from the final segment we just completed
             transitionToMainPath(player);
             return;
         }
@@ -374,21 +409,25 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Check if entry frame indicates we should go to main path
         if (mainCharFrame >= 4) {
             // Exit tube
-            exitTube(player);
+            LOGGER.info("Exiting tube early: entryFrame >= 4");
+            exitTube(player, currentFrameCounter);
             return;
         }
 
         // Calculate main path index from subtype and entry frame
         int routingIndex = (spawn.subtype() & 0xFC) + mainCharFrame;
         if (routingIndex >= MAIN_PATH_ROUTING.length) {
-            exitTube(player);
+            LOGGER.info("Exiting tube: routingIndex " + routingIndex + " out of bounds");
+            exitTube(player, currentFrameCounter);
             return;
         }
 
         int pathId = MAIN_PATH_ROUTING[routingIndex];
         if (pathId == 0) {
             // No main path - exit
-            exitTube(player);
+            LOGGER.info("Exiting tube: no main path for routingIndex " + routingIndex +
+                    " (subtype=0x" + Integer.toHexString(spawn.subtype()) + ", frame=" + mainCharFrame + ")");
+            exitTube(player, currentFrameCounter);
             return;
         }
 
@@ -407,7 +446,7 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Adjust for 1-based indexing in routing table
         pathId--;
         if (pathId < 0 || pathId >= MAIN_PATHS.length) {
-            exitTube(player);
+            exitTube(player, currentFrameCounter);
             return;
         }
 
@@ -423,7 +462,7 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         }
         // Note: mainCharDuration will be set by calculateVelocity
 
-        // Position player at first waypoint (absolute coordinates)
+        // Position player at first waypoint (absolute coordinates, center-based)
         int startX, startY;
         if (mainCharReverse) {
             startX = mainCharPath[mainCharPathIndex + 2];
@@ -432,8 +471,8 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
             startX = mainCharPath[0];
             startY = mainCharPath[1];
         }
-        player.setX((short) startX);
-        player.setY((short) startY);
+        player.setCentreX((short) startX);
+        player.setCentreY((short) startY);
 
         // Get next waypoint
         int nextX, nextY;
@@ -455,13 +494,24 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Advance to main path mode
         mainCharState = 4;
 
-        LOGGER.fine("Transitioned to main path " + pathId + " (reverse=" + mainCharReverse + ")");
+        LOGGER.info("Transitioned to main path " + (pathId + 1) + " (reverse=" + mainCharReverse +
+                "), routingIndex=" + routingIndex + ", pathLength=" + mainCharPath.length +
+                ", duration=" + mainCharDuration + ", startPos=(" + startX + "," + startY +
+                "), nextTarget=(" + nextX + "," + nextY + ")");
     }
 
     /**
      * Mode 4: Following the main tube path.
      */
     private void updateMainPath(AbstractPlayableSprite player) {
+        // Log only every 8 frames or when starting a new segment
+        if (mainCharDuration % 8 == 0 || mainCharDuration <= 1) {
+            LOGGER.info("updateMainPath: duration=" + mainCharDuration +
+                    ", pathIndex=" + mainCharPathIndex +
+                    ", xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
+                    ", pos=(" + player.getCentreX() + "," + player.getCentreY() + ")");
+        }
+
         mainCharDuration--;
         if (mainCharDuration >= 0) {
             // Continue moving along current segment
@@ -479,23 +529,23 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
             nextY = mainCharPath[mainCharPathIndex + 1];
         }
 
-        // Set player position to current target
-        player.setX((short) nextX);
-        player.setY((short) nextY);
+        // Set player position to current target (center-based)
+        player.setCentreX((short) nextX);
+        player.setCentreY((short) nextY);
 
         // Advance path index
         if (mainCharReverse) {
             mainCharPathIndex -= 2;
             if (mainCharPathIndex < 0) {
                 // End of main path
-                exitTube(player);
+                exitTube(player, currentFrameCounter);
                 return;
             }
         } else {
             mainCharPathIndex += 2;
             if (mainCharPathIndex >= mainCharPath.length) {
                 // End of main path
-                exitTube(player);
+                exitTube(player, currentFrameCounter);
                 return;
             }
         }
@@ -517,8 +567,9 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     private void checkExitCollision(AbstractPlayableSprite player) {
         int objX = spawn.x();
         int objY = spawn.y();
-        int playerX = player.getX();
-        int playerY = player.getY();
+        // ROM uses center-based coordinates
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
 
         // Check if player has left the tube area
         int dx = playerX - objX;
@@ -538,15 +589,24 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     /**
      * Exit the tube and restore player control.
      */
-    private void exitTube(AbstractPlayableSprite player) {
-        // Clear Y position high bits (mask to 0x7FF)
-        int y = player.getY() & 0x7FF;
-        player.setY((short) y);
+    private void exitTube(AbstractPlayableSprite player, int frameCounter) {
+        // Clear Y position high bits (mask to 0x7FF) - using center coordinates
+        int y = player.getCentreY() & 0x7FF;
+        player.setCentreY((short) y);
 
-        // Restore player control
+        // Restore player control with cooldown to prevent immediate re-capture
         // ROM: clr.b obj_control(a1)
+        player.releaseFromObjectControl(frameCounter);
         player.setControlLocked(false);
-        player.setRolling(false);
+        // Keep rolling - player exits with momentum and should continue rolling
+        // The movement manager will stop rolling when speed drops below threshold
+
+        // Restore normal render priority
+        player.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
+
+        // Debug: Log exit velocity to help diagnose direction issues
+        LOGGER.info("Spin tube exit: xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
+                ", position=(" + player.getCentreX() + "," + player.getCentreY() + ")");
 
         // Play spindash release sound
         playSound(GameSound.SPINDASH_RELEASE);
@@ -560,38 +620,51 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     /**
      * Move character by current velocity.
      * Based on Obj1E_MoveCharacter from disassembly.
+     *
+     * The original ROM uses 16.16 fixed point positions and shifts velocity left by 8
+     * before adding. Our engine uses 8.8 fixed point velocities with the move() method
+     * handling the conversion correctly.
      */
     private void moveCharacter(AbstractPlayableSprite player) {
-        // x_pos += x_vel << 8 (fixed point)
-        // y_pos += y_vel << 8 (fixed point)
-        // In Java, we work with integer positions, so we scale appropriately
+        short xSpeed = player.getXSpeed();
+        short ySpeed = player.getYSpeed();
+        short beforeX = player.getCentreX();
+        short beforeY = player.getCentreY();
 
-        int xPos = player.getX();
-        int yPos = player.getY();
-        int xVel = player.getXSpeed();
-        int yVel = player.getYSpeed();
+        // Use player.move() which correctly handles 8.8 fixed point velocities
+        // (where 256 = 1 pixel per frame)
+        player.move(xSpeed, ySpeed);
 
-        // The ROM uses 16.16 fixed point, but our positions are integers
-        // Velocity is already in sub-pixel units, so we add directly
-        xPos += xVel;
-        yPos += yVel;
-
-        player.setX((short) xPos);
-        player.setY((short) yPos);
+        // Log if position didn't change but velocity is non-zero
+        short afterX = player.getCentreX();
+        short afterY = player.getCentreY();
+        if ((xSpeed != 0 || ySpeed != 0) && beforeX == afterX && beforeY == afterY) {
+            LOGGER.warning("moveCharacter: position unchanged! speed=(" + xSpeed + "," + ySpeed +
+                    "), pos=(" + beforeX + "," + beforeY + ")");
+        }
     }
 
     /**
      * Calculate velocity to move from current position to target.
      * Based on loc_22902 from disassembly.
      *
+     * The ROM uses 16.16 fixed point and calculates:
+     * - duration = (dominant_distance << 16) / speed, stored as word, read as high byte
+     * - So effective frames = (dominant_distance * 256) / speed
+     * - cross_axis_vel = (cross_distance * speed) / dominant_distance
+     *
+     * Our engine uses 8.8 fixed point velocities (256 = 1 pixel/frame).
+     * Speed of 0x800 = 2048 means 8 pixels per frame.
+     *
      * @param player The player sprite
      * @param targetX Target X coordinate
      * @param targetY Target Y coordinate
-     * @param speed Fixed movement speed (0x800)
+     * @param speed Fixed movement speed (0x800 = 8 pixels/frame in 8.8 format)
      */
     private void calculateVelocity(AbstractPlayableSprite player, int targetX, int targetY, int speed) {
-        int currentX = player.getX();
-        int currentY = player.getY();
+        // Use center coordinates to match ROM behavior
+        int currentX = player.getCentreX();
+        int currentY = player.getCentreY();
 
         int dx = targetX - currentX;
         int dy = targetY - currentY;
@@ -602,34 +675,54 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         int xVel, yVel, frames;
 
         if (absDy >= absDx) {
-            // Y distance is greater - move at fixed Y speed
+            // Y distance is dominant - move at fixed Y speed
             yVel = (dy >= 0) ? speed : -speed;
 
-            // Calculate X velocity proportionally
-            if (dy != 0) {
-                xVel = (dx * speed) / Math.abs(dy);
+            // Calculate X velocity proportionally: xVel = (dx * speed) / abs(dy)
+            if (absDy != 0) {
+                xVel = (dx * speed) / absDy;
             } else {
                 xVel = 0;
             }
 
-            frames = absDy / speed;
+            // Frame count = (distance * 256) / speed
+            // This matches ROM: duration = (distance << 16) / speed, read high byte
+            frames = (absDy * 256) / speed;
         } else {
-            // X distance is greater - move at fixed X speed
+            // X distance is dominant - move at fixed X speed
             xVel = (dx >= 0) ? speed : -speed;
 
-            // Calculate Y velocity proportionally
-            if (dx != 0) {
-                yVel = (dy * speed) / Math.abs(dx);
+            // Calculate Y velocity proportionally: yVel = (dy * speed) / abs(dx)
+            if (absDx != 0) {
+                yVel = (dy * speed) / absDx;
             } else {
                 yVel = 0;
             }
 
-            frames = absDx / speed;
+            // Frame count = (distance * 256) / speed
+            frames = (absDx * 256) / speed;
+        }
+
+        // Ensure at least 1 frame to prevent getting stuck
+        if (frames < 1) {
+            frames = 1;
         }
 
         player.setXSpeed((short) xVel);
         player.setYSpeed((short) yVel);
         mainCharDuration = frames;
+
+        // Verify the speeds were actually set
+        short actualXSpeed = player.getXSpeed();
+        short actualYSpeed = player.getYSpeed();
+        if (actualXSpeed != xVel || actualYSpeed != yVel) {
+            LOGGER.warning("calculateVelocity: speed mismatch! set=(" + xVel + "," + yVel +
+                    "), actual=(" + actualXSpeed + "," + actualYSpeed + ")");
+        }
+
+        LOGGER.info("calculateVelocity: from (" + currentX + "," + currentY +
+                ") to (" + targetX + "," + targetY +
+                "), vel=(" + xVel + "," + yVel + "), frames=" + frames);
     }
 
     private void playSound(GameSound sound) {
@@ -646,5 +739,11 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         // Invisible object - no rendering
+    }
+
+    @Override
+    public boolean isPersistent() {
+        // Keep this object active while it's controlling a player (state != 0 and state != 6)
+        return mainCharState == 2 || mainCharState == 4;
     }
 }

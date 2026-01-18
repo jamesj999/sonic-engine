@@ -179,6 +179,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean controlLocked = false;
         /**
+         * When true, an object has full control of the player and normal physics
+         * (gravity, movement, collision) are skipped. This matches the ROM's
+         * obj_control = $81 behavior used by spin tubes, corkscrews, etc.
+         */
+        protected boolean objectControlled = false;
+        /**
+         * Frame number when the player was last released from object control.
+         * Used to prevent immediate re-capture by nearby objects (e.g., spin tubes).
+         */
+        protected int objectControlReleasedFrame = Integer.MIN_VALUE;
+        /**
          * Tracks whether the jump button is currently pressed this frame.
          * Set by movement manager, used by objects (like flippers) to detect jump input.
          */
@@ -247,6 +258,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
                 this.controlLocked = false;
+                this.objectControlled = false;
+                this.objectControlReleasedFrame = Integer.MIN_VALUE;
                 this.spiralActiveFrame = Integer.MIN_VALUE;
                 this.flipAngle = 0;
                 this.flipSpeed = 0;
@@ -758,6 +771,46 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setControlLocked(boolean controlLocked) {
                 this.controlLocked = controlLocked;
+        }
+
+        /**
+         * Returns whether an object has full control of the player (physics disabled).
+         * When true, the movement manager skips all physics processing.
+         */
+        public boolean isObjectControlled() {
+                return objectControlled;
+        }
+
+        /**
+         * Sets whether an object has full control of the player.
+         * When true, normal physics (gravity, movement, collision) are skipped.
+         * The controlling object is responsible for updating the player's position.
+         */
+        public void setObjectControlled(boolean objectControlled) {
+                this.objectControlled = objectControlled;
+        }
+
+        /**
+         * Releases the player from object control and records the frame number.
+         * Use this instead of setObjectControlled(false) when exiting a controlling object
+         * to enable the cooldown period that prevents immediate re-capture.
+         */
+        public void releaseFromObjectControl(int frameCounter) {
+                this.objectControlled = false;
+                this.objectControlReleasedFrame = frameCounter;
+        }
+
+        /**
+         * Returns true if the player was recently released from object control.
+         * Used by objects like spin tubes to prevent immediate re-capture after exit.
+         * @param frameCounter Current frame number
+         * @param cooldownFrames Number of frames to wait before allowing re-capture
+         */
+        public boolean wasRecentlyObjectControlled(int frameCounter, int cooldownFrames) {
+                if (objectControlReleasedFrame == Integer.MIN_VALUE) {
+                        return false;
+                }
+                return (frameCounter - objectControlReleasedFrame) < cooldownFrames;
         }
 
         /**

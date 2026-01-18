@@ -107,15 +107,18 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
             return;
         }
 
-        // Original logic: only break when player is STANDING on block AND was rolling
-        // (at the start of the frame - stored in update())
-        // The contact must be from above (player standing on top)
-        if (contact.standing() && playerWasRolling) {
-            breakBlock(player);
+        // Break the block if player is rolling and either:
+        // 1. Standing on top of the block
+        // 2. Hitting from below (e.g., exiting a spin tube upward)
+        // 3. Hitting from the side while rolling
+        boolean isRolling = playerWasRolling || player.getRolling();
+
+        if (isRolling && (contact.standing() || contact.touchBottom() || contact.touchSide())) {
+            breakBlock(player, contact);
         }
     }
 
-    private void breakBlock(AbstractPlayableSprite player) {
+    private void breakBlock(AbstractPlayableSprite player, SolidContact contact) {
         if (broken) {
             return;
         }
@@ -133,9 +136,16 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         // setRolling(true) handles radius change and animation internally
         player.setRolling(true);
 
-        // Bounce player upward
-        // From disassembly: move.w #-$300,y_vel(a1)
-        player.setYSpeed((short) PLAYER_BOUNCE_VELOCITY);
+        // Handle velocity based on contact direction:
+        // - Standing on top: bounce upward
+        // - Hitting from below: continue through (don't change velocity)
+        // - Hitting from side: continue through (don't change velocity)
+        if (contact.standing()) {
+            // Bounce player upward only when breaking from above
+            // From disassembly: move.w #-$300,y_vel(a1)
+            player.setYSpeed((short) PLAYER_BOUNCE_VELOCITY);
+        }
+        // When hitting from below or side, player maintains their momentum
 
         // Set player state to in-air
         // From disassembly: bset #status.player.in_air, bclr #status.player.on_object
