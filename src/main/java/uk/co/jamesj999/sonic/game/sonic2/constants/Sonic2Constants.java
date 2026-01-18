@@ -159,6 +159,10 @@ public class Sonic2Constants {
     // CNZ Flipper (Object 0x86)
     public static final int ART_NEM_FLIPPER_ADDR = 0x81EF2;  // ArtNem_CNZFlipper
 
+    // CPZ Speed Booster (Object 0x1B)
+    public static final int ART_NEM_SPEED_BOOSTER_ADDR = 0x824D4;  // ArtNem_CPZBooster (verified)
+    public static final int MAP_UNC_SPEED_BOOSTER_ADDR = 0x223E2;  // Obj1B_MapUnc
+
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)
             { 0x0060, 0x02AF }, // 1 Emerald Hill 2 (EHZ_2.bin)

@@ -249,6 +249,11 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet flipperSheet = new ObjectSpriteSheet(flipperPatterns, flipperMappings, 2, 1);
         SpriteAnimationSet flipperAnimations = createFlipperAnimations();
 
+        // CPZ Speed Booster art (Object 0x1B)
+        Pattern[] speedBoosterPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPEED_BOOSTER_ADDR, "SpeedBooster");
+        List<SpriteMappingFrame> speedBoosterMappings = createSpeedBoosterMappings();
+        ObjectSpriteSheet speedBoosterSheet = new ObjectSpriteSheet(speedBoosterPatterns, speedBoosterMappings, 3, 1);
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -316,6 +321,7 @@ public class Sonic2ObjectArt {
                 hexBumperSheet,
                 bonusBlockSheet,
                 flipperSheet,
+                speedBoosterSheet,
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
@@ -1319,6 +1325,29 @@ public class Sonic2ObjectArt {
                 SpriteAnimationEndAction.SWITCH, 2));
 
         return set;
+    }
+
+    /**
+     * Creates mappings for CPZ Speed Booster (Obj1B).
+     * Based on obj1B.asm mappings.
+     * Frame 0: Visible - Two 2x2 pieces at (-24,-8) and (8,-8)
+     * Frame 1: Same as frame 0 (duplicate in ROM)
+     * Frame 2: Empty (for blinking effect)
+     */
+    private List<SpriteMappingFrame> createSpeedBoosterMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 & 1: Visible state - two 2x2 tile pieces
+        List<SpriteMappingPiece> visiblePieces = new ArrayList<>();
+        visiblePieces.add(new SpriteMappingPiece(-24, -8, 2, 2, 0, false, false, 0));
+        visiblePieces.add(new SpriteMappingPiece(8, -8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(visiblePieces));
+        frames.add(new SpriteMappingFrame(visiblePieces)); // Frame 1 = same as frame 0
+
+        // Frame 2: Empty (creates blinking effect)
+        frames.add(new SpriteMappingFrame(new ArrayList<>()));
+
+        return frames;
     }
 
     /**

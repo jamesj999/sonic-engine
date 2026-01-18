@@ -38,6 +38,7 @@ public class ObjectArtData {
         private final ObjectSpriteSheet hexBumperSheet;
         private final ObjectSpriteSheet bonusBlockSheet;
         private final ObjectSpriteSheet flipperSheet;
+        private final ObjectSpriteSheet speedBoosterSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
@@ -82,6 +83,7 @@ public class ObjectArtData {
                         ObjectSpriteSheet hexBumperSheet,
                         ObjectSpriteSheet bonusBlockSheet,
                         ObjectSpriteSheet flipperSheet,
+                        ObjectSpriteSheet speedBoosterSheet,
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
@@ -124,6 +126,7 @@ public class ObjectArtData {
                 this.hexBumperSheet = hexBumperSheet;
                 this.bonusBlockSheet = bonusBlockSheet;
                 this.flipperSheet = flipperSheet;
+                this.speedBoosterSheet = speedBoosterSheet;
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
@@ -250,6 +253,10 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet flipperSheet() {
                 return flipperSheet;
+        }
+
+        public ObjectSpriteSheet speedBoosterSheet() {
+                return speedBoosterSheet;
         }
 
         public ObjectSpriteSheet resultsSheet() {

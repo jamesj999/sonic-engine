@@ -126,6 +126,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.CHECKPOINT,
                 (spawn, registry) -> new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // CPZ Objects
+        registerFactory(Sonic2ObjectIds.SPEED_BOOSTER,
+                (spawn, registry) -> new SpeedBoosterObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         // CNZ Objects
         registerFactory(Sonic2ObjectIds.BUMPER,
                 (spawn, registry) -> new BumperObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));

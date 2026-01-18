@@ -28,6 +28,9 @@ public final class Sonic2ObjectIds {
     public static final int SIGNPOST = 0x0D; // End of level signpost
     public static final int INVISIBLE_BLOCK = 0x74;
 
+    // CPZ Objects
+    public static final int SPEED_BOOSTER = 0x1B; // Speed Booster (Obj1B)
+
     // CNZ Objects
     public static final int BUMPER = 0x44;       // Round Bumper (Obj44)
     public static final int HEX_BUMPER = 0xD7;   // Hexagonal Bumper (ObjD7)

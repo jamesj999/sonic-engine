@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-18 10:06:21
+Generated: 2026-01-18 12:31:12
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 16 (13.3%)
-- **Unimplemented:** 104 (86.7%)
+- **Implemented:** 17 (14.2%)
+- **Unimplemented:** 103 (85.8%)
 
 ## Implemented Objects
 
@@ -19,6 +19,7 @@ Generated: 2026-01-18 10:06:21
 | 0x15 | SwingingPlatform | 7 | ARZ2, MCZ1, MCZ2 |
 | 0x18 | ARZPlatform | 71 | EHZ1, EHZ2, ARZ1, ARZ2, HTZ1, HTZ2 |
 | 0x19 | CPZPlatform | 55 | CPZ1, CPZ2, OOZ1, OOZ2, WFZ1 |
+| 0x1B | SpeedBooster | 20 | CPZ1, CPZ2 |
 | 0x1C | Scenery | 135 | EHZ1, EHZ2, HTZ1, HTZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
 | 0x26 | Monitor | 245 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
 | 0x36 | Spikes | 204 | EHZ1, EHZ2, CPZ2, ARZ1, CNZ1, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
@@ -67,7 +68,6 @@ Generated: 2026-01-18 10:06:21
 | 0xD4 | Object | CNZBigBlock | 23 | CNZ1, CNZ2 |
 | 0x33 | Object | OOZPoppingPform | 22 | OOZ1, OOZ2 |
 | 0x68 | Object | SpikyBlock | 22 | MTZ1, MTZ2, MTZ3 |
-| 0x1B | Object | SpeedBooster | 20 | CPZ1, CPZ2 |
 | 0x24 | Object | Bubbles | 20 | ARZ1, ARZ2 |
 | 0x8E | Badnik | GrounderInWall2 | 20 | ARZ1, ARZ2 |
 | 0x75 | Object | MCZBrick | 19 | MCZ1, MCZ2 |
@@ -196,7 +196,7 @@ Total: 158 objects | Implemented: 14 | Unimplemented: 1
 
 #### Act 1
 
-Total: 153 objects | Implemented: 6 | Unimplemented: 13
+Total: 153 objects | Implemented: 7 | Unimplemented: 12
 
 **Badniks:**
 - [ ] 0xA5 Spiny (x10) [0x32]
@@ -208,7 +208,7 @@ Total: 153 objects | Implemented: 6 | Unimplemented: 13
 - [ ] 0x0B TippingFloor (x4) [4 subtypes]
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x19 CPZPlatform (x7) [4 subtypes]
-- [ ] 0x1B SpeedBooster (x8) [0x00]
+- [x] 0x1B SpeedBooster (x8) [0x00]
 - [ ] 0x1D BlueBalls (x7) [0x15, 0x05]
 - [ ] 0x1E CPZSpinTube (x9) [9 subtypes]
 - [x] 0x26 Monitor (x19) [4 subtypes]
@@ -223,7 +223,7 @@ Total: 153 objects | Implemented: 6 | Unimplemented: 13
 
 #### Act 2
 
-Total: 202 objects | Implemented: 6 | Unimplemented: 15
+Total: 202 objects | Implemented: 7 | Unimplemented: 14
 
 **Badniks:**
 - [ ] 0xA5 Spiny (x1) [0x32]
@@ -237,7 +237,7 @@ Total: 202 objects | Implemented: 6 | Unimplemented: 15
 - [x] 0x03 LayerSwitcher (x59) [21 subtypes]
 - [ ] 0x0B TippingFloor (x14) [6 subtypes]
 - [x] 0x19 CPZPlatform (x6) [6 subtypes]
-- [ ] 0x1B SpeedBooster (x12) [0x00]
+- [x] 0x1B SpeedBooster (x12) [0x00]
 - [ ] 0x1E CPZSpinTube (x7) [7 subtypes]
 - [x] 0x26 Monitor (x19) [4 subtypes]
 - [ ] 0x2D Barrier (x4) [0x00]

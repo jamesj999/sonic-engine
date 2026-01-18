@@ -61,6 +61,9 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet flipperSheet;
     private final SpriteAnimationSet flipperAnimations;
 
+    // CPZ Speed Booster
+    private final ObjectSpriteSheet speedBoosterSheet;
+
     // Results screen
     private final ObjectSpriteSheet resultsSheet;
     private final Pattern[] resultsHudDigitPatterns;
@@ -97,6 +100,9 @@ public class ObjectRenderManager {
     private final PatternSpriteRenderer hexBumperRenderer;
     private final PatternSpriteRenderer bonusBlockRenderer;
     private final PatternSpriteRenderer flipperRenderer;
+
+    // CPZ Speed Booster renderer
+    private final PatternSpriteRenderer speedBoosterRenderer;
 
     // Results screen renderer
     private final PatternSpriteRenderer resultsRenderer;
@@ -144,6 +150,9 @@ public class ObjectRenderManager {
         this.bonusBlockSheet = artData.bonusBlockSheet();
         this.flipperSheet = artData.flipperSheet();
         this.flipperAnimations = artData.flipperAnimations();
+
+        // CPZ Speed Booster
+        this.speedBoosterSheet = artData.speedBoosterSheet();
 
         // Results screen
         this.resultsSheet = artData.resultsSheet();
@@ -208,6 +217,10 @@ public class ObjectRenderManager {
         register(bonusBlockSheet, bonusBlockRenderer);
         this.flipperRenderer = new PatternSpriteRenderer(flipperSheet);
         register(flipperSheet, flipperRenderer);
+
+        // CPZ Speed Booster renderer
+        this.speedBoosterRenderer = new PatternSpriteRenderer(speedBoosterSheet);
+        register(speedBoosterSheet, speedBoosterRenderer);
 
         // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
@@ -407,6 +420,14 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getFlipperAnimations() {
         return flipperAnimations;
+    }
+
+    public PatternSpriteRenderer getSpeedBoosterRenderer() {
+        return speedBoosterRenderer;
+    }
+
+    public ObjectSpriteSheet getSpeedBoosterSheet() {
+        return speedBoosterSheet;
     }
 
     public PatternSpriteRenderer getResultsRenderer() {

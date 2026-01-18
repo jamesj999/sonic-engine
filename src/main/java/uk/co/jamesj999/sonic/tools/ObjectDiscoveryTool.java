@@ -64,6 +64,7 @@ public class ObjectDiscoveryTool {
             0x15,  // SwingingPlatform
             0x18,  // ARZPlatform/EHZPlatform
             0x19,  // CPZPlatform/OOZMovingPform/WFZPlatform
+            0x1B,  // SpeedBooster (CPZ)
             0x1C,  // BridgeStake
             0x26,  // Monitor
             0x36,  // Spikes

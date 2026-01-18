@@ -267,8 +267,8 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
         int dy = spawn.y() - player.getCentreY();
 
         // Calculate angle (0-255 range, 0 = right, 64 = down, 128 = left, 192 = up)
-        double radians = Math.atan2(dy, dx);
-        int angle = (int) ((radians / (2 * Math.PI)) * 256) & 0xFF;
+        double radians = StrictMath.atan2(dy, dx);
+        int angle = (int) ((radians / (2 * StrictMath.PI)) * 256) & 0xFF;
 
         // Quantize to 4 directions: add $20, mask with $C0
         int quantized = (angle + 0x20) & 0xC0;
