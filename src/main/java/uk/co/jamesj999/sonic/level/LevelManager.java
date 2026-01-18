@@ -35,6 +35,7 @@ import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.graphics.WaterShaderProgram;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
+import uk.co.jamesj999.sonic.graphics.PatternRenderCommand;
 import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.render.BackgroundRenderer;
@@ -364,10 +365,10 @@ public class LevelManager {
      * These are the triangular bumpers embedded in level tiles that use
      * SndID_LargeBumper (0xD9) and have $A00 velocity.
      *
-     * @param rom The ROM to read bumper data from
+     * @param rom       The ROM to read bumper data from
      * @param zoneIndex Current zone index
-     * @param actIndex Current act index (0 or 1)
-     * @param cameraX Current camera X position for initial windowing
+     * @param actIndex  Current act index (0 or 1)
+     * @param cameraX   Current camera X position for initial windowing
      */
     private void initCNZBumpers(Rom rom, int zoneIndex, int actIndex, int cameraX) {
         // Only initialize for Casino Night Zone (zone index 3)
@@ -668,8 +669,11 @@ public class LevelManager {
 
         // Revert to default shader for HUD rendering to avoid distortion
         // IMPORTANT: Must be queued as a command so it executes AFTER pattern batches
+        // Also reset PatternRenderCommand state so next pattern will reinitialize with
+        // the default shader
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
             graphicsManager.setUseWaterShader(false);
+            PatternRenderCommand.resetFrameState();
         }));
 
         if (hudRenderManager != null) {
