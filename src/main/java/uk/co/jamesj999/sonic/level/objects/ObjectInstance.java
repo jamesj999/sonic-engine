@@ -36,4 +36,13 @@ public interface ObjectInstance {
     default boolean isPersistent() {
         return false;
     }
+
+    /**
+     * Called when this object is being unloaded from the active object list.
+     * Override to perform cleanup when the object goes off-screen or is removed.
+     * Default implementation does nothing.
+     */
+    default void onUnload() {
+        // Default no-op
+    }
 }

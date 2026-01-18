@@ -256,7 +256,6 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Don't grab player if already rolling (anim 0x20)
         // This prevents re-triggering - matches ROM behavior
         if (player.getRolling()) {
-            LOGGER.fine("Tube at (" + objX + "," + objY + ") skipping - player is rolling");
             return;
         }
 
@@ -268,7 +267,6 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Skip if player was just released from object control (cooldown)
         // This prevents chain-grabbing between nearby tubes
         if (player.wasRecentlyObjectControlled(currentFrameCounter, TUBE_EXIT_COOLDOWN_FRAMES)) {
-            LOGGER.fine("Tube at (" + objX + "," + objY + ") skipping - player recently exited a tube");
             return;
         }
 
@@ -504,13 +502,6 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
      * Mode 4: Following the main tube path.
      */
     private void updateMainPath(AbstractPlayableSprite player) {
-        // Log only every 8 frames or when starting a new segment
-        if (mainCharDuration % 8 == 0 || mainCharDuration <= 1) {
-            LOGGER.info("updateMainPath: duration=" + mainCharDuration +
-                    ", pathIndex=" + mainCharPathIndex +
-                    ", xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
-                    ", pos=(" + player.getCentreX() + "," + player.getCentreY() + ")");
-        }
 
         mainCharDuration--;
         if (mainCharDuration >= 0) {
@@ -598,14 +589,16 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // ROM: clr.b obj_control(a1)
         player.releaseFromObjectControl(frameCounter);
         player.setControlLocked(false);
-        // Keep rolling - player exits with momentum and should continue rolling
-        // The movement manager will stop rolling when speed drops below threshold
+
+        // Enable pinball mode to preserve rolling on landing
+        // ROM: move.b #1,pinball_mode(a1) at autoroll triggers (Object 84)
+        // This prevents Sonic_ResetOnFloor from clearing rolling when player lands
+        player.setPinballMode(true);
 
         // Restore normal render priority
         player.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
 
-        // Debug: Log exit velocity to help diagnose direction issues
-        LOGGER.info("Spin tube exit: xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
+        LOGGER.fine("Spin tube exit: xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
                 ", position=(" + player.getCentreX() + "," + player.getCentreY() + ")");
 
         // Play spindash release sound
@@ -626,22 +619,9 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
      * handling the conversion correctly.
      */
     private void moveCharacter(AbstractPlayableSprite player) {
-        short xSpeed = player.getXSpeed();
-        short ySpeed = player.getYSpeed();
-        short beforeX = player.getCentreX();
-        short beforeY = player.getCentreY();
-
         // Use player.move() which correctly handles 8.8 fixed point velocities
         // (where 256 = 1 pixel per frame)
-        player.move(xSpeed, ySpeed);
-
-        // Log if position didn't change but velocity is non-zero
-        short afterX = player.getCentreX();
-        short afterY = player.getCentreY();
-        if ((xSpeed != 0 || ySpeed != 0) && beforeX == afterX && beforeY == afterY) {
-            LOGGER.warning("moveCharacter: position unchanged! speed=(" + xSpeed + "," + ySpeed +
-                    "), pos=(" + beforeX + "," + beforeY + ")");
-        }
+        player.move(player.getXSpeed(), player.getYSpeed());
     }
 
     /**
@@ -712,15 +692,7 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         player.setYSpeed((short) yVel);
         mainCharDuration = frames;
 
-        // Verify the speeds were actually set
-        short actualXSpeed = player.getXSpeed();
-        short actualYSpeed = player.getYSpeed();
-        if (actualXSpeed != xVel || actualYSpeed != yVel) {
-            LOGGER.warning("calculateVelocity: speed mismatch! set=(" + xVel + "," + yVel +
-                    "), actual=(" + actualXSpeed + "," + actualYSpeed + ")");
-        }
-
-        LOGGER.info("calculateVelocity: from (" + currentX + "," + currentY +
+        LOGGER.fine("calculateVelocity: from (" + currentX + "," + currentY +
                 ") to (" + targetX + "," + targetY +
                 "), vel=(" + xVel + "," + yVel + "), frames=" + frames);
     }

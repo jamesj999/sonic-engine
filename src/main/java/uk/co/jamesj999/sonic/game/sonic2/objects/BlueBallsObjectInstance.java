@@ -11,7 +11,9 @@ import uk.co.jamesj999.sonic.level.objects.TouchResponseProvider;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * CPZ BlueBalls Object (Obj1D) - Bouncing water droplet hazard.
@@ -117,6 +119,47 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
      */
     private static final int SIBLING_WAIT_STAGGER = 3;
 
+    /**
+     * Full cycle length for arc motion (wait + motion).
+     * Motion is approximately 96 frames (48 up + 48 down at gravity 0x18 from -0x480).
+     */
+    private static final int ARC_CYCLE_LENGTH = WAIT_DURATION + 96;
+
+    /**
+     * Full cycle length for straight motion (wait + motion).
+     * Similar to arc motion timing.
+     */
+    private static final int STRAIGHT_CYCLE_LENGTH = WAIT_DURATION + 96;
+
+    // ========================================================================
+    // Global Timing Synchronization (Bug Fix #1)
+    // All BlueBalls instances share this frame reference so they stay in sync.
+    // ========================================================================
+
+    /**
+     * Global start frame - set when the first BlueBalls is loaded.
+     * All instances calculate their wait timer relative to this frame.
+     */
+    private static int globalStartFrame = -1;
+
+    /**
+     * Count of active BlueBalls instances. When this reaches zero, we reset
+     * globalStartFrame so the next BlueBalls load starts a fresh cycle.
+     */
+    private static int activeInstanceCount = 0;
+
+    // ========================================================================
+    // Sibling Spawn Tracking (Bug Fix #2)
+    // Tracks which spawn locations have already created siblings.
+    // Persists across object load/unload cycles within a level.
+    // ========================================================================
+
+    /**
+     * Registry of spawn locations that have already spawned siblings.
+     * Key: (x << 16) | (y & 0xFFFF) to create unique identifier.
+     */
+    private static final Set<Long> spawnedSiblingLocations = new HashSet<>();
+
     // ========================================================================
     // Instance State
     // ========================================================================
@@ -163,6 +206,12 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     /** X-flip status (from Sonic's facing direction at spawn time, stored in renderFlags). */
     private final boolean xFlipped;
 
+    /**
+     * Sibling offset for staggered timing (0 for parent, 3/6/9... for siblings).
+     * Used with global frame calculation to synchronize all instances.
+     */
+    private final int siblingOffset;
+
     public BlueBallsObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
         this.currentX = spawn.x() << 8; // Convert to subpixels
@@ -185,23 +234,26 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         this.xDistance = xFlipped ? -ARC_X_DISTANCE : ARC_X_DISTANCE;
 
         // Start in appropriate wait state (not motion state)
-        // Parent ball starts with waitTimer = 0, which is immediately checked
         if (arcMotion) {
             this.state = STATE_WAIT_ARC;
         } else {
             this.state = STATE_WAIT_STRAIGHT;
         }
-        this.waitTimer = 0; // Parent starts with 0, will transition immediately
+        this.waitTimer = 0; // Parent starts with 0 (legacy field, now unused for timing)
         this.hasSpawnedSiblings = false;
+        this.siblingOffset = 0; // Parent has no offset
+
+        // Global instance tracking
+        activeInstanceCount++;
     }
 
     /**
      * Constructor for spawned sibling balls.
-     * Siblings don't spawn more siblings and have staggered wait timers.
+     * Siblings don't spawn more siblings and have staggered timing offsets.
      */
     private BlueBallsObjectInstance(ObjectSpawn spawn, String name, int yVelocity,
                                     int xVelDelta, int xDistance, boolean arcMotion,
-                                    int initialWaitTimer) {
+                                    int siblingOffset) {
         super(spawn, name);
         this.currentX = spawn.x() << 8;
         this.currentY = spawn.y() << 8;
@@ -215,18 +267,27 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         this.xDistance = xDistance;
         this.siblingCount = 0; // Siblings don't spawn more
         this.hasSpawnedSiblings = true; // Prevent future spawning
-        this.waitTimer = initialWaitTimer; // Staggered wait timer
+        this.waitTimer = 0; // Legacy field, now unused for timing
+        this.siblingOffset = siblingOffset; // Offset for staggered timing
 
-        // Siblings start in wait state with their staggered timer
+        // Siblings start in wait state
         if (arcMotion) {
             this.state = STATE_WAIT_ARC;
         } else {
             this.state = STATE_WAIT_STRAIGHT;
         }
+
+        // Global instance tracking
+        activeInstanceCount++;
     }
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
+        // Initialize global start frame if this is the first active BlueBalls
+        if (globalStartFrame < 0) {
+            globalStartFrame = frameCounter;
+        }
+
         // Spawn siblings on first update
         if (!hasSpawnedSiblings && siblingCount > 0) {
             spawnSiblings();
@@ -235,41 +296,55 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
 
         // State machine update
         switch (state) {
-            case STATE_WAIT_ARC -> updateWaitArc();
+            case STATE_WAIT_ARC -> updateWaitArc(frameCounter);
             case STATE_MOVE_ARC -> updateMoveArc();
-            case STATE_WAIT_STRAIGHT -> updateWaitStraight();
+            case STATE_WAIT_STRAIGHT -> updateWaitStraight(frameCounter);
             case STATE_MOVE_STRAIGHT -> updateMoveStraight();
         }
     }
 
     /**
-     * Wait state for arc motion: countdown timer, then transition to MoveArc.
+     * Wait state for arc motion: uses global frame synchronization for timing.
+     * All BlueBalls share the same timing reference via globalStartFrame.
+     * <p>
      * ROM: Obj1D_Wait at routine 2, line 47893
      */
-    private void updateWaitArc() {
-        if (waitTimer > 0) {
-            waitTimer--;
+    private void updateWaitArc(int frameCounter) {
+        // Calculate effective frame with sibling offset
+        int effectiveFrame = frameCounter - globalStartFrame + siblingOffset;
+
+        // Use modulo to handle cycling nature
+        int cycleFrame = effectiveFrame % ARC_CYCLE_LENGTH;
+
+        // Still waiting if within the wait phase of the cycle
+        if (cycleFrame < WAIT_DURATION) {
             return;
         }
 
         // Transition to arc movement
-        waitTimer = WAIT_DURATION;
         playGloopSound();
         state = STATE_MOVE_ARC;
     }
 
     /**
-     * Wait state for straight motion: countdown timer, then transition to MoveStraight.
+     * Wait state for straight motion: uses global frame synchronization for timing.
+     * All BlueBalls share the same timing reference via globalStartFrame.
+     * <p>
      * ROM: Obj1D_Wait at routine 6, line 47893
      */
-    private void updateWaitStraight() {
-        if (waitTimer > 0) {
-            waitTimer--;
+    private void updateWaitStraight(int frameCounter) {
+        // Calculate effective frame with sibling offset
+        int effectiveFrame = frameCounter - globalStartFrame + siblingOffset;
+
+        // Use modulo to handle cycling nature
+        int cycleFrame = effectiveFrame % STRAIGHT_CYCLE_LENGTH;
+
+        // Still waiting if within the wait phase of the cycle
+        if (cycleFrame < WAIT_DURATION) {
             return;
         }
 
         // Transition to straight movement
-        waitTimer = WAIT_DURATION;
         playGloopSound();
         state = STATE_MOVE_STRAIGHT;
     }
@@ -343,23 +418,33 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Spawns sibling balls with staggered wait timers.
+     * Spawns sibling balls with staggered timing offsets.
      * ROM: Obj1D_LoadBall loop at line 47870
      * <p>
      * All siblings share the SAME y_vel as the parent (line 47894: move.w y_vel(a0),y_vel(a1)).
-     * Only the wait timer (objoff_32) is staggered: 3, 6, 9, 12, 15, etc.
+     * Timing offsets are staggered: 3, 6, 9, 12, 15, etc.
      * This creates evenly-spaced balls that bounce identically but offset in time.
+     * <p>
+     * Uses spawn location registry to prevent duplicate siblings when parent is
+     * unloaded and reloaded (Bug Fix #2).
      */
     private void spawnSiblings() {
+        // Check if siblings were already spawned for this location (Bug Fix #2)
+        long spawnKey = ((long) initialX << 16) | (initialY & 0xFFFF);
+        if (spawnedSiblingLocations.contains(spawnKey)) {
+            return; // Already spawned siblings for this location
+        }
+        spawnedSiblingLocations.add(spawnKey);
+
         LevelManager levelManager = LevelManager.getInstance();
         if (levelManager == null || levelManager.getObjectManager() == null) {
             return;
         }
 
         for (int i = 0; i < siblingCount; i++) {
-            // Staggered wait timer: 3, 6, 9, 12, etc.
-            // (i+1) because parent already took timer 0
-            int siblingWaitTimer = (i + 1) * SIBLING_WAIT_STAGGER;
+            // Staggered sibling offset: 3, 6, 9, 12, etc.
+            // (i+1) because parent has offset 0
+            int offset = (i + 1) * SIBLING_WAIT_STAGGER;
 
             // Create sibling spawn data
             ObjectSpawn siblingSpawn = new ObjectSpawn(
@@ -372,7 +457,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             // The disassembly does NOT increment velocity per sibling
             BlueBallsObjectInstance sibling = new BlueBallsObjectInstance(
                     siblingSpawn, name, INITIAL_Y_VEL, xVelDelta, xDistance, arcMotion,
-                    siblingWaitTimer
+                    offset
             );
 
             levelManager.getObjectManager().addDynamicObject(sibling);
@@ -462,5 +547,39 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(3);
+    }
+
+    // ========================================================================
+    // Lifecycle Management
+    // ========================================================================
+
+    /**
+     * Called when this object is unloaded from the active object list.
+     * Decrements the global instance count and resets global state when
+     * all instances are unloaded.
+     */
+    @Override
+    public void onUnload() {
+        activeInstanceCount--;
+        if (activeInstanceCount <= 0) {
+            // Reset global timing when all instances are gone
+            globalStartFrame = -1;
+            activeInstanceCount = 0;
+        }
+    }
+
+    // ========================================================================
+    // Static Reset (for level transitions)
+    // ========================================================================
+
+    /**
+     * Resets all global state for BlueBalls objects.
+     * Call this when loading a new level or restarting the current level
+     * to ensure clean timing and sibling tracking.
+     */
+    public static void resetGlobalState() {
+        globalStartFrame = -1;
+        activeInstanceCount = 0;
+        spawnedSiblingLocations.clear();
     }
 }

@@ -92,6 +92,9 @@ public class FlipperObjectInstance extends BoxObjectInstance
             if (contact.standing()) {
                 if (playerFlipperState == 0) {
                     // First frame standing: enter rolling state (loc_2B20A)
+                    // ROM: move.b #1,obj_control(a1) - locks player movement
+                    // We use pinball_mode to prevent rolling from being cleared
+                    player.setPinballMode(true);
                     // setRolling(true) handles radius change and Y adjustment internally
                     boolean wasRolling = player.getRolling();
                     player.setRolling(true);
@@ -109,7 +112,11 @@ public class FlipperObjectInstance extends BoxObjectInstance
                     }
                 }
             } else {
-                // Player left flipper without jumping
+                // Player left flipper without jumping (loc_2B23C branch to clear)
+                // ROM: move.b #0,obj_control(a1)
+                if (playerFlipperState != 0) {
+                    player.setPinballMode(false);
+                }
                 playerFlipperState = 0;
             }
 
@@ -165,6 +172,9 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setXSpeed((short) xVel);
         player.setAir(true);
         player.setGSpeed((short) 0);
+
+        // Clear pinball mode when launching (ROM: move.b #0,obj_control(a1) at loc_2B2E2)
+        player.setPinballMode(false);
 
         // Reset flipper state
         playerFlipperState = 0;

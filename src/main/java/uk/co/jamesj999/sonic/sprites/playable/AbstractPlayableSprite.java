@@ -76,6 +76,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean rolling = false;
 
         /**
+         * Pinball mode flag - when set, prevents rolling from being cleared on landing
+         * and prevents rolling from stopping when speed reaches 0 (gives a boost instead).
+         * This matches ROM's pinball_mode (spindash_flag when rolling) behavior used by
+         * spin tubes, S-curves, and other "must roll" areas.
+         * See s2.asm lines 36712, 37745 for usage in rolling/landing logic.
+         */
+        protected boolean pinballMode = false;
+
+        /**
          * Whether the current jump originated from a rolling state.
          * In Sonic 1, 2, 3 & K, air control is locked when jumping while rolling.
          * Reset to false when landing.
@@ -251,6 +260,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.springingFrames = 0;
                 this.rolling = false;
                 this.rollingJump = false;
+                this.pinballMode = false;
                 this.spindash = false;
                 this.pushing = false;
                 this.crouching = false;
@@ -1122,6 +1132,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setRollingJump(boolean rollingJump) {
                 this.rollingJump = rollingJump;
+        }
+
+        /**
+         * Returns whether pinball mode is active.
+         * When true, rolling cannot be cleared on landing and rolling cannot stop at 0 speed.
+         */
+        public boolean getPinballMode() {
+                return pinballMode;
+        }
+
+        /**
+         * Sets pinball mode. When true, the player must continue rolling -
+         * rolling won't be cleared on landing and if speed reaches 0, a boost is given.
+         */
+        public void setPinballMode(boolean pinballMode) {
+                this.pinballMode = pinballMode;
         }
 
         @Override

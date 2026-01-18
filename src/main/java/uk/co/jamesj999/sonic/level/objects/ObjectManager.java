@@ -47,6 +47,7 @@ public class ObjectManager {
             ObjectInstance instance = dynamicIterator.next();
             instance.update(frameCounter, player);
             if (instance.isDestroyed()) {
+                instance.onUnload();
                 dynamicIterator.remove();
             }
         }
@@ -57,6 +58,7 @@ public class ObjectManager {
             ObjectInstance instance = entry.getValue();
             instance.update(frameCounter, player);
             if (instance.isDestroyed()) {
+                instance.onUnload();
                 placementManager.markRemembered(entry.getKey());
                 iterator.remove();
             }
@@ -133,6 +135,7 @@ public class ObjectManager {
             if (!activeSpawns.contains(entry.getKey())) {
                 // Don't remove persistent objects (e.g., spin tubes controlling a player)
                 if (!entry.getValue().isPersistent()) {
+                    entry.getValue().onUnload();
                     iterator.remove();
                 }
             }

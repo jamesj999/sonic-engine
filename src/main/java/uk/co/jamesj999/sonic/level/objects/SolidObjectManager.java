@@ -431,7 +431,13 @@ public class SolidObjectManager {
                         ") distY=" + distY);
                     player.setGSpeed(player.getXSpeed());
                     player.setAir(false);
-                    player.setRolling(false);
+                    // Sonic_ResetOnFloor (s2.asm:37744): Check pinball_mode before clearing rolling
+                    // This allows spin tubes and other "must roll" areas to preserve rolling on landing
+                    if (!player.getPinballMode()) {
+                        player.setRolling(false);
+                    }
+                    // Clear pinball mode after landing check - only protects one landing
+                    player.setPinballMode(false);
                 }
             }
             return new SolidContact(true, false, false, true, false);

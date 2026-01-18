@@ -85,7 +85,43 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         // The original tracks player animation state each frame
         if (player != null) {
             playerWasRolling = player.getRolling();
+
+            // Check for breaking from below - when player is rolling and moving upward
+            // We handle this here because isSolidFor returns false for this case,
+            // so onSolidContact won't be called
+            if (player.getRolling() && player.getYSpeed() < 0) {
+                if (isPlayerOverlapping(player)) {
+                    // Create a synthetic contact for breaking from below
+                    SolidContact contact = new SolidContact(false, false, true, false, false);
+                    breakBlock(player, contact);
+                }
+            }
         }
+    }
+
+    /**
+     * Check if the player overlaps with this block's collision area.
+     */
+    private boolean isPlayerOverlapping(AbstractPlayableSprite player) {
+        int blockX = spawn.x();
+        int blockY = spawn.y();
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
+        int playerYRadius = player.getYRadius();
+
+        // Check X overlap
+        int dx = Math.abs(playerX - blockX);
+        if (dx >= HALF_WIDTH + 11) {
+            return false;
+        }
+
+        // Check Y overlap - player's top must be near or overlapping block's bottom
+        int playerTop = playerY - playerYRadius;
+        int blockBottom = blockY + HALF_HEIGHT;
+        int blockTop = blockY - HALF_HEIGHT;
+
+        // Player is overlapping if their top is within the block's vertical range
+        return playerTop <= blockBottom && playerTop >= blockTop - playerYRadius;
     }
 
     @Override
@@ -98,7 +134,15 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
     @Override
     public boolean isSolidFor(AbstractPlayableSprite player) {
         // Block is not solid once broken
-        return !broken;
+        if (broken) {
+            return false;
+        }
+        // Don't be solid for rolling players moving upward - they should break through
+        // The break detection is handled in update() instead
+        if (player.getRolling() && player.getYSpeed() < 0) {
+            return false;
+        }
+        return true;
     }
 
     @Override

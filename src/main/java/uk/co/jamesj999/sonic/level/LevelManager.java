@@ -20,7 +20,6 @@ import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.LevelEventProvider;
 import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.game.RespawnState;
-import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
@@ -183,7 +182,6 @@ public class LevelManager {
             audioManager.resetRingSound();
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
-            OscillationManager.reset();
             initAnimatedPatterns();
             initAnimatedPalettes();
             RomByteReader romReader = RomByteReader.fromRom(rom);
@@ -198,6 +196,8 @@ public class LevelManager {
             camera.setMinX((short) 0);
             camera.setMaxX((short) (level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH));
             objectManager.reset(camera.getX(), level.getObjects());
+            // Reset game-specific object state for new level
+            gameModule.onLevelLoad();
             solidObjectManager = new SolidObjectManager(objectManager);
             solidObjectManager.reset();
             TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
@@ -805,7 +805,7 @@ public class LevelManager {
         // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
-        int fboHeight = 256; // Increased to 256 (power of 2) to allow vertical buffer for smooth scrolling
+        int fboHeight = 224; // Match screen height for correct Y coordinate alignment
 
         // Extra buffer on each side
         int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
@@ -899,7 +899,7 @@ public class LevelManager {
         if (bgCameraY < 0 && bgCameraY % chunkHeight != 0)
             alignedBgY -= chunkHeight; // Handle negative rounding
 
-        // Render enough rows to fill the 256px FBO height
+        // Render enough rows to fill the FBO height
         // alignedBgY corresponds to FBO Y=0
         int worldYStart = alignedBgY;
         int worldYEnd = alignedBgY + fboHeight;
@@ -1229,6 +1229,11 @@ public class LevelManager {
         commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
         commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
 
+        // Convert world Y to OpenGL screen Y (same transform as pattern rendering)
+        // Pattern renderer uses: screenY = screenHeight - y - 8
+        // We need to apply the same transform for collision to align properly
+        int screenHeight = configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+
         // Iterate over each pixel column in the tile
         for (int i = 0; i < LevelConstants.CHUNK_WIDTH; i++) {
             int tileIndex = hFlip ? (LevelConstants.CHUNK_HEIGHT - 1 - i) : i;
@@ -1243,13 +1248,21 @@ public class LevelManager {
 
                 // Adjust drawing coordinates based on vertical flip
                 if (yFlip) {
-                    // When yFlip is true, y coordinates increase downwards in the rendering context
-                    drawStartY = y - LevelConstants.CHUNK_HEIGHT;
-                    drawEndY = drawStartY + height;
+                    // When yFlip is true, collision extends upward from bottom of chunk
+                    // World Y is at bottom of chunk, collision goes up by 'height' pixels
+                    int worldBottom = y;
+                    int worldTop = y - height;
+                    // Convert to OpenGL coords (flip Y axis)
+                    drawStartY = screenHeight - worldBottom - 8;  // OpenGL bottom of rect
+                    drawEndY = screenHeight - worldTop - 8;       // OpenGL top of rect
                 } else {
-                    // Normal rendering, y decreases upwards
-                    drawStartY = y;
-                    drawEndY = y - height;
+                    // Normal: collision extends downward from top of chunk
+                    // World Y is at top of chunk, collision goes down by 'height' pixels
+                    int worldTop = y - LevelConstants.CHUNK_HEIGHT;
+                    int worldBottom = worldTop + height;
+                    // Convert to OpenGL coords (flip Y axis)
+                    drawStartY = screenHeight - worldBottom - 8;  // OpenGL bottom of rect
+                    drawEndY = screenHeight - worldTop - 8;       // OpenGL top of rect
                 }
 
                 commands.add(new GLCommand(
@@ -1259,9 +1272,9 @@ public class LevelManager {
                         g,
                         b,
                         drawStartX,
-                        drawEndY,
+                        drawStartY,
                         drawEndX,
-                        drawStartY));
+                        drawEndY));
             }
         }
         // Re-enable texturing and shader for subsequent rendering
