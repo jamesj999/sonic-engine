@@ -415,11 +415,12 @@ public class SolidObjectManager {
                 return null;
             }
 
-            // Snap Logic:
-            // if distY > 0: playerCenterY - distY (Push UP)
-            // if distY < 0: playerCenterY - (-4) = playerCenterY + 4 (Push DOWN)
+            // Snap Logic (from PlatformObject_cont):
+            // Original: add.w d0,d2 / addq.w #3,d2
+            // The +3 adjustment brings the player's feet to 1 pixel above the surface,
+            // matching the original game's landing behavior.
             if (apply) {
-                int newCenterY = playerCenterY - distY;
+                int newCenterY = playerCenterY - distY + 3;
                 int newY = newCenterY - (player.getHeight() / 2);
                 player.setY((short) newY);
                 if (player.getYSpeed() > 0) {
