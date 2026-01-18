@@ -951,11 +951,17 @@ public class PlayableSpriteMovementManager extends
 		sprite.setAir(false);
 		// Sonic_ResetOnFloor (s2.asm:37744): Check pinball_mode first - if set, skip clearing rolling
 		// This allows spin tubes and other "must roll" areas to preserve rolling state on landing
-		if (!sprite.getPinballMode()) {
+		boolean hadPinballMode = sprite.getPinballMode();
+		if (!hadPinballMode) {
 			sprite.setRolling(false);
+		} else {
+			LOGGER.fine("calculateLanding: pinballMode protected rolling, pos=(" + sprite.getX() + "," + sprite.getY() + ")");
 		}
 		// Clear pinball mode after the landing check - it only needs to protect one landing
 		// The autoroll triggers in ROM would clear this at area exits, but we do it here
+		if (hadPinballMode) {
+			LOGGER.fine("calculateLanding: clearing pinballMode after landing protection");
+		}
 		sprite.setPinballMode(false);
 		short ySpeed = sprite.getYSpeed();
 		short xSpeed = sprite.getXSpeed();
@@ -1029,7 +1035,10 @@ public class PlayableSpriteMovementManager extends
 					boost = (short) -boost;
 				}
 				sprite.setGSpeed(boost);
+				LOGGER.fine("calculateRoll: pinballMode boost applied, gSpeed was " + gSpeed + ", now " + boost);
 			} else {
+				LOGGER.fine("calculateRoll: STOPPING ROLL - gSpeed=" + gSpeed + ", pinballMode=false" +
+						", pos=(" + sprite.getX() + "," + sprite.getY() + ")");
 				sprite.setRolling(false);
 			}
 		}
