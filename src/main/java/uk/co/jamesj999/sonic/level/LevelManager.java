@@ -600,20 +600,23 @@ public class LevelManager {
         }
 
         parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
-        List<GLCommand> commands = new ArrayList<>(256);
+        List<GLCommand> collisionCommands = new ArrayList<>(256);
 
         // Draw Background (Layer 1)
         if (useShaderBackground && graphicsManager.getBackgroundRenderer() != null) {
-            renderBackgroundShader(commands, bgScrollY);
+            renderBackgroundShader(collisionCommands, bgScrollY);
         }
 
         // Draw Foreground (Layer 0) low-priority pass - batched for performance
         graphicsManager.beginPatternBatch();
-        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
+        drawLayer(collisionCommands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
         graphicsManager.flushPatternBatch();
 
-        if (!commands.isEmpty()) {
-            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        // Render collision debug overlay on top of foreground tiles
+        if (!collisionCommands.isEmpty() && overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
+            for (GLCommand cmd : collisionCommands) {
+                graphicsManager.registerCommand(cmd);
+            }
         }
 
         if (ringManager != null) {
@@ -633,8 +636,9 @@ public class LevelManager {
         }
 
         // Draw Foreground (Layer 0) high-priority pass - batched for performance
+        // Note: drawCollision=false so commands list is not used
         graphicsManager.beginPatternBatch();
-        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
+        drawLayer(null, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
         graphicsManager.flushPatternBatch();
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
@@ -1185,7 +1189,7 @@ public class LevelManager {
             boolean isPrimary,
             int x,
             int y) {
-        if (!configService.getBoolean(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED)) {
+        if (!overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
             return;
         }
 
@@ -1229,11 +1233,6 @@ public class LevelManager {
         commands.add(new GLCommand(GLCommand.CommandType.USE_PROGRAM, 0));
         commands.add(new GLCommand(GLCommand.CommandType.DISABLE, GL2.GL_TEXTURE_2D));
 
-        // Convert world Y to OpenGL screen Y (same transform as pattern rendering)
-        // Pattern renderer uses: screenY = screenHeight - y - 8
-        // We need to apply the same transform for collision to align properly
-        int screenHeight = configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
-
         // Iterate over each pixel column in the tile
         for (int i = 0; i < LevelConstants.CHUNK_WIDTH; i++) {
             int tileIndex = hFlip ? (LevelConstants.CHUNK_HEIGHT - 1 - i) : i;
@@ -1247,22 +1246,17 @@ public class LevelManager {
                 int drawEndY;
 
                 // Adjust drawing coordinates based on vertical flip
+                // GLCommand constructor handles Y-flip (SCREEN_HEIGHT_PIXELS - y)
+                // and execute() applies camera offset (y + cameraY)
+                // We add 16 to align with the pattern renderer's coordinate system
                 if (yFlip) {
                     // When yFlip is true, collision extends upward from bottom of chunk
-                    // World Y is at bottom of chunk, collision goes up by 'height' pixels
-                    int worldBottom = y;
-                    int worldTop = y - height;
-                    // Convert to OpenGL coords (flip Y axis)
-                    drawStartY = screenHeight - worldBottom - 8;  // OpenGL bottom of rect
-                    drawEndY = screenHeight - worldTop - 8;       // OpenGL top of rect
+                    drawStartY = y - LevelConstants.CHUNK_HEIGHT + 16;
+                    drawEndY = drawStartY + height;
                 } else {
-                    // Normal: collision extends downward from top of chunk
-                    // World Y is at top of chunk, collision goes down by 'height' pixels
-                    int worldTop = y - LevelConstants.CHUNK_HEIGHT;
-                    int worldBottom = worldTop + height;
-                    // Convert to OpenGL coords (flip Y axis)
-                    drawStartY = screenHeight - worldBottom - 8;  // OpenGL bottom of rect
-                    drawEndY = screenHeight - worldTop - 8;       // OpenGL top of rect
+                    // Normal rendering: collision extends downward from top of chunk
+                    drawStartY = y + 16;
+                    drawEndY = y - height + 16;
                 }
 
                 commands.add(new GLCommand(
@@ -1272,9 +1266,9 @@ public class LevelManager {
                         g,
                         b,
                         drawStartX,
-                        drawStartY,
+                        drawEndY,
                         drawEndX,
-                        drawEndY));
+                        drawStartY));
             }
         }
         // Re-enable texturing and shader for subsequent rendering
