@@ -328,10 +328,6 @@ public class RomOffsetFinder {
         System.out.println("Found " + results.size() + " result(s):");
         System.out.println();
 
-        // Create offset calculator for ROM offset estimation
-        RomOffsetCalculator offsetCalculator = new RomOffsetCalculator(
-                System.getProperty("disasm.path", DEFAULT_DISASM_PATH));
-
         for (DisassemblySearchResult result : results) {
             System.out.printf("Label:       %s%n", result.getLabel() != null ? result.getLabel() : "(none)");
             System.out.printf("File:        %s%n", result.getFilePath());
@@ -345,22 +341,28 @@ public class RomOffsetFinder {
                 System.out.printf("File Size:   (not found)%n");
             }
 
-            // Calculate ROM offset from anchors
+            // Get verified ROM offset by searching the ROM directly
             if (result.getLabel() != null) {
                 try {
-                    RomOffsetCalculator.OffsetCalculation calc =
-                            offsetCalculator.getCalculationDetails(result.getLabel());
-                    if (calc != null && calc.offset >= 0) {
-                        System.out.printf("ROM Offset:  0x%X", calc.offset);
-                        if (calc.isAnchor) {
-                            System.out.println(" (anchor)");
-                        } else {
-                            System.out.printf(" (calculated from %s, %d files away)%n",
-                                    calc.anchorLabel, calc.distanceFromAnchor);
-                        }
+                    VerificationResult vr = finder.verify(result.getLabel());
+                    switch (vr.getStatus()) {
+                        case VERIFIED:
+                            // For VERIFIED, calculatedOffset was correct
+                            System.out.printf("ROM Offset:  0x%X (verified)%n", vr.getCalculatedOffset());
+                            break;
+                        case MISMATCH:
+                            // Calculation was wrong, but we found the actual offset
+                            System.out.printf("ROM Offset:  0x%X (verified)%n", vr.getVerifiedOffset());
+                            break;
+                        case NOT_FOUND:
+                            System.out.printf("ROM Offset:  (not found in ROM)%n");
+                            break;
+                        case ERROR:
+                            System.out.printf("ROM Offset:  (error: %s)%n", vr.getMessage());
+                            break;
                     }
                 } catch (IOException e) {
-                    // Ignore offset calculation errors
+                    // Ignore verification errors
                 }
             }
 
