@@ -146,18 +146,25 @@ public class Sonic2Constants {
     public static final int ART_NEM_RABBIT_ADDR = 0x7FDD2;
 
     // CNZ Bumpers (addresses from Nemesis S2 art listing)
-    public static final int ART_NEM_HEX_BUMPER_ADDR = 0x81894;  // ArtNem_CNZHexBumper - Hex Bumper (ObjD7) - 6 blocks
-    public static final int ART_NEM_BUMPER_ADDR = 0x8191E;      // ArtNem_CNZRoundBumper - Round Bumper (Obj44) - 24 blocks
-    public static final int ART_NEM_BONUS_BLOCK_ADDR = 0x81DCC; // ArtNem_CNZMiniBumper - Bonus Block (ObjD8) - 28 blocks
+    public static final int ART_NEM_HEX_BUMPER_ADDR = 0x81894; // ArtNem_CNZHexBumper - Hex Bumper (ObjD7) - 6 blocks
+    public static final int ART_NEM_BUMPER_ADDR = 0x8191E; // ArtNem_CNZRoundBumper - Round Bumper (Obj44) - 24 blocks
+    public static final int ART_NEM_BONUS_BLOCK_ADDR = 0x81DCC; // ArtNem_CNZMiniBumper - Bonus Block (ObjD8) - 28
+                                                                // blocks
 
     // CNZ Map Bumpers (triangular bumpers embedded in level tiles)
     // ROM Reference: SpecialCNZBumpers at s2.asm line 32146
-    public static final int CNZ_BUMPERS_ACT1_ADDR = 0x1781A;    // SpecialCNZBumpers_Act1
-    public static final int CNZ_BUMPERS_ACT2_ADDR = 0x1795E;    // SpecialCNZBumpers_Act2
-    public static final int ZONE_CNZ = 0x0C;                     // Casino Night Zone index (s2.constants.asm: casino_night_zone = $0C)
+    public static final int CNZ_BUMPERS_ACT1_ADDR = 0x1781A; // SpecialCNZBumpers_Act1
+    public static final int CNZ_BUMPERS_ACT2_ADDR = 0x1795E; // SpecialCNZBumpers_Act2
+    public static final int ZONE_CNZ = 0x0C; // Casino Night Zone index (s2.constants.asm: casino_night_zone = $0C)
 
     // CNZ Flipper (Object 0x86)
-    public static final int ART_NEM_FLIPPER_ADDR = 0x81EF2;  // ArtNem_CNZFlipper
+    public static final int ART_NEM_FLIPPER_ADDR = 0x81EF2; // ArtNem_CNZFlipper
+
+    // Water Surface Art (Object $04 / SurfaceWater)
+    // CPZ uses the same water surface art as HPZ (pink/purple chemical water)
+    public static final int ART_NEM_WATER_SURFACE_CPZ_ADDR = 0x82364; // Top of water in HPZ and CPZ (24 blocks)
+    // ARZ has distinct water surface art (natural blue water)
+    public static final int ART_NEM_WATER_SURFACE_ARZ_ADDR = 0x82E02; // Top of water in ARZ (16 blocks)
 
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)

@@ -417,6 +417,30 @@ public class Sonic2ObjectArt {
         }
     }
 
+    /**
+     * Load water surface patterns for Chemical Plant Zone (and Hidden Palace Zone).
+     * <p>
+     * CPZ uses pink/purple chemical water surface art.
+     * ROM address: 0x82364 (Nemesis compressed, 24 blocks)
+     * 
+     * @return CPZ water surface patterns, or empty array on failure
+     */
+    public Pattern[] loadWaterSurfaceCPZPatterns() {
+        return safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_WATER_SURFACE_CPZ_ADDR, "WaterSurfaceCPZ");
+    }
+
+    /**
+     * Load water surface patterns for Aquatic Ruin Zone.
+     * <p>
+     * ARZ uses natural blue water surface art.
+     * ROM address: 0x82E02 (Nemesis compressed, 16 blocks)
+     * 
+     * @return ARZ water surface patterns, or empty array on failure
+     */
+    public Pattern[] loadWaterSurfaceARZPatterns() {
+        return safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_WATER_SURFACE_ARZ_ADDR, "WaterSurfaceARZ");
+    }
+
     private AnimalType[] resolveZoneAnimals(int zoneIndex) {
         if (zoneIndex < 0 || zoneIndex >= ZONE_ANIMALS.length) {
             return DEFAULT_ANIMALS;
@@ -676,7 +700,8 @@ public class Sonic2ObjectArt {
      * <p>
      * Frame 0: Normal state - 4 pieces (3x2 tiles each), 48x32 px total
      * Frame 1: Vertical squeeze - 4 pieces squeezed vertically (bounce up/down)
-     * Frame 2: Horizontal squeeze - 4 pieces squeezed horizontally (bounce left/right)
+     * Frame 2: Horizontal squeeze - 4 pieces squeezed horizontally (bounce
+     * left/right)
      * <p>
      * Each frame uses mirrored pieces (hFlip, vFlip) to create symmetry.
      */
@@ -684,7 +709,8 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> frames = new ArrayList<>();
 
         // Frame 0: Map_objD7_0006 - Normal state
-        // 4 pieces: top-left, top-right (hFlip), bottom-left (vFlip), bottom-right (h+vFlip)
+        // 4 pieces: top-left, top-right (hFlip), bottom-left (vFlip), bottom-right
+        // (h+vFlip)
         List<SpriteMappingPiece> frame0 = new ArrayList<>();
         frame0.add(new SpriteMappingPiece(-24, -16, 3, 2, 0, false, false, 0));
         frame0.add(new SpriteMappingPiece(0, -16, 3, 2, 0, true, false, 0));
@@ -716,9 +742,9 @@ public class Sonic2ObjectArt {
      * <p>
      * 6 frames total - 3 orientations x 2 states (normal/hit):
      * <ul>
-     *   <li>Frames 0,3: Horizontal (32x16 px) - 4 tiles wide, 2 tiles high</li>
-     *   <li>Frames 1,4: Vertical (24x32 px) - 3 tiles wide, 4 tiles high</li>
-     *   <li>Frames 2,5: Vertical narrow (16x32 px) - 2 tiles wide, 4 tiles high</li>
+     * <li>Frames 0,3: Horizontal (32x16 px) - 4 tiles wide, 2 tiles high</li>
+     * <li>Frames 1,4: Vertical (24x32 px) - 3 tiles wide, 4 tiles high</li>
+     * <li>Frames 2,5: Vertical narrow (16x32 px) - 2 tiles wide, 4 tiles high</li>
      * </ul>
      * Hit frames have slightly adjusted offsets for the "bounce" animation.
      */
