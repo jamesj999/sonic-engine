@@ -106,4 +106,22 @@ public final class OscillationManager {
         int word = (within < 2) ? values[index] : deltas[index];
         return ((within & 1) == 0) ? ((word >> 8) & 0xFF) : (word & 0xFF);
     }
+
+    /**
+     * Returns the word at the given offset into Oscillating_Data.
+     * Offsets follow the ROM layout: value word then delta word per oscillator.
+     * Used by circular motion platforms (Obj6B types 8-11) to detect delta zero crossings.
+     *
+     * @param offset byte offset into oscillating data (must be word-aligned: 0, 2, 4, ...)
+     * @return the 16-bit word at that offset, sign-extended to int
+     */
+    public static int getWord(int offset) {
+        if (offset < 0 || offset >= OSC_COUNT * 4) {
+            return 0;
+        }
+        int index = offset / 4;
+        int within = offset % 4;
+        int word = (within < 2) ? values[index] : deltas[index];
+        return (short) word; // Sign-extend to int
+    }
 }

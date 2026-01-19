@@ -73,16 +73,20 @@ public class ObjectDiscoveryTool {
             0x26,  // Monitor
             0x32,  // BreakableBlock (CPZ metal blocks / HTZ rocks)
             0x36,  // Spikes
+            0x40,  // Springboard (CPZ/ARZ/MCZ lever spring)
             0x41,  // Spring
             0x44,  // Bumper
             0x49,  // EHZWaterfall
             0x4B,  // Buzzer
             0x5C,  // Masher
+            0x6B,  // MTZPlatform (multi-purpose platform with 12 movement subtypes)
             0x74,  // InvisibleBlock
             0x78,  // CPZStaircase (4-piece triggered elevator platform)
             0x79,  // Checkpoint
             0x7B,  // PipeExitSpring (CPZ warp tube exit spring)
+            0x86,  // CNZFlipper
             0x9D,  // Coconuts
+            0xD7,  // HexBumper (CNZ hexagonal bumper)
             0xD8   // BonusBlock
     );
 

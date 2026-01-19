@@ -52,6 +52,9 @@ public final class Sonic2ObjectIds {
     // CPZ Foreground Objects
     public static final int CPZ_PYLON = 0x7C;  // CPZ Pylon (Obj7C) - decorative background pylon
 
+    // MTZ/CPZ Platform Objects
+    public static final int MTZ_PLATFORM = 0x6B; // MTZ Platform (Obj6B) - multi-purpose platform with 12 movement subtypes
+
     private Sonic2ObjectIds() {
     }
 

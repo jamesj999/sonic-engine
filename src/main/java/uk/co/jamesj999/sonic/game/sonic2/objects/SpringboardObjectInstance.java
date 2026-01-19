@@ -16,23 +16,28 @@ import java.util.List;
  * Springboard / Lever Spring (Object 0x40).
  * A red diving-board style springboard found in CPZ, ARZ, and MCZ.
  * <p>
- * When the player stands on it, the platform compresses and launches them
- * upward with position-dependent velocity. Standing on the higher end
- * (right side for unflipped) gives a stronger launch.
+ * When the player stands on the "high" side (the raised end), the platform
+ * compresses and launches them upward with position-dependent velocity.
+ * Standing closer to the high end gives a stronger launch.
  * <p>
  * Based on Sonic 2 disassembly s2.asm lines 51757-51971.
+ * <p>
+ * Launch sequence:
+ * 1. Player stands on high side -> animation switches to 1 (compressed)
+ * 2. Animation 1 shows frame 1, then cycles to frame 0
+ * 3. When anim==1 AND frame==0, player is launched
+ * 4. Animation auto-switches back to 0 (idle)
  */
 public class SpringboardObjectInstance extends BoxObjectInstance
         implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
 
-    // Animation IDs
-    private static final int ANIM_IDLE = 0;
-    private static final int ANIM_TRIGGERED = 1;
+    // Animation IDs (from Ani_obj40)
+    private static final int ANIM_IDLE = 0;       // byte_265EC: delay=0xF, frames=[0], LOOP
+    private static final int ANIM_COMPRESSED = 1; // byte_265EF: delay=3, frames=[1,0], SWITCH to 0
 
     /**
      * Diagonal slope data (idle state - frame 0).
-     * From s2.asm byte_26598 (40 bytes).
-     * These values define the height at each X position relative to the center.
+     * From s2.asm Obj40_SlopeData_DiagUp (40 bytes).
      */
     private static final byte[] SLOPE_DIAG_UP = {
             0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09,
@@ -44,8 +49,7 @@ public class SpringboardObjectInstance extends BoxObjectInstance
 
     /**
      * Straight slope data (compressed state - frame 1).
-     * From s2.asm byte_265C0 (40 bytes).
-     * A flatter slope when the springboard is pressed down.
+     * From s2.asm Obj40_SlopeData_Straight (40 bytes).
      */
     private static final byte[] SLOPE_STRAIGHT = {
             0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09,
@@ -59,7 +63,6 @@ public class SpringboardObjectInstance extends BoxObjectInstance
      * Position-to-boost lookup table (72 bytes).
      * From s2.asm byte_26550.
      * Maps relative X position to a boost value (0-4).
-     * Higher values at the right (higher) end give stronger launches.
      */
     private static final byte[] VELOCITY_BOOST_TABLE = {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -69,23 +72,20 @@ public class SpringboardObjectInstance extends BoxObjectInstance
             0, 0, 0, 0, 0, 0, 0, 0
     };
 
-    // Collision dimensions from ROM
-    // Width: 0x27 (39) pixels half-width
-    // Height: 8 pixels
-    private static final int COLLISION_WIDTH = 0x27;
+    // Collision dimensions from ROM (Obj40_Main)
+    // d1 = $27 (39) half-width, d2 = 8 height
+    private static final int COLLISION_HALF_WIDTH = 0x27;
     private static final int COLLISION_HEIGHT = 8;
 
     // Position threshold for launch trigger (0x10 pixels from center)
-    private static final int LAUNCH_THRESHOLD = 0x10;
+    // ROM: loc_2641E checks player.x vs springboard.x ± 0x10
+    private static final int POSITION_THRESHOLD = 0x10;
 
     private final ObjectAnimationState animationState;
     private int mappingFrame;
-    private int prevMappingFrame;
-    private boolean compressed;
-    private int launchCooldown;
 
     public SpringboardObjectInstance(ObjectSpawn spawn, String name) {
-        super(spawn, name, COLLISION_WIDTH, COLLISION_HEIGHT, 1.0f, 0.85f, 0.1f, false);
+        super(spawn, name, COLLISION_HALF_WIDTH, COLLISION_HEIGHT, 1.0f, 0.85f, 0.1f, false);
 
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
         this.animationState = new ObjectAnimationState(
@@ -93,119 +93,125 @@ public class SpringboardObjectInstance extends BoxObjectInstance
                 ANIM_IDLE,
                 0);
         this.mappingFrame = 0;
-        this.prevMappingFrame = 0;
-        this.compressed = false;
-        this.launchCooldown = 0;
     }
 
+    /**
+     * Called when player has solid contact with the springboard.
+     * ROM: loc_2641E is called when p1_standing_bit is set in object's status.
+     */
     @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
         if (player == null || !contact.standing()) {
             return;
         }
 
-        // Prevent re-triggering while player is still springing or during cooldown
-        if (player.getSpringing() || launchCooldown > 0) {
+        // Don't process if player is already springing or in air
+        // This prevents re-triggering immediately after launch
+        if (player.getSpringing() || player.getAir()) {
             return;
         }
 
-        // Check if player is on the "high" side of the springboard
-        // ROM: loc_2641E - position threshold check
-        boolean onHighSide = checkPlayerOnHighSide(player);
-        if (!onHighSide) {
+        // ROM: loc_2641E - Check if player is on the "high" side
+        if (!isPlayerOnHighSide(player)) {
             return;
         }
 
-        // ROM logic: Launch when animation is compressed (anim 1) AND frame cycles back to 0
-        // First time on high side: set animation to compressed
-        if (!compressed) {
-            animationState.setAnimId(ANIM_TRIGGERED);
-            compressed = true;
+        // ROM: loc_26446 - Check animation state
+        int currentAnim = animationState.getAnimId();
+
+        if (currentAnim != ANIM_COMPRESSED) {
+            // ROM: move.w #(1<<8)|(0<<0),anim(a0) - set anim to 1, frame to 0
+            // This starts the compress animation
+            animationState.setAnimId(ANIM_COMPRESSED);
             return;
         }
 
-        // If compressed and frame just cycled to 0, trigger launch
-        // (prevMappingFrame was 1, now mappingFrame is 0)
-        if (compressed && prevMappingFrame == 1 && mappingFrame == 0) {
+        // ROM: loc_26456 - anim is 1, check if mapping_frame is 0
+        if (mappingFrame == 0) {
+            // ROM: loc_2645E - Launch the player!
             applyLaunch(player);
         }
+        // If mapping_frame != 0, do nothing (wait for animation to cycle)
     }
 
     /**
-     * Checks if the player is on the "high" side of the springboard (the launch zone).
-     * ROM: loc_2641E - unflipped: player.x > springboard.x - 0x10
-     *      loc_26436 - flipped: player.x <= springboard.x + 0x10
+     * Checks if the player is on the "high" side of the springboard.
+     * ROM: loc_2641E (unflipped) and loc_26436 (flipped)
      */
-    private boolean checkPlayerOnHighSide(AbstractPlayableSprite player) {
+    private boolean isPlayerOnHighSide(AbstractPlayableSprite player) {
         int playerX = player.getX();
         int springboardX = spawn.x();
 
         if (isFlippedHorizontal()) {
-            // Flipped: high side is on the left
-            return playerX <= springboardX + LAUNCH_THRESHOLD;
+            // ROM: loc_26436 - d0 = springboard.x + 0x10, bhs if d0 >= player.x
+            // Flipped: high side is on the left, player.x <= springboard.x + 0x10
+            return playerX <= springboardX + POSITION_THRESHOLD;
         } else {
-            // Unflipped: high side is on the right
-            return playerX > springboardX - LAUNCH_THRESHOLD;
+            // ROM: loc_2641E - d0 = springboard.x - 0x10, blo if d0 < player.x
+            // Unflipped: high side is on the right, player.x > springboard.x - 0x10
+            return playerX > springboardX - POSITION_THRESHOLD;
         }
     }
 
     /**
-     * Calculates and applies launch velocity based on player position on the springboard.
-     * Based on ROM loc_2645E.
+     * Applies launch velocity and sets player state.
+     * ROM: loc_2645E through loc_26546
      */
     private void applyLaunch(AbstractPlayableSprite player) {
-        // Calculate relative X position: dx = player.x - spawn.x + 0x1C
+        boolean flipped = isFlippedHorizontal();
+
+        // ROM: loc_2645E - Calculate relative X position for boost lookup
+        // d0 = player.x - (springboard.x - 0x1C) = player.x - springboard.x + 0x1C
         int dx = player.getX() - spawn.x() + 0x1C;
 
-        // If flipped horizontally, invert the position
-        // ROM bug preserved: uses 0x27 instead of 0x38
-        boolean flipped = isFlippedHorizontal();
         if (flipped) {
+            // ROM bug preserved: uses 0x27 instead of 0x38 (2*0x1C)
             dx = ~dx + 0x27;
         }
 
-        // Clamp to valid table range
-        if (dx < 0) dx = 0;
-        if (dx >= VELOCITY_BOOST_TABLE.length) dx = VELOCITY_BOOST_TABLE.length - 1;
+        // ROM: loc_2647A - Clamp negative values to 0
+        if (dx < 0) {
+            dx = 0;
+        }
 
-        // Look up boost value (0-4)
+        // Clamp to table bounds (72 entries)
+        if (dx >= VELOCITY_BOOST_TABLE.length) {
+            dx = VELOCITY_BOOST_TABLE.length - 1;
+        }
+
+        // ROM: loc_26480 - Look up boost value (0-4)
         int boost = VELOCITY_BOOST_TABLE[dx] & 0xFF;
 
-        // Calculate Y velocity: -0x400 - (boost << 8)
-        // Base velocity of -0x400 (-1024), plus up to -0x400 more for max boost
+        // ROM: move.w #-$400,y_vel(a1) then sub.b d0,y_vel(a1)
+        // sub.b from high byte = y_vel -= boost << 8
         int yVelocity = -0x400 - (boost << 8);
-
-        // Apply Y velocity
         player.setYSpeed((short) yVelocity);
 
-        // Set player facing direction based on springboard orientation
-        // ROM: bset #status.player.x_flip (face right if flipped, left if not)
+        // ROM: bset #status.player.x_flip,status(a1) (set facing right)
+        // Then if springboard NOT flipped: bclr (clear = face left), neg.b d0
         if (flipped) {
             player.setDirection(Direction.LEFT);
         } else {
             player.setDirection(Direction.RIGHT);
+            boost = -boost; // ROM: neg.b d0
         }
 
-        // Add X velocity boost if player is moving fast
-        // ROM: if |x_vel| >= 0x400, subtract boost from x_vel high byte
-        // This is equivalent to x_vel -= boost << 8
+        // ROM: loc_264AA - Apply X velocity boost if |x_vel| >= 0x400
         int xVel = player.getXSpeed();
         if (Math.abs(xVel) >= 0x400) {
-            // ROM negates boost if springboard is NOT flipped
-            int xBoost = boost << 8;
-            if (!flipped) {
-                xBoost = -xBoost;
-            }
-            // ROM uses sub.b which subtracts from high byte
-            player.setXSpeed((short) (xVel - xBoost));
+            // ROM: sub.b d0,x_vel(a1) - subtract from high byte = x_vel -= boost << 8
+            player.setXSpeed((short) (xVel - (boost << 8)));
         }
 
-        // Set player to air state
+        // ROM: loc_264BC - Set player to airborne state
         player.setAir(true);
         player.setGSpeed((short) 0);
-        player.setSpringing(15);
+        player.setSpringing(15); // ROM: AniIDSonAni_Spring
 
-        // Play spring sound
+        // ROM: Clear on_object status (player no longer standing on springboard)
+        // This is handled by the physics engine when we set air=true
+
+        // ROM: loc_26546 - Play spring sound
         try {
             if (AudioManager.getInstance() != null) {
                 AudioManager.getInstance().playSfx(GameSound.SPRING);
@@ -213,39 +219,22 @@ public class SpringboardObjectInstance extends BoxObjectInstance
         } catch (Exception e) {
             // Prevent audio failure from breaking game logic
         }
-
-        // Set cooldown to prevent immediate re-triggering
-        launchCooldown = 30;
-        compressed = false;
     }
 
     private boolean isFlippedHorizontal() {
         return (spawn.renderFlags() & 0x1) != 0;
     }
 
-    /**
-     * Make springboard non-solid when player is springing.
-     * Prevents collision issues immediately after launch.
-     */
-    @Override
-    public boolean isSolidFor(AbstractPlayableSprite player) {
-        if (player != null && player.getSpringing()) {
-            return false;
-        }
-        return true;
-    }
-
     @Override
     public SolidObjectParams getSolidParams() {
-        // Width: 39 pixels (0x27), height based on slope
-        return new SolidObjectParams(COLLISION_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
+        // ROM: d1=$27 (half-width), d2=8 (height)
+        return new SolidObjectParams(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
     }
 
     @Override
     public byte[] getSlopeData() {
-        // Return slope based on current animation frame
-        // Frame 0 (idle): diagonal slope
-        // Frame 1 (compressed): flatter slope
+        // ROM: Obj40_Main selects slope data based on mapping_frame
+        // frame 0 = diagonal (idle), frame 1 = straight (compressed)
         return mappingFrame == 0 ? SLOPE_DIAG_UP : SLOPE_STRAIGHT;
     }
 
@@ -256,22 +245,9 @@ public class SpringboardObjectInstance extends BoxObjectInstance
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        // Track previous frame for launch trigger detection
-        prevMappingFrame = mappingFrame;
-
-        // Update animation state
+        // ROM: Obj40_Main calls AnimateSprite before collision check
         animationState.update();
         mappingFrame = animationState.getMappingFrame();
-
-        // Decrement cooldown
-        if (launchCooldown > 0) {
-            launchCooldown--;
-        }
-
-        // Reset compressed flag when animation returns to idle and cooldown expires
-        if (compressed && mappingFrame == 0 && launchCooldown == 0) {
-            compressed = false;
-        }
     }
 
     @Override

@@ -190,6 +190,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.GENERIC_PLATFORM_B,
                 (spawn, registry) -> new CPZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // MTZ/CPZ multi-purpose platform with 12 movement subtypes
+        registerFactory(Sonic2ObjectIds.MTZ_PLATFORM,
+                (spawn, registry) -> new MTZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         registerFactory(Sonic2ObjectIds.INVISIBLE_BLOCK,
                 (spawn, registry) -> new InvisibleBlockObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
