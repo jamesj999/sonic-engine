@@ -78,8 +78,10 @@ public class SmpsSequencer implements AudioStream {
     // Speed-up tempos and channel orders are game/driver-specific (configurable).
 
     // F-Num table for Octave 4
+    // Calculated using Z80 formula: round(freq * 1024 * 1024 * 2 / FM_Sample_Rate)
+    // where FM_Sample_Rate = 53267 Hz (NTSC: 7670454 / 144)
     private static final int[] FNUM_TABLE = {
-            617, 653, 692, 733, 777, 823, 872, 924, 979, 1037, 1099, 1164
+            606, 644, 683, 723, 766, 813, 860, 911, 965, 1023, 1084, 1148
     };
     // SMPSPlay DEF_PSGFREQ_68K table (register values). Slice from DEF_PSGFREQ_PRE
     // starting at index 12 (count 70).
@@ -669,10 +671,19 @@ public class SmpsSequencer implements AudioStream {
                         }
                     }
                     playNote(t);
+                    // Z80 driver calls zDoModulation on the same frame as note start.
+                    // This ensures the wait counter begins decrementing immediately.
+                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled) {
+                        applyModulation(t);
+                    }
                     break;
                 } else {
                     setDuration(t, cmd);
                     playNote(t);
+                    // Z80 driver calls zDoModulation on the same frame as note start.
+                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled) {
+                        applyModulation(t);
+                    }
                     break;
                 }
             }
@@ -1288,25 +1299,10 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private int getPitchSlideFreq(int freq) {
-        // SMPS driver wraps slides within octaves to avoid discontinuities, but never
-        // past the top octave.
-        int block = (freq >> 11) & 0x7;
-        if (block >= 7) {
-            return freq;
-        }
-
-        int baseFreq = 0x269;
-        int lowFreq = baseFreq;
-        int highFreq = baseFreq * 2;
-        int freqFixDown = 0x7FF - baseFreq;
-        int freqFixUp = 0x800 - baseFreq;
-
-        int octFreq = freq & 0x7FF;
-        if (octFreq < lowFreq) {
-            freq -= freqFixDown;
-        } else if (octFreq > highFreq) {
-            freq += freqFixUp;
-        }
+        // The Z80 SMPS driver does NOT have any pitch slide wrapping logic.
+        // It directly adds modulation/detune to the frequency and lets the
+        // hardware handle any overflow. Previous wrapping code here was
+        // causing incorrect octave jumps during modulation (e.g., Gloop SFX).
         return freq;
     }
 
