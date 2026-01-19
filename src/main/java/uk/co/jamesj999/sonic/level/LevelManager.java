@@ -256,6 +256,9 @@ public class LevelManager {
         // no platform objects are currently on-screen.
         uk.co.jamesj999.sonic.game.sonic2.OscillationManager.update(frameCounter);
 
+        // Update dynamic water levels (for rising water in CPZ2, etc.)
+        WaterSystem.getInstance().update();
+
         Sprite player = null;
         AbstractPlayableSprite playable = null;
         boolean needsPlayer = objectManager != null || ringManager != null;

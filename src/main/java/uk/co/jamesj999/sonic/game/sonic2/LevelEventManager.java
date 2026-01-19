@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.LevelEventProvider;
+import uk.co.jamesj999.sonic.level.WaterSystem;
 
 /**
  * Sonic 2 implementation of dynamic level events.
@@ -39,6 +40,8 @@ public class LevelEventManager implements LevelEventProvider {
     public static final int ZONE_SCZ = 9;
     public static final int ZONE_WFZ = 10;
     public static final int ZONE_DEZ = 11;
+    // CPZ uses zone index 1 in level event ordering (ROM zone ID 0x0D)
+    public static final int ZONE_CPZ = 1;
 
     private LevelEventManager() {
         this.camera = Camera.getInstance();
@@ -68,6 +71,7 @@ public class LevelEventManager implements LevelEventProvider {
         // Dispatch to zone-specific event handler
         switch (currentZone) {
             case ZONE_EHZ -> updateEHZ();
+            case ZONE_CPZ -> updateCPZ();
             case ZONE_HTZ -> updateHTZ();
             case ZONE_MCZ -> updateMCZ();
             case ZONE_ARZ -> updateARZ();
@@ -159,6 +163,53 @@ public class LevelEventManager implements LevelEventProvider {
     private void updateHTZ() {
         // HTZ has complex earthquake/lava events
         // Implement as needed
+    }
+
+    /**
+     * Chemical Plant Zone events.
+     * ROM: LevEvents_CPZ (s2.asm:20504-20542)
+     *
+     * Act 1: No dynamic events
+     * Act 2: Water (Mega Mack) rises when player reaches trigger X coordinate
+     *
+     * CPZ2 water rising: When camera X >= trigger point, set water target level
+     * and WaterSystem will gradually raise it each frame until target reached.
+     */
+    private void updateCPZ() {
+        if (currentAct != 1) {
+            // Only Act 2 has water rise events
+            return;
+        }
+
+        // CPZ Act 2: Rising Mega Mack
+        // ROM zone ID for CPZ is 0x0D
+        final int ZONE_ID_CPZ_ROM = 0x0D;
+
+        // X coordinate trigger for water rise (from original game)
+        // This is where the famous "rising water" section begins
+        final int WATER_RISE_TRIGGER_X = 0x1E80;
+
+        // Target water level (lower Y = higher water on screen)
+        // Initial level is 0x710 (1808), target is approximately 0x508 (1288)
+        final int WATER_TARGET_Y = 0x508;
+
+        switch (eventRoutine) {
+            case 0 -> {
+                // Routine 0: Wait for player X to reach trigger point
+                // Note: Original game checks player position, not camera position
+                var player = camera.getFocusedSprite();
+                if (player != null && player.getX() >= WATER_RISE_TRIGGER_X) {
+                    // Trigger water to start rising
+                    WaterSystem.getInstance().setWaterLevelTarget(
+                            ZONE_ID_CPZ_ROM, currentAct, WATER_TARGET_Y);
+                    eventRoutine += 2;
+                }
+            }
+            default -> {
+                // Water is rising or has reached target
+                // WaterSystem.update() handles the gradual rise
+            }
+        }
     }
 
     /**

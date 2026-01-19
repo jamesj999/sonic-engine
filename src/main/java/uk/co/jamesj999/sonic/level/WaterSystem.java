@@ -46,6 +46,9 @@ public class WaterSystem {
     // Water configuration data
     private final Map<String, WaterConfig> waterConfigs = new HashMap<>();
 
+    // Dynamic water level state (for levels where water rises/falls)
+    private final Map<String, DynamicWaterState> dynamicWaterStates = new HashMap<>();
+
     /**
      * Water configuration for a specific zone/act.
      */
@@ -70,6 +73,45 @@ public class WaterSystem {
 
         public Palette[] getUnderwaterPalette() {
             return underwaterPalette;
+        }
+    }
+
+    /**
+     * Tracks dynamic water level state for levels where water rises or falls.
+     * Used for CPZ2's rising Mega Mack.
+     */
+    private static class DynamicWaterState {
+        private int currentLevel; // Current water Y position
+        private int targetLevel; // Target water Y position (water moves toward this)
+        private boolean rising; // True if water is actively rising
+
+        DynamicWaterState(int initialLevel) {
+            this.currentLevel = initialLevel;
+            this.targetLevel = initialLevel;
+            this.rising = false;
+        }
+
+        void setTarget(int targetY) {
+            this.targetLevel = targetY;
+            this.rising = (currentLevel != targetLevel);
+        }
+
+        /** Move water toward target by 1 pixel. Returns true if still rising. */
+        boolean update() {
+            if (!rising) {
+                return false;
+            }
+            if (currentLevel > targetLevel) {
+                // Water rising (lower Y = higher on screen)
+                currentLevel--;
+            } else if (currentLevel < targetLevel) {
+                // Water falling (higher Y = lower on screen)
+                currentLevel++;
+            }
+            if (currentLevel == targetLevel) {
+                rising = false;
+            }
+            return rising;
         }
     }
 
@@ -114,6 +156,10 @@ public class WaterSystem {
 
         // Store configuration
         waterConfigs.put(key, new WaterConfig(true, waterHeight, underwaterPalette));
+
+        // Initialize dynamic water state with the initial level
+        dynamicWaterStates.put(key, new DynamicWaterState(waterHeight));
+
         LOGGER.info(String.format("Zone %d Act %d: Water detected at Y=%d, palette=%s",
                 zoneId, actId, waterHeight,
                 (underwaterPalette != null ? "loaded" : "none")));
@@ -287,7 +333,14 @@ public class WaterSystem {
      * @return Water level Y in pixels, or 0 if no water
      */
     public int getWaterLevelY(int zoneId, int actId) {
-        WaterConfig config = waterConfigs.get(makeKey(zoneId, actId));
+        String key = makeKey(zoneId, actId);
+        // Return dynamic level if available (supports rising water)
+        DynamicWaterState dynamicState = dynamicWaterStates.get(key);
+        if (dynamicState != null) {
+            return dynamicState.currentLevel;
+        }
+        // Fallback to static config
+        WaterConfig config = waterConfigs.get(key);
         return config != null ? config.getWaterLevelY() : 0;
     }
 
@@ -362,5 +415,48 @@ public class WaterSystem {
      */
     public void reset() {
         waterConfigs.clear();
+        dynamicWaterStates.clear();
+    }
+
+    // =========================================================================
+    // Dynamic Water Level Methods (for rising/falling water like CPZ2)
+    // =========================================================================
+
+    /**
+     * Set a target water level, triggering the water to rise or fall toward it.
+     * Called by LevelEventManager when player crosses a trigger point.
+     *
+     * @param zoneId  Zone index
+     * @param actId   Act index
+     * @param targetY Target water Y position (lower = higher on screen)
+     */
+    public void setWaterLevelTarget(int zoneId, int actId, int targetY) {
+        String key = makeKey(zoneId, actId);
+        DynamicWaterState state = dynamicWaterStates.get(key);
+        if (state != null) {
+            state.setTarget(targetY);
+            LOGGER.info(String.format("Zone %d Act %d: Water target set to %d (0x%X)",
+                    zoneId, actId, targetY, targetY));
+        }
+    }
+
+    /**
+     * Update dynamic water levels. Should be called once per frame.
+     * Moves water toward its target level by 1 pixel per call.
+     */
+    public void update() {
+        for (DynamicWaterState state : dynamicWaterStates.values()) {
+            state.update();
+        }
+    }
+
+    /**
+     * Check if water is currently rising or falling toward a target.
+     *
+     * @return true if water is actively moving
+     */
+    public boolean isWaterRising(int zoneId, int actId) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        return state != null && state.rising;
     }
 }
