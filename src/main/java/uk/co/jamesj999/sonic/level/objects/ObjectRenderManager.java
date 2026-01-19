@@ -84,6 +84,9 @@ public class ObjectRenderManager {
     private final ObjectSpriteSheet tippingFloorSheet;
     private final SpriteAnimationSet tippingFloorAnimations;
 
+    // CPZ/DEZ Barrier
+    private final ObjectSpriteSheet barrierSheet;
+
     // Results screen
     private final ObjectSpriteSheet resultsSheet;
     private final Pattern[] resultsHudDigitPatterns;
@@ -141,6 +144,9 @@ public class ObjectRenderManager {
 
     // CPZ Tipping Floor renderer
     private final PatternSpriteRenderer tippingFloorRenderer;
+
+    // CPZ/DEZ Barrier renderer
+    private final PatternSpriteRenderer barrierRenderer;
 
     // Results screen renderer
     private final PatternSpriteRenderer resultsRenderer;
@@ -211,6 +217,9 @@ public class ObjectRenderManager {
         // CPZ Tipping Floor
         this.tippingFloorSheet = artData.tippingFloorSheet();
         this.tippingFloorAnimations = artData.tippingFloorAnimations();
+
+        // CPZ/DEZ Barrier
+        this.barrierSheet = artData.barrierSheet();
 
         // Results screen
         this.resultsSheet = artData.resultsSheet();
@@ -303,6 +312,10 @@ public class ObjectRenderManager {
         // CPZ Tipping Floor renderer
         this.tippingFloorRenderer = new PatternSpriteRenderer(tippingFloorSheet);
         register(tippingFloorSheet, tippingFloorRenderer);
+
+        // CPZ/DEZ Barrier renderer
+        this.barrierRenderer = new PatternSpriteRenderer(barrierSheet);
+        register(barrierSheet, barrierRenderer);
 
         // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
@@ -566,6 +579,14 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getTippingFloorAnimations() {
         return tippingFloorAnimations;
+    }
+
+    public PatternSpriteRenderer getBarrierRenderer() {
+        return barrierRenderer;
+    }
+
+    public ObjectSpriteSheet getBarrierSheet() {
+        return barrierSheet;
     }
 
     public PatternSpriteRenderer getResultsRenderer() {

@@ -294,6 +294,11 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet tippingFloorSheet = new ObjectSpriteSheet(tippingFloorPatterns, tippingFloorMappings, 3, 1);
         SpriteAnimationSet tippingFloorAnimations = createTippingFloorAnimations();
 
+        // CPZ/DEZ Barrier art (Object 0x2D) - one-way rising barrier with construction stripes
+        Pattern[] barrierPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CONSTRUCTION_STRIPES_ADDR, "ConstructionStripes");
+        List<SpriteMappingFrame> barrierMappings = createBarrierMappings();
+        ObjectSpriteSheet barrierSheet = new ObjectSpriteSheet(barrierPatterns, barrierMappings, 1, 1);
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -368,6 +373,7 @@ public class Sonic2ObjectArt {
                 cpzStairBlockSheet,
                 pipeExitSpringSheet,
                 tippingFloorSheet,
+                barrierSheet,
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
@@ -1690,6 +1696,56 @@ public class Sonic2ObjectArt {
                 SpriteAnimationEndAction.LOOP_BACK, 1));
 
         return set;
+    }
+
+    /**
+     * Creates mappings for CPZ/DEZ Barrier (Obj2D).
+     * Based on obj2D.asm mappings:
+     * Frame 0 (HTZ): 4 x 2x2 tile pieces stacked vertically (16x64 total)
+     * Frame 1 (MTZ): 2 x 3x4 tile pieces using tile $5F (24x64 total)
+     * Frame 2 (CPZ/DEZ): 2 x 2x4 tile pieces stacked vertically (16x64 total)
+     * Frame 3 (ARZ): Same as Frame 2
+     */
+    private List<SpriteMappingFrame> createBarrierMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj2D_0008): HTZ - 4 x 2x2 tile pieces
+        // spritePiece -8, -$20, 2, 2, 0, 0, 0, 0, 0
+        // spritePiece -8, -$10, 2, 2, 0, 0, 0, 0, 0
+        // spritePiece -8, 0, 2, 2, 0, 0, 0, 0, 0
+        // spritePiece -8, $10, 2, 2, 0, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-8, -0x20, 2, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-8, -0x10, 2, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-8, 0, 2, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-8, 0x10, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Map_obj2D_002A): MTZ - 2 x 3x4 tile pieces, tile $5F
+        // spritePiece -$C, -$20, 3, 4, $5F, 0, 0, 0, 0
+        // spritePiece -$C, 0, 3, 4, $5F, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x0C, -0x20, 3, 4, 0x5F, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-0x0C, 0, 3, 4, 0x5F, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (Map_obj2D_003C): CPZ/DEZ - 2 x 2x4 tile pieces
+        // spritePiece -8, -$20, 2, 4, 0, 0, 0, 0, 0
+        // spritePiece -8, 0, 2, 4, 0, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-8, -0x20, 2, 4, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-8, 0, 2, 4, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (Map_obj2D_004E): ARZ - same as Frame 2
+        // spritePiece -8, -$20, 2, 4, 0, 0, 0, 0, 0
+        // spritePiece -8, 0, 2, 4, 0, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-8, -0x20, 2, 4, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-8, 0, 2, 4, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        return frames;
     }
 
     /**

@@ -45,6 +45,7 @@ public class ObjectArtData {
         private final ObjectSpriteSheet cpzStairBlockSheet;
         private final ObjectSpriteSheet pipeExitSpringSheet;
         private final ObjectSpriteSheet tippingFloorSheet;
+        private final ObjectSpriteSheet barrierSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
@@ -98,6 +99,7 @@ public class ObjectArtData {
                         ObjectSpriteSheet cpzStairBlockSheet,
                         ObjectSpriteSheet pipeExitSpringSheet,
                         ObjectSpriteSheet tippingFloorSheet,
+                        ObjectSpriteSheet barrierSheet,
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
@@ -149,6 +151,7 @@ public class ObjectArtData {
                 this.cpzStairBlockSheet = cpzStairBlockSheet;
                 this.pipeExitSpringSheet = pipeExitSpringSheet;
                 this.tippingFloorSheet = tippingFloorSheet;
+                this.barrierSheet = barrierSheet;
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
@@ -305,6 +308,10 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet tippingFloorSheet() {
                 return tippingFloorSheet;
+        }
+
+        public ObjectSpriteSheet barrierSheet() {
+                return barrierSheet;
         }
 
         public ObjectSpriteSheet resultsSheet() {

@@ -672,12 +672,6 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         // Restore normal render priority
         player.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
 
-        // Log at WARNING level temporarily to debug exit velocity issue
-        LOGGER.warning("TUBE EXIT: xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
-                " (expected ~0x800=" + TUBE_SPEED + " in dominant axis)" +
-                ", position=(" + player.getCentreX() + "," + player.getCentreY() + ")" +
-                ", subtype=0x" + Integer.toHexString(spawn.subtype()));
-
         // Play spindash release sound
         playSound(GameSound.SPINDASH_RELEASE);
 
@@ -768,13 +762,6 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         player.setXSpeed((short) xVel);
         player.setYSpeed((short) yVel);
         mainCharDuration = frames;
-
-        // Log velocity calculation at WARNING level to debug exit velocity issue
-        LOGGER.warning("TUBE VELOCITY: from (" + currentX + "," + currentY +
-                ") to (" + targetX + "," + targetY +
-                "), dx=" + dx + ", dy=" + dy + ", absDx=" + absDx + ", absDy=" + absDy +
-                ", vel=(" + xVel + "," + yVel + "), frames=" + frames +
-                " (dominant=" + (absDy >= absDx ? "Y" : "X") + ")");
     }
 
     /**

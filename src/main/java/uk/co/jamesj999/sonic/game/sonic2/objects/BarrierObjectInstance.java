@@ -3,11 +3,13 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
+import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.SolidContact;
 import uk.co.jamesj999.sonic.level.objects.SolidObjectListener;
 import uk.co.jamesj999.sonic.level.objects.SolidObjectParams;
 import uk.co.jamesj999.sonic.level.objects.SolidObjectProvider;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -188,9 +190,16 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        // Render debug box for now (barrier is 16x64 or 24x64 pixels tall)
-        // TODO: Add proper art rendering when zone-specific art loading is implemented
-        appendDebugBox(commands);
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        if (renderManager == null) {
+            return;
+        }
+        PatternSpriteRenderer renderer = renderManager.getBarrierRenderer();
+        if (renderer == null || !renderer.isReady()) {
+            return;
+        }
+        // mappingFrame is the subtype (0=HTZ, 1=MTZ, 2=CPZ/DEZ, 3=ARZ)
+        renderer.drawFrameIndex(mappingFrame, x, y, xFlip, false);
     }
 
     @Override
@@ -264,47 +273,5 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
                     spawn.respawnTracked(),
                     spawn.rawYWord());
         }
-    }
-
-    /**
-     * Renders a debug visualization of the barrier.
-     * Shows the barrier as a vertical rectangle with the current height.
-     */
-    private void appendDebugBox(List<GLCommand> commands) {
-        // Barrier visual dimensions based on mappings
-        // Frame 0 (HTZ): 16x64 pixels (-8 to +8, -32 to +32)
-        // Frame 1 (MTZ): 24x64 pixels (-12 to +12, -32 to +32)
-        // Frame 2 (CPZ): 16x64 pixels (-8 to +8, -32 to +32)
-        // Frame 3 (ARZ): 16x64 pixels (-8 to +8, -32 to +32)
-
-        int halfWidth = widthPixels;
-        int halfHeight = 32;  // All frames are 64 pixels tall
-
-        int left = x - halfWidth;
-        int right = x + halfWidth;
-        int top = y - halfHeight;
-        int bottom = y + halfHeight;
-
-        // Draw filled rectangle with barrier color (orange/yellow for construction)
-        float r = 0.9f;
-        float g = 0.6f;
-        float b = 0.2f;
-
-        // Draw outline
-        appendLine(commands, left, top, right, top, r, g, b);
-        appendLine(commands, right, top, right, bottom, r, g, b);
-        appendLine(commands, right, bottom, left, bottom, r, g, b);
-        appendLine(commands, left, bottom, left, top, r, g, b);
-
-        // Draw cross-hatch pattern to indicate it's a barrier
-        appendLine(commands, left, top, right, bottom, r, g, b);
-        appendLine(commands, left, bottom, right, top, r, g, b);
-    }
-
-    private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2, float r, float g, float b) {
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x1, y1, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                r, g, b, x2, y2, 0, 0));
     }
 }
