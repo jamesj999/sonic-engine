@@ -356,6 +356,18 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     /**
      * Straight motion: linear trajectory.
      * ROM: Obj1D_MoveStraight at line 47929
+     *
+     * <p>Correct behavior cycle:
+     * <ol>
+     *   <li>Ball at left (initialX) goes UP</li>
+     *   <li>Ball reaches apex (y_vel == 0)</li>
+     *   <li>X teleports to right (initialX + xDistance)</li>
+     *   <li>59-frame delay (wait state) at apex</li>
+     *   <li>Ball falls DOWN on right side</li>
+     *   <li>Ball reaches bottom, resets to left - NO delay</li>
+     *   <li>Ball immediately goes UP again</li>
+     *   <li>Loop back to step 2</li>
+     * </ol>
      */
     private void updateMoveStraight() {
         // Apply velocities
@@ -365,10 +377,13 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         // Apply gravity
         yVelocity += GRAVITY;
 
-        // Check for y_vel collision (ROM: bne.s at line 47935)
-        // When collision occurs, X is set to initial + distance
+        // At apex (y_vel == 0): teleport X and ENTER WAIT STATE
+        // The delay happens at the top of the arc, not the bottom
         if (yVelocity == 0) {
             currentX = (initialX + xDistance) << 8;
+            playGloopSound();
+            state = STATE_WAIT_STRAIGHT;  // Delay at apex
+            return;  // Don't continue motion this frame
         }
 
         // Play sound at terminal velocity (ROM: cmpi.w #$180,y_vel)
@@ -376,7 +391,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             playGloopSound();
         }
 
-        // Check if returned to initial Y position
+        // Reset at bottom - NO DELAY, immediately continue
         int pixelY = currentY >> 8;
         if (pixelY >= initialY) {
             // Reset for next bounce
@@ -384,7 +399,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             currentX = initialX << 8;
             yVelocity = INITIAL_Y_VEL;
             playGloopSound();
-            state = STATE_WAIT_STRAIGHT; // Return to straight wait state
+            // NO state change - stay in STATE_MOVE_STRAIGHT for immediate rise
         }
     }
 
