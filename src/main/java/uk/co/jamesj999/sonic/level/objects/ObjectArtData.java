@@ -47,6 +47,7 @@ public class ObjectArtData {
         private final ObjectSpriteSheet pipeExitSpringSheet;
         private final ObjectSpriteSheet tippingFloorSheet;
         private final ObjectSpriteSheet barrierSheet;
+        private final ObjectSpriteSheet springboardSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
@@ -63,6 +64,7 @@ public class ObjectArtData {
         private final SpriteAnimationSet flipperAnimations;
         private final SpriteAnimationSet pipeExitSpringAnimations;
         private final SpriteAnimationSet tippingFloorAnimations;
+        private final SpriteAnimationSet springboardAnimations;
 
         public ObjectArtData(
                         ObjectSpriteSheet monitorSheet,
@@ -102,6 +104,7 @@ public class ObjectArtData {
                         ObjectSpriteSheet pipeExitSpringSheet,
                         ObjectSpriteSheet tippingFloorSheet,
                         ObjectSpriteSheet barrierSheet,
+                        ObjectSpriteSheet springboardSheet,
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
@@ -117,7 +120,8 @@ public class ObjectArtData {
                         SpriteAnimationSet signpostAnimations,
                         SpriteAnimationSet flipperAnimations,
                         SpriteAnimationSet pipeExitSpringAnimations,
-                        SpriteAnimationSet tippingFloorAnimations) {
+                        SpriteAnimationSet tippingFloorAnimations,
+                        SpriteAnimationSet springboardAnimations) {
                 this.monitorSheet = monitorSheet;
                 this.spikeSheet = spikeSheet;
                 this.spikeSideSheet = spikeSideSheet;
@@ -155,6 +159,7 @@ public class ObjectArtData {
                 this.pipeExitSpringSheet = pipeExitSpringSheet;
                 this.tippingFloorSheet = tippingFloorSheet;
                 this.barrierSheet = barrierSheet;
+                this.springboardSheet = springboardSheet;
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
@@ -171,6 +176,7 @@ public class ObjectArtData {
                 this.flipperAnimations = flipperAnimations;
                 this.pipeExitSpringAnimations = pipeExitSpringAnimations;
                 this.tippingFloorAnimations = tippingFloorAnimations;
+                this.springboardAnimations = springboardAnimations;
         }
 
         public ObjectSpriteSheet monitorSheet() {
@@ -321,6 +327,10 @@ public class ObjectArtData {
                 return barrierSheet;
         }
 
+        public ObjectSpriteSheet springboardSheet() {
+                return springboardSheet;
+        }
+
         public ObjectSpriteSheet resultsSheet() {
                 return resultsSheet;
         }
@@ -371,5 +381,9 @@ public class ObjectArtData {
 
         public SpriteAnimationSet tippingFloorAnimations() {
                 return tippingFloorAnimations;
+        }
+
+        public SpriteAnimationSet springboardAnimations() {
+                return springboardAnimations;
         }
 }

@@ -139,6 +139,7 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(Sonic2ObjectArtKeys.PIPE_EXIT_SPRING, artData.pipeExitSpringSheet());
         registerSheet(Sonic2ObjectArtKeys.TIPPING_FLOOR, artData.tippingFloorSheet());
         registerSheet(Sonic2ObjectArtKeys.BARRIER, artData.barrierSheet());
+        registerSheet(Sonic2ObjectArtKeys.SPRINGBOARD, artData.springboardSheet());
 
         // Results screen - stored separately, not in sheetOrder
         resultsSheet = artData.resultsSheet();
@@ -156,6 +157,7 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         animations.put(Sonic2ObjectArtKeys.ANIM_FLIPPER, artData.flipperAnimations());
         animations.put(Sonic2ObjectArtKeys.ANIM_PIPE_EXIT_SPRING, artData.pipeExitSpringAnimations());
         animations.put(Sonic2ObjectArtKeys.ANIM_TIPPING_FLOOR, artData.tippingFloorAnimations());
+        animations.put(Sonic2ObjectArtKeys.ANIM_SPRINGBOARD, artData.springboardAnimations());
 
         // Store HUD patterns
         hudDigitPatterns = artData.getHudDigitPatterns();

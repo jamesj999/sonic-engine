@@ -35,4 +35,8 @@ public final class Sonic2ObjectArtKeys {
 
     // CPZ/DEZ shared
     public static final String BARRIER = "barrier";
+
+    // CPZ/ARZ/MCZ shared
+    public static final String SPRINGBOARD = "springboard";
+    public static final String ANIM_SPRINGBOARD = "springboard";
 }

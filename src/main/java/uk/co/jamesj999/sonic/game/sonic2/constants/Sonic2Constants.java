@@ -145,6 +145,9 @@ public class Sonic2Constants {
     public static final int ART_NEM_BEAR_ADDR = 0x7FC90;
     public static final int ART_NEM_RABBIT_ADDR = 0x7FDD2;
 
+    // Springboard / Lever Spring (Object 0x40) - CPZ, ARZ, MCZ
+    public static final int ART_NEM_LEVER_SPRING_ADDR = 0x7AB4A;  // ArtNem_LeverSpring
+
     // CNZ Bumpers (addresses from Nemesis S2 art listing)
     public static final int ART_NEM_HEX_BUMPER_ADDR = 0x81894; // ArtNem_CNZHexBumper - Hex Bumper (ObjD7) - 6 blocks
     public static final int ART_NEM_BUMPER_ADDR = 0x8191E; // ArtNem_CNZRoundBumper - Round Bumper (Obj44) - 24 blocks

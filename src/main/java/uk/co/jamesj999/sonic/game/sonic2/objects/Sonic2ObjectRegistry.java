@@ -126,6 +126,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.CHECKPOINT,
                 (spawn, registry) -> new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // Springboard / Lever Spring (CPZ, ARZ, MCZ)
+        registerFactory(Sonic2ObjectIds.SPRINGBOARD,
+                (spawn, registry) -> new SpringboardObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         // CPZ Objects
         registerFactory(Sonic2ObjectIds.TIPPING_FLOOR,
                 (spawn, registry) -> new TippingFloorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));

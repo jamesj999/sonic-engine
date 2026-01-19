@@ -40,6 +40,9 @@ public final class Sonic2ObjectIds {
     public static final int BARRIER = 0x2D;    // Barrier (Obj2D) - one-way rising barrier
     public static final int CPZ_STAIRCASE = 0x78; // CPZ Staircase (Obj78) - 4-piece triggered elevator platform
 
+    // CPZ/ARZ/MCZ Objects
+    public static final int SPRINGBOARD = 0x40;  // Pressure spring / lever spring (Obj40)
+
     // CNZ Objects
     public static final int BUMPER = 0x44;       // Round Bumper (Obj44)
     public static final int HEX_BUMPER = 0xD7;   // Hexagonal Bumper (ObjD7)

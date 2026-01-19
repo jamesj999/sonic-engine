@@ -338,6 +338,18 @@ public class ObjectRenderManager {
         return provider.getSheet(Sonic2ObjectArtKeys.BARRIER);
     }
 
+    public PatternSpriteRenderer getSpringboardRenderer() {
+        return provider.getRenderer(Sonic2ObjectArtKeys.SPRINGBOARD);
+    }
+
+    public ObjectSpriteSheet getSpringboardSheet() {
+        return provider.getSheet(Sonic2ObjectArtKeys.SPRINGBOARD);
+    }
+
+    public SpriteAnimationSet getSpringboardAnimations() {
+        return provider.getAnimations(Sonic2ObjectArtKeys.ANIM_SPRINGBOARD);
+    }
+
     public PatternSpriteRenderer getResultsRenderer() {
         return provider.getRenderer(ObjectArtKeys.RESULTS);
     }

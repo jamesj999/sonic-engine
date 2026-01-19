@@ -304,6 +304,12 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> barrierMappings = createBarrierMappings();
         ObjectSpriteSheet barrierSheet = new ObjectSpriteSheet(barrierPatterns, barrierMappings, 1, 1);
 
+        // Springboard / Lever Spring art (Object 0x40) - CPZ, ARZ, MCZ
+        Pattern[] springboardPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_LEVER_SPRING_ADDR, "LeverSpring");
+        List<SpriteMappingFrame> springboardMappings = createSpringboardMappings();
+        ObjectSpriteSheet springboardSheet = new ObjectSpriteSheet(springboardPatterns, springboardMappings, 0, 1);
+        SpriteAnimationSet springboardAnimations = createSpringboardAnimations();
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -380,6 +386,7 @@ public class Sonic2ObjectArt {
                 pipeExitSpringSheet,
                 tippingFloorSheet,
                 barrierSheet,
+                springboardSheet,
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
@@ -395,7 +402,8 @@ public class Sonic2ObjectArt {
                 signpostAnimations,
                 flipperAnimations,
                 pipeExitSpringAnimations,
-                tippingFloorAnimations);
+                tippingFloorAnimations,
+                springboardAnimations);
 
         cachedByZone.put(cacheKey, artData);
         return artData;
@@ -1786,6 +1794,61 @@ public class Sonic2ObjectArt {
         frames.add(new SpriteMappingFrame(frame3));
 
         return frames;
+    }
+
+    /**
+     * Creates mappings for Springboard / Lever Spring (Obj40).
+     * Based on obj40.asm mappings (Map_obj40):
+     * <p>
+     * Frame 0 (idle): Two pieces forming the diagonal diving board shape
+     * - Left piece: 3x2 tiles at (-0x1C, -0x18), tile 0
+     * - Right piece: 4x2 tiles at (-4, -0x18), tile 6
+     * <p>
+     * Frame 1 (compressed): Board compressed/triggered state
+     * - Left piece: 3x2 tiles at (-0x1C, -0x18), tile 0x0E
+     * - Right piece: 4x2 tiles at (-4, -0x18), tile 0x14
+     */
+    private List<SpriteMappingFrame> createSpringboardMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj40_0004): Idle/diagonal state
+        // spritePiece -$1C, -$18, 3, 2, 0, 0, 0, 0, 0
+        // spritePiece -4, -$18, 4, 2, 6, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x1C, -0x18, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-4, -0x18, 4, 2, 6, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Map_obj40_0016): Compressed/triggered state
+        // spritePiece -$1C, -$18, 3, 2, $E, 0, 0, 0, 0
+        // spritePiece -4, -$18, 4, 2, $14, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x1C, -0x18, 3, 2, 0x0E, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-4, -0x18, 4, 2, 0x14, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        return frames;
+    }
+
+    /**
+     * Creates animations for Springboard / Lever Spring (Obj40).
+     * <p>
+     * Anim 0: Idle - holds frame 0 indefinitely
+     * Anim 1: Triggered - shows compressed frame 1, then switches back to idle (anim 0)
+     */
+    private SpriteAnimationSet createSpringboardAnimations() {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+
+        // Anim 0: Idle - hold frame 0 indefinitely
+        set.addScript(0, new SpriteAnimationScript(0x0F, List.of(0),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 1: Triggered - show frame 1 briefly, then switch to anim 0
+        // Short delay (3 frames) before switching back
+        set.addScript(1, new SpriteAnimationScript(0x03, List.of(1, 0),
+                SpriteAnimationEndAction.SWITCH, 0));
+
+        return set;
     }
 
     /**

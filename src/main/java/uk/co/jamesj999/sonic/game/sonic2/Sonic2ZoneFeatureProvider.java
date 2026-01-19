@@ -1,12 +1,16 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
 import uk.co.jamesj999.sonic.game.sonic2.objects.CPZPylonObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.Sonic2ObjectRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.scroll.Sonic2ZoneConstants;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperCollisionManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperDataLoader;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperPlacementManager;
@@ -41,6 +45,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
 
     private CNZBumperCollisionManager cnzBumperManager;
     private ObjectInstance cpzPylon;
+    private WaterSurfaceManager waterSurfaceManager;
     private int currentZone = -1;
     private int currentAct = -1;
 
@@ -65,7 +70,10 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
             initCPZPylon();
         }
 
-        // TODO: Add water level initialization for ARZ, CPZ, etc.
+        // Initialize water surface manager for zones with water (CPZ Act 2, ARZ)
+        if (hasWater(zoneIndex)) {
+            initWaterSurfaceManager(rom, zoneIndex, actIndex);
+        }
     }
 
     private void initCNZBumpers(Rom rom, int actIndex, int cameraX) {
@@ -115,6 +123,52 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         }
     }
 
+    /**
+     * Initialize water surface manager for zones with water (CPZ, ARZ).
+     * Loads water surface patterns from ROM and creates the WaterSurfaceManager.
+     *
+     * @param rom The ROM to load patterns from
+     * @param zoneIndex The current zone index
+     * @param actIndex The current act index
+     */
+    private void initWaterSurfaceManager(Rom rom, int zoneIndex, int actIndex) {
+        try {
+            // Create a Sonic2ObjectArt instance to load water surface patterns
+            RomByteReader reader = RomByteReader.fromRom(rom);
+            Sonic2ObjectArt objectArt = new Sonic2ObjectArt(rom, reader);
+
+            // Load water surface patterns
+            Pattern[] cpzPatterns = objectArt.loadWaterSurfaceCPZPatterns();
+            Pattern[] arzPatterns = objectArt.loadWaterSurfaceARZPatterns();
+
+            LOGGER.info(String.format("Loaded water surface patterns: CPZ=%d, ARZ=%d",
+                    cpzPatterns.length, arzPatterns.length));
+
+            // Create water surface manager
+            waterSurfaceManager = new WaterSurfaceManager(zoneIndex, actIndex, cpzPatterns, arzPatterns);
+
+            LOGGER.info("Water surface manager initialized for zone " + zoneIndex + " act " + actIndex);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to initialize water surface manager", e);
+            waterSurfaceManager = null;
+        }
+    }
+
+    @Override
+    public void render(Camera camera, int frameCounter) {
+        if (waterSurfaceManager != null && waterSurfaceManager.isInitialized()) {
+            waterSurfaceManager.render(camera, frameCounter);
+        }
+    }
+
+    @Override
+    public int ensurePatternsCached(GraphicsManager graphicsManager, int baseIndex) {
+        if (waterSurfaceManager != null) {
+            return waterSurfaceManager.ensurePatternsCached(graphicsManager, baseIndex);
+        }
+        return baseIndex;
+    }
+
     @Override
     public void update(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
         if (cnzBumperManager != null && zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
@@ -126,6 +180,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     public void reset() {
         cnzBumperManager = null;
         cpzPylon = null;
+        waterSurfaceManager = null;
         currentZone = -1;
         currentAct = -1;
     }

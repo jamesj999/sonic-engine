@@ -21,7 +21,6 @@ import uk.co.jamesj999.sonic.game.ObjectArtProvider;
 import uk.co.jamesj999.sonic.game.RespawnState;
 import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
 
-import uk.co.jamesj999.sonic.game.sonic2.WaterSurfaceManager;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArt;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;
 import uk.co.jamesj999.sonic.debug.DebugOption;
@@ -124,7 +123,6 @@ public class LevelManager {
     private AnimatedPaletteManager animatedPaletteManager;
     private RespawnState checkpointState;
     private LevelState levelGamestate;
-    private WaterSurfaceManager waterSurfaceManager;
 
     private boolean specialStageRequestedFromCheckpoint;
     private boolean titleCardRequested;
@@ -215,10 +213,13 @@ public class LevelManager {
             }
             ringManager = new RingManager(ringPlacementManager, ringRenderManager);
             lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
-            // Initialize zone-specific features (CNZ bumpers, CPZ pylon, etc.)
+            // Initialize zone-specific features (CNZ bumpers, CPZ pylon, water surface, etc.)
             zoneFeatureProvider = gameModule.getZoneFeatureProvider();
             if (zoneFeatureProvider != null) {
                 zoneFeatureProvider.initZoneFeatures(rom, level.getZoneIndex(), currentAct, camera.getX());
+                // Cache zone feature patterns (water surface, etc.)
+                int waterPatternBase = 0x30000; // High offset to avoid collision
+                zoneFeatureProvider.ensurePatternsCached(graphicsManager, waterPatternBase);
             }
             initObjectArt();
             initPlayerSpriteArt();
@@ -235,9 +236,6 @@ public class LevelManager {
             // 0x0F for ARZ)
             WaterSystem waterSystem = WaterSystem.getInstance();
             waterSystem.loadForLevel(rom, level.getZoneIndex(), currentAct, level.getObjects());
-
-            // Initialize water surface manager for zones with water
-            initWaterSurfaceManager(rom);
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load level " + levelIndex, e);
             throw e;
@@ -464,53 +462,6 @@ public class LevelManager {
     }
 
     /**
-     * Initialize water surface manager for zones with water (CPZ, ARZ).
-     * Loads water surface patterns from ROM and caches them for rendering.
-     *
-     * @param rom The ROM to load patterns from
-     */
-    private void initWaterSurfaceManager(Rom rom) {
-        waterSurfaceManager = null;
-        if (level == null) {
-            return;
-        }
-
-        WaterSystem waterSystem = WaterSystem.getInstance();
-        if (!waterSystem.hasWater(level.getZoneIndex(), currentAct)) {
-            LOGGER.fine("No water in current level - skipping water surface manager");
-            return;
-        }
-
-        try {
-            // Create a Sonic2ObjectArt instance to load water surface patterns
-            RomByteReader reader = RomByteReader.fromRom(rom);
-            Sonic2ObjectArt objectArt = new Sonic2ObjectArt(rom, reader);
-
-            // Load water surface patterns
-            Pattern[] cpzPatterns = objectArt.loadWaterSurfaceCPZPatterns();
-            Pattern[] arzPatterns = objectArt.loadWaterSurfaceARZPatterns();
-
-            LOGGER.info(String.format("Loaded water surface patterns: CPZ=%d, ARZ=%d",
-                    cpzPatterns.length, arzPatterns.length));
-
-            // Create water surface manager
-            waterSurfaceManager = new WaterSurfaceManager(
-                    level.getZoneIndex(), currentAct, cpzPatterns, arzPatterns);
-
-            // Calculate the next available pattern index for water surface
-            // Water surface uses a dedicated pattern namespace to avoid conflicts
-            int waterSurfacePatternBase = 0x30000; // High offset to avoid collision
-            waterSurfaceManager.ensurePatternsCached(graphicsManager, waterSurfacePatternBase);
-
-            LOGGER.info("Water surface manager initialized for zone " + level.getZoneIndex() +
-                    " act " + currentAct);
-        } catch (Exception e) {
-            LOGGER.log(SEVERE, "Failed to initialize water surface manager", e);
-            waterSurfaceManager = null;
-        }
-    }
-
-    /**
      * Debug Functionality to print each pattern to the screen.
      */
     public void drawAllPatterns() {
@@ -672,8 +623,8 @@ public class LevelManager {
         }
 
         // Draw water surface sprites at the water line (CPZ2, ARZ1, ARZ2)
-        if (waterSurfaceManager != null && waterSurfaceManager.isInitialized()) {
-            waterSurfaceManager.render(camera, frameCounter);
+        if (zoneFeatureProvider != null) {
+            zoneFeatureProvider.render(camera, frameCounter);
         }
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {

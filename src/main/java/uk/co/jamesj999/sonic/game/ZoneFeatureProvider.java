@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.io.IOException;
@@ -71,4 +72,23 @@ public interface ZoneFeatureProvider {
      * @return the water level Y position, or Integer.MAX_VALUE if no water
      */
     int getWaterLevel(int zoneIndex, int actIndex);
+
+    /**
+     * Renders zone-specific visual features (e.g., water surface sprites).
+     * Called during the draw phase after level rendering.
+     *
+     * @param camera the camera for screen coordinates
+     * @param frameCounter current frame number for animation
+     */
+    void render(Camera camera, int frameCounter);
+
+    /**
+     * Ensures zone feature patterns are cached in the graphics manager.
+     * Called during level initialization.
+     *
+     * @param graphicsManager the graphics manager
+     * @param baseIndex starting pattern index
+     * @return next available pattern index after caching
+     */
+    int ensurePatternsCached(GraphicsManager graphicsManager, int baseIndex);
 }
