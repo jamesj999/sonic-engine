@@ -128,6 +128,16 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
      */
     private static int activeInstanceCount = 0;
 
+    /**
+     * Gloop sound toggle flag. Only plays every other call.
+     * ROM: zGloopFlag in s2.sounddriver.asm lines 2144-2149
+     * <p>
+     * The original ROM implements this in the Z80 sound driver, but since
+     * Gloop is exclusively used by BlueBalls, we implement it here instead
+     * to keep the SMPS driver generic.
+     */
+    private static boolean gloopToggle = false;
+
     // ========================================================================
     // Sibling Spawn Tracking (Bug Fix #2)
     // Tracks which spawn locations have already created siblings.
@@ -304,9 +314,14 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Wait state for straight motion: uses countdown timer like the original ROM.
+     * Wait state for straight motion: provides delay at apex.
      * <p>
-     * ROM: Obj1D_Wait at routine 6, line 47893 (same logic as arc wait)
+     * NOTE: The ROM's Obj1D_MoveStraight never returns to wait state - it bounces
+     * forever. We use wait state at apex as an implementation detail to achieve
+     * correct visual timing, but we do NOT play sound here since the ROM doesn't
+     * have this transition.
+     * <p>
+     * ROM sounds for straight motion per cycle: terminal velocity + bottom only.
      */
     private void updateWaitStraight() {
         waitTimer--;
@@ -314,9 +329,11 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             return; // Still waiting
         }
         // Timer went negative - transition to motion
-        // Set timer for NEXT cycle (59 frames wait after this bounce completes)
+        // Set timer for NEXT cycle
         waitTimer = WAIT_DURATION;
-        playGloopSound();
+        // NO sound here - ROM's straight motion never returns to wait state,
+        // so this transition doesn't exist in the original. We only use it
+        // for timing purposes.
         state = STATE_MOVE_STRAIGHT;
     }
 
@@ -379,9 +396,10 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
 
         // At apex (y_vel == 0): teleport X and ENTER WAIT STATE
         // The delay happens at the top of the arc, not the bottom
+        // ROM lines 47945-47948: x_pos = objoff_38 + objoff_3A (NO sound here)
         if (yVelocity == 0) {
             currentX = (initialX + xDistance) << 8;
-            playGloopSound();
+            // Note: ROM does NOT play sound at apex, only at terminal velocity and bottom
             state = STATE_WAIT_STRAIGHT;  // Delay at apex
             return;  // Don't continue motion this frame
         }
@@ -453,13 +471,23 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Plays the gloop sound effect ONLY if this object is on-screen.
-     * ROM: PlaySoundLocal (s2.asm line 1555) checks render_flags.on_screen
-     * before queueing the sound, preventing off-screen objects from
-     * playing audio.
+     * Plays the gloop sound effect with toggle behavior.
+     * <p>
+     * Two checks are performed:
+     * <ol>
+     *   <li>On-screen check: ROM's PlaySoundLocal (s2.asm line 1555) checks
+     *       render_flags.on_screen before queueing sound</li>
+     *   <li>Toggle check: ROM's zGloopFlag (s2.sounddriver.asm:2144) only
+     *       plays every other call to prevent sound spam from multiple balls</li>
+     * </ol>
      */
     private void playGloopSound() {
         if (!isOnScreen()) {
+            return;
+        }
+        // Toggle flag - only play every other call (ROM: zGloopFlag)
+        gloopToggle = !gloopToggle;
+        if (!gloopToggle) {
             return;
         }
         try {
@@ -560,10 +588,11 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     /**
      * Resets all global state for BlueBalls objects.
      * Call this when loading a new level or restarting the current level
-     * to ensure clean sibling tracking.
+     * to ensure clean sibling tracking and sound state.
      */
     public static void resetGlobalState() {
         activeInstanceCount = 0;
         spawnedSiblingLocations.clear();
+        gloopToggle = false;
     }
 }
