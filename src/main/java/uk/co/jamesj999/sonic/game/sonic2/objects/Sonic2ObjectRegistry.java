@@ -127,6 +127,8 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
                 (spawn, registry) -> new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
         // CPZ Objects
+        registerFactory(Sonic2ObjectIds.TIPPING_FLOOR,
+                (spawn, registry) -> new TippingFloorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.SPEED_BOOSTER,
                 (spawn, registry) -> new SpeedBoosterObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.CPZ_SPIN_TUBE,
@@ -135,6 +137,12 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
                 (spawn, registry) -> new BlueBallsObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.BREAKABLE_BLOCK,
                 (spawn, registry) -> new BreakableBlockObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.PIPE_EXIT_SPRING,
+                (spawn, registry) -> new PipeExitSpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.BARRIER,
+                (spawn, registry) -> new BarrierObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.CPZ_STAIRCASE,
+                (spawn, registry) -> new CPZStaircaseObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
         // CNZ Objects
         registerFactory(Sonic2ObjectIds.BUMPER,

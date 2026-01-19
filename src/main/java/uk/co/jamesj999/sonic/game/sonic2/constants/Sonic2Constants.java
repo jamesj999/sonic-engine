@@ -170,6 +170,17 @@ public class Sonic2Constants {
     public static final int ART_NEM_SPEED_BOOSTER_ADDR = 0x824D4;  // ArtNem_CPZBooster (verified)
     public static final int MAP_UNC_SPEED_BOOSTER_ADDR = 0x223E2;  // Obj1B_MapUnc
 
+    // CPZ Pipe Exit Spring (Object 0x7B) - warp tube exit spring
+    public static final int ART_NEM_PIPE_EXIT_SPRING_ADDR = 0x82C06;  // ArtNem_CPZTubeSpring (verified)
+
+    // CPZ Tipping Floor (Object 0x0B) - Small yellow platform that tips
+    public static final int ART_NEM_CPZ_ANIMATED_BITS_ADDR = 0x82864;  // ArtNem_CPZAnimatedBits (verified)
+
+    // Barrier (Object 0x2D) - One-way rising barrier
+    public static final int ART_NEM_CONSTRUCTION_STRIPES_ADDR = 0x827F8;  // ArtNem_ConstructionStripes (CPZ/DEZ)
+    public static final int ART_NEM_ARZ_BARRIER_ADDR = 0x830D2;           // ArtNem_ARZBarrierThing
+    public static final int MAP_UNC_BARRIER_ADDR = 0x11822;               // Obj2D_MapUnc_11822 (Enigma)
+
     // CPZ BlueBalls (Object 0x1D) - Bouncing water droplet hazard
     public static final int ART_NEM_CPZ_DROPLET_ADDR = 0x8253C;  // ArtNem_CPZDroplet (verified)
 
@@ -180,6 +191,9 @@ public class Sonic2Constants {
     public static final int MAP_UNC_OBJ19_ADDR = 0x2222A;  // Obj19_MapUnc_2222A
     public static final int ART_NEM_CPZ_ELEVATOR_ADDR = 0x82216;    // ArtNem_CPZElevator (verified)
     public static final int ART_NEM_OOZ_ELEVATOR_ADDR = 0x810B8;    // ArtNem_OOZElevator (verified)
+
+    // CPZ Staircase (Object 0x78) - shares appearance with CPZ platform
+    public static final int ART_NEM_CPZ_STAIRBLOCK_ADDR = 0x82A46;  // ArtNem_CPZStairBlock (Moving block from CPZ)
     public static final int ART_NEM_WFZ_PLATFORM_ADDR = 0x8D96E;    // ArtNem_WfzFloatingPlatform (verified)
     public static final int ART_TILE_CPZ_ELEVATOR = 0x03A0;  // palette 3
     public static final int ART_TILE_OOZ_ELEVATOR = 0x02F4;  // palette 3

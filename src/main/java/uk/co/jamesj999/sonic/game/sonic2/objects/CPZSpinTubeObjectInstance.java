@@ -664,11 +664,19 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
             player.setPinballMode(true);
         }
 
+        // Set springing frames to give the player ceiling collision immunity.
+        // This prevents the movement manager from immediately zeroing ySpeed when the
+        // exit point is inside the tube's solid geometry. 15 frames matches springs.
+        player.setSpringing(15);
+
         // Restore normal render priority
         player.setPriorityBucket(RenderPriority.PLAYER_DEFAULT);
 
-        LOGGER.fine("Spin tube exit: xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
-                ", position=(" + player.getCentreX() + "," + player.getCentreY() + ")");
+        // Log at WARNING level temporarily to debug exit velocity issue
+        LOGGER.warning("TUBE EXIT: xSpeed=" + player.getXSpeed() + ", ySpeed=" + player.getYSpeed() +
+                " (expected ~0x800=" + TUBE_SPEED + " in dominant axis)" +
+                ", position=(" + player.getCentreX() + "," + player.getCentreY() + ")" +
+                ", subtype=0x" + Integer.toHexString(spawn.subtype()));
 
         // Play spindash release sound
         playSound(GameSound.SPINDASH_RELEASE);
@@ -761,9 +769,12 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
         player.setYSpeed((short) yVel);
         mainCharDuration = frames;
 
-        LOGGER.fine("calculateVelocity: from (" + currentX + "," + currentY +
+        // Log velocity calculation at WARNING level to debug exit velocity issue
+        LOGGER.warning("TUBE VELOCITY: from (" + currentX + "," + currentY +
                 ") to (" + targetX + "," + targetY +
-                "), vel=(" + xVel + "," + yVel + "), frames=" + frames);
+                "), dx=" + dx + ", dy=" + dy + ", absDx=" + absDx + ", absDy=" + absDy +
+                ", vel=(" + xVel + "," + yVel + "), frames=" + frames +
+                " (dominant=" + (absDy >= absDx ? "Y" : "X") + ")");
     }
 
     /**

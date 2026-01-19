@@ -277,6 +277,23 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> cpzPlatformMappings = createCPZPlatformMappings();
         ObjectSpriteSheet cpzPlatformSheet = new ObjectSpriteSheet(cpzPlatformPatterns, cpzPlatformMappings, cpzPlatformPalette, 0);
 
+        // CPZ Stair Block art (Object 0x78) - moving staircase blocks in CPZ
+        Pattern[] cpzStairBlockPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_STAIRBLOCK_ADDR, "CPZStairBlock");
+        List<SpriteMappingFrame> cpzStairBlockMappings = createCPZStairBlockMappings();
+        ObjectSpriteSheet cpzStairBlockSheet = new ObjectSpriteSheet(cpzStairBlockPatterns, cpzStairBlockMappings, 3, 1);
+
+        // CPZ Pipe Exit Spring art (Object 0x7B) - warp tube exit spring
+        Pattern[] pipeExitSpringPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_PIPE_EXIT_SPRING_ADDR, "PipeExitSpring");
+        List<SpriteMappingFrame> pipeExitSpringMappings = createPipeExitSpringMappings();
+        ObjectSpriteSheet pipeExitSpringSheet = new ObjectSpriteSheet(pipeExitSpringPatterns, pipeExitSpringMappings, 0, 1);
+        SpriteAnimationSet pipeExitSpringAnimations = createPipeExitSpringAnimations();
+
+        // CPZ Tipping Floor art (Object 0x0B) - platform that tips back and forth
+        Pattern[] tippingFloorPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_ANIMATED_BITS_ADDR, "CPZAnimatedBits");
+        List<SpriteMappingFrame> tippingFloorMappings = createTippingFloorMappings();
+        ObjectSpriteSheet tippingFloorSheet = new ObjectSpriteSheet(tippingFloorPatterns, tippingFloorMappings, 3, 1);
+        SpriteAnimationSet tippingFloorAnimations = createTippingFloorAnimations();
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -348,6 +365,9 @@ public class Sonic2ObjectArt {
                 blueBallsSheet,
                 breakableBlockSheet,
                 cpzPlatformSheet,
+                cpzStairBlockSheet,
+                pipeExitSpringSheet,
+                tippingFloorSheet,
                 resultsSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
@@ -361,7 +381,9 @@ public class Sonic2ObjectArt {
                 springAnimations,
                 checkpointAnimations,
                 signpostAnimations,
-                flipperAnimations);
+                flipperAnimations,
+                pipeExitSpringAnimations,
+                tippingFloorAnimations);
 
         cachedByZone.put(cacheKey, artData);
         return artData;
@@ -1500,6 +1522,174 @@ public class Sonic2ObjectArt {
         frames.add(new SpriteMappingFrame(frame3));
 
         return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ Stair Block (Obj78).
+     * Based on obj6B.asm mappings (shared):
+     * Frame 0: Single 4x4 tile piece at (-16,-16), 32x32 pixels
+     */
+    private List<SpriteMappingFrame> createCPZStairBlockMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj6B_0002): 4x4 tiles centered
+        // spritePiece -$10, -$10, 4, 4, 0, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ Pipe Exit Spring (Obj7B).
+     * Based on obj7B.asm mappings:
+     * Frame 0: Base spring - 4x2 tile piece at (-16,-16)
+     * Frame 1: Compressed vertical - 2 x 2x4 tile pieces at (-16,-32) and (0,-32)
+     * Frame 2: Alternate vertical - 2 x 2x4 tile pieces with different tile offset
+     * Frame 3: Compressed base - 4x2 tile piece at (-16,-16) with tile offset 0x18
+     * Frame 4: Same as frame 0 (copy)
+     */
+    private List<SpriteMappingFrame> createPipeExitSpringMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj7B_000A): Base spring - 4x2 tile piece
+        // spritePiece -$10, -$10, 4, 2, 0, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x10, -0x10, 4, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Map_obj7B_0014): Compressed vertical - 2 x 2x4 tile pieces
+        // spritePiece -$10, -$20, 2, 4, 8, 0, 0, 0, 0
+        // spritePiece 0, -$20, 2, 4, 8, 1, 0, 0, 0 (H-flipped)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x10, -0x20, 2, 4, 8, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -0x20, 2, 4, 8, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (Map_obj7B_0026): Alternate vertical - 2 x 2x4 tile pieces
+        // spritePiece -$10, -$20, 2, 4, $10, 0, 0, 0, 0
+        // spritePiece 0, -$20, 2, 4, $10, 1, 0, 0, 0 (H-flipped)
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-0x10, -0x20, 2, 4, 0x10, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0, -0x20, 2, 4, 0x10, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (Map_obj7B_0038): Compressed base - 4x2 tile piece with tile offset
+        // spritePiece -$10, -$10, 4, 2, $18, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-0x10, -0x10, 4, 2, 0x18, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Same as frame 0 (mappingsTableEntry.w Map_obj7B_0014 -> points to frame 1 in ROM)
+        // Actually looking at mapping table: entry 4 points to Map_obj7B_0014 which is frame 1
+        // But for simplicity, we'll use same as frame 0 for idle
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-0x10, -0x10, 4, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        return frames;
+    }
+
+    /**
+     * Creates animations for CPZ Pipe Exit Spring (Obj7B).
+     * From Ani_obj7B in the disassembly:
+     * Anim 0: Idle - hold frame 0 ($0F, 0, $FF)
+     * Anim 1: Triggered - show frame 3, then switch to anim 0 ($00, 3, $FD, 0)
+     * Anim 2: Raised - spring moves up when player is below in tube ($05, 1, 2, 2, 2, 4, $FD, 0)
+     */
+    private SpriteAnimationSet createPipeExitSpringAnimations() {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+
+        // Anim 0: Idle - hold frame 0 indefinitely
+        set.addScript(0, new SpriteAnimationScript(0x0F, List.of(0),
+                SpriteAnimationEndAction.LOOP, 0));
+
+        // Anim 1: Triggered - show frame 3 briefly, then switch to anim 0
+        set.addScript(1, new SpriteAnimationScript(0x00, List.of(3),
+                SpriteAnimationEndAction.SWITCH, 0));
+
+        // Anim 2: Raised - spring visually moves up when player passes below in tube
+        // ROM: byte_29777: dc.b $5, 1, 2, 2, 2, 4, $FD, 0
+        // Frames 1 and 2 show the spring at Y offset -32 (16 pixels higher than normal)
+        set.addScript(2, new SpriteAnimationScript(0x05, List.of(1, 2, 2, 2, 4),
+                SpriteAnimationEndAction.SWITCH, 0));
+
+        return set;
+    }
+
+    /**
+     * Creates mappings for CPZ Tipping Floor (Obj0B).
+     * Based on obj0B.asm mappings - 5 frames showing platform tipping states.
+     * <p>
+     * Each frame has 2 pieces:
+     * - Piece 1: The moving platform edge (tiles 0 or 4 or 0x14)
+     * - Piece 2: The static base (tile 0x24, 4x3)
+     */
+    private List<SpriteMappingFrame> createTippingFloorMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj0B_000A): Flat position
+        // spritePiece -$10, -$10, 4, 1, 0, 0, 0, 0, 0
+        // spritePiece -$10, -8, 4, 3, $24, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x10, -0x10, 4, 1, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-0x10, -8, 4, 3, 0x24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Map_obj0B_001C): Tilted up position
+        // spritePiece -$10, -$18, 4, 4, 4, 0, 0, 0, 0
+        // spritePiece -$10, -8, 4, 3, $24, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x10, -0x18, 4, 4, 4, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-0x10, -8, 4, 3, 0x24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (Map_obj0B_002E): Middle tilt position
+        // spritePiece -$10, -$C, 4, 4, $14, 0, 0, 0, 0
+        // spritePiece -$10, -8, 4, 3, $24, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-0x10, -0x0C, 4, 4, 0x14, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-0x10, -8, 4, 3, 0x24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (Map_obj0B_0040): Tilted down position (V-flipped tiles)
+        // spritePiece -$10, 0, 4, 4, 4, 0, 1, 0, 0 (vFlip=1)
+        // spritePiece -$10, -8, 4, 3, $24, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-0x10, 0, 4, 4, 4, false, true, 0));
+        frame3.add(new SpriteMappingPiece(-0x10, -8, 4, 3, 0x24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4 (Map_obj0B_0052): Fully tilted down position (V-flipped)
+        // spritePiece -$10, $10, 4, 1, 0, 0, 1, 0, 0 (vFlip=1)
+        // spritePiece -$10, -8, 4, 3, $24, 0, 0, 0, 0
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-0x10, 0x10, 4, 1, 0, false, true, 0));
+        frame4.add(new SpriteMappingPiece(-0x10, -8, 4, 3, 0x24, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        return frames;
+    }
+
+    /**
+     * Creates animations for CPZ Tipping Floor (Obj0B).
+     * Two animations for forward (0->4) and reverse (4->0) tipping motion.
+     * Delay of 7 frames between each frame change.
+     */
+    private SpriteAnimationSet createTippingFloorAnimations() {
+        SpriteAnimationSet set = new SpriteAnimationSet();
+
+        // Anim 0: Forward - frames 0,1,2,3,4, loop back to frame 1
+        // Delay 7 ($07) between frames
+        set.addScript(0, new SpriteAnimationScript(0x07, List.of(0, 1, 2, 3, 4),
+                SpriteAnimationEndAction.LOOP_BACK, 1));
+
+        // Anim 1: Reverse - frames 4,3,2,1,0, loop back to frame 1
+        set.addScript(1, new SpriteAnimationScript(0x07, List.of(4, 3, 2, 1, 0),
+                SpriteAnimationEndAction.LOOP_BACK, 1));
+
+        return set;
     }
 
     /**

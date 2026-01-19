@@ -59,6 +59,7 @@ public class ObjectDiscoveryTool {
     private static final Set<Integer> IMPLEMENTED_IDS = Set.of(
             0x03,  // LayerSwitcher (via PlaneSwitcherManager, no visual instance)
             0x06,  // Spiral
+            0x0B,  // TippingFloor (CPZ)
             0x0D,  // Signpost
             0x11,  // Bridge
             0x15,  // SwingingPlatform
@@ -68,6 +69,7 @@ public class ObjectDiscoveryTool {
             0x1C,  // BridgeStake
             0x1D,  // BlueBalls (CPZ)
             0x1E,  // CPZSpinTube
+            0x2D,  // Barrier (one-way rising platform)
             0x26,  // Monitor
             0x32,  // BreakableBlock (CPZ metal blocks / HTZ rocks)
             0x36,  // Spikes
@@ -77,7 +79,9 @@ public class ObjectDiscoveryTool {
             0x4B,  // Buzzer
             0x5C,  // Masher
             0x74,  // InvisibleBlock
+            0x78,  // CPZStaircase (4-piece triggered elevator platform)
             0x79,  // Checkpoint
+            0x7B,  // PipeExitSpring (CPZ warp tube exit spring)
             0x9D,  // Coconuts
             0xD8   // BonusBlock
     );

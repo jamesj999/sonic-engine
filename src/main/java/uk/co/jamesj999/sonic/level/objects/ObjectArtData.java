@@ -42,6 +42,9 @@ public class ObjectArtData {
         private final ObjectSpriteSheet blueBallsSheet;
         private final ObjectSpriteSheet breakableBlockSheet;
         private final ObjectSpriteSheet cpzPlatformSheet;
+        private final ObjectSpriteSheet cpzStairBlockSheet;
+        private final ObjectSpriteSheet pipeExitSpringSheet;
+        private final ObjectSpriteSheet tippingFloorSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
@@ -56,6 +59,8 @@ public class ObjectArtData {
         private final SpriteAnimationSet checkpointAnimations;
         private final SpriteAnimationSet signpostAnimations;
         private final SpriteAnimationSet flipperAnimations;
+        private final SpriteAnimationSet pipeExitSpringAnimations;
+        private final SpriteAnimationSet tippingFloorAnimations;
 
         public ObjectArtData(
                         ObjectSpriteSheet monitorSheet,
@@ -90,6 +95,9 @@ public class ObjectArtData {
                         ObjectSpriteSheet blueBallsSheet,
                         ObjectSpriteSheet breakableBlockSheet,
                         ObjectSpriteSheet cpzPlatformSheet,
+                        ObjectSpriteSheet cpzStairBlockSheet,
+                        ObjectSpriteSheet pipeExitSpringSheet,
+                        ObjectSpriteSheet tippingFloorSheet,
                         ObjectSpriteSheet resultsSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
@@ -103,7 +111,9 @@ public class ObjectArtData {
                         SpriteAnimationSet springAnimations,
                         SpriteAnimationSet checkpointAnimations,
                         SpriteAnimationSet signpostAnimations,
-                        SpriteAnimationSet flipperAnimations) {
+                        SpriteAnimationSet flipperAnimations,
+                        SpriteAnimationSet pipeExitSpringAnimations,
+                        SpriteAnimationSet tippingFloorAnimations) {
                 this.monitorSheet = monitorSheet;
                 this.spikeSheet = spikeSheet;
                 this.spikeSideSheet = spikeSideSheet;
@@ -136,6 +146,9 @@ public class ObjectArtData {
                 this.blueBallsSheet = blueBallsSheet;
                 this.breakableBlockSheet = breakableBlockSheet;
                 this.cpzPlatformSheet = cpzPlatformSheet;
+                this.cpzStairBlockSheet = cpzStairBlockSheet;
+                this.pipeExitSpringSheet = pipeExitSpringSheet;
+                this.tippingFloorSheet = tippingFloorSheet;
                 this.resultsSheet = resultsSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
@@ -150,6 +163,8 @@ public class ObjectArtData {
                 this.checkpointAnimations = checkpointAnimations;
                 this.signpostAnimations = signpostAnimations;
                 this.flipperAnimations = flipperAnimations;
+                this.pipeExitSpringAnimations = pipeExitSpringAnimations;
+                this.tippingFloorAnimations = tippingFloorAnimations;
         }
 
         public ObjectSpriteSheet monitorSheet() {
@@ -280,6 +295,18 @@ public class ObjectArtData {
                 return cpzPlatformSheet;
         }
 
+        public ObjectSpriteSheet cpzStairBlockSheet() {
+                return cpzStairBlockSheet;
+        }
+
+        public ObjectSpriteSheet pipeExitSpringSheet() {
+                return pipeExitSpringSheet;
+        }
+
+        public ObjectSpriteSheet tippingFloorSheet() {
+                return tippingFloorSheet;
+        }
+
         public ObjectSpriteSheet resultsSheet() {
                 return resultsSheet;
         }
@@ -322,5 +349,13 @@ public class ObjectArtData {
 
         public SpriteAnimationSet flipperAnimations() {
                 return flipperAnimations;
+        }
+
+        public SpriteAnimationSet pipeExitSpringAnimations() {
+                return pipeExitSpringAnimations;
+        }
+
+        public SpriteAnimationSet tippingFloorAnimations() {
+                return tippingFloorAnimations;
         }
 }

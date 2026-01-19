@@ -944,7 +944,7 @@ public class LevelManager {
         // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
-        int fboHeight = 224; // Match screen height for correct Y coordinate alignment
+        int fboHeight = 256; // Full background map height for complete parallax
 
         // Extra buffer on each side
         int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side

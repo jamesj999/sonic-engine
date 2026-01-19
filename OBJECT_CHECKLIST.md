@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-18 22:08:27
+Generated: 2026-01-19 15:22:19
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 23 (19.2%)
-- **Unimplemented:** 97 (80.8%)
+- **Implemented:** 27 (22.5%)
+- **Unimplemented:** 93 (77.5%)
 
 ## Implemented Objects
 
@@ -14,6 +14,7 @@ Generated: 2026-01-18 22:08:27
 |----|------|------------|-------|
 | 0x03 | LayerSwitcher | 299 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, SCZ1 |
 | 0x06 | Spiral | 18 | EHZ1, EHZ2, MTZ1, MTZ2, MTZ3 |
+| 0x0B | TippingFloor | 18 | CPZ1, CPZ2 |
 | 0x0D | GoalPlate | 13 | EHZ1, EHZ2, CPZ1, ARZ1, CNZ1, CNZ2, HTZ1, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2 |
 | 0x11 | Bridge | 14 | EHZ1, EHZ2 |
 | 0x15 | SwingingPlatform | 7 | ARZ2, MCZ1, MCZ2 |
@@ -24,6 +25,7 @@ Generated: 2026-01-18 22:08:27
 | 0x1D | BlueBalls | 7 | CPZ1 |
 | 0x1E | CPZSpinTube | 16 | CPZ1, CPZ2 |
 | 0x26 | Monitor | 245 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
+| 0x2D | Barrier | 35 | CPZ1, CPZ2, HTZ1, HTZ2, MTZ1, MTZ2, MTZ3, WFZ1, DEZ1 |
 | 0x32 | BreakableBlock | 28 | CPZ1, CPZ2, HTZ1, HTZ2 |
 | 0x36 | Spikes | 204 | EHZ1, EHZ2, CPZ2, ARZ1, CNZ1, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
 | 0x41 | Spring | 139 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
@@ -32,7 +34,9 @@ Generated: 2026-01-18 22:08:27
 | 0x4B | Buzzer | 23 | EHZ1, EHZ2 |
 | 0x5C | Masher | 21 | EHZ1, EHZ2 |
 | 0x74 | InvisibleBlock | 113 | CPZ1, CPZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MTZ1, MTZ2, MTZ3, WFZ1 |
+| 0x78 | CPZStaircase | 6 | CPZ1, CPZ2 |
 | 0x79 | Checkpoint | 61 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
+| 0x7B | PipeExitSpring | 9 | CPZ1, CPZ2 |
 | 0x9D | Coconuts | 17 | EHZ1, EHZ2 |
 | 0xD8 | BonusBlock | 98 | CNZ1, CNZ2 |
 
@@ -52,7 +56,6 @@ Generated: 2026-01-18 22:08:27
 | 0x84 | Object | ForcedSpin | 42 | CNZ1, CNZ2, HTZ1, HTZ2 |
 | 0x2F | Object | SmashableGround | 40 | HTZ1, HTZ2 |
 | 0x91 | Badnik | ChopChop | 38 | ARZ1, ARZ2 |
-| 0x2D | Object | Barrier | 35 | CPZ1, CPZ2, HTZ1, HTZ2, MTZ1, MTZ2, MTZ3, WFZ1, DEZ1 |
 | 0x48 | Object | LauncherBall | 32 | OOZ1, OOZ2 |
 | 0x40 | Object | Springboard | 31 | CPZ2, ARZ1, ARZ2, MCZ2 |
 | 0xD6 | Object | PointPokey | 29 | CNZ1, CNZ2 |
@@ -74,7 +77,6 @@ Generated: 2026-01-18 22:08:27
 | 0x8E | Badnik | GrounderInWall2 | 20 | ARZ1, ARZ2 |
 | 0x75 | Object | MCZBrick | 19 | MCZ1, MCZ2 |
 | 0xAC | Badnik | Balkiry | 19 | SCZ1 |
-| 0x0B | Object | TippingFloor | 18 | CPZ1, CPZ2 |
 | 0x42 | Object | SteamSpring | 18 | MTZ1, MTZ2, MTZ3 |
 | 0xD7 | Object | HexBumper | 18 | CNZ1, CNZ2 |
 | 0x23 | Object | FallingPillar | 16 | ARZ1, ARZ2 |
@@ -104,7 +106,6 @@ Generated: 2026-01-18 22:08:27
 | 0xAE | Badnik | Clucker | 10 | WFZ1 |
 | 0xB5 | Object | HPropeller | 10 | SCZ1, WFZ1 |
 | 0x7A | Object | SidewaysPform | 9 | CPZ2, MCZ1, MCZ2 |
-| 0x7B | Object | PipeExitSpring | 9 | CPZ1, CPZ2 |
 | 0x9F | Badnik | Shellcracker | 9 | MTZ1, MTZ2, MTZ3 |
 | 0x8D | Badnik | GrounderInWall | 8 | ARZ1, ARZ2 |
 | 0xC0 | Object | SpeedLauncher | 8 | WFZ1 |
@@ -116,7 +117,6 @@ Generated: 2026-01-18 22:08:27
 | 0xBE | Object | LateralCannon | 7 | WFZ1 |
 | 0x3D | Object | OOZLauncher | 6 | OOZ1, OOZ2 |
 | 0x64 | Object | MTZTwinStompers | 6 | MTZ1, MTZ2, MTZ3 |
-| 0x78 | Object | CPZStaircase | 6 | CPZ1, CPZ2 |
 | 0x96 | Badnik | Rexon2 | 6 | HTZ1, HTZ2 |
 | 0xB9 | Object | Laser | 6 | WFZ1 |
 | 0x77 | Object | MCZBridge | 5 | MCZ1, MCZ2 |
@@ -196,7 +196,7 @@ Total: 158 objects | Implemented: 14 | Unimplemented: 1
 
 #### Act 1
 
-Total: 153 objects | Implemented: 11 | Unimplemented: 8
+Total: 153 objects | Implemented: 15 | Unimplemented: 4
 
 **Badniks:**
 - [ ] 0xA5 Spiny (x10) [0x32]
@@ -205,25 +205,25 @@ Total: 153 objects | Implemented: 11 | Unimplemented: 8
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x60) [23 subtypes]
-- [ ] 0x0B TippingFloor (x4) [4 subtypes]
+- [x] 0x0B TippingFloor (x4) [4 subtypes]
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x19 CPZPlatform (x7) [4 subtypes]
 - [x] 0x1B SpeedBooster (x8) [0x00]
 - [x] 0x1D BlueBalls (x7) [0x15, 0x05]
 - [x] 0x1E CPZSpinTube (x9) [9 subtypes]
 - [x] 0x26 Monitor (x19) [4 subtypes]
-- [ ] 0x2D Barrier (x2) [0x00]
+- [x] 0x2D Barrier (x2) [0x00]
 - [x] 0x32 BreakableBlock (x4) [0x00]
 - [x] 0x41 Spring (x5) [0x10, 0x02, 0x12]
 - [ ] 0x6B MTZPlatform (x2) [0x19]
 - [x] 0x74 InvisibleBlock (x2) [0x17]
-- [ ] 0x78 CPZStaircase (x2) [0x00, 0x04]
+- [x] 0x78 CPZStaircase (x2) [0x00, 0x04]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
-- [ ] 0x7B PipeExitSpring (x5) [0x02]
+- [x] 0x7B PipeExitSpring (x5) [0x02]
 
 #### Act 2
 
-Total: 202 objects | Implemented: 10 | Unimplemented: 11
+Total: 202 objects | Implemented: 14 | Unimplemented: 7
 
 **Badniks:**
 - [ ] 0xA5 Spiny (x1) [0x32]
@@ -235,12 +235,12 @@ Total: 202 objects | Implemented: 10 | Unimplemented: 11
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x59) [21 subtypes]
-- [ ] 0x0B TippingFloor (x14) [6 subtypes]
+- [x] 0x0B TippingFloor (x14) [6 subtypes]
 - [x] 0x19 CPZPlatform (x6) [6 subtypes]
 - [x] 0x1B SpeedBooster (x12) [0x00]
 - [x] 0x1E CPZSpinTube (x7) [7 subtypes]
 - [x] 0x26 Monitor (x19) [4 subtypes]
-- [ ] 0x2D Barrier (x4) [0x00]
+- [x] 0x2D Barrier (x4) [0x00]
 - [x] 0x32 BreakableBlock (x3) [0x00]
 - [x] 0x36 Spikes (x3) [0x30]
 - [ ] 0x3E EggPrison (x1) [0x00]
@@ -248,10 +248,10 @@ Total: 202 objects | Implemented: 10 | Unimplemented: 11
 - [x] 0x41 Spring (x3) [0x10, 0x12]
 - [ ] 0x6B MTZPlatform (x28) [0x18, 0x19]
 - [x] 0x74 InvisibleBlock (x16) [5 subtypes]
-- [ ] 0x78 CPZStaircase (x4) [0x00, 0x04]
+- [x] 0x78 CPZStaircase (x4) [0x00, 0x04]
 - [x] 0x79 Checkpoint (x5) [5 subtypes]
 - [ ] 0x7A SidewaysPform (x3) [0x00, 0x06, 0x0C]
-- [ ] 0x7B PipeExitSpring (x4) [0x02]
+- [x] 0x7B PipeExitSpring (x4) [0x02]
 
 ### Aquatic Ruin Zone
 
@@ -377,7 +377,7 @@ Total: 254 objects | Implemented: 8 | Unimplemented: 11
 
 #### Act 1
 
-Total: 144 objects | Implemented: 10 | Unimplemented: 10
+Total: 144 objects | Implemented: 11 | Unimplemented: 9
 
 **Badniks:**
 - [ ] 0x92 Spiker (x6) [0x0A]
@@ -392,7 +392,7 @@ Total: 144 objects | Implemented: 10 | Unimplemented: 10
 - [x] 0x18 ARZPlatform (x8) [4 subtypes]
 - [x] 0x1C Scenery (x16) [4 subtypes]
 - [x] 0x26 Monitor (x8) [0x04, 0x06, 0x07]
-- [ ] 0x2D Barrier (x5) [0x00]
+- [x] 0x2D Barrier (x5) [0x00]
 - [ ] 0x2F SmashableGround (x10) [5 subtypes]
 - [ ] 0x30 RisingLava (x3) [0x00, 0x02, 0x04]
 - [ ] 0x31 LavaMarker (x9) [0x01, 0x02]
@@ -405,7 +405,7 @@ Total: 144 objects | Implemented: 10 | Unimplemented: 10
 
 #### Act 2
 
-Total: 259 objects | Implemented: 9 | Unimplemented: 11
+Total: 259 objects | Implemented: 10 | Unimplemented: 10
 
 **Badniks:**
 - [ ] 0x92 Spiker (x17) [0x0A]
@@ -422,7 +422,7 @@ Total: 259 objects | Implemented: 9 | Unimplemented: 11
 - [x] 0x18 ARZPlatform (x24) [6 subtypes]
 - [x] 0x1C Scenery (x35) [4 subtypes]
 - [x] 0x26 Monitor (x14) [4 subtypes]
-- [ ] 0x2D Barrier (x10) [0x00]
+- [x] 0x2D Barrier (x10) [0x00]
 - [ ] 0x2F SmashableGround (x30) [10 subtypes]
 - [ ] 0x30 RisingLava (x4) [0x06, 0x08]
 - [ ] 0x31 LavaMarker (x21) [0x00, 0x01, 0x02]
@@ -547,7 +547,7 @@ Total: 189 objects | Implemented: 7 | Unimplemented: 7
 
 #### Act 1
 
-Total: 193 objects | Implemented: 8 | Unimplemented: 14
+Total: 193 objects | Implemented: 9 | Unimplemented: 13
 
 **Badniks:**
 - [ ] 0x9F Shellcracker (x3) [0x24]
@@ -559,7 +559,7 @@ Total: 193 objects | Implemented: 8 | Unimplemented: 14
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x1C Scenery (x1) [0x03]
 - [x] 0x26 Monitor (x10) [0x04, 0x06, 0x07]
-- [ ] 0x2D Barrier (x3) [0x01]
+- [x] 0x2D Barrier (x3) [0x01]
 - [x] 0x36 Spikes (x7) [0x10, 0x00, 0x30]
 - [x] 0x41 Spring (x4) [0x20, 0x12, 0x02]
 - [ ] 0x42 SteamSpring (x4) [0x01]
@@ -577,7 +577,7 @@ Total: 193 objects | Implemented: 8 | Unimplemented: 14
 
 #### Act 2
 
-Total: 220 objects | Implemented: 8 | Unimplemented: 19
+Total: 220 objects | Implemented: 9 | Unimplemented: 18
 
 **Badniks:**
 - [ ] 0x9F Shellcracker (x3) [0x24]
@@ -589,7 +589,7 @@ Total: 220 objects | Implemented: 8 | Unimplemented: 19
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x1C Scenery (x12) [0x00, 0x01, 0x03]
 - [x] 0x26 Monitor (x13) [4 subtypes]
-- [ ] 0x2D Barrier (x3) [0x01]
+- [x] 0x2D Barrier (x3) [0x01]
 - [ ] 0x31 LavaMarker (x12) [0x01, 0x02]
 - [x] 0x36 Spikes (x11) [0x00, 0x40]
 - [x] 0x41 Spring (x6) [0x00, 0x02]
@@ -612,7 +612,7 @@ Total: 220 objects | Implemented: 8 | Unimplemented: 19
 
 #### Act 3
 
-Total: 270 objects | Implemented: 7 | Unimplemented: 22
+Total: 270 objects | Implemented: 8 | Unimplemented: 21
 
 **Badniks:**
 - [ ] 0x9F Shellcracker (x3) [0x24]
@@ -627,7 +627,7 @@ Total: 270 objects | Implemented: 7 | Unimplemented: 22
 - [x] 0x06 Spiral (x2) [0x80]
 - [x] 0x1C Scenery (x1) [0x03]
 - [x] 0x26 Monitor (x11) [4 subtypes]
-- [ ] 0x2D Barrier (x4) [0x01]
+- [x] 0x2D Barrier (x4) [0x01]
 - [ ] 0x31 LavaMarker (x8) [0x01, 0x02]
 - [x] 0x36 Spikes (x14) [5 subtypes]
 - [ ] 0x3E EggPrison (x1) [0x00]
@@ -673,7 +673,7 @@ Total: 60 objects | Implemented: 1 | Unimplemented: 7
 
 #### Act 1
 
-Total: 157 objects | Implemented: 4 | Unimplemented: 21
+Total: 157 objects | Implemented: 5 | Unimplemented: 20
 
 **Badniks:**
 - [ ] 0xAD CluckerBase (x10) [0x42]
@@ -685,7 +685,7 @@ Total: 157 objects | Implemented: 4 | Unimplemented: 21
 **Objects:**
 - [x] 0x19 CPZPlatform (x16) [10 subtypes]
 - [x] 0x26 Monitor (x19) [5 subtypes]
-- [ ] 0x2D Barrier (x1) [0x00]
+- [x] 0x2D Barrier (x1) [0x00]
 - [ ] 0x72 CNZConveyorBelt (x1) [0x90]
 - [x] 0x74 InvisibleBlock (x5) [0x03, 0x07, 0x18]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
@@ -710,12 +710,12 @@ Total: 157 objects | Implemented: 4 | Unimplemented: 21
 
 #### Act 1
 
-Total: 5 objects | Implemented: 0 | Unimplemented: 3
+Total: 5 objects | Implemented: 1 | Unimplemented: 2
 
 **Bosses:**
 - [ ] 0xC6 Eggman (x1) [0xA6]
 - [ ] 0xC7 Eggrobo (x1) [0x02]
 
 **Objects:**
-- [ ] 0x2D Barrier (x3) [0x00]
+- [x] 0x2D Barrier (x3) [0x00]
 

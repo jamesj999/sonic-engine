@@ -287,6 +287,14 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	private void doCeilingCollision(AbstractPlayableSprite sprite, SensorResult[] results) {
+		// Skip ceiling collision when springing - the player was just launched by a spring
+		// or tube and needs time to clear the launch point. This matches how objects like
+		// PipeExitSpring use getSpringing() to prevent immediate re-collision.
+		// ROM: Springs set a temporary immunity period; we use the springing frames.
+		if (sprite.getSpringing()) {
+			return;
+		}
+
 		// Only check ceiling collision if we are moving upwards (ySpeed < 0)
 		if (sprite.getYSpeed() < 0) {
 			SensorResult lowestResult = findLowestSensorResult(results);
