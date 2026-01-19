@@ -20,7 +20,7 @@ import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.LevelEventProvider;
 import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.game.RespawnState;
-import uk.co.jamesj999.sonic.game.sonic2.OscillationManager;
+
 import uk.co.jamesj999.sonic.game.sonic2.WaterSurfaceManager;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArt;
 import uk.co.jamesj999.sonic.debug.DebugObjectArtViewer;

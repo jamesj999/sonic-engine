@@ -130,16 +130,10 @@ public class WaterSystem {
      * @return Water surface Y position, or null if no water
      */
     private Integer extractWaterHeight(int zoneId, int actId, List<ObjectSpawn> objects, Rom rom) {
-        // Debug output to trace what's happening
-        System.out.printf("  extractWaterHeight called: zoneId=0x%02X (%d), actId=%d, ZONE_ID_CPZ=0x%02X%n",
-                zoneId, zoneId, actId, ZONE_ID_CPZ);
-
         // Also log the object Y for comparison (even if we use ROM value)
         if (objects != null) {
             for (ObjectSpawn spawn : objects) {
                 if (spawn.objectId() == WATER_SURFACE_OBJECT_ID) {
-                    System.out.printf("  [COMPARE] Water surface OBJECT Y in level data: %d (0x%X)%n",
-                            spawn.y(), spawn.y());
                     break; // Just show the first one for comparison
                 }
             }
@@ -151,22 +145,16 @@ public class WaterSystem {
             if (zoneId == ZONE_ID_CPZ && actId == 1) {
                 // CPZ Act 2 - read from ROM (Level Boundaries table)
                 int height = readWaterHeightFromRom(rom, WATER_HEIGHT_ROM_CPZ2);
-                System.out.printf("  CPZ2 water height read from ROM (0x%X): 0x%04X (%d)%n",
-                        WATER_HEIGHT_ROM_CPZ2, height, height);
                 return height;
             }
             if (zoneId == ZONE_ID_ARZ && actId == 0) {
                 // ARZ Act 1 - read from ROM
                 int height = readWaterHeightFromRom(rom, WATER_HEIGHT_ROM_ARZ1);
-                System.out.printf("  ARZ1 water height read from ROM (0x%X): 0x%04X (%d)%n",
-                        WATER_HEIGHT_ROM_ARZ1, height, height);
                 return height;
             }
             if (zoneId == ZONE_ID_ARZ && actId == 1) {
                 // ARZ Act 2 - read from ROM
                 int height = readWaterHeightFromRom(rom, WATER_HEIGHT_ROM_ARZ2);
-                System.out.printf("  ARZ2 water height read from ROM (0x%X): 0x%04X (%d)%n",
-                        WATER_HEIGHT_ROM_ARZ2, height, height);
                 return height;
             }
         } catch (Exception e) {
@@ -178,10 +166,6 @@ public class WaterSystem {
         if (objects != null) {
             for (ObjectSpawn spawn : objects) {
                 if (spawn.objectId() == WATER_SURFACE_OBJECT_ID) {
-                    System.out.printf("  [DEBUG] Water surface OBJECT in level data at y=%d (0x%X)%n",
-                            spawn.y(), spawn.y());
-                    LOGGER.fine(String.format("Found water surface object at x=%d, y=%d",
-                            spawn.x(), spawn.y()));
                     // Only return this if we didn't already return a ROM value
                     return spawn.y();
                 }
@@ -328,10 +312,11 @@ public class WaterSystem {
         }
         // Only CPZ has water oscillation - ARZ water stays fixed
         if (zoneId == ZONE_ID_CPZ) {
-            // Apply oscillation offset from oscillator index 0 (limit=0x10, ±16 pixels)
-            // Divide by 2 to get ±8 pixels (~16 pixels total bobbing, ring height)
-            int oscillationOffset = uk.co.jamesj999.sonic.game.sonic2.OscillationManager.getSignedValue(0) / 2;
-            return baseLevel + oscillationOffset;
+            // Apply oscillation offset from oscillator index 0 (limit=0x10, 0-16 range)
+            // Center around 0 by subtracting half the limit (8)
+            // Result is ±8 pixels (~16 pixels total bobbing, ring height)
+            int oscillation = uk.co.jamesj999.sonic.game.sonic2.OscillationManager.getByte(0);
+            return baseLevel + (oscillation - 8);
         }
         return baseLevel; // ARZ: no oscillation
     }
