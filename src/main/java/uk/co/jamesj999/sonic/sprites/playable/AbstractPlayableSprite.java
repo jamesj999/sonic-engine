@@ -180,7 +180,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean controlLocked = false;
         /**
          * Tracks whether the jump button is currently pressed this frame.
-         * Set by movement manager, used by objects (like flippers) to detect jump input.
+         * Set by movement manager, used by objects (like flippers) to detect jump
+         * input.
          */
         protected boolean jumpInputPressed = false;
         private int spiralActiveFrame = Integer.MIN_VALUE;
@@ -1423,8 +1424,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         ySpeed = (short) (ySpeed / 2);
                 }
 
-                // TODO: Play splash sound
-                // TODO: Spawn splash object
+                // Play splash sound
+                AudioManager.getInstance().playSfx(GameSound.SPLASH);
+
+                // Spawn splash object at water surface
+                spawnSplash();
         }
 
         /**
@@ -1447,8 +1451,43 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         }
                 }
 
-                // TODO: Play splash sound
-                // TODO: Spawn splash object
+                // Play splash sound
+                AudioManager.getInstance().playSfx(GameSound.SPLASH);
+
+                // Spawn splash object at water surface
+                spawnSplash();
+        }
+
+        /**
+         * Spawns a splash object at the water surface.
+         * The splash appears at the player's X position at the water level Y.
+         */
+        private void spawnSplash() {
+                LevelManager levelManager = LevelManager.getInstance();
+                if (levelManager == null || levelManager.getObjectManager() == null) {
+                        return;
+                }
+
+                // Get dust/splash renderer from spindash dust manager
+                if (spindashDustManager == null || spindashDustManager.getRenderer() == null) {
+                        return;
+                }
+
+                // Get water level from WaterSystem
+                var level = levelManager.getCurrentLevel();
+                if (level == null) {
+                        return;
+                }
+                var waterSystem = uk.co.jamesj999.sonic.level.WaterSystem.getInstance();
+                int waterY = waterSystem.getWaterLevelY(level.getZoneIndex(), levelManager.getCurrentAct());
+
+                // Create splash object
+                var splash = new uk.co.jamesj999.sonic.game.sonic2.objects.SplashObjectInstance(
+                                getCentreX(), waterY, spindashDustManager.getRenderer(),
+                                direction == Direction.LEFT);
+
+                // Add to object manager
+                levelManager.getObjectManager().addDynamicObject(splash);
         }
 
         /**

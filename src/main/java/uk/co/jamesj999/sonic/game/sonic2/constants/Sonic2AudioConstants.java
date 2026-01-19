@@ -18,9 +18,10 @@ public final class Sonic2AudioConstants {
     public static final int SFX_SPRING = 0xCC;
     public static final int SFX_BUMPER = 0xB4; // Round/Hex bumper (SndID_Bumper)
     public static final int SFX_LARGE_BUMPER = 0xD9; // CNZ map triangular bumpers (SndID_LargeBumper)
-    public static final int SFX_FLIPPER = 0xE3;  // CNZ Flipper (SndID_Flipper)
+    public static final int SFX_FLIPPER = 0xE3; // CNZ Flipper (SndID_Flipper)
     public static final int SFX_ROLLING = 0xBE;
     public static final int SFX_SHIELD = 0xAF;
+    public static final int SFX_SPLASH = 0xAA; // Water splash (SndID_Splash)
     public static final int SFX_EXPLOSION = 0xC1;
     public static final int SFX_ERROR = 0xED; // Error/fail sound (SndID_Error)
 

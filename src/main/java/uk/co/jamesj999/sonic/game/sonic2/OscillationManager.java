@@ -106,4 +106,32 @@ public final class OscillationManager {
         int word = (within < 2) ? values[index] : deltas[index];
         return ((within & 1) == 0) ? ((word >> 8) & 0xFF) : (word & 0xFF);
     }
+
+    /**
+     * Returns the signed offset from center (0x80) for the given oscillator index.
+     * The value oscillates around 0, with amplitude determined by the oscillator's
+     * limit.
+     * 
+     * @param index Oscillator index (0-15)
+     * @return Signed offset in pixels (typically -limit to +limit range)
+     */
+    public static int getSignedValue(int index) {
+        if (index < 0 || index >= OSC_COUNT) {
+            return 0;
+        }
+        // High byte of value, centered at 0x80
+        int highByte = (values[index] >> 8) & 0xFF;
+        return highByte - 0x80; // Convert to signed offset from center
+    }
+
+    /**
+     * Returns the water level oscillation offset in pixels.
+     * The original game uses oscillator index 2 for water surface bobbing.
+     * Oscillator 2 has speed=2 and limit=0x20, giving a ±32 pixel range.
+     * 
+     * @return Water level Y offset in pixels (oscillates smoothly)
+     */
+    public static int getWaterOscillationOffset() {
+        return getSignedValue(2);
+    }
 }

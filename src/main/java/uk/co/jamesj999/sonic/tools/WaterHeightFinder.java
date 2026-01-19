@@ -7,6 +7,14 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Tool to find water height data in Sonic 2 ROM.
+ * 
+ * Known water heights (from SonLVL/s2disasm):
+ * - ARZ Act 1: 0x410 (1040 decimal)
+ * - ARZ Act 2: 0x510 (1296 decimal)
+ * - CPZ Act 2: Unknown initial value (710 was display value, but starts lower)
+ */
 public class WaterHeightFinder {
 
     public static void main(String[] args) throws IOException {
@@ -17,66 +25,92 @@ public class WaterHeightFinder {
         }
 
         byte[] romData = Files.readAllBytes(romPath);
+        System.out.println("ROM loaded: " + romData.length + " bytes\n");
 
-        // Search for 0x0510 (ARZ2 target) and 0x0710 (CPZ2 target, maybe?)
-        // Or maybe CPZ2 is 0x0728 (old hardcode 710 is 0x2C6... user said "Same is true
-        // for CPZ2")
-        // "CPZ Act 2: ~0x2C6 = 710" -> "710 in hex" = 0x710.
+        // Search for ARZ1 (0x0410) and ARZ2 (0x0510) appearing together
+        // These are 16-bit big-endian values
+        System.out.println("=== Searching for ARZ water height sequence (0x0410 followed by 0x0510) ===\n");
 
-        System.out.println("Searching for 0x0510 (ARZ2)...");
-        List<Integer> arz2Matches = findSequence(romData, new byte[] { 0x05, 0x10 });
-        for (int addr : arz2Matches) {
-            System.out.printf("  0x%X\n", addr);
+        for (int i = 0; i < romData.length - 4; i++) {
+            int word1 = ((romData[i] & 0xFF) << 8) | (romData[i + 1] & 0xFF);
+            int word2 = ((romData[i + 2] & 0xFF) << 8) | (romData[i + 3] & 0xFF);
+
+            if (word1 == 0x0410 && word2 == 0x0510) {
+                System.out.printf("FOUND at offset 0x%X!%n", i);
+                System.out.printf("  0x%X: 0x%04X (ARZ1 = %d)%n", i, word1, word1);
+                System.out.printf("  0x%X: 0x%04X (ARZ2 = %d)%n", i + 2, word2, word2);
+
+                // Look at more extended context - 64 bytes before for full table structure
+                System.out.println("\nExtended Context (32 words before to 8 words after):");
+                int start = Math.max(0, i - 64);
+                int end = Math.min(romData.length, i + 16);
+                int idx = 0;
+                for (int j = start; j < end; j += 2) {
+                    int w = ((romData[j] & 0xFF) << 8) | (romData[j + 1] & 0xFF);
+                    String label = "";
+                    if (j == i)
+                        label = " <-- ARZ1";
+                    else if (j == i + 2)
+                        label = " <-- ARZ2";
+                    else if (w >= 0x700 && w <= 0x900)
+                        label = " <-- Possible CPZ2 candidate";
+                    System.out.printf("  [%2d] 0x%05X: 0x%04X (%5d)%s%n", idx++, j, w, w, label);
+                }
+                System.out.println();
+            }
         }
 
-        System.out.println("Searching for 0x0710 (CPZ2?)...");
-        List<Integer> cpz2Matches = findSequence(romData, new byte[] { 0x07, 0x10 });
-        for (int addr : cpz2Matches) {
-            System.out.printf("  0x%X\n", addr);
+        // Also search for CPZ2 patterns (values around 0x720-0x740) near 0x0410
+        System.out.println("=== Searching for CPZ2 candidates (0x0700-0x0740) followed by 0x0410 (ARZ1) ===\n");
+
+        for (int i = 0; i < romData.length - 6; i++) {
+            int word1 = ((romData[i] & 0xFF) << 8) | (romData[i + 1] & 0xFF);
+            int word2 = ((romData[i + 2] & 0xFF) << 8) | (romData[i + 3] & 0xFF);
+            int word3 = ((romData[i + 4] & 0xFF) << 8) | (romData[i + 5] & 0xFF);
+
+            // Look for pattern: CPZ2 (0x700-0x740), ARZ1 (0x410), ARZ2 (0x510)
+            if (word1 >= 0x700 && word1 <= 0x740 && word2 == 0x0410 && word3 == 0x0510) {
+                System.out.printf("FOUND WATER TABLE at offset 0x%X!%n", i);
+                System.out.printf("  CPZ2: 0x%04X (%d) at 0x%X%n", word1, word1, i);
+                System.out.printf("  ARZ1: 0x%04X (%d) at 0x%X%n", word2, word2, i + 2);
+                System.out.printf("  ARZ2: 0x%04X (%d) at 0x%X%n", word3, word3, i + 4);
+                System.out.println();
+            }
         }
 
-        // Also look for values that might be ARZ1.
-        // User said old hardcode 1069 (0x42D) was "really close".
-        // "it's too low" -> correct value is HIGHER (smaller Y).
-        // Maybe 1069 hex? 0x1069 (Too big).
-        // Maybe "1069 is close to hex value"? 0x42D.
-        // If 510 (dec) -> 0x510 (hex) was the pattern.
-        // Then 1069 (dec) -> 0x1069 (hex)? No.
-        // Wait, 1069 is 0x42D.
-        // Maybe the value is around 1069?
-        // Let's look around the matches.
+        // Search for higher values (If 0x710 is wrong, try 0x740-0x780 range)
+        // Based on visual comparison, water should be about 48 pixels lower
+        System.out.println("=== Searching for CPZ2 candidates (0x0740-0x0780) near ARZ entries ===\n");
 
-        for (int addr : arz2Matches) {
-            dumpRegion(romData, addr - 32, addr + 32);
-        }
-    }
+        for (int i = 0; i < romData.length - 30; i++) {
+            int word = ((romData[i] & 0xFF) << 8) | (romData[i + 1] & 0xFF);
 
-    private static List<Integer> findSequence(byte[] data, byte[] sequence) {
-        List<Integer> matches = new ArrayList<>();
-        for (int i = 0; i < data.length - sequence.length; i++) {
-            boolean match = true;
-            for (int j = 0; j < sequence.length; j++) {
-                if (data[i + j] != sequence[j]) {
-                    match = false;
-                    break;
+            // Check for values in the target range
+            if (word >= 0x0740 && word <= 0x0780) {
+                // Check if ARZ1/ARZ2 appear within 30 bytes
+                for (int k = 2; k <= 30; k += 2) {
+                    if (i + k + 4 >= romData.length)
+                        break;
+                    int wordArz1 = ((romData[i + k] & 0xFF) << 8) | (romData[i + k + 1] & 0xFF);
+                    int wordArz2 = ((romData[i + k + 2] & 0xFF) << 8) | (romData[i + k + 3] & 0xFF);
+
+                    if (wordArz1 == 0x0410 && wordArz2 == 0x0510) {
+                        System.out.printf("FOUND at 0x%05X: 0x%04X (%d) - ARZ at offset +%d%n", i, word, word, k);
+                    }
                 }
             }
-            if (match) {
-                matches.add(i);
-            }
         }
-        return matches;
-    }
 
-    private static void dumpRegion(byte[] data, int start, int end) {
-        System.out.println("Dump " + Integer.toHexString(start) + " - " + Integer.toHexString(end));
-        for (int i = start; i < end; i++) {
-            if (i % 16 == 0)
-                System.out.printf("\n%05X: ", i);
-            if (i >= 0 && i < data.length) {
-                System.out.printf("%02X ", data[i]);
+        // Also dump all values between 0x0700 and 0x0800 found in the first 0x10000
+        // bytes
+        System.out.println("\n=== All values 0x0700-0x0800 in first 0x10000 bytes ===");
+        for (int i = 0; i < Math.min(romData.length, 0x10000) - 2; i += 2) {
+            int word = ((romData[i] & 0xFF) << 8) | (romData[i + 1] & 0xFF);
+            if (word >= 0x0700 && word <= 0x0800) {
+                System.out.printf("  0x%05X: 0x%04X (%d)%n", i, word, word);
             }
         }
-        System.out.println("\n");
+
+        System.out.println("\nSearch complete.");
     }
 }

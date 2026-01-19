@@ -17,13 +17,16 @@ public class WaterSystem {
     private static final Logger LOGGER = Logger.getLogger(WaterSystem.class.getName());
     private static final int WATER_SURFACE_OBJECT_ID = 0x04;
 
-    // Default water heights for levels (measured in pixels from top)
-    // CPZ Act 2: ~0x2C6 = 710
-    // ARZ Act 1: ~0x42D = 1069 (Corrected based on in-game testing)
-    // ARZ Act 2: ~0x1FE = 510
-    private static final int CPZ_ACT_2_WATER_HEIGHT = 710;
-    private static final int ARZ_ACT_1_WATER_HEIGHT = 1069;
-    private static final int ARZ_ACT_2_WATER_HEIGHT = 510;
+    // ROM offsets for water height table (Water_Height in s2disasm)
+    // Table starts at 0x04584, each zone has 2 entries (Act 1 and Act 2)
+    // Verified offsets found by searching ROM for known ARZ values:
+    // ARZ1 (0x0410) at offset 0x45A0
+    // ARZ2 (0x0510) at offset 0x45A2
+    private static final int WATER_HEIGHT_ROM_ARZ1 = 0x45A0; // ARZ Act 1 water height offset
+    private static final int WATER_HEIGHT_ROM_ARZ2 = 0x45A2; // ARZ Act 2 water height offset
+    // CPZ2: Water_Height table entry at 0x459A contains 0x0710 (1808)
+    // This is the same table that ARZ uses (and ARZ works correctly)
+    private static final int WATER_HEIGHT_ROM_CPZ2 = 0x459A; // CPZ Act 2 water height offset
 
     // ROM addresses for underwater palettes (from SCHG)
     // HPZ unused in final game, but address preserved for reference
@@ -127,91 +130,104 @@ public class WaterSystem {
      * @return Water surface Y position, or null if no water
      */
     private Integer extractWaterHeight(int zoneId, int actId, List<ObjectSpawn> objects, Rom rom) {
-        // First, try to find from object data
+        // Debug output to trace what's happening
+        System.out.printf("  extractWaterHeight called: zoneId=0x%02X (%d), actId=%d, ZONE_ID_CPZ=0x%02X%n",
+                zoneId, zoneId, actId, ZONE_ID_CPZ);
+
+        // Also log the object Y for comparison (even if we use ROM value)
         if (objects != null) {
             for (ObjectSpawn spawn : objects) {
                 if (spawn.objectId() == WATER_SURFACE_OBJECT_ID) {
-                    LOGGER.fine(String.format("Found water surface object at x=%d, y=%d",
-                            spawn.x(), spawn.y()));
-                    System.out.printf("  Water surface object found at y=%d%n", spawn.y());
-                    return spawn.y();
+                    System.out.printf("  [COMPARE] Water surface OBJECT Y in level data: %d (0x%X)%n",
+                            spawn.y(), spawn.y());
+                    break; // Just show the first one for comparison
                 }
             }
         }
 
-        // Fallback to reading from ROM for known levels
-        // Addresses identified in code (Rev01):
-        // CPZ2: 0xE92FA (Value 0x0720)
-        // ARZ2: 0xE930E (Value 0x0510)
-        // ARZ1: 0xE9314 (Value 0x0430)
+        // For levels with known ROM water height offsets, read from ROM directly
+        // This is more accurate than object data for initial water levels
         try {
-            // Chemical Plant Zone Act 2
             if (zoneId == ZONE_ID_CPZ && actId == 1) {
-                int height = rom.readByte(0xE92FA) << 8 | (rom.readByte(0xE92FB) & 0xFF);
-                System.out.printf("  Loaded CPZ Act 2 water height from ROM (0xE92FA): 0x%X (%d)%n", height, height);
+                // CPZ Act 2 - read from ROM (Level Boundaries table)
+                int height = readWaterHeightFromRom(rom, WATER_HEIGHT_ROM_CPZ2);
+                System.out.printf("  CPZ2 water height read from ROM (0x%X): 0x%04X (%d)%n",
+                        WATER_HEIGHT_ROM_CPZ2, height, height);
                 return height;
             }
-            // Aquatic Ruin Zone Act 2
-            if (zoneId == ZONE_ID_ARZ && actId == 1) {
-                int height = rom.readByte(0xE930C) << 8 | (rom.readByte(0xE930D) & 0xFF);
-                System.out.printf("  Loaded ARZ Act 2 water height from ROM (0xE930C): 0x%X (%d)%n", height, height);
-                return height;
-            }
-            // Aquatic Ruin Zone Act 1
             if (zoneId == ZONE_ID_ARZ && actId == 0) {
-                int height = rom.readByte(0xE9312) << 8 | (rom.readByte(0xE9313) & 0xFF);
-                System.out.printf("  Loaded ARZ Act 1 water height from ROM (0xE9312): 0x%X (%d)%n", height, height);
+                // ARZ Act 1 - read from ROM
+                int height = readWaterHeightFromRom(rom, WATER_HEIGHT_ROM_ARZ1);
+                System.out.printf("  ARZ1 water height read from ROM (0x%X): 0x%04X (%d)%n",
+                        WATER_HEIGHT_ROM_ARZ1, height, height);
+                return height;
+            }
+            if (zoneId == ZONE_ID_ARZ && actId == 1) {
+                // ARZ Act 2 - read from ROM
+                int height = readWaterHeightFromRom(rom, WATER_HEIGHT_ROM_ARZ2);
+                System.out.printf("  ARZ2 water height read from ROM (0x%X): 0x%04X (%d)%n",
+                        WATER_HEIGHT_ROM_ARZ2, height, height);
                 return height;
             }
         } catch (Exception e) {
             LOGGER.warning("Failed to read water height from ROM: " + e.getMessage());
         }
 
-        // Hardcoded legacy fallbacks (should not be reached for CPZ2/ARZ2/ARZ1 if above
-        // works)
-        if (zoneId == ZONE_ID_CPZ && actId == 1)
-            return CPZ_ACT_2_WATER_HEIGHT;
-        if (zoneId == ZONE_ID_ARZ && actId == 0)
-            return ARZ_ACT_1_WATER_HEIGHT;
-        if (zoneId == ZONE_ID_ARZ && actId == 1)
-            return ARZ_ACT_2_WATER_HEIGHT;
+        // Fallback: try to find from object data for other levels
+        // Also log the object Y for debugging, even if we used ROM value
+        if (objects != null) {
+            for (ObjectSpawn spawn : objects) {
+                if (spawn.objectId() == WATER_SURFACE_OBJECT_ID) {
+                    System.out.printf("  [DEBUG] Water surface OBJECT in level data at y=%d (0x%X)%n",
+                            spawn.y(), spawn.y());
+                    LOGGER.fine(String.format("Found water surface object at x=%d, y=%d",
+                            spawn.x(), spawn.y()));
+                    // Only return this if we didn't already return a ROM value
+                    return spawn.y();
+                }
+            }
+        }
 
         return null;
     }
 
     /**
+     * Read a 16-bit big-endian water height value from ROM at the given offset.
+     */
+    private int readWaterHeightFromRom(Rom rom, int offset) {
+        try {
+            int high = rom.readByte(offset) & 0xFF;
+            int low = rom.readByte(offset + 1) & 0xFF;
+            return (high << 8) | low;
+        } catch (java.io.IOException e) {
+            LOGGER.warning("Failed to read water height from ROM at offset 0x" +
+                    Integer.toHexString(offset) + ": " + e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
      * Validate extracted water height against known reference values.
-     * Logs warnings if values differ significantly.
+     * Since water heights are now read from ROM, this method just logs the value.
      */
     private void validateWaterHeight(int zoneId, int actId, int extractedHeight) {
-        Integer expectedHeight = null;
         String levelName = "";
 
         // Chemical Plant Zone (ROM zone ID 0x0D)
         if (zoneId == ZONE_ID_CPZ && actId == 1) {
-            expectedHeight = CPZ_ACT_2_WATER_HEIGHT;
             levelName = "CPZ Act 2";
         }
         // Aquatic Ruin Zone (ROM zone ID 0x0F)
         else if (zoneId == ZONE_ID_ARZ && actId == 0) {
-            expectedHeight = ARZ_ACT_1_WATER_HEIGHT;
             levelName = "ARZ Act 1";
         } else if (zoneId == ZONE_ID_ARZ && actId == 1) {
-            expectedHeight = ARZ_ACT_2_WATER_HEIGHT;
             levelName = "ARZ Act 2";
         }
 
-        if (expectedHeight != null) {
-            int diff = Math.abs(extractedHeight - expectedHeight);
-            if (diff > 5) { // Allow small tolerance
-                LOGGER.warning(String.format(
-                        "%s: Extracted water height %d differs from expected %d (diff=%d px)",
-                        levelName, extractedHeight, expectedHeight, diff));
-            } else {
-                LOGGER.info(String.format(
-                        "%s: Water height validated: %d (expected %d)",
-                        levelName, extractedHeight, expectedHeight));
-            }
+        if (!levelName.isEmpty()) {
+            LOGGER.info(String.format(
+                    "%s: Water height loaded from ROM: %d (0x%X)",
+                    levelName, extractedHeight, extractedHeight));
         }
     }
 
@@ -281,12 +297,43 @@ public class WaterSystem {
 
     /**
      * Get water surface Y position in world coordinates.
+     * This is the fixed/gameplay water level used for detecting if Sonic is
+     * underwater.
      * 
      * @return Water level Y in pixels, or 0 if no water
      */
     public int getWaterLevelY(int zoneId, int actId) {
         WaterConfig config = waterConfigs.get(makeKey(zoneId, actId));
         return config != null ? config.getWaterLevelY() : 0;
+    }
+
+    /**
+     * Get the visual water surface Y position with oscillation applied.
+     * This is used for rendering the water surface sprites and palette/shader
+     * split.
+     * <p>
+     * CPZ water bobs up and down by about the height of a ring (~16 pixels total).
+     * ARZ water does NOT oscillate - it remains at a fixed level.
+     * <p>
+     * Note: This does NOT affect gameplay - Sonic's underwater detection uses
+     * the fixed water level from {@link #getWaterLevelY(int, int)}.
+     * 
+     * @return Visual water level Y in pixels with oscillation offset applied (CPZ
+     *         only)
+     */
+    public int getVisualWaterLevelY(int zoneId, int actId) {
+        int baseLevel = getWaterLevelY(zoneId, actId);
+        if (baseLevel == 0) {
+            return 0; // No water
+        }
+        // Only CPZ has water oscillation - ARZ water stays fixed
+        if (zoneId == ZONE_ID_CPZ) {
+            // Apply oscillation offset from oscillator index 0 (limit=0x10, ±16 pixels)
+            // Divide by 2 to get ±8 pixels (~16 pixels total bobbing, ring height)
+            int oscillationOffset = uk.co.jamesj999.sonic.game.sonic2.OscillationManager.getSignedValue(0) / 2;
+            return baseLevel + oscillationOffset;
+        }
+        return baseLevel; // ARZ: no oscillation
     }
 
     /**

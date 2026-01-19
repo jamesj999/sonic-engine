@@ -181,7 +181,9 @@ public class WaterSurfaceManager {
         }
 
         WaterSystem waterSystem = WaterSystem.getInstance();
-        int waterLevelY = waterSystem.getWaterLevelY(zoneId, actId);
+        // Use visual water level (with oscillation) for rendering the water surface
+        // sprites
+        int waterLevelY = waterSystem.getVisualWaterLevelY(zoneId, actId);
 
         // Get visible area
         int cameraX = camera.getX();
@@ -206,9 +208,26 @@ public class WaterSurfaceManager {
         int endX = cameraX + cameraWidth + SEGMENT_WIDTH_PIXELS;
 
         // Determine animation frame based on frame counter
-        // Water surface animates slowly - change frame every 8 frames
+        // Water surface animates slowly - change frame every 16 frames (matches
+        // original game)
+        // Animation uses ping-pong pattern: 0-1-2-1-0-1-2-1... (bounces back instead of
+        // looping)
         int mappingFrameCount = (zoneId == ZONE_CPZ) ? cpzSheet.getFrameCount() : arzSheet.getFrameCount();
-        int animFrame = (frameCounter / 8) % Math.max(1, mappingFrameCount);
+        int animFrame;
+        if (mappingFrameCount <= 1) {
+            animFrame = 0;
+        } else {
+            // Ping-pong cycle length is (frameCount - 1) * 2
+            // For 3 frames: cycle is 0,1,2,1 = 4 steps
+            int cycleLength = (mappingFrameCount - 1) * 2;
+            int position = (frameCounter / 16) % cycleLength;
+            // If position < frameCount, use position directly; otherwise bounce back
+            if (position < mappingFrameCount) {
+                animFrame = position;
+            } else {
+                animFrame = cycleLength - position;
+            }
+        }
 
         // Alternate which segments are drawn each frame (even/odd based on
         // frameCounter)

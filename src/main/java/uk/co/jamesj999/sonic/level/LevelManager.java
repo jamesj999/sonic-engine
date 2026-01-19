@@ -882,7 +882,8 @@ public class LevelManager {
 
         if (waterSystem.hasWater(zoneId, currentAct)) {
             // Set uniforms via custom command - this also enables the water shader
-            int waterLevel = waterSystem.getWaterLevelY(zoneId, currentAct);
+            // Use visual water level (with oscillation) for rendering effects
+            int waterLevel = waterSystem.getVisualWaterLevelY(zoneId, currentAct);
             float waterlineScreenY = (float) (waterLevel - camera.getY()); // Pixels from top
 
             graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
@@ -960,7 +961,8 @@ public class LevelManager {
         // Use water shader in screen-space mode for FBO, with adjusted waterline
         WaterSystem waterSystem = WaterSystem.getInstance();
         boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
-        int waterLevelWorldY = hasWater ? waterSystem.getWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
+        // Use visual water level (with oscillation) for background rendering
+        int waterLevelWorldY = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
 
         // Calculate waterline for FBO - use SCREEN-SPACE waterline PLUS parallax offset
         // The parallax shader shifts the FBO sampling by (actualBgScrollY - alignedBgY)
@@ -1005,8 +1007,8 @@ public class LevelManager {
         graphicsManager.flushPatternBatch();
 
         // 4. End Tile Pass (Unbind FBO) and switch water shader back to screen-space
-        // mode
-        int waterLevel = hasWater ? waterSystem.getWaterLevelY(level.getZoneIndex(), currentAct) : 0;
+        // mode. Use visual water level (with oscillation) for foreground rendering.
+        int waterLevel = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 0;
         float waterlineScreenY = (float) (waterLevel - camera.getY()); // Pixels from top
 
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
