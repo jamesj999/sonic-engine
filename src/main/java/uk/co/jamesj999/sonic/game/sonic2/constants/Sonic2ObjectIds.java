@@ -29,10 +29,16 @@ public final class Sonic2ObjectIds {
     public static final int INVISIBLE_BLOCK = 0x74;
 
     // CPZ Objects
+    public static final int TIPPING_FLOOR = 0x0B; // CPZ Tipping Floor (Obj0B)
     public static final int SPEED_BOOSTER = 0x1B; // Speed Booster (Obj1B)
     public static final int CPZ_SPIN_TUBE = 0x1E; // CPZ Spin Tube (Obj1E)
     public static final int BLUE_BALLS = 0x1D;    // Blue Balls / CPZ Droplet hazard (Obj1D)
     public static final int BREAKABLE_BLOCK = 0x32; // Breakable Block (Obj32) - CPZ metal blocks / HTZ rocks
+    public static final int PIPE_EXIT_SPRING = 0x7B; // Pipe Exit Spring (Obj7B) - CPZ warp tube exit spring
+
+    // CPZ/HTZ/MTZ/ARZ/DEZ Barrier (One-way rising platform)
+    public static final int BARRIER = 0x2D;    // Barrier (Obj2D) - one-way rising barrier
+    public static final int CPZ_STAIRCASE = 0x78; // CPZ Staircase (Obj78) - 4-piece triggered elevator platform
 
     // CNZ Objects
     public static final int BUMPER = 0x44;       // Round Bumper (Obj44)

@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.Sprite;
+import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 
 import java.util.Collection;
@@ -58,6 +59,21 @@ public class SpriteManager {
 
 	public Sprite getSprite(String code) {
 		return sprites.get(code);
+	}
+
+	/**
+	 * Returns the sidekick sprite (Tails in 2-player or AI mode).
+	 * Currently returns null as sidekick AI is not implemented.
+	 * <p>
+	 * In the original Sonic 2, the sidekick is stored at RAM $FFFFB040
+	 * (Sidekick) vs the main character at $FFFFB000 (MainCharacter).
+	 *
+	 * @return the sidekick sprite, or null if no sidekick is active
+	 */
+	public AbstractPlayableSprite getSidekick() {
+		// TODO: Implement sidekick (Tails AI) support
+		// When implemented, this should return the secondary playable sprite
+		return null;
 	}
 
 	private boolean removeSprite(Sprite sprite) {

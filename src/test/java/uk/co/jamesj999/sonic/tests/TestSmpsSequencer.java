@@ -90,12 +90,12 @@ public class TestSmpsSequencer {
         }
         // Check full log for frequency components
         String logStr = synth.log.toString();
-        // Note C (81) -> S2 Base Note (+13) -> Index 1 -> FNum 653 (0x28D). Block 1.
-        // 0x28D -> FNum 28D, Block 1.
+        // Note C (81) -> S2 Base Note (+13) -> Index 1 -> FNum 644 (0x284). Block 1.
+        // 0x284 -> FNum 284, Block 1.
         // Reg A4: (Block << 3) | (FNum >> 8) -> (1 << 3) | 2 = 10 (0x0A).
-        // Reg A0: FNum & 0xFF -> 0x8D.
-        // RA4 V0A, RA0 V8D.
-        if (logStr.contains("RA4 V0A") && logStr.contains("RA0 V8D")) foundFreq = true;
+        // Reg A0: FNum & 0xFF -> 0x84.
+        // RA4 V0A, RA0 V84.
+        if (logStr.contains("RA4 V0A") && logStr.contains("RA0 V84")) foundFreq = true;
 
         assertTrue("Should set Frequency. Log: " + logStr, foundFreq);
         assertTrue("Should Key On", foundKeyOn);

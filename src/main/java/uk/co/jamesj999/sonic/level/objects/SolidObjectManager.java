@@ -63,6 +63,15 @@ public class SolidObjectManager {
             if (!provider.isSolidFor(player)) {
                 continue;
             }
+
+            // Handle multi-piece objects (e.g., CPZ Staircase)
+            if (provider instanceof MultiPieceSolidProvider multiPiece) {
+                if (hasStandingContactMultiPiece(player, multiPiece, instance)) {
+                    return true;
+                }
+                continue;
+            }
+
             SolidObjectParams params = provider.getSolidParams();
             int anchorX = instance.getSpawn().x() + params.offsetX();
             int anchorY = instance.getSpawn().y() + params.offsetY();
@@ -80,6 +89,24 @@ public class SolidObjectManager {
                 contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
                         provider.isTopSolidOnly(), instance, false);
             }
+            if (contact != null && contact.standing()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasStandingContactMultiPiece(AbstractPlayableSprite player,
+            MultiPieceSolidProvider multiPiece, ObjectInstance instance) {
+        int pieceCount = multiPiece.getPieceCount();
+        for (int i = 0; i < pieceCount; i++) {
+            SolidObjectParams params = multiPiece.getPieceParams(i);
+            int anchorX = multiPiece.getPieceX(i) + params.offsetX();
+            int anchorY = multiPiece.getPieceY(i) + params.offsetY();
+            int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
+
+            SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
+                    multiPiece.isTopSolidOnly(), instance, false);
             if (contact != null && contact.standing()) {
                 return true;
             }
@@ -246,6 +273,21 @@ public class SolidObjectManager {
             if (!provider.isSolidFor(player)) {
                 continue;
             }
+
+            // Handle multi-piece objects (e.g., CPZ Staircase)
+            if (provider instanceof MultiPieceSolidProvider multiPiece) {
+                MultiPieceContactResult result = processMultiPieceCollision(player, multiPiece, instance, frameCounter);
+                if (result.pushing) {
+                    player.setPushing(true);
+                }
+                if (result.standing) {
+                    nextRidingObject = instance;
+                    nextRidingX = result.ridingX;
+                    nextRidingY = result.ridingY;
+                }
+                continue;
+            }
+
             SolidObjectParams params = provider.getSolidParams();
             int anchorX = instance.getSpawn().x() + params.offsetX();
             int anchorY = instance.getSpawn().y() + params.offsetY();
@@ -282,6 +324,56 @@ public class SolidObjectManager {
         ridingObject = nextRidingObject;
         ridingX = nextRidingX;
         ridingY = nextRidingY;
+    }
+
+    private record MultiPieceContactResult(boolean standing, boolean pushing, int ridingX, int ridingY) {}
+
+    private MultiPieceContactResult processMultiPieceCollision(AbstractPlayableSprite player,
+            MultiPieceSolidProvider multiPiece, ObjectInstance instance, int frameCounter) {
+        boolean anyStanding = false;
+        boolean anyPushing = false;
+        int ridingX = 0;
+        int ridingY = 0;
+
+        int pieceCount = multiPiece.getPieceCount();
+        for (int i = 0; i < pieceCount; i++) {
+            SolidObjectParams params = multiPiece.getPieceParams(i);
+            int pieceX = multiPiece.getPieceX(i);
+            int pieceY = multiPiece.getPieceY(i);
+            int anchorX = pieceX + params.offsetX();
+            int anchorY = pieceY + params.offsetY();
+            int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
+
+            SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
+                    multiPiece.isTopSolidOnly(), instance, true);
+
+            if (contact == null) {
+                continue;
+            }
+
+            // Notify the object about this piece's contact
+            multiPiece.onPieceContact(i, player, contact, frameCounter);
+
+            if (contact.pushing()) {
+                anyPushing = true;
+            }
+            if (contact.standing()) {
+                anyStanding = true;
+                // Track the piece position for riding delta calculation
+                ridingX = pieceX;
+                ridingY = pieceY;
+            }
+        }
+
+        // Also call the standard SolidObjectListener if implemented
+        if (anyStanding || anyPushing) {
+            if (instance instanceof SolidObjectListener listener) {
+                SolidContact aggregateContact = new SolidContact(anyStanding, false, false, anyStanding, anyPushing);
+                listener.onSolidContact(player, aggregateContact, frameCounter);
+            }
+        }
+
+        return new MultiPieceContactResult(anyStanding, anyPushing, ridingX, ridingY);
     }
 
     private SolidContact resolveContact(AbstractPlayableSprite player,

@@ -73,6 +73,17 @@ public class ObjectRenderManager {
     // CPZ/OOZ/WFZ Moving Platform
     private final ObjectSpriteSheet cpzPlatformSheet;
 
+    // CPZ Stair Block
+    private final ObjectSpriteSheet cpzStairBlockSheet;
+
+    // CPZ Pipe Exit Spring
+    private final ObjectSpriteSheet pipeExitSpringSheet;
+    private final SpriteAnimationSet pipeExitSpringAnimations;
+
+    // CPZ Tipping Floor
+    private final ObjectSpriteSheet tippingFloorSheet;
+    private final SpriteAnimationSet tippingFloorAnimations;
+
     // Results screen
     private final ObjectSpriteSheet resultsSheet;
     private final Pattern[] resultsHudDigitPatterns;
@@ -121,6 +132,15 @@ public class ObjectRenderManager {
 
     // CPZ/OOZ/WFZ Moving Platform renderer
     private final PatternSpriteRenderer cpzPlatformRenderer;
+
+    // CPZ Stair Block renderer
+    private final PatternSpriteRenderer cpzStairBlockRenderer;
+
+    // CPZ Pipe Exit Spring renderer
+    private final PatternSpriteRenderer pipeExitSpringRenderer;
+
+    // CPZ Tipping Floor renderer
+    private final PatternSpriteRenderer tippingFloorRenderer;
 
     // Results screen renderer
     private final PatternSpriteRenderer resultsRenderer;
@@ -180,6 +200,17 @@ public class ObjectRenderManager {
 
         // CPZ/OOZ/WFZ Moving Platform
         this.cpzPlatformSheet = artData.cpzPlatformSheet();
+
+        // CPZ Stair Block
+        this.cpzStairBlockSheet = artData.cpzStairBlockSheet();
+
+        // CPZ Pipe Exit Spring
+        this.pipeExitSpringSheet = artData.pipeExitSpringSheet();
+        this.pipeExitSpringAnimations = artData.pipeExitSpringAnimations();
+
+        // CPZ Tipping Floor
+        this.tippingFloorSheet = artData.tippingFloorSheet();
+        this.tippingFloorAnimations = artData.tippingFloorAnimations();
 
         // Results screen
         this.resultsSheet = artData.resultsSheet();
@@ -260,6 +291,18 @@ public class ObjectRenderManager {
         // CPZ/OOZ/WFZ Moving Platform renderer
         this.cpzPlatformRenderer = new PatternSpriteRenderer(cpzPlatformSheet);
         register(cpzPlatformSheet, cpzPlatformRenderer);
+
+        // CPZ Stair Block renderer
+        this.cpzStairBlockRenderer = new PatternSpriteRenderer(cpzStairBlockSheet);
+        register(cpzStairBlockSheet, cpzStairBlockRenderer);
+
+        // CPZ Pipe Exit Spring renderer
+        this.pipeExitSpringRenderer = new PatternSpriteRenderer(pipeExitSpringSheet);
+        register(pipeExitSpringSheet, pipeExitSpringRenderer);
+
+        // CPZ Tipping Floor renderer
+        this.tippingFloorRenderer = new PatternSpriteRenderer(tippingFloorSheet);
+        register(tippingFloorSheet, tippingFloorRenderer);
 
         // Results screen - NOT registered in sheetOrder, uses separate caching
         this.resultsRenderer = new PatternSpriteRenderer(resultsSheet);
@@ -491,6 +534,38 @@ public class ObjectRenderManager {
 
     public ObjectSpriteSheet getCpzPlatformSheet() {
         return cpzPlatformSheet;
+    }
+
+    public PatternSpriteRenderer getCpzStairBlockRenderer() {
+        return cpzStairBlockRenderer;
+    }
+
+    public ObjectSpriteSheet getCpzStairBlockSheet() {
+        return cpzStairBlockSheet;
+    }
+
+    public PatternSpriteRenderer getPipeExitSpringRenderer() {
+        return pipeExitSpringRenderer;
+    }
+
+    public ObjectSpriteSheet getPipeExitSpringSheet() {
+        return pipeExitSpringSheet;
+    }
+
+    public SpriteAnimationSet getPipeExitSpringAnimations() {
+        return pipeExitSpringAnimations;
+    }
+
+    public PatternSpriteRenderer getTippingFloorRenderer() {
+        return tippingFloorRenderer;
+    }
+
+    public ObjectSpriteSheet getTippingFloorSheet() {
+        return tippingFloorSheet;
+    }
+
+    public SpriteAnimationSet getTippingFloorAnimations() {
+        return tippingFloorAnimations;
     }
 
     public PatternSpriteRenderer getResultsRenderer() {
