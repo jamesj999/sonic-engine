@@ -21,14 +21,14 @@ public class WaterSystemTest {
     private static final int WATER_SURFACE_OBJECT_ID = 0x04;
 
     // Zone IDs
-    private static final int ZONE_EHZ = 0;
-    private static final int ZONE_CPZ = 1;
-    private static final int ZONE_ARZ = 2;
+    private static final int ZONE_EHZ = 0x00;
+    private static final int ZONE_CPZ = 0x0D;
+    private static final int ZONE_ARZ = 0x0F;
 
     // Expected water heights (from original game)
-    private static final int CPZ_ACT_2_EXPECTED = 710;
-    private static final int ARZ_ACT_1_EXPECTED = 410;
-    private static final int ARZ_ACT_2_EXPECTED = 510;
+    private static final int CPZ_ACT_2_EXPECTED = 0x710;
+    private static final int ARZ_ACT_1_EXPECTED = 0x410;
+    private static final int ARZ_ACT_2_EXPECTED = 0x510;
 
     private WaterSystem waterSystem;
     private Rom rom;
