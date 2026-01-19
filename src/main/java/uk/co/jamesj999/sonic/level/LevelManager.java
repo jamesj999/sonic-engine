@@ -19,6 +19,7 @@ import uk.co.jamesj999.sonic.game.LevelEventProvider;
 import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.game.ObjectArtProvider;
 import uk.co.jamesj999.sonic.game.RespawnState;
+import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
 
 import uk.co.jamesj999.sonic.game.sonic2.WaterSurfaceManager;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArt;
@@ -48,10 +49,6 @@ import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
 import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
-import uk.co.jamesj999.sonic.level.bumpers.CNZBumperCollisionManager;
-import uk.co.jamesj999.sonic.level.bumpers.CNZBumperDataLoader;
-import uk.co.jamesj999.sonic.level.bumpers.CNZBumperPlacementManager;
-import uk.co.jamesj999.sonic.level.bumpers.CNZBumperSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
 import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
@@ -120,7 +117,7 @@ public class LevelManager {
     private RingRenderManager ringRenderManager;
     private RingManager ringManager;
     private LostRingManager lostRingManager;
-    private CNZBumperCollisionManager cnzBumperManager;
+    private ZoneFeatureProvider zoneFeatureProvider;
     private ObjectRenderManager objectRenderManager;
     private HudRenderManager hudRenderManager;
     private AnimatedPatternManager animatedPatternManager;
@@ -218,7 +215,11 @@ public class LevelManager {
             }
             ringManager = new RingManager(ringPlacementManager, ringRenderManager);
             lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
-            initCNZBumpers(rom, level.getZoneIndex(), currentAct, camera.getX());
+            // Initialize zone-specific features (CNZ bumpers, CPZ pylon, etc.)
+            zoneFeatureProvider = gameModule.getZoneFeatureProvider();
+            if (zoneFeatureProvider != null) {
+                zoneFeatureProvider.initZoneFeatures(rom, level.getZoneIndex(), currentAct, camera.getX());
+            }
             initObjectArt();
             initPlayerSpriteArt();
             resetPlayerState();
@@ -283,10 +284,9 @@ public class LevelManager {
         if (lostRingManager != null) {
             lostRingManager.update(playable, frameCounter + 1);
         }
-        if (cnzBumperManager != null && level != null) {
-            // Use level.getZoneIndex() which is the actual ROM zone index (e.g., 3 for CNZ)
-            // NOT currentZone which is just the menu/list index
-            cnzBumperManager.update(playable, Camera.getInstance().getX(), level.getZoneIndex());
+        // Update zone-specific features (CNZ bumpers, etc.)
+        if (zoneFeatureProvider != null && level != null) {
+            zoneFeatureProvider.update(playable, Camera.getInstance().getX(), level.getZoneIndex());
         }
         if (levelGamestate != null) {
             levelGamestate.update();
@@ -371,45 +371,6 @@ public class LevelManager {
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load spindash dust art.", e);
             playable.setSpindashDustManager(null);
-        }
-    }
-
-    /**
-     * Initialize CNZ map bumpers if the current zone is Casino Night Zone.
-     * <p>
-     * These are the triangular bumpers embedded in level tiles that use
-     * SndID_LargeBumper (0xD9) and have $A00 velocity.
-     *
-     * @param rom       The ROM to read bumper data from
-     * @param zoneIndex Current zone index
-     * @param actIndex  Current act index (0 or 1)
-     * @param cameraX   Current camera X position for initial windowing
-     */
-    private void initCNZBumpers(Rom rom, int zoneIndex, int actIndex, int cameraX) {
-        // Only initialize for Casino Night Zone (zone index 3)
-        if (zoneIndex != CNZBumperCollisionManager.ZONE_CNZ) {
-            cnzBumperManager = null;
-            return;
-        }
-
-        try {
-            CNZBumperDataLoader loader = new CNZBumperDataLoader();
-            java.util.List<CNZBumperSpawn> bumpers = loader.load(rom, actIndex);
-
-            if (bumpers.isEmpty()) {
-                LOGGER.warning("No CNZ bumpers loaded for Act " + (actIndex + 1));
-                cnzBumperManager = null;
-                return;
-            }
-
-            CNZBumperPlacementManager placementManager = new CNZBumperPlacementManager(bumpers);
-            placementManager.reset(cameraX);
-            cnzBumperManager = new CNZBumperCollisionManager(placementManager);
-
-            LOGGER.info("Initialized CNZ bumper system with " + bumpers.size() + " bumpers");
-        } catch (IOException e) {
-            LOGGER.log(SEVERE, "Failed to load CNZ bumper data", e);
-            cnzBumperManager = null;
         }
     }
 

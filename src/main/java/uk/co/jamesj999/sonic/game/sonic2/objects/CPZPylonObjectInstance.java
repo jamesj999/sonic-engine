@@ -19,23 +19,20 @@ import java.util.List;
  * but in front of the background art. Uses parallax scrolling.
  * <p>
  * Based on disassembly from s2.asm lines 46164-46212:
- * - Art: ArtNem_CPZMetalThings at tile $0373
- * - Mappings: 9 sprite pieces, each 4x4 tiles (32x32 pixels), arranged vertically
- * - Total height: 288 pixels (from Y=-0x80 to Y=0x7F)
- * - Width: 32 pixels
+ * - Art: ArtNem_CPZMetalThings at ROM 0x825AE
+ * - Mappings: 1 frame with 9 sprite pieces (4x4 tiles each), arranged vertically
+ * - All pieces use tile 0 with alternating vertical flip for symmetry
+ * - Priority: 7 (highest - renders first/furthest back)
  * <p>
- * Parallax behavior:
- * X position = (Camera_X_pos & 0x3FF) / 2
- * Y position = 0xD0 (208, fixed screen position)
- * Only visible when (Camera_X_pos & 0x3FF) < 0x2E0
+ * Parallax behavior (from disassembly):
+ * - Visibility: (Camera_X_pos & 0x3FF) < 0x2E0
+ * - X pixel = -3 * (Camera_X_pos & 0x3FF) / 4  (moves left as camera moves right)
+ * - Y pixel = 0x100 - ((Camera_Y_pos / 2) & 0x3F)
  * <p>
  * This object is NOT loaded from level object data - it is created automatically
  * when CPZ loads and uses camera-relative positioning.
  */
 public class CPZPylonObjectInstance extends AbstractObjectInstance {
-
-    // Screen Y position (fixed at 208 pixels from top)
-    private static final int SCREEN_Y = 0xD0;
 
     // Maximum camera X value (masked) for visibility
     private static final int VISIBILITY_THRESHOLD = 0x2E0;
@@ -43,14 +40,11 @@ public class CPZPylonObjectInstance extends AbstractObjectInstance {
     // Camera X mask for parallax calculation
     private static final int CAMERA_X_MASK = 0x3FF;
 
-    // Number of sprite pieces in the pylon
-    private static final int PIECE_COUNT = 9;
+    // Camera Y mask after shift
+    private static final int CAMERA_Y_MASK = 0x3F;
 
-    // Each piece is 4x4 tiles = 32x32 pixels
-    private static final int PIECE_HEIGHT = 32;
-
-    // Starting Y offset for the first piece (from Y=-0x80)
-    private static final int START_Y_OFFSET = -0x80;
+    // Base Y offset for the pylon
+    private static final int BASE_Y = 0x100;
 
     public CPZPylonObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -58,16 +52,22 @@ public class CPZPylonObjectInstance extends AbstractObjectInstance {
 
     @Override
     public int getX() {
-        // X position uses parallax: (cameraX & 0x3FF) / 2
+        // X position uses parallax: -3 * (cameraX & 0x3FF) / 4
         Camera camera = Camera.getInstance();
         int cameraX = camera.getX();
-        return (cameraX & CAMERA_X_MASK) / 2;
+        int masked = cameraX & CAMERA_X_MASK;
+        // Original: asr.w #1,d1 -> d1/2; move.w d1,d0; asr.w #1,d1 -> d1/4; add.w d1,d0 -> 3/4; neg.w d0
+        int x = (masked >> 1) + (masked >> 2);  // 3/4 of masked value
+        return -x;
     }
 
     @Override
     public int getY() {
-        // Fixed screen Y position
-        return SCREEN_Y;
+        // Y position: 0x100 - ((cameraY / 2) & 0x3F)
+        Camera camera = Camera.getInstance();
+        int cameraY = camera.getY();
+        int yOffset = (cameraY >> 1) & CAMERA_Y_MASK;
+        return BASE_Y - yOffset;
     }
 
     @Override
@@ -117,18 +117,18 @@ public class CPZPylonObjectInstance extends AbstractObjectInstance {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
 
-        // Calculate screen position (parallax X, fixed Y)
-        int screenX = (cameraX & CAMERA_X_MASK) / 2;
-        int screenY = SCREEN_Y;
+        // Calculate screen position using correct parallax formulas
+        int screenX = getX();
+        int screenY = getY();
 
         // Convert to world position for rendering
+        // Screen coordinates are relative to camera, so:
+        // worldX = cameraX + screenX
+        // worldY = cameraY + screenY
         int worldX = cameraX + screenX;
         int worldY = cameraY + screenY;
 
-        // Render all 9 pieces vertically
-        for (int i = 0; i < PIECE_COUNT; i++) {
-            int pieceY = worldY + START_Y_OFFSET + (i * PIECE_HEIGHT);
-            renderer.drawFrameIndex(i, worldX, pieceY, false, false);
-        }
+        // Render frame 0 (the single frame containing all 9 pieces)
+        renderer.drawFrameIndex(0, worldX, worldY, false, false);
     }
 }

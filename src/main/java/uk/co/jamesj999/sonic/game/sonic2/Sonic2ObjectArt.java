@@ -1555,23 +1555,35 @@ public class Sonic2ObjectArt {
 
     /**
      * Creates mappings for CPZ Pylon (Obj7C).
-     * Based on s2.asm lines 46164-46212:
-     * 9 sprite pieces, each 4x4 tiles (32x32 pixels), arranged vertically.
-     * Each frame represents one piece of the pylon.
+     * Based on mappings/sprite/obj7C.asm:
+     * ONE frame with 9 sprite pieces (4x4 tiles each), arranged vertically.
+     * All pieces use tile 0 with alternating vFlip for visual symmetry.
+     *
+     * spritePiece xoffset, yoffset, width, height, tileIndex, hFlip, vFlip, palette, priority
+     * spritePiece -$10, -$80, 4, 4, 0, 0, 0, 1, 1
+     * spritePiece -$10, -$60, 4, 4, 0, 0, 1, 1, 1  (vFlip)
+     * spritePiece -$10, -$40, 4, 4, 0, 0, 0, 1, 1
+     * spritePiece -$10, -$20, 4, 4, 0, 0, 1, 1, 1  (vFlip)
+     * spritePiece -$10,    0, 4, 4, 0, 0, 0, 1, 1
+     * spritePiece -$10,  $20, 4, 4, 0, 0, 1, 1, 1  (vFlip)
+     * spritePiece -$10,  $40, 4, 4, 0, 0, 0, 1, 1
+     * spritePiece -$10,  $60, 4, 4, 0, 0, 1, 1, 1  (vFlip)
+     * spritePiece -$10,  $7F, 4, 4, 0, 0, 0, 1, 1
      */
     private List<SpriteMappingFrame> createCPZPylonMappings() {
         List<SpriteMappingFrame> frames = new ArrayList<>();
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
 
-        // 9 frames, each with a single 4x4 tile piece
-        // Tile index increases by 16 (4x4 tiles) per frame
+        // Y offsets for each piece: -128, -96, -64, -32, 0, 32, 64, 96, 127
+        int[] yOffsets = { -0x80, -0x60, -0x40, -0x20, 0, 0x20, 0x40, 0x60, 0x7F };
+
+        // Create 9 pieces, all using tile 0, with alternating vFlip
         for (int i = 0; i < 9; i++) {
-            List<SpriteMappingPiece> pieces = new ArrayList<>();
-            // spritePiece -$10, -$10, 4, 4, tileIndex, 0, 0, 0, 0
-            int tileIndex = i * 16;  // 4x4 = 16 tiles per piece
-            pieces.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, tileIndex, false, false, 0));
-            frames.add(new SpriteMappingFrame(pieces));
+            boolean vFlip = (i % 2) == 1;  // Odd indices have vFlip
+            pieces.add(new SpriteMappingPiece(-0x10, yOffsets[i], 4, 4, 0, false, vFlip, 0));
         }
 
+        frames.add(new SpriteMappingFrame(pieces));
         return frames;
     }
 

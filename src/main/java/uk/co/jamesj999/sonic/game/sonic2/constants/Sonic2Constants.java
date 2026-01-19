@@ -196,7 +196,7 @@ public class Sonic2Constants {
     public static final int ART_NEM_CPZ_STAIRBLOCK_ADDR = 0x82A46;  // ArtNem_CPZStairBlock (Moving block from CPZ)
 
     // CPZ Pylon (Object 0x7C) - decorative background pylon
-    public static final int ART_NEM_CPZ_METAL_THINGS_ADDR = 0x82A8C;  // ArtNem_CPZMetalThings (verified)
+    public static final int ART_NEM_CPZ_METAL_THINGS_ADDR = 0x825AE;  // ArtNem_CPZMetalThings (verified)
     public static final int ART_NEM_WFZ_PLATFORM_ADDR = 0x8D96E;    // ArtNem_WfzFloatingPlatform (verified)
     public static final int ART_TILE_CPZ_ELEVATOR = 0x03A0;  // palette 3
     public static final int ART_TILE_OOZ_ELEVATOR = 0x02F4;  // palette 3

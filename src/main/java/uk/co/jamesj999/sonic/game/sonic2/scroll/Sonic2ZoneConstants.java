@@ -4,12 +4,13 @@ import uk.co.jamesj999.sonic.game.ScrollHandlerProvider.ZoneConstants;
 
 /**
  * Zone index constants for Sonic 2.
- * These match the zone indices used by LevelManager and ParallaxManager.
+ * Contains both internal list indices (for LevelManager/ParallaxManager) and
+ * ROM zone IDs (from s2.constants.asm zoneID macro).
  */
 public class Sonic2ZoneConstants implements ZoneConstants {
     public static final Sonic2ZoneConstants INSTANCE = new Sonic2ZoneConstants();
 
-    // Zone indices (matching LevelManager list order)
+    // Internal zone indices (matching LevelManager list order)
     public static final int ZONE_EHZ = 0;  // Emerald Hill
     public static final int ZONE_CPZ = 1;  // Chemical Plant
     public static final int ZONE_ARZ = 2;  // Aquatic Ruin
@@ -23,6 +24,22 @@ public class Sonic2ZoneConstants implements ZoneConstants {
     public static final int ZONE_DEZ = 10; // Death Egg
 
     public static final int ZONE_COUNT = 11;
+
+    // ROM zone IDs (from s2.constants.asm zoneID macro)
+    // These are the actual values stored in the ROM and returned by level.getZoneIndex()
+    public static final int ROM_ZONE_EHZ = 0x00;  // emerald_hill_zone
+    public static final int ROM_ZONE_WZ  = 0x02;  // wood_zone (unused)
+    public static final int ROM_ZONE_MTZ = 0x04;  // metropolis_zone
+    public static final int ROM_ZONE_WFZ = 0x06;  // wing_fortress_zone
+    public static final int ROM_ZONE_HTZ = 0x07;  // hill_top_zone
+    public static final int ROM_ZONE_HPZ = 0x08;  // hidden_palace_zone (unused)
+    public static final int ROM_ZONE_OOZ = 0x0A;  // oil_ocean_zone
+    public static final int ROM_ZONE_MCZ = 0x0B;  // mystic_cave_zone
+    public static final int ROM_ZONE_CNZ = 0x0C;  // casino_night_zone
+    public static final int ROM_ZONE_CPZ = 0x0D;  // chemical_plant_zone
+    public static final int ROM_ZONE_DEZ = 0x0E;  // death_egg_zone
+    public static final int ROM_ZONE_ARZ = 0x0F;  // aquatic_ruin_zone
+    public static final int ROM_ZONE_SCZ = 0x10;  // sky_chase_zone
 
     private static final String[] ZONE_NAMES = {
             "Emerald Hill",

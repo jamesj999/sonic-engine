@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
+import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -11,9 +12,7 @@ import uk.co.jamesj999.sonic.level.objects.TouchResponseProvider;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * CPZ BlueBalls Object (Obj1D) - Bouncing water droplet hazard.
@@ -101,6 +100,15 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
      */
     private static final int COLLISION_FLAGS = 0x8B;
 
+    /**
+     * Off-screen distance threshold for object deletion.
+     * ROM: MarkObjGone uses $80+320+$40+$80 = $280 (640 pixels).
+     * Objects further than this from camera are deleted.
+     * <p>
+     * ROM formula: ((x_pos & $FF80) - Camera_X_pos_coarse) > $280
+     */
+    private static final int OFFSCREEN_DISTANCE = 0x280;
+
     // ========================================================================
     // State Machine
     // The disassembly uses separate wait states for arc and straight motion:
@@ -138,17 +146,6 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
      */
     private static boolean gloopToggle = false;
 
-    // ========================================================================
-    // Sibling Spawn Tracking (Bug Fix #2)
-    // Tracks which spawn locations have already created siblings.
-    // Persists across object load/unload cycles within a level.
-    // ========================================================================
-
-    /**
-     * Registry of spawn locations that have already spawned siblings.
-     * Key: (x << 16) | (y & 0xFFFF) to create unique identifier.
-     */
-    private static final Set<Long> spawnedSiblingLocations = new HashSet<>();
 
     // ========================================================================
     // Instance State
@@ -271,6 +268,14 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
+        // MarkObjGone check: destroy if too far from camera
+        // ROM: s2.asm lines 29993-30011
+        // This ensures dynamic siblings are unloaded like ROM behavior
+        if (checkMarkObjGone()) {
+            setDestroyed(true);
+            return;
+        }
+
         // Spawn siblings on first update
         if (!hasSpawnedSiblings && siblingCount > 0) {
             spawnSiblings();
@@ -284,6 +289,31 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             case STATE_WAIT_STRAIGHT -> updateWaitStraight();
             case STATE_MOVE_STRAIGHT -> updateMoveStraight();
         }
+    }
+
+    /**
+     * Checks if this object should be deleted due to being off-screen.
+     * Replicates ROM's MarkObjGone behavior (s2.asm lines 29993-30011).
+     * <p>
+     * ROM logic:
+     * <pre>
+     *     move.w  x_pos(a0),d0
+     *     andi.w  #$FF80,d0              ; Round to 128-pixel chunks
+     *     sub.w   (Camera_X_pos_coarse).w,d0
+     *     cmpi.w  #$280,d0               ; $80+320+$40+$80
+     *     bhi.w   DeleteObject           ; If > $280, delete
+     * </pre>
+     *
+     * @return true if the object should be destroyed
+     */
+    private boolean checkMarkObjGone() {
+        Camera camera = Camera.getInstance();
+        int cameraXCoarse = camera.getX() & 0xFF80;
+        int objectXCoarse = (currentX >> 8) & 0xFF80;
+
+        // Unsigned comparison: if difference > OFFSCREEN_DISTANCE, delete
+        int diff = (objectXCoarse - cameraXCoarse) & 0xFFFF;
+        return diff > OFFSCREEN_DISTANCE;
     }
 
     /**
@@ -431,17 +461,10 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
      * <p>
      * ROM timing: Parent (timer=0) fires on frame 1, Sibling 1 (timer=3) fires on frame 4, etc.
      * <p>
-     * Uses spawn location registry to prevent duplicate siblings when parent is
-     * unloaded and reloaded.
+     * ROM behavior: Siblings are spawned fresh every time the parent initializes.
+     * When objects are unloaded (scrolled off-screen) and reloaded, they start fresh.
      */
     private void spawnSiblings() {
-        // Check if siblings were already spawned for this location (Bug Fix #2)
-        long spawnKey = ((long) initialX << 16) | (initialY & 0xFFFF);
-        if (spawnedSiblingLocations.contains(spawnKey)) {
-            return; // Already spawned siblings for this location
-        }
-        spawnedSiblingLocations.add(spawnKey);
-
         LevelManager levelManager = LevelManager.getInstance();
         if (levelManager == null || levelManager.getObjectManager() == null) {
             return;
@@ -588,11 +611,10 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     /**
      * Resets all global state for BlueBalls objects.
      * Call this when loading a new level or restarting the current level
-     * to ensure clean sibling tracking and sound state.
+     * to ensure clean sound state.
      */
     public static void resetGlobalState() {
         activeInstanceCount = 0;
-        spawnedSiblingLocations.clear();
         gloopToggle = false;
     }
 }

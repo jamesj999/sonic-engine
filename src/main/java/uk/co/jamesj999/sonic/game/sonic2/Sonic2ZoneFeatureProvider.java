@@ -55,13 +55,13 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         currentZone = zoneIndex;
         currentAct = actIndex;
 
-        // Initialize CNZ bumpers
-        if (zoneIndex == Sonic2ZoneConstants.ZONE_CNZ) {
+        // Initialize CNZ bumpers (ROM zone ID 0x0C)
+        if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
             initCNZBumpers(rom, actIndex, cameraX);
         }
 
-        // Initialize CPZ pylon
-        if (zoneIndex == Sonic2ZoneConstants.ZONE_CPZ) {
+        // Initialize CPZ pylon (ROM zone ID 0x0D)
+        if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CPZ) {
             initCPZPylon();
         }
 
@@ -117,7 +117,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
 
     @Override
     public void update(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
-        if (cnzBumperManager != null && zoneIndex == Sonic2ZoneConstants.ZONE_CNZ) {
+        if (cnzBumperManager != null && zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
             cnzBumperManager.update(player, cameraX, zoneIndex);
         }
     }
@@ -132,15 +132,15 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
 
     @Override
     public boolean hasCollisionFeatures(int zoneIndex) {
-        return zoneIndex == Sonic2ZoneConstants.ZONE_CNZ;
+        return zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ;
     }
 
     @Override
     public boolean hasWater(int zoneIndex) {
-        // Zones with water in Sonic 2
-        return zoneIndex == Sonic2ZoneConstants.ZONE_ARZ ||
-               zoneIndex == Sonic2ZoneConstants.ZONE_CPZ ||  // Mega Mack (purple liquid)
-               zoneIndex == Sonic2ZoneConstants.ZONE_HTZ;    // Lava (acts like water for drowning)
+        // Zones with water in Sonic 2 (using ROM zone IDs)
+        return zoneIndex == Sonic2ZoneConstants.ROM_ZONE_ARZ ||
+               zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CPZ ||  // Mega Mack (purple liquid)
+               zoneIndex == Sonic2ZoneConstants.ROM_ZONE_HTZ;    // Lava (acts like water for drowning)
     }
 
     @Override
