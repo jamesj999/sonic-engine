@@ -201,13 +201,11 @@ public class SignpostObjectInstance extends BoxObjectInstance {
             LOGGER.fine("Walk-off initiated: forceInputRight=true, controlLocked=true");
         }
 
-        // Check for off-screen transition - trigger results when player is fully
-        // past the right edge of the visible screen
+        // Check for off-screen transition
         Camera camera = Camera.getInstance();
         if (camera != null && !resultsSpawned) {
-            int screenRightEdge = camera.getX() + camera.getWidth();
-            // Player is off-screen when their left edge is past the screen's right edge
-            if (player.getX() > screenRightEdge) {
+            int offScreenX = resolveRightLimit(camera);
+            if (resolvePlayerRenderRight(player) > offScreenX) {
                 spawnResultsScreen(player);
             }
         }

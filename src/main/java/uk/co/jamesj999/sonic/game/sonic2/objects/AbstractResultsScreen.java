@@ -3,7 +3,6 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.GameStateManager;
-import uk.co.jamesj999.sonic.game.ResultsScreen;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
@@ -22,12 +21,12 @@ import java.util.logging.Logger;
  * - Slide animation calculations
  * - Score updating
  */
-public abstract class AbstractResultsScreen extends AbstractObjectInstance implements ResultsScreen {
+public abstract class AbstractResultsScreen extends AbstractObjectInstance {
     private static final Logger LOGGER = Logger.getLogger(AbstractResultsScreen.class.getName());
 
     // States
     protected static final int STATE_SLIDE_IN = 0;
-    protected static final int STATE_PRE_TALLY_DELAY = 1; // ROM: $B4 (180) frame delay before tally
+    protected static final int STATE_PRE_TALLY_DELAY = 1;  // ROM: $B4 (180) frame delay before tally
     protected static final int STATE_TALLY = 2;
     protected static final int STATE_WAIT = 3;
     protected static final int STATE_EXIT = 4;
@@ -35,13 +34,12 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
     // Default timing constants (can be overridden)
     // From s2.asm: move.w #$B4,anim_frame_duration(a0) = 180 frames
     protected static final int DEFAULT_SLIDE_DURATION = 60;
-    protected static final int DEFAULT_PRE_TALLY_DELAY = 180; // $B4 frames - ROM-accurate delay before tally starts
+    protected static final int DEFAULT_PRE_TALLY_DELAY = 180;  // $B4 frames - ROM-accurate delay before tally starts
     protected static final int DEFAULT_WAIT_DURATION = 180;
     protected static final int DEFAULT_TALLY_DECREMENT = 10;
     protected static final int DEFAULT_TALLY_TICK_INTERVAL = 4;
 
-    // Movement speed from s2.asm Obj34_MoveTowardsTargetPosition: moveq #$10,d0 =
-    // 16 pixels/frame
+    // Movement speed from s2.asm Obj34_MoveTowardsTargetPosition: moveq #$10,d0 = 16 pixels/frame
     protected static final int SLIDE_SPEED_PIXELS_PER_FRAME = 16;
 
     // Screen dimensions
@@ -103,9 +101,9 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
     /**
      * ROM-accurate delay before tally begins.
      * From s2.asm loc_1419C / Obj6F_TimedDisplay:
-     * subq.w #1,anim_frame_duration(a0)
-     * bne.s BranchTo18_DisplaySprite
-     * addq.b #2,routine(a0)
+     *   subq.w #1,anim_frame_duration(a0)
+     *   bne.s BranchTo18_DisplaySprite
+     *   addq.b #2,routine(a0)
      */
     protected void updatePreTallyDelay() {
         if (stateTimer >= getPreTallyDelay()) {
@@ -168,17 +166,6 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
         return complete;
     }
 
-    /**
-     * Bridge method to satisfy {@link ResultsScreen} interface.
-     * Delegates to the concrete update method with player cast.
-     */
-    @Override
-    public void update(int frameCounter, Object context) {
-        AbstractPlayableSprite player = (context instanceof AbstractPlayableSprite) ? (AbstractPlayableSprite) context
-                : null;
-        update(frameCounter, player);
-    }
-
     // Timing getters - override to customize
     protected int getSlideDuration() {
         return DEFAULT_SLIDE_DURATION;
@@ -226,10 +213,8 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
      * Calculate remaining offset for an element sliding in from off-screen.
      * Uses ROM-accurate 16 pixels/frame speed.
      *
-     * @param startOffset The initial distance from target (e.g., 352 for element
-     *                    starting at 320+352)
-     * @return The current offset from target (0 when element has reached its
-     *         position)
+     * @param startOffset The initial distance from target (e.g., 352 for element starting at 320+352)
+     * @return The current offset from target (0 when element has reached its position)
      */
     protected int getSlideOffset(int startOffset) {
         int pixelsMoved = totalFrames * SLIDE_SPEED_PIXELS_PER_FRAME;
@@ -261,7 +246,7 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
 
     // Placeholder rendering helpers for subclasses
     protected void renderPlaceholderBox(List<GLCommand> commands, int x, int y, int width, int height,
-            float r, float g, float b) {
+                                        float r, float g, float b) {
         // Draw a simple outline rectangle as placeholder
         // Top edge
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
@@ -286,7 +271,7 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
     }
 
     protected void renderPlaceholderText(List<GLCommand> commands, int x, int y,
-            String text, float r, float g, float b) {
+                                         String text, float r, float g, float b) {
         int width = text.length() * 6;
         int height = 12;
         renderPlaceholderBox(commands, x - width / 2, y, width, height, r, g, b);
@@ -300,10 +285,10 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
      */
     protected int[] decrementBonus(int currentValue) {
         if (currentValue <= 0) {
-            return new int[] { 0, 0 };
+            return new int[]{0, 0};
         }
         int decrement = Math.min(getTallyDecrement(), currentValue);
-        return new int[] { currentValue - decrement, decrement };
+        return new int[]{currentValue - decrement, decrement};
     }
 
     /**

@@ -143,8 +143,6 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
                 (spawn, registry) -> new BarrierObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.CPZ_STAIRCASE,
                 (spawn, registry) -> new CPZStaircaseObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
-        registerFactory(Sonic2ObjectIds.CPZ_PYLON,
-                (spawn, registry) -> new CPZPylonObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
         // CNZ Objects
         registerFactory(Sonic2ObjectIds.BUMPER,

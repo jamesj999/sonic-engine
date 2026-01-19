@@ -154,14 +154,19 @@ public abstract class AbstractSprite implements Sprite {
 		byte updatedXSubpixel = (byte) (xTotal % 256);
 		byte updatedYSubpixel = (byte) (yTotal % 256);
 
-		xPixel = updatedXPixel;
-		xSubpixel = updatedXSubpixel;
+		if (updatedXPixel < 0) {
+			xPixel = 0;
+			xSubpixel = 0;
+			xSpeed = 0;
+		} else {
+			xPixel = updatedXPixel;
+			xSubpixel = updatedXSubpixel;
+		}
 
-		// Y boundary: prevent going above Y=0 (top of level)
-		// X boundary enforcement is handled by PlayableSpriteMovementManager.doLevelBoundary()
 		if (updatedYPixel < 0) {
 			yPixel = 0;
 			ySubpixel = 0;
+			ySpeed = 0;
 		} else {
 			yPixel = updatedYPixel;
 			ySubpixel = updatedYSubpixel;

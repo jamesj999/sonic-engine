@@ -14,8 +14,6 @@ import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.LevelEventProvider;
 import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.game.RespawnState;
-import uk.co.jamesj999.sonic.game.ResultsScreen;
-import uk.co.jamesj999.sonic.game.SpecialStageProvider;
 import uk.co.jamesj999.sonic.game.TitleCardProvider;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
 import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObjectInstance;
@@ -36,20 +34,18 @@ import java.util.logging.Logger;
  * Standalone game loop that can run independently of the rendering system.
  * This enables headless testing of game logic without requiring OpenGL context.
  *
- * <p>
- * The GameLoop manages:
+ * <p>The GameLoop manages:
  * <ul>
- * <li>Audio updates</li>
- * <li>Timer updates</li>
- * <li>Input processing</li>
- * <li>Game mode transitions (level ↔ special stage)</li>
- * <li>Sprite collision and movement</li>
- * <li>Camera updates</li>
- * <li>Level updates</li>
+ *   <li>Audio updates</li>
+ *   <li>Timer updates</li>
+ *   <li>Input processing</li>
+ *   <li>Game mode transitions (level ↔ special stage)</li>
+ *   <li>Sprite collision and movement</li>
+ *   <li>Camera updates</li>
+ *   <li>Level updates</li>
  * </ul>
  *
- * <p>
- * For headless testing, create a GameLoop with a mock InputHandler
+ * <p>For headless testing, create a GameLoop with a mock InputHandler
  * and call {@link #step()} to advance one frame.
  */
 public class GameLoop {
@@ -61,10 +57,8 @@ public class GameLoop {
     private final Camera camera = Camera.getInstance();
     private final TimerManager timerManager = TimerManager.getInstance();
     private final LevelManager levelManager = LevelManager.getInstance();
-    // Direct reference to Sonic2SpecialStageManager for debug features and Sonic
-    // 2-specific logic.
-    // Future games should use GameModule.getSpecialStageProvider() for
-    // game-agnostic code.
+    // Direct reference to Sonic2SpecialStageManager for debug features and Sonic 2-specific logic.
+    // Future games should use GameModule.getSpecialStageProvider() for game-agnostic code.
     private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
 
     // Title card provider - lazily initialized when GameModule is available
@@ -74,14 +68,13 @@ public class GameLoop {
     private GameMode currentGameMode = GameMode.LEVEL;
 
     // Special stage results screen
-    private ResultsScreen resultsScreen;
+    private SpecialStageResultsScreenObjectInstance resultsScreen;
     private int ssRingsCollected;
     private boolean ssEmeraldCollected;
     private int ssStageIndex;
     private int resultsFrameCounter = 0;
 
-    // Flag to track when returning from special stage (for title card exit
-    // handling)
+    // Flag to track when returning from special stage (for title card exit handling)
     private boolean returningFromSpecialStage = false;
 
     // Flag to freeze level updates during special stage entry transition
@@ -109,9 +102,7 @@ public class GameLoop {
     }
 
     /**
-     * Gets the title card provider, lazily initializing it from the current
-     * GameModule.
-     * 
+     * Gets the title card provider, lazily initializing it from the current GameModule.
      * @return the title card provider
      */
     private TitleCardProvider getTitleCardProviderLazy() {
@@ -215,8 +206,7 @@ public class GameLoop {
             // Update title card animation
             getTitleCardProviderLazy().update();
 
-            // From disassembly lines 5073-5078: control is released at the START of
-            // TEXT_WAIT,
+            // From disassembly lines 5073-5078: control is released at the START of TEXT_WAIT,
             // not when the title card is complete. This allows the player to move while the
             // text is still visible on screen.
             if (getTitleCardProviderLazy().shouldReleaseControl()) {
@@ -227,8 +217,7 @@ public class GameLoop {
                 // This allows Sonic to settle onto the ground while title card is visible,
                 // preventing camera jitter when title card ends
                 spriteCollisionManager.updateWithoutInput();
-                // Force camera to snap to player position during title card (no smooth
-                // scrolling)
+                // Force camera to snap to player position during title card (no smooth scrolling)
                 camera.updatePosition(true);
                 return; // Don't process LEVEL mode logic yet
             }
@@ -237,8 +226,7 @@ public class GameLoop {
         // LEVEL mode (or just transitioned from TITLE_CARD)
         if (currentGameMode == GameMode.LEVEL) {
             // Continue updating title card overlay if still active
-            // (TEXT_WAIT and TEXT_EXIT phases where player can move but text is still
-            // visible)
+            // (TEXT_WAIT and TEXT_EXIT phases where player can move but text is still visible)
             if (getTitleCardProviderLazy().isOverlayActive()) {
                 getTitleCardProviderLazy().update();
             }
@@ -319,8 +307,7 @@ public class GameLoop {
     }
 
     /**
-     * Debug function: Immediately completes the special stage with emerald
-     * collected.
+     * Debug function: Immediately completes the special stage with emerald collected.
      * Simulates successful completion with the ring requirement met.
      * Press END key during special stage to trigger.
      */
@@ -370,13 +357,13 @@ public class GameLoop {
         // Ring requirements at final checkpoint (checkpoint 3) for each stage
         // From s2.asm Ring_Requirement_Table (solo mode)
         int[][] requirements = {
-                { 30, 60, 90, 120 }, // Stage 1
-                { 40, 80, 120, 160 }, // Stage 2
-                { 50, 100, 140, 180 }, // Stage 3
-                { 50, 100, 140, 180 }, // Stage 4
-                { 60, 110, 160, 200 }, // Stage 5
-                { 70, 120, 180, 220 }, // Stage 6
-                { 80, 140, 200, 240 } // Stage 7
+                {30, 60, 90, 120},   // Stage 1
+                {40, 80, 120, 160},  // Stage 2
+                {50, 100, 140, 180}, // Stage 3
+                {50, 100, 140, 180}, // Stage 4
+                {60, 110, 160, 200}, // Stage 5
+                {70, 120, 180, 220}, // Stage 6
+                {80, 140, 200, 240}  // Stage 7
         };
         if (stageIndex >= 0 && stageIndex < requirements.length) {
             return requirements[stageIndex][3]; // Final checkpoint requirement
@@ -420,8 +407,7 @@ public class GameLoop {
     }
 
     /**
-     * Actually enters the results screen after fade-to-white completes (debug
-     * version).
+     * Actually enters the results screen after fade-to-white completes (debug version).
      */
     private void doEnterResultsScreenDebug() {
         // Reset special stage manager
@@ -473,8 +459,7 @@ public class GameLoop {
 
         // Clear power-ups before entering special stage
         String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-        if (mainCode == null)
-            mainCode = "sonic";
+        if (mainCode == null) mainCode = "sonic";
         var sprite = spriteManager.getSprite(mainCode);
         if (sprite instanceof AbstractPlayableSprite playable) {
             playable.clearPowerUps();
@@ -537,7 +522,6 @@ public class GameLoop {
     /**
      * Enters the results screen after special stage completion/failure.
      * Performs fade-to-white transition before showing results.
-     * 
      * @param emeraldCollected true if an emerald was collected
      */
     private void enterResultsScreen(boolean emeraldCollected) {
@@ -575,23 +559,18 @@ public class GameLoop {
      * Actually enters the results screen after fade-to-white completes.
      */
     private void doEnterResultsScreen() {
-        // Reset special stage provider
-        SpecialStageProvider ssProvider = GameModuleRegistry.getCurrent().getSpecialStageProvider();
-        if (ssProvider != null) {
-            ssProvider.reset();
-        }
+        // Reset special stage manager
+        specialStageManager.reset();
 
         // Transition to results mode
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.SPECIAL_STAGE_RESULTS;
         resultsFrameCounter = 0;
 
-        // Create results screen with current emerald count via provider
+        // Create results screen with current emerald count
         int totalEmeralds = GameStateManager.getInstance().getEmeraldCount();
-        if (ssProvider != null) {
-            resultsScreen = ssProvider.createResultsScreen(
-                    ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
-        }
+        resultsScreen = new SpecialStageResultsScreenObjectInstance(
+                ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
 
         // Play act clear music
         AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_ACT_CLEAR);
@@ -609,8 +588,7 @@ public class GameLoop {
     }
 
     /**
-     * Exits the results screen and shows the title card before returning to the
-     * level.
+     * Exits the results screen and shows the title card before returning to the level.
      * Performs fade-to-black transition before showing title card.
      */
     private void exitResultsScreen() {
@@ -642,8 +620,7 @@ public class GameLoop {
         // Clean up results screen
         resultsScreen = null;
 
-        // Restore level palettes (special stage overwrites them) - needed for title
-        // card
+        // Restore level palettes (special stage overwrites them) - needed for title card
         levelManager.reloadLevelPalettes();
 
         // Consume any pending title card request to prevent double title card
@@ -673,8 +650,7 @@ public class GameLoop {
         // Restore player to checkpoint state BEFORE title card starts
         // This prevents the player from falling/dying during the title card animation
         String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-        if (mainCode == null)
-            mainCode = "sonic";
+        if (mainCode == null) mainCode = "sonic";
         var sprite = spriteManager.getSprite(mainCode);
         if (sprite instanceof AbstractPlayableSprite playable) {
             RespawnState checkpointState = levelManager.getCheckpointState();
@@ -739,8 +715,7 @@ public class GameLoop {
 
         // Freeze the player during title card - full state reset
         String mainCode = configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-        if (mainCode == null)
-            mainCode = "sonic";
+        if (mainCode == null) mainCode = "sonic";
         var sprite = spriteManager.getSprite(mainCode);
         if (sprite instanceof AbstractPlayableSprite playable) {
             // Freeze all movement
@@ -786,13 +761,11 @@ public class GameLoop {
         GameMode oldMode = currentGameMode;
         currentGameMode = GameMode.LEVEL;
 
-        // Don't reset title card - overlay phases (TEXT_WAIT, TEXT_EXIT) still need to
-        // run
+        // Don't reset title card - overlay phases (TEXT_WAIT, TEXT_EXIT) still need to run
         // getTitleCardProviderLazy().reset();
 
         if (returningFromSpecialStage) {
-            // Returning from special stage - checkpoint was already restored in
-            // enterTitleCardFromResults()
+            // Returning from special stage - checkpoint was already restored in enterTitleCardFromResults()
             returningFromSpecialStage = false;
             LOGGER.info("Exited Title Card, returned to level from special stage at checkpoint");
         } else {
@@ -901,7 +874,6 @@ public class GameLoop {
 
     /**
      * Gets the title card provider (for rendering).
-     * 
      * @return the title card provider
      */
     public TitleCardProvider getTitleCardProvider() {
@@ -910,10 +882,9 @@ public class GameLoop {
 
     /**
      * Gets the current results screen object (for rendering).
-     * 
      * @return the results screen object, or null if not in results mode
      */
-    public ResultsScreen getResultsScreen() {
+    public SpecialStageResultsScreenObjectInstance getResultsScreen() {
         return resultsScreen;
     }
 
@@ -924,13 +895,8 @@ public class GameLoop {
         int downKey = configService.getInt(SonicConfiguration.DOWN);
         int jumpKey = configService.getInt(SonicConfiguration.JUMP);
 
-        SpecialStageProvider ssProvider = GameModuleRegistry.getCurrent().getSpecialStageProvider();
-        if (ssProvider == null) {
-            return;
-        }
-
         if (inputHandler.isKeyPressed(KeyEvent.VK_F4)) {
-            ssProvider.toggleAlignmentTestMode();
+            specialStageManager.toggleAlignmentTestMode();
         }
 
         // Lag compensation adjustment (F6 decrease, F7 increase)
@@ -941,21 +907,21 @@ public class GameLoop {
             adjustLagCompensation(0.05);
         }
 
-        if (ssProvider.isAlignmentTestMode()) {
+        if (specialStageManager.isAlignmentTestMode()) {
             if (inputHandler.isKeyPressed(leftKey)) {
-                ssProvider.adjustAlignmentOffset(-1);
+                specialStageManager.adjustAlignmentOffset(-1);
             }
             if (inputHandler.isKeyPressed(rightKey)) {
-                ssProvider.adjustAlignmentOffset(1);
+                specialStageManager.adjustAlignmentOffset(1);
             }
             if (inputHandler.isKeyPressed(upKey)) {
-                ssProvider.adjustAlignmentSpeed(0.1);
+                specialStageManager.adjustAlignmentSpeed(0.1);
             }
             if (inputHandler.isKeyPressed(downKey)) {
-                ssProvider.adjustAlignmentSpeed(-0.1);
+                specialStageManager.adjustAlignmentSpeed(-0.1);
             }
             if (inputHandler.isKeyPressed(KeyEvent.VK_SPACE)) {
-                ssProvider.toggleAlignmentStepMode();
+                specialStageManager.toggleAlignmentStepMode();
             }
             return;
         }
@@ -977,33 +943,30 @@ public class GameLoop {
             heldButtons |= 0x70;
         }
 
-        ssProvider.handleInput(heldButtons, pressedButtons);
+        specialStageManager.handleInput(heldButtons, pressedButtons);
     }
 
     /**
      * Adjusts the lag compensation factor for the entire special stage simulation.
      * The lag compensation simulates original Mega Drive hardware lag frames,
-     * affecting track animation, player movement, object speed, and all other
-     * timing.
+     * affecting track animation, player movement, object speed, and all other timing.
      *
-     * @param delta Amount to adjust (positive = more lag compensation = slower
-     *              simulation)
+     * @param delta Amount to adjust (positive = more lag compensation = slower simulation)
      */
     private void adjustLagCompensation(double delta) {
-        SpecialStageProvider ssProvider = GameModuleRegistry.getCurrent().getSpecialStageProvider();
-        if (ssProvider == null || !ssProvider.isInitialized()) {
+        if (!specialStageManager.isInitialized()) {
             return;
         }
 
-        double current = ssProvider.getLagCompensation();
+        double current = specialStageManager.getLagCompensation();
         double newValue = current + delta;
-        ssProvider.setLagCompensation(newValue);
+        specialStageManager.setLagCompensation(newValue);
 
         // Calculate effective simulation rate for display
         // Base is 60 fps. With lag compensation, effective = 60 * (1 - lagComp)
-        double effectiveUpdates = 60.0 * (1.0 - ssProvider.getLagCompensation());
+        double effectiveUpdates = 60.0 * (1.0 - specialStageManager.getLagCompensation());
 
         LOGGER.info(String.format("Lag compensation: %.0f%% (effective ~%.1f updates/sec)",
-                ssProvider.getLagCompensation() * 100, effectiveUpdates));
+                specialStageManager.getLagCompensation() * 100, effectiveUpdates));
     }
 }
