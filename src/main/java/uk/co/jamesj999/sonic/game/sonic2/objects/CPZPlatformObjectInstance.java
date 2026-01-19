@@ -35,23 +35,25 @@ import java.util.logging.Logger;
  * - 8-B: Circular motion (variants)
  * - C-F: Circular motion reversed (variants)
  */
-public class CPZPlatformObjectInstance extends AbstractObjectInstance implements SolidObjectProvider, SolidObjectListener {
+public class CPZPlatformObjectInstance extends AbstractObjectInstance
+        implements SolidObjectProvider, SolidObjectListener {
     private static final Logger LOGGER = Logger.getLogger(CPZPlatformObjectInstance.class.getName());
 
-    // Subtype properties: width_pixels, mapping_frame (from Obj19_SubtypeProperties)
+    // Subtype properties: width_pixels, mapping_frame (from
+    // Obj19_SubtypeProperties)
     private static final int[][] SUBTYPE_PROPERTIES = {
-            {0x20, 0},  // Index 0: 32px width, frame 0
-            {0x18, 1},  // Index 1: 24px width, frame 1
-            {0x40, 2},  // Index 2: 64px width, frame 2
-            {0x20, 3},  // Index 3: 32px width, frame 3
+            { 0x20, 0 }, // Index 0: 32px width, frame 0
+            { 0x18, 1 }, // Index 1: 24px width, frame 1
+            { 0x40, 2 }, // Index 2: 64px width, frame 2
+            { 0x20, 3 }, // Index 3: 32px width, frame 3
     };
 
-    private static final int HALF_HEIGHT = 0x11;  // d3 = $11 in Obj19_Main
+    private static final int HALF_HEIGHT = 0x11; // d3 = $11 in Obj19_Main
 
     private int x;
     private int y;
-    private int baseX;  // objoff_30
-    private int baseY;  // objoff_32
+    private int baseX; // objoff_30
+    private int baseY; // objoff_32
     private int widthPixels;
     private int mappingFrame;
     private int moveType;
@@ -81,8 +83,6 @@ public class CPZPlatformObjectInstance extends AbstractObjectInstance implements
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        OscillationManager.update(frameCounter);
-
         // Apply movement based on subtype
         applyMovement(player);
 
@@ -132,7 +132,7 @@ public class CPZPlatformObjectInstance extends AbstractObjectInstance implements
     private void init() {
         // Extract size index from subtype bits 4-7: (subtype >> 3) & 0x1E
         int sizeIndex = (spawn.subtype() >> 3) & 0x1E;
-        sizeIndex /= 2;  // Convert to table index
+        sizeIndex /= 2; // Convert to table index
         if (sizeIndex < 0) {
             sizeIndex = 0;
         }
@@ -173,12 +173,13 @@ public class CPZPlatformObjectInstance extends AbstractObjectInstance implements
      */
     private void applyMovement(AbstractPlayableSprite player) {
         switch (moveType) {
-            case 0 -> applyHorizontalOscillation(0x08, 0x40);  // Oscillating_Data+8, amplitude $40
-            case 1 -> applyHorizontalOscillation(0x0C, 0x60);  // Oscillating_Data+$C, amplitude $60
-            case 2 -> applyVerticalOscillation(0x1C, 0x80);    // Oscillating_Data+$1C, amplitude $80
+            case 0 -> applyHorizontalOscillation(0x08, 0x40); // Oscillating_Data+8, amplitude $40
+            case 1 -> applyHorizontalOscillation(0x0C, 0x60); // Oscillating_Data+$C, amplitude $60
+            case 2 -> applyVerticalOscillation(0x1C, 0x80); // Oscillating_Data+$1C, amplitude $80
             case 3 -> applyTriggerOnStanding();
             case 4 -> applyAutoRise(true);
-            case 5 -> { /* Stationary - no movement */ }
+            case 5 -> {
+                /* Stationary - no movement */ }
             case 6, 7 -> applyAutoRise(false);
             case 8, 9, 0xA, 0xB -> applyCircularMotion(moveType, false);
             case 0xC, 0xD, 0xE, 0xF -> applyCircularMotion(moveType, true);
@@ -262,7 +263,7 @@ public class CPZPlatformObjectInstance extends AbstractObjectInstance implements
      */
     private void applyCircularMotion(int subtype, boolean reversed) {
         // Get circular motion components
-        int d1 = OscillationManager.getByte(0x38) - 0x40;  // Sign-extend
+        int d1 = OscillationManager.getByte(0x38) - 0x40; // Sign-extend
         int d2 = OscillationManager.getByte(0x3C) - 0x40;
 
         // Sign-extend from byte to signed value

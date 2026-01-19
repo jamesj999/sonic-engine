@@ -29,7 +29,8 @@ import java.util.logging.Logger;
  * Object 18 - Stationary floating platform (EHZ/ARZ/HTZ).
  * Implements movement behaviors and rendering from the disassembly.
  */
-public class ARZPlatformObjectInstance extends AbstractObjectInstance implements SolidObjectProvider, SolidObjectListener {
+public class ARZPlatformObjectInstance extends AbstractObjectInstance
+        implements SolidObjectProvider, SolidObjectListener {
     private static final Logger LOGGER = Logger.getLogger(ARZPlatformObjectInstance.class.getName());
 
     private static final int[] WIDTH_PIXELS = {
@@ -115,7 +116,6 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance implements
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        OscillationManager.update(frameCounter);
         x = baseX;
 
         boolean standing = isStanding();

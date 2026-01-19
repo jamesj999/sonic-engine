@@ -249,6 +249,13 @@ public class LevelManager {
     }
 
     public void update() {
+        // Update global oscillation values used by moving platforms, water surface,
+        // etc.
+        // Must be called centrally each frame to ensure continuous oscillation even
+        // when
+        // no platform objects are currently on-screen.
+        uk.co.jamesj999.sonic.game.sonic2.OscillationManager.update(frameCounter);
+
         Sprite player = null;
         AbstractPlayableSprite playable = null;
         boolean needsPlayer = objectManager != null || ringManager != null;
