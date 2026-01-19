@@ -129,6 +129,15 @@ public interface GameModule {
     ZoneArtProvider getZoneArtProvider();
 
     /**
+     * Returns the object art provider for this game.
+     * Provides key-based access to object sprites, animations, and related data.
+     * This abstracts away game-specific art loading to support multiple games.
+     *
+     * @return the object art provider, or null if this game has no object art
+     */
+    ObjectArtProvider getObjectArtProvider();
+
+    /**
      * Called when a level is loaded to reset any game-specific object state.
      * Use this to clear static state in object classes that persists across
      * object load/unload cycles (e.g., sibling spawn tracking, timing sync).

@@ -46,6 +46,9 @@ public final class Sonic2ObjectIds {
     public static final int BONUS_BLOCK = 0xD8; // Bonus Block / Drop Target (ObjD8)
     public static final int FLIPPER = 0x86;    // CNZ Flipper (Obj86)
 
+    // CPZ Foreground Objects
+    public static final int CPZ_PYLON = 0x7C;  // CPZ Pylon (Obj7C) - decorative background pylon
+
     private Sonic2ObjectIds() {
     }
 

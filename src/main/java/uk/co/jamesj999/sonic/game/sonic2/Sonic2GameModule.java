@@ -17,6 +17,7 @@ import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
 import uk.co.jamesj999.sonic.game.RomOffsetProvider;
 import uk.co.jamesj999.sonic.game.DebugModeProvider;
 import uk.co.jamesj999.sonic.game.DebugOverlayProvider;
+import uk.co.jamesj999.sonic.game.ObjectArtProvider;
 import uk.co.jamesj999.sonic.game.ZoneArtProvider;
 import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2DebugModeProvider;
 import uk.co.jamesj999.sonic.game.sonic2.scroll.Sonic2ScrollHandlerProvider;
@@ -32,6 +33,7 @@ import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
 
 public class Sonic2GameModule implements GameModule {
     private final GameAudioProfile audioProfile = new Sonic2AudioProfile();
+    private Sonic2ObjectArtProvider objectArtProvider;
 
     @Override
     public String getIdentifier() {
@@ -150,5 +152,13 @@ public class Sonic2GameModule implements GameModule {
         OscillationManager.reset();
         // Reset object-specific static state that persists across load/unload cycles
         BlueBallsObjectInstance.resetGlobalState();
+    }
+
+    @Override
+    public ObjectArtProvider getObjectArtProvider() {
+        if (objectArtProvider == null) {
+            objectArtProvider = new Sonic2ObjectArtProvider();
+        }
+        return objectArtProvider;
     }
 }

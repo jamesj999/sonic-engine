@@ -8,8 +8,6 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Game;
 import uk.co.jamesj999.sonic.data.AnimatedPaletteProvider;
 import uk.co.jamesj999.sonic.data.AnimatedPatternProvider;
-import uk.co.jamesj999.sonic.data.ObjectArtProvider;
-import uk.co.jamesj999.sonic.data.ZoneAwareObjectArtProvider;
 import uk.co.jamesj999.sonic.data.PlayerSpriteArtProvider;
 import uk.co.jamesj999.sonic.data.SpindashDustArtProvider;
 import uk.co.jamesj999.sonic.data.Rom;
@@ -19,6 +17,7 @@ import uk.co.jamesj999.sonic.game.GameModule;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.LevelEventProvider;
 import uk.co.jamesj999.sonic.game.LevelState;
+import uk.co.jamesj999.sonic.game.ObjectArtProvider;
 import uk.co.jamesj999.sonic.game.RespawnState;
 
 import uk.co.jamesj999.sonic.game.sonic2.WaterSurfaceManager;
@@ -28,7 +27,6 @@ import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
 import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
-import uk.co.jamesj999.sonic.level.objects.ObjectArtData;
 import uk.co.jamesj999.sonic.level.objects.HudRenderManager;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
@@ -413,58 +411,61 @@ public class LevelManager {
     }
 
     private void initObjectArt() {
-        if (!(game instanceof ObjectArtProvider provider)) {
+        ObjectArtProvider provider = gameModule != null ? gameModule.getObjectArtProvider() : null;
+        if (provider == null) {
             objectRenderManager = null;
             return;
         }
+
         try {
-            ObjectArtData artData;
-            if (provider instanceof ZoneAwareObjectArtProvider zoneProvider && level != null) {
-                artData = zoneProvider.loadObjectArt(level.getZoneIndex());
-            } else {
-                artData = provider.loadObjectArt();
-            }
-            if (artData == null) {
-                objectRenderManager = null;
-                return;
-            }
-            objectRenderManager = new ObjectRenderManager(artData);
+            int zoneIndex = level != null ? level.getZoneIndex() : -1;
+            provider.loadArtForZone(zoneIndex);
+
+            objectRenderManager = new ObjectRenderManager(provider);
             LOGGER.info("Initializing Object Art. Base Index: " + OBJECT_PATTERN_BASE);
             int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, OBJECT_PATTERN_BASE);
 
             hudRenderManager = new HudRenderManager(graphicsManager);
 
-            Pattern[] hudDigits = artData.getHudDigitPatterns();
-            LOGGER.info("Cached " + hudDigits.length + " HUD Digit patterns at index " + hudBaseIndex);
-            for (int i = 0; i < hudDigits.length; i++) {
-                graphicsManager.cachePatternTexture(hudDigits[i], hudBaseIndex + i);
-            }
-            hudRenderManager.setDigitPatternIndex(hudBaseIndex);
+            Pattern[] hudDigits = provider.getHudDigitPatterns();
+            if (hudDigits != null) {
+                LOGGER.info("Cached " + hudDigits.length + " HUD Digit patterns at index " + hudBaseIndex);
+                for (int i = 0; i < hudDigits.length; i++) {
+                    graphicsManager.cachePatternTexture(hudDigits[i], hudBaseIndex + i);
+                }
+                hudRenderManager.setDigitPatternIndex(hudBaseIndex);
 
-            int textBaseIndex = hudBaseIndex + hudDigits.length;
-            Pattern[] hudText = artData.getHudTextPatterns();
-            LOGGER.info("Cached " + hudText.length + " HUD Text patterns at index " + textBaseIndex);
-            for (int i = 0; i < hudText.length; i++) {
-                graphicsManager.cachePatternTexture(hudText[i], textBaseIndex + i);
-            }
-            hudRenderManager.setTextPatternIndex(textBaseIndex, hudText.length);
+                int textBaseIndex = hudBaseIndex + hudDigits.length;
+                Pattern[] hudText = provider.getHudTextPatterns();
+                if (hudText != null) {
+                    LOGGER.info("Cached " + hudText.length + " HUD Text patterns at index " + textBaseIndex);
+                    for (int i = 0; i < hudText.length; i++) {
+                        graphicsManager.cachePatternTexture(hudText[i], textBaseIndex + i);
+                    }
+                    hudRenderManager.setTextPatternIndex(textBaseIndex, hudText.length);
 
-            int livesBaseIndex = textBaseIndex + hudText.length;
-            Pattern[] hudLives = artData.getHudLivesPatterns();
-            LOGGER.info("Cached " + hudLives.length + " HUD Lives patterns at index " + livesBaseIndex);
-            for (int i = 0; i < hudLives.length; i++) {
-                graphicsManager.cachePatternTexture(hudLives[i], livesBaseIndex + i);
-            }
-            hudRenderManager.setLivesPatternIndex(livesBaseIndex, hudLives.length);
+                    int livesBaseIndex = textBaseIndex + hudText.length;
+                    Pattern[] hudLives = provider.getHudLivesPatterns();
+                    if (hudLives != null) {
+                        LOGGER.info("Cached " + hudLives.length + " HUD Lives patterns at index " + livesBaseIndex);
+                        for (int i = 0; i < hudLives.length; i++) {
+                            graphicsManager.cachePatternTexture(hudLives[i], livesBaseIndex + i);
+                        }
+                        hudRenderManager.setLivesPatternIndex(livesBaseIndex, hudLives.length);
 
-            int livesNumbersBaseIndex = livesBaseIndex + hudLives.length;
-            Pattern[] hudLivesNumbers = artData.getHudLivesNumbers();
-            LOGGER.info("Cached " + hudLivesNumbers.length + " HUD Lives Numbers patterns at index "
-                    + livesNumbersBaseIndex);
-            for (int i = 0; i < hudLivesNumbers.length; i++) {
-                graphicsManager.cachePatternTexture(hudLivesNumbers[i], livesNumbersBaseIndex + i);
+                        int livesNumbersBaseIndex = livesBaseIndex + hudLives.length;
+                        Pattern[] hudLivesNumbers = provider.getHudLivesNumbers();
+                        if (hudLivesNumbers != null) {
+                            LOGGER.info("Cached " + hudLivesNumbers.length + " HUD Lives Numbers patterns at index "
+                                    + livesNumbersBaseIndex);
+                            for (int i = 0; i < hudLivesNumbers.length; i++) {
+                                graphicsManager.cachePatternTexture(hudLivesNumbers[i], livesNumbersBaseIndex + i);
+                            }
+                            hudRenderManager.setLivesNumbersPatternIndex(livesNumbersBaseIndex);
+                        }
+                    }
+                }
             }
-            hudRenderManager.setLivesNumbersPatternIndex(livesNumbersBaseIndex);
 
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load object art.", e);

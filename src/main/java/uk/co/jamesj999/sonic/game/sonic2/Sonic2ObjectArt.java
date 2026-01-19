@@ -282,6 +282,11 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> cpzStairBlockMappings = createCPZStairBlockMappings();
         ObjectSpriteSheet cpzStairBlockSheet = new ObjectSpriteSheet(cpzStairBlockPatterns, cpzStairBlockMappings, 3, 1);
 
+        // CPZ Pylon art (Object 0x7C) - decorative background pylon
+        Pattern[] cpzPylonPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_METAL_THINGS_ADDR, "CPZMetalThings");
+        List<SpriteMappingFrame> cpzPylonMappings = createCPZPylonMappings();
+        ObjectSpriteSheet cpzPylonSheet = new ObjectSpriteSheet(cpzPylonPatterns, cpzPylonMappings, 2, 1);
+
         // CPZ Pipe Exit Spring art (Object 0x7B) - warp tube exit spring
         Pattern[] pipeExitSpringPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_PIPE_EXIT_SPRING_ADDR, "PipeExitSpring");
         List<SpriteMappingFrame> pipeExitSpringMappings = createPipeExitSpringMappings();
@@ -371,6 +376,7 @@ public class Sonic2ObjectArt {
                 breakableBlockSheet,
                 cpzPlatformSheet,
                 cpzStairBlockSheet,
+                cpzPylonSheet,
                 pipeExitSpringSheet,
                 tippingFloorSheet,
                 barrierSheet,
@@ -1543,6 +1549,28 @@ public class Sonic2ObjectArt {
         List<SpriteMappingPiece> frame0 = new ArrayList<>();
         frame0.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, 0, false, false, 0));
         frames.add(new SpriteMappingFrame(frame0));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ Pylon (Obj7C).
+     * Based on s2.asm lines 46164-46212:
+     * 9 sprite pieces, each 4x4 tiles (32x32 pixels), arranged vertically.
+     * Each frame represents one piece of the pylon.
+     */
+    private List<SpriteMappingFrame> createCPZPylonMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // 9 frames, each with a single 4x4 tile piece
+        // Tile index increases by 16 (4x4 tiles) per frame
+        for (int i = 0; i < 9; i++) {
+            List<SpriteMappingPiece> pieces = new ArrayList<>();
+            // spritePiece -$10, -$10, 4, 4, tileIndex, 0, 0, 0, 0
+            int tileIndex = i * 16;  // 4x4 = 16 tiles per piece
+            pieces.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, tileIndex, false, false, 0));
+            frames.add(new SpriteMappingFrame(pieces));
+        }
 
         return frames;
     }
