@@ -76,6 +76,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean rolling = false;
 
         /**
+         * Pinball mode flag - when set, prevents rolling from being cleared on landing
+         * and prevents rolling from stopping when speed reaches 0 (gives a boost instead).
+         * This matches ROM's pinball_mode (spindash_flag when rolling) behavior used by
+         * spin tubes, S-curves, and other "must roll" areas.
+         * See s2.asm lines 36712, 37745 for usage in rolling/landing logic.
+         */
+        protected boolean pinballMode = false;
+
+        /**
          * Whether the current jump originated from a rolling state.
          * In Sonic 1, 2, 3 & K, air control is locked when jumping while rolling.
          * Reset to false when landing.
@@ -179,6 +188,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean controlLocked = false;
         /**
+         * When true, an object has full control of the player and normal physics
+         * (gravity, movement, collision) are skipped. This matches the ROM's
+         * obj_control = $81 behavior used by spin tubes, corkscrews, etc.
+         */
+        protected boolean objectControlled = false;
+        /**
+         * Frame number when the player was last released from object control.
+         * Used to prevent immediate re-capture by nearby objects (e.g., spin tubes).
+         */
+        protected int objectControlReleasedFrame = Integer.MIN_VALUE;
+        /**
          * Tracks whether the jump button is currently pressed this frame.
          * Set by movement manager, used by objects (like flippers) to detect jump
          * input.
@@ -251,6 +271,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.springingFrames = 0;
                 this.rolling = false;
                 this.rollingJump = false;
+                this.pinballMode = false;
                 this.spindash = false;
                 this.pushing = false;
                 this.crouching = false;
@@ -258,6 +279,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
                 this.controlLocked = false;
+                this.objectControlled = false;
+                this.objectControlReleasedFrame = Integer.MIN_VALUE;
                 this.spiralActiveFrame = Integer.MIN_VALUE;
                 this.flipAngle = 0;
                 this.flipSpeed = 0;
@@ -778,6 +801,46 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         /**
+         * Returns whether an object has full control of the player (physics disabled).
+         * When true, the movement manager skips all physics processing.
+         */
+        public boolean isObjectControlled() {
+                return objectControlled;
+        }
+
+        /**
+         * Sets whether an object has full control of the player.
+         * When true, normal physics (gravity, movement, collision) are skipped.
+         * The controlling object is responsible for updating the player's position.
+         */
+        public void setObjectControlled(boolean objectControlled) {
+                this.objectControlled = objectControlled;
+        }
+
+        /**
+         * Releases the player from object control and records the frame number.
+         * Use this instead of setObjectControlled(false) when exiting a controlling object
+         * to enable the cooldown period that prevents immediate re-capture.
+         */
+        public void releaseFromObjectControl(int frameCounter) {
+                this.objectControlled = false;
+                this.objectControlReleasedFrame = frameCounter;
+        }
+
+        /**
+         * Returns true if the player was recently released from object control.
+         * Used by objects like spin tubes to prevent immediate re-capture after exit.
+         * @param frameCounter Current frame number
+         * @param cooldownFrames Number of frames to wait before allowing re-capture
+         */
+        public boolean wasRecentlyObjectControlled(int frameCounter, int cooldownFrames) {
+                if (objectControlReleasedFrame == Integer.MIN_VALUE) {
+                        return false;
+                }
+                return (frameCounter - objectControlReleasedFrame) < cooldownFrames;
+        }
+
+        /**
          * Returns whether the jump button is currently pressed.
          * Used by objects (like CNZ flippers) to detect jump input for triggering.
          */
@@ -1121,6 +1184,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setRollingJump(boolean rollingJump) {
                 this.rollingJump = rollingJump;
+        }
+
+        /**
+         * Returns whether pinball mode is active.
+         * When true, rolling cannot be cleared on landing and rolling cannot stop at 0 speed.
+         */
+        public boolean getPinballMode() {
+                return pinballMode;
+        }
+
+        /**
+         * Sets pinball mode. When true, the player must continue rolling -
+         * rolling won't be cleared on landing and if speed reaches 0, a boost is given.
+         */
+        public void setPinballMode(boolean pinballMode) {
+                this.pinballMode = pinballMode;
         }
 
         @Override

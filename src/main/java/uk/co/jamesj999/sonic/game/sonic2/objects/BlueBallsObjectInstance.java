@@ -11,7 +11,9 @@ import uk.co.jamesj999.sonic.level.objects.TouchResponseProvider;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * CPZ BlueBalls Object (Obj1D) - Bouncing water droplet hazard.
@@ -118,6 +120,37 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     private static final int SIBLING_WAIT_STAGGER = 3;
 
     // ========================================================================
+    // Global State Tracking
+    // ========================================================================
+
+    /**
+     * Count of active BlueBalls instances. Used for lifecycle tracking.
+     */
+    private static int activeInstanceCount = 0;
+
+    /**
+     * Gloop sound toggle flag. Only plays every other call.
+     * ROM: zGloopFlag in s2.sounddriver.asm lines 2144-2149
+     * <p>
+     * The original ROM implements this in the Z80 sound driver, but since
+     * Gloop is exclusively used by BlueBalls, we implement it here instead
+     * to keep the SMPS driver generic.
+     */
+    private static boolean gloopToggle = false;
+
+    // ========================================================================
+    // Sibling Spawn Tracking (Bug Fix #2)
+    // Tracks which spawn locations have already created siblings.
+    // Persists across object load/unload cycles within a level.
+    // ========================================================================
+
+    /**
+     * Registry of spawn locations that have already spawned siblings.
+     * Key: (x << 16) | (y & 0xFFFF) to create unique identifier.
+     */
+    private static final Set<Long> spawnedSiblingLocations = new HashSet<>();
+
+    // ========================================================================
     // Instance State
     // ========================================================================
 
@@ -185,19 +218,25 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         this.xDistance = xFlipped ? -ARC_X_DISTANCE : ARC_X_DISTANCE;
 
         // Start in appropriate wait state (not motion state)
-        // Parent ball starts with waitTimer = 0, which is immediately checked
         if (arcMotion) {
             this.state = STATE_WAIT_ARC;
         } else {
             this.state = STATE_WAIT_STRAIGHT;
         }
-        this.waitTimer = 0; // Parent starts with 0, will transition immediately
+        // Parent starts with waitTimer = 0, which means it fires immediately
+        // (ROM: 0 - 1 = -1, which is negative, so skip wait)
+        this.waitTimer = 0;
         this.hasSpawnedSiblings = false;
+
+        // Global instance tracking
+        activeInstanceCount++;
     }
 
     /**
      * Constructor for spawned sibling balls.
-     * Siblings don't spawn more siblings and have staggered wait timers.
+     * Siblings don't spawn more siblings and have staggered initial wait timers.
+     *
+     * @param initialWaitTimer Initial countdown timer (3, 6, 9... for siblings)
      */
     private BlueBallsObjectInstance(ObjectSpawn spawn, String name, int yVelocity,
                                     int xVelDelta, int xDistance, boolean arcMotion,
@@ -215,14 +254,19 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         this.xDistance = xDistance;
         this.siblingCount = 0; // Siblings don't spawn more
         this.hasSpawnedSiblings = true; // Prevent future spawning
-        this.waitTimer = initialWaitTimer; // Staggered wait timer
+        // Siblings start with staggered wait timer (3, 6, 9...)
+        // They wait this many frames before firing
+        this.waitTimer = initialWaitTimer;
 
-        // Siblings start in wait state with their staggered timer
+        // Siblings start in wait state
         if (arcMotion) {
             this.state = STATE_WAIT_ARC;
         } else {
             this.state = STATE_WAIT_STRAIGHT;
         }
+
+        // Global instance tracking
+        activeInstanceCount++;
     }
 
     @Override
@@ -243,34 +287,53 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Wait state for arc motion: countdown timer, then transition to MoveArc.
+     * Wait state for arc motion: uses countdown timer like the original ROM.
+     * <p>
      * ROM: Obj1D_Wait at routine 2, line 47893
+     * <pre>
+     * Obj1D_Wait:
+     *     subq.w  #1,objoff_32(a0)          ; decrement timer
+     *     bpl.s   BranchTo_JmpTo7_MarkObjGone ; if >= 0, stay waiting
+     *     addq.b  #2,routine(a0)            ; advance to motion
+     *     move.w  #$3B,objoff_32(a0)        ; 59 frames for NEXT cycle
+     * </pre>
+     * Parent (timer=0): 0-1=-1 (negative) → fires frame 1
+     * Sibling 1 (timer=3): fires frame 4
+     * Sibling 2 (timer=6): fires frame 7
      */
     private void updateWaitArc() {
-        if (waitTimer > 0) {
-            waitTimer--;
-            return;
+        waitTimer--;
+        if (waitTimer >= 0) {
+            return; // Still waiting
         }
-
-        // Transition to arc movement
+        // Timer went negative - transition to motion
+        // Set timer for NEXT cycle (59 frames wait after this bounce completes)
         waitTimer = WAIT_DURATION;
         playGloopSound();
         state = STATE_MOVE_ARC;
     }
 
     /**
-     * Wait state for straight motion: countdown timer, then transition to MoveStraight.
-     * ROM: Obj1D_Wait at routine 6, line 47893
+     * Wait state for straight motion: provides delay at apex.
+     * <p>
+     * NOTE: The ROM's Obj1D_MoveStraight never returns to wait state - it bounces
+     * forever. We use wait state at apex as an implementation detail to achieve
+     * correct visual timing, but we do NOT play sound here since the ROM doesn't
+     * have this transition.
+     * <p>
+     * ROM sounds for straight motion per cycle: terminal velocity + bottom only.
      */
     private void updateWaitStraight() {
-        if (waitTimer > 0) {
-            waitTimer--;
-            return;
+        waitTimer--;
+        if (waitTimer >= 0) {
+            return; // Still waiting
         }
-
-        // Transition to straight movement
+        // Timer went negative - transition to motion
+        // Set timer for NEXT cycle
         waitTimer = WAIT_DURATION;
-        playGloopSound();
+        // NO sound here - ROM's straight motion never returns to wait state,
+        // so this transition doesn't exist in the original. We only use it
+        // for timing purposes.
         state = STATE_MOVE_STRAIGHT;
     }
 
@@ -310,6 +373,18 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     /**
      * Straight motion: linear trajectory.
      * ROM: Obj1D_MoveStraight at line 47929
+     *
+     * <p>Correct behavior cycle:
+     * <ol>
+     *   <li>Ball at left (initialX) goes UP</li>
+     *   <li>Ball reaches apex (y_vel == 0)</li>
+     *   <li>X teleports to right (initialX + xDistance)</li>
+     *   <li>59-frame delay (wait state) at apex</li>
+     *   <li>Ball falls DOWN on right side</li>
+     *   <li>Ball reaches bottom, resets to left - NO delay</li>
+     *   <li>Ball immediately goes UP again</li>
+     *   <li>Loop back to step 2</li>
+     * </ol>
      */
     private void updateMoveStraight() {
         // Apply velocities
@@ -319,10 +394,14 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         // Apply gravity
         yVelocity += GRAVITY;
 
-        // Check for y_vel collision (ROM: bne.s at line 47935)
-        // When collision occurs, X is set to initial + distance
+        // At apex (y_vel == 0): teleport X and ENTER WAIT STATE
+        // The delay happens at the top of the arc, not the bottom
+        // ROM lines 47945-47948: x_pos = objoff_38 + objoff_3A (NO sound here)
         if (yVelocity == 0) {
             currentX = (initialX + xDistance) << 8;
+            // Note: ROM does NOT play sound at apex, only at terminal velocity and bottom
+            state = STATE_WAIT_STRAIGHT;  // Delay at apex
+            return;  // Don't continue motion this frame
         }
 
         // Play sound at terminal velocity (ROM: cmpi.w #$180,y_vel)
@@ -330,7 +409,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             playGloopSound();
         }
 
-        // Check if returned to initial Y position
+        // Reset at bottom - NO DELAY, immediately continue
         int pixelY = currentY >> 8;
         if (pixelY >= initialY) {
             // Reset for next bounce
@@ -338,28 +417,40 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             currentX = initialX << 8;
             yVelocity = INITIAL_Y_VEL;
             playGloopSound();
-            state = STATE_WAIT_STRAIGHT; // Return to straight wait state
+            // NO state change - stay in STATE_MOVE_STRAIGHT for immediate rise
         }
     }
 
     /**
-     * Spawns sibling balls with staggered wait timers.
+     * Spawns sibling balls with staggered initial wait timers.
      * ROM: Obj1D_LoadBall loop at line 47870
      * <p>
      * All siblings share the SAME y_vel as the parent (line 47894: move.w y_vel(a0),y_vel(a1)).
-     * Only the wait timer (objoff_32) is staggered: 3, 6, 9, 12, 15, etc.
-     * This creates evenly-spaced balls that bounce identically but offset in time.
+     * Initial wait timers are staggered: 3, 6, 9, 12, 15 frames.
+     * This creates balls that fire in quick succession (3 frames apart).
+     * <p>
+     * ROM timing: Parent (timer=0) fires on frame 1, Sibling 1 (timer=3) fires on frame 4, etc.
+     * <p>
+     * Uses spawn location registry to prevent duplicate siblings when parent is
+     * unloaded and reloaded.
      */
     private void spawnSiblings() {
+        // Check if siblings were already spawned for this location (Bug Fix #2)
+        long spawnKey = ((long) initialX << 16) | (initialY & 0xFFFF);
+        if (spawnedSiblingLocations.contains(spawnKey)) {
+            return; // Already spawned siblings for this location
+        }
+        spawnedSiblingLocations.add(spawnKey);
+
         LevelManager levelManager = LevelManager.getInstance();
         if (levelManager == null || levelManager.getObjectManager() == null) {
             return;
         }
 
         for (int i = 0; i < siblingCount; i++) {
-            // Staggered wait timer: 3, 6, 9, 12, etc.
-            // (i+1) because parent already took timer 0
-            int siblingWaitTimer = (i + 1) * SIBLING_WAIT_STAGGER;
+            // Staggered initial wait timer: 3, 6, 9, 12, etc.
+            // (i+1) because parent has timer 0 (fires immediately)
+            int initialWaitTimer = (i + 1) * SIBLING_WAIT_STAGGER;
 
             // Create sibling spawn data
             ObjectSpawn siblingSpawn = new ObjectSpawn(
@@ -372,7 +463,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             // The disassembly does NOT increment velocity per sibling
             BlueBallsObjectInstance sibling = new BlueBallsObjectInstance(
                     siblingSpawn, name, INITIAL_Y_VEL, xVelDelta, xDistance, arcMotion,
-                    siblingWaitTimer
+                    initialWaitTimer
             );
 
             levelManager.getObjectManager().addDynamicObject(sibling);
@@ -380,13 +471,23 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Plays the gloop sound effect ONLY if this object is on-screen.
-     * ROM: PlaySoundLocal (s2.asm line 1555) checks render_flags.on_screen
-     * before queueing the sound, preventing off-screen objects from
-     * playing audio.
+     * Plays the gloop sound effect with toggle behavior.
+     * <p>
+     * Two checks are performed:
+     * <ol>
+     *   <li>On-screen check: ROM's PlaySoundLocal (s2.asm line 1555) checks
+     *       render_flags.on_screen before queueing sound</li>
+     *   <li>Toggle check: ROM's zGloopFlag (s2.sounddriver.asm:2144) only
+     *       plays every other call to prevent sound spam from multiple balls</li>
+     * </ol>
      */
     private void playGloopSound() {
         if (!isOnScreen()) {
+            return;
+        }
+        // Toggle flag - only play every other call (ROM: zGloopFlag)
+        gloopToggle = !gloopToggle;
+        if (!gloopToggle) {
             return;
         }
         try {
@@ -462,5 +563,36 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(3);
+    }
+
+    // ========================================================================
+    // Lifecycle Management
+    // ========================================================================
+
+    /**
+     * Called when this object is unloaded from the active object list.
+     * Decrements the global instance count.
+     */
+    @Override
+    public void onUnload() {
+        activeInstanceCount--;
+        if (activeInstanceCount < 0) {
+            activeInstanceCount = 0;
+        }
+    }
+
+    // ========================================================================
+    // Static Reset (for level transitions)
+    // ========================================================================
+
+    /**
+     * Resets all global state for BlueBalls objects.
+     * Call this when loading a new level or restarting the current level
+     * to ensure clean sibling tracking and sound state.
+     */
+    public static void resetGlobalState() {
+        activeInstanceCount = 0;
+        spawnedSiblingLocations.clear();
+        gloopToggle = false;
     }
 }

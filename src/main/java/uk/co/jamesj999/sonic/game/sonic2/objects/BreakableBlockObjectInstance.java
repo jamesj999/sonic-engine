@@ -85,7 +85,43 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         // The original tracks player animation state each frame
         if (player != null) {
             playerWasRolling = player.getRolling();
+
+            // Check for breaking from below - when player is rolling and moving upward
+            // We handle this here because isSolidFor returns false for this case,
+            // so onSolidContact won't be called
+            if (player.getRolling() && player.getYSpeed() < 0) {
+                if (isPlayerOverlapping(player)) {
+                    // Create a synthetic contact for breaking from below
+                    SolidContact contact = new SolidContact(false, false, true, false, false);
+                    breakBlock(player, contact);
+                }
+            }
         }
+    }
+
+    /**
+     * Check if the player overlaps with this block's collision area.
+     */
+    private boolean isPlayerOverlapping(AbstractPlayableSprite player) {
+        int blockX = spawn.x();
+        int blockY = spawn.y();
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
+        int playerYRadius = player.getYRadius();
+
+        // Check X overlap
+        int dx = Math.abs(playerX - blockX);
+        if (dx >= HALF_WIDTH + 11) {
+            return false;
+        }
+
+        // Check Y overlap - player's top must be near or overlapping block's bottom
+        int playerTop = playerY - playerYRadius;
+        int blockBottom = blockY + HALF_HEIGHT;
+        int blockTop = blockY - HALF_HEIGHT;
+
+        // Player is overlapping if their top is within the block's vertical range
+        return playerTop <= blockBottom && playerTop >= blockTop - playerYRadius;
     }
 
     @Override
@@ -98,7 +134,15 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
     @Override
     public boolean isSolidFor(AbstractPlayableSprite player) {
         // Block is not solid once broken
-        return !broken;
+        if (broken) {
+            return false;
+        }
+        // Don't be solid for rolling players moving upward - they should break through
+        // The break detection is handled in update() instead
+        if (player.getRolling() && player.getYSpeed() < 0) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -107,15 +151,18 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
             return;
         }
 
-        // Original logic: only break when player is STANDING on block AND was rolling
-        // (at the start of the frame - stored in update())
-        // The contact must be from above (player standing on top)
-        if (contact.standing() && playerWasRolling) {
-            breakBlock(player);
+        // Break the block if player is rolling and either:
+        // 1. Standing on top of the block
+        // 2. Hitting from below (e.g., exiting a spin tube upward)
+        // 3. Hitting from the side while rolling
+        boolean isRolling = playerWasRolling || player.getRolling();
+
+        if (isRolling && (contact.standing() || contact.touchBottom() || contact.touchSide())) {
+            breakBlock(player, contact);
         }
     }
 
-    private void breakBlock(AbstractPlayableSprite player) {
+    private void breakBlock(AbstractPlayableSprite player, SolidContact contact) {
         if (broken) {
             return;
         }
@@ -133,9 +180,16 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         // setRolling(true) handles radius change and animation internally
         player.setRolling(true);
 
-        // Bounce player upward
-        // From disassembly: move.w #-$300,y_vel(a1)
-        player.setYSpeed((short) PLAYER_BOUNCE_VELOCITY);
+        // Handle velocity based on contact direction:
+        // - Standing on top: bounce upward
+        // - Hitting from below: continue through (don't change velocity)
+        // - Hitting from side: continue through (don't change velocity)
+        if (contact.standing()) {
+            // Bounce player upward only when breaking from above
+            // From disassembly: move.w #-$300,y_vel(a1)
+            player.setYSpeed((short) PLAYER_BOUNCE_VELOCITY);
+        }
+        // When hitting from below or side, player maintains their momentum
 
         // Set player state to in-air
         // From disassembly: bset #status.player.in_air, bclr #status.player.on_object

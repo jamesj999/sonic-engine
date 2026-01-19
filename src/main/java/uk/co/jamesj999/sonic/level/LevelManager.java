@@ -188,7 +188,6 @@ public class LevelManager {
             audioManager.resetRingSound();
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
-            OscillationManager.reset();
             initAnimatedPatterns();
             initAnimatedPalettes();
             RomByteReader romReader = RomByteReader.fromRom(rom);
@@ -203,6 +202,8 @@ public class LevelManager {
             camera.setMinX((short) 0);
             camera.setMaxX((short) (level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH));
             objectManager.reset(camera.getX(), level.getObjects());
+            // Reset game-specific object state for new level
+            gameModule.onLevelLoad();
             solidObjectManager = new SolidObjectManager(objectManager);
             solidObjectManager.reset();
             TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
@@ -669,23 +670,26 @@ public class LevelManager {
         }
 
         parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
-        List<GLCommand> commands = new ArrayList<>(256);
+        List<GLCommand> collisionCommands = new ArrayList<>(256);
 
         // Update water shader state before rendering level
         updateWaterShaderState(camera);
 
         // Draw Background (Layer 1)
         if (useShaderBackground && graphicsManager.getBackgroundRenderer() != null) {
-            renderBackgroundShader(commands, bgScrollY);
+            renderBackgroundShader(collisionCommands, bgScrollY);
         }
 
         // Draw Foreground (Layer 0) low-priority pass - batched for performance
         graphicsManager.beginPatternBatch();
-        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
+        drawLayer(collisionCommands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
         graphicsManager.flushPatternBatch();
 
-        if (!commands.isEmpty()) {
-            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
+        // Render collision debug overlay on top of foreground tiles
+        if (!collisionCommands.isEmpty() && overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
+            for (GLCommand cmd : collisionCommands) {
+                graphicsManager.registerCommand(cmd);
+            }
         }
 
         if (ringManager != null) {
@@ -710,8 +714,9 @@ public class LevelManager {
         }
 
         // Draw Foreground (Layer 0) high-priority pass - batched for performance
+        // Note: drawCollision=false so commands list is not used
         graphicsManager.beginPatternBatch();
-        drawLayer(commands, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
+        drawLayer(null, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
         graphicsManager.flushPatternBatch();
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
@@ -939,7 +944,7 @@ public class LevelManager {
         // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
-        int fboHeight = 256; // Increased to 256 (power of 2) to allow vertical buffer for smooth scrolling
+        int fboHeight = 224; // Match screen height for correct Y coordinate alignment
 
         // Extra buffer on each side
         int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
@@ -1096,7 +1101,7 @@ public class LevelManager {
         if (bgCameraY < 0 && bgCameraY % chunkHeight != 0)
             alignedBgY -= chunkHeight; // Handle negative rounding
 
-        // Render enough rows to fill the 256px FBO height
+        // Render enough rows to fill the FBO height
         // alignedBgY corresponds to FBO Y=0
         int worldYStart = alignedBgY;
         int worldYEnd = alignedBgY + fboHeight;
@@ -1382,7 +1387,7 @@ public class LevelManager {
             boolean isPrimary,
             int x,
             int y) {
-        if (!configService.getBoolean(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED)) {
+        if (!overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
             return;
         }
 
@@ -1439,14 +1444,17 @@ public class LevelManager {
                 int drawEndY;
 
                 // Adjust drawing coordinates based on vertical flip
+                // GLCommand constructor handles Y-flip (SCREEN_HEIGHT_PIXELS - y)
+                // and execute() applies camera offset (y + cameraY)
+                // We add 16 to align with the pattern renderer's coordinate system
                 if (yFlip) {
-                    // When yFlip is true, y coordinates increase downwards in the rendering context
-                    drawStartY = y - LevelConstants.CHUNK_HEIGHT;
+                    // When yFlip is true, collision extends upward from bottom of chunk
+                    drawStartY = y - LevelConstants.CHUNK_HEIGHT + 16;
                     drawEndY = drawStartY + height;
                 } else {
-                    // Normal rendering, y decreases upwards
-                    drawStartY = y;
-                    drawEndY = y - height;
+                    // Normal rendering: collision extends downward from top of chunk
+                    drawStartY = y + 16;
+                    drawEndY = y - height + 16;
                 }
 
                 commands.add(new GLCommand(

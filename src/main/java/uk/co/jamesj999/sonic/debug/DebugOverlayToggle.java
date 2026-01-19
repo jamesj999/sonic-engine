@@ -14,7 +14,8 @@ public enum DebugOverlayToggle {
     RING_BOUNDS("Ring Bounds", KeyEvent.VK_F9, true),
     PLANE_SWITCHERS("Plane Switchers", KeyEvent.VK_F10, true),
     TOUCH_RESPONSE("Touch Response", KeyEvent.VK_F11, false),
-    OBJECT_ART_VIEWER("Art Viewer", KeyEvent.VK_F12, false);
+    OBJECT_ART_VIEWER("Art Viewer", KeyEvent.VK_F12, false),
+    COLLISION_VIEW("Collision View", KeyEvent.VK_BACK_QUOTE, false);
 
     private final String label;
     private final int keyCode;

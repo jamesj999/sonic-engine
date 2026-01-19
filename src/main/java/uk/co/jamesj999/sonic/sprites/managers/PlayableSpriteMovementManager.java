@@ -85,6 +85,15 @@ public class PlayableSpriteMovementManager extends
 			return;
 		}
 
+		// OBJECT CONTROLLED MODE: When an object has full control (like spin tubes,
+		// corkscrews), skip all physics processing. The controlling object handles
+		// position updates directly. This matches ROM's obj_control = $81 behavior.
+		if (sprite.isObjectControlled()) {
+			// Skip all physics, collision, and movement processing
+			// The controlling object is responsible for moving the player
+			return;
+		}
+
 		// A simple way to test our running modes...
 		if (testKey && !testKeyPressed) {
 			testKeyPressed = true;
@@ -939,8 +948,21 @@ public class PlayableSpriteMovementManager extends
 	 *               The sprite in question
 	 */
 	private void calculateLanding(AbstractPlayableSprite sprite) {
-		sprite.setRolling(false);
 		sprite.setAir(false);
+		// Sonic_ResetOnFloor (s2.asm:37744): Check pinball_mode first - if set, skip clearing rolling
+		// This allows spin tubes and other "must roll" areas to preserve rolling state on landing
+		boolean hadPinballMode = sprite.getPinballMode();
+		if (!hadPinballMode) {
+			sprite.setRolling(false);
+		} else {
+			LOGGER.fine("calculateLanding: pinballMode protected rolling, pos=(" + sprite.getX() + "," + sprite.getY() + ")");
+		}
+		// Clear pinball mode after the landing check - it only needs to protect one landing
+		// The autoroll triggers in ROM would clear this at area exits, but we do it here
+		if (hadPinballMode) {
+			LOGGER.fine("calculateLanding: clearing pinballMode after landing protection");
+		}
+		sprite.setPinballMode(false);
 		short ySpeed = sprite.getYSpeed();
 		short xSpeed = sprite.getXSpeed();
 		short gSpeed = sprite.getGSpeed();
@@ -1001,10 +1023,24 @@ public class PlayableSpriteMovementManager extends
 		}
 
 		// If we're rolling and our ground speed is less than the minimum roll
-		// speed then stop rolling:
+		// speed then check if we should stop rolling:
 		if (sprite.getRolling()
 				&& ((gSpeed < minRollSpeed && gSpeed >= 0) || (gSpeed > -minRollSpeed && gSpeed <= 0))) {
-			sprite.setRolling(false);
+			// Sonic_CheckRollStop (s2.asm:36712): If pinball_mode is set, give a boost
+			// instead of stopping. This keeps the player rolling in "must roll" areas.
+			if (sprite.getPinballMode()) {
+				// Sonic_KeepRolling: move.w #$400,inertia(a0) / neg if facing left
+				short boost = 0x400; // 1024 subpixels = 4 pixels/frame
+				if (sprite.getDirection() == uk.co.jamesj999.sonic.physics.Direction.LEFT) {
+					boost = (short) -boost;
+				}
+				sprite.setGSpeed(boost);
+				LOGGER.fine("calculateRoll: pinballMode boost applied, gSpeed was " + gSpeed + ", now " + boost);
+			} else {
+				LOGGER.fine("calculateRoll: STOPPING ROLL - gSpeed=" + gSpeed + ", pinballMode=false" +
+						", pos=(" + sprite.getX() + "," + sprite.getY() + ")");
+				sprite.setRolling(false);
+			}
 		}
 	}
 

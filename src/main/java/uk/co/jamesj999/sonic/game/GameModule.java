@@ -127,4 +127,15 @@ public interface GameModule {
      * @return the zone art provider, or null if no zone-specific art
      */
     ZoneArtProvider getZoneArtProvider();
+
+    /**
+     * Called when a level is loaded to reset any game-specific object state.
+     * Use this to clear static state in object classes that persists across
+     * object load/unload cycles (e.g., sibling spawn tracking, timing sync).
+     * <p>
+     * Default implementation does nothing.
+     */
+    default void onLevelLoad() {
+        // Default no-op
+    }
 }
