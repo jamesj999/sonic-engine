@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.debug;
 
+import uk.co.jamesj999.sonic.game.SpecialStageDebugProvider;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageSpriteMappings;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageSpriteMappings.SpriteFrame;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageSpriteMappings.SpritePiece;
@@ -10,22 +11,24 @@ import uk.co.jamesj999.sonic.level.PatternDesc;
  * Debug viewer for Sonic 2 Special Stage graphics (sprites and UI elements).
  * Displays patterns in a paginated grid layout for visual inspection.
  *
- * <p>This is a Sonic 2-specific debug tool that displays:
+ * <p>
+ * This is a Sonic 2-specific debug tool that displays:
  * <ul>
- *   <li>Sonic player sprites (animation frames)</li>
- *   <li>HUD graphics (numbers, text, UI elements)</li>
- *   <li>START banner</li>
- *   <li>Message graphics</li>
+ * <li>Sonic player sprites (animation frames)</li>
+ * <li>HUD graphics (numbers, text, UI elements)</li>
+ * <li>START banner</li>
+ * <li>Message graphics</li>
  * </ul>
  *
- * <p>Controls (only active during Special Stage):
+ * <p>
+ * Controls (only active during Special Stage):
  * <ul>
- *   <li>F12: Toggle sprite frame viewer on/off</li>
- *   <li>Up/Down arrows: Change graphics set</li>
- *   <li>Left/Right arrows: Change page within current set</li>
+ * <li>F12: Toggle sprite frame viewer on/off</li>
+ * <li>Up/Down arrows: Change graphics set</li>
+ * <li>Left/Right arrows: Change page within current set</li>
  * </ul>
  */
-public class Sonic2SpecialStageSpriteDebug {
+public class Sonic2SpecialStageSpriteDebug implements SpecialStageDebugProvider {
     private static Sonic2SpecialStageSpriteDebug instance;
 
     private static final int TILE_SIZE = 8;
@@ -52,19 +55,20 @@ public class Sonic2SpecialStageSpriteDebug {
         }
     }
 
-    // Sonic sprite animation page definitions: {startFrame, endFrame (exclusive), showFlipped}
+    // Sonic sprite animation page definitions: {startFrame, endFrame (exclusive),
+    // showFlipped}
     private static final int[][] SONIC_PAGES = {
-        {0, 4, 1},    // UPRIGHT: frames 0-3, show flipped versions too
-        {4, 12, 0},   // DIAGONAL: frames 4-11, no flip (8 unique frames)
-        {12, 16, 1},  // HORIZONTAL: frames 12-15, show flipped versions too
-        {16, 18, 1},  // BALL: frames 16-17, show flipped versions too
+            { 0, 4, 1 }, // UPRIGHT: frames 0-3, show flipped versions too
+            { 4, 12, 0 }, // DIAGONAL: frames 4-11, no flip (8 unique frames)
+            { 12, 16, 1 }, // HORIZONTAL: frames 12-15, show flipped versions too
+            { 16, 18, 1 }, // BALL: frames 16-17, show flipped versions too
     };
 
     private static final String[] SONIC_PAGE_LABELS = {
-        "UPRIGHT (frames 0-3, + flipped)",
-        "DIAGONAL (frames 4-11)",
-        "HORIZONTAL (frames 12-15, + flipped)",
-        "BALL (frames 16-17, + flipped)"
+            "UPRIGHT (frames 0-3, + flipped)",
+            "DIAGONAL (frames 4-11)",
+            "HORIZONTAL (frames 12-15, + flipped)",
+            "BALL (frames 16-17, + flipped)"
     };
 
     // Raw pattern grid settings
@@ -143,12 +147,12 @@ public class Sonic2SpecialStageSpriteDebug {
     public int getTotalPages() {
         return switch (currentSet) {
             case SONIC_SPRITES -> SONIC_PAGES.length;
-            case HUD_GRAPHICS -> hudPatternCount > 0 ?
-                    (hudPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
-            case START_BANNER -> startPatternCount > 0 ?
-                    (startPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
-            case MESSAGES -> messagesPatternCount > 0 ?
-                    (messagesPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case HUD_GRAPHICS ->
+                hudPatternCount > 0 ? (hudPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case START_BANNER ->
+                startPatternCount > 0 ? (startPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
+            case MESSAGES ->
+                messagesPatternCount > 0 ? (messagesPatternCount + RAW_TILES_PER_PAGE - 1) / RAW_TILES_PER_PAGE : 0;
         };
     }
 

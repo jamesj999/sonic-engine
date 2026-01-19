@@ -235,6 +235,9 @@ public class PlayableSpriteMovementManager extends
 		// Now, move the sprite as per the air movement or GSpeed rules:
 		sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
 
+		// Enforce level boundaries (ROM: Sonic_LevelBound)
+		doLevelBoundary(sprite);
+
 		// Has the sprite slowed down enough to stop rolling? Do we need to start
 		// rolling?
 		// (Only applicable if not in the air)
@@ -315,6 +318,68 @@ public class PlayableSpriteMovementManager extends
 					sprite.setYSpeed((short) 0);
 				}
 			}
+		}
+	}
+
+	/**
+	 * Enforces level boundaries, preventing Sonic from leaving the playable area.
+	 * ROM: Sonic_LevelBound (s2.asm:36890-36988)
+	 *
+	 * The original game calculates boundaries as:
+	 * - Left: Camera_Min_X_pos + 16
+	 * - Right: Camera_Max_X_pos + screen_width - 24 (+ 64 if not in boss fight)
+	 *
+	 * When a boundary is hit:
+	 * - X position is clamped to the boundary
+	 * - X subpixel is cleared
+	 * - X velocity is zeroed
+	 * - Ground speed (inertia) is zeroed
+	 *
+	 * @param sprite The player sprite to check
+	 */
+	private void doLevelBoundary(AbstractPlayableSprite sprite) {
+		// Get the LEVEL's boundaries, not the camera's current limits
+		// (camera limits can be temporarily locked by signpost, boss arenas, etc.)
+		uk.co.jamesj999.sonic.level.LevelManager levelManager =
+				uk.co.jamesj999.sonic.level.LevelManager.getInstance();
+		uk.co.jamesj999.sonic.level.Level level = levelManager.getCurrentLevel();
+		if (level == null) {
+			return;
+		}
+
+		short playerX = sprite.getX();
+
+		// ROM constants for boundary calculation
+		// Screen width is 320, Sonic's width is ~24 for boundary purposes
+		final int SCREEN_WIDTH = 320;
+		final int SONIC_WIDTH = 24;
+		final int LEFT_OFFSET = 16;
+		final int RIGHT_EXTRA_BUFFER = 64; // Added when not in boss fight
+
+		// Use level's actual boundaries, not camera's (which may be locked)
+		int levelMinX = level.getMinX();
+		int levelMaxX = level.getMaxX();
+
+		// Calculate left boundary: Level_Min_X + 16
+		// This prevents walking off the left edge of the level
+		int leftBoundary = levelMinX + LEFT_OFFSET;
+
+		// Calculate right boundary: Level_Max_X + screen_width - Sonic_width + buffer
+		// The +64 buffer allows running past camera scroll limit when not in boss
+		// TODO: Check Current_Boss_ID and remove buffer during boss fights
+		int rightBoundary = levelMaxX + SCREEN_WIDTH - SONIC_WIDTH + RIGHT_EXTRA_BUFFER;
+
+		// Check left boundary
+		if (playerX < leftBoundary) {
+			sprite.setX((short) leftBoundary); // setX also clears subpixel
+			sprite.setXSpeed((short) 0);
+			sprite.setGSpeed((short) 0);
+		}
+		// Check right boundary
+		else if (playerX > rightBoundary) {
+			sprite.setX((short) rightBoundary); // setX also clears subpixel
+			sprite.setXSpeed((short) 0);
+			sprite.setGSpeed((short) 0);
 		}
 	}
 

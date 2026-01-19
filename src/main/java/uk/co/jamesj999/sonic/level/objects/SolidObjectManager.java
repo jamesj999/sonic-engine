@@ -12,6 +12,8 @@ public class SolidObjectManager {
     private ObjectInstance ridingObject;
     private int ridingX;
     private int ridingY;
+    // For multi-piece objects, track the piece index to get correct delta
+    private int ridingPieceIndex = -1;
 
     public SolidObjectManager(ObjectManager objectManager) {
         this.objectManager = objectManager;
@@ -20,6 +22,7 @@ public class SolidObjectManager {
     public void reset() {
         frameCounter = 0;
         ridingObject = null;
+        ridingPieceIndex = -1;
     }
 
     /**
@@ -249,8 +252,16 @@ public class SolidObjectManager {
 
         Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
         if (ridingObject != null) {
-            int currentX = ridingObject.getX();
-            int currentY = ridingObject.getY();
+            int currentX;
+            int currentY;
+            // For multi-piece objects, get the current position of the specific piece
+            if (ridingPieceIndex >= 0 && ridingObject instanceof MultiPieceSolidProvider multiPiece) {
+                currentX = multiPiece.getPieceX(ridingPieceIndex);
+                currentY = multiPiece.getPieceY(ridingPieceIndex);
+            } else {
+                currentX = ridingObject.getX();
+                currentY = ridingObject.getY();
+            }
             int deltaX = currentX - ridingX;
             int deltaY = currentY - ridingY;
             if (deltaX != 0) {
@@ -261,6 +272,9 @@ public class SolidObjectManager {
                 int baseY = player.getCentreY() - (player.getHeight() / 2);
                 player.setY((short) (baseY + deltaY));
             }
+            // Update stored position for next frame's delta calculation
+            ridingX = currentX;
+            ridingY = currentY;
         }
 
         ObjectInstance nextRidingObject = null;
@@ -284,6 +298,7 @@ public class SolidObjectManager {
                     nextRidingObject = instance;
                     nextRidingX = result.ridingX;
                     nextRidingY = result.ridingY;
+                    ridingPieceIndex = result.pieceIndex;
                 }
                 continue;
             }
@@ -316,6 +331,7 @@ public class SolidObjectManager {
                 nextRidingObject = instance;
                 nextRidingX = instance.getX();
                 nextRidingY = instance.getY();
+                ridingPieceIndex = -1;  // Not a multi-piece object
             }
             if (instance instanceof SolidObjectListener listener) {
                 listener.onSolidContact(player, contact, frameCounter);
@@ -326,16 +342,42 @@ public class SolidObjectManager {
         ridingY = nextRidingY;
     }
 
-    private record MultiPieceContactResult(boolean standing, boolean pushing, int ridingX, int ridingY) {}
+    private record MultiPieceContactResult(boolean standing, boolean pushing, int ridingX, int ridingY, int pieceIndex) {}
 
+    /**
+     * Processes collision for multi-piece objects like CPZ Staircase.
+     *
+     * Based on the original Sonic 2 disassembly (Obj78), each piece is a separate object
+     * that calls SolidObject independently. The pieces have intentionally overlapping
+     * collision boxes (27px half-width with 32px spacing = 22px overlap) to create
+     * smooth transitions when walking across adjacent pieces.
+     *
+     * The original approach:
+     * 1. Each piece calls SolidObject independently
+     * 2. Touch flags from all pieces are ORed together (objoff_2E)
+     * 3. Collision naturally resolves because pieces are processed sequentially
+     *
+     * Our approach mimics this by processing pieces sequentially. When standing contact
+     * is found, we snap to that piece and record it for riding. Subsequent pieces
+     * will either also have standing contact (same height) or be out of bounds
+     * (different heights after snap).
+     */
     private MultiPieceContactResult processMultiPieceCollision(AbstractPlayableSprite player,
             MultiPieceSolidProvider multiPiece, ObjectInstance instance, int frameCounter) {
+        int pieceCount = multiPiece.getPieceCount();
+
         boolean anyStanding = false;
         boolean anyPushing = false;
-        int ridingX = 0;
-        int ridingY = 0;
+        boolean anyTouchTop = false;
+        boolean anyTouchBottom = false;
+        boolean anyTouchSide = false;
 
-        int pieceCount = multiPiece.getPieceCount();
+        int standingPieceIndex = -1;
+        int standingPieceX = 0;
+        int standingPieceY = 0;
+
+        // Process each piece sequentially, like the original game
+        // Each piece gets its own SolidObject collision call
         for (int i = 0; i < pieceCount; i++) {
             SolidObjectParams params = multiPiece.getPieceParams(i);
             int pieceX = multiPiece.getPieceX(i);
@@ -344,6 +386,8 @@ public class SolidObjectManager {
             int anchorY = pieceY + params.offsetY();
             int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
 
+            // Process collision with apply=true for each piece
+            // The collision logic naturally handles sequential processing
             SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
                     multiPiece.isTopSolidOnly(), instance, true);
 
@@ -351,29 +395,43 @@ public class SolidObjectManager {
                 continue;
             }
 
-            // Notify the object about this piece's contact
-            multiPiece.onPieceContact(i, player, contact, frameCounter);
-
+            // OR all touch flags together (like the original: or.b d6,objoff_2E(a2))
+            if (contact.standing()) {
+                anyStanding = true;
+                // Track the first piece we land on for riding delta calculations
+                if (standingPieceIndex < 0) {
+                    standingPieceIndex = i;
+                    standingPieceX = pieceX;
+                    standingPieceY = pieceY;
+                }
+            }
+            if (contact.touchTop()) {
+                anyTouchTop = true;
+            }
+            if (contact.touchBottom()) {
+                anyTouchBottom = true;
+            }
+            if (contact.touchSide()) {
+                anyTouchSide = true;
+            }
             if (contact.pushing()) {
                 anyPushing = true;
             }
-            if (contact.standing()) {
-                anyStanding = true;
-                // Track the piece position for riding delta calculation
-                ridingX = pieceX;
-                ridingY = pieceY;
-            }
+
+            // Notify the object about this piece's contact (for touch detection/triggers)
+            multiPiece.onPieceContact(i, player, contact, frameCounter);
         }
 
-        // Also call the standard SolidObjectListener if implemented
-        if (anyStanding || anyPushing) {
+        // Notify the object about aggregate contact (for compatibility)
+        if (anyStanding || anyTouchTop || anyTouchBottom || anyTouchSide || anyPushing) {
             if (instance instanceof SolidObjectListener listener) {
-                SolidContact aggregateContact = new SolidContact(anyStanding, false, false, anyStanding, anyPushing);
+                SolidContact aggregateContact = new SolidContact(
+                        anyStanding, anyTouchSide, anyTouchBottom, anyTouchTop, anyPushing);
                 listener.onSolidContact(player, aggregateContact, frameCounter);
             }
         }
 
-        return new MultiPieceContactResult(anyStanding, anyPushing, ridingX, ridingY);
+        return new MultiPieceContactResult(anyStanding, anyPushing, standingPieceX, standingPieceY, standingPieceIndex);
     }
 
     private SolidContact resolveContact(AbstractPlayableSprite player,
@@ -475,8 +533,23 @@ public class SolidObjectManager {
                 return null;
             }
             boolean leftSide = distX > 0;
-            boolean nearVerticalEdge = absDistY <= 4;
-            boolean pushing = !player.getAir() && !nearVerticalEdge;
+            // Original disassembly (SolidObject_LeftRight) uses threshold of 4 pixels.
+            // We use a slightly larger threshold (6) to account for minor terrain/block
+            // surface alignment differences. This allows stepping onto blocks when
+            // the player's feet are within a few pixels of the block's top surface.
+            boolean nearVerticalEdge = absDistY <= 6;
+
+            // Original disassembly (SolidObject_LeftRight):
+            // If Sonic is extremely close to the top or bottom, branch
+            // to SolidObject_SideAir which returns side contact WITHOUT pushing out.
+            // This allows walking over objects that are barely poking out.
+            if (nearVerticalEdge) {
+                // Just return side contact for touch detection, don't push out
+                return new SolidContact(false, true, false, false, false);
+            }
+
+            // Not near vertical edge - do full side collision with push out
+            boolean pushing = !player.getAir();
             boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
             if (apply) {
                 if (movingInto) {

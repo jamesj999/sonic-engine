@@ -40,7 +40,10 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
     // Constants from disassembly
     private static final int NUM_PIECES = 4;
     private static final int PIECE_SPACING = 0x20;  // 32 pixels
-    private static final int PIECE_HALF_WIDTH = 0x1B;  // 27 pixels
+    // Collision half-width from disassembly: width_pixels + 0x0B = 0x10 + 0x0B = 0x1B
+    // This creates intentional overlap between adjacent pieces (54px collision width
+    // with 32px spacing = 22px overlap), allowing smooth walking across pieces.
+    private static final int PIECE_HALF_WIDTH = 0x1B;  // 27 pixels (matches original)
     private static final int PIECE_TOP_HEIGHT = 0x10;  // 16 pixels
     private static final int PIECE_BOTTOM_HEIGHT = 0x11;  // 17 pixels
 
@@ -62,10 +65,11 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
     // Y offsets for each piece (piece 0 is the "master", others interpolate from it)
     private final int[] yOffsets = new int[NUM_PIECES];
 
-    // Contact tracking (reset each frame, ORed together from all pieces)
-    private boolean touchTop;
-    private boolean touchBottom;
-    private int lastContactFrame;
+    // Contact tracking - uses frame numbers because solidObjectManager.update() runs
+    // AFTER objectManager.update(), so contact flags are set after our update() runs.
+    // We check if contact was made in the PREVIOUS frame instead.
+    private int lastTopContactFrame = -2;
+    private int lastBottomContactFrame = -2;
 
     // Dynamic spawn for position tracking
     private ObjectSpawn dynamicSpawn;
@@ -151,8 +155,11 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isTopSolidOnly() {
-        // Platforms are top-solid only (can pass through from below)
-        return true;
+        // Original Obj78 uses full SolidObject collision (not top-solid only).
+        // The overlapping collision boxes (27px half-width, 32px spacing) combined
+        // with the "near vertical edge" check in SolidObject allows smooth walking
+        // across adjacent pieces while still having solid sides.
+        return false;
     }
 
     @Override
@@ -163,42 +170,41 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
     @Override
     public void onPieceContact(int pieceIndex, AbstractPlayableSprite player,
                                SolidContact contact, int frameCounter) {
-        // Track contact from any piece
+        // Track contact from any piece by recording the frame number.
+        // Since solidObjectManager.update() runs AFTER objectManager.update(),
+        // contact is detected after our update() has already run this frame.
+        // Our update() checks if contact was made in the PREVIOUS frame.
         if (contact.standing() || contact.touchTop()) {
-            touchTop = true;
+            lastTopContactFrame = frameCounter;
         }
         if (contact.touchBottom()) {
-            touchBottom = true;
+            lastBottomContactFrame = frameCounter;
         }
-        lastContactFrame = frameCounter;
     }
 
     @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
         // Aggregate contact callback - also tracked via onPieceContact
         if (contact.standing() || contact.touchTop()) {
-            touchTop = true;
+            lastTopContactFrame = frameCounter;
         }
         if (contact.touchBottom()) {
-            touchBottom = true;
+            lastBottomContactFrame = frameCounter;
         }
-        lastContactFrame = frameCounter;
     }
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        // Reset contact flags at the start of each frame
-        // (they'll be set again by SolidObjectManager if there's contact)
-        if (frameCounter != lastContactFrame) {
-            touchTop = false;
-            touchBottom = false;
-        }
+        // Check contact from the PREVIOUS frame, since solidObjectManager.update()
+        // runs AFTER objectManager.update() in the game loop.
+        boolean touchTop = (frameCounter - lastTopContactFrame) <= 1;
+        boolean touchBottom = (frameCounter - lastBottomContactFrame) <= 1;
 
         // Run state machine
         switch (state) {
-            case 0, 4 -> updateWaitTop();
+            case 0, 4 -> updateWaitTop(touchTop);
             case 1, 3 -> updateRise();
-            case 2, 6 -> updateWaitBottom();
+            case 2, 6 -> updateWaitBottom(touchBottom);
             case 5, 7 -> updateDrop();
         }
 
@@ -211,7 +217,7 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
     /**
      * States 0, 4: Wait for player contact on TOP, then 30-frame countdown.
      */
-    private void updateWaitTop() {
+    private void updateWaitTop(boolean touchTop) {
         if (touchTop && timer == 0) {
             timer = TOP_CONTACT_DELAY;
         }
@@ -244,7 +250,7 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
      * States 2, 6: Wait for player contact from BOTTOM, 60-frame countdown with oscillation.
      * Oscillation visual effect is applied in appendRenderCommands().
      */
-    private void updateWaitBottom() {
+    private void updateWaitBottom(boolean touchBottom) {
         if (touchBottom && timer == 0) {
             timer = BOTTOM_CONTACT_DELAY;
         }

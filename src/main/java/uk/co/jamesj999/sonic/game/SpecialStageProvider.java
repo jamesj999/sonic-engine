@@ -6,11 +6,12 @@ import java.io.IOException;
  * Interface for special stage implementations that award Chaos Emeralds.
  * Extends {@link MiniGameProvider} with emerald-specific functionality.
  *
- * <p>Access method varies by game:
+ * <p>
+ * Access method varies by game:
  * <ul>
- *   <li>Sonic 1: Giant rings (hidden in levels)</li>
- *   <li>Sonic 2: Star posts with 50+ rings</li>
- *   <li>Sonic 3&K: Giant rings (Blue Sphere stages)</li>
+ * <li>Sonic 1: Giant rings (hidden in levels)</li>
+ * <li>Sonic 2: Star posts with 50+ rings</li>
+ * <li>Sonic 3&K: Giant rings (Blue Sphere stages)</li>
  * </ul>
  */
 public interface SpecialStageProvider extends MiniGameProvider {
@@ -72,4 +73,109 @@ public interface SpecialStageProvider extends MiniGameProvider {
      * @param collected true to mark emerald as collected
      */
     void setEmeraldCollected(boolean collected);
+
+    // ==================== Debug Methods ====================
+
+    /**
+     * Checks if sprite debug mode is active.
+     *
+     * @return true if sprite debug viewer is enabled
+     */
+    boolean isSpriteDebugMode();
+
+    /**
+     * Toggles sprite debug mode on/off.
+     */
+    void toggleSpriteDebugMode();
+
+    /**
+     * Cycles through plane visibility debug modes (A/B/both/off).
+     */
+    void cyclePlaneDebugMode();
+
+    /**
+     * Gets the debug provider for sprite viewing.
+     *
+     * @return the debug provider, or null if not available
+     */
+    SpecialStageDebugProvider getDebugProvider();
+
+    // ==================== Alignment Test Methods ====================
+
+    /**
+     * Checks if alignment test mode is active.
+     *
+     * @return true if alignment testing is enabled
+     */
+    boolean isAlignmentTestMode();
+
+    /**
+     * Toggles alignment test mode on/off.
+     */
+    void toggleAlignmentTestMode();
+
+    /**
+     * Adjusts the alignment offset for testing.
+     *
+     * @param delta amount to adjust the offset
+     */
+    void adjustAlignmentOffset(int delta);
+
+    /**
+     * Adjusts the alignment speed for testing.
+     *
+     * @param delta amount to adjust the speed
+     */
+    void adjustAlignmentSpeed(double delta);
+
+    /**
+     * Toggles alignment step mode for frame-by-frame testing.
+     */
+    void toggleAlignmentStepMode();
+
+    /**
+     * Renders the alignment test overlay.
+     *
+     * @param viewportWidth  viewport width in pixels
+     * @param viewportHeight viewport height in pixels
+     */
+    void renderAlignmentOverlay(int viewportWidth, int viewportHeight);
+
+    // ==================== Lag Compensation Methods ====================
+
+    /**
+     * Renders the lag compensation debug overlay.
+     *
+     * @param viewportWidth  viewport width in pixels
+     * @param viewportHeight viewport height in pixels
+     */
+    void renderLagCompensationOverlay(int viewportWidth, int viewportHeight);
+
+    /**
+     * Gets the current lag compensation factor.
+     *
+     * @return the lag compensation factor
+     */
+    double getLagCompensation();
+
+    /**
+     * Sets the lag compensation factor.
+     *
+     * @param factor the new lag compensation factor
+     */
+    void setLagCompensation(double factor);
+
+    // ==================== Results Screen ====================
+
+    /**
+     * Creates a results screen for this special stage type.
+     *
+     * @param ringsCollected    number of rings collected
+     * @param gotEmerald        true if an emerald was collected
+     * @param stageIndex        the stage index (0-based)
+     * @param totalEmeraldCount total emeralds collected so far
+     * @return a results screen instance
+     */
+    ResultsScreen createResultsScreen(int ringsCollected, boolean gotEmerald,
+            int stageIndex, int totalEmeraldCount);
 }

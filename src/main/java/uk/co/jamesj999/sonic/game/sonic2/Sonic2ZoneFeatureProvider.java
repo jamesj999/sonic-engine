@@ -2,11 +2,17 @@ package uk.co.jamesj999.sonic.game.sonic2;
 
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
+import uk.co.jamesj999.sonic.game.sonic2.objects.CPZPylonObjectInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.Sonic2ObjectRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.scroll.Sonic2ZoneConstants;
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperCollisionManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperDataLoader;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperPlacementManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperSpawn;
+import uk.co.jamesj999.sonic.level.objects.ObjectInstance;
+import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.io.IOException;
@@ -34,6 +40,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     private static final Logger LOGGER = Logger.getLogger(Sonic2ZoneFeatureProvider.class.getName());
 
     private CNZBumperCollisionManager cnzBumperManager;
+    private ObjectInstance cpzPylon;
     private int currentZone = -1;
     private int currentAct = -1;
 
@@ -51,6 +58,11 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         // Initialize CNZ bumpers
         if (zoneIndex == Sonic2ZoneConstants.ZONE_CNZ) {
             initCNZBumpers(rom, actIndex, cameraX);
+        }
+
+        // Initialize CPZ pylon
+        if (zoneIndex == Sonic2ZoneConstants.ZONE_CPZ) {
+            initCPZPylon();
         }
 
         // TODO: Add water level initialization for ARZ, CPZ, etc.
@@ -78,6 +90,31 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         }
     }
 
+    /**
+     * Initializes the CPZ pylon decorative object.
+     * The pylon is not loaded from level object data - it is created automatically
+     * when CPZ loads and added to the dynamic objects list.
+     */
+    private void initCPZPylon() {
+        try {
+            // Create a synthetic ObjectSpawn for the pylon
+            // Position doesn't matter - pylon uses camera-relative positioning
+            // ObjectSpawn(x, y, objectId, subtype, renderFlags, respawnTracked, rawYWord)
+            ObjectSpawn spawn = new ObjectSpawn(0, 0, Sonic2ObjectIds.CPZ_PYLON, 0, 0, false, 0);
+            cpzPylon = new CPZPylonObjectInstance(spawn, "CPZPylon");
+
+            // Add to ObjectManager's dynamic objects list
+            LevelManager levelManager = LevelManager.getInstance();
+            if (levelManager != null && levelManager.getObjectManager() != null) {
+                levelManager.getObjectManager().addDynamicObject(cpzPylon);
+                LOGGER.info("Initialized CPZ pylon");
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Failed to initialize CPZ pylon", e);
+            cpzPylon = null;
+        }
+    }
+
     @Override
     public void update(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
         if (cnzBumperManager != null && zoneIndex == Sonic2ZoneConstants.ZONE_CNZ) {
@@ -88,6 +125,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     @Override
     public void reset() {
         cnzBumperManager = null;
+        cpzPylon = null;
         currentZone = -1;
         currentAct = -1;
     }
