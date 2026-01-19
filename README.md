@@ -46,8 +46,12 @@ terrain in the same way Sonic would in the original game.
 V0.05 - Little more than a tech demo. Sonic is able to run and jump and collide with terrain in a reasonably correct way. No
 graphics have yet been implemented so it's a moving white box on a black background.
 
-0.1.20260110 - Now vaguely resembles the actual Sonic 2 game. Real collision and graphics data is loaded from the Sonic 2 ROM and rendered
+v0.1.20260110 - Now vaguely resembles the actual Sonic 2 game. Real collision and graphics data is loaded from the Sonic 2 ROM and rendered
 on screen. The majority of the physics are in place, although it is far from perfect. A system for loading game objects has
 been created, along with an implementation for most of the objects and Badniks in Emerald Hill Zone. Rings are implemented, life and score
 tracking is implemented. SoundFX and music are implemented. Everything has room for improvement, but this now resembles a playable
 game.
+
+v0.2.20260117 - Improvements and fixes across the board. Special stages are now implemented, feature complete with a few known issues.
+Physics have been improved, parallax backgrounds implemented and complete for EHZ, CPZ, ARZ and MCZ. Some sound improvements, title cards,
+level 'outros' etc.
