@@ -243,15 +243,26 @@ public class DrowningManager {
     }
 
     /**
-     * Called when the player exits water. Resets state and stops drowning music if playing.
+     * Called when the player exits water. Resets state and restarts zone music if drowning music was playing.
      */
     public void onExitWater() {
         if (drowningMusicStarted) {
-            // End the drowning music override and return to level music
-            AudioManager.getInstance().endMusicOverride(Sonic2AudioConstants.MUS_UNDERWATER);
+            // Restart the level music from the beginning (original Sonic 2 behavior)
+            restartZoneMusic();
             drowningMusicStarted = false;
         }
         reset();
+    }
+
+    /**
+     * Restarts the zone music from the beginning.
+     * Called when exiting water or replenishing air while drowning music was playing.
+     */
+    private void restartZoneMusic() {
+        int musicId = LevelManager.getInstance().getCurrentLevelMusicId();
+        if (musicId >= 0) {
+            AudioManager.getInstance().playMusic(musicId);
+        }
     }
 
     /**
@@ -262,7 +273,8 @@ public class DrowningManager {
         frameTimer = FRAMES_PER_SECOND;
 
         if (drowningMusicStarted) {
-            AudioManager.getInstance().endMusicOverride(Sonic2AudioConstants.MUS_UNDERWATER);
+            // Restart the level music from the beginning (original Sonic 2 behavior)
+            restartZoneMusic();
             drowningMusicStarted = false;
         }
     }
