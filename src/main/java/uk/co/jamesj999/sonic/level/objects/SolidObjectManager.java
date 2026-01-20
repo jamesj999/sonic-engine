@@ -251,30 +251,55 @@ public class SolidObjectManager {
         player.setPushing(false);
 
         Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
-        if (ridingObject != null) {
+
+        // Original game behavior (s2.asm SolidObject, lines 34806-34828):
+        // Check if player is still within bounds of the platform's NEW position BEFORE
+        // applying any movement delta. This is crucial for multi-block objects like
+        // MTZ platforms where blocks teleport - if a block teleports away from Sonic,
+        // the bounds check fails and Sonic falls off (transfers to another block)
+        // instead of teleporting with the block.
+        if (ridingObject != null && ridingObject instanceof SolidObjectProvider provider) {
             int currentX;
             int currentY;
+            SolidObjectParams params;
+
             // For multi-piece objects, get the current position of the specific piece
             if (ridingPieceIndex >= 0 && ridingObject instanceof MultiPieceSolidProvider multiPiece) {
                 currentX = multiPiece.getPieceX(ridingPieceIndex);
                 currentY = multiPiece.getPieceY(ridingPieceIndex);
+                params = multiPiece.getPieceParams(ridingPieceIndex);
             } else {
                 currentX = ridingObject.getX();
                 currentY = ridingObject.getY();
+                params = provider.getSolidParams();
             }
-            int deltaX = currentX - ridingX;
-            int deltaY = currentY - ridingY;
-            if (deltaX != 0) {
-                int baseX = player.getCentreX() - (player.getWidth() / 2);
-                player.setX((short) (baseX + deltaX));
+
+            // Check if player is still within X bounds of the platform's NEW position
+            // Original: sub.w x_pos(a0),d0 / add.w d1,d0 / bmi.s detach / cmp.w d2,d0 / bhs.s detach
+            int halfWidth = params.halfWidth();
+            int relX = player.getCentreX() - currentX + halfWidth;
+            boolean inBounds = relX >= 0 && relX < halfWidth * 2;
+
+            if (inBounds && provider.isSolidFor(player)) {
+                // Still in bounds - apply delta immediately (like original's MvSonicOnPtfm)
+                int deltaX = currentX - ridingX;
+                int deltaY = currentY - ridingY;
+                if (deltaX != 0) {
+                    int baseX = player.getCentreX() - (player.getWidth() / 2);
+                    player.setX((short) (baseX + deltaX));
+                }
+                if (deltaY != 0) {
+                    int baseY = player.getCentreY() - (player.getHeight() / 2);
+                    player.setY((short) (baseY + deltaY));
+                }
+                ridingX = currentX;
+                ridingY = currentY;
+            } else {
+                // Out of bounds - detach from this object (like original's loc_1975A)
+                // Don't apply any delta; collision detection will find a new object to stand on
+                ridingObject = null;
+                ridingPieceIndex = -1;
             }
-            if (deltaY != 0) {
-                int baseY = player.getCentreY() - (player.getHeight() / 2);
-                player.setY((short) (baseY + deltaY));
-            }
-            // Update stored position for next frame's delta calculation
-            ridingX = currentX;
-            ridingY = currentY;
         }
 
         ObjectInstance nextRidingObject = null;

@@ -18,25 +18,26 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * MTZ Platform (Object 0x6B) - Multi-purpose platform used in Metropolis Zone and Chemical Plant Zone.
+ * MTZ Platform (Object 0x6B) - Moving platform from Metropolis Zone and Chemical Plant Zone.
  * <p>
- * Implements 12 distinct movement subtypes from the disassembly (s2.asm lines 53860-54159):
+ * In CPZ, this object renders as a SINGLE 32x32 block. The multi-block visual effect
+ * seen in the game is achieved by placing MULTIPLE separate Object 0x6B instances
+ * at the same location, each with different subtypes (movement types 8, 9, 10, 11)
+ * which have different radii (0x10, 0x30, 0x50, 0x70). The oscillators for these
+ * types are synchronized but at different amplitudes, creating coordinated but
+ * differential movement.
+ * <p>
+ * In MTZ, this object uses different mappings with multi-block frames, but all
+ * blocks still move as one unit (single x_pos, y_pos).
+ * <p>
+ * Movement types (from s2.asm lines 53860-54159):
  * <ul>
  *   <li>Type 0: Stationary</li>
- *   <li>Type 1: Horizontal oscillation (amplitude 0x40)</li>
- *   <li>Type 2: Horizontal oscillation (amplitude 0x80)</li>
- *   <li>Type 3: Vertical oscillation (amplitude 0x40)</li>
- *   <li>Type 4: Vertical oscillation (amplitude 0x80)</li>
- *   <li>Type 5: Trigger on standing (transitions to type 6)</li>
- *   <li>Type 6: Falling platform</li>
+ *   <li>Types 1-2: Horizontal oscillation (amplitudes 0x40, 0x80)</li>
+ *   <li>Types 3-4: Vertical oscillation (amplitudes 0x40, 0x80)</li>
+ *   <li>Types 5-6: Triggered falling</li>
  *   <li>Type 7: Bouncy platform</li>
- *   <li>Types 8-11: Circular motion with varying radii</li>
- * </ul>
- * <p>
- * Subtype structure:
- * <ul>
- *   <li>Bits 0-3: Movement type (0-11)</li>
- *   <li>Bits 2-4: Property index (size/collision selection)</li>
+ *   <li>Types 8-11: Circular/square motion with radii 0x10, 0x30, 0x50, 0x70</li>
  * </ul>
  */
 public class MTZPlatformObjectInstance extends AbstractObjectInstance
@@ -47,8 +48,8 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
     // Subtype properties from Obj6B_Properties (line 53879-53881)
     // Format: {width_pixels, y_radius, mapping_frame}
     private static final int[][] SUBTYPE_PROPERTIES = {
-            {32, 12, 1}, // Index 0: wide platform (32px half-width, 12px y_radius, frame 1)
-            {16, 16, 0}, // Index 1: small block (16px half-width, 16px y_radius, frame 0)
+            {32, 12, 1}, // Index 0: width=32, y_radius=12, frame 1
+            {16, 16, 0}, // Index 1: width=16, y_radius=16, frame 0
     };
 
     // Circular motion radii for types 8-11
@@ -59,22 +60,23 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
     private int y;
     private int baseX;      // objoff_34 - Original X position
     private int baseY;      // objoff_30 - Original Y position
-    private int yFixed;     // 16.8 fixed-point Y for falling/bouncing (objoff_2C)
+    private int yFixed;     // 16.8 fixed-point Y for falling/bouncing
     private int yVel;       // Y velocity for falling/bouncing
 
     // Subtype configuration
-    private int moveType;       // Movement type (0-11)
-    private int widthPixels;    // Collision half-width
-    private int yRadius;        // Collision half-height
-    private int mappingFrame;   // Sprite frame index
+    private int moveType;
+    private int widthPixels;
+    private int yRadius;
+    private int mappingFrame;
 
     // State tracking
     private int flipState;      // objoff_2E - Circular motion quadrant (0-3)
-    private int bounceAccel;    // objoff_38 - Bounce direction (+8 or -8)
-    private boolean xFlip;      // X-flip from render flags
+    private int bounceAccel;
+    private boolean xFlip;
 
-    // Zone handling
-    private boolean isCpz;
+    // Contact tracking
+    private int lastContactFrame = -2;
+
     private ObjectSpawn dynamicSpawn;
 
     public MTZPlatformObjectInstance(ObjectSpawn spawn, String name) {
@@ -98,33 +100,6 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, AbstractPlayableSprite player) {
-        applyMovement(player);
-        refreshDynamicSpawn();
-    }
-
-    @Override
-    public void appendRenderCommands(List<GLCommand> commands) {
-        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
-        if (renderManager == null) {
-            appendDebug(commands);
-            return;
-        }
-
-        if (isCpz) {
-            // CPZ uses the stair block renderer (single piece)
-            PatternSpriteRenderer renderer = renderManager.getCpzStairBlockRenderer();
-            if (renderer != null && renderer.isReady()) {
-                renderer.drawFrameIndex(mappingFrame, x, y, xFlip, false);
-                return;
-            }
-        }
-
-        // Fall back to debug rendering for MTZ (multi-piece level art not yet integrated)
-        appendDebug(commands);
-    }
-
-    @Override
     public SolidObjectParams getSolidParams() {
         // From disassembly line 53930-53937:
         // d1 = width_pixels + 11 (half-width for collision)
@@ -134,12 +109,9 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isTopSolidOnly() {
-        return true; // Platform only solid from above
-    }
-
-    @Override
-    public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
-        // Platform state is driven via SolidObjectManager standing checks.
+        // Obj6B uses regular SolidObject (jsrto JmpTo14_SolidObject), not PlatformObject,
+        // so it's fully solid from all sides, not just the top.
+        return false;
     }
 
     @Override
@@ -147,12 +119,39 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
         return !isDestroyed();
     }
 
-    private void init() {
-        // Zone detection
-        LevelManager manager = LevelManager.getInstance();
-        int zone = manager != null ? manager.getCurrentZone() : -1;
-        isCpz = (zone == 2); // chemical_plant_zone
+    @Override
+    public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
+        if (contact.standing() || contact.touchTop()) {
+            lastContactFrame = frameCounter;
+        }
+    }
 
+    @Override
+    public void update(int frameCounter, AbstractPlayableSprite player) {
+        applyMovement(frameCounter);
+        refreshDynamicSpawn();
+    }
+
+    @Override
+    public void appendRenderCommands(List<GLCommand> commands) {
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        PatternSpriteRenderer renderer = null;
+
+        if (renderManager != null) {
+            renderer = renderManager.getCpzStairBlockRenderer();
+        }
+
+        if (renderer != null && renderer.isReady()) {
+            // In CPZ, the original mappings (obj6B.asm) only have 1 frame with 1 piece.
+            // Multiple instances are placed at the same location with different subtypes
+            // to create the multi-block effect. So we always render a SINGLE block (frame 2).
+            renderer.drawFrameIndex(2, x, y, xFlip, false);
+        } else {
+            appendDebug(commands);
+        }
+    }
+
+    private void init() {
         // Property extraction: (subtype >> 2) & 0x1C gives byte offset
         int propsOffset = (spawn.subtype() >> 2) & 0x1C;
         int propsIndex = Math.min(propsOffset / 4, SUBTYPE_PROPERTIES.length - 1);
@@ -174,19 +173,22 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
         // Movement type from bits 0-3 (clamped to 0-11)
         moveType = spawn.subtype() & 0x0F;
         if (moveType > 11) {
-            moveType = 0; // Undefined types become stationary
+            moveType = 0;
         }
 
-        // X-flip from render flags
+        // flipState (objoff_2E) is initialized from status byte which has both xFlip and yFlip
+        // This creates a 2-bit quadrant value (0-3) for circular motion
+        // Bit 0 = xFlip, Bit 1 = yFlip
         xFlip = (spawn.renderFlags() & 0x01) != 0;
-        flipState = xFlip ? 1 : 0;
+        flipState = spawn.renderFlags() & 0x03;  // Both bits: 0-3 range
 
-        // Special init for circular motion (types 8-11)
+        // Special init for circular motion (types 8-11):
+        // If oscillator delta is negative, toggle bit 0 of flipState
         if (moveType >= 8 && moveType <= 11) {
             int oscOffset = 0x2A + ((moveType - 8) * 4);
             int oscWord = OscillationManager.getWord(oscOffset);
             if (oscWord < 0) {
-                flipState ^= 1; // Toggle x_flip
+                flipState ^= 1;  // Toggle bit 0 (bchg #0,objoff_2E)
             }
         }
 
@@ -197,85 +199,80 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Applies movement based on movement type (subtype & 0x0F).
-     * Ported from Obj6B_Move and Obj6B_MoveRoutines (s2.asm lines 53938-54080).
+     * Applies movement based on movement type.
      */
-    private void applyMovement(AbstractPlayableSprite player) {
+    private void applyMovement(int frameCounter) {
+        boolean standing = (frameCounter - lastContactFrame) <= 1;
+
         switch (moveType) {
             case 0 -> { /* Stationary - no movement */ }
-            case 1 -> applyHorizontalOscillation(0x08, 0x40); // Oscillating_Data+8, amplitude $40
-            case 2 -> applyHorizontalOscillation(0x1C, 0x80); // Oscillating_Data+$1C, amplitude $80
-            case 3 -> applyVerticalOscillation(0x08, 0x40);   // Oscillating_Data+8, amplitude $40
-            case 4 -> applyVerticalOscillation(0x1C, 0x80);   // Oscillating_Data+$1C, amplitude $80
-            case 5 -> applyTriggerFall();
+            case 1 -> applyHorizontalOscillation(0x08, 0x40);
+            case 2 -> applyHorizontalOscillation(0x1C, 0x80);
+            case 3 -> applyVerticalOscillation(0x08, 0x40);
+            case 4 -> applyVerticalOscillation(0x1C, 0x80);
+            case 5 -> applyTriggerFall(standing);
             case 6 -> applyFalling();
-            case 7 -> applyBouncy();
+            case 7 -> applyBouncy(standing);
             case 8, 9, 10, 11 -> applyCircularMotion(moveType - 8);
         }
     }
 
     /**
      * Movement types 1-2: Horizontal oscillation.
-     * x_pos = objoff_34 - oscillation_value (adjusted for x-flip)
      */
     private void applyHorizontalOscillation(int oscOffset, int amplitude) {
-        int oscValue = OscillationManager.getByte(oscOffset);
+        int oscValue = OscillationManager.getByte(oscOffset) & 0xFF;
 
         if (xFlip) {
-            // Negate and add amplitude
             oscValue = -oscValue + amplitude;
         }
 
         x = baseX - oscValue;
+        y = baseY;
     }
 
     /**
      * Movement types 3-4: Vertical oscillation.
-     * y_pos = objoff_30 - oscillation_value (adjusted for x-flip)
      */
     private void applyVerticalOscillation(int oscOffset, int amplitude) {
-        int oscValue = OscillationManager.getByte(oscOffset);
+        int oscValue = OscillationManager.getByte(oscOffset) & 0xFF;
 
         if (xFlip) {
-            // Negate and add amplitude
             oscValue = -oscValue + amplitude;
         }
 
+        x = baseX;
         y = baseY - oscValue;
     }
 
     /**
      * Movement type 5: Trigger on standing.
-     * Visual wobble using oscillation, transitions to type 6 (falling) when player stands on it.
-     * ROM: Obj6B_Move_Type05 (s2.asm lines 53986-53998)
      */
-    private void applyTriggerFall() {
-        // Visual wobble: y = baseY + (oscillation >> 1)
-        int oscValue = OscillationManager.getByte(0);
+    private void applyTriggerFall(boolean standing) {
+        int oscValue = OscillationManager.getByte(0) & 0xFF;
         y = baseY + (oscValue >> 1);
+        x = baseX;
 
-        if (isStanding()) {
-            moveType = 6; // Transition to falling
+        if (standing) {
+            moveType = 6;
+            yFixed = y << 8;
         }
     }
 
     /**
      * Movement type 6: Falling platform.
-     * Applies gravity (+8 per frame) and resets when below camera + 224.
-     * ROM: Obj6B_Move_Type06 (s2.asm lines 54000-54020)
      */
     private void applyFalling() {
-        // 16.8 fixed-point position update
         yFixed += yVel;
         y = yFixed >> 8;
-        yVel += 8; // Gravity
+        yVel += 8;
+        x = baseX;
 
-        // Reset when below camera + 224
         Camera camera = Camera.getInstance();
         int maxY = camera != null ? camera.getMaxY() + 224 : baseY + 500;
 
         if (y > maxY) {
-            moveType = 5; // Reset to trigger mode
+            moveType = 5;
             yVel = 0;
             y = baseY;
             yFixed = baseY << 8;
@@ -284,28 +281,28 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
 
     /**
      * Movement type 7: Bouncy platform.
-     * Bounces at velocity 0x2A8, reverses direction at peak.
-     * ROM: Obj6B_Move_Type07 (s2.asm lines 54022-54062)
      */
-    private void applyBouncy() {
+    private void applyBouncy(boolean standing) {
+        x = baseX;
+
         if (bounceAccel == 0) {
-            if (isStanding()) {
-                bounceAccel = 8; // Start bouncing
+            if (standing) {
+                bounceAccel = 8;
             }
             return;
         }
 
         yFixed += yVel;
-        y = (yFixed >> 8) & 0x7FF; // Mask to prevent overflow
+        y = (yFixed >> 8) & 0x7FF;
 
         if (yVel == 0x2A8) {
-            bounceAccel = -bounceAccel; // Reverse at peak
+            bounceAccel = -bounceAccel;
         }
 
         yVel += bounceAccel;
 
         if (yVel == 0) {
-            moveType = 0; // Reset to stationary
+            moveType = 0;
             bounceAccel = 0;
             y = baseY;
             yFixed = baseY << 8;
@@ -313,61 +310,45 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Movement types 8-11: Circular motion.
-     * Uses oscillation data to move in a circle with varying radii.
-     * ROM: Obj6B_Move_Type08 through Type0B (s2.asm lines 54064-54156)
-     *
-     * @param typeIndex 0-3 corresponding to types 8-11
+     * Movement types 8-11: Circular/square motion.
+     * Each type uses a different oscillator with different radius but synchronized timing.
+     * Multiple Object 0x6B instances at the same location with types 8, 9, 10, 11
+     * create the visual effect of blocks moving at different rates.
      */
     private void applyCircularMotion(int typeIndex) {
         int radius = CIRCULAR_RADII[typeIndex];
         int oscOffset = 0x28 + (typeIndex * 4);
 
-        // Get oscillation value (high byte) and delta (word at +2)
-        int d0 = OscillationManager.getByte(oscOffset);
-        // Only type 8 (typeIndex == 0) applies lsr #1 to the oscillation value
+        int d0 = OscillationManager.getByte(oscOffset) & 0xFF;
         if (typeIndex == 0) {
             d0 = d0 >> 1;
         }
         int d3 = OscillationManager.getWord(oscOffset + 2);
 
-        // Advance quadrant when oscillation crosses zero
+        // Advance quadrant when delta crosses zero
         if (d3 == 0) {
             flipState = (flipState + 1) & 0x03;
         }
 
-        // Calculate position based on quadrant (from s2.asm lines 54109-54152)
-        // Quadrants 1 and 2 use (radius - 1) in their calculations
+        // Position calculation based on current quadrant
         switch (flipState & 0x03) {
             case 0 -> {
-                // d0 = d0 - radius; x = baseX + d0; y = baseY - radius
                 x = baseX - radius + d0;
                 y = baseY - radius;
             }
             case 1 -> {
-                // x = baseX + radius; y = baseY + (radius - 1) - d0
                 x = baseX + radius;
                 y = baseY + radius - d0 - 1;
             }
             case 2 -> {
-                // x = baseX + (radius - 1) - d0; y = baseY + radius
                 x = baseX + radius - d0 - 1;
                 y = baseY + radius;
             }
             case 3 -> {
-                // x = baseX - radius; y = baseY + d0 - radius
                 x = baseX - radius;
                 y = baseY - radius + d0;
             }
         }
-    }
-
-    private boolean isStanding() {
-        LevelManager manager = LevelManager.getInstance();
-        if (manager == null || manager.getSolidObjectManager() == null) {
-            return false;
-        }
-        return manager.getSolidObjectManager().isRidingObject(this);
     }
 
     private void refreshDynamicSpawn() {
@@ -385,19 +366,17 @@ public class MTZPlatformObjectInstance extends AbstractObjectInstance
 
     private void appendDebug(List<GLCommand> commands) {
         int halfWidth = widthPixels + 0x0B;
-        int halfHeight = yRadius;
         int left = x - halfWidth;
         int right = x + halfWidth;
-        int top = y - halfHeight;
-        int bottom = y + halfHeight;
+        int top = y - yRadius;
+        int bottom = y + yRadius + 1;
 
-        // Platform outline
         appendLine(commands, left, top, right, top);
         appendLine(commands, right, top, right, bottom);
         appendLine(commands, right, bottom, left, bottom);
         appendLine(commands, left, bottom, left, top);
 
-        // Cross to indicate platform center
+        // Draw center cross
         appendLine(commands, x - 4, y, x + 4, y);
         appendLine(commands, x, y - 4, x, y + 4);
     }

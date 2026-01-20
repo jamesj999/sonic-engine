@@ -361,8 +361,8 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
                 pieceY += shake;
             }
 
-            // Draw the stair block at this position
-            renderer.drawFrameIndex(0, pieceX, pieceY, xFlip, false);
+            // Draw the stair block at this position (frame 2 = single 32x32 block)
+            renderer.drawFrameIndex(2, pieceX, pieceY, xFlip, false);
         }
     }
 

@@ -1545,18 +1545,37 @@ public class Sonic2ObjectArt {
     }
 
     /**
-     * Creates mappings for CPZ Stair Block (Obj78).
+     * Creates mappings for CPZ Stair Block (Obj78) and MTZ Platform (Obj6B).
      * Based on obj6B.asm mappings (shared):
-     * Frame 0: Single 4x4 tile piece at (-16,-16), 32x32 pixels
+     *
+     * Frame 0: 4 blocks at positions -0x40, -0x20, 0, 0x20 (MTZ-style multi-block)
+     *          Used by MTZPlatform (Object 0x6B) subtype index 1
+     * Frame 1: 2 blocks at outer positions -0x40, 0x20 (same span as frame 0)
+     *          Used by MTZPlatform (Object 0x6B) subtype index 0
+     * Frame 2: Single 32x32 block for CPZStaircaseObjectInstance
      */
     private List<SpriteMappingFrame> createCPZStairBlockMappings() {
         List<SpriteMappingFrame> frames = new ArrayList<>();
 
-        // Frame 0 (Map_obj6B_0002): 4x4 tiles centered
-        // spritePiece -$10, -$10, 4, 4, 0, 0, 0, 0, 0
+        // Frame 0: 4 blocks at positions -0x40, -0x20, 0, 0x20 (32px spacing)
         List<SpriteMappingPiece> frame0 = new ArrayList<>();
-        frame0.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-0x40, -0x10, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-0x20, -0x10, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -0x10, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0x20, -0x10, 4, 4, 0, false, false, 0));
         frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: 2 blocks at positions -0x20 and 0 (from MTZ obj65_a.asm Map_obj65_a_002A)
+        // The second piece has hFlip=true to mirror the block
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x20, -0x10, 4, 4, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(0, -0x10, 4, 4, 0, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Single 32x32 block (used by CPZStaircaseObjectInstance)
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
 
         return frames;
     }
