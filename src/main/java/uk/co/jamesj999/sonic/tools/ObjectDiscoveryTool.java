@@ -69,6 +69,8 @@ public class ObjectDiscoveryTool {
             0x1C,  // BridgeStake
             0x1D,  // BlueBalls (CPZ)
             0x1E,  // CPZSpinTube
+            0x23,  // FallingPillar (ARZ pillar that drops lower section)
+            0x2C,  // LeavesGenerator (ARZ falling leaves trigger)
             0x2D,  // Barrier (one-way rising platform)
             0x26,  // Monitor
             0x32,  // BreakableBlock (CPZ metal blocks / HTZ rocks)

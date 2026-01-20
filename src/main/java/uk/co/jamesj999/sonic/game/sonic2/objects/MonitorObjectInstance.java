@@ -3,6 +3,8 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.level.objects.*;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
+import uk.co.jamesj999.sonic.physics.ObjectTerrainUtils;
+import uk.co.jamesj999.sonic.physics.TerrainCheckResult;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
@@ -28,6 +30,10 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     private static final int ICON_FRAME_OFFSET = 1;
     private static final int RING_MONITOR_REWARD = 10;
 
+    // Monitor falling constants (from ROM: Touch_Monitor and Obj26_Main)
+    private static final int FALLING_INITIAL_VEL = -0x180;  // Upward pop velocity when hit from below
+    private static final int FALLING_GRAVITY = 0x38;        // Same gravity as other objects
+
     private final MonitorType type;
     private final ObjectAnimationState animationState;
     private boolean broken;
@@ -39,6 +45,12 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     private boolean effectApplied;
     private AbstractPlayableSprite effectTarget;
     private AbstractPlayableSprite iconPlayer; // Preserved for rendering (effectTarget gets nulled)
+
+    // Falling state (routineSecondary != 0 in ROM)
+    private boolean falling;
+    private int yVel;
+    private int yFixed;
+    private int currentY;
 
     public MonitorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, HALF_RADIUS, HALF_RADIUS, 0.4f, 0.9f, 1.0f, false);
@@ -59,17 +71,46 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         if (broken) {
             effectApplied = true;
         }
+
+        // Initialize position tracking for falling behavior
+        this.currentY = spawn.y();
+        this.yFixed = spawn.y() << 8;
     }
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
+        // Handle falling state first (ROM: Obj26_Main routine_secondary check)
+        if (falling) {
+            updateFalling();
+        }
+
         if (!broken) {
             animationState.update();
             mappingFrame = animationState.getMappingFrame();
-            // Log 10 frames every second to see progression and break aliasing
             return;
         }
         updateIcon();
+    }
+
+    /**
+     * Update falling monitor (after being hit from below).
+     * ROM reference: s2.asm lines 25401-25408 (ObjectMoveAndFall + ObjCheckFloorDist)
+     */
+    private void updateFalling() {
+        // ObjectMoveAndFall: apply velocity and gravity
+        yFixed += yVel;
+        yVel += FALLING_GRAVITY;
+        currentY = yFixed >> 8;
+
+        // ObjCheckFloorDist: check for floor collision
+        TerrainCheckResult result = ObjectTerrainUtils.checkFloorDist(spawn.x(), currentY, HALF_RADIUS);
+        if (result.hasCollision()) {
+            // Snap to floor and stop falling
+            currentY = currentY + result.distance();
+            yFixed = currentY << 8;
+            yVel = 0;
+            falling = false;
+        }
     }
 
     @Override
@@ -79,18 +120,26 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         }
 
         // Hitting from below (Moving Up)
-        // Only bounce if player is actually BELOW the monitor (player center Y > monitor Y)
-        // This prevents bouncing when the player jumps near the monitor from the side
+        // ROM reference: Touch_Monitor (s2.asm lines 84742-84763)
+        // Check: player.y - 0x10 >= monitor.y (player center minus 16 must be >= monitor y)
         if (player.getYSpeed() < 0) {
             int playerCenterY = player.getCentreY();
-            int monitorY = spawn.y();
+            int monitorY = currentY;  // Use current Y position (may have moved if falling)
 
-            // Player must be below the monitor to trigger the "hit from below" bounce
-            if (playerCenterY > monitorY) {
-                LOGGER.fine(() -> "Monitor bounce: player at (" + player.getX() + "," + player.getY() +
-                    ") ySpeed=" + player.getYSpeed() + " monitor at (" + spawn.x() + "," + spawn.y() + ")");
-                // Bounce player down, but DO NOT break monitor
+            // ROM check: move.w y_pos(a0),d0; subi.w #$10,d0; cmp.w y_pos(a1),d0; blo.s return
+            // If player center - 16 >= monitor Y, then player is hitting from below
+            if (playerCenterY - 0x10 >= monitorY) {
+                LOGGER.fine(() -> "Monitor hit from below: player at (" + player.getX() + "," + player.getY() +
+                    ") ySpeed=" + player.getYSpeed() + " monitor at (" + spawn.x() + "," + currentY + ")");
+
+                // Bounce player down (neg.w y_vel(a0))
                 player.setYSpeed((short) -player.getYSpeed());
+
+                // Make monitor pop up and fall (only if not already falling)
+                if (!falling) {
+                    falling = true;
+                    yVel = FALLING_INITIAL_VEL;  // -0x180 upward
+                }
             }
             return;
         }
@@ -137,7 +186,8 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             return;
         }
         int frameIndex = broken ? BROKEN_FRAME : mappingFrame;
-        renderer.drawFrameIndex(frameIndex, spawn.x(), spawn.y(), false, false);
+        // Use currentY for rendering (supports falling animation)
+        renderer.drawFrameIndex(frameIndex, spawn.x(), currentY, false, false);
 
         if (iconActive) {
             int iconFrame = resolveIconFrame(iconPlayer);
@@ -266,6 +316,27 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(3);
+    }
+
+    @Override
+    public int getY() {
+        return currentY;
+    }
+
+    @Override
+    public ObjectSpawn getSpawn() {
+        // Return spawn with dynamic Y for solid collision checks
+        if (currentY != spawn.y()) {
+            return new ObjectSpawn(
+                    spawn.x(),
+                    currentY,
+                    spawn.objectId(),
+                    spawn.subtype(),
+                    spawn.renderFlags(),
+                    spawn.respawnTracked(),
+                    spawn.rawYWord());
+        }
+        return spawn;
     }
 
     private enum MonitorType {

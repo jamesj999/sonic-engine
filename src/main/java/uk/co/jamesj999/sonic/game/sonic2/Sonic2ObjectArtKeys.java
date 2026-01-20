@@ -46,6 +46,13 @@ public final class Sonic2ObjectArtKeys {
     // Underwater objects (ARZ/CPZ/HPZ)
     public static final String BUBBLES = "bubbles";
 
+    // ARZ specific
+    public static final String LEAVES = "leaves";
+
+    // Collapsing Platform (OOZ/MCZ)
+    public static final String OOZ_COLLAPSING_PLATFORM = "ooz_collapsing_platform";
+    public static final String MCZ_COLLAPSING_PLATFORM = "mcz_collapsing_platform";
+
     // EHZ Badniks
     public static final String MASHER = "masher";
     public static final String BUZZER = "buzzer";

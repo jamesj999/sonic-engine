@@ -148,6 +148,19 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         // Underwater bubbles
         registerSheet(Sonic2ObjectArtKeys.BUBBLES, artData.bubblesSheet());
 
+        // ARZ leaves
+        registerSheet(Sonic2ObjectArtKeys.LEAVES, artData.leavesSheet());
+
+        // Collapsing Platform art (Object 0x1F) - zone-specific
+        ObjectSpriteSheet oozCollapsingPlatformSheet = artLoader.loadOOZCollapsingPlatformSheet();
+        if (oozCollapsingPlatformSheet != null) {
+            registerSheet(Sonic2ObjectArtKeys.OOZ_COLLAPSING_PLATFORM, oozCollapsingPlatformSheet);
+        }
+        ObjectSpriteSheet mczCollapsingPlatformSheet = artLoader.loadMCZCollapsingPlatformSheet();
+        if (mczCollapsingPlatformSheet != null) {
+            registerSheet(Sonic2ObjectArtKeys.MCZ_COLLAPSING_PLATFORM, mczCollapsingPlatformSheet);
+        }
+
         // Results screen - stored separately, not in sheetOrder
         resultsSheet = artData.resultsSheet();
         resultsRenderer = new PatternSpriteRenderer(resultsSheet);

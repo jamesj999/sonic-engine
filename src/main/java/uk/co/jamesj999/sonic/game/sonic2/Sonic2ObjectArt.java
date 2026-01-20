@@ -333,6 +333,12 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> bubblesMappings = createBubblesMappings();
         ObjectSpriteSheet bubblesSheet = new ObjectSpriteSheet(bubblesPatterns, bubblesMappings, 1, 1);
 
+        // ARZ Leaves art (Object $2C LeavesGenerator - falling leaves)
+        // ROM: make_art_tile(ArtTile_ArtNem_Leaves,3,1) - palette line 3, priority 1
+        Pattern[] leavesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_LEAVES_ADDR, "Leaves");
+        List<SpriteMappingFrame> leavesMappings = createLeavesMappings();
+        ObjectSpriteSheet leavesSheet = new ObjectSpriteSheet(leavesPatterns, leavesMappings, 3, 1);
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -416,6 +422,7 @@ public class Sonic2ObjectArt {
                 springboardSheet,
                 resultsSheet,
                 bubblesSheet,
+                leavesSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
                 hudLivesPatterns,
@@ -536,11 +543,45 @@ public class Sonic2ObjectArt {
      * <p>
      * ARZ uses natural blue water surface art.
      * ROM address: 0x82E02 (Nemesis compressed, 16 blocks)
-     * 
+     *
      * @return ARZ water surface patterns, or empty array on failure
      */
     public Pattern[] loadWaterSurfaceARZPatterns() {
         return safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_WATER_SURFACE_ARZ_ADDR, "WaterSurfaceARZ");
+    }
+
+    /**
+     * Load OOZ Collapsing Platform sprite sheet (Object 0x1F in Oil Ocean Zone).
+     * <p>
+     * ROM: ArtNem_OOZPlatform at 0x809D0, palette line 3
+     *
+     * @return sprite sheet for OOZ collapsing platform, or null on failure
+     */
+    public ObjectSpriteSheet loadOOZCollapsingPlatformSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_OOZ_COLLAPSING_PLATFORM_ADDR, "OOZCollapsingPlatform");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createOOZCollapsingPlatformMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 3, 1);
+    }
+
+    /**
+     * Load MCZ Collapsing Platform sprite sheet (Object 0x1F in Mystic Cave Zone).
+     * <p>
+     * ROM: ArtNem_MCZCollapsePlat at 0xF1ABA, palette line 3
+     *
+     * @return sprite sheet for MCZ collapsing platform, or null on failure
+     */
+    public ObjectSpriteSheet loadMCZCollapsingPlatformSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_MCZ_COLLAPSING_PLATFORM_ADDR, "MCZCollapsingPlatform");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createMCZCollapsingPlatformMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 3, 1);
     }
 
     private AnimalType[] resolveZoneAnimals(int zoneIndex) {
@@ -2238,6 +2279,123 @@ public class Sonic2ObjectArt {
         for (int i = 0; i < 6; i++) {
             frames.add(createSimpleFrame(-8, -8, 2, 2, 15 + i * 4));
         }
+
+        return frames;
+    }
+
+    /**
+     * Creates mapping frames for ARZ falling leaves (Object $2C).
+     * Based on mappings/sprite/obj2C.asm from the disassembly.
+     * <p>
+     * Art: ArtNem_Leaves - 7 tiles total
+     * Frames:
+     * - Frame 0: 1x1 tile at (-4, -4), tile 0 (8x8 pixels)
+     * - Frame 1: 2x1 tiles at (-8, -4), tiles 1-2 (16x8 pixels)
+     * - Frame 2: 2x1 tiles at (-8, -4), tiles 3-4 (16x8 pixels)
+     * - Frame 3: 2x1 tiles at (-8, -4), tiles 5-6 (16x8 pixels)
+     */
+    private List<SpriteMappingFrame> createLeavesMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: spritePiece -4, -4, 1, 1, 0, 0, 0, 0, 0
+        // 1x1 tile (8x8 pixels) at tile 0
+        frames.add(createSimpleFrame(-4, -4, 1, 1, 0));
+
+        // Frame 1: spritePiece -8, -4, 2, 1, 1, 0, 0, 0, 0
+        // 2x1 tiles (16x8 pixels) starting at tile 1
+        frames.add(createSimpleFrame(-8, -4, 2, 1, 1));
+
+        // Frame 2: spritePiece -8, -4, 2, 1, 3, 0, 0, 0, 0
+        // 2x1 tiles (16x8 pixels) starting at tile 3
+        frames.add(createSimpleFrame(-8, -4, 2, 1, 3));
+
+        // Frame 3: spritePiece -8, -4, 2, 1, 5, 0, 0, 0, 0
+        // 2x1 tiles (16x8 pixels) starting at tile 5
+        frames.add(createSimpleFrame(-8, -4, 2, 1, 5));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for OOZ Collapsing Platform (Obj1F in OOZ).
+     * Based on obj1F_b.asm:
+     *
+     * Frame 0 (intact): 7 pieces total
+     * Top row: 4 pieces, 4x4 tiles each (128x32 pixels)
+     * Bottom row: 3 pieces, 4x2 tiles each (128x16 pixels)
+     *
+     * Frame 1 (collapsed): Same as frame 0 for intact appearance
+     * The fragments are rendered individually using frame 0 pieces
+     */
+    private List<SpriteMappingFrame> createOOZCollapsingPlatformMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Intact platform - 7 pieces
+        // Top row (4 pieces, 4x4 tiles each at y=-16)
+        // spritePiece -$40, -$10, 4, 4, $10, 1, 0, 0, 0
+        // spritePiece -$20, -$10, 4, 4, $10, 1, 0, 0, 0
+        // spritePiece 0, -$10, 4, 4, $10, 1, 0, 0, 0
+        // spritePiece $20, -$10, 4, 4, 0, 1, 0, 0, 0
+        // Note: priority bit is set in disassembly (last 0 or 1), but we use palette 3
+        List<SpriteMappingPiece> intactPieces = new ArrayList<>();
+        intactPieces.add(new SpriteMappingPiece(-0x40, -0x10, 4, 4, 0x10, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(-0x20, -0x10, 4, 4, 0x10, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(0x00, -0x10, 4, 4, 0x10, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(0x20, -0x10, 4, 4, 0x00, false, false, 0));
+
+        // Bottom row (3 pieces, 4x2 tiles each at y=16)
+        // spritePiece -$40, $10, 4, 2, $20, 1, 0, 0, 0
+        // spritePiece -$20, $10, 4, 2, $20, 1, 0, 0, 0
+        // spritePiece 0, $10, 4, 2, $20, 1, 0, 0, 0
+        intactPieces.add(new SpriteMappingPiece(-0x40, 0x10, 4, 2, 0x20, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(-0x20, 0x10, 4, 2, 0x20, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(0x00, 0x10, 4, 2, 0x20, false, false, 0));
+
+        frames.add(new SpriteMappingFrame(intactPieces));
+
+        // Frame 1: Collapsed/fragment appearance (same as intact for OOZ)
+        frames.add(new SpriteMappingFrame(intactPieces));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for MCZ Collapsing Platform (Obj1F in MCZ).
+     * Based on obj1F_c.asm:
+     *
+     * Frame 0 (intact): 4 pieces
+     * Frame 1 (collapsed): 6 pieces
+     */
+    private List<SpriteMappingFrame> createMCZCollapsingPlatformMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Intact platform - 4 pieces
+        // spritePiece -$20, -$10, 4, 2, 0, 0, 0, 0, 0
+        // spritePiece 0, -$10, 4, 2, 0, 1, 0, 0, 0  (H-flip)
+        // spritePiece -$10, 0, 3, 2, 8, 0, 0, 0, 0
+        // spritePiece 8, 0, 3, 4, $E, 0, 0, 0, 0
+        List<SpriteMappingPiece> intactPieces = new ArrayList<>();
+        intactPieces.add(new SpriteMappingPiece(-0x20, -0x10, 4, 2, 0x00, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(0x00, -0x10, 4, 2, 0x00, true, false, 0));
+        intactPieces.add(new SpriteMappingPiece(-0x10, 0x00, 3, 2, 0x08, false, false, 0));
+        intactPieces.add(new SpriteMappingPiece(0x08, 0x00, 3, 4, 0x0E, false, false, 0));
+        frames.add(new SpriteMappingFrame(intactPieces));
+
+        // Frame 1: Collapsed platform - 6 pieces
+        // spritePiece -$20, -$10, 2, 2, 0, 0, 0, 0, 0
+        // spritePiece -$10, -$10, 2, 2, 4, 0, 0, 0, 0
+        // spritePiece 0, -$10, 2, 2, 4, 1, 0, 0, 0  (H-flip)
+        // spritePiece $10, -$10, 2, 2, 0, 1, 0, 0, 0  (H-flip)
+        // spritePiece -$10, 0, 3, 2, 8, 0, 0, 0, 0
+        // spritePiece 8, 0, 3, 4, $E, 0, 0, 0, 0
+        List<SpriteMappingPiece> collapsedPieces = new ArrayList<>();
+        collapsedPieces.add(new SpriteMappingPiece(-0x20, -0x10, 2, 2, 0x00, false, false, 0));
+        collapsedPieces.add(new SpriteMappingPiece(-0x10, -0x10, 2, 2, 0x04, false, false, 0));
+        collapsedPieces.add(new SpriteMappingPiece(0x00, -0x10, 2, 2, 0x04, true, false, 0));
+        collapsedPieces.add(new SpriteMappingPiece(0x10, -0x10, 2, 2, 0x00, true, false, 0));
+        collapsedPieces.add(new SpriteMappingPiece(-0x10, 0x00, 3, 2, 0x08, false, false, 0));
+        collapsedPieces.add(new SpriteMappingPiece(0x08, 0x00, 3, 4, 0x0E, false, false, 0));
+        frames.add(new SpriteMappingFrame(collapsedPieces));
 
         return frames;
     }

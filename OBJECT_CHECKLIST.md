@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-20 17:28:18
+Generated: 2026-01-20 22:30:01
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 35 (29.2%)
-- **Unimplemented:** 85 (70.8%)
+- **Implemented:** 37 (30.8%)
+- **Unimplemented:** 83 (69.2%)
 
 ## Implemented Objects
 
@@ -24,7 +24,9 @@ Generated: 2026-01-20 17:28:18
 | 0x1C | Scenery | 135 | EHZ1, EHZ2, HTZ1, HTZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
 | 0x1D | BlueBalls | 7 | CPZ1 |
 | 0x1E | CPZSpinTube | 16 | CPZ1, CPZ2 |
+| 0x23 | FallingPillar | 16 | ARZ1, ARZ2 |
 | 0x26 | Monitor | 245 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
+| 0x2C | LeavesGenerator | 43 | ARZ1, ARZ2 |
 | 0x2D | Barrier | 35 | CPZ1, CPZ2, HTZ1, HTZ2, MTZ1, MTZ2, MTZ3, WFZ1, DEZ1 |
 | 0x32 | BreakableBlock | 28 | CPZ1, CPZ2, HTZ1, HTZ2 |
 | 0x36 | Spikes | 204 | EHZ1, EHZ2, CPZ2, ARZ1, CNZ1, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
@@ -58,7 +60,6 @@ Generated: 2026-01-20 17:28:18
 | 0x3F | Object | Fan | 60 | OOZ1, OOZ2 |
 | 0x66 | Object | MTZSpringWall | 60 | MTZ1, MTZ2, MTZ3 |
 | 0x31 | Object | LavaMarker | 50 | HTZ1, HTZ2, MTZ2, MTZ3 |
-| 0x2C | Object | LeavesGenerator | 43 | ARZ1, ARZ2 |
 | 0x84 | Object | ForcedSpin | 42 | CNZ1, CNZ2, HTZ1, HTZ2 |
 | 0x2F | Object | SmashableGround | 40 | HTZ1, HTZ2 |
 | 0x91 | Badnik | ChopChop | 38 | ARZ1, ARZ2 |
@@ -83,7 +84,6 @@ Generated: 2026-01-20 17:28:18
 | 0x75 | Object | MCZBrick | 19 | MCZ1, MCZ2 |
 | 0xAC | Badnik | Balkiry | 19 | SCZ1 |
 | 0x42 | Object | SteamSpring | 18 | MTZ1, MTZ2, MTZ3 |
-| 0x23 | Object | FallingPillar | 16 | ARZ1, ARZ2 |
 | 0x50 | Badnik | Aquis | 16 | OOZ1, OOZ2 |
 | 0xD5 | Object | Elevator | 16 | CNZ1, CNZ2 |
 | 0x71 | Object | MTZLavaBubble | 15 | MTZ2, MTZ3 |
@@ -257,7 +257,7 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 #### Act 1
 
-Total: 182 objects | Implemented: 8 | Unimplemented: 12
+Total: 182 objects | Implemented: 10 | Unimplemented: 10
 
 **Badniks:**
 - [ ] 0x8C Whisp (x6) [0x00]
@@ -271,11 +271,11 @@ Total: 182 objects | Implemented: 8 | Unimplemented: 12
 - [x] 0x18 ARZPlatform (x11) [5 subtypes]
 - [ ] 0x1F CollapsPform (x5) [0x00]
 - [ ] 0x22 ArrowShooter (x8) [0x00]
-- [ ] 0x23 FallingPillar (x5) [0x00]
+- [x] 0x23 FallingPillar (x5) [0x00]
 - [ ] 0x24 Bubbles (x10) [0x80]
 - [x] 0x26 Monitor (x13) [5 subtypes]
 - [ ] 0x2B RisingPillar (x4) [0x00]
-- [ ] 0x2C LeavesGenerator (x34) [0x00, 0x01, 0x02]
+- [x] 0x2C LeavesGenerator (x34) [0x00, 0x01, 0x02]
 - [x] 0x36 Spikes (x1) [0x30]
 - [x] 0x40 Springboard (x6) [0x03]
 - [x] 0x41 Spring (x8) [0x10, 0x12]
@@ -285,7 +285,7 @@ Total: 182 objects | Implemented: 8 | Unimplemented: 12
 
 #### Act 2
 
-Total: 222 objects | Implemented: 7 | Unimplemented: 13
+Total: 222 objects | Implemented: 9 | Unimplemented: 11
 
 **Badniks:**
 - [ ] 0x8C Whisp (x19) [0x00]
@@ -302,11 +302,11 @@ Total: 222 objects | Implemented: 7 | Unimplemented: 13
 - [x] 0x18 ARZPlatform (x10) [4 subtypes]
 - [ ] 0x1F CollapsPform (x10) [0x00]
 - [ ] 0x22 ArrowShooter (x16) [0x00]
-- [ ] 0x23 FallingPillar (x11) [0x00]
+- [x] 0x23 FallingPillar (x11) [0x00]
 - [ ] 0x24 Bubbles (x10) [0x81]
 - [x] 0x26 Monitor (x18) [4 subtypes]
 - [ ] 0x2B RisingPillar (x7) [0x00]
-- [ ] 0x2C LeavesGenerator (x9) [0x00, 0x01, 0x02]
+- [x] 0x2C LeavesGenerator (x9) [0x00, 0x01, 0x02]
 - [ ] 0x3E EggPrison (x1) [0x00]
 - [x] 0x40 Springboard (x10) [0x03]
 - [x] 0x41 Spring (x17) [5 subtypes]

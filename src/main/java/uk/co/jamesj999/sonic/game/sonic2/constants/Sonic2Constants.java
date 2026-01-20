@@ -115,6 +115,9 @@ public class Sonic2Constants {
     public static final int MAP_UNC_OBJ18_A_ADDR = 0x107F6;
     public static final int MAP_UNC_OBJ18_B_ADDR = 0x1084E;
 
+    // Falling Pillar (Object 0x23) - ARZ pillar that drops its lower section
+    public static final int MAP_UNC_OBJ23_ADDR = 0x259E6;  // Obj23_MapUnc_259E6
+
     public static final int ZONE_AQUATIC_RUIN = 2;
 
     // Checkpoint/Starpost (Object $79)
@@ -215,6 +218,9 @@ public class Sonic2Constants {
     public static final int MAP_UNC_BUBBLES_ADDR = 0x1FCA2;  // Obj24_MapUnc - bubble generator / countdown bubbles
     public static final int ART_TILE_BUBBLES = 0x055B;  // ArtTile_ArtNem_BigBubbles - VRAM tile base
 
+    // Leaves Art (Object $2C LeavesGenerator - ARZ falling leaves)
+    public static final int ART_NEM_LEAVES_ADDR = 0x82EE8;  // ArtNem_Leaves - falling leaves (7 tiles)
+
     // CPZ Speed Booster (Object 0x1B)
     public static final int ART_NEM_SPEED_BOOSTER_ADDR = 0x824D4;  // ArtNem_CPZBooster (verified)
     public static final int MAP_UNC_SPEED_BOOSTER_ADDR = 0x223E2;  // Obj1B_MapUnc
@@ -255,6 +261,12 @@ public class Sonic2Constants {
     public static final int ZONE_CHEMICAL_PLANT = 0x0D;  // chemical_plant_zone
     public static final int ZONE_OIL_OCEAN = 0x0A;       // oil_ocean_zone
     public static final int ZONE_WING_FORTRESS = 0x06;   // wing_fortress_zone
+    public static final int ZONE_MYSTIC_CAVE = 0x0B;     // mystic_cave_zone
+    public static final int ZONE_ARZ = 0x0F;             // aquatic_ruin_zone
+
+    // Collapsing Platform art (Object 0x1F)
+    public static final int ART_NEM_OOZ_COLLAPSING_PLATFORM_ADDR = 0x809D0;  // ArtNem_OOZPlatform
+    public static final int ART_NEM_MCZ_COLLAPSING_PLATFORM_ADDR = 0xF1ABA;  // ArtNem_MCZCollapsePlat
 
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)

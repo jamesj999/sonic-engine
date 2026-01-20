@@ -1,9 +1,10 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects.badniks;
 
 import uk.co.jamesj999.sonic.camera.Camera;
-
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.physics.ObjectTerrainUtils;
+import uk.co.jamesj999.sonic.physics.TerrainCheckResult;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
@@ -133,41 +134,13 @@ public class AnimalObjectInstance extends uk.co.jamesj999.sonic.level.objects.Ab
     }
 
     private boolean checkFloorCollision() {
-        int checkX = currentX;
-        int checkY = currentY + 12;
-
-        uk.co.jamesj999.sonic.level.ChunkDesc chunk = levelManager.getChunkDescAt((byte) 0, checkX, checkY);
-        if (chunk == null) {
-            return false;
+        // Use centralized terrain API (mirrors ROM's ObjCheckFloorDist)
+        TerrainCheckResult result = ObjectTerrainUtils.checkFloorDist(currentX, currentY, 12);
+        if (result.hasCollision()) {
+            currentY = currentY + result.distance();
+            return true;
         }
-
-        int solidityBit = 0;
-        if (!chunk.isSolidityBitSet(solidityBit)) {
-            return false;
-        }
-
-        uk.co.jamesj999.sonic.level.SolidTile tile = levelManager.getSolidTileForChunkDesc(chunk, solidityBit);
-        if (tile == null) {
-            return false;
-        }
-
-        int blockTop = (checkY & ~15);
-        int indexInBlock = checkX & 15;
-        if (chunk.getHFlip()) {
-            indexInBlock = 15 - indexInBlock;
-        }
-        int height = tile.getHeightAt((byte) indexInBlock);
-        if (height <= 0) {
-            return false;
-        }
-
-        int surfaceY = blockTop + 16 - height;
-        if (checkY < surfaceY) {
-            return false;
-        }
-
-        currentY = surfaceY - 12;
-        return true;
+        return false;
     }
 
     private int getFrameIndex() {

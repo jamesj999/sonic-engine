@@ -133,6 +133,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.SPRINGBOARD,
                 (spawn, registry) -> new SpringboardObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // ARZ Leaves Generator
+        registerFactory(Sonic2ObjectIds.LEAVES_GENERATOR,
+                (spawn, registry) -> new LeavesGeneratorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         // CPZ Objects
         registerFactory(Sonic2ObjectIds.TIPPING_FLOOR,
                 (spawn, registry) -> new TippingFloorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
@@ -211,6 +215,16 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
 
         registerFactory(Sonic2ObjectIds.INVISIBLE_BLOCK,
                 (spawn, registry) -> new InvisibleBlockObjectInstance(spawn,
+                        registry.getPrimaryName(spawn.objectId())));
+
+        // ARZ Objects
+        registerFactory(Sonic2ObjectIds.FALLING_PILLAR,
+                (spawn, registry) -> new FallingPillarObjectInstance(spawn,
+                        registry.getPrimaryName(spawn.objectId())));
+
+        // OOZ/MCZ/ARZ Collapsing Platform
+        registerFactory(Sonic2ObjectIds.COLLAPSING_PLATFORM,
+                (spawn, registry) -> new CollapsingPlatformObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
     }
 }

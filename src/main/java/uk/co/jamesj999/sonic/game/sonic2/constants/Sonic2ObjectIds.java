@@ -45,6 +45,9 @@ public final class Sonic2ObjectIds {
     public static final int BARRIER = 0x2D;    // Barrier (Obj2D) - one-way rising barrier
     public static final int CPZ_STAIRCASE = 0x78; // CPZ Staircase (Obj78) - 4-piece triggered elevator platform
 
+    // ARZ Objects
+    public static final int LEAVES_GENERATOR = 0x2C; // Leaves Generator (Obj2C) - spawns falling leaves on contact
+
     // CPZ/ARZ/MCZ Objects
     public static final int SPRINGBOARD = 0x40;  // Pressure spring / lever spring (Obj40)
 
@@ -60,6 +63,12 @@ public final class Sonic2ObjectIds {
     // MTZ/CPZ Platform Objects
     public static final int MTZ_PLATFORM = 0x6B; // MTZ Platform (Obj6B) - multi-purpose platform with 12 movement subtypes
     public static final int SIDEWAYS_PFORM = 0x7A; // Sideways Platform (Obj7A) - CPZ/MCZ horizontal moving platform
+
+    // ARZ Objects
+    public static final int FALLING_PILLAR = 0x23; // Falling Pillar (Obj23) - ARZ pillar that drops its lower section
+
+    // OOZ/MCZ/ARZ Objects
+    public static final int COLLAPSING_PLATFORM = 0x1F; // Collapsing Platform (Obj1F) - OOZ/MCZ/ARZ
 
     private Sonic2ObjectIds() {
     }
