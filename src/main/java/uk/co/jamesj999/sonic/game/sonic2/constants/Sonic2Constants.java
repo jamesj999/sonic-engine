@@ -80,6 +80,34 @@ public class Sonic2Constants {
     public static final int CYCLING_PAL_CPZ3_ADDR = 0x002082;  // 16 frames × 2 bytes = 32 bytes (1 color)
     public static final int CYCLING_PAL_CPZ3_LEN = 32;
 
+    // Palette cycling (HTZ - Hill Top Zone) - Lava animation
+    public static final int CYCLING_PAL_LAVA_ADDR = 0x001E9A;  // 16 frames × 8 bytes = 128 bytes
+    public static final int CYCLING_PAL_LAVA_LEN = 128;
+
+    // Palette cycling (MTZ - Metropolis Zone)
+    public static final int CYCLING_PAL_MTZ1_ADDR = 0x001F2A;  // 6 frames × 2 bytes = 12 bytes
+    public static final int CYCLING_PAL_MTZ1_LEN = 12;
+    public static final int CYCLING_PAL_MTZ2_ADDR = 0x001F36;  // 3 frames × 4 bytes (2 colors + padding) = 12 bytes
+    public static final int CYCLING_PAL_MTZ2_LEN = 12;
+    public static final int CYCLING_PAL_MTZ3_ADDR = 0x001F42;  // 10 frames × 2 bytes = 20 bytes
+    public static final int CYCLING_PAL_MTZ3_LEN = 20;
+
+    // Palette cycling (OOZ - Oil Ocean Zone)
+    public static final int CYCLING_PAL_OIL_ADDR = 0x001F76;  // 4 frames × 4 bytes = 16 bytes
+    public static final int CYCLING_PAL_OIL_LEN = 16;
+
+    // Palette cycling (MCZ - Mystic Cave Zone) - Lanterns
+    public static final int CYCLING_PAL_LANTERN_ADDR = 0x001F86;  // 4 frames × 2 bytes = 8 bytes
+    public static final int CYCLING_PAL_LANTERN_LEN = 8;
+
+    // Palette cycling (CNZ - Casino Night Zone)
+    public static final int CYCLING_PAL_CNZ1_ADDR = 0x001F8E;  // 3 frames × 12 bytes = 36 bytes (6 interleaved colors)
+    public static final int CYCLING_PAL_CNZ1_LEN = 36;
+    public static final int CYCLING_PAL_CNZ3_ADDR = 0x001FB2;  // 3 frames × 6 bytes = 18 bytes (3 interleaved colors)
+    public static final int CYCLING_PAL_CNZ3_LEN = 18;
+    public static final int CYCLING_PAL_CNZ4_ADDR = 0x001FC4;  // 18 frames × varying = 40 bytes
+    public static final int CYCLING_PAL_CNZ4_LEN = 40;
+
     public static final int ART_NEM_INVINCIBILITY_STARS_ADDR = 0x71F14;
     public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x1DCBC;
     public static final int ART_TILE_INVINCIBILITY_STARS = 0x05C0;
