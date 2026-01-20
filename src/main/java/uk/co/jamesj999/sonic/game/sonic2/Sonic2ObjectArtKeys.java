@@ -42,4 +42,7 @@ public final class Sonic2ObjectArtKeys {
     // CPZ/ARZ/MCZ shared
     public static final String SPRINGBOARD = "springboard";
     public static final String ANIM_SPRINGBOARD = "springboard";
+
+    // Underwater objects (ARZ/CPZ/HPZ)
+    public static final String BUBBLES = "bubbles";
 }

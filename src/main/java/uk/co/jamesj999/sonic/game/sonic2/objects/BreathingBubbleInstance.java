@@ -1,11 +1,14 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.WaterSystem;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
+import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -181,67 +184,25 @@ public class BreathingBubbleInstance extends AbstractObjectInstance {
             return;
         }
 
-        // Render the bubble
-        // For now, render as a simple circle. This can be replaced with proper sprite
-        // rendering when bubble art is loaded.
-        if (countdownNumber >= 0 && numberFormed) {
-            // Render countdown number
-            // TODO: Replace with actual number sprite rendering
-            renderCountdownNumber(commands, screenX, screenY);
-        } else {
-            // Render small bubble
-            // TODO: Replace with actual bubble sprite rendering
-            renderSmallBubble(commands, screenX, screenY);
+        // Get the bubble renderer
+        ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
+        if (renderManager == null) {
+            return;
         }
-    }
 
-    /**
-     * Renders a small breathing bubble.
-     * This is a placeholder that draws a simple circle.
-     */
-    private void renderSmallBubble(List<GLCommand> commands, int screenX, int screenY) {
-        // Draw a small white/blue circle as placeholder
-        // Size varies slightly based on lifetime for visual interest
-        int size = 3 + (lifetime / 20) % 2;
+        // TODO: Find correct bubble art ROM offset - using explosion as placeholder
+        PatternSpriteRenderer renderer = renderManager.getRenderer(
+                uk.co.jamesj999.sonic.level.objects.ObjectArtKeys.EXPLOSION);
+        if (renderer == null || !renderer.isReady()) {
+            return;
+        }
 
-        // Convert to world coordinates for GLCommand
-        Camera camera = Camera.getInstance();
-        int worldX = screenX + camera.getX();
-        int worldY = screenY + camera.getY();
+        // Determine which frame to render
+        // TODO: Update frame indices when proper bubble art is found
+        int frameIndex = Math.min(lifetime / 30, 3); // Use first few explosion frames
 
-        // Create a simple point/circle command
-        // Using VERTEX2I for a point marker - this is a placeholder
-        commands.add(new GLCommand(
-            GLCommand.CommandType.VERTEX2I,
-            -1,
-            GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-            0.7f, 0.9f, 1.0f, // Light blue color
-            worldX, worldY,
-            size, size
-        ));
-    }
-
-    /**
-     * Renders the countdown number.
-     * This is a placeholder that will be replaced with sprite rendering.
-     */
-    private void renderCountdownNumber(List<GLCommand> commands, int screenX, int screenY) {
-        // Draw a larger bubble with number indication
-        // TODO: Replace with actual number sprite from ROM
-
-        Camera camera = Camera.getInstance();
-        int worldX = screenX + camera.getX();
-        int worldY = screenY + camera.getY();
-
-        // Placeholder: larger bubble for countdown
-        commands.add(new GLCommand(
-            GLCommand.CommandType.VERTEX2I,
-            -1,
-            GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-            1.0f, 0.5f, 0.5f, // Reddish to indicate countdown
-            worldX, worldY,
-            8, 8
-        ));
+        // Render the sprite
+        renderer.drawFrameIndex(frameIndex, (int) currentX, currentY, false, false);
     }
 
     /**

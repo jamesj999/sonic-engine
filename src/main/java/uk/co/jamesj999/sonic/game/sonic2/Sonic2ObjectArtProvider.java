@@ -142,6 +142,9 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(Sonic2ObjectArtKeys.BARRIER, artData.barrierSheet());
         registerSheet(Sonic2ObjectArtKeys.SPRINGBOARD, artData.springboardSheet());
 
+        // Underwater bubbles
+        registerSheet(Sonic2ObjectArtKeys.BUBBLES, artData.bubblesSheet());
+
         // Results screen - stored separately, not in sheetOrder
         resultsSheet = artData.resultsSheet();
         resultsRenderer = new PatternSpriteRenderer(resultsSheet);

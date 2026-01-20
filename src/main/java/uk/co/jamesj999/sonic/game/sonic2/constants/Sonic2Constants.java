@@ -169,6 +169,12 @@ public class Sonic2Constants {
     // ARZ has distinct water surface art (natural blue water)
     public static final int ART_NEM_WATER_SURFACE_ARZ_ADDR = 0x82E02; // Top of water in ARZ (16 blocks)
 
+    // Bubbles Art (Object $0A Small Bubbles, Object $24 Bubble Generator)
+    public static final int ART_NEM_BUBBLES_ADDR = 0x837A0;  // ArtNem_Bubbles - underwater bubbles
+    public static final int MAP_UNC_SMALL_BUBBLES_ADDR = 0x21FD6;  // Obj0A_MapUnc - small breathing bubbles
+    public static final int MAP_UNC_BUBBLES_ADDR = 0x1FCA2;  // Obj24_MapUnc - bubble generator / countdown bubbles
+    public static final int ART_TILE_BUBBLES = 0x055B;  // ArtTile_ArtNem_BigBubbles - VRAM tile base
+
     // CPZ Speed Booster (Object 0x1B)
     public static final int ART_NEM_SPEED_BOOSTER_ADDR = 0x824D4;  // ArtNem_CPZBooster (verified)
     public static final int MAP_UNC_SPEED_BOOSTER_ADDR = 0x223E2;  // Obj1B_MapUnc

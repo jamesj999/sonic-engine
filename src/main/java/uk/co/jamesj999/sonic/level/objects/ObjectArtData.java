@@ -50,6 +50,7 @@ public class ObjectArtData {
         private final ObjectSpriteSheet barrierSheet;
         private final ObjectSpriteSheet springboardSheet;
         private final ObjectSpriteSheet resultsSheet;
+        private final ObjectSpriteSheet bubblesSheet;
         private final Pattern[] hudDigitPatterns;
         private final Pattern[] hudTextPatterns;
         private final Pattern[] hudLivesPatterns;
@@ -108,6 +109,7 @@ public class ObjectArtData {
                         ObjectSpriteSheet barrierSheet,
                         ObjectSpriteSheet springboardSheet,
                         ObjectSpriteSheet resultsSheet,
+                        ObjectSpriteSheet bubblesSheet,
                         Pattern[] hudDigitPatterns,
                         Pattern[] hudTextPatterns,
                         Pattern[] hudLivesPatterns,
@@ -164,6 +166,7 @@ public class ObjectArtData {
                 this.barrierSheet = barrierSheet;
                 this.springboardSheet = springboardSheet;
                 this.resultsSheet = resultsSheet;
+                this.bubblesSheet = bubblesSheet;
                 this.hudDigitPatterns = hudDigitPatterns;
                 this.hudTextPatterns = hudTextPatterns;
                 this.hudLivesPatterns = hudLivesPatterns;
@@ -340,6 +343,10 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet resultsSheet() {
                 return resultsSheet;
+        }
+
+        public ObjectSpriteSheet bubblesSheet() {
+                return bubblesSheet;
         }
 
         public Pattern[] getHudDigitPatterns() {

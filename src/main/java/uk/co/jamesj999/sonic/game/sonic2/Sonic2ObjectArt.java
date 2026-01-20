@@ -315,6 +315,11 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet springboardSheet = new ObjectSpriteSheet(springboardPatterns, springboardMappings, 0, 1);
         SpriteAnimationSet springboardAnimations = createSpringboardAnimations();
 
+        // Underwater Bubbles art (Object $0A Small Bubbles, Object $24 Bubble Generator)
+        Pattern[] bubblesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUBBLES_ADDR, "Bubbles");
+        List<SpriteMappingFrame> bubblesMappings = createBubblesMappings();
+        ObjectSpriteSheet bubblesSheet = new ObjectSpriteSheet(bubblesPatterns, bubblesMappings, 1, 1);
+
         // Results screen art (Obj3A)
         // ROM mappings expect fixed VRAM tile bases for each chunk:
         // Numbers (0x520), Perfect (0x540), TitleCard (0x580),
@@ -394,6 +399,7 @@ public class Sonic2ObjectArt {
                 barrierSheet,
                 springboardSheet,
                 resultsSheet,
+                bubblesSheet,
                 hudDigitPatterns,
                 hudTextPatterns,
                 hudLivesPatterns,
@@ -1984,6 +1990,42 @@ public class Sonic2ObjectArt {
         }
         int copyLen = Math.min(src.length, dest.length - destPos);
         System.arraycopy(src, 0, dest, destPos, copyLen);
+    }
+
+    /**
+     * Creates mappings for underwater bubbles (Obj0A Small Bubbles).
+     * Based on Sonic 2 bubble sprite layout:
+     * - Frames 0-5: Different bubble sizes (tiny to medium)
+     * - The smallest bubbles are 8x8, larger ones are 16x16
+     */
+    private List<SpriteMappingFrame> createBubblesMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Tiny bubble (1x1 tile = 8x8 pixels) - centered
+        frames.add(createSimpleFrame(-4, -4, 1, 1, 0));
+
+        // Frame 1: Small bubble (1x1 tile)
+        frames.add(createSimpleFrame(-4, -4, 1, 1, 1));
+
+        // Frame 2: Medium-small bubble (1x1 tile)
+        frames.add(createSimpleFrame(-4, -4, 1, 1, 2));
+
+        // Frame 3: Medium bubble (2x2 tiles = 16x16 pixels) - centered
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 3));
+
+        // Frame 4: Large bubble (2x2 tiles)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 7));
+
+        // Frame 5: Largest bubble before countdown (2x2 tiles)
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 11));
+
+        // Frames 6-11: Countdown numbers 5, 4, 3, 2, 1, 0 (each 2x2 tiles = 16x16)
+        // These use tiles starting at index 15 (after the bubble tiles)
+        for (int i = 0; i < 6; i++) {
+            frames.add(createSimpleFrame(-8, -8, 2, 2, 15 + i * 4));
+        }
+
+        return frames;
     }
 
     /**
