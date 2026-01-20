@@ -18,6 +18,7 @@ import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants.*;
  */
 public class Sonic2PaletteCycleManager implements AnimatedPaletteManager {
     private static final int ZONE_EHZ = 0;
+    private static final int ZONE_CPZ = 13;  // chemical_plant_zone = $0D
     private static final int ZONE_ARZ = 15;
     private static final int WATER_FRAME_COUNT = 4;
     private static final int WATER_FRAME_SIZE = 8;
@@ -49,6 +50,8 @@ public class Sonic2PaletteCycleManager implements AnimatedPaletteManager {
             if (ehzWater != null) {
                 list.add(ehzWater);
             }
+        } else if (zoneIndex == ZONE_CPZ) {
+            list.addAll(createCpzCycles(reader));
         } else if (zoneIndex == ZONE_ARZ) {
             PaletteCycle arzWater = createArzWaterCycle(reader);
             if (arzWater != null) {
@@ -74,6 +77,40 @@ public class Sonic2PaletteCycleManager implements AnimatedPaletteManager {
         }
         int[] colorIndices = { 2, 3, 4, 5 };
         return new PaletteCycle(data, WATER_FRAME_COUNT, WATER_FRAME_SIZE, 5, 2, colorIndices);
+    }
+
+    /**
+     * Creates the 3 CPZ palette cycles as per PalCycle_CPZ in s2.asm.
+     * All 3 cycles share a common timer (7 frames) but have independent frame counters.
+     */
+    private List<PaletteCycle> createCpzCycles(RomByteReader reader) {
+        List<PaletteCycle> cycles = new ArrayList<>();
+
+        // Cycle 1: 3 colors at palette line 4, offset $18 (indices 12, 13, 14)
+        // 9 frames, 6 bytes per frame (3 colors × 2 bytes)
+        byte[] data1 = safeSlice(reader, CYCLING_PAL_CPZ1_ADDR, CYCLING_PAL_CPZ1_LEN);
+        if (data1.length >= CYCLING_PAL_CPZ1_LEN) {
+            int[] colorIndices1 = { 12, 13, 14 };
+            cycles.add(new PaletteCycle(data1, 9, 6, 7, 3, colorIndices1));
+        }
+
+        // Cycle 2: 1 color at palette line 4, offset $1E (index 15)
+        // 21 frames, 2 bytes per frame
+        byte[] data2 = safeSlice(reader, CYCLING_PAL_CPZ2_ADDR, CYCLING_PAL_CPZ2_LEN);
+        if (data2.length >= CYCLING_PAL_CPZ2_LEN) {
+            int[] colorIndices2 = { 15 };
+            cycles.add(new PaletteCycle(data2, 21, 2, 7, 3, colorIndices2));
+        }
+
+        // Cycle 3: 1 color at palette line 3, offset $1E (index 15)
+        // 16 frames, 2 bytes per frame (wraps with AND #$1E, so 16 entries)
+        byte[] data3 = safeSlice(reader, CYCLING_PAL_CPZ3_ADDR, CYCLING_PAL_CPZ3_LEN);
+        if (data3.length >= CYCLING_PAL_CPZ3_LEN) {
+            int[] colorIndices3 = { 15 };
+            cycles.add(new PaletteCycle(data3, 16, 2, 7, 2, colorIndices3));
+        }
+
+        return cycles;
     }
 
     private byte[] safeSlice(RomByteReader reader, int addr, int len) {

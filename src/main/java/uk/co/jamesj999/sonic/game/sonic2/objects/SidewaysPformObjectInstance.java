@@ -244,16 +244,27 @@ public class SidewaysPformObjectInstance extends AbstractObjectInstance
 
         // Check for linked platform collision (direction toggle)
         // This check is performed by the CHILD, not the parent (assembly: Obj7A_SubObject)
+        // Note: Original uses exact equality, but our update order (dynamic before active)
+        // means child checks against stale parent position. Use overlap + direction check.
         if (linkedPlatform != null && isChild) {
-            // Child checks if its left edge meets parent's right edge
-            // Assembly: child.x - 0x18 == parent.x + 0x18
             int childLeft = x - HALF_WIDTH;
+            int childRight = x + HALF_WIDTH;
+            int parentLeft = linkedPlatform.x - HALF_WIDTH;
             int parentRight = linkedPlatform.x + HALF_WIDTH;
 
-            // Use exact equality (no direction checks) and XOR toggle
-            if (childLeft == parentRight) {
-                direction ^= 1;
-                linkedPlatform.direction ^= 1;
+            // Check if collision boxes overlap or touch
+            boolean touching = (childLeft <= parentRight) && (childRight >= parentLeft);
+
+            if (touching) {
+                // Only toggle if moving toward each other (prevents repeated toggles)
+                boolean childRightOfParent = x > linkedPlatform.x;
+                boolean movingToward = (childRightOfParent && direction == 1 && linkedPlatform.direction == 0) ||
+                                       (!childRightOfParent && direction == 0 && linkedPlatform.direction == 1);
+
+                if (movingToward) {
+                    direction ^= 1;
+                    linkedPlatform.direction ^= 1;
+                }
             }
         }
     }

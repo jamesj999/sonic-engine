@@ -72,6 +72,14 @@ public class Sonic2Constants {
     public static final int CYCLING_PAL_EHZ_ARZ_WATER_ADDR = 0x001E7A;
     public static final int CYCLING_PAL_EHZ_ARZ_WATER_LEN = 0x20;
 
+    // Palette cycling (CPZ - Chemical Plant Zone)
+    public static final int CYCLING_PAL_CPZ1_ADDR = 0x002022;  // 9 frames × 6 bytes = 54 bytes (3 colors)
+    public static final int CYCLING_PAL_CPZ1_LEN = 54;
+    public static final int CYCLING_PAL_CPZ2_ADDR = 0x002058;  // 21 frames × 2 bytes = 42 bytes (1 color)
+    public static final int CYCLING_PAL_CPZ2_LEN = 42;
+    public static final int CYCLING_PAL_CPZ3_ADDR = 0x002082;  // 16 frames × 2 bytes = 32 bytes (1 color)
+    public static final int CYCLING_PAL_CPZ3_LEN = 32;
+
     public static final int ART_NEM_INVINCIBILITY_STARS_ADDR = 0x71F14;
     public static final int MAP_UNC_INVINCIBILITY_STARS_ADDR = 0x1DCBC;
     public static final int ART_TILE_INVINCIBILITY_STARS = 0x05C0;
