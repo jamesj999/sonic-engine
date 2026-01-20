@@ -25,6 +25,7 @@ public final class Sonic2AudioConstants {
     public static final int SFX_AIR_DING = 0xC2; // Air warning ding (SndID_AirDing)
     public static final int SFX_EXPLOSION = 0xC1;
     public static final int SFX_ERROR = 0xED; // Error/fail sound (SndID_Error)
+    public static final int SFX_SLOW_SMASH = 0xCB; // Slow smash / wall/block break (SndID_SlowSmash)
 
     public static final int MUS_CASINO_NIGHT_2P = 0x80;
     public static final int MUS_EMERALD_HILL = 0x81;

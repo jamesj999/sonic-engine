@@ -201,8 +201,17 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         // Play slow smash sound effect
         AudioManager.getInstance().playSfx(GameSound.SLOW_SMASH);
 
-        // Award points (chain bonus system - simplified to flat 10 points)
-        uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addScore(10);
+        // Award 100 points
+        uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addScore(100);
+
+        // Spawn points display popup
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        if (objectManager != null) {
+            PointsObjectInstance points = new PointsObjectInstance(
+                    new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
+                    LevelManager.getInstance(), 100);
+            objectManager.addDynamicObject(points);
+        }
 
         // Mark this object as destroyed so it stops rendering/updating
         setDestroyed(true);

@@ -142,6 +142,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         map.put(GameSound.ERROR, SFX_ERROR);
         map.put(GameSound.SPLASH, SFX_SPLASH);
         map.put(GameSound.AIR_DING, SFX_AIR_DING);
+        map.put(GameSound.SLOW_SMASH, SFX_SLOW_SMASH);
         return map;
     }
 
