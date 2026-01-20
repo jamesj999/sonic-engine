@@ -22,6 +22,7 @@ public final class Sonic2AudioConstants {
     public static final int SFX_ROLLING = 0xBE;
     public static final int SFX_SHIELD = 0xAF;
     public static final int SFX_SPLASH = 0xAA; // Water splash (SndID_Splash)
+    public static final int SFX_AIR_DING = 0xC2; // Air warning ding (SndID_AirDing)
     public static final int SFX_EXPLOSION = 0xC1;
     public static final int SFX_ERROR = 0xED; // Error/fail sound (SndID_Error)
 

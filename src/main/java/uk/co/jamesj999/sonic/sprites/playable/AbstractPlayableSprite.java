@@ -219,6 +219,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * Previous frame's water state, used for detecting transitions.
          */
         protected boolean wasInWater = false;
+        /**
+         * Manages drowning mechanics while underwater (air countdown, bubbles, etc.).
+         */
+        protected DrowningManager drowningManager;
 
         /**
          * Clears all active power-ups (shield, invincibility, speed shoes).
@@ -1023,6 +1027,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 // Always use PlayableSpriteMovementManager - it checks debugMode internally
                 movementManager = new PlayableSpriteMovementManager(this);
                 animationManager = new PlayableSpriteAnimationManager(this);
+                // Initialize drowning manager for underwater mechanics
+                drowningManager = new DrowningManager(this);
         }
 
         /**
@@ -1482,6 +1488,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 } else if (wasInWater && !inWater) {
                         onExitWater();
                 }
+
+                // Update drowning manager each frame while underwater
+                if (inWater && !dead && drowningManager != null) {
+                        boolean shouldDrown = drowningManager.update();
+                        if (shouldDrown) {
+                                applyDrownDeath();
+                        }
+                }
         }
 
         /**
@@ -1508,6 +1522,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
                 // Spawn splash object at water surface
                 spawnSplash();
+
+                // Reset drowning manager for new underwater session
+                if (drowningManager != null) {
+                        drowningManager.reset();
+                }
         }
 
         /**
@@ -1535,6 +1554,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
                 // Spawn splash object at water surface
                 spawnSplash();
+
+                // Notify drowning manager of water exit (stops drowning music, resets state)
+                if (drowningManager != null) {
+                        drowningManager.onExitWater();
+                }
         }
 
         /**

@@ -22,5 +22,6 @@ public enum GameSound {
     FLIPPER, // SFX 0xE3 - CNZ Flipper (SndID_Flipper)
     SLOW_SMASH, // Special stage bomb explosion
     ERROR, // Error/fail sound (used for checkpoint failure)
-    SPLASH // SFX 0xAA - Water splash (entering/exiting water)
+    SPLASH, // SFX 0xAA - Water splash (entering/exiting water)
+    AIR_DING // SFX 0xC2 - Air warning ding (underwater countdown warning)
 }
