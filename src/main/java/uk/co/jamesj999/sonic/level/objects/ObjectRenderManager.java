@@ -298,6 +298,14 @@ public class ObjectRenderManager {
         return provider.getSheet(Sonic2ObjectArtKeys.CPZ_STAIR_BLOCK);
     }
 
+    public PatternSpriteRenderer getSidewaysPformRenderer() {
+        return provider.getRenderer(Sonic2ObjectArtKeys.SIDEWAYS_PFORM);
+    }
+
+    public ObjectSpriteSheet getSidewaysPformSheet() {
+        return provider.getSheet(Sonic2ObjectArtKeys.SIDEWAYS_PFORM);
+    }
+
     public PatternSpriteRenderer getCpzPylonRenderer() {
         return provider.getRenderer(Sonic2ObjectArtKeys.CPZ_PYLON);
     }

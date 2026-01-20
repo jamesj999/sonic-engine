@@ -83,6 +83,7 @@ public class ObjectDiscoveryTool {
             0x74,  // InvisibleBlock
             0x78,  // CPZStaircase (4-piece triggered elevator platform)
             0x79,  // Checkpoint
+            0x7A,  // SidewaysPform (CPZ/MCZ horizontal moving platform)
             0x7B,  // PipeExitSpring (CPZ warp tube exit spring)
             0x86,  // CNZFlipper
             0x9D,  // Coconuts

@@ -135,6 +135,7 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(Sonic2ObjectArtKeys.BREAKABLE_BLOCK, artData.breakableBlockSheet());
         registerSheet(Sonic2ObjectArtKeys.CPZ_PLATFORM, artData.cpzPlatformSheet());
         registerSheet(Sonic2ObjectArtKeys.CPZ_STAIR_BLOCK, artData.cpzStairBlockSheet());
+        registerSheet(Sonic2ObjectArtKeys.SIDEWAYS_PFORM, artData.sidewaysPformSheet());
         registerSheet(Sonic2ObjectArtKeys.CPZ_PYLON, artData.cpzPylonSheet());
         registerSheet(Sonic2ObjectArtKeys.PIPE_EXIT_SPRING, artData.pipeExitSpringSheet());
         registerSheet(Sonic2ObjectArtKeys.TIPPING_FLOOR, artData.tippingFloorSheet());

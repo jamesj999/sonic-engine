@@ -54,6 +54,7 @@ public final class Sonic2ObjectIds {
 
     // MTZ/CPZ Platform Objects
     public static final int MTZ_PLATFORM = 0x6B; // MTZ Platform (Obj6B) - multi-purpose platform with 12 movement subtypes
+    public static final int SIDEWAYS_PFORM = 0x7A; // Sideways Platform (Obj7A) - CPZ/MCZ horizontal moving platform
 
     private Sonic2ObjectIds() {
     }

@@ -282,6 +282,11 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> cpzStairBlockMappings = createCPZStairBlockMappings();
         ObjectSpriteSheet cpzStairBlockSheet = new ObjectSpriteSheet(cpzStairBlockPatterns, cpzStairBlockMappings, 3, 1);
 
+        // CPZ/MCZ Sideways Platform art (Object 0x7A) - horizontal moving platform
+        // Uses same patterns as CPZ Stair Block but different mappings (tiles 16+, 48x16 platform)
+        List<SpriteMappingFrame> sidewaysPformMappings = createSidewaysPformMappings();
+        ObjectSpriteSheet sidewaysPformSheet = new ObjectSpriteSheet(cpzStairBlockPatterns, sidewaysPformMappings, 3, 1);
+
         // CPZ Pylon art (Object 0x7C) - decorative background pylon
         Pattern[] cpzPylonPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_METAL_THINGS_ADDR, "CPZMetalThings");
         List<SpriteMappingFrame> cpzPylonMappings = createCPZPylonMappings();
@@ -382,6 +387,7 @@ public class Sonic2ObjectArt {
                 breakableBlockSheet,
                 cpzPlatformSheet,
                 cpzStairBlockSheet,
+                sidewaysPformSheet,
                 cpzPylonSheet,
                 pipeExitSpringSheet,
                 tippingFloorSheet,
@@ -1576,6 +1582,27 @@ public class Sonic2ObjectArt {
         List<SpriteMappingPiece> frame2 = new ArrayList<>();
         frame2.add(new SpriteMappingPiece(-0x10, -0x10, 4, 4, 0, false, false, 0));
         frames.add(new SpriteMappingFrame(frame2));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CPZ/MCZ Sideways Platform (Obj7A).
+     * Based on Map_obj7A from obj7A.asm:
+     * <p>
+     * Frame 0: 48x16 platform using tiles 16+ from CPZStairBlock art
+     * spritePiece -$18, -8, 3, 2, $10, 0, 0, 0, 0  ; left half (24x16), tile 0x10
+     * spritePiece 0, -8, 3, 2, $10, 1, 0, 0, 0    ; right half (24x16), tile 0x10, hFlip
+     */
+    private List<SpriteMappingFrame> createSidewaysPformMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: 48x16 platform (2 pieces of 3x2 tiles each)
+        // Uses tile 0x10 (16) from the CPZStairBlock patterns
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x18, -8, 3, 2, 0x10, false, false, 0));
+        frame0.add(new SpriteMappingPiece(0, -8, 3, 2, 0x10, true, false, 0)); // hFlip
+        frames.add(new SpriteMappingFrame(frame0));
 
         return frames;
     }

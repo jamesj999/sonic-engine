@@ -194,6 +194,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.MTZ_PLATFORM,
                 (spawn, registry) -> new MTZPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // CPZ/MCZ horizontal moving platform
+        registerFactory(Sonic2ObjectIds.SIDEWAYS_PFORM,
+                (spawn, registry) -> new SidewaysPformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+
         registerFactory(Sonic2ObjectIds.INVISIBLE_BLOCK,
                 (spawn, registry) -> new InvisibleBlockObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));

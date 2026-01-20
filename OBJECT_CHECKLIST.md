@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-20 12:42:44
+Generated: 2026-01-20 13:10:01
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 31 (25.8%)
-- **Unimplemented:** 89 (74.2%)
+- **Implemented:** 32 (26.7%)
+- **Unimplemented:** 88 (73.3%)
 
 ## Implemented Objects
 
@@ -38,6 +38,7 @@ Generated: 2026-01-20 12:42:44
 | 0x74 | InvisibleBlock | 113 | CPZ1, CPZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MTZ1, MTZ2, MTZ3, WFZ1 |
 | 0x78 | CPZStaircase | 6 | CPZ1, CPZ2 |
 | 0x79 | Checkpoint | 61 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
+| 0x7A | SidewaysPform | 9 | CPZ2, MCZ1, MCZ2 |
 | 0x7B | PipeExitSpring | 9 | CPZ1, CPZ2 |
 | 0x86 | Flipper | 63 | CNZ1, CNZ2 |
 | 0x9D | Coconuts | 17 | EHZ1, EHZ2 |
@@ -105,7 +106,6 @@ Generated: 2026-01-20 12:42:44
 | 0xAD | Badnik | CluckerBase | 10 | WFZ1 |
 | 0xAE | Badnik | Clucker | 10 | WFZ1 |
 | 0xB5 | Object | HPropeller | 10 | SCZ1, WFZ1 |
-| 0x7A | Object | SidewaysPform | 9 | CPZ2, MCZ1, MCZ2 |
 | 0x9F | Badnik | Shellcracker | 9 | MTZ1, MTZ2, MTZ3 |
 | 0x8D | Badnik | GrounderInWall | 8 | ARZ1, ARZ2 |
 | 0xC0 | Object | SpeedLauncher | 8 | WFZ1 |
@@ -223,7 +223,7 @@ Total: 153 objects | Implemented: 16 | Unimplemented: 3
 
 #### Act 2
 
-Total: 202 objects | Implemented: 16 | Unimplemented: 5
+Total: 202 objects | Implemented: 17 | Unimplemented: 4
 
 **Badniks:**
 - [ ] 0xA5 Spiny (x1) [0x32]
@@ -250,7 +250,7 @@ Total: 202 objects | Implemented: 16 | Unimplemented: 5
 - [x] 0x74 InvisibleBlock (x16) [5 subtypes]
 - [x] 0x78 CPZStaircase (x4) [0x00, 0x04]
 - [x] 0x79 Checkpoint (x5) [5 subtypes]
-- [ ] 0x7A SidewaysPform (x3) [0x00, 0x06, 0x0C]
+- [x] 0x7A SidewaysPform (x3) [0x00, 0x06, 0x0C]
 - [x] 0x7B PipeExitSpring (x4) [0x02]
 
 ### Aquatic Ruin Zone
@@ -438,7 +438,7 @@ Total: 259 objects | Implemented: 10 | Unimplemented: 10
 
 #### Act 1
 
-Total: 130 objects | Implemented: 7 | Unimplemented: 12
+Total: 130 objects | Implemented: 8 | Unimplemented: 11
 
 **Badniks:**
 - [ ] 0x9E Crawlton (x6) [0x22]
@@ -458,14 +458,14 @@ Total: 130 objects | Implemented: 7 | Unimplemented: 12
 - [ ] 0x76 SlidingSpikes (x11) [0x00]
 - [ ] 0x77 MCZBridge (x3) [0x01, 0x02]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
-- [ ] 0x7A SidewaysPform (x3) [0x00, 0x12]
+- [x] 0x7A SidewaysPform (x3) [0x00, 0x12]
 - [ ] 0x7F VineSwitch (x4) [4 subtypes]
 - [ ] 0x80 MovingVine (x6) [4 subtypes]
 - [ ] 0x81 MCZDrawbridge (x5) [5 subtypes]
 
 #### Act 2
 
-Total: 148 objects | Implemented: 7 | Unimplemented: 13
+Total: 148 objects | Implemented: 8 | Unimplemented: 12
 
 **Badniks:**
 - [ ] 0x9E Crawlton (x6) [0x22]
@@ -489,7 +489,7 @@ Total: 148 objects | Implemented: 7 | Unimplemented: 13
 - [ ] 0x76 SlidingSpikes (x3) [0x00]
 - [ ] 0x77 MCZBridge (x2) [0x03, 0x04]
 - [x] 0x79 Checkpoint (x4) [4 subtypes]
-- [ ] 0x7A SidewaysPform (x3) [0x00, 0x12]
+- [x] 0x7A SidewaysPform (x3) [0x00, 0x12]
 - [ ] 0x7F VineSwitch (x7) [7 subtypes]
 - [ ] 0x80 MovingVine (x8) [4 subtypes]
 - [ ] 0x81 MCZDrawbridge (x7) [7 subtypes]

@@ -43,6 +43,7 @@ public class ObjectArtData {
         private final ObjectSpriteSheet breakableBlockSheet;
         private final ObjectSpriteSheet cpzPlatformSheet;
         private final ObjectSpriteSheet cpzStairBlockSheet;
+        private final ObjectSpriteSheet sidewaysPformSheet;
         private final ObjectSpriteSheet cpzPylonSheet;
         private final ObjectSpriteSheet pipeExitSpringSheet;
         private final ObjectSpriteSheet tippingFloorSheet;
@@ -100,6 +101,7 @@ public class ObjectArtData {
                         ObjectSpriteSheet breakableBlockSheet,
                         ObjectSpriteSheet cpzPlatformSheet,
                         ObjectSpriteSheet cpzStairBlockSheet,
+                        ObjectSpriteSheet sidewaysPformSheet,
                         ObjectSpriteSheet cpzPylonSheet,
                         ObjectSpriteSheet pipeExitSpringSheet,
                         ObjectSpriteSheet tippingFloorSheet,
@@ -155,6 +157,7 @@ public class ObjectArtData {
                 this.breakableBlockSheet = breakableBlockSheet;
                 this.cpzPlatformSheet = cpzPlatformSheet;
                 this.cpzStairBlockSheet = cpzStairBlockSheet;
+                this.sidewaysPformSheet = sidewaysPformSheet;
                 this.cpzPylonSheet = cpzPylonSheet;
                 this.pipeExitSpringSheet = pipeExitSpringSheet;
                 this.tippingFloorSheet = tippingFloorSheet;
@@ -309,6 +312,10 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet cpzStairBlockSheet() {
                 return cpzStairBlockSheet;
+        }
+
+        public ObjectSpriteSheet sidewaysPformSheet() {
+                return sidewaysPformSheet;
         }
 
         public ObjectSpriteSheet cpzPylonSheet() {
