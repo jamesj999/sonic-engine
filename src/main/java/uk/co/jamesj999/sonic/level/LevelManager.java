@@ -295,9 +295,10 @@ public class LevelManager {
 
         // Update water state for player
         // Use level.getZoneIndex() which returns the ROM zone ID
+        // Use getVisualWaterLevelY() so collision matches the oscillating water surface (CPZ2)
         WaterSystem waterSystem = WaterSystem.getInstance();
         if (level != null && playable != null && waterSystem.hasWater(level.getZoneIndex(), currentAct)) {
-            int waterY = waterSystem.getWaterLevelY(level.getZoneIndex(), currentAct);
+            int waterY = waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct);
             playable.updateWaterState(waterY);
         }
     }

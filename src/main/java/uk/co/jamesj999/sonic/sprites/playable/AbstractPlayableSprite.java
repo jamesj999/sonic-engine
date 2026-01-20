@@ -1553,12 +1553,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
 
                 // Get water level from WaterSystem
+                // Use getVisualWaterLevelY so splash appears at the oscillating water surface (CPZ2)
                 var level = levelManager.getCurrentLevel();
                 if (level == null) {
                         return;
                 }
                 var waterSystem = uk.co.jamesj999.sonic.level.WaterSystem.getInstance();
-                int waterY = waterSystem.getWaterLevelY(level.getZoneIndex(), levelManager.getCurrentAct());
+                int waterY = waterSystem.getVisualWaterLevelY(level.getZoneIndex(), levelManager.getCurrentAct());
 
                 // Create splash object
                 var splash = new uk.co.jamesj999.sonic.game.sonic2.objects.SplashObjectInstance(
