@@ -622,11 +622,6 @@ public class LevelManager {
             lostRingManager.draw(frameCounter);
         }
 
-        // Draw water surface sprites at the water line (CPZ2, ARZ1, ARZ2)
-        if (zoneFeatureProvider != null) {
-            zoneFeatureProvider.render(camera, frameCounter);
-        }
-
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
             if (spriteRenderManager != null) {
                 spriteRenderManager.drawPriorityBucket(bucket, false);
@@ -649,6 +644,12 @@ public class LevelManager {
             if (objectManager != null) {
                 objectManager.drawPriorityBucket(bucket, true);
             }
+        }
+
+        // Draw water surface sprites at the water line (CPZ2, ARZ1, ARZ2)
+        // Rendered last (after all sprites and tiles) so it appears in front of everything
+        if (zoneFeatureProvider != null) {
+            zoneFeatureProvider.render(camera, frameCounter);
         }
 
         DebugObjectArtViewer.getInstance().draw(objectRenderManager, camera);
