@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -71,7 +72,7 @@ public class FlipperObjectInstance extends BoxObjectInstance
 
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
         this.animationState = new ObjectAnimationState(
-                renderManager != null ? renderManager.getFlipperAnimations() : null,
+                renderManager != null ? renderManager.getAnimations(Sonic2ObjectArtKeys.ANIM_FLIPPER) : null,
                 idleAnimId,
                 mappingFrame);
     }
@@ -286,7 +287,7 @@ public class FlipperObjectInstance extends BoxObjectInstance
             super.appendRenderCommands(commands);
             return;
         }
-        PatternSpriteRenderer renderer = renderManager.getFlipperRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.FLIPPER);
         if (renderer == null || !renderer.isReady()) {
             super.appendRenderCommands(commands);
             return;

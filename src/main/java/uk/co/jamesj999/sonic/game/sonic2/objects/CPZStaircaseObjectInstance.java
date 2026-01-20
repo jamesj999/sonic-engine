@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -334,7 +335,7 @@ public class CPZStaircaseObjectInstance extends AbstractObjectInstance
         }
 
         // Use the dedicated CPZ Stair Block renderer (NOT cpzPlatformRenderer which is Obj19)
-        PatternSpriteRenderer renderer = renderManager.getCpzStairBlockRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.CPZ_STAIR_BLOCK);
         if (renderer == null || !renderer.isReady()) {
             appendDebug(commands);
             return;

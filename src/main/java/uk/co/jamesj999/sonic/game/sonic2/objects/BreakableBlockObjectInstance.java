@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -256,7 +257,7 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
             return;
         }
 
-        PatternSpriteRenderer renderer = renderManager.getBreakableBlockRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.BREAKABLE_BLOCK);
         if (renderer == null || !renderer.isReady()) {
             super.appendRenderCommands(commands);
             return;
@@ -339,7 +340,7 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
                 return;
             }
 
-            PatternSpriteRenderer renderer = renderManager.getBreakableBlockRenderer();
+            PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.BREAKABLE_BLOCK);
             if (renderer == null || !renderer.isReady()) {
                 return;
             }

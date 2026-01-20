@@ -66,11 +66,20 @@ public class PatternSpriteRenderer {
     }
 
     public void drawFrameIndex(int frameIndex, int originX, int originY, boolean hFlip, boolean vFlip) {
+        drawFrameIndex(frameIndex, originX, originY, hFlip, vFlip, -1);
+    }
+
+    /**
+     * Draws a frame with an optional palette override.
+     * @param paletteOverride palette index to use, or -1 to use the sprite sheet's default
+     */
+    public void drawFrameIndex(int frameIndex, int originX, int originY, boolean hFlip, boolean vFlip, int paletteOverride) {
         if (frameIndex < 0 || frameIndex >= spriteSheet.getFrameCount() || patternBase < 0) {
             return;
         }
         SpriteFrame<? extends SpriteFramePiece> frame = spriteSheet.getFrame(frameIndex);
-        drawFrame(frame, originX, originY, hFlip, vFlip);
+        int paletteIndex = paletteOverride >= 0 ? paletteOverride : spriteSheet.getPaletteIndex();
+        drawFrame(frame, originX, originY, hFlip, vFlip, paletteIndex);
     }
 
     public void drawPieces(List<? extends SpriteFramePiece> pieces,
@@ -81,7 +90,7 @@ public class PatternSpriteRenderer {
         if (pieces == null || patternBase < 0) {
             return;
         }
-        drawFramePieces(pieces, originX, originY, hFlip, vFlip);
+        drawFramePieces(pieces, originX, originY, hFlip, vFlip, spriteSheet.getPaletteIndex());
     }
 
     public void drawPatternIndex(int patternIndex, int drawX, int drawY, int paletteIndex) {
@@ -117,14 +126,24 @@ public class PatternSpriteRenderer {
             int originY,
             boolean hFlip,
             boolean vFlip) {
-        drawFramePieces(frame.pieces(), originX, originY, hFlip, vFlip);
+        drawFramePieces(frame.pieces(), originX, originY, hFlip, vFlip, spriteSheet.getPaletteIndex());
+    }
+
+    private void drawFrame(SpriteFrame<? extends SpriteFramePiece> frame,
+            int originX,
+            int originY,
+            boolean hFlip,
+            boolean vFlip,
+            int paletteIndex) {
+        drawFramePieces(frame.pieces(), originX, originY, hFlip, vFlip, paletteIndex);
     }
 
     private void drawFramePieces(List<? extends SpriteFramePiece> pieces,
             int originX,
             int originY,
             boolean hFlip,
-            boolean vFlip) {
+            boolean vFlip,
+            int paletteIndex) {
         // Draw in reverse order (Painter's Algorithm) so that the first piece in the
         // list (index 0)
         // is drawn LAST, appearing on top. This matches Genesis behavior where lower
@@ -136,22 +155,22 @@ public class PatternSpriteRenderer {
                     originX,
                     originY,
                     patternBase,
-                    spriteSheet.getPaletteIndex(),
+                    paletteIndex,
                     hFlip,
                     vFlip,
-                    (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
+                    (patternIdx, pieceHFlip, pieceVFlip, palIdx, drawX, drawY) -> {
                         // Build PatternDesc with masked index (for flip/palette flags)
-                        int descIndex = patternIndex & 0x7FF;
+                        int descIndex = patternIdx & 0x7FF;
                         if (pieceHFlip) {
                             descIndex |= 0x800;
                         }
                         if (pieceVFlip) {
                             descIndex |= 0x1000;
                         }
-                        descIndex |= (paletteIndex & 0x3) << 13;
+                        descIndex |= (palIdx & 0x3) << 13;
                         PatternDesc desc = new PatternDesc(descIndex);
                         // Use full patternIndex for texture lookup (avoids 11-bit limit)
-                        GraphicsManager.getInstance().renderPatternWithId(patternIndex, desc, drawX, drawY);
+                        GraphicsManager.getInstance().renderPatternWithId(patternIdx, desc, drawX, drawY);
                     });
         }
     }

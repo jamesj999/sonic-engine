@@ -45,4 +45,14 @@ public final class Sonic2ObjectArtKeys {
 
     // Underwater objects (ARZ/CPZ/HPZ)
     public static final String BUBBLES = "bubbles";
+
+    // EHZ Badniks
+    public static final String MASHER = "masher";
+    public static final String BUZZER = "buzzer";
+    public static final String COCONUTS = "coconuts";
+
+    // CPZ Badniks
+    public static final String SPINY = "spiny";
+    public static final String GRABBER = "grabber";
+    public static final String GRABBER_STRING = "grabber_string";
 }

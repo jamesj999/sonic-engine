@@ -1,7 +1,6 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import uk.co.jamesj999.sonic.game.ObjectArtProvider;
-import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
@@ -151,14 +150,6 @@ public class ObjectRenderManager {
         return provider.getSheet(ObjectArtKeys.BRIDGE);
     }
 
-    public PatternSpriteRenderer getWaterfallRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.WATERFALL);
-    }
-
-    public ObjectSpriteSheet getWaterfallSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.WATERFALL);
-    }
-
     public PatternSpriteRenderer getCheckpointRenderer() {
         return provider.getRenderer(ObjectArtKeys.CHECKPOINT);
     }
@@ -177,18 +168,6 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getCheckpointAnimations() {
         return provider.getAnimations(ObjectArtKeys.ANIM_CHECKPOINT);
-    }
-
-    public PatternSpriteRenderer getMasherRenderer() {
-        return provider.getRenderer(ObjectArtKeys.MASHER);
-    }
-
-    public PatternSpriteRenderer getBuzzerRenderer() {
-        return provider.getRenderer(ObjectArtKeys.BUZZER);
-    }
-
-    public PatternSpriteRenderer getCoconutsRenderer() {
-        return provider.getRenderer(ObjectArtKeys.COCONUTS);
     }
 
     public PatternSpriteRenderer getAnimalRenderer() {
@@ -217,145 +196,6 @@ public class ObjectRenderManager {
 
     public SpriteAnimationSet getSignpostAnimations() {
         return provider.getAnimations(ObjectArtKeys.ANIM_SIGNPOST);
-    }
-
-    // --- Sonic 2-specific convenience methods (for backward compatibility) ---
-    // For new code, prefer using getRenderer(Sonic2ObjectArtKeys.KEY) directly
-
-    public PatternSpriteRenderer getBumperRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.BUMPER);
-    }
-
-    public ObjectSpriteSheet getBumperSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.BUMPER);
-    }
-
-    public PatternSpriteRenderer getHexBumperRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.HEX_BUMPER);
-    }
-
-    public ObjectSpriteSheet getHexBumperSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.HEX_BUMPER);
-    }
-
-    public PatternSpriteRenderer getBonusBlockRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.BONUS_BLOCK);
-    }
-
-    public ObjectSpriteSheet getBonusBlockSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.BONUS_BLOCK);
-    }
-
-    public PatternSpriteRenderer getFlipperRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.FLIPPER);
-    }
-
-    public ObjectSpriteSheet getFlipperSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.FLIPPER);
-    }
-
-    public SpriteAnimationSet getFlipperAnimations() {
-        return provider.getAnimations(Sonic2ObjectArtKeys.ANIM_FLIPPER);
-    }
-
-    public PatternSpriteRenderer getSpeedBoosterRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.SPEED_BOOSTER);
-    }
-
-    public ObjectSpriteSheet getSpeedBoosterSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.SPEED_BOOSTER);
-    }
-
-    public PatternSpriteRenderer getBlueBallsRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.BLUE_BALLS);
-    }
-
-    public ObjectSpriteSheet getBlueBallsSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.BLUE_BALLS);
-    }
-
-    public PatternSpriteRenderer getBreakableBlockRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.BREAKABLE_BLOCK);
-    }
-
-    public ObjectSpriteSheet getBreakableBlockSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.BREAKABLE_BLOCK);
-    }
-
-    public PatternSpriteRenderer getCpzPlatformRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.CPZ_PLATFORM);
-    }
-
-    public ObjectSpriteSheet getCpzPlatformSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.CPZ_PLATFORM);
-    }
-
-    public PatternSpriteRenderer getCpzStairBlockRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.CPZ_STAIR_BLOCK);
-    }
-
-    public ObjectSpriteSheet getCpzStairBlockSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.CPZ_STAIR_BLOCK);
-    }
-
-    public PatternSpriteRenderer getSidewaysPformRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.SIDEWAYS_PFORM);
-    }
-
-    public ObjectSpriteSheet getSidewaysPformSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.SIDEWAYS_PFORM);
-    }
-
-    public PatternSpriteRenderer getCpzPylonRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.CPZ_PYLON);
-    }
-
-    public ObjectSpriteSheet getCpzPylonSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.CPZ_PYLON);
-    }
-
-    public PatternSpriteRenderer getPipeExitSpringRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.PIPE_EXIT_SPRING);
-    }
-
-    public ObjectSpriteSheet getPipeExitSpringSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.PIPE_EXIT_SPRING);
-    }
-
-    public SpriteAnimationSet getPipeExitSpringAnimations() {
-        return provider.getAnimations(Sonic2ObjectArtKeys.ANIM_PIPE_EXIT_SPRING);
-    }
-
-    public PatternSpriteRenderer getTippingFloorRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.TIPPING_FLOOR);
-    }
-
-    public ObjectSpriteSheet getTippingFloorSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.TIPPING_FLOOR);
-    }
-
-    public SpriteAnimationSet getTippingFloorAnimations() {
-        return provider.getAnimations(Sonic2ObjectArtKeys.ANIM_TIPPING_FLOOR);
-    }
-
-    public PatternSpriteRenderer getBarrierRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.BARRIER);
-    }
-
-    public ObjectSpriteSheet getBarrierSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.BARRIER);
-    }
-
-    public PatternSpriteRenderer getSpringboardRenderer() {
-        return provider.getRenderer(Sonic2ObjectArtKeys.SPRINGBOARD);
-    }
-
-    public ObjectSpriteSheet getSpringboardSheet() {
-        return provider.getSheet(Sonic2ObjectArtKeys.SPRINGBOARD);
-    }
-
-    public SpriteAnimationSet getSpringboardAnimations() {
-        return provider.getAnimations(Sonic2ObjectArtKeys.ANIM_SPRINGBOARD);
     }
 
     public PatternSpriteRenderer getResultsRenderer() {

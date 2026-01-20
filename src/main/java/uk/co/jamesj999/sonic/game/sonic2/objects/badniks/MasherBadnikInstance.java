@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects.badniks;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -90,7 +91,7 @@ public class MasherBadnikInstance extends AbstractBadnikInstance {
             return;
         }
 
-        PatternSpriteRenderer renderer = renderManager.getMasherRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.MASHER);
         if (renderer == null || !renderer.isReady()) {
             return;
         }

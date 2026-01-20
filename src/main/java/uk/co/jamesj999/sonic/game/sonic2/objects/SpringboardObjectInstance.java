@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -89,7 +90,7 @@ public class SpringboardObjectInstance extends BoxObjectInstance
 
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
         this.animationState = new ObjectAnimationState(
-                renderManager != null ? renderManager.getSpringboardAnimations() : null,
+                renderManager != null ? renderManager.getAnimations(Sonic2ObjectArtKeys.ANIM_SPRINGBOARD) : null,
                 ANIM_IDLE,
                 0);
         this.mappingFrame = 0;
@@ -258,7 +259,7 @@ public class SpringboardObjectInstance extends BoxObjectInstance
             return;
         }
 
-        PatternSpriteRenderer renderer = renderManager.getSpringboardRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.SPRINGBOARD);
         if (renderer == null || !renderer.isReady()) {
             super.appendRenderCommands(commands);
             return;

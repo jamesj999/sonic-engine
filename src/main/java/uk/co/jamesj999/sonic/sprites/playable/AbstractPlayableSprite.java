@@ -204,6 +204,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * input.
          */
         protected boolean jumpInputPressed = false;
+        /**
+         * Tracks whether the left button is currently pressed this frame.
+         * Set by movement manager, used by objects (like Grabber) to detect directional input.
+         */
+        protected boolean leftInputPressed = false;
+        /**
+         * Tracks whether the right button is currently pressed this frame.
+         * Set by movement manager, used by objects (like Grabber) to detect directional input.
+         */
+        protected boolean rightInputPressed = false;
         private int spiralActiveFrame = Integer.MIN_VALUE;
         private byte flipAngle = 0;
         private byte flipSpeed = 0;
@@ -858,6 +868,31 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         public void setJumpInputPressed(boolean pressed) {
                 this.jumpInputPressed = pressed;
+        }
+
+        /**
+         * Returns whether the left button is currently pressed.
+         * Used by objects (like Grabber) to detect directional input for escape mechanism.
+         */
+        public boolean isLeftPressed() {
+                return leftInputPressed;
+        }
+
+        /**
+         * Returns whether the right button is currently pressed.
+         * Used by objects (like Grabber) to detect directional input for escape mechanism.
+         */
+        public boolean isRightPressed() {
+                return rightInputPressed;
+        }
+
+        /**
+         * Sets the directional input state for this frame.
+         * Called by movement manager each frame with the current button states.
+         */
+        public void setDirectionalInputPressed(boolean left, boolean right) {
+                this.leftInputPressed = left;
+                this.rightInputPressed = right;
         }
 
         public void markSpiralActive(int frameCounter) {

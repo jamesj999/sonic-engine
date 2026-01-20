@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -108,7 +109,7 @@ public class CPZPylonObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        PatternSpriteRenderer renderer = renderManager.getCpzPylonRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.CPZ_PYLON);
         if (renderer == null || !renderer.isReady()) {
             return;
         }

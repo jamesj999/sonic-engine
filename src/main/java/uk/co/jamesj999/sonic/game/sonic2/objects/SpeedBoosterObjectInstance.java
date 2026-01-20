@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -159,7 +160,7 @@ public class SpeedBoosterObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        PatternSpriteRenderer renderer = renderManager.getSpeedBoosterRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.SPEED_BOOSTER);
         if (renderer == null || !renderer.isReady()) {
             return;
         }

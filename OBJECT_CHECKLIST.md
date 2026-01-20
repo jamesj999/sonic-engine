@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-20 15:48:38
+Generated: 2026-01-20 17:28:18
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 32 (26.7%)
-- **Unimplemented:** 88 (73.3%)
+- **Implemented:** 35 (29.2%)
+- **Unimplemented:** 85 (70.8%)
 
 ## Implemented Objects
 
@@ -42,6 +42,9 @@ Generated: 2026-01-20 15:48:38
 | 0x7B | PipeExitSpring | 9 | CPZ1, CPZ2 |
 | 0x86 | Flipper | 63 | CNZ1, CNZ2 |
 | 0x9D | Coconuts | 17 | EHZ1, EHZ2 |
+| 0xA5 | Spiny | 11 | CPZ1, CPZ2 |
+| 0xA6 | SpinyOnWall | 2 | CPZ1, CPZ2 |
+| 0xA7 | Grabber | 5 | CPZ1, CPZ2 |
 | 0xD7 | HexBumper | 18 | CNZ1, CNZ2 |
 | 0xD8 | BonusBlock | 98 | CNZ1, CNZ2 |
 
@@ -100,7 +103,6 @@ Generated: 2026-01-20 15:48:38
 | 0x2B | Object | RisingPillar | 11 | ARZ1, ARZ2 |
 | 0x7F | Object | VineSwitch | 11 | MCZ1, MCZ2 |
 | 0x8B | Object | WFZPalSwitcher | 11 | WFZ1 |
-| 0xA5 | Badnik | Spiny | 11 | CPZ1, CPZ2 |
 | 0x6C | Object | Conveyor | 10 | MTZ2, MTZ3 |
 | 0x9A | Badnik | Turtloid | 10 | SCZ1 |
 | 0xAD | Badnik | CluckerBase | 10 | WFZ1 |
@@ -120,7 +122,6 @@ Generated: 2026-01-20 15:48:38
 | 0x96 | Badnik | Rexon2 | 6 | HTZ1, HTZ2 |
 | 0xB9 | Object | Laser | 6 | WFZ1 |
 | 0x77 | Object | MCZBridge | 5 | MCZ1, MCZ2 |
-| 0xA7 | Badnik | Grabber | 5 | CPZ1, CPZ2 |
 | 0xB6 | Object | TiltingPlatform | 5 | WFZ1 |
 | 0xB8 | Object | WallTurret | 5 | WFZ1 |
 | 0xBD | Object | SmallMetalPform | 5 | WFZ1 |
@@ -130,7 +131,6 @@ Generated: 2026-01-20 15:48:38
 | 0xB2 | Object | Tornado | 3 | SCZ1, WFZ1 |
 | 0xB3 | Object | Cloud | 3 | SCZ1 |
 | 0xD9 | Object | Grab | 3 | WFZ1 |
-| 0xA6 | Badnik | SpinyOnWall | 2 | CPZ1, CPZ2 |
 | 0xBA | Object | WFZWheel | 2 | WFZ1 |
 | 0xBC | Object | WFZShipFire | 2 | WFZ1 |
 | 0xC2 | Object | Rivet | 1 | WFZ1 |
@@ -196,12 +196,12 @@ Total: 158 objects | Implemented: 14 | Unimplemented: 1
 
 #### Act 1
 
-Total: 153 objects | Implemented: 16 | Unimplemented: 3
+Total: 153 objects | Implemented: 19 | Unimplemented: 0
 
 **Badniks:**
-- [ ] 0xA5 Spiny (x10) [0x32]
-- [ ] 0xA6 SpinyOnWall (x1) [0x32]
-- [ ] 0xA7 Grabber (x2) [0x36]
+- [x] 0xA5 Spiny (x10) [0x32]
+- [x] 0xA6 SpinyOnWall (x1) [0x32]
+- [x] 0xA7 Grabber (x2) [0x36]
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x60) [23 subtypes]
@@ -223,12 +223,12 @@ Total: 153 objects | Implemented: 16 | Unimplemented: 3
 
 #### Act 2
 
-Total: 202 objects | Implemented: 17 | Unimplemented: 4
+Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 **Badniks:**
-- [ ] 0xA5 Spiny (x1) [0x32]
-- [ ] 0xA6 SpinyOnWall (x1) [0x32]
-- [ ] 0xA7 Grabber (x3) [0x36]
+- [x] 0xA5 Spiny (x1) [0x32]
+- [x] 0xA6 SpinyOnWall (x1) [0x32]
+- [x] 0xA7 Grabber (x3) [0x36]
 
 **Bosses:**
 - [ ] 0x5D CPZBoss *(dynamic)* - Water dropper boss

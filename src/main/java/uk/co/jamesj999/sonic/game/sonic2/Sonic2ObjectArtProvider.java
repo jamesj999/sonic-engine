@@ -113,10 +113,13 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(ObjectArtKeys.CHECKPOINT, artData.checkpointSheet());
         registerSheet(ObjectArtKeys.CHECKPOINT_STAR, artData.checkpointStarSheet());
 
-        // Badnik sheets
-        registerSheet(ObjectArtKeys.MASHER, artData.masherSheet());
-        registerSheet(ObjectArtKeys.BUZZER, artData.buzzerSheet());
-        registerSheet(ObjectArtKeys.COCONUTS, artData.coconutsSheet());
+        // Badnik sheets (Sonic 2-specific)
+        registerSheet(Sonic2ObjectArtKeys.MASHER, artData.masherSheet());
+        registerSheet(Sonic2ObjectArtKeys.BUZZER, artData.buzzerSheet());
+        registerSheet(Sonic2ObjectArtKeys.COCONUTS, artData.coconutsSheet());
+        registerSheet(Sonic2ObjectArtKeys.SPINY, artData.spinySheet());
+        registerSheet(Sonic2ObjectArtKeys.GRABBER, artData.grabberSheet());
+        registerSheet(Sonic2ObjectArtKeys.GRABBER_STRING, artData.grabberStringSheet());
         registerSheet(ObjectArtKeys.ANIMAL, artData.animalSheet());
         registerSheet(ObjectArtKeys.POINTS, artData.pointsSheet());
 

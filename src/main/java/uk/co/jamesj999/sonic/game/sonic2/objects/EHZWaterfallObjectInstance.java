@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -72,7 +73,7 @@ public class EHZWaterfallObjectInstance extends AbstractObjectInstance {
         if (renderManager == null) {
             return;
         }
-        PatternSpriteRenderer renderer = renderManager.getWaterfallRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.WATERFALL);
         if (renderer == null || !renderer.isReady()) {
             return;
         }

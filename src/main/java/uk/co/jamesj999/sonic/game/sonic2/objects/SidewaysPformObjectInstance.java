@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -135,7 +136,7 @@ public class SidewaysPformObjectInstance extends AbstractObjectInstance
         PatternSpriteRenderer renderer = null;
 
         if (renderManager != null) {
-            renderer = renderManager.getSidewaysPformRenderer();
+            renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.SIDEWAYS_PFORM);
         }
 
         if (renderer != null && renderer.isReady()) {

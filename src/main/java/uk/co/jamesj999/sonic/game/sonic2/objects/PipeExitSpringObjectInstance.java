@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -61,7 +62,7 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
 
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
         this.animationState = new ObjectAnimationState(
-                renderManager != null ? renderManager.getPipeExitSpringAnimations() : null,
+                renderManager != null ? renderManager.getAnimations(Sonic2ObjectArtKeys.ANIM_PIPE_EXIT_SPRING) : null,
                 ANIM_IDLE,
                 mappingFrame);
     }
@@ -215,7 +216,7 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
             return;
         }
 
-        PatternSpriteRenderer renderer = renderManager.getPipeExitSpringRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.PIPE_EXIT_SPRING);
         if (renderer == null || !renderer.isReady()) {
             super.appendRenderCommands(commands);
             return;

@@ -87,6 +87,9 @@ public class ObjectDiscoveryTool {
             0x7B,  // PipeExitSpring (CPZ warp tube exit spring)
             0x86,  // CNZFlipper
             0x9D,  // Coconuts
+            0xA5,  // Spiny (CPZ crawling badnik)
+            0xA6,  // SpinyOnWall (CPZ wall-climbing badnik)
+            0xA7,  // Grabber (CPZ spider badnik)
             0xD7,  // HexBumper (CNZ hexagonal bumper)
             0xD8   // BonusBlock
     );

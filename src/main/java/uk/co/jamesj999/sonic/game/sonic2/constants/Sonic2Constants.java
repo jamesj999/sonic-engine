@@ -167,6 +167,10 @@ public class Sonic2Constants {
     public static final int ART_NEM_COCONUTS_ADDR = 0x8A87A; // 38 blocks
     public static final int ART_NEM_ANIMAL_ADDR = 0x7FDD2; // Rabbit (Pocky) fallback
 
+    // CPZ Badnik Art (Nemesis compressed)
+    public static final int ART_NEM_SPINY_ADDR = 0x8B430; // Spiny (CPZ crawling badnik)
+    public static final int ART_NEM_GRABBER_ADDR = 0x8B6B4; // Grabber (CPZ spider badnik)
+
     // Animal art (Nemesis compressed, verified offsets)
     public static final int ART_NEM_FLICKY_ADDR = 0x7EF60;
     public static final int ART_NEM_SQUIRREL_ADDR = 0x7F0A2;

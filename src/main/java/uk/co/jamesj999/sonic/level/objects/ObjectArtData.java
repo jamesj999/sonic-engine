@@ -29,6 +29,9 @@ public class ObjectArtData {
         private final ObjectSpriteSheet masherSheet;
         private final ObjectSpriteSheet buzzerSheet;
         private final ObjectSpriteSheet coconutsSheet;
+        private final ObjectSpriteSheet spinySheet;
+        private final ObjectSpriteSheet grabberSheet;
+        private final ObjectSpriteSheet grabberStringSheet;
         private final ObjectSpriteSheet animalSheet;
         private final int animalTypeA;
         private final int animalTypeB;
@@ -88,6 +91,9 @@ public class ObjectArtData {
                         ObjectSpriteSheet masherSheet,
                         ObjectSpriteSheet buzzerSheet,
                         ObjectSpriteSheet coconutsSheet,
+                        ObjectSpriteSheet spinySheet,
+                        ObjectSpriteSheet grabberSheet,
+                        ObjectSpriteSheet grabberStringSheet,
                         ObjectSpriteSheet animalSheet,
                         int animalTypeA,
                         int animalTypeB,
@@ -145,6 +151,9 @@ public class ObjectArtData {
                 this.masherSheet = masherSheet;
                 this.buzzerSheet = buzzerSheet;
                 this.coconutsSheet = coconutsSheet;
+                this.spinySheet = spinySheet;
+                this.grabberSheet = grabberSheet;
+                this.grabberStringSheet = grabberStringSheet;
                 this.animalSheet = animalSheet;
                 this.animalTypeA = animalTypeA;
                 this.animalTypeB = animalTypeB;
@@ -259,6 +268,18 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet coconutsSheet() {
                 return coconutsSheet;
+        }
+
+        public ObjectSpriteSheet spinySheet() {
+                return spinySheet;
+        }
+
+        public ObjectSpriteSheet grabberSheet() {
+                return grabberSheet;
+        }
+
+        public ObjectSpriteSheet grabberStringSheet() {
+                return grabberStringSheet;
         }
 
         public ObjectSpriteSheet animalSheet() {

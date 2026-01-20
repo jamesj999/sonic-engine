@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -62,7 +63,7 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
 
         ObjectRenderManager renderManager = LevelManager.getInstance().getObjectRenderManager();
         this.animationState = new ObjectAnimationState(
-                renderManager != null ? renderManager.getTippingFloorAnimations() : null,
+                renderManager != null ? renderManager.getAnimations(Sonic2ObjectArtKeys.ANIM_TIPPING_FLOOR) : null,
                 ANIM_FORWARD,
                 0);
     }
@@ -146,7 +147,7 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
         if (renderManager == null) {
             return;
         }
-        PatternSpriteRenderer renderer = renderManager.getTippingFloorRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.TIPPING_FLOOR);
         if (renderer == null || !renderer.isReady()) {
             return;
         }

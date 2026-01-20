@@ -9,6 +9,8 @@ public final class Sonic2AnimationIds {
     public static final int WAIT = 0x05;
     public static final int DUCK = 0x08;
     public static final int SPINDASH = 0x09;
+    public static final int FLOAT = 0x0E;      // Suspended/floating (used by Grabber)
+    public static final int FLOAT2 = 0x0F;     // Alternate float
     public static final int SPRING = 0x10;
     public static final int DEATH = 0x18;
     public static final int HURT = 0x19;

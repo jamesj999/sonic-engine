@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -573,7 +574,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             return;
         }
 
-        PatternSpriteRenderer renderer = rm.getBlueBallsRenderer();
+        PatternSpriteRenderer renderer = rm.getRenderer(Sonic2ObjectArtKeys.BLUE_BALLS);
         if (renderer != null && renderer.isReady()) {
             int drawX = currentX >> 8;
             int drawY = currentY >> 8;

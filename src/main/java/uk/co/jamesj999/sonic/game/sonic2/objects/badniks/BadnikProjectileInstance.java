@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects.badniks;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -21,12 +22,15 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
 
     public enum ProjectileType {
         BUZZER_STINGER,
-        COCONUT
+        COCONUT,
+        SPINY_SPIKE
     }
 
     private static final int COLLISION_SIZE_STINGER = 0x18; // From disassembly $98 & 0x3F
     private static final int COLLISION_SIZE_COCONUT = 0x0B; // From disassembly $8B & 0x3F
+    private static final int COLLISION_SIZE_SPINY_SPIKE = 0x0B; // Same as coconut
     private static final int GRAVITY_COCONUT = 0x20; // Obj98_CoconutFall
+    private static final int GRAVITY_SPINY_SPIKE = 0x20; // From disassembly +$20 per frame
 
     private final ProjectileType type;
     private int currentX;
@@ -70,6 +74,10 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
             case COCONUT -> {
                 this.gravity = GRAVITY_COCONUT;
                 this.collisionSizeIndex = COLLISION_SIZE_COCONUT;
+            }
+            case SPINY_SPIKE -> {
+                this.gravity = GRAVITY_SPINY_SPIKE;
+                this.collisionSizeIndex = COLLISION_SIZE_SPINY_SPIKE;
             }
         }
     }
@@ -145,14 +153,19 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
 
         switch (type) {
             case BUZZER_STINGER:
-                renderer = renderManager.getBuzzerRenderer();
+                renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.BUZZER);
                 // Buzzer projectile uses frames 5-6 (animation 2 in disassembly)
                 frame = 5 + animFrame;
                 break;
             case COCONUT:
-                renderer = renderManager.getCoconutsRenderer();
+                renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.COCONUTS);
                 // Coconut uses frame 3
                 frame = 3;
+                break;
+            case SPINY_SPIKE:
+                renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.SPINY);
+                // Spiny spike uses frames 6-7 (alternating)
+                frame = 6 + animFrame;
                 break;
             default:
                 return;

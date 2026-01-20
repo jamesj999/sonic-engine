@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -194,7 +195,7 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
         if (renderManager == null) {
             return;
         }
-        PatternSpriteRenderer renderer = renderManager.getBarrierRenderer();
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.BARRIER);
         if (renderer == null || !renderer.isReady()) {
             return;
         }

@@ -217,6 +217,19 @@ public class Sonic2ObjectArt {
         List<SpriteMappingFrame> coconutsMappings = createCoconutsMappings();
         ObjectSpriteSheet coconutsSheet = new ObjectSpriteSheet(coconutsPatterns, coconutsMappings, 0, 1);
 
+        // CPZ Badnik: Spiny
+        Pattern[] spinyPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPINY_ADDR, "Spiny");
+        List<SpriteMappingFrame> spinyMappings = createSpinyMappings();
+        ObjectSpriteSheet spinySheet = new ObjectSpriteSheet(spinyPatterns, spinyMappings, 0, 1);
+
+        // CPZ Badnik: Grabber (spider)
+        // Per disassembly: make_art_tile(ArtTile_ArtNem_Grabber,1,1) - uses palette line 1
+        Pattern[] grabberPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_GRABBER_ADDR, "Grabber");
+        List<SpriteMappingFrame> grabberMappings = createGrabberMappings();
+        ObjectSpriteSheet grabberSheet = new ObjectSpriteSheet(grabberPatterns, grabberMappings, 1, 1);
+        List<SpriteMappingFrame> grabberStringMappings = createGrabberStringMappings();
+        ObjectSpriteSheet grabberStringSheet = new ObjectSpriteSheet(grabberPatterns, grabberStringMappings, 1, 1);
+
         Pattern[] animalPatterns = loadAnimalPatterns(animalTypeA, animalTypeB);
         List<SpriteMappingFrame> animalMappings = createAnimalMappings();
         ObjectSpriteSheet animalSheet = new ObjectSpriteSheet(animalPatterns, animalMappings, 0, 1);
@@ -378,6 +391,9 @@ public class Sonic2ObjectArt {
                 masherSheet,
                 buzzerSheet,
                 coconutsSheet,
+                spinySheet,
+                grabberSheet,
+                grabberStringSheet,
                 animalSheet,
                 animalTypeA.ordinal(),
                 animalTypeB.ordinal(),
@@ -1153,6 +1169,204 @@ public class Sonic2ObjectArt {
         frame3.add(new SpriteMappingPiece(-8, -8, 1, 2, 36, false, false, 2));
         frame3.add(new SpriteMappingPiece(0, -8, 1, 2, 36, true, false, 2));
         frames.add(new SpriteMappingFrame(frame3));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Spiny (ObjA5) and SpinyOnWall (ObjA6) badniks.
+     * Based on objA6.asm (S2 disassembly):
+     * - Frames 0-2: Horizontal Spiny (crawling caterpillar)
+     * - Frames 3-5: SpinyOnWall (wall-climbing variant)
+     * - Frames 6-7: Spike projectile (shared by both)
+     * Uses palette line 1 (from make_art_tile(ArtTile_ArtNem_Spiny,1,0)).
+     */
+    private List<SpriteMappingFrame> createSpinyMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+        final int palette = 1;  // Spiny uses palette line 1
+
+        // Frame 0: Crawl frame 1
+        // Spiny is a symmetrical caterpillar - left half mirrored to right
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-8, -12, 1, 1, 0, false, false, palette));     // Antenna/leg left
+        frame0.add(new SpriteMappingPiece(-24, -4, 3, 2, 1, false, false, palette));     // Body left half
+        frame0.add(new SpriteMappingPiece(0, -12, 1, 1, 0, true, false, palette));       // Antenna/leg right (mirrored)
+        frame0.add(new SpriteMappingPiece(0, -4, 3, 2, 1, true, false, palette));        // Body right half (mirrored)
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Crawl frame 2 (same antenna tile 0, body uses tile 7)
+        // From objA6.asm Map_objA6_0032: tiles 0,7,0,7
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-8, -12, 1, 1, 0, false, false, palette));
+        frame1.add(new SpriteMappingPiece(-24, -4, 3, 2, 7, false, false, palette));
+        frame1.add(new SpriteMappingPiece(0, -12, 1, 1, 0, true, false, palette));
+        frame1.add(new SpriteMappingPiece(0, -4, 3, 2, 7, true, false, palette));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Attack pose (rearing up head - 2x1 tile piece at tile 0xD)
+        // From objA6.asm Map_objA6_0054: head is 2x1 at -16,-12 with tile $D
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-16, -12, 2, 1, 0xD, false, false, palette));  // Head left
+        frame2.add(new SpriteMappingPiece(-24, -4, 3, 2, 1, false, false, palette));     // Body left
+        frame2.add(new SpriteMappingPiece(0, -12, 2, 1, 0xD, true, false, palette));     // Head right (H-flip)
+        frame2.add(new SpriteMappingPiece(0, -4, 3, 2, 1, true, false, palette));        // Body right (H-flip)
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: Wall climb frame 1 (SpinyOnWall patrol frame 1)
+        // From objA6.asm Map_objA6_0076 - vertical orientation for wall-crawling variant
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-12, -24, 2, 3, 0x0F, false, false, palette));  // Body top
+        frame3.add(new SpriteMappingPiece(4, -8, 1, 1, 0x15, false, false, palette));     // Leg top
+        frame3.add(new SpriteMappingPiece(-12, 0, 2, 3, 0x0F, false, true, palette));     // Body bottom (V-flip)
+        frame3.add(new SpriteMappingPiece(4, 0, 1, 1, 0x15, false, true, palette));       // Leg bottom (V-flip)
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Wall climb frame 2 (SpinyOnWall patrol frame 2)
+        // From objA6.asm Map_objA6_0098 - uses different body tile $16
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-12, -24, 2, 3, 0x16, false, false, palette));  // Body top
+        frame4.add(new SpriteMappingPiece(4, -8, 1, 1, 0x15, false, false, palette));     // Leg top
+        frame4.add(new SpriteMappingPiece(-12, 0, 2, 3, 0x16, false, true, palette));     // Body bottom (V-flip)
+        frame4.add(new SpriteMappingPiece(4, 0, 1, 1, 0x15, false, true, palette));       // Leg bottom (V-flip)
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Wall attack pose (SpinyOnWall attack frame)
+        // From objA6.asm Map_objA6_00BA - body with spike extending
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-12, -24, 2, 3, 0x0F, false, false, palette));  // Body top
+        frame5.add(new SpriteMappingPiece(4, -16, 1, 2, 0x1C, false, false, palette));    // Spike top
+        frame5.add(new SpriteMappingPiece(-12, 0, 2, 3, 0x0F, false, true, palette));     // Body bottom (V-flip)
+        frame5.add(new SpriteMappingPiece(4, 0, 1, 2, 0x1C, false, true, palette));       // Spike bottom (V-flip)
+        frames.add(new SpriteMappingFrame(frame5));
+
+        // Frame 6: Spike projectile frame 1 (also uses palette 1)
+        List<SpriteMappingPiece> frame6 = new ArrayList<>();
+        frame6.add(new SpriteMappingPiece(-4, -4, 1, 1, 0x1E, false, false, palette));
+        frames.add(new SpriteMappingFrame(frame6));
+
+        // Frame 7: Spike projectile frame 2
+        List<SpriteMappingPiece> frame7 = new ArrayList<>();
+        frame7.add(new SpriteMappingPiece(-4, -4, 1, 1, 0x1F, false, false, palette));
+        frames.add(new SpriteMappingFrame(frame7));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Grabber (ObjA7) - CPZ spider badnik.
+     * Based on ObjA7_ObjA8_ObjA9_Obj98_MapUnc_3921A from disassembly.
+     * Frame 0: Body with open claws
+     * Frame 1: Body with closed claws (grabbing)
+     * Frame 2: Anchor box (hanger attachment point)
+     * Frame 3: Legs (small 3x2)
+     * Frame 4: Legs (large 4x2)
+     * Frame 5-6: Unused small pieces
+     */
+    private List<SpriteMappingFrame> createGrabberMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Body with open claws (word_3923A)
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x1B, -8, 1, 2, 0, false, false, 0));    // Left antenna
+        frame0.add(new SpriteMappingPiece(-0x13, -8, 4, 2, 2, false, false, 0));    // Body
+        frame0.add(new SpriteMappingPiece(-0xF, 8, 3, 2, 0x1D, false, false, 0));   // Open claws
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Body with closed claws (word_39254)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x1B, -8, 1, 2, 0, false, false, 0));    // Left antenna
+        frame1.add(new SpriteMappingPiece(-0x13, -8, 4, 2, 2, false, false, 0));    // Body
+        frame1.add(new SpriteMappingPiece(-0xF, 8, 4, 2, 0x23, false, false, 0));   // Closed claws
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Anchor box (word_3926E)
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-4, -4, 1, 1, 0xA, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: Legs small (word_39278)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-7, -8, 3, 2, 0xF, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Legs large (word_39282)
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-7, -8, 4, 2, 0x15, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Small unused piece (word_3928C)
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-4, -4, 1, 1, 0x2B, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        // Frame 6: Small unused piece (word_39296)
+        List<SpriteMappingPiece> frame6 = new ArrayList<>();
+        frame6.add(new SpriteMappingPiece(-4, -4, 1, 1, 0x2C, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame6));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Grabber's string (ObjAA) - the thread connecting Grabber to anchor.
+     * Based on ObjAA_MapUnc_39228 from disassembly.
+     * Frames 0-8 represent increasing string lengths.
+     */
+    private List<SpriteMappingFrame> createGrabberStringMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Short string (word_392A0) - 1x2 = 16 pixels
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-4, 0, 1, 2, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: String (word_392AA) - 1x4 = 32 pixels
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-4, 0, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: String (word_392B4) - 1x2 + 1x4 = 48 pixels
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-4, 0, 1, 2, 0xB, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-4, 0x10, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: String (word_392C6) - 1x4 + 1x4 = 64 pixels
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-4, 0, 1, 4, 0xB, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-4, 0x20, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: String (word_392D8) - 80 pixels
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-4, 0, 1, 2, 0xB, false, false, 0));
+        frame4.add(new SpriteMappingPiece(-4, 0x10, 1, 4, 0xB, false, false, 0));
+        frame4.add(new SpriteMappingPiece(-4, 0x30, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: String (word_3930C - but mapped as frame 6 in table) - 96 pixels
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-4, 0, 1, 2, 0xB, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-4, 0x10, 1, 4, 0xB, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-4, 0x30, 1, 4, 0xB, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-4, 0x50, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        // Frame 6: String (word_392F2 - but mapped as frame 5 in table) - 96 pixels
+        List<SpriteMappingPiece> frame6 = new ArrayList<>();
+        frame6.add(new SpriteMappingPiece(-4, 0, 1, 4, 0xB, false, false, 0));
+        frame6.add(new SpriteMappingPiece(-4, 0x20, 1, 4, 0xB, false, false, 0));
+        frame6.add(new SpriteMappingPiece(-4, 0x40, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame6));
+
+        // Frame 7-8: String (word_3932E) - 128 pixels (both point to same data)
+        List<SpriteMappingPiece> frame7 = new ArrayList<>();
+        frame7.add(new SpriteMappingPiece(-4, 0, 1, 4, 0xB, false, false, 0));
+        frame7.add(new SpriteMappingPiece(-4, 0x20, 1, 4, 0xB, false, false, 0));
+        frame7.add(new SpriteMappingPiece(-4, 0x40, 1, 4, 0xB, false, false, 0));
+        frame7.add(new SpriteMappingPiece(-4, 0x60, 1, 4, 0xB, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame7));
+        frames.add(new SpriteMappingFrame(frame7)); // Frame 8 is same as 7
 
         return frames;
     }

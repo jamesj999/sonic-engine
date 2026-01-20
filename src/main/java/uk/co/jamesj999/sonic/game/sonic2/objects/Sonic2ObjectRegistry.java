@@ -10,6 +10,9 @@ import uk.co.jamesj999.sonic.level.objects.PlaceholderObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.MasherBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.BuzzerBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.CoconutsBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyOnWallBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.GrabberBadnikInstance;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -178,6 +181,14 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
                 (spawn, registry) -> new BuzzerBadnikInstance(spawn, LevelManager.getInstance()));
         registerFactory(Sonic2ObjectIds.COCONUTS,
                 (spawn, registry) -> new CoconutsBadnikInstance(spawn, LevelManager.getInstance()));
+
+        // CPZ Badniks
+        registerFactory(Sonic2ObjectIds.SPINY,
+                (spawn, registry) -> new SpinyBadnikInstance(spawn, LevelManager.getInstance()));
+        registerFactory(Sonic2ObjectIds.SPINY_ON_WALL,
+                (spawn, registry) -> new SpinyOnWallBadnikInstance(spawn, LevelManager.getInstance()));
+        registerFactory(Sonic2ObjectIds.GRABBER,
+                (spawn, registry) -> new GrabberBadnikInstance(spawn, LevelManager.getInstance()));
 
         // Level completion objects
         registerFactory(Sonic2ObjectIds.SIGNPOST,

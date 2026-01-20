@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.GameStateManager;
+import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
@@ -319,7 +320,7 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        PatternSpriteRenderer renderer = rm.getBonusBlockRenderer();
+        PatternSpriteRenderer renderer = rm.getRenderer(Sonic2ObjectArtKeys.BONUS_BLOCK);
         if (renderer != null && renderer.isReady()) {
             boolean hFlip = (spawn.renderFlags() & 0x1) != 0;
             boolean vFlip = (spawn.renderFlags() & 0x2) != 0;

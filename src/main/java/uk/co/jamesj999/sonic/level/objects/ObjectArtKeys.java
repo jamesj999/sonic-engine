@@ -44,9 +44,4 @@ public final class ObjectArtKeys {
     // Zone data keys
     public static final String ANIMAL_TYPE_A = "animal_type_a";
     public static final String ANIMAL_TYPE_B = "animal_type_b";
-
-    // Common badniks (may have game-specific implementations)
-    public static final String MASHER = "masher";
-    public static final String BUZZER = "buzzer";
-    public static final String COCONUTS = "coconuts";
 }
