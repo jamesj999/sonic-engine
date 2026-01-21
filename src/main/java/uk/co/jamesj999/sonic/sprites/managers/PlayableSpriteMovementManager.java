@@ -321,12 +321,106 @@ public class PlayableSpriteMovementManager extends
 				// penetrated it.
 				// If distance < 0, we have hit the ceiling.
 				if (lowestResult.distance() < 0) {
-					// We hit the ceiling - correct position and zero Y speed
+					// We hit the ceiling - correct position
 					moveForSensorResult(sprite, lowestResult);
-					sprite.setYSpeed((short) 0);
+
+					// ROM: Sonic_DoLevelCollision (s2.asm:37540-37733)
+					// The original uses CalcAngle to determine movement direction, then
+					// only the 0x80 quadrant (mostly upward) goes to HitCeilingAndWalls
+					// which allows ceiling landing. Other quadrants just zero Y velocity.
+					//
+					// Movement quadrant calculation:
+					// moveQuadrant = (CalcAngle(xSpeed, ySpeed) - 0x20) & 0xC0
+					// 0x80 quadrant covers movement angles 0xA0-0xDF (mostly upward)
+					int moveQuadrant = calculateMovementQuadrant(sprite.getXSpeed(), sprite.getYSpeed());
+
+					if (moveQuadrant == 0x80) {
+						// ROM: Sonic_HitCeilingAndWalls (s2.asm:37657-37691)
+						// Check if the ceiling is sloped enough to land on.
+						// The check (angle + 0x20) & 0x40 determines if surface is suitable for landing:
+						// - Angles 0x20-0x5F (32-95): sloped right wall to moderate ceiling-right -> LAND
+						// - Angles 0xA0-0xDF (160-223): sloped left wall to moderate ceiling-left -> LAND
+						// - Angles 0x60-0x9F (96-159): flat ceiling range -> just bonk (zero Y vel)
+						// - Other angles: floor-like, handled elsewhere
+						int ceilingAngle = lowestResult.angle() & 0xFF;
+						boolean canLandOnCeiling = ((ceilingAngle + 0x20) & 0x40) != 0;
+
+						if (canLandOnCeiling) {
+							// Land on the sloped ceiling!
+							// ROM: loc_1B02C in Sonic_HitCeilingAndWalls
+							sprite.setAngle(lowestResult.angle());
+
+							// Reset sprite to grounded state (Sonic_ResetOnFloor)
+							sprite.setAir(false);
+							sprite.setRolling(false);
+							sprite.setPinballMode(false);
+
+							// ROM: move.w y_vel(a0),inertia(a0)
+							// gSpeed is set from Y velocity
+							short gSpeed = sprite.getYSpeed();
+
+							// ROM: tst.b d3 / bpl.s return / neg.w inertia(a0)
+							// If angle >= 128 (0x80), negate the ground speed
+							// This ensures correct running direction on the ceiling
+							if ((lowestResult.angle() & 0x80) != 0) {
+								gSpeed = (short) -gSpeed;
+							}
+
+							sprite.setGSpeed(gSpeed);
+							sprite.setYSpeed((short) 0);
+
+							// Update ground mode based on new angle
+							updateGroundMode(sprite);
+						} else {
+							// Flat ceiling - just stop upward movement
+							// ROM: move.w #0,y_vel(a0)
+							sprite.setYSpeed((short) 0);
+						}
+					} else {
+						// Not moving mostly upward - just stop Y velocity
+						// ROM: Sonic_HitCeiling/Sonic_HitCeiling2 paths
+						sprite.setYSpeed((short) 0);
+					}
 				}
 			}
 		}
+	}
+
+	/**
+	 * Calculates the movement quadrant from velocity, matching ROM's CalcAngle logic.
+	 * ROM: Sonic_DoLevelCollision (s2.asm:37547-37557)
+	 *
+	 * The quadrant determines which collision path to take:
+	 * - 0x00: Moving mostly right/down-right -> floor path
+	 * - 0x40: Moving mostly down/down-left -> HitLeftWall path
+	 * - 0x80: Moving mostly up/up-left -> HitCeilingAndWalls path (can land on ceiling!)
+	 * - 0xC0: Moving mostly up-right/right -> HitRightWall path
+	 *
+	 * @param xSpeed X velocity (subpixels)
+	 * @param ySpeed Y velocity (subpixels)
+	 * @return Movement quadrant (0x00, 0x40, 0x80, or 0xC0)
+	 */
+	private int calculateMovementQuadrant(short xSpeed, short ySpeed) {
+		// Handle zero velocity case
+		if (xSpeed == 0 && ySpeed == 0) {
+			return 0x00;
+		}
+
+		// CalcAngle: atan2(y, x) converted to Sonic angle convention
+		// MD convention: 0=right, 0x40=down, 0x80=left, 0xC0=up
+		// Note: Y is inverted in screen coords (positive = down)
+		double radians = Math.atan2(ySpeed, xSpeed);
+
+		// Convert radians to 0-255 angle range
+		// atan2 returns -PI to PI, we need 0 to 255
+		int moveAngle = (int) Math.round((radians / (2.0 * Math.PI)) * 256.0);
+		if (moveAngle < 0) {
+			moveAngle += 256;
+		}
+		moveAngle &= 0xFF;
+
+		// ROM: subi.b #$20,d0 / andi.b #$C0,d0
+		return ((moveAngle - 0x20) & 0xC0) & 0xFF;
 	}
 
 	/**
