@@ -283,6 +283,40 @@ public class Sonic2Constants {
     public static final int ART_NEM_OOZ_COLLAPSING_PLATFORM_ADDR = 0x809D0;  // ArtNem_OOZPlatform
     public static final int ART_NEM_MCZ_COLLAPSING_PLATFORM_ADDR = 0xF1ABA;  // ArtNem_MCZCollapsePlat
 
+    // HTZ/EHZ Level Resource Composition (from SonLVL.ini)
+    // HTZ uses EHZ_HTZ base data with HTZ-specific overlays.
+    // Reference: docs/s2disasm/SonLVL.ini [Hill Top Zone Act 1/2]
+    //
+    // TERMINOLOGY NOTE: SonLVL uses inverted terminology from this engine!
+    //   - SonLVL "blocks" (16x16) = Engine "chunks"
+    //   - SonLVL "chunks" (128x128) = Engine "blocks"
+    // The constants below use ENGINE terminology (chunks=16x16, blocks=128x128).
+
+    // Foreground 8x8 patterns (Kosinski-compressed):
+    // SonLVL: tiles=../art/kosinski/EHZ_HTZ.bin|../art/kosinski/HTZ_Supp.bin:0x3F80
+    public static final int HTZ_PATTERNS_BASE_ADDR = 0x095C24;      // Base patterns (shared EHZ/HTZ)
+    public static final int HTZ_PATTERNS_OVERLAY_ADDR = 0x098AB4;   // HTZ supplemental patterns
+    public static final int HTZ_PATTERNS_OVERLAY_OFFSET = 0x3F80;   // Byte offset for HTZ pattern overlay
+
+    // 16x16 chunk mappings (engine terminology - SonLVL calls these "blocks"):
+    // SonLVL: blocks=../mappings/16x16/EHZ.bin|../mappings/16x16/HTZ.bin:0x980
+    public static final int HTZ_CHUNKS_BASE_ADDR = 0x094E74;        // Base 16x16 chunks (EHZ)
+    public static final int HTZ_CHUNKS_OVERLAY_ADDR = 0x0985A4;     // HTZ supplemental 16x16 chunks
+    public static final int HTZ_CHUNKS_OVERLAY_OFFSET = 0x0980;     // Byte offset for HTZ chunk overlay
+
+    // 128x128 block mappings (engine terminology - SonLVL calls these "chunks"):
+    // SonLVL: chunks=../mappings/128x128/EHZ_HTZ.bin
+    public static final int HTZ_BLOCKS_ADDR = 0x099D34;             // Shared 128x128 blocks (no overlay)
+
+    // Collision index arrays (shared between EHZ and HTZ):
+    // colind1=../collision/EHZ and HTZ primary 16x16 collision index.bin
+    // colind2=../collision/EHZ and HTZ secondary 16x16 collision index.bin
+    public static final int HTZ_COLLISION_PRIMARY_ADDR = 0x044E50;    // Primary collision index
+    public static final int HTZ_COLLISION_SECONDARY_ADDR = 0x044F40;  // Secondary collision index
+
+    // HTZ ROM zone ID (from s2.constants.asm)
+    public static final int ZONE_HTZ = 0x07;  // hill_top_zone
+
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)
             { 0x0060, 0x02AF }, // 1 Emerald Hill 2 (EHZ_2.bin)

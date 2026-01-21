@@ -16,6 +16,7 @@ import uk.co.jamesj999.sonic.level.animation.AnimatedPaletteManager;
 import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectArtData;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.resources.LevelResourcePlan;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
 
@@ -156,12 +157,7 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         int levelPalettesAddr = levelPaletteInfo[0];
         int levelPalettesSize = levelPaletteInfo[1];
 
-        int patternsAddr = getPatternsAddr(zoneAct);
-        int chunksAddr = getChunksAddr(zoneAct);
-        int blocksAddr = getBlocksAddr(zoneAct);
         int mapAddr = getTilesAddr(zoneAct);
-        int collisionAddr = getCollisionMapAddr(zoneAct);
-        int altCollisionAddr = getAltCollisionMapAddr(zoneAct);
         int solidTileHeightsAddr = getSolidTileHeightsAddr();
         int solidTileWidthsAddr = getSolidTileWidthsAddr();
         int solidTileAngleAddr = getSolidTileAngleAddr();
@@ -170,18 +166,22 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         List<RingSpawn> ringSpawns = ringPlacement.load(zoneAct);
         var ringSpriteSheet = ringArt.load();
 
-        System.out.printf("Character palette addr: 0x%08X%n", characterPaletteAddr);
-        System.out.printf("Level palettes addr: 0x%08X%n", levelPalettesAddr);
-        System.out.printf("Level palettes size: %d bytes%n", levelPalettesSize);
-        System.out.printf("Patterns addr: 0x%08X%n", patternsAddr);
-        System.out.printf("Chunks addr: 0x%08X%n", chunksAddr);
-        System.out.printf("Blocks addr: 0x%08X%n", blocksAddr);
-        System.out.printf("Map/Tiles addr: 0x%08X%n", mapAddr);
-        System.out.printf("Collision addr: 0x%08X%n", collisionAddr);
-        System.out.printf("Alt Collision addr: 0x%08X%n", altCollisionAddr);
-        System.out.printf("Solid Tile addr: 0x%08X%n", solidTileHeightsAddr);
-        System.out.printf("Solid Tile Angle addr: 0x%08X%n", solidTileAngleAddr);
-        System.out.printf("Level boundaries addr: 0x%08X%n", levelBoundariesAddr);
+        // Check if this zone requires custom resource plan loading (e.g., HTZ overlays)
+        LevelResourcePlan resourcePlan = Sonic2LevelResourcePlans.getPlanForZone(zoneAct.zone());
+
+        if (resourcePlan != null) {
+            // Zone uses custom resource plan with overlay composition
+            return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize,
+                    resourcePlan, mapAddr, solidTileHeightsAddr, solidTileWidthsAddr,
+                    solidTileAngleAddr, objectSpawns, ringSpawns, ringSpriteSheet, levelBoundariesAddr);
+        }
+
+        // Standard loading via ROM directory tables
+        int patternsAddr = getPatternsAddr(zoneAct);
+        int chunksAddr = getChunksAddr(zoneAct);
+        int blocksAddr = getBlocksAddr(zoneAct);
+        int collisionAddr = getCollisionMapAddr(zoneAct);
+        int altCollisionAddr = getAltCollisionMapAddr(zoneAct);
 
         return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize,
                 patternsAddr,

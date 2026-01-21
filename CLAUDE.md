@@ -165,6 +165,65 @@ The codebase uses singletons extensively via `getInstance()`:
 - `AUDIO_ENABLED` - Sound on/off
 - `ROM_FILENAME` - ROM path
 
+## Level Resource Overlay System
+
+Some Sonic 2 zones share level resources with overlays applied to customize the graphics. The most notable example is **Hill Top Zone (HTZ)**, which shares base data with **Emerald Hill Zone (EHZ)** and applies HTZ-specific overlays.
+
+### HTZ/EHZ Resource Composition
+
+From the s2disasm `SonLVL.ini`:
+```ini
+[Hill Top Zone Act 1/2]
+tiles=../art/kosinski/EHZ_HTZ.bin|../art/kosinski/HTZ_Supp.bin:0x3F80
+blocks=../mappings/16x16/EHZ.bin|../mappings/16x16/HTZ.bin:0x980
+chunks=../mappings/128x128/EHZ_HTZ.bin
+colind1=../collision/EHZ and HTZ primary 16x16 collision index.bin
+colind2=../collision/EHZ and HTZ secondary 16x16 collision index.bin
+```
+
+**What the overlays do:**
+- **Patterns (8×8 tiles):** Base EHZ_HTZ data is loaded, then HTZ_Supp replaces tiles starting at byte offset `0x3F80` (tile index 0x01FC). This replaces EHZ palm tree foreground tiles with HTZ fir trees.
+- **Blocks (16×16 mappings):** Base EHZ blocks are loaded, then HTZ blocks overwrite starting at byte offset `0x0980` (block index 0x0130).
+- **Chunks and Collision:** Fully shared between EHZ and HTZ (no overlay needed).
+
+### ROM Addresses (Rev01)
+
+| Resource | ROM Address | Notes |
+|----------|-------------|-------|
+| Base patterns (EHZ_HTZ) | `0x095C24` | Kosinski compressed |
+| HTZ supplement patterns | `0x098AB4` | Overlay at +0x3F80 bytes |
+| Base blocks (EHZ) | `0x094E74` | Kosinski compressed |
+| HTZ supplement blocks | `0x0985A4` | Overlay at +0x0980 bytes |
+| Shared chunks (EHZ_HTZ) | `0x099D34` | Kosinski compressed |
+| Primary collision | `0x044E50` | Shared EHZ/HTZ |
+| Secondary collision | `0x044F40` | Shared EHZ/HTZ |
+
+### Implementation
+
+The overlay system is implemented in the `uk.co.jamesj999.sonic.level.resources` package:
+
+| Class | Purpose |
+|-------|---------|
+| `LoadOp` | Describes a single load operation (ROM address, compression, dest offset) |
+| `LevelResourcePlan` | Holds lists of LoadOps for patterns, blocks, chunks, collision |
+| `ResourceLoader` | Performs the actual loading with overlay composition |
+| `Sonic2LevelResourcePlans` | Factory for zone-specific resource plans |
+
+**Key points:**
+- Each `LoadOp` specifies a `destOffsetBytes` (0 for base, non-zero for overlays)
+- `ResourceLoader.loadWithOverlays()` allocates a fresh buffer, loads base, then applies overlays
+- Overlays never mutate cached data (copy-on-write pattern)
+- `Sonic2.loadLevel()` checks for custom plans via `Sonic2LevelResourcePlans.getPlanForZone()`
+
+### Adding Similar Overlay Support for Other Zones
+
+If another zone requires overlay-based loading:
+
+1. Add ROM offset constants to `Sonic2Constants.java`
+2. Create a plan factory method in `Sonic2LevelResourcePlans.java`
+3. Update `getPlanForZone()` to return the plan for that zone ID
+4. Write tests in `LevelResourceOverlayTest.java`
+
 ## Multi-Game Support Architecture
 
 The engine supports multiple Sonic games (Sonic 1, Sonic 2, Sonic 3&K) through a provider-based abstraction layer. Game-specific behavior is isolated behind interfaces, allowing the engine core to remain game-agnostic.
