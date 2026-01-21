@@ -21,6 +21,7 @@ public class ObjectManager {
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final Map<ObjectSpawn, ObjectInstance> activeObjects = new IdentityHashMap<>();
     private final List<ObjectInstance> dynamicObjects = new ArrayList<>();
+    private final List<GLCommand> renderCommands = new ArrayList<>();
     private int frameCounter;
 
     public ObjectManager(ObjectPlacementManager placementManager, ObjectRegistry registry) {
@@ -81,7 +82,7 @@ public class ObjectManager {
         if (activeObjects.isEmpty() && dynamicObjects.isEmpty()) {
             return;
         }
-        List<GLCommand> commands = new ArrayList<>();
+        renderCommands.clear();
         int targetBucket = RenderPriority.clamp(bucket);
         for (ObjectInstance instance : activeObjects.values()) {
             if (instance.isHighPriority() != highPriority) {
@@ -90,7 +91,7 @@ public class ObjectManager {
             if (RenderPriority.clamp(instance.getPriorityBucket()) != targetBucket) {
                 continue;
             }
-            instance.appendRenderCommands(commands);
+            instance.appendRenderCommands(renderCommands);
         }
         for (ObjectInstance instance : dynamicObjects) {
             if (instance.isHighPriority() != highPriority) {
@@ -99,14 +100,14 @@ public class ObjectManager {
             if (RenderPriority.clamp(instance.getPriorityBucket()) != targetBucket) {
                 continue;
             }
-            instance.appendRenderCommands(commands);
+            instance.appendRenderCommands(renderCommands);
         }
 
-        if (commands.isEmpty()) {
+        if (renderCommands.isEmpty()) {
             return;
         }
         graphicsManager.enqueueDebugLineState();
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, renderCommands));
         graphicsManager.enqueueDefaultShaderState();
     }
 
