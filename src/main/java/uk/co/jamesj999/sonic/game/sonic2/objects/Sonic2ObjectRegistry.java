@@ -14,6 +14,7 @@ import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyOnWallBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.GrabberBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.ChopChopBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.WhispBadnikInstance;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -211,6 +212,8 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         // ARZ Badniks
         registerFactory(Sonic2ObjectIds.CHOP_CHOP,
                 (spawn, registry) -> new ChopChopBadnikInstance(spawn, LevelManager.getInstance()));
+        registerFactory(Sonic2ObjectIds.WHISP,
+                (spawn, registry) -> new WhispBadnikInstance(spawn, LevelManager.getInstance()));
 
         // Level completion objects
         registerFactory(Sonic2ObjectIds.SIGNPOST,

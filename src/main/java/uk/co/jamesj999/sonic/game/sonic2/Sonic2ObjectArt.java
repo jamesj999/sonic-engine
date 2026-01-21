@@ -653,6 +653,21 @@ public class Sonic2ObjectArt {
     }
 
     /**
+     * Load Whisp (Obj8C) sprite sheet - blowfly badnik from ARZ.
+     * ROM: ArtNem_Whisp at 0x895E4
+     * Uses palette line 1.
+     * 2 animation frames, each with 2 sprite pieces (3x1 tiles stacked = 24x16 pixels).
+     */
+    public ObjectSpriteSheet loadWhispSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_WHISP_ADDR, "Whisp");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createWhispMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
      * Load ArrowShooter (Obj22) sprite sheet - arrow shooter from ARZ.
      * ROM: ArtNem_ArrowAndShooter at 0x90020, Obj22_MapUnc_25804
      * Uses palette line 0 for arrow (frame 0) and palette line 1 for shooter.
@@ -1513,6 +1528,34 @@ public class Sonic2ObjectArt {
         // Single 4x3 tile piece at (-16, -12) using tiles 12-23
         List<SpriteMappingPiece> frame1 = new ArrayList<>();
         frame1.add(new SpriteMappingPiece(-16, -12, 4, 3, 12, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Whisp (Obj8C) - blowfly badnik from ARZ.
+     * 2 frames of animation, each with 2 pieces (3x1 tiles stacked = 24x16 pixels total).
+     * Frame 0: tiles 0-2 (top), tiles 3-5 (bottom)
+     * Frame 1: tiles 6-8 (top), tiles 3-5 (bottom) - bottom piece shared
+     */
+    private List<SpriteMappingFrame> createWhispMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Wing position A
+        // Top piece: 3x1 tiles at (-12, -8), starting at tile 0
+        // Bottom piece: 3x1 tiles at (-12, 0), starting at tile 3
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-12, -8, 3, 1, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, 0, 3, 1, 3, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Wing position B
+        // Top piece: 3x1 tiles at (-12, -8), starting at tile 6
+        // Bottom piece: 3x1 tiles at (-12, 0), starting at tile 3 (shared with frame 0)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-12, -8, 3, 1, 6, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-12, 0, 3, 1, 3, false, false, 0));
         frames.add(new SpriteMappingFrame(frame1));
 
         return frames;

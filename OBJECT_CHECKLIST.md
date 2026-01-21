@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-21 16:02:34
+Generated: 2026-01-21 17:14:38
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 41 (34.2%)
-- **Unimplemented:** 79 (65.8%)
+- **Implemented:** 44 (36.7%)
+- **Unimplemented:** 76 (63.3%)
 
 ## Implemented Objects
 
@@ -24,6 +24,7 @@ Generated: 2026-01-21 16:02:34
 | 0x1C | Scenery | 135 | EHZ1, EHZ2, HTZ1, HTZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
 | 0x1D | BlueBalls | 7 | CPZ1 |
 | 0x1E | CPZSpinTube | 16 | CPZ1, CPZ2 |
+| 0x1F | CollapsPform | 84 | ARZ1, ARZ2, MCZ1, MCZ2, OOZ1, OOZ2 |
 | 0x22 | ArrowShooter | 24 | ARZ1, ARZ2 |
 | 0x23 | FallingPillar | 16 | ARZ1, ARZ2 |
 | 0x24 | Bubbles | 20 | ARZ1, ARZ2 |
@@ -47,6 +48,8 @@ Generated: 2026-01-21 16:02:34
 | 0x7B | PipeExitSpring | 9 | CPZ1, CPZ2 |
 | 0x82 | SwingingPform | 15 | ARZ1, ARZ2 |
 | 0x86 | Flipper | 63 | CNZ1, CNZ2 |
+| 0x8C | Whisp | 25 | ARZ1, ARZ2 |
+| 0x91 | ChopChop | 38 | ARZ1, ARZ2 |
 | 0x9D | Coconuts | 17 | EHZ1, EHZ2 |
 | 0xA5 | Spiny | 11 | CPZ1, CPZ2 |
 | 0xA6 | SpinyOnWall | 2 | CPZ1, CPZ2 |
@@ -59,14 +62,12 @@ Generated: 2026-01-21 16:02:34
 | ID | Category | Name | Total Uses | Zones |
 |----|----------|------|------------|-------|
 | 0xA4 | Badnik | Asteron | 90 | MTZ1, MTZ2, MTZ3 |
-| 0x1F | Object | CollapsPform | 84 | ARZ1, ARZ2, MCZ1, MCZ2, OOZ1, OOZ2 |
 | 0x65 | Object | MTZLongPlatform | 81 | MTZ1, MTZ2, MTZ3 |
 | 0x3F | Object | Fan | 60 | OOZ1, OOZ2 |
 | 0x66 | Object | MTZSpringWall | 60 | MTZ1, MTZ2, MTZ3 |
 | 0x31 | Object | LavaMarker | 50 | HTZ1, HTZ2, MTZ2, MTZ3 |
 | 0x84 | Object | ForcedSpin | 42 | CNZ1, CNZ2, HTZ1, HTZ2 |
 | 0x2F | Object | SmashableGround | 40 | HTZ1, HTZ2 |
-| 0x91 | Badnik | ChopChop | 38 | ARZ1, ARZ2 |
 | 0x48 | Object | LauncherBall | 32 | OOZ1, OOZ2 |
 | 0xD6 | Object | PointPokey | 29 | CNZ1, CNZ2 |
 | 0x4A | Badnik | Octus | 28 | OOZ1, OOZ2 |
@@ -74,7 +75,6 @@ Generated: 2026-01-21 16:02:34
 | 0x6E | Object | LargeRotPform | 28 | MTZ3 |
 | 0xA3 | Badnik | Flasher | 26 | MCZ1, MCZ2 |
 | 0x6D | Object | FloorSpike | 25 | MTZ1, MTZ2, MTZ3 |
-| 0x8C | Badnik | Whisp | 25 | ARZ1, ARZ2 |
 | 0x80 | Object | MovingVine | 24 | MCZ1, MCZ2, WFZ1 |
 | 0xA1 | Badnik | Slicer | 24 | MTZ1, MTZ2, MTZ3 |
 | 0x92 | Badnik | Spiker | 23 | HTZ1, HTZ2 |
@@ -257,19 +257,19 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 #### Act 1
 
-Total: 182 objects | Implemented: 14 | Unimplemented: 6
+Total: 182 objects | Implemented: 17 | Unimplemented: 3
 
 **Badniks:**
-- [ ] 0x8C Whisp (x6) [0x00]
+- [x] 0x8C Whisp (x6) [0x00]
 - [ ] 0x8D GrounderInWall (x4) [0x02]
 - [ ] 0x8E GrounderInWall2 (x11) [0x02]
-- [ ] 0x91 ChopChop (x17) [0x08]
+- [x] 0x91 ChopChop (x17) [0x08]
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x30) [18 subtypes]
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x18 ARZPlatform (x11) [5 subtypes]
-- [ ] 0x1F CollapsPform (x5) [0x00]
+- [x] 0x1F CollapsPform (x5) [0x00]
 - [x] 0x22 ArrowShooter (x8) [0x00]
 - [x] 0x23 FallingPillar (x5) [0x00]
 - [x] 0x24 Bubbles (x10) [0x80]
@@ -285,13 +285,13 @@ Total: 182 objects | Implemented: 14 | Unimplemented: 6
 
 #### Act 2
 
-Total: 222 objects | Implemented: 13 | Unimplemented: 7
+Total: 222 objects | Implemented: 16 | Unimplemented: 4
 
 **Badniks:**
-- [ ] 0x8C Whisp (x19) [0x00]
+- [x] 0x8C Whisp (x19) [0x00]
 - [ ] 0x8D GrounderInWall (x4) [0x02]
 - [ ] 0x8E GrounderInWall2 (x9) [0x02]
-- [ ] 0x91 ChopChop (x21) [0x08]
+- [x] 0x91 ChopChop (x21) [0x08]
 
 **Bosses:**
 - [ ] 0x89 ARZBoss *(dynamic)* - Hammer/arrow boss
@@ -300,7 +300,7 @@ Total: 222 objects | Implemented: 13 | Unimplemented: 7
 - [x] 0x03 LayerSwitcher (x28) [17 subtypes]
 - [x] 0x15 SwingingPlatform (x4) [4 subtypes]
 - [x] 0x18 ARZPlatform (x10) [4 subtypes]
-- [ ] 0x1F CollapsPform (x10) [0x00]
+- [x] 0x1F CollapsPform (x10) [0x00]
 - [x] 0x22 ArrowShooter (x16) [0x00]
 - [x] 0x23 FallingPillar (x11) [0x00]
 - [x] 0x24 Bubbles (x10) [0x81]
@@ -438,7 +438,7 @@ Total: 259 objects | Implemented: 10 | Unimplemented: 10
 
 #### Act 1
 
-Total: 130 objects | Implemented: 8 | Unimplemented: 11
+Total: 130 objects | Implemented: 9 | Unimplemented: 10
 
 **Badniks:**
 - [ ] 0x9E Crawlton (x6) [0x22]
@@ -447,7 +447,7 @@ Total: 130 objects | Implemented: 8 | Unimplemented: 11
 **Objects:**
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x15 SwingingPlatform (x1) [0x48]
-- [ ] 0x1F CollapsPform (x19) [0x00]
+- [x] 0x1F CollapsPform (x19) [0x00]
 - [x] 0x26 Monitor (x12) [0x04, 0x06, 0x07]
 - [ ] 0x2A Stomper (x8) [0x00]
 - [x] 0x36 Spikes (x13) [5 subtypes]
@@ -465,7 +465,7 @@ Total: 130 objects | Implemented: 8 | Unimplemented: 11
 
 #### Act 2
 
-Total: 148 objects | Implemented: 8 | Unimplemented: 12
+Total: 148 objects | Implemented: 9 | Unimplemented: 11
 
 **Badniks:**
 - [ ] 0x9E Crawlton (x6) [0x22]
@@ -477,7 +477,7 @@ Total: 148 objects | Implemented: 8 | Unimplemented: 12
 **Objects:**
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x15 SwingingPlatform (x2) [0x18, 0x38]
-- [ ] 0x1F CollapsPform (x16) [0x00]
+- [x] 0x1F CollapsPform (x16) [0x00]
 - [x] 0x26 Monitor (x13) [5 subtypes]
 - [ ] 0x2A Stomper (x5) [0x00]
 - [x] 0x36 Spikes (x21) [6 subtypes]
@@ -498,7 +498,7 @@ Total: 148 objects | Implemented: 8 | Unimplemented: 12
 
 #### Act 1
 
-Total: 189 objects | Implemented: 7 | Unimplemented: 7
+Total: 189 objects | Implemented: 8 | Unimplemented: 6
 
 **Badniks:**
 - [ ] 0x4A Octus (x14) [0x00]
@@ -508,7 +508,7 @@ Total: 189 objects | Implemented: 7 | Unimplemented: 7
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x19 CPZPlatform (x13) [0x23]
 - [x] 0x1C Scenery (x21) [7 subtypes]
-- [ ] 0x1F CollapsPform (x17) [0x00]
+- [x] 0x1F CollapsPform (x17) [0x00]
 - [x] 0x26 Monitor (x11) [4 subtypes]
 - [ ] 0x33 OOZPoppingPform (x11) [0x00]
 - [x] 0x36 Spikes (x40) [0x00, 0x10, 0x30]
@@ -520,7 +520,7 @@ Total: 189 objects | Implemented: 7 | Unimplemented: 7
 
 #### Act 2
 
-Total: 189 objects | Implemented: 7 | Unimplemented: 7
+Total: 189 objects | Implemented: 8 | Unimplemented: 6
 
 **Badniks:**
 - [ ] 0x4A Octus (x14) [0x00]
@@ -533,7 +533,7 @@ Total: 189 objects | Implemented: 7 | Unimplemented: 7
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x19 CPZPlatform (x13) [0x23]
 - [x] 0x1C Scenery (x21) [7 subtypes]
-- [ ] 0x1F CollapsPform (x17) [0x00]
+- [x] 0x1F CollapsPform (x17) [0x00]
 - [x] 0x26 Monitor (x11) [4 subtypes]
 - [ ] 0x33 OOZPoppingPform (x11) [0x00]
 - [x] 0x36 Spikes (x40) [0x00, 0x10, 0x30]

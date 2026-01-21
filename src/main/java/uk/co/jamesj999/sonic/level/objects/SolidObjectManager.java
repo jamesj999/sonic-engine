@@ -502,12 +502,13 @@ public class SolidObjectManager {
             return null;
         }
 
-        int sampleX = relX & 0xFFFF;
+        int sampleX = relX;
         if (xFlip) {
-            sampleX = (~sampleX) & 0xFFFF;
-            sampleX = (sampleX + width2) & 0xFFFF;
+            // Mirror the X coordinate for flipped objects
+            sampleX = width2 - sampleX;
         }
-        sampleX = (sampleX >> 1) & 0xFFFF;
+        // Divide by 2 to get slope data index (slope data is half-resolution)
+        sampleX = sampleX >> 1;
         if (sampleX < 0 || sampleX >= slopeData.length) {
             return null;
         }
@@ -600,8 +601,11 @@ public class SolidObjectManager {
                 return null;
             }
 
-            int landingThreshold = 0x10;
-            // Only reject if strictly ABOVE threshold (and not sticky snapping)
+            // Landing threshold: reject if player is too deep inside the object.
+            // When standing at surface, distY = 2 * halfHeight + 4.
+            // For halfHeight = 8 (common for objects), distY at surface = 20.
+            // Threshold must exceed this to allow surface landing.
+            int landingThreshold = 0x18;  // 24 - allows landing at surface + small margin
             if (distY >= landingThreshold) {
                 return null;
             }
@@ -643,6 +647,15 @@ public class SolidObjectManager {
         }
 
         // This is CEILING collision (hit from below)
+        // ROM: SolidObject_InsideBottom checks y_vel first - if moving vertically, do push
+        // If ySpeed == 0, goes to SolidObject_Squash which checks in_air flag:
+        //   - If in air, do vertical push
+        //   - If on ground, redirect to SolidObject_LeftRight (horizontal push)
+        // Only skip vertical push when walking on ground (ySpeed == 0 AND not in air)
+        if (player.getYSpeed() == 0 && !player.getAir()) {
+            return null;
+        }
+
         if (apply) {
             int newCenterY = playerCenterY - distY;
             int newY = newCenterY - (player.getHeight() / 2);

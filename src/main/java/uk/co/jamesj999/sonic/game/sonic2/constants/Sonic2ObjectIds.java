@@ -26,6 +26,7 @@ public final class Sonic2ObjectIds {
 
     // ARZ Badniks
     public static final int CHOP_CHOP = 0x91;
+    public static final int WHISP = 0x8C;
 
     // ARZ Objects
     public static final int ARROW_SHOOTER = 0x22;
