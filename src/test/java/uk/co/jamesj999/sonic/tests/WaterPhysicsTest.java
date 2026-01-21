@@ -149,6 +149,47 @@ public class WaterPhysicsTest {
         assertEquals("Velocity should be unchanged", 500, sprite.getXSpeed());
     }
 
+    @Test
+    public void testHurtKnockback_NormalVelocities() {
+        // Player is not underwater
+        sprite.setInWater(false);
+        sprite.setTestY((short) 300);
+
+        // Apply hurt from the left (sourceX < player center)
+        sprite.applyHurt(0);
+
+        assertTrue("Player should be hurt", sprite.isHurt());
+        // Normal knockback: xSpeed = 0x200 (512), ySpeed = -0x400 (-1024)
+        assertEquals("Normal hurt xSpeed should be 0x200", 0x200, sprite.getXSpeed());
+        assertEquals("Normal hurt ySpeed should be -0x400", -0x400, sprite.getYSpeed());
+    }
+
+    @Test
+    public void testHurtKnockback_UnderwaterHalvedVelocities() {
+        // Player is underwater (ROM s2.asm lines 84936-84941)
+        sprite.setInWater(true);
+        sprite.setTestY((short) 500);
+
+        // Apply hurt from the left (sourceX < player center)
+        sprite.applyHurt(0);
+
+        assertTrue("Player should be hurt", sprite.isHurt());
+        // Underwater knockback is halved: xSpeed = 0x100 (256), ySpeed = -0x200 (-512)
+        assertEquals("Underwater hurt xSpeed should be 0x100 (halved)", 0x100, sprite.getXSpeed());
+        assertEquals("Underwater hurt ySpeed should be -0x200 (halved)", -0x200, sprite.getYSpeed());
+    }
+
+    @Test
+    public void testHurtGravity_UnderwaterValue() {
+        // According to ROM s2.asm: hurt gravity = 0x30, underwater subtracts 0x20
+        // So underwater hurt gravity = 0x30 - 0x20 = 0x10 (same as normal underwater)
+        sprite.setInWater(true);
+        sprite.setHurt(true);
+
+        float gravity = sprite.getGravity();
+        assertEquals("Underwater hurt gravity should be 0x10", 0x10, gravity, 0.001f);
+    }
+
     /**
      * Minimal test subclass of AbstractPlayableSprite for physics testing.
      */

@@ -580,9 +580,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public short getJump() {
-                // Water: reduced jump force (0x300 vs normal ~0x680)
+                // Water: reduced jump force (ROM s2.asm line 37019: 0x380 vs normal 0x680)
                 if (inWater) {
-                        return 0x300;
+                        return 0x380;
                 }
                 return jump;
         }
@@ -761,8 +761,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 setAir(true);
                 setGSpeed((short) 0);
                 int dir = (getCentreX() >= sourceX) ? 1 : -1;
-                setXSpeed((short) (0x200 * dir));
-                setYSpeed((short) -0x400);
+                // ROM s2.asm lines 84936-84941: knockback is halved underwater
+                if (inWater) {
+                        setXSpeed((short) (0x100 * dir));
+                        setYSpeed((short) -0x200);
+                } else {
+                        setXSpeed((short) (0x200 * dir));
+                        setYSpeed((short) -0x400);
+                }
                 AudioManager.getInstance().playSfx(resolveDamageSound(cause));
                 return true;
         }
@@ -1815,11 +1821,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         /**
          * Returns effective jump force, accounting for underwater modifier.
-         * Underwater: reduced (0x300 in original vs normal 0x680)
+         * ROM s2.asm line 37019: Underwater = 0x380 (896), Normal = 0x680 (1664)
          */
         public short getEffectiveJump() {
                 if (inWater) {
-                        return 0x300; // Reduced underwater jump
+                        return 0x380; // Reduced underwater jump (ROM: 0x380)
                 }
                 return jump;
         }
