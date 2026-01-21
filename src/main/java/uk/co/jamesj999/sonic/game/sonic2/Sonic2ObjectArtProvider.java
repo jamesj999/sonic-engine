@@ -122,6 +122,8 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(Sonic2ObjectArtKeys.GRABBER_STRING, artLoader.loadGrabberStringSheet());
         registerSheet(Sonic2ObjectArtKeys.CHOP_CHOP, artLoader.loadChopChopSheet());
         registerSheet(Sonic2ObjectArtKeys.WHISP, artLoader.loadWhispSheet());
+        registerSheet(Sonic2ObjectArtKeys.GROUNDER, artLoader.loadGrounderSheet());
+        registerSheet(Sonic2ObjectArtKeys.GROUNDER_ROCK, artLoader.loadGrounderRockSheet());
         registerSheet(Sonic2ObjectArtKeys.ARROW_SHOOTER, artLoader.loadArrowShooterSheet());
         registerSheet(ObjectArtKeys.ANIMAL, artData.animalSheet());
         registerSheet(ObjectArtKeys.POINTS, artData.pointsSheet());

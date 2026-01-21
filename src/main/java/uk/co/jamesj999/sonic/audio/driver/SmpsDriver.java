@@ -19,6 +19,8 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     private final Map<Object, Integer> psgLatches = new HashMap<>();
     private SmpsSequencer.Region region = SmpsSequencer.Region.NTSC;
 
+    private final List<SmpsSequencer> pendingRemovals = new ArrayList<>();
+
     public void setRegion(SmpsSequencer.Region region) {
         this.region = region;
         for (SmpsSequencer seq : sequencers) {
@@ -48,25 +50,29 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
 
     @Override
     public int read(short[] buffer) {
-        // Render interleaved stereo frames (2 samples per frame)
         int frames = buffer.length / 2;
         short[] frameBuf = new short[2];
 
         for (int i = 0; i < frames; i++) {
-            // Make a defensive copy to handle concurrent modification
-            // (e.g., E4 handler calling restoreMusic which calls stopAll)
-            List<SmpsSequencer> seqCopy = new ArrayList<>(sequencers);
-            for (SmpsSequencer seq : seqCopy) {
+            int size = sequencers.size();
+            for (int j = 0; j < size; j++) {
+                SmpsSequencer seq = sequencers.get(j);
                 seq.advance(1.0);
                 if (seq.isComplete()) {
-                    sequencers.remove(seq);
-                    releaseLocks(seq);
-                    if (isSfx(seq))
-                        sfxSequencers.remove(seq);
+                    pendingRemovals.add(seq);
                 }
             }
 
-            // Render Synth (Stereo Frame)
+            if (!pendingRemovals.isEmpty()) {
+                for (int j = 0; j < pendingRemovals.size(); j++) {
+                    SmpsSequencer seq = pendingRemovals.get(j);
+                    sequencers.remove(seq);
+                    releaseLocks(seq);
+                    sfxSequencers.remove(seq);
+                }
+                pendingRemovals.clear();
+            }
+
             super.render(frameBuf);
             buffer[i * 2] = frameBuf[0];
             buffer[i * 2 + 1] = frameBuf[1];

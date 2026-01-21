@@ -66,6 +66,8 @@ public final class Sonic2ObjectArtKeys {
     // ARZ Badniks
     public static final String CHOP_CHOP = "chopchop";
     public static final String WHISP = "whisp";
+    public static final String GROUNDER = "grounder";
+    public static final String GROUNDER_ROCK = "grounder_rock";
 
     // ARZ Objects
     public static final String ARROW_SHOOTER = "arrow_shooter";

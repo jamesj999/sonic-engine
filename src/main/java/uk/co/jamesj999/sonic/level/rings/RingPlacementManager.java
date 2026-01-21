@@ -4,9 +4,8 @@ import uk.co.jamesj999.sonic.level.spawn.AbstractPlacementManager;
 
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Minimal runtime manager that exposes rings within a camera window.
@@ -18,6 +17,8 @@ public class RingPlacementManager extends AbstractPlacementManager<RingSpawn> {
 
     private final BitSet collected = new BitSet();
     private final int[] sparkleStartFrames;
+    private int cursorIndex = 0;
+    private int lastCameraX = Integer.MIN_VALUE;
 
     public RingPlacementManager(List<RingSpawn> spawns) {
         super(spawns, LOAD_AHEAD, UNLOAD_BEHIND);
@@ -29,7 +30,9 @@ public class RingPlacementManager extends AbstractPlacementManager<RingSpawn> {
         active.clear();
         collected.clear();
         Arrays.fill(sparkleStartFrames, NO_SPARKLE);
-        update(cameraX);
+        cursorIndex = 0;
+        lastCameraX = cameraX;
+        refreshWindow(cameraX);
     }
 
     public boolean isCollected(int index) {
@@ -64,19 +67,55 @@ public class RingPlacementManager extends AbstractPlacementManager<RingSpawn> {
     }
 
     public void update(int cameraX) {
-        int windowStart = getWindowStart(cameraX);
-        int windowEnd = getWindowEnd(cameraX);
-
-        int start = lowerBound(windowStart);
-        int end = upperBound(windowEnd);
-
-        Set<RingSpawn> window = new LinkedHashSet<>();
-        for (int i = start; i < end; i++) {
-            window.add(spawns.get(i));
+        if (spawns.isEmpty()) {
+            return;
+        }
+        if (lastCameraX == Integer.MIN_VALUE) {
+            reset(cameraX);
+            return;
         }
 
-        active.retainAll(window);
-        active.addAll(window);
+        int delta = cameraX - lastCameraX;
+        if (delta < 0 || delta > (getLoadAhead() + getUnloadBehind())) {
+            refreshWindow(cameraX);
+        } else {
+            spawnForward(cameraX);
+            trimActive(cameraX);
+        }
+
+        lastCameraX = cameraX;
+    }
+
+    private void spawnForward(int cameraX) {
+        int spawnLimit = cameraX + getLoadAhead();
+        while (cursorIndex < spawns.size() && spawns.get(cursorIndex).x() <= spawnLimit) {
+            active.add(spawns.get(cursorIndex));
+            cursorIndex++;
+        }
+    }
+
+    private void trimActive(int cameraX) {
+        int windowStart = getWindowStart(cameraX);
+        int windowEnd = getWindowEnd(cameraX);
+        Iterator<RingSpawn> iterator = active.iterator();
+        while (iterator.hasNext()) {
+            RingSpawn spawn = iterator.next();
+            if (spawn.x() < windowStart || spawn.x() > windowEnd) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void refreshWindow(int cameraX) {
+        int windowStart = getWindowStart(cameraX);
+        int windowEnd = getWindowEnd(cameraX);
+        int start = lowerBound(windowStart);
+        int end = upperBound(windowEnd);
+        cursorIndex = end;
+        active.clear();
+        for (int i = start; i < end; i++) {
+            active.add(spawns.get(i));
+        }
     }
 
     public int getTotalRingCount() {

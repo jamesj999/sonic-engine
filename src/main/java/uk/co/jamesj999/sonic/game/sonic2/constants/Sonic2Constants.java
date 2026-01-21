@@ -183,6 +183,7 @@ public class Sonic2Constants {
     // ARZ Badnik Art (Nemesis compressed)
     public static final int ART_NEM_CHOPCHOP_ADDR = 0x89B9A; // ChopChop (piranha from ARZ)
     public static final int ART_NEM_WHISP_ADDR = 0x895E4;    // Whisp (blowfly from ARZ)
+    public static final int ART_NEM_GROUNDER_ADDR = 0x8970E; // Grounder (drill badnik from ARZ)
 
     // Arrow Shooter (Object 0x22) - ARZ
     public static final int ART_NEM_ARROW_SHOOTER_ADDR = 0x82F74; // ArtNem_ArrowAndShooter

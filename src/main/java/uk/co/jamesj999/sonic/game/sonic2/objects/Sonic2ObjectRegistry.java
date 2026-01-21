@@ -15,6 +15,7 @@ import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyOnWallBadnikInstan
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.GrabberBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.ChopChopBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.WhispBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.GrounderBadnikInstance;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -214,6 +215,11 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
                 (spawn, registry) -> new ChopChopBadnikInstance(spawn, LevelManager.getInstance()));
         registerFactory(Sonic2ObjectIds.WHISP,
                 (spawn, registry) -> new WhispBadnikInstance(spawn, LevelManager.getInstance()));
+        registerFactory(Sonic2ObjectIds.GROUNDER_IN_WALL,
+                (spawn, registry) -> new GrounderBadnikInstance(spawn, LevelManager.getInstance(), false));
+        registerFactory(Sonic2ObjectIds.GROUNDER_IN_WALL2,
+                (spawn, registry) -> new GrounderBadnikInstance(spawn, LevelManager.getInstance(), true));
+        // Note: GROUNDER_WALL (0x8F) and GROUNDER_ROCKS (0x90) are spawned dynamically
 
         // Level completion objects
         registerFactory(Sonic2ObjectIds.SIGNPOST,

@@ -681,6 +681,34 @@ public class Sonic2ObjectArt {
         return new ObjectSpriteSheet(patterns, mappings, 0, 1);
     }
 
+    /**
+     * Load Grounder (Obj8D/8E) sprite sheet - drill badnik from ARZ.
+     * ROM: ArtNem_Grounder at 0x8970E, palette line 1
+     * 5 frames: 2 idle (symmetric with flipped parts) + 3 walking
+     */
+    public ObjectSpriteSheet loadGrounderSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_GROUNDER_ADDR, "Grounder");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createGrounderMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Load Grounder Rock (Obj90) sprite sheet - rock projectiles from ARZ.
+     * Uses same Grounder art but different mappings and palette line 2.
+     * 3 frames: 2x2 large rock, 1x1 small rocks (2 variants)
+     */
+    public ObjectSpriteSheet loadGrounderRockSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_GROUNDER_ADDR, "GrounderRock");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createGrounderRockMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 2, 0);
+    }
+
     private AnimalType[] resolveZoneAnimals(int zoneIndex) {
         if (zoneIndex < 0 || zoneIndex >= ZONE_ANIMALS.length) {
             return DEFAULT_ANIMALS;
@@ -1557,6 +1585,86 @@ public class Sonic2ObjectArt {
         frame1.add(new SpriteMappingPiece(-12, -8, 3, 1, 6, false, false, 0));
         frame1.add(new SpriteMappingPiece(-12, 0, 3, 1, 3, false, false, 0));
         frames.add(new SpriteMappingFrame(frame1));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Grounder (Obj8D/8E) - drill badnik from ARZ.
+     * Based on Obj8D_MapUnc_36CF0 from disassembly.
+     * 5 frames:
+     *   Frame 0 (idle 1): 4 pieces - symmetric body with tiles 0,1 and hFlip
+     *   Frame 1 (idle 2): 4 pieces - taller pose with tiles 7,8 and hFlip
+     *   Frame 2-4 (walking): 2 pieces each - 4x4 body (tile 0x10) + 4x1 feet
+     */
+    private List<SpriteMappingFrame> createGrounderMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (word_36D02) - Idle 1:
+        // 4 pieces forming symmetric body
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-8, -12, 1, 1, 0, false, false, 0));   // eye left
+        frame0.add(new SpriteMappingPiece(-16, -4, 2, 3, 1, false, false, 0));   // body left
+        frame0.add(new SpriteMappingPiece(0, -12, 1, 1, 0, true, false, 0));     // eye right (hFlip)
+        frame0.add(new SpriteMappingPiece(0, -4, 2, 3, 1, true, false, 0));      // body right (hFlip)
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (word_36D24) - Idle 2:
+        // 4 pieces forming taller symmetric pose
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-8, -20, 1, 1, 7, false, false, 0));   // eye left
+        frame1.add(new SpriteMappingPiece(-16, -12, 2, 4, 8, false, false, 0));  // body left
+        frame1.add(new SpriteMappingPiece(0, -20, 1, 1, 7, true, false, 0));     // eye right (hFlip)
+        frame1.add(new SpriteMappingPiece(0, -12, 2, 4, 8, true, false, 0));     // body right (hFlip)
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (word_36D46) - Walking 1:
+        // 2 pieces: 4x4 body + 4x1 feet
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-16, -20, 4, 4, 0x10, false, false, 0)); // body
+        frame2.add(new SpriteMappingPiece(-16, 12, 4, 1, 0x20, false, false, 0));  // feet
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (word_36D58) - Walking 2:
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-16, -20, 4, 4, 0x10, false, false, 0)); // body
+        frame3.add(new SpriteMappingPiece(-16, 12, 4, 1, 0x24, false, false, 0));  // feet
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4 (word_36D6A) - Walking 3:
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-16, -20, 4, 4, 0x10, false, false, 0)); // body
+        frame4.add(new SpriteMappingPiece(-16, 12, 4, 1, 0x28, false, false, 0));  // feet
+        frames.add(new SpriteMappingFrame(frame4));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for Grounder Rock (Obj90) - rock projectiles from ARZ.
+     * Based on Obj90_MapUnc_36D7A from disassembly.
+     * 3 frames:
+     *   Frame 0: 2x2 tiles at tile 0x2C (large rock)
+     *   Frame 1: 1x1 tile at tile 0x30 (small rock variant 1)
+     *   Frame 2: 1x1 tile at tile 0x31 (small rock variant 2)
+     */
+    private List<SpriteMappingFrame> createGrounderRockMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (word_36D7C) - Large rock: 2x2 tiles
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-8, -8, 2, 2, 0x2C, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (word_36D86) - Small rock 1: 1x1 tile
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-4, -4, 1, 1, 0x30, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (word_36D90) - Small rock 2: 1x1 tile
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-4, -4, 1, 1, 0x31, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
 
         return frames;
     }

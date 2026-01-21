@@ -27,6 +27,10 @@ public final class Sonic2ObjectIds {
     // ARZ Badniks
     public static final int CHOP_CHOP = 0x91;
     public static final int WHISP = 0x8C;
+    public static final int GROUNDER_IN_WALL = 0x8D;   // Grounder hiding behind wall (spawns walls + rocks)
+    public static final int GROUNDER_IN_WALL2 = 0x8E;  // Grounder variant (skips wall setup, walks immediately)
+    public static final int GROUNDER_WALL = 0x8F;      // Wall piece (spawned dynamically, not in level data)
+    public static final int GROUNDER_ROCKS = 0x90;     // Rock projectiles (spawned dynamically)
 
     // ARZ Objects
     public static final int ARROW_SHOOTER = 0x22;

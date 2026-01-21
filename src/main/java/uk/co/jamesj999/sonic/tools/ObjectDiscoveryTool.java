@@ -94,6 +94,8 @@ public class ObjectDiscoveryTool {
             0x82,  // SwingingPform (ARZ swinging vine platform)
             0x86,  // CNZFlipper
             0x8C,  // Whisp
+            0x8D,  // GrounderInWall (ARZ Grounder hiding behind wall)
+            0x8E,  // GrounderInWall2 (ARZ Grounder variant - walks immediately)
             0x91,  // ChopChop
             0x9D,  // Coconuts
             0xA5,  // Spiny (CPZ crawling badnik)
