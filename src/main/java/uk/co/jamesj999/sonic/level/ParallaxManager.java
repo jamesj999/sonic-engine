@@ -9,6 +9,7 @@ import uk.co.jamesj999.sonic.level.scroll.SwScrlCnz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlCpz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlMcz;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlOoz;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -62,6 +63,7 @@ public class ParallaxManager {
     private SwScrlEhz ehzHandler;
     private SwScrlCpz cpzHandler;
     private SwScrlMcz mczHandler;
+    private SwScrlOoz oozHandler;
 
     private int currentZone = -1;
     private int currentAct = -1;
@@ -88,6 +90,7 @@ public class ParallaxManager {
             ehzHandler = new SwScrlEhz(tables);
             cpzHandler = new SwScrlCpz(tables);
             mczHandler = new SwScrlMcz(tables);
+            oozHandler = new SwScrlOoz(tables);
             loaded = true;
             LOGGER.info("Parallax tables loaded.");
         } catch (IOException e) {
@@ -105,6 +108,8 @@ public class ParallaxManager {
                 arzHandler.init(actId, cameraX, cameraY);
             } else if (zoneId == ZONE_CPZ && cpzHandler != null) {
                 cpzHandler.init(cameraX, cameraY);
+            } else if (zoneId == ZONE_OOZ && oozHandler != null) {
+                oozHandler.init(cameraX, cameraY);
             }
         }
     }
@@ -218,7 +223,16 @@ public class ParallaxManager {
                 }
                 break;
             case ZONE_OOZ:
-                fillOoz(cameraX, bgScrollY, frameCounter);
+                if (oozHandler != null) {
+                    oozHandler.update(hScroll, cameraX, cameraY, frameCounter, actId);
+                    minScroll = oozHandler.getMinScrollOffset();
+                    maxScroll = oozHandler.getMaxScrollOffset();
+                    vscrollFactorBG = oozHandler.getVscrollFactorBG();
+                    // Update bgCamera for renderer's vertical scroll
+                    bgCamera.setBgYPos(vscrollFactorBG);
+                } else {
+                    fillOoz(cameraX, bgScrollY, frameCounter);
+                }
                 break;
             case ZONE_MTZ:
                 fillMtz(cameraX);
