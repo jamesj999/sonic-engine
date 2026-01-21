@@ -40,15 +40,17 @@ import java.util.Random;
  */
 public class BubbleGeneratorObjectInstance extends AbstractObjectInstance {
 
-    // Bubble sequence table (byte_1FAF0 from ROM)
-    // 4 sequences of up to 6 entries each, indexed by (sequence_offset + bubble_index)
-    // Values 0,1,2 correspond to bubble subtypes (0=tiny, 1=small, 2=large/breathable)
+    // Bubble sequence table (byte_1FAF0 from ROM, line 45055 of s2.asm)
+    // 18-entry overlapping table with 4 sequences at offsets 0, 4, 8, 12
+    // ROM uses: andi.w #$C,d1 to select offset (0, 4, 8, or 12)
+    // Each sequence provides 6 bubble subtypes (0=tiny, 1=small, 2=large)
+    // Sequences overlap by 2 entries to save ROM space:
+    //   Seq0 @ offset 0:  positions 0-5   = {0, 1, 0, 0, 0, 0}
+    //   Seq1 @ offset 4:  positions 4-9   = {0, 0, 1, 0, 0, 0}
+    //   Seq2 @ offset 8:  positions 8-13  = {0, 0, 0, 1, 0, 1}
+    //   Seq3 @ offset 12: positions 12-17 = {0, 1, 0, 0, 1, 0}
     private static final int[] BUBBLE_SEQUENCE_TABLE = {
-        0, 1, 0, 0,  // Sequence 0 (offset 0)
-        0, 0, 1, 0,  // Sequence 1 (offset 4)
-        0, 0, 0, 1,  // Sequence 2 (offset 8)
-        0, 1, 0, 0,  // Sequence 3 (offset 12)
-        1, 0         // Overflow area (offset 16-17)
+        0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0
     };
 
     private final Random random = new Random();

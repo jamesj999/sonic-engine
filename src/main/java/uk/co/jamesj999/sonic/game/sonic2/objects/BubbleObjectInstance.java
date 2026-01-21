@@ -181,11 +181,14 @@ public class BubbleObjectInstance extends AbstractObjectInstance {
 
     /**
      * Checks for collision with the player and handles air restoration.
-     * ROM uses an asymmetric collision box: ±16 horizontal, but only 16px downward.
+     * ROM uses an asymmetric collision box: ±16 horizontal, downward-only from bubble Y.
      * <p>
      * ROM collision logic (lines 44952-44965):
      * X: (bubble_x - 16) <= player_x <= (bubble_x + 16)
-     * Y: bubble_y <= player_y <= (bubble_y + 16)
+     * Y: bubble_y < player_y < (bubble_y + 16)
+     * <p>
+     * The player's center must be BELOW the bubble (bubble above player),
+     * but within 16 pixels. This is a downward-only collision box.
      */
     private void checkPlayerCollision(AbstractPlayableSprite player) {
         // Only interact if player is underwater
@@ -198,14 +201,14 @@ public class BubbleObjectInstance extends AbstractObjectInstance {
 
         // ROM asymmetric box collision:
         // X: ±16 from bubble center (move.w x_pos(a0),d1 / subi.w #$10,d1 ... addi.w #$20,d1)
-        // Y: only 16px downward from bubble Y (move.w y_pos(a0),d1 / addi.w #$10,d1)
+        // Y: downward-only - player must be BELOW bubble but within 16px
+        //    ROM: cmp.w y_pos(a0),d1 / blo.s (bubble_y < player_y required)
+        //    ROM: addi.w #$10,d1 / cmp.w d1,d0 (player_y < bubble_y + 16)
         int bubbleLeft = displayX - COLLISION_HALF_WIDTH;
         int bubbleRight = displayX + COLLISION_HALF_WIDTH;
-        int bubbleTop = displayY;
-        int bubbleBottom = displayY + COLLISION_HALF_HEIGHT;
 
         if (playerX >= bubbleLeft && playerX <= bubbleRight &&
-            playerY >= bubbleTop && playerY <= bubbleBottom) {
+            playerY > displayY && playerY < displayY + COLLISION_HALF_HEIGHT) {
 
             // Player touched the bubble - restore air
             player.replenishAir();
