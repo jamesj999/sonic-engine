@@ -838,4 +838,78 @@ public class TestPlayableSpriteMovementManager {
                 assertEquals("Velocity should remain unchanged because jumpHandler is not called when jumpPressed is false",
                                 (short) -1720, mockSprite.getYSpeed());
         }
+
+        /**
+         * Test rolling slope physics when gSpeed is zero.
+         *
+         * Bug fix: When gSpeed == 0, the original code used Math.signum(0) = 0,
+         * which never matched +1 or -1, so it always used the "uphill" factor of 20.
+         *
+         * The original Sonic 2 game (Sonic_RollRepel in s2.asm:37393) treats gSpeed >= 0
+         * as "moving right", so when gSpeed == 0 on a downhill-right slope (sin >= 0),
+         * it should use the full factor of 80, not the reduced factor of 20.
+         *
+         * This bug caused Sonic to get stuck on curved ramps in ARZ after springs.
+         */
+        @Test
+        public void testRollingSlopePhysicsWithZeroGSpeed() throws Exception {
+                // Setup: Rolling with gSpeed = 0 on a downhill slope (angle 0x10)
+                // Angle 0x10 = 16 = ~22.5 degrees, slope going down to the right
+                // sin(0x10) is positive, so this should use full slope factor (80)
+                mockSprite.setAir(false);
+                mockSprite.setRolling(true);
+                mockSprite.setGSpeed((short) 0); // Zero ground speed
+                mockSprite.setAngle((byte) 0x10); // Downhill to the right
+
+                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
+                method.setAccessible(true);
+
+                // Act: No input (let slope physics apply)
+                method.invoke(manager, mockSprite, false, false, false, false);
+
+                // Assert: gSpeed should increase significantly (full factor 80 applied)
+                // With the bug, only 20 was used, resulting in ~1/4 the acceleration.
+                // The sine of angle 0x10 is approximately 0.38, so:
+                // Full factor: 80 * 0.38 = ~30 subpixels
+                // Bug factor: 20 * 0.38 = ~7 subpixels
+                short newGSpeed = mockSprite.getGSpeed();
+                assertTrue("gSpeed should be positive (accelerating down-right slope) with full factor, was " + newGSpeed,
+                                newGSpeed > 20); // Should be ~30, not ~7
+        }
+
+        /**
+         * Test rolling slope physics when gSpeed is zero on an uphill slope.
+         * When gSpeed == 0 on an uphill-right slope (sin < 0), the reduced factor of 20
+         * should be used, matching original game behavior.
+         */
+        @Test
+        public void testRollingSlopePhysicsWithZeroGSpeedUphill() throws Exception {
+                // Setup: Rolling with gSpeed = 0 on an uphill slope (angle 0xF0)
+                // Angle 0xF0 = 240 = ~-22.5 degrees, slope going up to the right
+                // sin(0xF0) is negative, so this should use reduced slope factor (20)
+                mockSprite.setAir(false);
+                mockSprite.setRolling(true);
+                mockSprite.setGSpeed((short) 0); // Zero ground speed
+                mockSprite.setAngle((byte) 0xF0); // Uphill to the right
+
+                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                                AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
+                                boolean.class);
+                method.setAccessible(true);
+
+                // Act: No input
+                method.invoke(manager, mockSprite, false, false, false, false);
+
+                // Assert: gSpeed should become negative (pushed back down the slope)
+                // with the reduced factor. The sine of 0xF0 is approximately -0.38.
+                // Reduced factor: 20 * -0.38 = ~-7 subpixels
+                short newGSpeed = mockSprite.getGSpeed();
+                assertTrue("gSpeed should be negative (pushed back down uphill slope), was " + newGSpeed,
+                                newGSpeed < 0);
+                // Should be a small value (reduced factor)
+                assertTrue("gSpeed magnitude should be small (reduced factor), was " + newGSpeed,
+                                newGSpeed > -20);
+        }
 }

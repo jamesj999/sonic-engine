@@ -212,25 +212,8 @@ public class PlayableSpriteMovementManager extends
 				calculateGSpeed(sprite, left, right, rawLeft, rawRight);
 				// Since this will update the gSpeed, we now need to update the X/Y from this.
 				calculateXYFromGSpeed(sprite);
-
-				if (!controlLocked) {
-					// Check for slip/fall condition
-					short absGSpeed = (short) Math.abs(sprite.getGSpeed());
-					int angle = sprite.getAngle() & 0xFF;
-
-					// SPG: If too slow (speed < 2.5 pixels = 640 subpixels) and on a steep slope
-					// (hex angle 33-223, which is 46°-314° - everything NOT in ground mode)
-					if (absGSpeed < 640 && (angle >= 33 && angle <= 223)) {
-						// Detach from floor
-						sprite.setAir(true);
-						// SPG: Only Ground Speed is set to 0, X/Y Speed are PRESERVED
-						// This allows player to maintain momentum and land correctly
-						sprite.setGSpeed((short) 0);
-						// Lock controls for 30 frames
-						TimerManager.getInstance()
-								.registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
-					}
-				}
+				// Note: Slip/fall check (Sonic_SlopeRepel) moved to after terrain collision
+				// to match original game order - it must use the NEW angle from terrain collision
 			}
 		}
 
@@ -276,6 +259,30 @@ public class PlayableSpriteMovementManager extends
 
 		doTerrainCollision(sprite, groundResult);
 		doCeilingCollision(sprite, ceilingResult);
+
+		// Sonic_SlopeRepel (s2.asm:37432): Slip/fall check runs AFTER terrain collision
+		// so it uses the NEW angle. In the original, this is called after AnglePos.
+		// Only check if grounded and controls not locked.
+		if (!sprite.getAir() && !controlLocked) {
+			short absGSpeed = (short) Math.abs(sprite.getGSpeed());
+			int angle = sprite.getAngle() & 0xFF;
+
+			// Original check: addi.b #$20,d0; andi.b #$C0,d0; beq.s return
+			// This skips when angle is in flat range: 0x00-0x1F or 0xE0-0xFF
+			// SPG: If too slow (speed < 2.5 pixels = 640 subpixels) and on a steep slope
+			// (hex angle 32-223, which is ~45°-315° - steep slopes, walls, ceiling)
+			boolean angleInFlatRange = (angle <= 0x1F) || (angle >= 0xE0);
+			if (absGSpeed < 640 && !angleInFlatRange) {
+				// Detach from floor
+				sprite.setAir(true);
+				// SPG: Only Ground Speed is set to 0, X/Y Speed are PRESERVED
+				// This allows player to maintain momentum and land correctly
+				sprite.setGSpeed((short) 0);
+				// Lock controls for 30 frames (0x1E)
+				TimerManager.getInstance()
+						.registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
+			}
+		}
 
 		if (left && !right) {
 			if (!sprite.getAir() && sprite.getGSpeed() > 0) {
@@ -491,6 +498,18 @@ public class PlayableSpriteMovementManager extends
 		// xSpeed.
 		// If we are, we need to stop moving.
 		if (!sprite.getAir()) {
+			// Original Sonic 2 "Obj01_CheckWallsOnGround" (s2.asm:36486) has two skip conditions:
+			// 1. Skip if angle is in range 0x40-0xBF (steep slopes, walls, or ceiling)
+			//    This prevents false wall collisions on curved ramps during mode transitions
+			// 2. Skip if gSpeed is 0 (not moving)
+			int angle = sprite.getAngle() & 0xFF;
+			// The original uses: addi.b #$40,d0; bmi.s return (skip if result >= 0x80)
+			// This is equivalent to: angle in range [0x40, 0xBF]
+			boolean angleInSkipRange = ((angle + 0x40) & 0x80) != 0;
+			if (angleInSkipRange || sprite.getGSpeed() == 0) {
+				return;
+			}
+
 			// Grounded collision
 			// TODO: This really should be xSpeed and ySpeed but we only care about xSpeed
 			// for now.
@@ -504,6 +523,25 @@ public class PlayableSpriteMovementManager extends
 			if (lowestResult != null) {
 				byte distance = lowestResult.distance();
 				Direction dir = lowestResult.direction();
+
+				// Check if this "wall" is actually just curved terrain (floor wrapping around).
+				// The original game uses rotated angle scanning perpendicular to the terrain,
+				// but our push sensors scan horizontally. On curved ramps, this can detect
+				// the curved floor as a "wall". Skip if the detected tile's angle is similar
+				// to the current terrain angle (within ~45 degrees), indicating it's floor.
+				int wallAngle = lowestResult.angle() & 0xFF;
+				int terrainAngle = sprite.getAngle() & 0xFF;
+				int angleDiff = Math.abs(wallAngle - terrainAngle);
+				// Handle wrap-around (e.g., 0x10 vs 0xF0 should be 0x20 apart, not 0xE0)
+				if (angleDiff > 128) {
+					angleDiff = 256 - angleDiff;
+				}
+				// If angles are within ~45 degrees (0x20), it's likely curved terrain, not a wall
+				// Real walls would have angles perpendicular to the terrain (diff ~0x40)
+				if (angleDiff < 0x30) {
+					// Skip - this is curved floor, not a wall
+					return;
+				}
 
 				boolean movingTowards = false;
 				if (dir == Direction.LEFT && sprite.getXSpeed() < 0)
@@ -826,14 +864,15 @@ public class PlayableSpriteMovementManager extends
 			decel = runDecel;
 		} else {
 			friction = (short) (sprite.getFriction() / 2);
-			double gSpeedSign = Math.signum(gSpeed);
-			// SPG: Use hex-angle sin for slope direction check
-			double angleSign = Math.signum(TrigLookupTable.sinHex(hexAngle));
-			if (gSpeedSign == angleSign) {
-				slopeRunningVariant = 80;
-			} else {
-				slopeRunningVariant = 20;
-			}
+			// Rolling slope physics matches original Sonic 2 "Sonic_RollRepel" (s2.asm:37393)
+			// Original uses 0x50 (80) and divides by 4 when rolling "uphill"
+			// Downhill = gSpeed and sin have same sign direction
+			// Critical: when gSpeed == 0, original treats as "moving right" (>= 0 branch)
+			// Using Math.signum() was wrong because signum(0) == 0 which never matches ±1
+			double sinValue = TrigLookupTable.sinHex(hexAngle);
+			// goingDownhill when: (moving right AND slope down-right) OR (moving left AND slope down-left)
+			boolean goingDownhill = (gSpeed >= 0) == (sinValue >= 0);
+			slopeRunningVariant = goingDownhill ? (short) 80 : (short) 20;
 			accel = 0;
 			decel = rollDecel;
 			maxSpeed = maxRoll;
