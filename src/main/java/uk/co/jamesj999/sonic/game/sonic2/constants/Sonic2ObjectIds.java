@@ -24,6 +24,12 @@ public final class Sonic2ObjectIds {
     public static final int SPINY_ON_WALL = 0xA6;
     public static final int GRABBER = 0xA7;
 
+    // ARZ Badniks
+    public static final int CHOP_CHOP = 0x91;
+
+    // ARZ Objects
+    public static final int ARROW_SHOOTER = 0x22;
+
     // Supporting objects spawned by Badniks
     public static final int EXPLOSION = 0x27;
     public static final int ANIMAL = 0x28;

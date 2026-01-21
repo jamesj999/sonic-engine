@@ -62,4 +62,10 @@ public final class Sonic2ObjectArtKeys {
     public static final String SPINY = "spiny";
     public static final String GRABBER = "grabber";
     public static final String GRABBER_STRING = "grabber_string";
+
+    // ARZ Badniks
+    public static final String CHOP_CHOP = "chopchop";
+
+    // ARZ Objects
+    public static final String ARROW_SHOOTER = "arrow_shooter";
 }

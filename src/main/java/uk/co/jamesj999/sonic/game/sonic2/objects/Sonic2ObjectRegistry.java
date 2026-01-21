@@ -13,6 +13,7 @@ import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.CoconutsBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.SpinyOnWallBadnikInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.GrabberBadnikInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.badniks.ChopChopBadnikInstance;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -194,6 +195,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.GRABBER,
                 (spawn, registry) -> new GrabberBadnikInstance(spawn, LevelManager.getInstance()));
 
+        // ARZ Badniks
+        registerFactory(Sonic2ObjectIds.CHOP_CHOP,
+                (spawn, registry) -> new ChopChopBadnikInstance(spawn, LevelManager.getInstance()));
+
         // Level completion objects
         registerFactory(Sonic2ObjectIds.SIGNPOST,
                 (spawn, registry) -> new SignpostObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
@@ -220,6 +225,9 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         // ARZ Objects
         registerFactory(Sonic2ObjectIds.FALLING_PILLAR,
                 (spawn, registry) -> new FallingPillarObjectInstance(spawn,
+                        registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.ARROW_SHOOTER,
+                (spawn, registry) -> new ArrowShooterObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
 
         // OOZ/MCZ/ARZ Collapsing Platform

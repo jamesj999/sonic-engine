@@ -82,6 +82,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 	// Core special stage logic uses SpecialStageProvider interface via GameModule.
 	private final Sonic2SpecialStageManager specialStageManager = Sonic2SpecialStageManager.getInstance();
 
+	// Pre-allocated list for results screen rendering (avoids per-frame allocation)
+	private final java.util.List<uk.co.jamesj999.sonic.graphics.GLCommand> resultsCommands = new java.util.ArrayList<>(64);
+
 	private GLU glu;
 
 	// TODO Add Log4J Support, or some other logging that allows proper
@@ -230,13 +233,13 @@ public class Engine extends GLCanvas implements GLEventListener {
 				// Begin pattern batch for ROM art rendering
 				graphicsManager.beginPatternBatch();
 
-				java.util.List<uk.co.jamesj999.sonic.graphics.GLCommand> commands = new java.util.ArrayList<>();
-				resultsScreen.appendRenderCommands(commands);
+				resultsCommands.clear();
+				resultsScreen.appendRenderCommands(resultsCommands);
 
 				// Register placeholder commands (for fallback rendering)
-				if (!commands.isEmpty()) {
+				if (!resultsCommands.isEmpty()) {
 					graphicsManager.registerCommand(new uk.co.jamesj999.sonic.graphics.GLCommandGroup(
-							com.jogamp.opengl.GL2.GL_LINES, commands));
+							com.jogamp.opengl.GL2.GL_LINES, resultsCommands));
 				}
 			}
 		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {

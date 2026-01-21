@@ -174,6 +174,16 @@ public class Sonic2Constants {
     public static final int ART_NEM_SPINY_ADDR = 0x8B430; // Spiny (CPZ crawling badnik)
     public static final int ART_NEM_GRABBER_ADDR = 0x8B6B4; // Grabber (CPZ spider badnik)
 
+    // ARZ Badnik Art (Nemesis compressed)
+    public static final int ART_NEM_CHOPCHOP_ADDR = 0x89B9A; // ChopChop (piranha from ARZ)
+
+    // Arrow Shooter (Object 0x22) - ARZ
+    public static final int ART_NEM_ARROW_SHOOTER_ADDR = 0x90020; // ArtNem_ArrowAndShooter
+    public static final int MAP_UNC_ARROW_SHOOTER_ADDR = 0x25804; // Obj22_MapUnc_25804
+    public static final int ART_TILE_ARROW_SHOOTER = 0x0417;      // ArtTile_ArtNem_ArrowAndShooter
+    public static final int SndID_PreArrowFiring = 0xDB;
+    public static final int SndID_ArrowFiring = 0xAE;
+
     // Animal art (Nemesis compressed, verified offsets)
     public static final int ART_NEM_FLICKY_ADDR = 0x7EF60;
     public static final int ART_NEM_SQUIRREL_ADDR = 0x7F0A2;

@@ -138,6 +138,14 @@ public class LevelManager {
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
     private boolean useShaderBackground = true; // Feature flag for shader background
 
+    // Pre-allocated lists for debug overlay rendering (avoids per-frame allocations)
+    private final List<GLCommand> debugObjectCommands = new ArrayList<>(256);
+    private final List<GLCommand> debugSwitcherLineCommands = new ArrayList<>(128);
+    private final List<GLCommand> debugSwitcherAreaCommands = new ArrayList<>(128);
+    private final List<GLCommand> debugRingCommands = new ArrayList<>(256);
+    private final List<GLCommand> debugBoxCommands = new ArrayList<>(512);
+    private final List<GLCommand> debugCenterCommands = new ArrayList<>(256);
+
     private enum TilePriorityPass {
         ALL,
         LOW_ONLY,
@@ -678,38 +686,38 @@ public class LevelManager {
         if (objectPlacementManager != null && overlayEnabled) {
             boolean showObjectPoints = overlayManager.isEnabled(DebugOverlayToggle.OBJECT_POINTS);
             boolean showPlaneSwitchers = overlayManager.isEnabled(DebugOverlayToggle.PLANE_SWITCHERS);
-            List<GLCommand> objectCommands = new ArrayList<>();
-            List<GLCommand> switcherLineCommands = new ArrayList<>();
-            List<GLCommand> switcherAreaCommands = new ArrayList<>();
+            debugObjectCommands.clear();
+            debugSwitcherLineCommands.clear();
+            debugSwitcherAreaCommands.clear();
             Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
             AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite
                     ? (AbstractPlayableSprite) player
                     : null;
             for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
                 if (showObjectPoints) {
-                    objectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                    debugObjectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                             -1,
                             GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                             1f, 0f, 1f,
                             spawn.x(), spawn.y(), 0, 0));
                 }
                 if (showPlaneSwitchers) {
-                    appendPlaneSwitcherDebug(spawn, switcherLineCommands, switcherAreaCommands, playable);
+                    appendPlaneSwitcherDebug(spawn, debugSwitcherLineCommands, debugSwitcherAreaCommands, playable);
                 }
             }
-            if (showPlaneSwitchers && !switcherAreaCommands.isEmpty()) {
+            if (showPlaneSwitchers && !debugSwitcherAreaCommands.isEmpty()) {
                 graphicsManager.enqueueDebugLineState();
-                for (GLCommand command : switcherAreaCommands) {
+                for (GLCommand command : debugSwitcherAreaCommands) {
                     graphicsManager.registerCommand(command);
                 }
             }
-            if (showPlaneSwitchers && !switcherLineCommands.isEmpty()) {
+            if (showPlaneSwitchers && !debugSwitcherLineCommands.isEmpty()) {
                 graphicsManager.enqueueDebugLineState();
-                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, switcherLineCommands));
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, debugSwitcherLineCommands));
             }
-            if (showObjectPoints && !objectCommands.isEmpty()) {
+            if (showObjectPoints && !debugObjectCommands.isEmpty()) {
                 graphicsManager.enqueueDebugLineState();
-                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, objectCommands));
+                graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, debugObjectCommands));
             }
         }
 
@@ -718,23 +726,23 @@ public class LevelManager {
             Collection<RingSpawn> rings = ringManager.getActiveSpawns();
             if (!rings.isEmpty()) {
                 if (ringRenderManager == null) {
-                    List<GLCommand> ringCommands = new ArrayList<>();
+                    debugRingCommands.clear();
                     for (RingSpawn ring : rings) {
                         if (!ringManager.isRenderable(ring, frameCounter)) {
                             continue;
                         }
-                        ringCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
+                        debugRingCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                                 -1,
                                 GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                                 1f, 0.85f, 0.1f,
                                 ring.x(), ring.y(), 0, 0));
                     }
                     graphicsManager.enqueueDebugLineState();
-                    graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, ringCommands));
+                    graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, debugRingCommands));
                 } else {
                     PatternSpriteRenderer.FrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
-                    List<GLCommand> boxCommands = new ArrayList<>();
-                    List<GLCommand> centerCommands = new ArrayList<>();
+                    debugBoxCommands.clear();
+                    debugCenterCommands.clear();
                     int crossHalf = 2;
 
                     for (RingSpawn ring : rings) {
@@ -749,44 +757,44 @@ public class LevelManager {
                         int bottom = centerY + bounds.maxY();
 
                         // Bounding box (4 line segments)
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, left, top, 0, 0));
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, right, top, 0, 0));
 
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, right, top, 0, 0));
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, right, bottom, 0, 0));
 
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, right, bottom, 0, 0));
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, left, bottom, 0, 0));
 
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, left, bottom, 0, 0));
-                        boxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugBoxCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 0.2f, 1f, 0.2f, left, top, 0, 0));
 
                         // Center cross
-                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugCenterCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 1f, 0.85f, 0.1f, centerX - crossHalf, centerY, 0, 0));
-                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugCenterCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 1f, 0.85f, 0.1f, centerX + crossHalf, centerY, 0, 0));
-                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugCenterCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 1f, 0.85f, 0.1f, centerX, centerY - crossHalf, 0, 0));
-                        centerCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                        debugCenterCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                                 1f, 0.85f, 0.1f, centerX, centerY + crossHalf, 0, 0));
                     }
 
-                    if (!boxCommands.isEmpty()) {
+                    if (!debugBoxCommands.isEmpty()) {
                         graphicsManager.enqueueDebugLineState();
-                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, boxCommands));
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, debugBoxCommands));
                     }
-                    if (!centerCommands.isEmpty()) {
+                    if (!debugCenterCommands.isEmpty()) {
                         graphicsManager.enqueueDebugLineState();
-                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, centerCommands));
+                        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, debugCenterCommands));
                     }
                 }
             }

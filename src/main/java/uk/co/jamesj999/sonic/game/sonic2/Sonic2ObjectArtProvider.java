@@ -113,13 +113,15 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(ObjectArtKeys.CHECKPOINT, artData.checkpointSheet());
         registerSheet(ObjectArtKeys.CHECKPOINT_STAR, artData.checkpointStarSheet());
 
-        // Badnik sheets (Sonic 2-specific)
-        registerSheet(Sonic2ObjectArtKeys.MASHER, artData.masherSheet());
-        registerSheet(Sonic2ObjectArtKeys.BUZZER, artData.buzzerSheet());
-        registerSheet(Sonic2ObjectArtKeys.COCONUTS, artData.coconutsSheet());
-        registerSheet(Sonic2ObjectArtKeys.SPINY, artData.spinySheet());
-        registerSheet(Sonic2ObjectArtKeys.GRABBER, artData.grabberSheet());
-        registerSheet(Sonic2ObjectArtKeys.GRABBER_STRING, artData.grabberStringSheet());
+        // Badnik sheets (Sonic 2-specific) - loaded directly via artLoader
+        registerSheet(Sonic2ObjectArtKeys.MASHER, artLoader.loadMasherSheet());
+        registerSheet(Sonic2ObjectArtKeys.BUZZER, artLoader.loadBuzzerSheet());
+        registerSheet(Sonic2ObjectArtKeys.COCONUTS, artLoader.loadCoconutsSheet());
+        registerSheet(Sonic2ObjectArtKeys.SPINY, artLoader.loadSpinySheet());
+        registerSheet(Sonic2ObjectArtKeys.GRABBER, artLoader.loadGrabberSheet());
+        registerSheet(Sonic2ObjectArtKeys.GRABBER_STRING, artLoader.loadGrabberStringSheet());
+        registerSheet(Sonic2ObjectArtKeys.CHOP_CHOP, artLoader.loadChopChopSheet());
+        registerSheet(Sonic2ObjectArtKeys.ARROW_SHOOTER, artLoader.loadArrowShooterSheet());
         registerSheet(ObjectArtKeys.ANIMAL, artData.animalSheet());
         registerSheet(ObjectArtKeys.POINTS, artData.pointsSheet());
 

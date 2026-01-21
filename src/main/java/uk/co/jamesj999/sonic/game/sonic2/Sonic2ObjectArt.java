@@ -204,31 +204,8 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.ANI_OBJ79_ADDR,
                 Sonic2Constants.ANI_OBJ79_SCRIPT_COUNT);
 
-        // Badnik art (Masher, Buzzer, Coconuts)
-        Pattern[] masherPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MASHER_ADDR, "Masher");
-        List<SpriteMappingFrame> masherMappings = createMasherMappings();
-        ObjectSpriteSheet masherSheet = new ObjectSpriteSheet(masherPatterns, masherMappings, 0, 1);
-
-        Pattern[] buzzerPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUZZER_ADDR, "Buzzer");
-        List<SpriteMappingFrame> buzzerMappings = createBuzzerMappings();
-        ObjectSpriteSheet buzzerSheet = new ObjectSpriteSheet(buzzerPatterns, buzzerMappings, 0, 1);
-
-        Pattern[] coconutsPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_COCONUTS_ADDR, "Coconuts");
-        List<SpriteMappingFrame> coconutsMappings = createCoconutsMappings();
-        ObjectSpriteSheet coconutsSheet = new ObjectSpriteSheet(coconutsPatterns, coconutsMappings, 0, 1);
-
-        // CPZ Badnik: Spiny
-        Pattern[] spinyPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPINY_ADDR, "Spiny");
-        List<SpriteMappingFrame> spinyMappings = createSpinyMappings();
-        ObjectSpriteSheet spinySheet = new ObjectSpriteSheet(spinyPatterns, spinyMappings, 0, 1);
-
-        // CPZ Badnik: Grabber (spider)
-        // Per disassembly: make_art_tile(ArtTile_ArtNem_Grabber,1,1) - uses palette line 1
-        Pattern[] grabberPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_GRABBER_ADDR, "Grabber");
-        List<SpriteMappingFrame> grabberMappings = createGrabberMappings();
-        ObjectSpriteSheet grabberSheet = new ObjectSpriteSheet(grabberPatterns, grabberMappings, 1, 1);
-        List<SpriteMappingFrame> grabberStringMappings = createGrabberStringMappings();
-        ObjectSpriteSheet grabberStringSheet = new ObjectSpriteSheet(grabberPatterns, grabberStringMappings, 1, 1);
+        // Badnik sheets are loaded separately via Sonic2ObjectArtProvider
+        // using the load*Sheet() methods on this class
 
         Pattern[] animalPatterns = loadAnimalPatterns(animalTypeA, animalTypeB);
         List<SpriteMappingFrame> animalMappings = createAnimalMappings();
@@ -394,12 +371,6 @@ public class Sonic2ObjectArt {
                 waterfallSheet,
                 checkpointSheet,
                 checkpointStarSheet,
-                masherSheet,
-                buzzerSheet,
-                coconutsSheet,
-                spinySheet,
-                grabberSheet,
-                grabberStringSheet,
                 animalSheet,
                 animalTypeA.ordinal(),
                 animalTypeB.ordinal(),
@@ -582,6 +553,115 @@ public class Sonic2ObjectArt {
         }
         List<SpriteMappingFrame> mappings = createMCZCollapsingPlatformMappings();
         return new ObjectSpriteSheet(patterns, mappings, 3, 1);
+    }
+
+    // ========== Badnik Sheet Loaders ==========
+    // These are Sonic 2-specific and loaded directly by Sonic2ObjectArtProvider
+
+    /**
+     * Load Masher (Obj5C) sprite sheet - leaping piranha from EHZ.
+     * ROM: ArtNem_Masher at 0x839EA, palette line 0
+     */
+    public ObjectSpriteSheet loadMasherSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MASHER_ADDR, "Masher");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createMasherMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load Buzzer (Obj4B) sprite sheet - flying bee from EHZ.
+     * ROM: ArtNem_Buzzer at 0x8316A, palette line 0
+     */
+    public ObjectSpriteSheet loadBuzzerSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUZZER_ADDR, "Buzzer");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createBuzzerMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load Coconuts (Obj9D) sprite sheet - monkey badnik from EHZ.
+     * ROM: ArtNem_Coconuts at 0x8A87A, palette line 0
+     */
+    public ObjectSpriteSheet loadCoconutsSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_COCONUTS_ADDR, "Coconuts");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCoconutsMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load Spiny (ObjA5) sprite sheet - crawling badnik from CPZ.
+     * ROM: ArtNem_Spiny at 0x8B430, palette line 0
+     */
+    public ObjectSpriteSheet loadSpinySheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SPINY_ADDR, "Spiny");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createSpinyMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load Grabber (ObjA7) sprite sheet - spider badnik from CPZ.
+     * ROM: ArtNem_Grabber at 0x8B6B4, palette line 1
+     */
+    public ObjectSpriteSheet loadGrabberSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_GRABBER_ADDR, "Grabber");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createGrabberMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Load Grabber String (ObjAA) sprite sheet - thread connecting Grabber to anchor.
+     * Uses same patterns as Grabber but different mappings.
+     * ROM: ArtNem_Grabber at 0x8B6B4, palette line 1
+     */
+    public ObjectSpriteSheet loadGrabberStringSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_GRABBER_ADDR, "Grabber");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createGrabberStringMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Load ChopChop (Obj91) sprite sheet - piranha badnik from ARZ.
+     * ROM: ArtNem_ChopChop at 0x89B9A, palette line 1
+     */
+    public ObjectSpriteSheet loadChopChopSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CHOPCHOP_ADDR, "ChopChop");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createChopChopMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Load ArrowShooter (Obj22) sprite sheet - arrow shooter from ARZ.
+     * ROM: ArtNem_ArrowAndShooter at 0x90020, Obj22_MapUnc_25804
+     * Uses palette line 0 for arrow (frame 0) and palette line 1 for shooter.
+     */
+    public ObjectSpriteSheet loadArrowShooterSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ARROW_SHOOTER_ADDR, "ArrowShooter");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_ARROW_SHOOTER_ADDR);
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
     }
 
     private AnimalType[] resolveZoneAnimals(int zoneIndex) {
@@ -1408,6 +1488,30 @@ public class Sonic2ObjectArt {
         frame7.add(new SpriteMappingPiece(-4, 0x60, 1, 4, 0xB, false, false, 0));
         frames.add(new SpriteMappingFrame(frame7));
         frames.add(new SpriteMappingFrame(frame7)); // Frame 8 is same as 7
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for ChopChop (Obj91) - Piranha badnik from ARZ.
+     * Based on Obj91_MapUnc_36534 from disassembly.
+     * Frame 0: Mouth closed (4x3 tiles = 32x24 pixels)
+     * Frame 1: Mouth open (4x3 tiles = 32x24 pixels)
+     */
+    private List<SpriteMappingFrame> createChopChopMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Mouth closed (word_3653A)
+        // Single 4x3 tile piece at (-16, -12) using tiles 0-11
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-16, -12, 4, 3, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Mouth open (word_36544)
+        // Single 4x3 tile piece at (-16, -12) using tiles 12-23
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-16, -12, 4, 3, 12, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
 
         return frames;
     }
