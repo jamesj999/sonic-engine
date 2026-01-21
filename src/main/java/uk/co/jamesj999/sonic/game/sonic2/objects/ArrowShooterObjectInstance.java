@@ -91,7 +91,8 @@ public class ArrowShooterObjectInstance extends AbstractObjectInstance {
         }
 
         // Check if player is within detection distance
-        int dx = currentX - player.getX();
+        // Use getCentreX to match ROM x_pos (center coordinate)
+        int dx = currentX - player.getCentreX();
         if (dx < 0) {
             dx = -dx;
         }

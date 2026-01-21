@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-21 10:02:55
+Generated: 2026-01-21 11:25:39
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 37 (30.8%)
-- **Unimplemented:** 83 (69.2%)
+- **Implemented:** 38 (31.7%)
+- **Unimplemented:** 82 (68.3%)
 
 ## Implemented Objects
 
@@ -26,6 +26,7 @@ Generated: 2026-01-21 10:02:55
 | 0x1E | CPZSpinTube | 16 | CPZ1, CPZ2 |
 | 0x23 | FallingPillar | 16 | ARZ1, ARZ2 |
 | 0x26 | Monitor | 245 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
+| 0x2B | RisingPillar | 11 | ARZ1, ARZ2 |
 | 0x2C | LeavesGenerator | 43 | ARZ1, ARZ2 |
 | 0x2D | Barrier | 35 | CPZ1, CPZ2, HTZ1, HTZ2, MTZ1, MTZ2, MTZ3, WFZ1, DEZ1 |
 | 0x32 | BreakableBlock | 28 | CPZ1, CPZ2, HTZ1, HTZ2 |
@@ -100,7 +101,6 @@ Generated: 2026-01-21 10:02:55
 | 0x67 | Object | MTZSpinTube | 12 | MTZ1, MTZ2, MTZ3 |
 | 0x81 | Object | MCZDrawbridge | 12 | MCZ1, MCZ2 |
 | 0x9E | Badnik | Crawlton | 12 | MCZ1, MCZ2 |
-| 0x2B | Object | RisingPillar | 11 | ARZ1, ARZ2 |
 | 0x7F | Object | VineSwitch | 11 | MCZ1, MCZ2 |
 | 0x8B | Object | WFZPalSwitcher | 11 | WFZ1 |
 | 0x6C | Object | Conveyor | 10 | MTZ2, MTZ3 |
@@ -257,7 +257,7 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 #### Act 1
 
-Total: 182 objects | Implemented: 10 | Unimplemented: 10
+Total: 182 objects | Implemented: 11 | Unimplemented: 9
 
 **Badniks:**
 - [ ] 0x8C Whisp (x6) [0x00]
@@ -274,7 +274,7 @@ Total: 182 objects | Implemented: 10 | Unimplemented: 10
 - [x] 0x23 FallingPillar (x5) [0x00]
 - [ ] 0x24 Bubbles (x10) [0x80]
 - [x] 0x26 Monitor (x13) [5 subtypes]
-- [ ] 0x2B RisingPillar (x4) [0x00]
+- [x] 0x2B RisingPillar (x4) [0x00]
 - [x] 0x2C LeavesGenerator (x34) [0x00, 0x01, 0x02]
 - [x] 0x36 Spikes (x1) [0x30]
 - [x] 0x40 Springboard (x6) [0x03]
@@ -285,7 +285,7 @@ Total: 182 objects | Implemented: 10 | Unimplemented: 10
 
 #### Act 2
 
-Total: 222 objects | Implemented: 9 | Unimplemented: 11
+Total: 222 objects | Implemented: 10 | Unimplemented: 10
 
 **Badniks:**
 - [ ] 0x8C Whisp (x19) [0x00]
@@ -305,7 +305,7 @@ Total: 222 objects | Implemented: 9 | Unimplemented: 11
 - [x] 0x23 FallingPillar (x11) [0x00]
 - [ ] 0x24 Bubbles (x10) [0x81]
 - [x] 0x26 Monitor (x18) [4 subtypes]
-- [ ] 0x2B RisingPillar (x7) [0x00]
+- [x] 0x2B RisingPillar (x7) [0x00]
 - [x] 0x2C LeavesGenerator (x9) [0x00, 0x01, 0x02]
 - [ ] 0x3E EggPrison (x1) [0x00]
 - [x] 0x40 Springboard (x10) [0x03]

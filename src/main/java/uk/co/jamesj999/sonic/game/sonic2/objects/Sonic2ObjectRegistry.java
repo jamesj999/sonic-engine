@@ -226,6 +226,9 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.FALLING_PILLAR,
                 (spawn, registry) -> new FallingPillarObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.RISING_PILLAR,
+                (spawn, registry) -> new RisingPillarObjectInstance(spawn,
+                        registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.ARROW_SHOOTER,
                 (spawn, registry) -> new ArrowShooterObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
