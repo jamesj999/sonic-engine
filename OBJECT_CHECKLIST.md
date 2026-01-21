@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-21 18:10:22
+Generated: 2026-01-21 20:24:49
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 44 (36.7%)
-- **Unimplemented:** 76 (63.3%)
+- **Implemented:** 46 (38.3%)
+- **Unimplemented:** 74 (61.7%)
 
 ## Implemented Objects
 
@@ -49,6 +49,8 @@ Generated: 2026-01-21 18:10:22
 | 0x82 | SwingingPform | 15 | ARZ1, ARZ2 |
 | 0x86 | Flipper | 63 | CNZ1, CNZ2 |
 | 0x8C | Whisp | 25 | ARZ1, ARZ2 |
+| 0x8D | GrounderInWall | 8 | ARZ1, ARZ2 |
+| 0x8E | GrounderInWall2 | 20 | ARZ1, ARZ2 |
 | 0x91 | ChopChop | 38 | ARZ1, ARZ2 |
 | 0x9D | Coconuts | 17 | EHZ1, EHZ2 |
 | 0xA5 | Spiny | 11 | CPZ1, CPZ2 |
@@ -82,7 +84,6 @@ Generated: 2026-01-21 18:10:22
 | 0xD4 | Object | CNZBigBlock | 23 | CNZ1, CNZ2 |
 | 0x33 | Object | OOZPoppingPform | 22 | OOZ1, OOZ2 |
 | 0x68 | Object | SpikyBlock | 22 | MTZ1, MTZ2, MTZ3 |
-| 0x8E | Badnik | GrounderInWall2 | 20 | ARZ1, ARZ2 |
 | 0x75 | Object | MCZBrick | 19 | MCZ1, MCZ2 |
 | 0xAC | Badnik | Balkiry | 19 | SCZ1 |
 | 0x42 | Object | SteamSpring | 18 | MTZ1, MTZ2, MTZ3 |
@@ -109,7 +110,6 @@ Generated: 2026-01-21 18:10:22
 | 0xAE | Badnik | Clucker | 10 | WFZ1 |
 | 0xB5 | Object | HPropeller | 10 | SCZ1, WFZ1 |
 | 0x9F | Badnik | Shellcracker | 9 | MTZ1, MTZ2, MTZ3 |
-| 0x8D | Badnik | GrounderInWall | 8 | ARZ1, ARZ2 |
 | 0xC0 | Object | SpeedLauncher | 8 | WFZ1 |
 | 0xC8 | Badnik | Crawl | 8 | CNZ1, CNZ2 |
 | 0xD2 | Object | CNZRectBlocks | 8 | CNZ1, CNZ2 |
@@ -257,12 +257,12 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 #### Act 1
 
-Total: 182 objects | Implemented: 17 | Unimplemented: 3
+Total: 182 objects | Implemented: 19 | Unimplemented: 1
 
 **Badniks:**
 - [x] 0x8C Whisp (x6) [0x00]
-- [ ] 0x8D GrounderInWall (x4) [0x02]
-- [ ] 0x8E GrounderInWall2 (x11) [0x02]
+- [x] 0x8D GrounderInWall (x4) [0x02]
+- [x] 0x8E GrounderInWall2 (x11) [0x02]
 - [x] 0x91 ChopChop (x17) [0x08]
 
 **Objects:**
@@ -285,12 +285,12 @@ Total: 182 objects | Implemented: 17 | Unimplemented: 3
 
 #### Act 2
 
-Total: 222 objects | Implemented: 16 | Unimplemented: 4
+Total: 222 objects | Implemented: 18 | Unimplemented: 2
 
 **Badniks:**
 - [x] 0x8C Whisp (x19) [0x00]
-- [ ] 0x8D GrounderInWall (x4) [0x02]
-- [ ] 0x8E GrounderInWall2 (x9) [0x02]
+- [x] 0x8D GrounderInWall (x4) [0x02]
+- [x] 0x8E GrounderInWall2 (x9) [0x02]
 - [x] 0x91 ChopChop (x21) [0x08]
 
 **Bosses:**
