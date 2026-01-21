@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.level.objects;
 
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 
 import java.util.Collection;
 import java.util.logging.Logger;
@@ -628,6 +629,10 @@ public class SolidObjectManager {
                     }
                     // Clear pinball mode after landing check - only protects one landing
                     player.setPinballMode(false);
+                    // Objects are always flat surfaces - reset angle and ground mode
+                    // This matches terrain landing behavior in PlayableSpriteMovementManager
+                    player.setAngle((byte) 0);
+                    player.setGroundMode(GroundMode.GROUND);
                 }
             }
             return new SolidContact(true, false, false, true, false);
