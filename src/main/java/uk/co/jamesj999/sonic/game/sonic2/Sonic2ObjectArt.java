@@ -305,8 +305,10 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet springboardSheet = new ObjectSpriteSheet(springboardPatterns, springboardMappings, 0, 1);
         SpriteAnimationSet springboardAnimations = createSpringboardAnimations();
 
-        // Underwater Bubbles art (Object $0A Small Bubbles, Object $24 Bubble Generator)
-        Pattern[] bubblesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUBBLES_ADDR, "Bubbles");
+        // Underwater Bubbles art (Object $0A - Small breathing bubbles from player's mouth)
+        // Art at 0x7AEE2 (10 tiles) - small bubbles that rise when Sonic breathes underwater
+        // Note: Bubble Generator (Object $24) is a separate object with its own art
+        Pattern[] bubblesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_BUBBLES_ADDR, "SmallBubbles");
         List<SpriteMappingFrame> bubblesMappings = createBubblesMappings();
         ObjectSpriteSheet bubblesSheet = new ObjectSpriteSheet(bubblesPatterns, bubblesMappings, 1, 1);
 
@@ -2353,35 +2355,39 @@ public class Sonic2ObjectArt {
 
     /**
      * Creates mappings for underwater bubbles (Obj0A Small Bubbles).
-     * Based on Sonic 2 bubble sprite layout:
-     * - Frames 0-5: Different bubble sizes (tiny to medium)
-     * - The smallest bubbles are 8x8, larger ones are 16x16
+     * Art from ART_NEM_BUBBLES_ADDR (0x7AEE2, 10 tiles) - small breathing bubbles.
+     *
+     * Based on testing, the 10 tiles appear to be laid out as:
+     * - Tile 0: Tiny bubble (1x1, 8x8)
+     * - Tile 1: Small bubble (1x1, 8x8)
+     * - Tiles 2-5: Medium bubble (2x2, 16x16)
+     * - Tiles 6-9: Larger bubble (2x2, 16x16)
+     *
+     * Note: Countdown numbers are part of Object $24 (Bubble Generator).
      */
     private List<SpriteMappingFrame> createBubblesMappings() {
         List<SpriteMappingFrame> frames = new ArrayList<>();
 
-        // Frame 0: Tiny bubble (1x1 tile = 8x8 pixels) - centered
+        // Frame 0: Tiny bubble (1x1 tile = 8x8 pixels)
         frames.add(createSimpleFrame(-4, -4, 1, 1, 0));
 
         // Frame 1: Small bubble (1x1 tile)
         frames.add(createSimpleFrame(-4, -4, 1, 1, 1));
 
-        // Frame 2: Medium-small bubble (1x1 tile)
-        frames.add(createSimpleFrame(-4, -4, 1, 1, 2));
+        // Frame 2: Medium bubble (2x2 tiles = 16x16 pixels) - tiles 2-5
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 2));
 
-        // Frame 3: Medium bubble (2x2 tiles = 16x16 pixels) - centered
-        frames.add(createSimpleFrame(-8, -8, 2, 2, 3));
+        // Frame 3: Larger bubble (2x2 tiles) - tiles 6-9
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 6));
 
-        // Frame 4: Large bubble (2x2 tiles)
-        frames.add(createSimpleFrame(-8, -8, 2, 2, 7));
+        // Frames 4-5: Reuse the larger bubble frames
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 6));
+        frames.add(createSimpleFrame(-8, -8, 2, 2, 6));
 
-        // Frame 5: Largest bubble before countdown (2x2 tiles)
-        frames.add(createSimpleFrame(-8, -8, 2, 2, 11));
-
-        // Frames 6-11: Countdown numbers 5, 4, 3, 2, 1, 0 (each 2x2 tiles = 16x16)
-        // These use tiles starting at index 15 (after the bubble tiles)
+        // Frames 6-11: Placeholder for countdown numbers
+        // Just show the small bubble for now
         for (int i = 0; i < 6; i++) {
-            frames.add(createSimpleFrame(-8, -8, 2, 2, 15 + i * 4));
+            frames.add(createSimpleFrame(-4, -4, 1, 1, 1));
         }
 
         return frames;

@@ -190,16 +190,34 @@ public class BreathingBubbleInstance extends AbstractObjectInstance {
             return;
         }
 
-        // TODO: Find correct bubble art ROM offset - using explosion as placeholder
-        PatternSpriteRenderer renderer = renderManager.getRenderer(
-                uk.co.jamesj999.sonic.level.objects.ObjectArtKeys.EXPLOSION);
+        // Use the correct bubble art from Sonic2ObjectArtKeys
+        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.BUBBLES);
         if (renderer == null || !renderer.isReady()) {
             return;
         }
 
         // Determine which frame to render
-        // TODO: Update frame indices when proper bubble art is found
-        int frameIndex = Math.min(lifetime / 30, 3); // Use first few explosion frames
+        int frameIndex;
+        if (countdownNumber >= 0) {
+            // Countdown bubble - show animation frames then number
+            int formFrame = COUNTDOWN_BUBBLE_FRAMES * COUNTDOWN_FRAME_DELAY;
+            if (countdownFrame >= formFrame) {
+                // Show the countdown number (frames 6-11 = numbers 5,4,3,2,1,0)
+                // countdownNumber is already 0-5 where 0=0, 1=1, etc.
+                // Frame mapping: frame 6 = "5", frame 7 = "4", ..., frame 11 = "0"
+                frameIndex = 6 + (5 - countdownNumber);
+            } else {
+                // Bubble growing animation - cycle through bubble sizes
+                int animFrame = countdownFrame / COUNTDOWN_FRAME_DELAY;
+                // Use frames 0-5 for bubble growth (small to large)
+                frameIndex = Math.min(animFrame / 3, 5);
+            }
+        } else {
+            // Regular small bubble - grow through frames as bubble rises
+            // Frame 0: tiny (1x1), Frame 1: small (1x1), Frame 2: medium (2x2), Frame 3: large (2x2)
+            int growthStage = lifetime / 30;  // Change frame every 30 ticks (~0.5 sec)
+            frameIndex = Math.min(growthStage, 3);  // Cap at frame 3
+        }
 
         // Render the sprite
         renderer.drawFrameIndex(frameIndex, (int) currentX, currentY, false, false);

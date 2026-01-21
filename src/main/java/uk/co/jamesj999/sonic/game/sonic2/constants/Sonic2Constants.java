@@ -223,10 +223,15 @@ public class Sonic2Constants {
     public static final int ART_NEM_WATER_SURFACE_ARZ_ADDR = 0x82E02; // Top of water in ARZ (16 blocks)
 
     // Bubbles Art (Object $0A Small Bubbles, Object $24 Bubble Generator)
-    public static final int ART_NEM_BUBBLES_ADDR = 0x837A0;  // ArtNem_Bubbles - underwater bubbles
+    // Small bubbles (Obj0A): 0x7AEE2 (10 tiles) - breathing bubbles from player's mouth
+    // Bubble generator (Obj24): 0x7AD16 (37 tiles) - air bubble generator object
+    // Countdown numbers: 0x7AF82 (uncompressed)
+    public static final int ART_NEM_BUBBLES_ADDR = 0x7AEE2;  // ArtNem_Bubbles - small breathing bubbles
+    public static final int ART_NEM_BUBBLE_GENERATOR_ADDR = 0x7AD16;  // ArtNem_BubbleGenerator - large bubbles (37 tiles)
+    public static final int ART_UNC_COUNTDOWN_ADDR = 0x7AF82;  // Countdown numbers for drowning (uncompressed)
     public static final int MAP_UNC_SMALL_BUBBLES_ADDR = 0x21FD6;  // Obj0A_MapUnc - small breathing bubbles
     public static final int MAP_UNC_BUBBLES_ADDR = 0x1FCA2;  // Obj24_MapUnc - bubble generator / countdown bubbles
-    public static final int ART_TILE_BUBBLES = 0x055B;  // ArtTile_ArtNem_BigBubbles - VRAM tile base
+    public static final int ART_TILE_BUBBLES = 0x055B;  // ArtTile_ArtNem_BigBubbles - VRAM tile base (original)
 
     // Leaves Art (Object $2C LeavesGenerator - ARZ falling leaves)
     public static final int ART_NEM_LEAVES_ADDR = 0x82EE8;  // ArtNem_Leaves - falling leaves (7 tiles)
