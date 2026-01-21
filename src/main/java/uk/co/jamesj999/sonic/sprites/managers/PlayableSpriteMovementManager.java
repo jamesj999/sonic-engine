@@ -527,20 +527,26 @@ public class PlayableSpriteMovementManager extends
 				// Check if this "wall" is actually just curved terrain (floor wrapping around).
 				// The original game uses rotated angle scanning perpendicular to the terrain,
 				// but our push sensors scan horizontally. On curved ramps, this can detect
-				// the curved floor as a "wall". Skip if the detected tile's angle is similar
-				// to the current terrain angle (within ~45 degrees), indicating it's floor.
-				int wallAngle = lowestResult.angle() & 0xFF;
+				// the curved floor as a "wall".
+				// IMPORTANT: Only apply this check when on a slope. On flat ground (angle near 0),
+				// wall tiles also often have angle 0, so we'd incorrectly skip real walls.
 				int terrainAngle = sprite.getAngle() & 0xFF;
-				int angleDiff = Math.abs(wallAngle - terrainAngle);
-				// Handle wrap-around (e.g., 0x10 vs 0xF0 should be 0x20 apart, not 0xE0)
-				if (angleDiff > 128) {
-					angleDiff = 256 - angleDiff;
-				}
-				// If angles are within ~45 degrees (0x20), it's likely curved terrain, not a wall
-				// Real walls would have angles perpendicular to the terrain (diff ~0x40)
-				if (angleDiff < 0x30) {
-					// Skip - this is curved floor, not a wall
-					return;
+				// Check if we're on a significant slope (not flat ground)
+				// Flat range: 0x00-0x10 or 0xF0-0xFF (within ~22 degrees of horizontal)
+				boolean onSlope = (terrainAngle > 0x10 && terrainAngle < 0xF0);
+				if (onSlope) {
+					int wallAngle = lowestResult.angle() & 0xFF;
+					int angleDiff = Math.abs(wallAngle - terrainAngle);
+					// Handle wrap-around (e.g., 0x10 vs 0xF0 should be 0x20 apart, not 0xE0)
+					if (angleDiff > 128) {
+						angleDiff = 256 - angleDiff;
+					}
+					// If angles are within ~45 degrees, it's likely curved terrain, not a wall
+					// Real walls would have angles perpendicular to the terrain
+					if (angleDiff < 0x30) {
+						// Skip - this is curved floor, not a wall
+						return;
+					}
 				}
 
 				boolean movingTowards = false;
