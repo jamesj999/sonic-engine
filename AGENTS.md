@@ -298,6 +298,11 @@ exporter.exportAsJavaConstants(results, "ART_", new PrintWriter(System.out));
 	*   `docs/SMPS-rips/SMPSPlay/libs/download/libvgm/emu/cores` – Contains source code for several consoles, but most importantly the ym2612(.c) for the sound chip, and sn76489(.c) which we are implementing on our own. These are extremely useful sources of truth for our project, as they are high-accuracy implementations.
 *   **Important guidelines:** We strive for accuracy in the audio engine. Wherever possible, we should be implementing features identically to hardware. We should reference the existing libvgm cores, the SMPSPlay source, and the documentation to achieve this. We should not "twiddle knobs" or implement simplified versions of logic, instead preferring to diagnose issues and compare to reference/sources of truth.
 ## Useful tips
+
+*   **Player Coordinates:** The original ROM uses **center coordinates** for player position. When implementing object interactions:
+    *   `player.getX()` / `player.getY()` → Top-left corner (for rendering)
+    *   `player.getCentreX()` / `player.getCentreY()` → Center position (for collision/interactions)
+    *   **Always use center coordinates** for object collision checks to match ROM behavior. Using top-left creates ~19 pixel vertical offset errors.
 *   **Terminology**: The codebase uses specific terms for level components that differ from standard Sonic 2 naming:
     *   **Pattern:** An 8x8 pixel tile.
     *   **Chunk:** A 16x16 pixel tile, composed of Patterns.

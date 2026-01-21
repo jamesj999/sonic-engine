@@ -415,6 +415,24 @@ Reference implementations in `docs/SMPS-rips/SMPSPlay/libs/download/libvgm/emu/c
 
 ## Coordinate System & Rendering
 
+### Player Sprite Coordinates
+
+**Critical:** The original Sonic 2 ROM uses **center coordinates** for player position (`x_pos`, `y_pos`), not top-left corner. When implementing object interactions or collision checks:
+
+| Method | Returns | Use Case |
+|--------|---------|----------|
+| `player.getX()` / `player.getY()` | Top-left corner of sprite bounding box | Rendering, bounding box calculations |
+| `player.getCentreX()` / `player.getCentreY()` | Center of sprite (matches ROM `x_pos`/`y_pos`) | **Object interactions, collision checks** |
+
+**Always use `getCentreX()`/`getCentreY()` for object interactions** to match original ROM behavior. Using `getX()`/`getY()` creates a vertical offset of ~19 pixels (half player height), causing incorrect collision detection (e.g., triggering checkpoints when running through loops beneath them).
+
+Example from disassembly (`s2.asm`):
+```assembly
+move.w  x_pos(a3),d0        ; player CENTER X
+sub.w   x_pos(a0),d0        ; object X
+; ... collision check uses center-to-center delta
+```
+
 ### Y-Axis Convention
 The engine uses Mega Drive/Genesis screen coordinates internally where **Y increases downward** (Y=0 at top of screen). OpenGL uses the opposite convention (Y=0 at bottom), so the `BatchedPatternRenderer` flips the Y coordinate during rendering:
 ```java
