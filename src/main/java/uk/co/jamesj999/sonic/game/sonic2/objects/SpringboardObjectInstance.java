@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AnimationIds;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -138,9 +139,12 @@ public class SpringboardObjectInstance extends BoxObjectInstance
     /**
      * Checks if the player is on the "high" side of the springboard.
      * ROM: loc_2641E (unflipped) and loc_26436 (flipped)
+     *
+     * NOTE: ROM uses x_pos(a1) which is player CENTER X, not top-left.
+     * Must use getCentreX() to match ROM behavior.
      */
     private boolean isPlayerOnHighSide(AbstractPlayableSprite player) {
-        int playerX = player.getX();
+        int playerX = player.getCentreX();
         int springboardX = spawn.x();
 
         if (isFlippedHorizontal()) {
@@ -163,7 +167,8 @@ public class SpringboardObjectInstance extends BoxObjectInstance
 
         // ROM: loc_2645E - Calculate relative X position for boost lookup
         // d0 = player.x - (springboard.x - 0x1C) = player.x - springboard.x + 0x1C
-        int dx = player.getX() - spawn.x() + 0x1C;
+        // NOTE: ROM uses x_pos(a1) which is player CENTER X
+        int dx = player.getCentreX() - spawn.x() + 0x1C;
 
         if (flipped) {
             // ROM bug preserved: uses 0x27 instead of 0x38 (2*0x1C)
@@ -206,8 +211,38 @@ public class SpringboardObjectInstance extends BoxObjectInstance
 
         // ROM: loc_264BC - Set player to airborne state
         player.setAir(true);
-        player.setGSpeed((short) 0);
-        player.setSpringing(15); // ROM: AniIDSonAni_Spring
+        player.setSpringing(15);
+
+        // ROM: move.b #0,spindash_flag(a1) - Clear spindash flag
+        player.setSpindash(false);
+
+        // ROM: move.b #AniIDSonAni_Spring,anim(a1) - Set Spring animation first
+        player.setAnimationId(Sonic2AnimationIds.SPRING);
+
+        // ROM: Animation override based on subtype bit 0 (twirl flag)
+        // If bit 0 set: Override to Walk animation with flip/twirl effect
+        int subtype = spawn.subtype();
+        if ((subtype & 0x01) != 0) {
+            // ROM: loc_264D4-26508 - Twirl animation setup
+            player.setAnimationId(Sonic2AnimationIds.WALK);
+            player.setFlipAngle(1);
+            player.setFlipSpeed(8);
+            // ROM: bit 1 controls flip count - 3 flips if clear, 1 flip if set
+            player.setFlipsRemaining((subtype & 0x02) != 0 ? 1 : 3);
+
+            // ROM: move.w #1,inertia(a1) - Set inertia for twirl
+            short inertia = 1;
+
+            // ROM: Negate flip_angle and inertia if player facing left
+            if (player.getDirection() == Direction.LEFT) {
+                player.setFlipAngle(-player.getFlipAngle());
+                inertia = -1;  // ROM: neg.w inertia(a1)
+            }
+            player.setGSpeed(inertia);
+        } else {
+            // ROM: No twirl - clear inertia
+            player.setGSpeed((short) 0);
+        }
 
         // ROM: Clear on_object status (player no longer standing on springboard)
         // This is handled by the physics engine when we set air=true

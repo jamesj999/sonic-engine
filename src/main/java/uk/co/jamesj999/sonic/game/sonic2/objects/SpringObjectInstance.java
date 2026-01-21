@@ -3,6 +3,7 @@ import uk.co.jamesj999.sonic.level.objects.*;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AnimationIds;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -240,6 +241,56 @@ public class SpringObjectInstance extends BoxObjectInstance
 
     private void trigger(AbstractPlayableSprite player) {
         animationState.setAnimId(triggeredAnimId);
+
+        int subtype = spawn.subtype();
+        int type = getType();
+
+        // ROM: Animation handling varies by spring type
+        // Up/Diagonal-Up: Set Spring animation, then override to Walk if bit 0 set
+        // Down/Diagonal-Down: Only set Walk if bit 0 set (no default animation change)
+        // Horizontal: Set Walk (unless rolling), then add flip params if bit 0 set
+
+        if (type == TYPE_HORIZONTAL) {
+            // ROM: loc_18B11-18B13 - Horizontal springs use Walk animation (unless rolling)
+            if (!player.getRolling()) {
+                player.setAnimationId(Sonic2AnimationIds.WALK);
+            }
+        } else if (type == TYPE_UP || type == TYPE_DIAGONAL_UP) {
+            // ROM: loc_189CA/loc_18E10 - Up springs set Spring animation first
+            player.setAnimationId(Sonic2AnimationIds.SPRING);
+        }
+        // Down springs (TYPE_DOWN, TYPE_DIAGONAL_DOWN): No default animation change
+
+        // ROM: If bit 0 set, override to Walk animation with flip/twirl effect
+        if ((subtype & 0x01) != 0) {
+            player.setAnimationId(Sonic2AnimationIds.WALK);
+            player.setFlipAngle(1);
+
+            if (type == TYPE_UP || type == TYPE_DOWN) {
+                // ROM: Up/Down springs use flip_speed=4, flips=0 (or 1 if bit 1 NOT set)
+                player.setFlipSpeed(4);
+                player.setFlipsRemaining((subtype & 0x02) != 0 ? 0 : 1);
+            } else {
+                // ROM: Horizontal/Diagonal springs use flip_speed=8, flips=1 (or 3 if bit 1 NOT set)
+                player.setFlipSpeed(8);
+                player.setFlipsRemaining((subtype & 0x02) != 0 ? 1 : 3);
+            }
+
+            // ROM: move.w #1,inertia(a1) - Set inertia for twirl
+            short inertia = 1;
+
+            // ROM: Negate flip_angle and inertia if player facing left
+            if (player.getDirection() == Direction.LEFT) {
+                player.setFlipAngle(-player.getFlipAngle());
+                inertia = -1;  // ROM: neg.w inertia(a1)
+            }
+
+            // Only set inertia for non-horizontal springs (horizontal already sets gSpeed = x_vel)
+            if (type != TYPE_HORIZONTAL) {
+                player.setGSpeed(inertia);
+            }
+        }
+
         try {
             if (AudioManager.getInstance() != null) {
                 AudioManager.getInstance().playSfx(GameSound.SPRING);

@@ -51,18 +51,20 @@ public class ObjectPlacementManager extends AbstractPlacementManager<ObjectSpawn
     }
 
     public void markRemembered(ObjectSpawn spawn) {
-        if (!spawn.respawnTracked()) {
-            return;
+        // Always remove from active list when object is destroyed
+        // (except Monitors which have special broken-state behavior)
+        if (spawn.objectId() != 0x26) {
+            active.remove(spawn);
         }
+
+        // Track ALL destroyed objects to prevent respawning during this session
+        // (original game only tracks respawnTracked objects, but we need to prevent
+        // immediate respawning when camera moves backward and refreshWindow is called)
         int index = getSpawnIndex(spawn);
         if (index < 0) {
             return;
         }
         remembered.set(index);
-        // Fix: Do not remove Monitors (0x26) from active list!
-        if (spawn.objectId() != 0x26) {
-            active.remove(spawn);
-        }
     }
 
     public boolean isRemembered(ObjectSpawn spawn) {
@@ -108,11 +110,10 @@ public class ObjectPlacementManager extends AbstractPlacementManager<ObjectSpawn
 
     private void trySpawn(int index) {
         ObjectSpawn spawn = spawns.get(index);
-        if (spawn.respawnTracked() && remembered.get(index)) {
-            // Monitors (0x26) are an exception: they spawn in a broken state if remembered
-            if (spawn.objectId() != 0x26) {
-                return;
-            }
+        // Skip spawning any object that has been destroyed (remembered) this session
+        // Monitors (0x26) are an exception: they spawn in a broken state if remembered
+        if (remembered.get(index) && spawn.objectId() != 0x26) {
+            return;
         }
         active.add(spawn);
     }

@@ -37,18 +37,26 @@ import java.util.logging.Logger;
  * <p>
  * <b>Disassembly Reference:</b> s2.asm lines 51297-51524 (Obj2B code)
  * <p>
- * <b>Routine Secondary states:</b>
+ * <b>Main routine states:</b>
+ * <ul>
+ *   <li>2: Main - handles rising and solid object behavior</li>
+ *   <li>4: Debris - falling debris piece with gravity</li>
+ * </ul>
+ * <b>Routine Secondary states (when routine=2):</b>
  * <ul>
  *   <li>0: Wait for player proximity trigger (within 64 pixels horizontal)</li>
  *   <li>2: Rising - extends 4 pixels per frame for 6 frames</li>
- *   <li>4: Extended - waits for player to stand on it, then launches</li>
+ *   <li>4: Extended - waits for player to stand on it, then breaks</li>
  * </ul>
  */
 public class RisingPillarObjectInstance extends AbstractObjectInstance
         implements SolidObjectProvider, SolidObjectListener {
     private static final Logger LOGGER = Logger.getLogger(RisingPillarObjectInstance.class.getName());
 
-    private static final int PALETTE_INDEX = 1;
+    // art_tile palette from disassembly: make_art_tile(ArtTile_ArtKos_LevelArt,1,0)
+    // The original game ADDS this to each mapping piece's pattern word
+    private static final int ART_TILE_PALETTE = 1;
+
     private static final int HALF_WIDTH = 0x1C;
     private static final int INITIAL_Y_RADIUS = 0x20;
     private static final int TRIGGER_DISTANCE = 0x40;
@@ -56,53 +64,61 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
     private static final int RISE_DELAY = 3;
     private static final int MAX_EXTENSION_FRAME = 6;
     private static final int GRAVITY = 0x18;
-    private static final int OFFSCREEN_Y_MARGIN = 0x120;
 
-    // Debris fragment velocities from Obj2B_VelArray (word_25BBE)
-    // Data format: index, x velocity, y velocity, delay
-    // Even indices fly left (-x), odd indices fly right (+x)
+    // Debris fragment velocities from word_25BBE and delays from byte_25BB0
+    // Format: x velocity, y velocity, delay
     private static final int[][] DEBRIS_DATA = {
-            {0, -0x200, -0x200, 0},   // Fragment 0: left
-            {1,  0x200, -0x200, 0},   // Fragment 1: right
-            {2, -0x1C0, -0x1C0, 0},   // Fragment 2: left
-            {3,  0x1C0, -0x1C0, 0},   // Fragment 3: right
-            {4, -0x180, -0x180, 4},   // Fragment 4: left
-            {5,  0x180, -0x180, 4},   // Fragment 5: right
-            {6, -0x140, -0x140, 8},   // Fragment 6: left
-            {7,  0x140, -0x140, 8},   // Fragment 7: right
-            {8, -0x100, -0x100, 12},  // Fragment 8: left
-            {9,  0x100, -0x100, 12},  // Fragment 9: right
-            {10,-0x0C0, -0x0C0, 16},  // Fragment 10: left
-            {11, 0x0C0, -0x0C0, 16},  // Fragment 11: right
-            {12,-0x080, -0x080, 20},  // Fragment 12: left
-            {13, 0x080, -0x080, 20}   // Fragment 13: right
+            {-0x200, -0x200, 0},   // Fragment 0
+            { 0x200, -0x200, 0},   // Fragment 1
+            {-0x1C0, -0x1C0, 0},   // Fragment 2
+            { 0x1C0, -0x1C0, 0},   // Fragment 3
+            {-0x180, -0x180, 4},   // Fragment 4
+            { 0x180, -0x180, 4},   // Fragment 5
+            {-0x140, -0x140, 8},   // Fragment 6
+            { 0x140, -0x140, 8},   // Fragment 7
+            {-0x100, -0x100, 12},  // Fragment 8
+            { 0x100, -0x100, 12},  // Fragment 9
+            {-0x0C0, -0x0C0, 16},  // Fragment 10
+            { 0x0C0, -0x0C0, 16},  // Fragment 11
+            {-0x080, -0x080, 20},  // Fragment 12
+            { 0x080, -0x080, 20}   // Fragment 13
     };
 
     private static List<SpriteMappingFrame> mappings;
     private static boolean mappingLoadAttempted;
 
+    // Position (8.8 fixed point for debris mode)
     private int x;
     private int y;
-    private int baseY;
+    private int subX;
+    private int subY;
+
     private int yRadius;
-    private int routineSecondary;
-    private int riseFrame;
+    private int routine;           // 2 = main, 4 = debris
+    private int routineSecondary;  // sub-state for main routine
     private int delayCounter;
     private int mappingFrame;
+    private int velX;
+    private int velY;
+    private int debrisDelay;       // objoff_3F in ROM - delay before debris starts moving
+    private SpriteMappingPiece debrisPiece;  // single piece for debris mode
     private ObjectSpawn dynamicSpawn;
-    private boolean playerStanding;
 
     public RisingPillarObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
         this.x = spawn.x();
         this.y = spawn.y();
-        this.baseY = spawn.y();
+        this.subX = x << 8;
+        this.subY = y << 8;
         this.yRadius = INITIAL_Y_RADIUS;
         this.mappingFrame = 0;
+        this.routine = 2;          // Start in main routine
         this.routineSecondary = 0;
-        this.riseFrame = 0;
         this.delayCounter = 0;
-        this.playerStanding = false;
+        this.velX = 0;
+        this.velY = 0;
+        this.debrisDelay = 0;
+        this.debrisPiece = null;
 
         refreshDynamicSpawn();
     }
@@ -124,23 +140,38 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        switch (routineSecondary) {
-            case 0 -> updateWaitForTrigger(player);
-            case 2 -> updateRising();
-            case 4 -> updateExtended(player);
+        if (routine == 2) {
+            updateMain(player);
+        } else if (routine == 4) {
+            updateDebris();
         }
         refreshDynamicSpawn();
     }
 
     /**
+     * Main routine (routine = 2): handles rising and solid object behavior.
+     * Corresponds to Obj2B_Main in disassembly.
+     */
+    private void updateMain(AbstractPlayableSprite player) {
+        switch (routineSecondary) {
+            case 0 -> updateWaitForTrigger(player);
+            case 2 -> updateRising();
+            case 4 -> {
+                // Extended state - solid contact triggers break
+                // The actual break is triggered in onSolidContact
+            }
+        }
+    }
+
+    /**
      * State 0: Wait for player to approach within trigger distance.
+     * Corresponds to loc_25B3C in disassembly.
      */
     private void updateWaitForTrigger(AbstractPlayableSprite player) {
         if (player == null) {
             return;
         }
 
-        // Use player centre X for distance check (matches ROM behavior)
         int dx = x - player.getCentreX();
         if (dx < 0) {
             dx = -dx;
@@ -154,6 +185,7 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
 
     /**
      * State 2: Rising - extend the pillar upward.
+     * Corresponds to loc_25B66 in disassembly.
      */
     private void updateRising() {
         if (delayCounter > 0) {
@@ -164,15 +196,9 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         // Extend pillar: y -= 4, yRadius += 4
         y -= RISE_SPEED;
         yRadius += RISE_SPEED;
-        riseFrame++;
+        mappingFrame++;
 
-        // Update mapping frame based on rise progress
-        if (riseFrame <= MAX_EXTENSION_FRAME) {
-            mappingFrame = riseFrame;
-        }
-
-        if (riseFrame >= MAX_EXTENSION_FRAME) {
-            // Fully extended, transition to extended state
+        if (mappingFrame >= MAX_EXTENSION_FRAME) {
             routineSecondary = 4;
         }
 
@@ -180,58 +206,94 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * State 4: Extended - wait for player to stand, then launch.
+     * Debris routine (routine = 4): falling debris with gravity.
+     * Corresponds to loc_25B8E in disassembly.
      */
-    private void updateExtended(AbstractPlayableSprite player) {
-        // The launch is triggered in onSolidContact when player stands on pillar
-        // Nothing to do here in the update loop
+    private void updateDebris() {
+        // Check delay (objoff_3F)
+        if (debrisDelay > 0) {
+            debrisDelay--;
+            return;
+        }
+
+        // Apply gravity and move (ObjectMove + add gravity)
+        velY += GRAVITY;
+        subX += velX;
+        subY += velY;
+        x = subX >> 8;
+        y = subY >> 8;
+
+        // Check if off-screen - delete if below screen
+        Camera camera = Camera.getInstance();
+        int screenBottom = camera.getY() + 224 + 128;
+        if (y > screenBottom) {
+            setDestroyed(true);
+        }
     }
 
     /**
-     * Release the player and destroy the pillar with debris.
-     * Note: The original ROM does NOT launch the player upward - it simply
-     * sets them to rolling/in-air state and lets them free-fall.
+     * Release the player and break the pillar into debris.
+     * The pillar itself becomes the first debris piece.
+     * Corresponds to loc_25ACE and loc_25BF6 in disassembly.
      */
     private void releasePlayerAndBreak(AbstractPlayableSprite player) {
-        // Set player to rolling state (bset #status.player.rolling)
+        // Set player to rolling state and in-air
         player.setRolling(true);
-
-        // Set player to in-air state (bset #status.player.in_air)
         player.setAir(true);
-
-        // Note: Original ROM does NOT modify y_vel - player free-falls
 
         // Play slow smash sound effect
         AudioManager.getInstance().playSfx(GameSound.SLOW_SMASH);
 
-        // Spawn debris fragments
-        spawnDebrisFragments();
+        // NOTE: We do NOT call markRemembered here. The original game uses MarkObjGone
+        // which CLEARS the respawn flag (bclr #7), allowing the pillar to respawn
+        // in its initial shrunken state when the player returns to this area.
 
-        // Destroy this pillar
-        setDestroyed(true);
-
-        LOGGER.fine(() -> String.format("Rising pillar at (%d,%d) launched player", spawn.x(), spawn.y()));
-    }
-
-    /**
-     * Spawn 14 debris fragment objects with scripted velocities.
-     */
-    private void spawnDebrisFragments() {
-        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
-        if (objectManager == null) {
+        // Get debris frame (mapping_frame + 7)
+        ensureMappingsLoaded();
+        if (mappings == null || mappings.isEmpty()) {
+            setDestroyed(true);
             return;
         }
 
-        for (int[] data : DEBRIS_DATA) {
-            int frameIndex = 7 + data[0]; // Frames 7-13 are debris
-            int velX = data[1];
-            int velY = data[2];
-            int delay = data[3];
-
-            RisingPillarDebrisInstance debris = new RisingPillarDebrisInstance(
-                    x, y, velX, velY, frameIndex, delay);
-            objectManager.addDynamicObject(debris);
+        int debrisFrame = Math.min(mappingFrame + 7, mappings.size() - 1);
+        SpriteMappingFrame frame = mappings.get(debrisFrame);
+        if (frame == null || frame.pieces().isEmpty()) {
+            setDestroyed(true);
+            return;
         }
+
+        List<SpriteMappingPiece> pieces = frame.pieces();
+
+        // Transform THIS pillar into the first debris piece
+        // The original sets routine to 4, gives it velocity, and sets static mappings
+        routine = 4;
+        mappingFrame = debrisFrame;
+        debrisPiece = pieces.get(0);
+        velX = DEBRIS_DATA[0][0];
+        velY = DEBRIS_DATA[0][1];
+        debrisDelay = DEBRIS_DATA[0][2];
+
+        // Initialize fixed-point position for debris movement
+        subX = x << 8;
+        subY = y << 8;
+
+        // Spawn remaining debris pieces (1-13) as separate objects
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        if (objectManager != null) {
+            int numPieces = Math.min(pieces.size(), DEBRIS_DATA.length);
+            for (int i = 1; i < numPieces; i++) {
+                SpriteMappingPiece piece = pieces.get(i);
+                int vx = DEBRIS_DATA[i][0];
+                int vy = DEBRIS_DATA[i][1];
+                int delay = DEBRIS_DATA[i][2];
+
+                RisingPillarDebrisInstance debris = new RisingPillarDebrisInstance(
+                        x, y, vx, vy, piece, delay);
+                objectManager.addDynamicObject(debris);
+            }
+        }
+
+        LOGGER.fine(() -> String.format("Rising pillar at (%d,%d) broke into debris", spawn.x(), spawn.y()));
     }
 
     @Override
@@ -242,6 +304,16 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
             return;
         }
 
+        if (routine == 4) {
+            // Debris mode - render single piece
+            renderDebrisPiece(commands);
+        } else {
+            // Main mode - render full frame
+            renderFullFrame(commands);
+        }
+    }
+
+    private void renderFullFrame(List<GLCommand> commands) {
         int frame = mappingFrame;
         if (frame < 0 || frame >= mappings.size()) {
             frame = 0;
@@ -260,26 +332,52 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         List<SpriteMappingPiece> pieces = mapping.pieces();
         for (int i = pieces.size() - 1; i >= 0; i--) {
             SpriteMappingPiece piece = pieces.get(i);
-            SpritePieceRenderer.renderPieces(
-                    List.of(piece),
-                    x,
-                    y,
-                    0,
-                    PALETTE_INDEX,
-                    hFlip,
-                    vFlip,
-                    (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
-                        int descIndex = patternIndex & 0x7FF;
-                        if (pieceHFlip) {
-                            descIndex |= 0x800;
-                        }
-                        if (pieceVFlip) {
-                            descIndex |= 0x1000;
-                        }
-                        descIndex |= (paletteIndex & 0x3) << 13;
-                        graphicsManager.renderPattern(new PatternDesc(descIndex), drawX, drawY);
-                    });
+            renderPieceWithArtTile(graphicsManager, piece, x, y, hFlip, vFlip);
         }
+    }
+
+    private void renderDebrisPiece(List<GLCommand> commands) {
+        if (debrisPiece == null) {
+            return;
+        }
+
+        // Don't render if in delay period
+        if (debrisDelay > 0) {
+            return;
+        }
+
+        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        renderPieceWithArtTile(graphicsManager, debrisPiece, x, y, false, false);
+    }
+
+    /**
+     * Render a piece, adding art_tile palette offset as the original game does.
+     * The original game does: pattern_word = mapping_pattern + art_tile
+     * This adds the art_tile palette (1) to the mapping piece's palette.
+     */
+    private void renderPieceWithArtTile(GraphicsManager graphicsManager, SpriteMappingPiece piece,
+                                        int drawX, int drawY, boolean hFlip, boolean vFlip) {
+        SpritePieceRenderer.renderPieces(
+                List.of(piece),
+                drawX,
+                drawY,
+                0,
+                -1, // We handle palette ourselves
+                hFlip,
+                vFlip,
+                (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, px, py) -> {
+                    int descIndex = patternIndex & 0x7FF;
+                    if (pieceHFlip) {
+                        descIndex |= 0x800;
+                    }
+                    if (pieceVFlip) {
+                        descIndex |= 0x1000;
+                    }
+                    // Add art_tile palette to mapping palette (as original game does)
+                    int finalPalette = (paletteIndex + ART_TILE_PALETTE) & 0x3;
+                    descIndex |= (finalPalette & 0x3) << 13;
+                    graphicsManager.renderPattern(new PatternDesc(descIndex), px, py);
+                });
     }
 
     @Override
@@ -303,11 +401,12 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
-        if (routineSecondary != 4) {
+        // Only handle solid contact in main routine, extended state
+        if (routine != 2 || routineSecondary != 4) {
             return;
         }
 
-        // If player is standing on extended pillar, launch them
+        // If player is standing on extended pillar, break it
         if (contact.standing()) {
             releasePlayerAndBreak(player);
         }
@@ -315,7 +414,8 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(AbstractPlayableSprite player) {
-        return !isDestroyed();
+        // Only solid in main routine (not when debris)
+        return routine == 2 && !isDestroyed();
     }
 
     private void refreshDynamicSpawn() {
@@ -367,7 +467,7 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
                 frameAddr += 1;
                 int tileWord = reader.readU16BE(frameAddr);
                 frameAddr += 2;
-                frameAddr += 2; // skip 2 bytes
+                frameAddr += 2; // skip 2 bytes (2P tile word)
                 int xOffset = (short) reader.readU16BE(frameAddr);
                 frameAddr += 2;
 
@@ -416,7 +516,8 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Inner class for debris fragments that fly apart when the pillar launches the player.
+     * Inner class for debris fragments (pieces 1-13).
+     * Piece 0 is the original pillar object transformed into debris.
      */
     public static class RisingPillarDebrisInstance extends AbstractObjectInstance {
 
@@ -429,10 +530,9 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         private int velX;
         private int velY;
         private int delay;
-        private final int frameIndex;
-        private boolean active;
+        private final SpriteMappingPiece piece;
 
-        public RisingPillarDebrisInstance(int x, int y, int velX, int velY, int frameIndex, int delay) {
+        public RisingPillarDebrisInstance(int x, int y, int velX, int velY, SpriteMappingPiece piece, int delay) {
             super(new ObjectSpawn(x, y, 0x2B, 0, 0, false, 0), "PillarDebris");
             this.currentX = x;
             this.currentY = y;
@@ -440,9 +540,8 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
             this.subY = y << 8;
             this.velX = velX;
             this.velY = velY;
-            this.frameIndex = frameIndex;
+            this.piece = piece;
             this.delay = delay;
-            this.active = (delay == 0);
         }
 
         @Override
@@ -451,72 +550,55 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
                 return;
             }
 
-            // Handle spawn delay
-            if (!active) {
+            // Handle spawn delay (objoff_3F)
+            if (delay > 0) {
                 delay--;
-                if (delay <= 0) {
-                    active = true;
-                }
                 return;
             }
 
-            // Apply gravity
+            // Apply gravity and move
             velY += GRAVITY;
-
-            // Update position (8.8 fixed point)
             subX += velX;
             subY += velY;
             currentX = subX >> 8;
             currentY = subY >> 8;
 
             // Check if off-screen
-            int cameraY = Camera.getInstance().getY();
-            int screenHeight = 224;
-            if (currentY > cameraY + screenHeight + 32) {
+            Camera camera = Camera.getInstance();
+            int screenBottom = camera.getY() + 224 + 128;
+            if (currentY > screenBottom) {
                 setDestroyed(true);
             }
         }
 
         @Override
         public void appendRenderCommands(List<GLCommand> commands) {
-            if (isDestroyed() || !active) {
-                return;
-            }
-
-            ensureMappingsLoaded();
-            if (mappings == null || frameIndex >= mappings.size()) {
-                return;
-            }
-
-            SpriteMappingFrame mapping = mappings.get(frameIndex);
-            if (mapping == null || mapping.pieces().isEmpty()) {
+            if (isDestroyed() || piece == null || delay > 0) {
                 return;
             }
 
             GraphicsManager graphicsManager = GraphicsManager.getInstance();
-            List<SpriteMappingPiece> pieces = mapping.pieces();
-            for (int i = pieces.size() - 1; i >= 0; i--) {
-                SpriteMappingPiece piece = pieces.get(i);
-                SpritePieceRenderer.renderPieces(
-                        List.of(piece),
-                        currentX,
-                        currentY,
-                        0,
-                        PALETTE_INDEX,
-                        false,
-                        false,
-                        (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
-                            int descIndex = patternIndex & 0x7FF;
-                            if (pieceHFlip) {
-                                descIndex |= 0x800;
-                            }
-                            if (pieceVFlip) {
-                                descIndex |= 0x1000;
-                            }
-                            descIndex |= (paletteIndex & 0x3) << 13;
-                            graphicsManager.renderPattern(new PatternDesc(descIndex), drawX, drawY);
-                        });
-            }
+            SpritePieceRenderer.renderPieces(
+                    List.of(piece),
+                    currentX,
+                    currentY,
+                    0,
+                    -1,
+                    false,
+                    false,
+                    (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
+                        int descIndex = patternIndex & 0x7FF;
+                        if (pieceHFlip) {
+                            descIndex |= 0x800;
+                        }
+                        if (pieceVFlip) {
+                            descIndex |= 0x1000;
+                        }
+                        // Add art_tile palette to mapping palette
+                        int finalPalette = (paletteIndex + ART_TILE_PALETTE) & 0x3;
+                        descIndex |= (finalPalette & 0x3) << 13;
+                        graphicsManager.renderPattern(new PatternDesc(descIndex), drawX, drawY);
+                    });
         }
 
         @Override

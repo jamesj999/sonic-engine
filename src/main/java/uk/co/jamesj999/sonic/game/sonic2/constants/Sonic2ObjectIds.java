@@ -29,6 +29,7 @@ public final class Sonic2ObjectIds {
 
     // ARZ Objects
     public static final int ARROW_SHOOTER = 0x22;
+    public static final int BUBBLES = 0x24;       // Bubble Generator (Obj24) - spawns breathable bubbles underwater
 
     // Supporting objects spawned by Badniks
     public static final int EXPLOSION = 0x27;

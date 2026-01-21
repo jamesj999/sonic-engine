@@ -188,6 +188,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean controlLocked = false;
         /**
+         * Movement lock timer (ROM: move_lock). When > 0, player input is ignored
+         * and the player cannot move. Decremented each frame.
+         * Used by: air bubble collection (35 frames), springs, hurt state, etc.
+         */
+        protected int moveLockTimer = 0;
+        /**
          * When true, an object has full control of the player and normal physics
          * (gravity, movement, collision) are skipped. This matches the ROM's
          * obj_control = $81 behavior used by spin tubes, corkscrews, etc.
@@ -293,6 +299,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
                 this.controlLocked = false;
+                this.moveLockTimer = 0;
                 this.objectControlled = false;
                 this.objectControlReleasedFrame = Integer.MIN_VALUE;
                 this.spiralActiveFrame = Integer.MIN_VALUE;
@@ -842,6 +849,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setControlLocked(boolean controlLocked) {
                 this.controlLocked = controlLocked;
+        }
+
+        /**
+         * Gets the movement lock timer (ROM: move_lock).
+         * When > 0, player input is ignored.
+         */
+        public int getMoveLockTimer() {
+                return moveLockTimer;
+        }
+
+        /**
+         * Sets the movement lock timer (ROM: move_lock).
+         * The timer is decremented each frame by the movement manager.
+         */
+        public void setMoveLockTimer(int moveLockTimer) {
+                this.moveLockTimer = Math.max(0, moveLockTimer);
         }
 
         /**
@@ -1668,6 +1691,55 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         public boolean isInWater() {
                 return inWater;
+        }
+
+        /**
+         * Replenishes air by collecting a large breathable bubble.
+         * Implements full ROM behavior from s2.asm lines 44966-44998:
+         * <ul>
+         *   <li>Clears all velocity (x_vel, y_vel, inertia)</li>
+         *   <li>Sets bubble-breathing animation</li>
+         *   <li>Locks movement for 35 frames (0x23)</li>
+         *   <li>Clears jumping, pushing, and roll-jumping flags</li>
+         *   <li>Unrolls player if rolling (adjusts hitbox)</li>
+         * </ul>
+         */
+        public void replenishAir() {
+                // ROM: clr.w x_vel(a1) / clr.w y_vel(a1) / clr.w inertia(a1)
+                xSpeed = 0;
+                ySpeed = 0;
+                gSpeed = 0;
+
+                // ROM: move.b #AniIDSonAni_Bubble,anim(a1)
+                setAnimationId(uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AnimationIds.BUBBLE);
+
+                // ROM: move.w #$23,move_lock(a1) (35 frames)
+                moveLockTimer = 0x23;
+
+                // ROM: move.b #0,jumping(a1) - we don't have a jumping flag, but air=false is similar
+                air = false;
+
+                // ROM: bclr #status.player.pushing,status(a1)
+                pushing = false;
+
+                // ROM: bclr #status.player.rolljumping,status(a1)
+                rollingJump = false;
+
+                // ROM: btst #status.player.rolling,status(a1) / beq.w loc_1FBB8
+                // If rolling, unroll (setRolling handles hitbox adjustment and Y position)
+                if (rolling) {
+                        // ROM: bclr #status.player.rolling,status(a1)
+                        // setRolling(false) handles:
+                        // - Adjusting y_radius back to standing height
+                        // - Adjusting x_radius back to standing width
+                        // - Adjusting Y position (subq.w #5,y_pos for Sonic, subq.w #1 for Tails)
+                        setRolling(false);
+                }
+
+                // Delegate to drowning manager for air timer reset and music handling
+                if (drowningManager != null) {
+                        drowningManager.replenishAir();
+                }
         }
 
         /**

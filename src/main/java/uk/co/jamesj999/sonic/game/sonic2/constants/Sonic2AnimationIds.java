@@ -12,6 +12,9 @@ public final class Sonic2AnimationIds {
     public static final int FLOAT = 0x0E;      // Suspended/floating (used by Grabber)
     public static final int FLOAT2 = 0x0F;     // Alternate float
     public static final int SPRING = 0x10;
+    public static final int HANG = 0x11;      // Hanging from horizontal bar
+    public static final int HANG2 = 0x14;     // Alternate hang
+    public static final int BUBBLE = 0x15;    // Breathing air bubble underwater
     public static final int DEATH = 0x18;
     public static final int HURT = 0x19;
 

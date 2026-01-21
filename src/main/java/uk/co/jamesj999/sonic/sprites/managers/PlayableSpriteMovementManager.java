@@ -113,7 +113,16 @@ public class PlayableSpriteMovementManager extends
 			testKeyPressed = false;
 		}
 
-		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null;
+		// Decrement moveLockTimer each frame (ROM: move_lock countdown)
+		// This is used by air bubble collection, springs, etc.
+		int moveLock = sprite.getMoveLockTimer();
+		if (moveLock > 0) {
+			sprite.setMoveLockTimer(moveLock - 1);
+		}
+
+		// Control is locked by either the timer system or the moveLockTimer counter
+		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null
+				|| sprite.getMoveLockTimer() > 0;
 
 		// SPG: Store raw button state before control lock modifies it.
 		// During control lock, friction is only applied when NO buttons are pressed.

@@ -246,8 +246,8 @@ public class ChopChopBadnikInstance extends AbstractBadnikInstance {
         }
 
         // Render current animation frame
-        // facingLeft = true means sprite needs horizontal flip
-        boolean hFlip = facingLeft;
+        // Art faces left by default; flip when facing right
+        boolean hFlip = !facingLeft;
         boolean vFlip = false;
         renderer.drawFrameIndex(animFrame, currentX, currentY, hFlip, vFlip);
     }

@@ -138,6 +138,19 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.LEAVES_GENERATOR,
                 (spawn, registry) -> new LeavesGeneratorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
+        // ARZ Bubble Generator (Object 0x24)
+        // Subtype bit 7 determines mode: generator (invisible spawner) vs child bubble
+        registerFactory(Sonic2ObjectIds.BUBBLES, (spawn, registry) -> {
+            if ((spawn.subtype() & 0x80) != 0) {
+                // Generator mode - invisible spawner that creates rising bubbles
+                return new BubbleGeneratorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId()));
+            } else {
+                // Child bubble mode - shouldn't be in level data normally
+                // but handle it by creating a rising bubble at that position
+                return new BubbleObjectInstance(spawn.x(), spawn.y(), spawn.subtype() & 0x07, 0);
+            }
+        });
+
         // CPZ Objects
         registerFactory(Sonic2ObjectIds.TIPPING_FLOOR,
                 (spawn, registry) -> new TippingFloorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));

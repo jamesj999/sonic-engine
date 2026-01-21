@@ -3,9 +3,11 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AnimationIds;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
+import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.SolidContact;
@@ -112,6 +114,34 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
         }
 
         player.setSpringing(15);
+
+        // ROM: move.b #AniIDSonAni_Spring,anim(a1) - Set Spring animation first
+        player.setAnimationId(Sonic2AnimationIds.SPRING);
+
+        // ROM: Animation override based on subtype bit 0 (twirl flag)
+        int subtype = spawn.subtype();
+        if ((subtype & 0x01) != 0) {
+            // ROM: loc_29967-29979 - Twirl animation setup
+            player.setAnimationId(Sonic2AnimationIds.WALK);
+            player.setFlipAngle(1);
+            player.setFlipSpeed(4);
+            // ROM: bit 1 controls flip count - 1 flip if clear, 0 flips if set
+            player.setFlipsRemaining((subtype & 0x02) != 0 ? 0 : 1);
+
+            // ROM: move.w #1,inertia(a1) - Set inertia for twirl
+            short inertia = 1;
+
+            // ROM: Negate flip_angle and inertia if player facing left
+            if (player.getDirection() == Direction.LEFT) {
+                player.setFlipAngle(-player.getFlipAngle());
+                inertia = -1;  // ROM: neg.w inertia(a1)
+            }
+            player.setGSpeed(inertia);
+        } else {
+            // ROM: No twirl - clear inertia
+            player.setGSpeed((short) 0);
+        }
+
         trigger();
     }
 

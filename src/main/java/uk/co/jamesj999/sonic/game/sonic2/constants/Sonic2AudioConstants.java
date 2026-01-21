@@ -28,6 +28,8 @@ public final class Sonic2AudioConstants {
     public static final int SFX_SLOW_SMASH = 0xCB; // Slow smash / wall/block break (SndID_SlowSmash)
     public static final int SFX_SMASH = 0xB9;      // Platform collapse sound (SndID_Smash)
     public static final int SFX_LEAVES = 0xE5; // ARZ leaves rustling sound (SndID_Leaves)
+    public static final int SFX_INHALING_BUBBLE = 0xAD; // Inhaling air bubble underwater (SndID_InhalingBubble)
+    public static final int SFX_GLOOP = 0xDA;           // Bubble gloop sound (SndID_Gloop)
 
     public static final int MUS_CASINO_NIGHT_2P = 0x80;
     public static final int MUS_EMERALD_HILL = 0x81;

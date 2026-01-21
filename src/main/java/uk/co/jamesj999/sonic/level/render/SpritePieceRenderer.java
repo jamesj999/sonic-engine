@@ -51,7 +51,10 @@ public final class SpritePieceRenderer {
 
             int pieceX = originX + pieceXOffset;
             int pieceY = originY + pieceYOffset;
-            int paletteIndex = piece.paletteIndex() != 0 ? piece.paletteIndex() : defaultPaletteIndex;
+            // If defaultPaletteIndex is negative, always use piece's palette (even if 0).
+            // Otherwise, fall back to default when piece's palette is 0.
+            int paletteIndex = defaultPaletteIndex < 0 ? piece.paletteIndex()
+                    : (piece.paletteIndex() != 0 ? piece.paletteIndex() : defaultPaletteIndex);
 
             for (int ty = 0; ty < heightTiles; ty++) {
                 for (int tx = 0; tx < widthTiles; tx++) {
