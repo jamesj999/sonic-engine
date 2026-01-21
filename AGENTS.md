@@ -124,6 +124,27 @@ Game objects use a factory pattern with game-specific registries.
 2. Create instance class extending `AbstractObjectInstance` (or `AbstractBadnikInstance` for enemies)
 3. Register factory in `Sonic2ObjectRegistry.registerDefaultFactories()`
 
+### Game-Specific Art Loading
+
+**Important:** Keep `ObjectArtData` game-agnostic. Game-specific art (badniks, zone objects) uses a provider pattern:
+
+1. **Add ROM address** to `Sonic2Constants.java`
+2. **Add art key** to `Sonic2ObjectArtKeys.java`
+3. **Add public loader method** to `Sonic2ObjectArt.java`:
+   ```java
+   public ObjectSpriteSheet loadNewBadnikSheet() {
+       Pattern[] patterns = safeLoadNemesisPatterns(ADDR, "Name");
+       if (patterns.length == 0) return null;
+       return new ObjectSpriteSheet(patterns, createMappings(), palette, 1);
+   }
+   ```
+4. **Register in provider** `Sonic2ObjectArtProvider.loadArtForZone()`:
+   ```java
+   registerSheet(Sonic2ObjectArtKeys.NEW_BADNIK, artLoader.loadNewBadnikSheet());
+   ```
+
+**DO NOT** add badnik/enemy sheets to `ObjectArtData` - it should remain game-agnostic.
+
 ### Constants Files
 | File | Contents |
 |------|----------|

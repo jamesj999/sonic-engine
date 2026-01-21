@@ -281,6 +281,67 @@ Example badniks: `MasherBadnikInstance`, `BuzzerBadnikInstance`, `CoconutsBadnik
 3. Register the factory in `Sonic2ObjectRegistry.registerDefaultFactories()`
 4. Add collision data to `Sonic2ObjectConstants.java` if needed
 
+## Game-Specific Art Loading Pattern
+
+**Important:** Keep `ObjectArtData` game-agnostic. Game-specific sprite sheets (badniks, zone-specific objects) should be loaded through the game-specific provider, not added to `ObjectArtData`.
+
+### Architecture
+
+| Class | Purpose |
+|-------|---------|
+| `ObjectArtData` | Game-agnostic art data (monitors, springs, spikes, etc.) |
+| `Sonic2ObjectArt` | Sonic 2-specific art loader with public loader methods |
+| `Sonic2ObjectArtProvider` | Registers sheets and provides key-based access |
+| `Sonic2ObjectArtKeys` | String keys for Sonic 2-specific art |
+
+### Adding Game-Specific Art (e.g., new Badnik)
+
+1. **Add ROM address** to `Sonic2Constants.java`:
+   ```java
+   public static final int ART_NEM_NEWBADNIK_ADDR = 0x89B9A;
+   ```
+
+2. **Add art key** to `Sonic2ObjectArtKeys.java`:
+   ```java
+   public static final String NEW_BADNIK = "newbadnik";
+   ```
+
+3. **Add loader method** to `Sonic2ObjectArt.java`:
+   ```java
+   public ObjectSpriteSheet loadNewBadnikSheet() {
+       Pattern[] patterns = safeLoadNemesisPatterns(
+           Sonic2Constants.ART_NEM_NEWBADNIK_ADDR, "NewBadnik");
+       if (patterns.length == 0) {
+           return null;
+       }
+       List<SpriteMappingFrame> mappings = createNewBadnikMappings();
+       return new ObjectSpriteSheet(patterns, mappings, paletteIndex, 1);
+   }
+   ```
+
+4. **Add mappings method** to `Sonic2ObjectArt.java`:
+   ```java
+   private List<SpriteMappingFrame> createNewBadnikMappings() {
+       List<SpriteMappingFrame> frames = new ArrayList<>();
+       // Add SpriteMappingPiece for each frame
+       return frames;
+   }
+   ```
+
+5. **Register in provider** `Sonic2ObjectArtProvider.loadArtForZone()`:
+   ```java
+   registerSheet(Sonic2ObjectArtKeys.NEW_BADNIK, artLoader.loadNewBadnikSheet());
+   ```
+
+### DO NOT add to ObjectArtData
+
+The following should NOT be added to `ObjectArtData`:
+- Badnik/enemy sprites (Masher, Buzzer, ChopChop, etc.)
+- Zone-specific object sprites
+- Game-specific decorative elements
+
+These should use the loader method pattern above, keeping `ObjectArtData` focused on common objects that could be shared across game implementations.
+
 ## Constants Files
 
 Game-specific constants are organized in the `game.sonic2.constants` package:
