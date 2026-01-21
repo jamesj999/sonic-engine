@@ -5,6 +5,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.level.scroll.BackgroundCamera;
 import uk.co.jamesj999.sonic.level.scroll.ParallaxTables;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlArz;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlCnz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlCpz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlMcz;
@@ -57,6 +58,7 @@ public class ParallaxManager {
     private boolean loaded = false;
 
     private SwScrlArz arzHandler;
+    private SwScrlCnz cnzHandler;
     private SwScrlEhz ehzHandler;
     private SwScrlCpz cpzHandler;
     private SwScrlMcz mczHandler;
@@ -82,6 +84,7 @@ public class ParallaxManager {
         try {
             tables = new ParallaxTables(rom);
             arzHandler = new SwScrlArz(tables);
+            cnzHandler = new SwScrlCnz(tables);
             ehzHandler = new SwScrlEhz(tables);
             cpzHandler = new SwScrlCpz(tables);
             mczHandler = new SwScrlMcz(tables);
@@ -189,7 +192,16 @@ public class ParallaxManager {
                 }
                 break;
             case ZONE_CNZ:
-                fillCnz(cameraX, bgScrollY);
+                if (cnzHandler != null) {
+                    cnzHandler.update(hScroll, cameraX, cameraY, frameCounter, actId);
+                    minScroll = cnzHandler.getMinScrollOffset();
+                    maxScroll = cnzHandler.getMaxScrollOffset();
+                    vscrollFactorBG = cnzHandler.getVscrollFactorBG();
+                    // Update bgCamera for renderer's vertical scroll
+                    bgCamera.setBgYPos(vscrollFactorBG);
+                } else {
+                    fillCnz(cameraX, bgScrollY);
+                }
                 break;
             case ZONE_HTZ:
                 fillHtz(cameraX, bgScrollY);

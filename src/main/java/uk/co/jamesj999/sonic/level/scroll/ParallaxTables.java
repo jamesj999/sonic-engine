@@ -29,7 +29,11 @@ public class ParallaxTables {
     public static final int SWSCRL_MCZ_2P_ROW_HEIGHTS_SIZE = 26;
 
     public static final int SWSCRL_CNZ_ROW_HEIGHTS_ADDR = 0xD156;
-    public static final int SWSCRL_CNZ_ROW_HEIGHTS_SIZE = 64;
+    public static final int SWSCRL_CNZ_ROW_HEIGHTS_SIZE = 10;  // 10 bytes: [16,16,16,16,16,16,16,16,0,240]
+
+    // CNZ Ripple data - subset of main ripple data at 0xC682 (66 bytes needed)
+    // Used for the special rippling segment
+    public static final int SWSCRL_CNZ_RIPPLE_DATA_SIZE = 66;
 
     public static final int SWSCRL_DEZ_ROW_HEIGHTS_ADDR = 0xD48A;
     public static final int SWSCRL_DEZ_ROW_HEIGHTS_SIZE = 36;
