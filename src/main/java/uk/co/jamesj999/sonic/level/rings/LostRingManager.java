@@ -10,10 +10,6 @@ import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-
 public class LostRingManager {
     private static final int MAX_LOST_RINGS = 0x20;
     private static final int GRAVITY = 0x18;
@@ -53,7 +49,10 @@ public class LostRingManager {
     private final int sparkleStartIndex;
     private final int sparkleFrameCount;
     private final int frameDelay;
-    private final List<LostRing> rings = new ArrayList<>();
+
+    // Pre-allocated ring pool to avoid per-hit allocations
+    private final LostRing[] ringPool = new LostRing[MAX_LOST_RINGS];
+    private int activeRingCount = 0;
     private int nextId;
 
     public LostRingManager(LevelManager levelManager, RingRenderManager renderManager,
@@ -70,6 +69,10 @@ public class LostRingManager {
             this.sparkleFrameCount = 0;
             this.frameDelay = 1;
         }
+        // Pre-allocate all ring objects upfront
+        for (int i = 0; i < MAX_LOST_RINGS; i++) {
+            ringPool[i] = new LostRing();
+        }
     }
 
     public void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter) {
@@ -83,6 +86,9 @@ public class LostRingManager {
         int angle = 0x288;
         int xVel = 0;
         int yVel = 0;
+
+        // Reset active count - new spawn replaces any existing rings
+        activeRingCount = 0;
 
         for (int i = 0; i < count; i++) {
             if (angle >= 0) {
@@ -100,8 +106,10 @@ public class LostRingManager {
                 }
             }
 
-            rings.add(new LostRing(nextId++, player.getCentreX(), player.getCentreY(), xVel, yVel, LIFETIME_FRAMES,
-                    frameCounter));
+            // Reuse pooled ring object instead of allocating new one
+            ringPool[activeRingCount].reset(nextId++, player.getCentreX(), player.getCentreY(),
+                    xVel, yVel, LIFETIME_FRAMES, frameCounter);
+            activeRingCount++;
             xVel = -xVel;
             angle = -angle;
         }
@@ -111,7 +119,7 @@ public class LostRingManager {
     }
 
     public void update(AbstractPlayableSprite player, int frameCounter) {
-        if (renderManager == null || rings.isEmpty()) {
+        if (renderManager == null || activeRingCount == 0) {
             return;
         }
 
@@ -134,9 +142,13 @@ public class LostRingManager {
             }
         }
 
-        Iterator<LostRing> iterator = rings.iterator();
-        while (iterator.hasNext()) {
-            LostRing ring = iterator.next();
+        int cameraBottom = camera.getMaxY() + 224;
+
+        for (int i = 0; i < activeRingCount; i++) {
+            LostRing ring = ringPool[i];
+            if (!ring.isActive()) {
+                continue;
+            }
 
             if (!ring.isCollected()) {
                 ring.addXSubpixel(ring.getXVel());
@@ -164,27 +176,24 @@ public class LostRingManager {
             }
 
             ring.decLifetime();
-            if (ring.getLifetime() <= 0) {
-                iterator.remove();
-                continue;
-            }
-
-            int cameraBottom = camera.getMaxY() + 224;
-            if (ring.getY() > cameraBottom) {
-                iterator.remove();
+            if (ring.getLifetime() <= 0 || ring.getY() > cameraBottom) {
+                ring.deactivate();
             }
         }
     }
 
     public void draw(int frameCounter) {
-        if (renderManager == null || rings.isEmpty()) {
+        if (renderManager == null || activeRingCount == 0) {
             return;
         }
 
         int spinFrameIndex = renderManager.getSpinFrameIndex(frameCounter);
-        Iterator<LostRing> iterator = rings.iterator();
-        while (iterator.hasNext()) {
-            LostRing ring = iterator.next();
+        for (int i = 0; i < activeRingCount; i++) {
+            LostRing ring = ringPool[i];
+            if (!ring.isActive()) {
+                continue;
+            }
+
             if (!ring.isCollected()) {
                 // Blink when lifetime < 64 frames (skip render on odd frames)
                 if (ring.getLifetime() < 64 && (ring.getLifetime() & 1) != 0) {
@@ -196,7 +205,7 @@ public class LostRingManager {
 
             int sparkleStart = ring.getSparkleStartFrame();
             if (sparkleStart < 0 || sparkleFrameCount <= 0) {
-                iterator.remove();
+                ring.deactivate();
                 continue;
             }
             int elapsed = frameCounter - sparkleStart;
@@ -205,7 +214,7 @@ public class LostRingManager {
             }
             int sparkleFrameOffset = elapsed / frameDelay;
             if (sparkleFrameOffset >= sparkleFrameCount) {
-                iterator.remove();
+                ring.deactivate();
                 continue;
             }
             int sparkleFrameIndex = sparkleStartIndex + sparkleFrameOffset;

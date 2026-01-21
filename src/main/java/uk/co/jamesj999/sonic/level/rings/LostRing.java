@@ -9,10 +9,18 @@ public class LostRing {
     private int lifetime;
     private boolean collected;
     private int sparkleStartFrame = -1;
-    private final int id;
-    private final int spawnFrame;
+    private int id;
+    private int spawnFrame;
+    private boolean active;
+
+    public LostRing() {
+    }
 
     public LostRing(int id, int x, int y, int xVel, int yVel, int lifetime, int spawnFrame) {
+        reset(id, x, y, xVel, yVel, lifetime, spawnFrame);
+    }
+
+    public void reset(int id, int x, int y, int xVel, int yVel, int lifetime, int spawnFrame) {
         this.id = id;
         this.xSubpixel = x << 8;
         this.ySubpixel = y << 8;
@@ -20,6 +28,17 @@ public class LostRing {
         this.yVel = yVel;
         this.lifetime = lifetime;
         this.spawnFrame = spawnFrame;
+        this.collected = false;
+        this.sparkleStartFrame = -1;
+        this.active = true;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void deactivate() {
+        this.active = false;
     }
 
     /**
