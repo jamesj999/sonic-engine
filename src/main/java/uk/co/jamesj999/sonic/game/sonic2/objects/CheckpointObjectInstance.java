@@ -129,9 +129,9 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
             return;
         }
 
-        // Check overlap zone
-        int px = player.getX();
-        int py = player.getY();
+        // Check overlap zone (use center position to match original ROM behavior)
+        int px = player.getCentreX();
+        int py = player.getCentreY();
         int cx = spawn.x();
         int cy = spawn.y();
 
