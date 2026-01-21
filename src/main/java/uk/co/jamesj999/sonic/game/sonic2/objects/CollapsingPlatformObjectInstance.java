@@ -60,7 +60,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     // Delay values: $1A, $12, $0A, $02, $16, $0E, $06
     // Piece offsets from mapping data (for debug rendering)
     private static final ZoneConfig OOZ_CONFIG = new ZoneConfig(
-            0x20,  // Half of width_pixels=0x40 (64px full width)
+            0x40,  // width_pixels from disassembly (half-width, collision extends ±0x40 from center)
             0x10,  // 16px half-height
             new int[]{0x1A, 0x12, 0x0A, 0x02, 0x16, 0x0E, 0x06},
             Sonic2ObjectArtKeys.OOZ_COLLAPSING_PLATFORM,
@@ -80,7 +80,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     // MCZ: 6 fragments from obj1F_c.asm
     // Delay values: $1A, $16, $12, $0E, $0A, $02
     private static final ZoneConfig MCZ_CONFIG = new ZoneConfig(
-            0x10,  // Half of width_pixels=0x20 (32px full width)
+            0x20,  // width_pixels from disassembly (half-width, collision extends ±0x20 from center)
             0x10,  // 16px half-height
             new int[]{0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x02},
             Sonic2ObjectArtKeys.MCZ_COLLAPSING_PLATFORM,
@@ -99,7 +99,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     // ARZ: 8 fragments from obj1F_d.asm
     // Delay values: $16, $1A, $18, $12, $06, $0E, $0A, $02
     private static final ZoneConfig ARZ_CONFIG = new ZoneConfig(
-            0x10,  // Half of width_pixels=0x20 (32px full width)
+            0x20,  // width_pixels from disassembly (half-width, collision extends ±0x20 from center)
             0x10,  // 16px half-height
             new int[]{0x16, 0x1A, 0x18, 0x12, 0x06, 0x0E, 0x0A, 0x02},
             null,  // Uses level art
@@ -153,8 +153,15 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     private boolean collapsed = false;
     private int mappingFrame = 0;  // 0 = intact, 1 = collapsed appearance
 
+    // Orientation from spawn render_flags (inherited by fragments per disassembly)
+    private final boolean hFlip;
+    private final boolean vFlip;
+
     public CollapsingPlatformObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
+        // Extract flip flags from spawn renderFlags (bit 0 = hFlip, bit 1 = vFlip)
+        this.hFlip = (spawn.renderFlags() & 1) != 0;
+        this.vFlip = (spawn.renderFlags() & 2) != 0;
         initZoneConfig();
     }
 
@@ -215,7 +222,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
                 appendDebug(commands);
                 return;
             }
-            renderer.drawFrameIndex(mappingFrame, spawn.x(), spawn.y(), false, false);
+            renderer.drawFrameIndex(mappingFrame, spawn.x(), spawn.y(), hFlip, vFlip);
         }
     }
 
@@ -305,12 +312,12 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         int[] delayData = config.delayData();
 
         // Fragments spawn at parent's exact position - sprite piece offsets handle visual displacement
-        // (This matches the disassembly where fragments inherit parent x_pos/y_pos)
+        // (This matches the disassembly where fragments inherit parent x_pos/y_pos and render_flags)
         for (int i = 0; i < delayData.length; i++) {
             int delay = delayData[i];
 
             CollapsingPlatformFragmentInstance fragment = new CollapsingPlatformFragmentInstance(
-                    spawn.x(), spawn.y(), delay, i, config, renderManager);
+                    spawn.x(), spawn.y(), delay, i, config, renderManager, hFlip, vFlip);
             objectManager.addDynamicObject(fragment);
         }
     }
@@ -331,8 +338,8 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
                     spawn.y(),
                     0,  // Level patterns start at index 0
                     ARZ_PALETTE,
-                    false,  // No frame H-flip
-                    false,  // No frame V-flip
+                    hFlip,  // Frame H-flip from spawn render_flags
+                    vFlip,  // Frame V-flip from spawn render_flags
                     (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
                         int descIndex = patternIndex & 0x7FF;
                         if (pieceHFlip) {
@@ -401,8 +408,13 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         private final ObjectRenderManager renderManager;
         private boolean falling = false;
 
+        // Inherited from parent (per disassembly: render_flags copied from parent to fragment)
+        private final boolean hFlip;
+        private final boolean vFlip;
+
         public CollapsingPlatformFragmentInstance(int x, int y, int delay, int fragmentIndex,
-                                                   ZoneConfig config, ObjectRenderManager renderManager) {
+                                                   ZoneConfig config, ObjectRenderManager renderManager,
+                                                   boolean hFlip, boolean vFlip) {
             super(new ObjectSpawn(x, y, 0x1F, 0, 0, false, 0), "CollapsingPlatformFragment");
             this.currentX = x;
             this.currentY = y;
@@ -411,6 +423,8 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             this.fragmentIndex = fragmentIndex;
             this.config = config;
             this.renderManager = renderManager;
+            this.hFlip = hFlip;
+            this.vFlip = vFlip;
         }
 
         @Override
@@ -480,7 +494,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             // OOZ: All fragments use the same mapping (frame 0 or 1)
             // MCZ: Fragments use frame 1 (collapsed pieces)
             int frameIndex = 1;  // Collapsed/fragment frame
-            renderer.drawFrameIndex(frameIndex, currentX, currentY, false, false);
+            renderer.drawFrameIndex(frameIndex, currentX, currentY, hFlip, vFlip);
         }
 
         @Override
@@ -506,8 +520,8 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
                     currentY,
                     0,  // Level patterns start at index 0
                     ARZ_PALETTE,
-                    false,  // No frame H-flip
-                    false,  // No frame V-flip
+                    hFlip,  // Frame H-flip inherited from parent
+                    vFlip,  // Frame V-flip inherited from parent
                     (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, drawX, drawY) -> {
                         int descIndex = patternIndex & 0x7FF;
                         if (pieceHFlip) {

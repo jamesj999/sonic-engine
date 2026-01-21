@@ -250,5 +250,10 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         registerFactory(Sonic2ObjectIds.COLLAPSING_PLATFORM,
                 (spawn, registry) -> new CollapsingPlatformObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
+
+        // ARZ Swinging Platform
+        registerFactory(Sonic2ObjectIds.SWINGING_PFORM,
+                (spawn, registry) -> new SwingingPformObjectInstance(spawn,
+                        registry.getPrimaryName(spawn.objectId())));
     }
 }

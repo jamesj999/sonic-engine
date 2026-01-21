@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-21 13:55:17
+Generated: 2026-01-21 16:02:34
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 40 (33.3%)
-- **Unimplemented:** 80 (66.7%)
+- **Implemented:** 41 (34.2%)
+- **Unimplemented:** 79 (65.8%)
 
 ## Implemented Objects
 
@@ -45,6 +45,7 @@ Generated: 2026-01-21 13:55:17
 | 0x79 | Checkpoint | 61 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
 | 0x7A | SidewaysPform | 9 | CPZ2, MCZ1, MCZ2 |
 | 0x7B | PipeExitSpring | 9 | CPZ1, CPZ2 |
+| 0x82 | SwingingPform | 15 | ARZ1, ARZ2 |
 | 0x86 | Flipper | 63 | CNZ1, CNZ2 |
 | 0x9D | Coconuts | 17 | EHZ1, EHZ2 |
 | 0xA5 | Spiny | 11 | CPZ1, CPZ2 |
@@ -89,7 +90,6 @@ Generated: 2026-01-21 13:55:17
 | 0xD5 | Object | Elevator | 16 | CNZ1, CNZ2 |
 | 0x71 | Object | MTZLavaBubble | 15 | MTZ2, MTZ3 |
 | 0x72 | Object | CNZConveyorBelt | 15 | CNZ1, CNZ2, MTZ2, MTZ3, WFZ1 |
-| 0x82 | Object | SwingingPform | 15 | ARZ1, ARZ2 |
 | 0x16 | Object | HTZLift | 14 | HTZ1, HTZ2 |
 | 0x47 | Object | Button | 14 | MTZ1, MTZ2, MTZ3 |
 | 0x70 | Object | Cog | 14 | MTZ2, MTZ3 |
@@ -257,7 +257,7 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 #### Act 1
 
-Total: 182 objects | Implemented: 13 | Unimplemented: 7
+Total: 182 objects | Implemented: 14 | Unimplemented: 6
 
 **Badniks:**
 - [ ] 0x8C Whisp (x6) [0x00]
@@ -280,12 +280,12 @@ Total: 182 objects | Implemented: 13 | Unimplemented: 7
 - [x] 0x40 Springboard (x6) [0x03]
 - [x] 0x41 Spring (x8) [0x10, 0x12]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
-- [ ] 0x82 SwingingPform (x2) [0x10]
+- [x] 0x82 SwingingPform (x2) [0x10]
 - [ ] 0x83 ARZRotPforms (x3) [0x10]
 
 #### Act 2
 
-Total: 222 objects | Implemented: 12 | Unimplemented: 8
+Total: 222 objects | Implemented: 13 | Unimplemented: 7
 
 **Badniks:**
 - [ ] 0x8C Whisp (x19) [0x00]
@@ -311,7 +311,7 @@ Total: 222 objects | Implemented: 12 | Unimplemented: 8
 - [x] 0x40 Springboard (x10) [0x03]
 - [x] 0x41 Spring (x17) [5 subtypes]
 - [x] 0x79 Checkpoint (x4) [4 subtypes]
-- [ ] 0x82 SwingingPform (x13) [0x10, 0x11]
+- [x] 0x82 SwingingPform (x13) [0x10, 0x11]
 - [ ] 0x83 ARZRotPforms (x1) [0x10]
 
 ### Casino Night Zone

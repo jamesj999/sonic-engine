@@ -69,6 +69,7 @@ public class ObjectDiscoveryTool {
             0x1C,  // BridgeStake
             0x1D,  // BlueBalls (CPZ)
             0x1E,  // CPZSpinTube
+            0x1F,  // Collapsing Platform
             0x22,  // ArrowShooter (ARZ arrow-firing hazard + projectile)
             0x23,  // FallingPillar (ARZ pillar that drops lower section)
             0x24,  // Bubbles (ARZ bubble generator + rising bubbles)
@@ -90,6 +91,7 @@ public class ObjectDiscoveryTool {
             0x79,  // Checkpoint
             0x7A,  // SidewaysPform (CPZ/MCZ horizontal moving platform)
             0x7B,  // PipeExitSpring (CPZ warp tube exit spring)
+            0x82,  // SwingingPform (ARZ swinging vine platform)
             0x86,  // CNZFlipper
             0x9D,  // Coconuts
             0xA5,  // Spiny (CPZ crawling badnik)

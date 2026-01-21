@@ -74,6 +74,7 @@ public final class Sonic2ObjectIds {
     // ARZ Objects
     public static final int FALLING_PILLAR = 0x23; // Falling Pillar (Obj23) - ARZ pillar that drops its lower section
     public static final int RISING_PILLAR = 0x2B;  // Rising Pillar (Obj2B) - ARZ pillar that rises and launches player
+    public static final int SWINGING_PFORM = 0x82; // Swinging Platform (Obj82) - ARZ swinging vine platform
 
     // OOZ/MCZ/ARZ Objects
     public static final int COLLAPSING_PLATFORM = 0x1F; // Collapsing Platform (Obj1F) - OOZ/MCZ/ARZ

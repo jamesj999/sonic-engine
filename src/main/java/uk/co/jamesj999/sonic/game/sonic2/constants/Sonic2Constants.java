@@ -121,6 +121,9 @@ public class Sonic2Constants {
     // Rising Pillar (Object 0x2B) - ARZ pillar that rises and launches player
     public static final int MAP_UNC_OBJ2B_ADDR = 0x25C6E;  // Obj2B_MapUnc_25C6E
 
+    // Swinging Platform (Object 0x82) - ARZ swinging vine platform
+    public static final int MAP_UNC_OBJ82_ADDR = 0x2A476;  // Obj82_MapUnc_2A476
+
     public static final int ZONE_AQUATIC_RUIN = 2;
 
     // Checkpoint/Starpost (Object $79)
