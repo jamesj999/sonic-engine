@@ -155,9 +155,12 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
         // Clamp to available frames (the mappings file only has 2 frames)
         mappingFrame = Math.min(propIndex, 1);
 
-        // Enable swinging if behavior type is not 0 and not 7
-        // From disassembly: "Check subtype bits 0-3: If NOT 0 and NOT 7: Set objoff_38 = 1"
-        swingEnabled = (behaviorType != 0 && behaviorType != 7);
+        // Enable swinging if behavior type is 1-6 (not 0 or 7)
+        // From disassembly: objoff_38 is set to 1 for types 1-6
+        // Note: When type 1/3/5 transition to 2/4/6, they clear swingEnabled
+        // If a platform starts at type 2/4/6, swinging will be enabled but the Y movement
+        // will override it (matching original behavior)
+        swingEnabled = (behaviorType >= 1 && behaviorType <= 6);
 
         LOGGER.fine(() -> String.format(
                 "SwingingPform init: subtype=0x%02X, behavior=%d, width=%d, yRadius=%d, frame=%d, swing=%s",
@@ -185,11 +188,12 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
             return;
         }
 
+        // TEMPORARILY DISABLED for debugging - test static collision first
         // Update behavior based on type
-        updateBehavior(player);
+        // updateBehavior(player);
 
         // Update swinging animation
-        updateSwinging();
+        // updateSwinging();
 
         refreshDynamicSpawn();
     }
@@ -427,8 +431,11 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         ensureMappingsLoaded();
+
+        // Always draw debug collision box for now to diagnose alignment
+        appendDebug(commands);
+
         if (mappings == null || mappings.isEmpty()) {
-            appendDebug(commands);
             return;
         }
 
@@ -439,7 +446,6 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
 
         SpriteMappingFrame mapping = mappings.get(frame);
         if (mapping == null || mapping.pieces().isEmpty()) {
-            appendDebug(commands);
             return;
         }
 
@@ -486,11 +492,10 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        // From disassembly lines 56704-56718:
-        // d1 = width_pixels + $B (half-width for collision)
-        // d2 = y_radius (air half-height)
-        // d3 = y_radius + 1 (ground half-height)
-        return new SolidObjectParams(widthPixels + 0x0B, yRadius, yRadius + 1);
+        // Use widthPixels as half-width and yRadius as half-height
+        // For property 0: widthPixels=32, yRadius=8 (small platform)
+        // For property 1: widthPixels=28, yRadius=50 (tall pillar)
+        return new SolidObjectParams(widthPixels, yRadius, yRadius + 1);
     }
 
     @Override
@@ -613,10 +618,22 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
         int top = y - halfHeight;
         int bottom = y + halfHeight;
 
-        appendLine(commands, left, top, right, top);
-        appendLine(commands, right, top, right, bottom);
-        appendLine(commands, right, bottom, left, bottom);
-        appendLine(commands, left, bottom, left, top);
+        // Draw collision box in green
+        appendLine(commands, left, top, right, top, 0.0f, 1.0f, 0.0f);      // Top (standing surface)
+        appendLine(commands, right, top, right, bottom, 0.3f, 0.7f, 0.3f);
+        appendLine(commands, right, bottom, left, bottom, 0.3f, 0.7f, 0.3f);
+        appendLine(commands, left, bottom, left, top, 0.3f, 0.7f, 0.3f);
+
+        // Draw center cross in red to show object origin
+        appendLine(commands, x - 4, y, x + 4, y, 1.0f, 0.0f, 0.0f);
+        appendLine(commands, x, y - 4, x, y + 4, 1.0f, 0.0f, 0.0f);
+    }
+
+    private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2, float r, float g, float b) {
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, x1, y1, 0, 0));
+        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
+                r, g, b, x2, y2, 0, 0));
     }
 
     private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2) {
