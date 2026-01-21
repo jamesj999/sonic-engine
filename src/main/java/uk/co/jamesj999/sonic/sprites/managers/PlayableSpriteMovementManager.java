@@ -209,16 +209,15 @@ public class PlayableSpriteMovementManager extends
 					short absGSpeed = (short) Math.abs(sprite.getGSpeed());
 					int angle = sprite.getAngle() & 0xFF;
 
-					// If too slow (speed < 2.5 pixels) and on a steep slope (angle between 33 and
-					// 223)
+					// SPG: If too slow (speed < 2.5 pixels = 640 subpixels) and on a steep slope
+					// (hex angle 33-223, which is 46°-314° - everything NOT in ground mode)
 					if (absGSpeed < 640 && (angle >= 33 && angle <= 223)) {
-						// Detach
+						// Detach from floor
 						sprite.setAir(true);
-						// Lock controls
+						// SPG: Only Ground Speed is set to 0, X/Y Speed are PRESERVED
+						// This allows player to maintain momentum and land correctly
 						sprite.setGSpeed((short) 0);
-						sprite.setXSpeed((short) 0);
-						sprite.setYSpeed((short) 0);
-
+						// Lock controls for 30 frames
 						TimerManager.getInstance()
 								.registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
 					}
@@ -235,6 +234,12 @@ public class PlayableSpriteMovementManager extends
 
 		// Now, move the sprite as per the air movement or GSpeed rules:
 		sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
+
+		// SPG: Gravity is applied AFTER position update for accurate jump heights.
+		// This must happen before collision checks but after movement.
+		if (inAir) {
+			applyAirGravity(sprite);
+		}
 
 		// Enforce level boundaries (ROM: Sonic_LevelBound)
 		doLevelBoundary(sprite);
@@ -306,16 +311,9 @@ public class PlayableSpriteMovementManager extends
 				// Distance is positive if we are below the ceiling, negative if we have
 				// penetrated it.
 				// If distance < 0, we have hit the ceiling.
-				// A small threshold might be needed, but < 0 is standard for penetration.
 				if (lowestResult.distance() < 0) {
-					// We hit the ceiling.
-					// 1. Correct position.
-					// distance is negative (e.g. -5). We need to move DOWN by 5.
-					// moveForSensorResult handles direction UP: y - distance => y - (-5) => y + 5.
-					// Correct.
+					// We hit the ceiling - correct position and zero Y speed
 					moveForSensorResult(sprite, lowestResult);
-
-					// 2. Stop vertical movement
 					sprite.setYSpeed((short) 0);
 				}
 			}
@@ -526,10 +524,14 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		} else {
+			// Use smarter sensor selection for grounded collision on curves.
+			// This prevents getting stuck on convex upward slopes while rolling.
+			SensorResult bestResult = selectBestGroundSensor(results);
+
 			// AnglePos-style grounded glue: use fixed 0x0E cutoff.
 			// BUT: if player is standing on a solid object (bridge, platform),
 			// don't set to air based on terrain alone.
-			if (lowestResult == null || lowestResult.distance() >= 14) {
+			if (bestResult == null || bestResult.distance() >= 14) {
 				// Check if player is standing on a solid object before setting to air
 				var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
 				if (solidManager != null && (solidManager.isRidingObject()
@@ -540,11 +542,11 @@ public class PlayableSpriteMovementManager extends
 				sprite.setAir(true);
 				return;
 			}
-			moveForSensorResult(sprite, lowestResult);
-			if (lowestResult.angle() == (byte) 0xFF) {
+			moveForSensorResult(sprite, bestResult);
+			if (bestResult.angle() == (byte) 0xFF) {
 				sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
 			} else {
-				sprite.setAngle(lowestResult.angle());
+				sprite.setAngle(bestResult.angle());
 			}
 			updateGroundMode(sprite);
 		}
@@ -968,22 +970,36 @@ public class PlayableSpriteMovementManager extends
 				}
 			}
 		}
-		// Air drag: Sonic 2 applies drag only when ySpeed is in [-1024, 0)
-		// subpixels/frame
+		// Air drag: Sonic 2 applies drag only when ySpeed is in (-1024, 0)
+		// subpixels/frame (SPG: Y Speed < 0 AND Y Speed > -4 pixels).
 		// (near jump apex, still moving up). Drag is NOT applied while falling or while
 		// hurt.
 		// Formula: xSpeed = xSpeed - (xSpeed / 32), using integer division (rounds
 		// toward zero).
 		// This naturally stops when abs(xSpeed) < 32 (since xSpeed/32 becomes 0).
-		if (ySpeed < 0 && ySpeed >= -1024 && !sprite.isHurt()) {
+		if (ySpeed < 0 && ySpeed > -1024 && !sprite.isHurt()) {
 			xSpeed = (short) (xSpeed - (xSpeed / 32));
 		}
-		ySpeed += sprite.getGravity();
+		// SPG: Gravity is applied AFTER position update, not here.
+		// See applyAirGravity() which is called after sprite.move()
+		sprite.setXSpeed(xSpeed);
+		sprite.setYSpeed(ySpeed);
 
+		// SPG: Ground Angle smoothly returns toward 0 by 2 hex units per frame while airborne.
+		// This affects the visual rotation of the sprite.
+		sprite.returnAngleToZero();
+	}
+
+	/**
+	 * Applies gravity to airborne sprite. SPG specifies this must happen
+	 * AFTER position update for accurate jump heights.
+	 */
+	private void applyAirGravity(AbstractPlayableSprite sprite) {
+		short ySpeed = sprite.getYSpeed();
+		ySpeed += sprite.getGravity();
 		if (ySpeed > 4096) {
 			ySpeed = 4096;
 		}
-		sprite.setXSpeed(xSpeed);
 		sprite.setYSpeed(ySpeed);
 	}
 
@@ -1194,7 +1210,9 @@ public class PlayableSpriteMovementManager extends
 	}
 
 	private void jumpHandler(boolean jump) {
-		short ySpeedConstant = (4 * 256);
+		// SPG: Jump release cap is -4 pixels (-1024 subpixels) normally,
+		// but -2 pixels (-512 subpixels) when underwater
+		short ySpeedConstant = sprite.isInWater() ? (short) (2 * 256) : (short) (4 * 256);
 		if (sprite.getYSpeed() < -ySpeedConstant) {
 			// Don't cap velocity if player is springing - let spring force apply fully
 			if (!jump && !sprite.getSpringing()) {
@@ -1216,6 +1234,64 @@ public class PlayableSpriteMovementManager extends
 			}
 		}
 		return lowestResult;
+	}
+
+	/**
+	 * Selects the best sensor result for grounded terrain collision on curves.
+	 * On convex curves (like upward slopes that get steeper), the standard
+	 * "lowest distance" approach can cause oscillation. This method improves
+	 * behavior by considering the direction of movement when sensors detect
+	 * significantly different terrain angles.
+	 *
+	 * @param results The two ground sensor results [left, right]
+	 * @return The best sensor result to use for collision
+	 */
+	private SensorResult selectBestGroundSensor(SensorResult[] results) {
+		SensorResult left = results[0];
+		SensorResult right = results[1];
+
+		// If only one sensor has a result, use it
+		if (left == null) return right;
+		if (right == null) return left;
+
+		// Check if both sensors are detecting terrain (within glue distance)
+		boolean leftOnTerrain = left.distance() < 14;
+		boolean rightOnTerrain = right.distance() < 14;
+
+		// If only one is on terrain, use it
+		if (leftOnTerrain && !rightOnTerrain) return left;
+		if (rightOnTerrain && !leftOnTerrain) return right;
+
+		// If neither on terrain, use lowest (standard behavior)
+		if (!leftOnTerrain && !rightOnTerrain) {
+			return findLowestSensorResult(results);
+		}
+
+		// Both sensors on terrain - check for significant angle difference (curve)
+		int leftAngle = left.angle() & 0xFF;
+		int rightAngle = right.angle() & 0xFF;
+		int angleDiff = Math.abs(leftAngle - rightAngle);
+		// Handle angle wraparound (e.g., 250 vs 10 should be diff of 16, not 240)
+		if (angleDiff > 128) angleDiff = 256 - angleDiff;
+
+		// If angles are similar (< 16 hex units ≈ 22°), use standard lowest approach
+		if (angleDiff < 16) {
+			return findLowestSensorResult(results);
+		}
+
+		// Significant curve detected - prefer sensor in direction of movement
+		// This prevents getting stuck on convex curves while rolling
+		short gSpeed = sprite.getGSpeed();
+		if (gSpeed > 0) {
+			// Moving right - prefer right sensor (front sensor)
+			return right;
+		} else if (gSpeed < 0) {
+			// Moving left - prefer left sensor (front sensor)
+			return left;
+		}
+
+		// Standing still - use lowest (standard)
+		return findLowestSensorResult(results);
 	}
 
 	private void moveForSensorResult(AbstractPlayableSprite sprite, SensorResult result) {

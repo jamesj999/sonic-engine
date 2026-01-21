@@ -397,7 +397,9 @@ public class TestPlayableSpriteMovementManager {
         }
 
         /**
-         * Test air drag applies at exactly ySpeed = -1024 (boundary condition).
+         * Test air drag does NOT apply at exactly ySpeed = -1024 (boundary condition).
+         * SPG specifies: air drag applies when ySpeed > -1024 (strictly greater than).
+         * At exactly -1024, the condition is false.
          */
         @Test
         public void testAirDragAtYSpeedBoundary() throws Exception {
@@ -412,8 +414,9 @@ public class TestPlayableSpriteMovementManager {
 
                 method.invoke(manager, mockSprite, false, false);
 
-                // Air drag should apply (ySpeed >= -1024 is true when ySpeed == -1024)
-                assertEquals("Air drag applies at ySpeed = -1024", (short) 2976, mockSprite.getXSpeed());
+                // SPG: Air drag only applies when ySpeed > -1024, NOT when ySpeed == -1024
+                // So xSpeed should remain unchanged
+                assertEquals("Air drag should NOT apply at ySpeed = -1024 (SPG boundary)", (short) 3072, mockSprite.getXSpeed());
         }
 
         /**
@@ -519,11 +522,16 @@ public class TestPlayableSpriteMovementManager {
 
                 method.invoke(manager, mockSprite);
 
-                // After jump, the sprite should be in air with angle reset to 0
+                // After jump, the sprite should be in air
                 assertTrue("Sprite should be in air after jump", mockSprite.getAir());
-                assertEquals("Angle should be 0 after jump (air)", (byte) 0x00, mockSprite.getAngle());
 
-                // But the jump velocity should reflect the ORIGINAL angle (0x40 = 90 degrees)
+                // SPG: Angle is NOT immediately reset to 0 - it gradually returns to 0
+                // at 2 hex units per frame while airborne. The jump just happened, so
+                // angle should still be close to original value (unchanged by setAir).
+                assertEquals("Angle should still be 0x40 immediately after jump (SPG: gradual return)",
+                                (byte) 0x40, mockSprite.getAngle());
+
+                // The jump velocity should reflect the ORIGINAL angle (0x40 = 90 degrees)
                 // sin(90) = 1, cos(90) = 0, so xSpeed should have full jump force, ySpeed
                 // should be ~0
                 // Actually for this engine: angle 0x40 = 90 degrees means running up a left
@@ -531,6 +539,34 @@ public class TestPlayableSpriteMovementManager {
                 // The key test is that xSpeed is non-zero (indicating angle was used)
                 assertTrue("Jump should have used original angle for velocity calculation",
                                 mockSprite.getXSpeed() != 0 || mockSprite.getYSpeed() != 0);
+        }
+
+        /**
+         * Test that angle gradually returns to 0 while airborne at 2 hex units per frame.
+         * SPG: Ground Angle smoothly returns toward 0 by 2.8125° (hex angle 2) per frame when airborne.
+         */
+        @Test
+        public void testAirAngleGradualReturn() {
+                // Start with angle at 0x10 (16 decimal), should decrease by 2 per call
+                mockSprite.setAngle((byte) 0x10);
+                mockSprite.returnAngleToZero();
+                assertEquals("Angle should decrease by 2", (byte) 0x0E, mockSprite.getAngle());
+
+                mockSprite.returnAngleToZero();
+                assertEquals("Angle should decrease by 2 again", (byte) 0x0C, mockSprite.getAngle());
+
+                // Test angle at 0xF0 (240 decimal, negative side), should increase toward 0 (256)
+                mockSprite.setAngle((byte) 0xF0);
+                mockSprite.returnAngleToZero();
+                assertEquals("Angle should increase by 2 toward 0", (byte) 0xF2, mockSprite.getAngle());
+
+                mockSprite.returnAngleToZero();
+                assertEquals("Angle should increase by 2 again", (byte) 0xF4, mockSprite.getAngle());
+
+                // Test angle at exactly 0 stays at 0
+                mockSprite.setAngle((byte) 0x00);
+                mockSprite.returnAngleToZero();
+                assertEquals("Angle at 0 should stay 0", (byte) 0x00, mockSprite.getAngle());
         }
 
         /**

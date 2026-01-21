@@ -502,11 +502,41 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.air = air;
                 if (air) {
                         setGroundMode(GroundMode.GROUND);
-                        setAngle((byte) 0);
+                        // SPG: Angle should gradually return to 0 while airborne,
+                        // NOT immediately reset. See returnAngleToZero() called during air updates.
                 } else {
                         // Reset badnik chain when landing
                         resetBadnikChain();
                 }
+        }
+
+        /**
+         * SPG: While airborne, Ground Angle smoothly returns toward 0 by 2 hex units per frame.
+         * This affects the visual rotation of the sprite during air time.
+         * Call this once per frame while airborne.
+         */
+        public void returnAngleToZero() {
+                int currentAngle = angle & 0xFF;
+                if (currentAngle == 0) {
+                        return; // Already at 0
+                }
+                // Determine shortest path to 0: through positive or negative direction
+                // Angles 1-127 should decrease toward 0
+                // Angles 128-255 should increase toward 0 (wrapping through 256)
+                if (currentAngle <= 128) {
+                        // Decrease toward 0
+                        currentAngle -= 2;
+                        if (currentAngle < 0) {
+                                currentAngle = 0;
+                        }
+                } else {
+                        // Increase toward 0 (256)
+                        currentAngle += 2;
+                        if (currentAngle >= 256) {
+                                currentAngle = 0;
+                        }
+                }
+                angle = (byte) currentAngle;
         }
 
         private int badnikChainCounter = 0;
@@ -1149,14 +1179,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         /**
-         * Override gravity to reduce it underwater.
+         * Override gravity to reduce it underwater or when hurt.
          * Normal: 0x38 (56 subpixels)
+         * Hurt: 0x30 (48 subpixels) - per SPG hurt_gravity_force
          * Underwater: 0x10 (16 subpixels)
          */
         @Override
         public float getGravity() {
                 if (inWater) {
                         return 0x10; // Reduced underwater gravity
+                }
+                if (hurt) {
+                        return 0x30; // Reduced hurt gravity (SPG: 0.1875 = 48 subpixels)
                 }
                 return gravity; // Normal gravity (0x38)
         }

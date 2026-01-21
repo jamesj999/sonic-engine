@@ -209,11 +209,11 @@ public class SpringObjectInstance extends BoxObjectInstance
             player.setYSpeed((short) 0);
         }
 
-        // ROM: Horizontal springs use move_lock ($F) but ideally shouldn't trigger
-        // spring animation
+        // ROM: Horizontal springs set control lock to 16 frames (SPG confirms)
+        // This prevents player from braking immediately after being launched
         // However, our engine uses setSpringing which also locks controls
         // TODO: Fix animation profile to not show spring animation when grounded
-        player.setSpringing(15);
+        player.setSpringing(16);
 
         trigger(player);
     }
