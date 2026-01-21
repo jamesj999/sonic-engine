@@ -1,6 +1,10 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
+import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
+import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
@@ -92,6 +96,11 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
 
     private static List<SpriteMappingFrame> mappings;
     private static boolean mappingsLoadAttempted;
+
+    // Debug state (cached for performance)
+    private static final boolean DEBUG_VIEW_ENABLED = SonicConfigurationService.getInstance()
+            .getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
+    private static final DebugOverlayManager OVERLAY_MANAGER = DebugOverlayManager.getInstance();
 
     // Position state
     private int x;
@@ -188,12 +197,11 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        // TEMPORARILY DISABLED for debugging - test static collision first
         // Update behavior based on type
-        // updateBehavior(player);
+        updateBehavior(player);
 
         // Update swinging animation
-        // updateSwinging();
+        updateSwinging();
 
         refreshDynamicSpawn();
     }
@@ -405,7 +413,8 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
 
     /**
      * Get sine value for angle (0-64 maps to 0-90 degrees).
-     * Returns value in 16.16 fixed point format (0 to 65535 for 0 to 1).
+     * Returns value in 8-bit format (0 to 256 for 0 to 1).
+     * Combined with SWING_SCALE (0x400) and >> 16 shift, this gives ~4 pixels max offset.
      */
     private int getSine(int angle) {
         if (angle <= 0) {
@@ -422,8 +431,9 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
         for (int i = 0; i <= MAX_SWING_ANGLE; i++) {
             // Map angle (0-64) to radians (0 to 90 degrees)
             double radians = (i * Math.PI) / (2 * MAX_SWING_ANGLE);
-            // Convert to 16.16 fixed point
-            table[i] = (int) (Math.sin(radians) * 65536);
+            // Convert to 8-bit format (0-256)
+            // With SWING_SCALE=0x400 and >>16 shift: (256 * 1024) >> 16 = 4 pixels max
+            table[i] = (int) (Math.sin(radians) * 256);
         }
         return table;
     }
@@ -432,8 +442,10 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
     public void appendRenderCommands(List<GLCommand> commands) {
         ensureMappingsLoaded();
 
-        // Always draw debug collision box for now to diagnose alignment
-        appendDebug(commands);
+        // Draw debug collision box only when F1 debug view is enabled
+        if (isDebugViewEnabled()) {
+            appendDebug(commands);
+        }
 
         if (mappings == null || mappings.isEmpty()) {
             return;
@@ -634,6 +646,10 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
                 r, g, b, x1, y1, 0, 0));
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
                 r, g, b, x2, y2, 0, 0));
+    }
+
+    private boolean isDebugViewEnabled() {
+        return DEBUG_VIEW_ENABLED && OVERLAY_MANAGER.isEnabled(DebugOverlayToggle.OVERLAY);
     }
 
     private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2) {
