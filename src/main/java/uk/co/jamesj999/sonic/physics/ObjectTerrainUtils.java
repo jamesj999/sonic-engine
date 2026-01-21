@@ -233,12 +233,14 @@ public final class ObjectTerrainUtils {
 
         if (metric == 0) {
             // No solid surface at this tile - check 16 pixels in wall direction
+            // ROM: loc_1E9C2 adds a3 to d3 (a3 = +/-16), then adds 16 to result (line 43207)
             int nextX = checkingLeft ? (x - 16) : (x + 16);
             ChunkDesc nextDesc = levelManager.getChunkDescAt((byte) 0, nextX, y);
             SolidTile nextTile = getSolidTile(levelManager, nextDesc, SOLIDITY_ALL);
             byte nextMetric = getWallMetric(nextTile, nextDesc, nextX, y, checkingLeft);
             if (nextMetric > 0) {
-                int dist = calculateWallDistance(nextMetric, x, nextX, checkingLeft);
+                // ROM adds 16 to distance when extending to next tile (line 43207: addi.w #$10,d1)
+                int dist = calculateWallDistance(nextMetric, x, checkingLeft, 16);
                 byte angle = nextTile != null ? nextTile.getAngle() : 0;
                 int tileIdx = nextDesc != null ? nextDesc.getChunkIndex() : -1;
                 return new TerrainCheckResult(dist, angle, tileIdx);
@@ -248,20 +250,22 @@ public final class ObjectTerrainUtils {
 
         if (metric == 16) {
             // Full width tile - check previous tile for edge detection
+            // ROM: loc_1EA4A subtracts a3 from d3, then subtracts 16 from result (line 43264)
             int prevX = checkingLeft ? (x + 16) : (x - 16);
             ChunkDesc prevDesc = levelManager.getChunkDescAt((byte) 0, prevX, y);
             SolidTile prevTile = getSolidTile(levelManager, prevDesc, SOLIDITY_ALL);
             byte prevMetric = getWallMetric(prevTile, prevDesc, prevX, y, checkingLeft);
             if (prevMetric > 0 && prevMetric < 16) {
-                int dist = calculateWallDistance(prevMetric, x, prevX, checkingLeft);
+                // ROM subtracts 16 from distance when checking previous tile (line 43264: subi.w #$10,d1)
+                int dist = calculateWallDistance(prevMetric, x, checkingLeft, -16);
                 byte angle = prevTile != null ? prevTile.getAngle() : 0;
                 int tileIdx = prevDesc != null ? prevDesc.getChunkIndex() : -1;
                 return new TerrainCheckResult(dist, angle, tileIdx);
             }
         }
 
-        // Standard case: use current tile's metric
-        int dist = calculateWallDistance(metric, x, x, checkingLeft);
+        // Standard case: use current tile's metric, no offset
+        int dist = calculateWallDistance(metric, x, checkingLeft, 0);
         byte angle = tile != null ? tile.getAngle() : 0;
         int tileIdx = chunkDesc != null ? chunkDesc.getChunkIndex() : -1;
         return new TerrainCheckResult(dist, angle, tileIdx);
@@ -368,26 +372,38 @@ public final class ObjectTerrainUtils {
     }
 
     /**
-     * Calculate distance to wall surface.
-     * Returns negative if wall is past the check position (collision).
+     * Calculate distance to wall surface using ROM's FindWall logic.
+     * <p>
+     * ROM logic (s2.asm lines 43246-43251):
+     * <pre>
+     * move.w  d3,d1       ; d1 = x position
+     * andi.w  #$F,d1      ; d1 = xInTile (0-15)
+     * add.w   d1,d0       ; d0 = metric + xInTile
+     * move.w  #$F,d1
+     * sub.w   d0,d1       ; d1 = 15 - (metric + xInTile)
+     * </pre>
+     * Returns negative when (metric + xInTile) > 15, indicating collision.
+     * <p>
+     * For left wall checks, the ROM flips xInTile with eori.w #$F,d3 (line 44070),
+     * effectively making xInTile = 15 - (x & 0x0F).
      *
      * @param metric The wall collision metric (0-16)
      * @param checkX The X position being checked
-     * @param tileX The X position of the tile
      * @param checkingLeft true if checking left wall, false for right wall
+     * @param tileOffset 0 for same tile, +16 for extension tile, -16 for previous tile
+     * @return Distance to wall (negative = collision)
      */
-    private static int calculateWallDistance(byte metric, int checkX, int tileX, boolean checkingLeft) {
-        int tileLeft = tileX & ~0x0F;
+    private static int calculateWallDistance(byte metric, int checkX, boolean checkingLeft, int tileOffset) {
+        int xInTile = checkX & 0x0F;
 
         if (checkingLeft) {
-            // Left wall: surface is at tileLeft + (16 - metric)
-            // e.g., metric=16 means full wall at tileLeft, metric=0 means no wall
-            int surfaceX = tileLeft + 16 - metric;
-            return checkX - surfaceX;
+            // For left wall, ROM flips xInTile: eori.w #$F,d3 (line 44070)
+            // This gives: distance = 15 - (metric + (15 - xInTile))
+            //                      = xInTile - metric
+            return (xInTile - metric) + tileOffset;
         } else {
-            // Right wall: surface is at tileLeft + metric - 1
-            int surfaceX = tileLeft + metric - 1;
-            return surfaceX - checkX;
+            // For right wall: distance = 15 - (metric + xInTile)
+            return (15 - (metric + xInTile)) + tileOffset;
         }
     }
 }

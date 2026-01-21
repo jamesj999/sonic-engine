@@ -6,10 +6,10 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 
 public class GLCommand implements GLCommandable {
         private static final ThreadLocal<Boolean> IN_GROUP = ThreadLocal.withInitial(() -> Boolean.FALSE);
-        // Cached screen height to avoid repeated synchronized getInstance() calls
+        // Cached screen dimensions to avoid repeated synchronized getInstance() calls
         private static final int SCREEN_HEIGHT_PIXELS = SonicConfigurationService.getInstance()
                         .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
-        private final int screenHeight = SonicConfigurationService.getInstance()
+        private static final int SCREEN_HEIGHT = SonicConfigurationService.getInstance()
                         .getInt(SonicConfiguration.SCREEN_HEIGHT);
 
         public enum CommandType {

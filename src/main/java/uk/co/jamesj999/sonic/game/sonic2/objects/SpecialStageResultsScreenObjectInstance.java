@@ -193,7 +193,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         try {
             RomManager romManager = RomManager.getInstance();
             if (!romManager.isRomAvailable()) {
-                System.out.println("[SS Results] ROM not available for results art loading");
+                LOGGER.warning("ROM not available for results art loading");
                 return;
             }
             Rom rom = romManager.getRom();
@@ -201,18 +201,18 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             // Load ArtNem_TitleCard2 - contains other letters (A,B,C,D,F,G,H,I,J,K,L,M,P,Q,R,S,T,U,V,W,X,Y)
             Pattern[] titleCard2Patterns = loadNemesisPatterns(rom,
                     Sonic2Constants.ART_NEM_TITLE_CARD2_ADDR, "TitleCard2");
-            System.out.println("[SS Results] Loaded " + (titleCard2Patterns != null ? titleCard2Patterns.length : 0) + " title card 2 patterns");
+            LOGGER.fine("Loaded " + (titleCard2Patterns != null ? titleCard2Patterns.length : 0) + " title card 2 patterns");
 
             // Load ArtUnc_HUDNumbers - HUD digit numbers (0-9)
             Pattern[] numbersPatterns = loadUncompressedPatterns(rom,
                     Sonic2Constants.ART_UNC_HUD_NUMBERS_ADDR,
                     Sonic2Constants.ART_UNC_HUD_NUMBERS_SIZE, "HUDNumbers");
-            System.out.println("[SS Results] Loaded " + (numbersPatterns != null ? numbersPatterns.length : 0) + " number patterns");
+            LOGGER.fine("Loaded " + (numbersPatterns != null ? numbersPatterns.length : 0) + " number patterns");
 
             // Load ArtNem_TitleCard - contains E, N, O, Z at the start (for "ZONE")
             Pattern[] titleCardPatterns = loadNemesisPatterns(rom,
                     Sonic2Constants.ART_NEM_TITLE_CARD_ADDR, "TitleCard");
-            System.out.println("[SS Results] Loaded " + (titleCardPatterns != null ? titleCardPatterns.length : 0) + " title card patterns (E,N,O,Z)");
+            LOGGER.fine("Loaded " + (titleCardPatterns != null ? titleCardPatterns.length : 0) + " title card patterns (E,N,O,Z)");
 
             // Load special stage results art from DataLoader
             Pattern[] resultsArtPatterns = null;
@@ -223,12 +223,12 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                     resultsArtPatterns = dataLoader.getResultsArtPatterns();
                 }
             }
-            System.out.println("[SS Results] Loaded " + (resultsArtPatterns != null ? resultsArtPatterns.length : 0) + " results art patterns");
+            LOGGER.fine("Loaded " + (resultsArtPatterns != null ? resultsArtPatterns.length : 0) + " results art patterns");
 
             // Load ArtNem_HUD - HUD text (SCORE/TIME/RING/etc)
             Pattern[] hudPatterns = loadNemesisPatterns(rom,
                     Sonic2Constants.ART_NEM_HUD_ADDR, "HUD");
-            System.out.println("[SS Results] Loaded " + (hudPatterns != null ? hudPatterns.length : 0) + " HUD patterns");
+            LOGGER.fine("Loaded " + (hudPatterns != null ? hudPatterns.length : 0) + " HUD patterns");
 
             // Null safety
             if (titleCard2Patterns == null) titleCard2Patterns = new Pattern[0];
@@ -246,12 +246,12 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
             // Extract SS letters from TitleCard2 to VRAM $02-$3F (indices 0-61)
             extractSSLettersFromTitleCard2(titleCard2Patterns);
-            System.out.println("[SS Results] Extracted SS letters to indices 0-61");
+            LOGGER.fine("Extracted SS letters to indices 0-61");
 
             // Copy Numbers to VRAM $520 (index $520 - $02 = $51E = 1310)
             int numbersOffset = VRAM_NUMBERS - VRAM_BASE;
             copyPatterns(numbersPatterns, numbersOffset);
-            System.out.println("[SS Results] Copied " + numbersPatterns.length + " number patterns to index " + numbersOffset + " (0x" + Integer.toHexString(numbersOffset) + ")");
+            LOGGER.fine("Copied " + numbersPatterns.length + " number patterns to index " + numbersOffset + " (0x" + Integer.toHexString(numbersOffset) + ")");
 
             // Preserve a copy of source digit patterns (0-9) before any modifications
             // These are needed because we modify the combined array in place during tally
@@ -263,7 +263,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                     sourceDigitPatterns[i].copyFrom(numbersPatterns[i]);
                 }
             }
-            System.out.println("[SS Results] Preserved " + numSourceDigits + " source digit patterns");
+            LOGGER.fine("Preserved " + numSourceDigits + " source digit patterns");
 
             // Copy Title Card E,N,O,Z to VRAM $580 (index $580 - $02 = $57E = 1406)
             int titleCardOffset = VRAM_TITLE_CARD - VRAM_BASE;
@@ -271,27 +271,26 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             for (int i = 0; i < enoTiles && (titleCardOffset + i) < combinedPatterns.length; i++) {
                 combinedPatterns[titleCardOffset + i] = titleCardPatterns[i];
             }
-            System.out.println("[SS Results] Copied " + enoTiles + " title card patterns to index " + titleCardOffset + " (0x" + Integer.toHexString(titleCardOffset) + ")");
+            LOGGER.fine("Copied " + enoTiles + " title card patterns to index " + titleCardOffset + " (0x" + Integer.toHexString(titleCardOffset) + ")");
 
             // Copy Results Art to VRAM $590 (index $590 - $02 = $58E = 1422)
             int resultsOffset = VRAM_RESULTS_ART - VRAM_BASE;
             copyPatterns(resultsArtPatterns, resultsOffset);
-            System.out.println("[SS Results] Copied " + resultsArtPatterns.length + " results patterns to index " + resultsOffset + " (0x" + Integer.toHexString(resultsOffset) + ")");
+            LOGGER.fine("Copied " + resultsArtPatterns.length + " results patterns to index " + resultsOffset + " (0x" + Integer.toHexString(resultsOffset) + ")");
 
             // Copy HUD to VRAM $6CA (index $6CA - $02 = $6C8 = 1736)
             int hudOffset = VRAM_HUD - VRAM_BASE;
             copyPatterns(hudPatterns, hudOffset);
-            System.out.println("[SS Results] Copied " + hudPatterns.length + " HUD patterns to index " + hudOffset + " (0x" + Integer.toHexString(hudOffset) + ")");
+            LOGGER.fine("Copied " + hudPatterns.length + " HUD patterns to index " + hudOffset + " (0x" + Integer.toHexString(hudOffset) + ")");
 
             artLoaded = true;
-            System.out.println("[SS Results] Art loaded successfully: total " + totalSize + " pattern slots");
+            LOGGER.fine("Art loaded successfully: total " + totalSize + " pattern slots");
 
             // Load the results screen palette
             loadPalette(rom);
 
         } catch (IOException e) {
-            System.out.println("[SS Results] Failed to load results art: " + e.getMessage());
-            e.printStackTrace();
+            LOGGER.warning("Failed to load results art: " + e.getMessage());
             combinedPatterns = null;
         }
     }
@@ -355,10 +354,10 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                 }
             }
             paletteLoaded = true;
-            System.out.println("[SS Results] Loaded results palette (4 lines, 64 colors)");
+            LOGGER.fine("Loaded results palette (4 lines, 64 colors)");
 
         } catch (Exception e) {
-            System.out.println("[SS Results] Failed to load palette: " + e.getMessage());
+            LOGGER.warning("Failed to load palette: " + e.getMessage());
             paletteLoaded = false;
         }
     }
@@ -400,7 +399,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
      */
     private void extractSSLettersFromTitleCard2(Pattern[] titleCard2Patterns) {
         if (titleCard2Patterns == null || titleCard2Patterns.length == 0) {
-            System.out.println("[SS Results] TitleCard2 patterns is null or empty");
+            LOGGER.warning("TitleCard2 patterns is null or empty");
             return;
         }
 
@@ -426,7 +425,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         String[] letterNames = {"A", "C", "D", "G", "H", "I", "L", "M", "P", "R", "S", "T", "U", "W"};
         int copiedLetters = 0;
 
-        System.out.println("[SS Results] TitleCard2 has " + titleCard2Patterns.length + " tiles");
+        LOGGER.fine("TitleCard2 has " + titleCard2Patterns.length + " tiles");
 
         for (int i = 0; i < letterTable.length; i++) {
             int srcOffset = letterTable[i][0];
@@ -434,7 +433,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
             int tileCount = letterTable[i][2];
 
             if (srcOffset + tileCount <= titleCard2Patterns.length) {
-                System.out.println("[SS Results] Copying letter " + letterNames[i] + ": src " + srcOffset +
+                LOGGER.fine("Copying letter " + letterNames[i] + ": src " + srcOffset +
                         " -> dest " + destOffset + " (" + tileCount + " tiles)");
                 for (int t = 0; t < tileCount; t++) {
                     if (destOffset + t < 64) {  // Stay within SS letters region (0-63)
@@ -443,12 +442,12 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
                 }
                 copiedLetters++;
             } else {
-                System.out.println("[SS Results] Warning: Not enough tiles for letter " + letterNames[i] +
+                LOGGER.warning("Not enough tiles for letter " + letterNames[i] +
                         " (need " + (srcOffset + tileCount) + ", have " + titleCard2Patterns.length + ")");
             }
         }
 
-        System.out.println("[SS Results] Extracted " + copiedLetters + " letters from TitleCard2");
+        LOGGER.fine("Extracted " + copiedLetters + " letters from TitleCard2");
     }
 
     private Pattern[] loadNemesisPatterns(Rom rom, int address, String name) {
@@ -486,18 +485,18 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         }
 
         if (combinedPatterns == null) {
-            System.out.println("[SS Results] ensureArtCached: combinedPatterns is null after loadArt, artLoaded=" + artLoaded);
+            LOGGER.warning("ensureArtCached: combinedPatterns is null after loadArt, artLoaded=" + artLoaded);
             return;
         }
 
         GraphicsManager graphicsManager = GraphicsManager.getInstance();
         if (graphicsManager == null) {
-            System.out.println("[SS Results] ensureArtCached: GraphicsManager is null");
+            LOGGER.warning("ensureArtCached: GraphicsManager is null");
             return;
         }
 
         // Cache all combined patterns to GPU
-        System.out.println("[SS Results] Caching " + combinedPatterns.length + " patterns at base 0x" + Integer.toHexString(PATTERN_BASE));
+        LOGGER.fine("Caching " + combinedPatterns.length + " patterns at base 0x" + Integer.toHexString(PATTERN_BASE));
         for (int i = 0; i < combinedPatterns.length; i++) {
             if (combinedPatterns[i] != null) {
                 graphicsManager.cachePatternTexture(combinedPatterns[i], PATTERN_BASE + i);
@@ -507,7 +506,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         // Cache the preserved source digit patterns at a separate base
         // These are used by renderBonusNumber() and won't be overwritten by updateBonusPatterns()
         if (sourceDigitPatterns != null) {
-            System.out.println("[SS Results] Caching " + sourceDigitPatterns.length + " source digit patterns at base 0x" + Integer.toHexString(SOURCE_DIGITS_PATTERN_BASE));
+            LOGGER.fine("Caching " + sourceDigitPatterns.length + " source digit patterns at base 0x" + Integer.toHexString(SOURCE_DIGITS_PATTERN_BASE));
             for (int i = 0; i < sourceDigitPatterns.length; i++) {
                 if (sourceDigitPatterns[i] != null) {
                     graphicsManager.cachePatternTexture(sourceDigitPatterns[i], SOURCE_DIGITS_PATTERN_BASE + i);
@@ -518,7 +517,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         // Cache the results palettes
         // The mappings use palette indices 0, 1, 2, 3 - we need to ensure those point to our results palettes
         if (paletteLoaded && resultsPalettes != null) {
-            System.out.println("[SS Results] Caching results palettes (4 lines)");
+            LOGGER.fine("Caching results palettes (4 lines)");
             for (int i = 0; i < 4; i++) {
                 if (resultsPalettes[i] != null) {
                     graphicsManager.cachePaletteTexture(resultsPalettes[i], i);
@@ -527,7 +526,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         }
 
         artCached = true;
-        System.out.println("[SS Results] Art and palettes cached successfully");
+        LOGGER.fine("Art and palettes cached successfully");
     }
 
     private void calculateBonuses() {
@@ -770,23 +769,6 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
 
         // Use ROM art if available, otherwise fall back to placeholders
         boolean useRomArt = artLoaded && combinedPatterns != null;
-
-        // Debug output (once per render)
-        if (frameCounter == 0) {
-            System.out.println("[SS Results] appendRenderCommands: artLoaded=" + artLoaded +
-                    ", combinedPatterns=" + (combinedPatterns != null ? combinedPatterns.length : "null") +
-                    ", artCached=" + artCached + ", useRomArt=" + useRomArt);
-            // Debug: Show first frame's piece info
-            var pieces = Sonic2SpecialStageResultsMappings.getFrame(0);
-            System.out.println("[SS Results] Frame 0 has " + pieces.length + " pieces:");
-            for (int i = 0; i < Math.min(3, pieces.length); i++) {
-                var p = pieces[i];
-                System.out.println("  Piece " + i + ": tileIndex=" + p.tileIndex() +
-                    " (0x" + Integer.toHexString(p.tileIndex()) + ")" +
-                    ", artType=" + p.artType() + ", palette=" + p.paletteIndex() +
-                    ", size=" + p.widthTiles() + "x" + p.heightTiles());
-            }
-        }
 
         // All elements use ROM-accurate 16 pixels/frame slide speed
         // From Obj6F_SubObjectMetaData in s2.asm - all elements start sliding at frame 0

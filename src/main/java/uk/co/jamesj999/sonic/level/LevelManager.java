@@ -146,10 +146,33 @@ public class LevelManager {
     private final List<GLCommand> debugBoxCommands = new ArrayList<>(512);
     private final List<GLCommand> debugCenterCommands = new ArrayList<>(256);
 
+    // Cached screen dimensions (avoids repeated config service lookups)
+    private final int cachedScreenWidth = configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
+    private final int cachedScreenHeight = configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+
+    // Camera reference for frustum culling
+    private final Camera camera = Camera.getInstance();
+
     private enum TilePriorityPass {
         ALL,
         LOW_ONLY,
         HIGH_ONLY
+    }
+
+    /**
+     * Checks if a point is within the visible camera frustum with optional padding.
+     * Used to cull debug overlay commands for off-screen objects.
+     *
+     * @param x       world X coordinate
+     * @param y       world Y coordinate
+     * @param padding extra pixels around screen edges to include
+     * @return true if the point is visible (or near-visible with padding)
+     */
+    private boolean isInCameraFrustum(int x, int y, int padding) {
+        int camX = camera.getX();
+        int camY = camera.getY();
+        return x >= camX - padding && x <= camX + cachedScreenWidth + padding
+                && y >= camY - padding && y <= camY + cachedScreenHeight + padding;
     }
 
     /**
@@ -694,6 +717,10 @@ public class LevelManager {
                     ? (AbstractPlayableSprite) player
                     : null;
             for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
+                // Frustum cull: skip objects outside visible area (with 32px padding for large objects)
+                if (!isInCameraFrustum(spawn.x(), spawn.y(), 32)) {
+                    continue;
+                }
                 if (showObjectPoints) {
                     debugObjectCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                             -1,
@@ -731,6 +758,10 @@ public class LevelManager {
                         if (!ringManager.isRenderable(ring, frameCounter)) {
                             continue;
                         }
+                        // Frustum cull rings outside visible area
+                        if (!isInCameraFrustum(ring.x(), ring.y(), 16)) {
+                            continue;
+                        }
                         debugRingCommands.add(new GLCommand(GLCommand.CommandType.VERTEX2I,
                                 -1,
                                 GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
@@ -747,6 +778,10 @@ public class LevelManager {
 
                     for (RingSpawn ring : rings) {
                         if (!ringManager.isRenderable(ring, frameCounter)) {
+                            continue;
+                        }
+                        // Frustum cull rings outside visible area
+                        if (!isInCameraFrustum(ring.x(), ring.y(), 16)) {
                             continue;
                         }
                         int centerX = ring.x();
@@ -883,8 +918,7 @@ public class LevelManager {
         int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
 
         // Get pattern renderer's screen height for correct Y coordinate handling
-        int screenHeightPixels = SonicConfigurationService.getInstance()
-                .getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+        int screenHeightPixels = cachedScreenHeight;
 
         // Use zone-specific vertical scroll from parallax manager
         // This ensures zones like MCZ use their act-dependent BG Y calculations
@@ -985,7 +1019,7 @@ public class LevelManager {
 
         if (paletteId != null) {
             int pId = paletteId;
-            int screenW = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
+            int screenW = cachedScreenWidth;
             int screenH = screenHeightPixels;
 
             // Calculate vertical scroll offset (sub-chunk) for shader
