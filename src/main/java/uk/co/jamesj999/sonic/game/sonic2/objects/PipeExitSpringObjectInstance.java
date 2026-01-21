@@ -142,6 +142,9 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
             player.setGSpeed((short) 0);
         }
 
+        // ROM: loc_29736-29768 - Set collision layer based on subtype bits 2-3
+        SpringHelper.applyCollisionLayerBits(player, subtype);
+
         trigger();
     }
 

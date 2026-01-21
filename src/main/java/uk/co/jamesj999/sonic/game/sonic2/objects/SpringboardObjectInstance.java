@@ -247,6 +247,9 @@ public class SpringboardObjectInstance extends BoxObjectInstance
         // ROM: Clear on_object status (player no longer standing on springboard)
         // This is handled by the physics engine when we set air=true
 
+        // ROM: loc_2651E-26546 - Set collision layer based on subtype bits 2-3
+        SpringHelper.applyCollisionLayerBits(player, subtype);
+
         // ROM: loc_26546 - Play spring sound
         try {
             if (AudioManager.getInstance() != null) {

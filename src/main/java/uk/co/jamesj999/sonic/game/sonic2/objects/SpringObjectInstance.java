@@ -291,6 +291,9 @@ public class SpringObjectInstance extends BoxObjectInstance
             }
         }
 
+        // ROM: loc_18A3E-18A66 - Set collision layer based on subtype bits 2-3
+        SpringHelper.applyCollisionLayerBits(player, subtype);
+
         try {
             if (AudioManager.getInstance() != null) {
                 AudioManager.getInstance().playSfx(GameSound.SPRING);
