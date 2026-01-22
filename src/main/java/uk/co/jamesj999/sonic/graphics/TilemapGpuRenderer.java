@@ -57,8 +57,11 @@ public class TilemapGpuRenderer {
             int atlasHeight,
             int atlasTextureId,
             int paletteTextureId,
+            int underwaterPaletteTextureId,
             int priorityPass,
-            boolean wrapY) {
+            boolean wrapY,
+            boolean useUnderwaterPalette,
+            float waterlineScreenY) {
         if (gl == null || shader == null || tilemapData == null || lookupData == null) {
             return;
         }
@@ -75,7 +78,7 @@ public class TilemapGpuRenderer {
         shader.use(gl);
         shader.cacheUniformLocations(gl);
 
-        shader.setTextureUnits(gl, 0, 1, 2, 3);
+        shader.setTextureUnits(gl, 0, 1, 2, 3, 4);
         shader.setTilemapDimensions(gl, tilemapWidthTiles, tilemapHeightTiles);
         shader.setAtlasDimensions(gl, atlasWidth, atlasHeight);
         shader.setLookupSize(gl, lookupSize);
@@ -83,6 +86,7 @@ public class TilemapGpuRenderer {
         shader.setWorldOffset(gl, worldOffsetX, worldOffsetY);
         shader.setWrapY(gl, wrapY);
         shader.setPriorityPass(gl, priorityPass);
+        shader.setWaterSplit(gl, useUnderwaterPalette, waterlineScreenY);
 
         gl.glActiveTexture(GL2.GL_TEXTURE0);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, tilemapTexture.getTextureId());
@@ -96,6 +100,9 @@ public class TilemapGpuRenderer {
         gl.glActiveTexture(GL2.GL_TEXTURE3);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, paletteTextureId);
 
+        gl.glActiveTexture(GL2.GL_TEXTURE4);
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, underwaterPaletteTextureId);
+
         gl.glBegin(GL2.GL_QUADS);
         gl.glVertex2f(0, 0);
         gl.glVertex2f(windowWidth, 0);
@@ -104,6 +111,8 @@ public class TilemapGpuRenderer {
         gl.glEnd();
 
         gl.glActiveTexture(GL2.GL_TEXTURE3);
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+        gl.glActiveTexture(GL2.GL_TEXTURE4);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
         gl.glActiveTexture(GL2.GL_TEXTURE2);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);

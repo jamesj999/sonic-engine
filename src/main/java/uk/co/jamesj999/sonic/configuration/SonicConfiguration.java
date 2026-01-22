@@ -117,6 +117,11 @@ public enum SonicConfiguration {
 	AUDIO_ENABLED,
 
 	/**
+	 * Key to toggle GPU tilemap rendering for parity checks.
+	 */
+	GPU_TILEMAP_TOGGLE_KEY,
+
+	/**
 	 * Region (NTSC/PAL) for audio timing.
 	 */
 	REGION,

@@ -115,13 +115,20 @@ public class LevelManager {
     private RespawnState checkpointState;
     private LevelState levelGamestate;
 
-    // GPU tilemap data for background layer (Track B)
+    // GPU tilemap data (Track B)
     private byte[] backgroundTilemapData;
     private int backgroundTilemapWidthTiles;
     private int backgroundTilemapHeightTiles;
-    private byte[] backgroundPatternLookupData;
-    private int backgroundPatternLookupSize;
     private boolean backgroundTilemapDirty = true;
+
+    private byte[] foregroundTilemapData;
+    private int foregroundTilemapWidthTiles;
+    private int foregroundTilemapHeightTiles;
+    private boolean foregroundTilemapDirty = true;
+
+    private byte[] patternLookupData;
+    private int patternLookupSize;
+    private boolean patternLookupDirty = true;
 
     private boolean specialStageRequestedFromCheckpoint;
     private boolean titleCardRequested;
@@ -212,8 +219,11 @@ public class LevelManager {
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
             backgroundTilemapDirty = true;
+            foregroundTilemapDirty = true;
+            patternLookupDirty = true;
             backgroundTilemapData = null;
-            backgroundPatternLookupData = null;
+            foregroundTilemapData = null;
+            patternLookupData = null;
             initAnimatedPatterns();
             initAnimatedPalettes();
             RomByteReader romReader = RomByteReader.fromRom(rom);
@@ -620,10 +630,18 @@ public class LevelManager {
             renderBackgroundShader(collisionCommands, bgScrollY);
         }
 
-        // Draw Foreground (Layer 0) low-priority pass - batched for performance
-        graphicsManager.beginPatternBatch();
-        drawLayer(collisionCommands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
-        graphicsManager.flushPatternBatch();
+        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
+        boolean gpuForeground = useGpuTilemap && !overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW);
+
+        // Draw Foreground (Layer 0) low-priority pass
+        if (gpuForeground) {
+            ensureForegroundTilemapData();
+            enqueueForegroundTilemapPass(camera, 0);
+        } else {
+            graphicsManager.beginPatternBatch();
+            drawLayer(collisionCommands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
+            graphicsManager.flushPatternBatch();
+        }
 
         // Render collision debug overlay on top of foreground tiles
         if (!collisionCommands.isEmpty() && overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
@@ -648,11 +666,15 @@ public class LevelManager {
         }
         graphicsManager.flushPatternBatch();
 
-        // Draw Foreground (Layer 0) high-priority pass - batched for performance
-        // Note: drawCollision=false so commands list is not used
-        graphicsManager.beginPatternBatch();
-        drawLayer(null, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
-        graphicsManager.flushPatternBatch();
+        // Draw Foreground (Layer 0) high-priority pass
+        if (gpuForeground) {
+            enqueueForegroundTilemapPass(camera, 1);
+        } else {
+            // Note: drawCollision=false so commands list is not used
+            graphicsManager.beginPatternBatch();
+            drawLayer(null, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
+            graphicsManager.flushPatternBatch();
+        }
 
         graphicsManager.beginPatternBatch();
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
@@ -947,6 +969,8 @@ public class LevelManager {
                 if (tilemapRenderer != null) {
                     Integer atlasId = graphicsManager.getPatternAtlasTextureId();
                     Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
+                    Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
+                    boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
                     if (atlasId != null && paletteId != null) {
                         tilemapRenderer.render(gl,
                                 fboWidth,
@@ -957,8 +981,11 @@ public class LevelManager {
                                 graphicsManager.getPatternAtlasHeight(),
                                 atlasId,
                                 paletteId,
+                                underwaterPaletteId != null ? underwaterPaletteId : 0,
                                 -1,
-                                true);
+                                true,
+                                useUnderwaterPalette,
+                                fboWaterlineY);
                     }
                 }
                 bgRenderer.endTilePass(gl);
@@ -1062,8 +1089,55 @@ public class LevelManager {
         }
     }
 
+    private void enqueueForegroundTilemapPass(Camera camera, int priorityPass) {
+        TilemapGpuRenderer renderer = graphicsManager.getTilemapGpuRenderer();
+        if (renderer == null) {
+            return;
+        }
+
+        WaterSystem waterSystem = WaterSystem.getInstance();
+        boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
+        int waterLevel = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 0;
+        float waterlineScreenY = (float) (waterLevel - camera.getY());
+
+        int screenW = cachedScreenWidth;
+        int screenH = cachedScreenHeight;
+        float worldOffsetX = camera.getX();
+        float worldOffsetY = camera.getY();
+
+        Integer atlasId = graphicsManager.getPatternAtlasTextureId();
+        Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
+        Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
+        boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
+
+        if (atlasId == null || paletteId == null) {
+            return;
+        }
+
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+            TilemapGpuRenderer tilemapRenderer = graphicsManager.getTilemapGpuRenderer();
+            if (tilemapRenderer == null) {
+                return;
+            }
+            tilemapRenderer.render(gl,
+                    screenW,
+                    screenH,
+                    worldOffsetX,
+                    worldOffsetY,
+                    graphicsManager.getPatternAtlasWidth(),
+                    graphicsManager.getPatternAtlasHeight(),
+                    atlasId,
+                    paletteId,
+                    underwaterPaletteId != null ? underwaterPaletteId : 0,
+                    priorityPass,
+                    false,
+                    useUnderwaterPalette,
+                    waterlineScreenY);
+        }));
+    }
+
     private void ensureBackgroundTilemapData() {
-        if (!backgroundTilemapDirty && backgroundTilemapData != null && backgroundPatternLookupData != null) {
+        if (!backgroundTilemapDirty && backgroundTilemapData != null && patternLookupData != null) {
             return;
         }
         if (level == null || level.getMap() == null) {
@@ -1073,20 +1147,80 @@ public class LevelManager {
         buildBackgroundTilemapData();
         backgroundTilemapDirty = false;
 
+        ensurePatternLookupData();
         TilemapGpuRenderer renderer = graphicsManager.getTilemapGpuRenderer();
         if (renderer != null) {
             renderer.setTilemapData(backgroundTilemapData, backgroundTilemapWidthTiles, backgroundTilemapHeightTiles);
-            renderer.setPatternLookupData(backgroundPatternLookupData, backgroundPatternLookupSize);
+            renderer.setPatternLookupData(patternLookupData, patternLookupSize);
         }
     }
 
+    private void ensureForegroundTilemapData() {
+        if (!foregroundTilemapDirty && foregroundTilemapData != null && patternLookupData != null) {
+            return;
+        }
+        if (level == null || level.getMap() == null) {
+            return;
+        }
+        buildForegroundTilemapData();
+        foregroundTilemapDirty = false;
+        ensurePatternLookupData();
+        TilemapGpuRenderer renderer = graphicsManager.getTilemapGpuRenderer();
+        if (renderer != null) {
+            renderer.setTilemapData(foregroundTilemapData, foregroundTilemapWidthTiles, foregroundTilemapHeightTiles);
+            renderer.setPatternLookupData(patternLookupData, patternLookupSize);
+        }
+    }
+
+    private void ensurePatternLookupData() {
+        if (!patternLookupDirty && patternLookupData != null) {
+            return;
+        }
+        if (level == null) {
+            return;
+        }
+        int patternCount = level.getPatternCount();
+        patternLookupSize = Math.max(1, patternCount);
+        patternLookupData = new byte[patternLookupSize * 4];
+        for (int i = 0; i < patternCount; i++) {
+            PatternAtlas.Entry entry = graphicsManager.getPatternAtlasEntry(i);
+            int offset = i * 4;
+            if (entry != null) {
+                patternLookupData[offset] = (byte) entry.tileX();
+                patternLookupData[offset + 1] = (byte) entry.tileY();
+                patternLookupData[offset + 2] = 0;
+                patternLookupData[offset + 3] = (byte) 255;
+            } else {
+                patternLookupData[offset] = 0;
+                patternLookupData[offset + 1] = 0;
+                patternLookupData[offset + 2] = 0;
+                patternLookupData[offset + 3] = 0;
+            }
+        }
+        patternLookupDirty = false;
+    }
+
     private void buildBackgroundTilemapData() {
+        TilemapData data = buildTilemapData((byte) 1);
+        backgroundTilemapData = data.data;
+        backgroundTilemapWidthTiles = data.widthTiles;
+        backgroundTilemapHeightTiles = data.heightTiles;
+    }
+
+    private void buildForegroundTilemapData() {
+        TilemapData data = buildTilemapData((byte) 0);
+        foregroundTilemapData = data.data;
+        foregroundTilemapWidthTiles = data.widthTiles;
+        foregroundTilemapHeightTiles = data.heightTiles;
+    }
+
+    private TilemapData buildTilemapData(byte layerIndex) {
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
         int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-        backgroundTilemapWidthTiles = levelWidth / Pattern.PATTERN_WIDTH;
-        backgroundTilemapHeightTiles = levelHeight / Pattern.PATTERN_HEIGHT;
-        backgroundTilemapData = new byte[backgroundTilemapWidthTiles * backgroundTilemapHeightTiles * 4];
+        int widthTiles = levelWidth / Pattern.PATTERN_WIDTH;
+        int heightTiles = levelHeight / Pattern.PATTERN_HEIGHT;
+        byte[] data = new byte[widthTiles * heightTiles * 4];
 
         int chunkWidth = LevelConstants.CHUNK_WIDTH;
         int chunkHeight = LevelConstants.CHUNK_HEIGHT;
@@ -1096,9 +1230,9 @@ public class LevelManager {
             for (int x = 0; x < levelWidth; x += chunkWidth) {
                 int chunkX = x / chunkWidth;
 
-                Block block = getBlockAtPosition((byte) 1, x, y);
+                Block block = getBlockAtPosition(layerIndex, x, y);
                 if (block == null) {
-                    writeEmptyChunk(chunkX, chunkY);
+                    writeEmptyChunk(data, widthTiles, heightTiles, chunkX, chunkY);
                     continue;
                 }
 
@@ -1108,13 +1242,13 @@ public class LevelManager {
                 int chunkIndex = chunkDesc.getChunkIndex();
 
                 if (chunkIndex == 0 || chunkIndex >= level.getChunkCount()) {
-                    writeEmptyChunk(chunkX, chunkY);
+                    writeEmptyChunk(data, widthTiles, heightTiles, chunkX, chunkY);
                     continue;
                 }
 
                 Chunk chunk = level.getChunk(chunkIndex);
                 if (chunk == null) {
-                    writeEmptyChunk(chunkX, chunkY);
+                    writeEmptyChunk(data, widthTiles, heightTiles, chunkX, chunkY);
                     continue;
                 }
 
@@ -1138,60 +1272,43 @@ public class LevelManager {
 
                         int tileX = chunkX * 2 + cX;
                         int tileY = chunkY * 2 + cY;
-                        writeTileDescriptor(tileX, tileY, newPatternDesc);
+                        writeTileDescriptor(data, widthTiles, heightTiles, tileX, tileY, newPatternDesc);
                     }
                 }
             }
         }
 
-        int patternCount = level.getPatternCount();
-        backgroundPatternLookupSize = Math.max(1, patternCount);
-        backgroundPatternLookupData = new byte[backgroundPatternLookupSize * 4];
-        for (int i = 0; i < patternCount; i++) {
-            PatternAtlas.Entry entry = graphicsManager.getPatternAtlasEntry(i);
-            int offset = i * 4;
-            if (entry != null) {
-                backgroundPatternLookupData[offset] = (byte) entry.tileX();
-                backgroundPatternLookupData[offset + 1] = (byte) entry.tileY();
-                backgroundPatternLookupData[offset + 2] = 0;
-                backgroundPatternLookupData[offset + 3] = (byte) 255;
-            } else {
-                backgroundPatternLookupData[offset] = 0;
-                backgroundPatternLookupData[offset + 1] = 0;
-                backgroundPatternLookupData[offset + 2] = 0;
-                backgroundPatternLookupData[offset + 3] = 0;
-            }
-        }
+        return new TilemapData(data, widthTiles, heightTiles);
     }
 
-    private void writeEmptyChunk(int chunkX, int chunkY) {
+    private void writeEmptyChunk(byte[] data, int widthTiles, int heightTiles, int chunkX, int chunkY) {
         for (int cY = 0; cY < 2; cY++) {
             for (int cX = 0; cX < 2; cX++) {
                 int tileX = chunkX * 2 + cX;
                 int tileY = chunkY * 2 + cY;
-                writeEmptyTile(tileX, tileY);
+                writeEmptyTile(data, widthTiles, heightTiles, tileX, tileY);
             }
         }
     }
 
-    private void writeEmptyTile(int tileX, int tileY) {
-        if (tileX < 0 || tileY < 0 || tileX >= backgroundTilemapWidthTiles
-                || tileY >= backgroundTilemapHeightTiles) {
+    private void writeEmptyTile(byte[] data, int widthTiles, int heightTiles, int tileX, int tileY) {
+        if (tileX < 0 || tileY < 0 || tileX >= widthTiles
+                || tileY >= heightTiles) {
             return;
         }
-        int offset = (tileY * backgroundTilemapWidthTiles + tileX) * 4;
-        backgroundTilemapData[offset] = 0;
-        backgroundTilemapData[offset + 1] = 0;
-        backgroundTilemapData[offset + 2] = 0;
-        backgroundTilemapData[offset + 3] = 0;
+        int offset = (tileY * widthTiles + tileX) * 4;
+        data[offset] = 0;
+        data[offset + 1] = 0;
+        data[offset + 2] = 0;
+        data[offset + 3] = 0;
     }
 
-    private void writeTileDescriptor(int tileX, int tileY, PatternDesc desc) {
-        if (tileX < 0 || tileY < 0 || tileX >= backgroundTilemapWidthTiles
-                || tileY >= backgroundTilemapHeightTiles) {
+    private void writeTileDescriptor(byte[] data, int widthTiles, int heightTiles, int tileX, int tileY,
+            PatternDesc desc) {
+        if (tileX < 0 || tileY < 0 || tileX >= widthTiles || tileY >= heightTiles) {
             return;
         }
-        int offset = (tileY * backgroundTilemapWidthTiles + tileX) * 4;
+        int offset = (tileY * widthTiles + tileX) * 4;
         int patternIndex = desc.getPatternIndex();
         int paletteIndex = desc.getPaletteIndex();
         boolean hFlip = desc.getHFlip();
@@ -1205,10 +1322,13 @@ public class LevelManager {
                 | (vFlip ? 0x40 : 0)
                 | (priority ? 0x80 : 0);
 
-        backgroundTilemapData[offset] = (byte) r;
-        backgroundTilemapData[offset + 1] = (byte) g;
-        backgroundTilemapData[offset + 2] = 0;
-        backgroundTilemapData[offset + 3] = (byte) 255;
+        data[offset] = (byte) r;
+        data[offset + 1] = (byte) g;
+        data[offset + 2] = 0;
+        data[offset + 3] = (byte) 255;
+    }
+
+    private record TilemapData(byte[] data, int widthTiles, int heightTiles) {
     }
 
     /**

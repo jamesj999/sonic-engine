@@ -12,6 +12,7 @@ public class TilemapShaderProgram extends ShaderProgram {
     private int patternLookupLocation = -1;
     private int atlasTextureLocation = -1;
     private int paletteLocation = -1;
+    private int underwaterPaletteLocation = -1;
     private int tilemapWidthLocation = -1;
     private int tilemapHeightLocation = -1;
     private int atlasWidthLocation = -1;
@@ -23,6 +24,8 @@ public class TilemapShaderProgram extends ShaderProgram {
     private int worldOffsetYLocation = -1;
     private int wrapYLocation = -1;
     private int priorityPassLocation = -1;
+    private int useUnderwaterPaletteLocation = -1;
+    private int waterlineScreenYLocation = -1;
 
     public TilemapShaderProgram(GL2 gl, String fragmentShaderPath) throws IOException {
         super(gl, fragmentShaderPath);
@@ -36,6 +39,7 @@ public class TilemapShaderProgram extends ShaderProgram {
         patternLookupLocation = gl.glGetUniformLocation(programId, "PatternLookup");
         atlasTextureLocation = gl.glGetUniformLocation(programId, "AtlasTexture");
         paletteLocation = gl.glGetUniformLocation(programId, "Palette");
+        underwaterPaletteLocation = gl.glGetUniformLocation(programId, "UnderwaterPalette");
         tilemapWidthLocation = gl.glGetUniformLocation(programId, "TilemapWidth");
         tilemapHeightLocation = gl.glGetUniformLocation(programId, "TilemapHeight");
         atlasWidthLocation = gl.glGetUniformLocation(programId, "AtlasWidth");
@@ -47,9 +51,12 @@ public class TilemapShaderProgram extends ShaderProgram {
         worldOffsetYLocation = gl.glGetUniformLocation(programId, "WorldOffsetY");
         wrapYLocation = gl.glGetUniformLocation(programId, "WrapY");
         priorityPassLocation = gl.glGetUniformLocation(programId, "PriorityPass");
+        useUnderwaterPaletteLocation = gl.glGetUniformLocation(programId, "UseUnderwaterPalette");
+        waterlineScreenYLocation = gl.glGetUniformLocation(programId, "WaterlineScreenY");
     }
 
-    public void setTextureUnits(GL2 gl, int tilemapUnit, int lookupUnit, int atlasUnit, int paletteUnit) {
+    public void setTextureUnits(GL2 gl, int tilemapUnit, int lookupUnit, int atlasUnit, int paletteUnit,
+            int underwaterPaletteUnit) {
         if (tilemapTextureLocation >= 0) {
             gl.glUniform1i(tilemapTextureLocation, tilemapUnit);
         }
@@ -61,6 +68,9 @@ public class TilemapShaderProgram extends ShaderProgram {
         }
         if (paletteLocation >= 0) {
             gl.glUniform1i(paletteLocation, paletteUnit);
+        }
+        if (underwaterPaletteLocation >= 0) {
+            gl.glUniform1i(underwaterPaletteLocation, underwaterPaletteUnit);
         }
     }
 
@@ -115,6 +125,15 @@ public class TilemapShaderProgram extends ShaderProgram {
     public void setPriorityPass(GL2 gl, int pass) {
         if (priorityPassLocation >= 0) {
             gl.glUniform1i(priorityPassLocation, pass);
+        }
+    }
+
+    public void setWaterSplit(GL2 gl, boolean useUnderwaterPalette, float waterlineScreenY) {
+        if (useUnderwaterPaletteLocation >= 0) {
+            gl.glUniform1i(useUnderwaterPaletteLocation, useUnderwaterPalette ? 1 : 0);
+        }
+        if (waterlineScreenYLocation >= 0) {
+            gl.glUniform1f(waterlineScreenYLocation, waterlineScreenY);
         }
     }
 }

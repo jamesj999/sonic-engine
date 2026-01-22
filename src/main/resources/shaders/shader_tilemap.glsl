@@ -4,6 +4,7 @@ uniform sampler2D TilemapTexture;    // RGBA8 tile descriptors
 uniform sampler1D PatternLookup;     // RGBA8: R=tileX, G=tileY
 uniform sampler2D AtlasTexture;      // Indexed color atlas (GL_RED)
 uniform sampler2D Palette;           // Combined palette texture
+uniform sampler2D UnderwaterPalette; // Underwater palette
 
 uniform float TilemapWidth;          // In tiles
 uniform float TilemapHeight;         // In tiles
@@ -16,6 +17,8 @@ uniform float WorldOffsetX;          // World X at left edge
 uniform float WorldOffsetY;          // World Y at top edge
 uniform int WrapY;                   // 1 to wrap vertically, 0 to clamp
 uniform int PriorityPass;            // -1 = all, 0 = low, 1 = high
+uniform int UseUnderwaterPalette;
+uniform float WaterlineScreenY;
 
 void main()
 {
@@ -92,7 +95,12 @@ void main()
 
     float paletteX = (index + 0.5) / 16.0;
     float paletteY = (paletteIndex + 0.5) / 4.0;
-    vec4 color = texture2D(Palette, vec2(paletteX, paletteY));
+    vec4 color;
+    if (UseUnderwaterPalette == 1 && pixelYFromTop >= WaterlineScreenY) {
+        color = texture2D(UnderwaterPalette, vec2(paletteX, paletteY));
+    } else {
+        color = texture2D(Palette, vec2(paletteX, paletteY));
+    }
 
     gl_FragColor = color;
 }
