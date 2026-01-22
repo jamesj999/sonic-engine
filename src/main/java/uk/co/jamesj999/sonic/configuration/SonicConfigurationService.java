@@ -150,11 +150,9 @@ public class SonicConfigurationService {
 		// Force debug view enabled for tests/headless use unless explicitly overridden
 		config.put(SonicConfiguration.DEBUG_VIEW_ENABLED.name(), true);
 		putDefault(SonicConfiguration.DEBUG_COLLISION_VIEW_ENABLED, false);
-		putDefault(SonicConfiguration.GPU_TILEMAP_ENABLED, false);
 		putDefault(SonicConfiguration.DAC_INTERPOLATE, true);
 		putDefault(SonicConfiguration.FM6_DAC_OFF, true); // Default true for Sonic 2 parity
 		putDefault(SonicConfiguration.AUDIO_ENABLED, true);
-		putDefault(SonicConfiguration.GPU_TILEMAP_TOGGLE_KEY, java.awt.event.KeyEvent.VK_F8);
 		putDefault(SonicConfiguration.REGION, "NTSC");
 		putDefault(SonicConfiguration.SPECIAL_STAGE_KEY, java.awt.event.KeyEvent.VK_HOME);
 		putDefault(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY, java.awt.event.KeyEvent.VK_END);

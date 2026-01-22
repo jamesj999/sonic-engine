@@ -147,13 +147,6 @@ public class GameLoop {
         GameServices.debugOverlay().updateInput(inputHandler);
         DebugObjectArtViewer.getInstance().updateInput(inputHandler);
 
-        if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.GPU_TILEMAP_TOGGLE_KEY))) {
-            boolean current = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
-            boolean next = !current;
-            configService.setConfigValue(SonicConfiguration.GPU_TILEMAP_ENABLED, next);
-            LOGGER.info("GPU tilemap rendering " + (next ? "enabled" : "disabled"));
-        }
-
         // Check for Special Stage toggle (HOME by default)
         if (inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.SPECIAL_STAGE_KEY))) {
             handleSpecialStageDebugKey();

@@ -123,24 +123,11 @@ public class BackgroundRenderer {
 
     /**
      * Begin the tile rendering pass - binds FBO and clears it.
-     * After calling this, render background tiles normally.
+     * After calling this, render background tiles using GPU tilemap.
      *
      * @param gl            OpenGL context
-     * @param displayHeight The display pixel height used by pattern renderer for
-     *                      Y-flip.
-     */
-    public void beginTilePass(GL2 gl, int displayHeight) {
-        beginTilePass(gl, displayHeight, false);
-    }
-
-    /**
-     * Begin the tile rendering pass - binds FBO and clears it.
-     * After calling this, render background tiles normally.
-     *
-     * @param gl            OpenGL context
-     * @param displayHeight The display pixel height used by pattern renderer for
-     *                      Y-flip.
-     * @param gpuTilemap    True if using GPU tilemap renderer (different projection)
+     * @param displayHeight The display pixel height (unused, kept for API compatibility)
+     * @param gpuTilemap    True (always, GPU tilemap is the only supported path)
      */
     public void beginTilePass(GL2 gl, int displayHeight, boolean gpuTilemap) {
         if (!initialized)
@@ -156,24 +143,9 @@ public class BackgroundRenderer {
         gl.glPushMatrix();
         gl.glLoadIdentity();
 
-        int top, bottom;
-        if (gpuTilemap) {
-            // GPU tilemap renderer draws a quad from (0,0) to (fboWidth, fboHeight).
-            // Set up projection to cover the full quad coordinate space.
-            top = fboHeight;
-            bottom = 0;
-        } else {
-            // Pattern renderer places tiles at OpenGL Y = displayHeight - genesisY.
-            // For genesis Y=0: OpenGL Y = displayHeight (top)
-            // For genesis Y=fboHeight: OpenGL Y = displayHeight - fboHeight
-            //
-            // Set up projection to capture OpenGL Y range [displayHeight-fboHeight,
-            // displayHeight]
-            // This maps that range to FBO pixels [0, fboHeight]
-            top = displayHeight;
-            bottom = displayHeight - fboHeight;
-        }
-        gl.glOrtho(0, fboWidth, bottom, top, -1, 1);
+        // GPU tilemap renderer draws a quad from (0,0) to (fboWidth, fboHeight).
+        // Set up projection to cover the full quad coordinate space.
+        gl.glOrtho(0, fboWidth, 0, fboHeight, -1, 1);
 
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glPushMatrix();

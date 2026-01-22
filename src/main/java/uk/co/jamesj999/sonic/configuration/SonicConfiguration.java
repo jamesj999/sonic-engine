@@ -97,11 +97,6 @@ public enum SonicConfiguration {
 	DEBUG_COLLISION_VIEW_ENABLED,
 
 	/**
-	 * Enable GPU tilemap shader path (Track B). When false, use CPU tile rendering.
-	 */
-	GPU_TILEMAP_ENABLED,
-
-	/**
 	 * Filename of ROM to use (temporary)
 	 */
 	ROM_FILENAME,
@@ -115,11 +110,6 @@ public enum SonicConfiguration {
 	 * Whether to enable Audio (Music/SFX)
 	 */
 	AUDIO_ENABLED,
-
-	/**
-	 * Key to toggle GPU tilemap rendering for parity checks.
-	 */
-	GPU_TILEMAP_TOGGLE_KEY,
 
 	/**
 	 * Region (NTSC/PAL) for audio timing.

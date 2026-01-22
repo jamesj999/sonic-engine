@@ -159,12 +159,6 @@ public class LevelManager {
     // Camera reference for frustum culling
     private final Camera camera = Camera.getInstance();
 
-    private enum TilePriorityPass {
-        ALL,
-        LOW_ONLY,
-        HIGH_ONLY
-    }
-
     /**
      * Checks if a point is within the visible camera frustum with optional padding.
      * Used to cull debug overlay commands for off-screen objects.
@@ -542,54 +536,6 @@ public class LevelManager {
     }
 
     /**
-     * Debug Functionality to print each ChunkDesc to the screen.
-     */
-    public void drawAllChunks() {
-        if (level == null) {
-            LOGGER.warning("No level loaded to draw.");
-            return;
-        }
-
-        Camera camera = Camera.getInstance();
-        int cameraX = camera.getX();
-        int cameraY = camera.getY();
-        int cameraWidth = camera.getWidth();
-        int cameraHeight = camera.getHeight();
-
-        // Calculate drawing bounds
-        int drawX = cameraX;
-        int drawY = cameraY;
-        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
-
-        int xLeftBound = Math.max(drawX, 0);
-        int xRightBound = Math.min(cameraX + cameraWidth, levelWidth);
-        int yTopBound = Math.max(drawY, 0);
-        int yBottomBound = Math.min(cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT, levelHeight);
-
-        List<GLCommand> commands = new ArrayList<>(256);
-
-        // Iterate over the visible area of the level
-        int count = 0;
-        int maxCount = level.getChunkCount();
-
-        for (int y = yTopBound; y <= yBottomBound; y += Chunk.CHUNK_HEIGHT) {
-            for (int x = xLeftBound; x <= xRightBound; x += Chunk.CHUNK_WIDTH) {
-                if (count < maxCount) {
-                    ChunkDesc chunkDesc = new ChunkDesc();
-                    chunkDesc.setChunkIndex(count);
-                    drawChunk(commands, chunkDesc, x, y, true);
-                    count++;
-                }
-            }
-        }
-
-        // Register all collected drawing commands with the graphics manager
-        graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, commands));
-
-    }
-
-    /**
      * Renders the current level by processing and displaying collision data.
      * This is currently for debugging purposes to visualize collision areas.
      */
@@ -630,17 +576,13 @@ public class LevelManager {
             renderBackgroundShader(collisionCommands, bgScrollY);
         }
 
-        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
-        boolean gpuForeground = useGpuTilemap && !overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW);
-
         // Draw Foreground (Layer 0) low-priority pass
-        if (gpuForeground) {
-            ensureForegroundTilemapData();
-            enqueueForegroundTilemapPass(camera, 0);
-        } else {
-            graphicsManager.beginPatternBatch();
-            drawLayer(collisionCommands, 0, camera, 1.0f, 1.0f, TilePriorityPass.LOW_ONLY, true, false);
-            graphicsManager.flushPatternBatch();
+        ensureForegroundTilemapData();
+        enqueueForegroundTilemapPass(camera, 0);
+
+        // Generate collision debug overlay commands (independent of GPU/CPU path)
+        if (overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
+            generateCollisionDebugCommands(collisionCommands, camera);
         }
 
         // Render collision debug overlay on top of foreground tiles
@@ -667,14 +609,7 @@ public class LevelManager {
         graphicsManager.flushPatternBatch();
 
         // Draw Foreground (Layer 0) high-priority pass
-        if (gpuForeground) {
-            enqueueForegroundTilemapPass(camera, 1);
-        } else {
-            // Note: drawCollision=false so commands list is not used
-            graphicsManager.beginPatternBatch();
-            drawLayer(null, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
-            graphicsManager.flushPatternBatch();
-        }
+        enqueueForegroundTilemapPass(camera, 1);
 
         graphicsManager.beginPatternBatch();
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
@@ -918,16 +853,13 @@ public class LevelManager {
 
         Camera camera = Camera.getInstance();
 
-        // Check GPU tilemap early since FBO height depends on it
-        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
-
         // FBO is wider than screen to accommodate per-scanline scroll range
         // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
-        // Add CHUNK_HEIGHT (16px) when using GPU tilemap to cover VScroll range
+        // Add CHUNK_HEIGHT (16px) to cover VScroll range
         // This prevents bottom clipping when VScroll > 0 (max VScroll = 15, max gameY = 223, max fboY = 238 < 272)
-        int fboHeight = useGpuTilemap ? 256 + LevelConstants.CHUNK_HEIGHT : 256;
+        int fboHeight = 256 + LevelConstants.CHUNK_HEIGHT;
 
         // Extra buffer on each side
         int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
@@ -966,17 +898,16 @@ public class LevelManager {
         int vOffset = actualBgScrollY - alignedBgY;
         final float fboWaterlineY = (float) ((waterLevelWorldY - camera.getY()) + vOffset);
 
-        if (useGpuTilemap) {
-            ensureBackgroundTilemapData();
-            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-                bgRenderer.beginTilePass(gl, screenHeightPixels, true);
-                TilemapGpuRenderer tilemapRenderer = graphicsManager.getTilemapGpuRenderer();
-                if (tilemapRenderer != null) {
-                    Integer atlasId = graphicsManager.getPatternAtlasTextureId();
-                    Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
-                    Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
-                    boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
-                    if (atlasId != null && paletteId != null) {
+        ensureBackgroundTilemapData();
+        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+            bgRenderer.beginTilePass(gl, screenHeightPixels, true);
+            TilemapGpuRenderer tilemapRenderer = graphicsManager.getTilemapGpuRenderer();
+            if (tilemapRenderer != null) {
+                Integer atlasId = graphicsManager.getPatternAtlasTextureId();
+                Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
+                Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
+                boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
+                if (atlasId != null && paletteId != null) {
                     int[] viewport = new int[4];
                     gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
                     tilemapRenderer.render(gl,
@@ -990,84 +921,19 @@ public class LevelManager {
                             0.0f,
                             (float) alignedBgYFinal,
                             graphicsManager.getPatternAtlasWidth(),
-                                graphicsManager.getPatternAtlasHeight(),
-                                atlasId,
-                                paletteId,
-                                underwaterPaletteId != null ? underwaterPaletteId : 0,
-                                -1,
-                                true,
-                                useUnderwaterPalette,
-                                fboWaterlineY);
-                    }
+                            graphicsManager.getPatternAtlasHeight(),
+                            atlasId,
+                            paletteId,
+                            underwaterPaletteId != null ? underwaterPaletteId : 0,
+                            -1,
+                            true,
+                            useUnderwaterPalette,
+                            fboWaterlineY);
                 }
-                bgRenderer.endTilePass(gl);
-                graphicsManager.setUseUnderwaterPaletteForBackground(false);
-            }));
-        } else {
-            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-                bgRenderer.beginTilePass(gl, screenHeightPixels);
-
-                if (hasWater) {
-                    // Use water shader in screen-space mode with FBO dimensions
-                    graphicsManager.setUseWaterShader(true);
-                    WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
-                    waterShader.use(gl);
-                    // Use screen-space mode (not world-space) with FBO-adjusted waterline
-                    waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
-                    waterShader.setWindowHeight(gl, (float) fboHeight);
-                    waterShader.setScreenDimensions(gl, (float) fboWidth, (float) fboHeight);
-                    waterShader.setDistortionAmplitude(gl, 0.0f);
-                    waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
-                    waterShader.setWaterlineScreenY(gl, fboWaterlineY);
-                } else {
-                    graphicsManager.setUseWaterShader(false);
-                }
-                // Clear underwater palette for background flag usage - explicitly control it
-                // Force underwater palette for background if we are fully submerged relative to
-                // FBO
-                // This ensures consistent behavior for deep water levels like ARZ
-                boolean fullyUnderwater = hasWater && fboWaterlineY <= 0;
-                graphicsManager.setUseUnderwaterPaletteForBackground(fullyUnderwater);
-            }));
-
-            // 3. Draw background tiles to wider FBO (uses water shader in world-space mode)
-            graphicsManager.beginPatternBatch();
-            drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidth, fboHeight, extraBuffer);
-            graphicsManager.flushPatternBatch();
-        }
-
-        // 4. End Tile Pass (Unbind FBO) and switch water shader back to screen-space
-        // mode. Use visual water level (with oscillation) for foreground rendering.
-        int waterLevel = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 0;
-        float waterlineScreenY = (float) (waterLevel - camera.getY()); // Pixels from top
-
-        if (!useGpuTilemap) {
-            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-                bgRenderer.endTilePass(gl);
-
-                // Always reset background palette flag to avoid affecting foreground
-                graphicsManager.setUseUnderwaterPaletteForBackground(false);
-
-                if (hasWater) {
-                    // Switch water shader back to screen-space mode for foreground rendering
-                    WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
-                    waterShader.use(gl);
-                    waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
-
-                    // Restore screen-space uniforms
-                    int[] viewport = new int[4];
-                    gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
-                    float windowHeight = (float) viewport[3];
-                    waterShader.setWindowHeight(gl, windowHeight);
-                    waterShader.setWaterlineScreenY(gl, waterlineScreenY);
-                    waterShader.setScreenDimensions(gl,
-                            (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
-                            (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
-                    waterShader.setDistortionAmplitude(gl, 0.0f);
-                    waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
-                }
-            }));
-        }
+            }
+            bgRenderer.endTilePass(gl);
+            graphicsManager.setUseUnderwaterPaletteForBackground(false);
+        }));
 
         // 5. Render the FBO with Parallax Shader
         Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
@@ -1353,300 +1219,74 @@ public class LevelManager {
     }
 
     /**
-     * Draw background tiles to FBO for per-scanline scrolling.
-     * Renders exactly one horizontal period of the background for seamless
-     * wrapping.
-     * Y coordinates are aligned to screen space (FBO Y=0 = screen Y=0).
+     * Generates collision debug overlay commands for visible chunks.
+     * This method iterates over visible chunks in the foreground layer (Layer 0)
+     * and generates collision debug rendering commands independently of tile rendering.
+     *
+     * @param commands the list of GLCommands to add collision rectangles to
+     * @param camera   the camera for visibility culling
      */
-    private void drawBackgroundToFBOWide(List<GLCommand> commands, Camera camera, int bgScrollY,
-            int fboWidth, int fboHeight, int extraBuffer) {
-        int cameraX = camera.getX();
-        int cameraY = camera.getY();
-
-        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
-        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
-
-        // bgCameraY is the vertical scroll position for background
-        int bgCameraY = bgScrollY;
-
-        int xStart = 0;
-        int xEnd = Math.min(fboWidth, levelWidth);
-
-        // Render to FBO aligning Y to chunk boundaries
-        // This ensures consistent tile placement regardless of sub-chunk scroll
-        // The shader applies the sub-chunk offset
-        int chunkHeight = LevelConstants.CHUNK_HEIGHT;
-        // Align bgCameraY down to nearest chunk
-        int alignedBgY = (bgCameraY / chunkHeight) * chunkHeight;
-        if (bgCameraY < 0 && bgCameraY % chunkHeight != 0)
-            alignedBgY -= chunkHeight; // Handle negative rounding
-
-        // Render enough rows to fill the FBO height
-        // alignedBgY corresponds to FBO Y=0
-        int worldYStart = alignedBgY;
-        int worldYEnd = alignedBgY + fboHeight;
-
-        for (int worldY = worldYStart; worldY < worldYEnd; worldY += chunkHeight) {
-            // Calculate FBO Y position for this tile
-            // Since we start at alignedBgY, the first row is at fboY = 0
-            int fboY = worldY - alignedBgY;
-
-            // Skip tiles outside FBO range (safeguard)
-            if (fboY < 0 || fboY >= fboHeight)
-                continue;
-
-            int wrappedY = ((worldY % levelHeight) + levelHeight) % levelHeight;
-
-            for (int x = xStart; x < xEnd; x += LevelConstants.CHUNK_WIDTH) {
-                int wrappedX = x % levelWidth;
-
-                Block block = getBlockAtPosition((byte) 1, wrappedX, wrappedY);
-                if (block != null) {
-                    int xBlockBit = (wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
-                    int yBlockBit = (wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
-                    ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
-
-                    // Convert to pattern renderer coordinates
-                    // We render relative to alignedBgY, so fboY 0 is alignedBgY
-                    // renderY is passed to pattern renderer which eventually maps to FBO
-                    // renderY = fboY + cameraY (but wait, we want fboY to be the OFFSET in the FBO)
-                    // If we pass x, y+cameraY, drawing usually effectively subtracts cameraY.
-                    // We want final coord in FBO to be fboY.
-                    // So we pass renderY = fboY + cameraY.
-                    // (Assuming drawPattern subtracts cameraY)
-                    int renderX = x + cameraX;
-                    int renderY = fboY + cameraY;
-
-                    drawChunk(commands, chunkDesc, renderX, renderY, false, null, 0, 0, TilePriorityPass.ALL);
-                }
-            }
+    private void generateCollisionDebugCommands(List<GLCommand> commands, Camera camera) {
+        if (level == null || level.getMap() == null) {
+            return;
         }
-    }
+        if (!overlayManager.isEnabled(DebugOverlayToggle.COLLISION_VIEW)) {
+            return;
+        }
 
-    private void drawLayer(List<GLCommand> commands,
-            int layerIndex,
-            Camera camera,
-            float parallaxX,
-            float parallaxY,
-            TilePriorityPass priorityPass,
-            boolean drawCollision,
-            boolean renderToFBO) {
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int cameraWidth = camera.getWidth();
         int cameraHeight = camera.getHeight();
 
-        int bgCameraX = (int) (cameraX * parallaxX);
-        int bgCameraY = (int) (cameraY * parallaxY);
-
-        // Disable CPU-side hScroll - Layer 0 (Foreground) doesn't use it here?
-        // Actually Layer 0 might use hScroll from parallaxManager?
-        // But getHScroll() was used for Layer 1. Layer 0 usually scroll constant?
-        // ParallaxManager calculates FG scroll too.
-        // But original code: (layerIndex == 1 && !renderToFBO)
-        // So hScroll was NULL for Layer 0.
-        int[] hScroll = null;
-
-        int drawX, drawY, xStart, xEnd, yStart, yEnd;
-
         int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
         int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
 
-        if (renderToFBO) {
-            // Render entire map from (0,0)
-            drawX = 0;
-            drawY = 0;
-            xStart = 0;
-            xEnd = levelWidth; // Draw full width
-            yStart = 0;
-            yEnd = levelHeight; // Draw full height
-            bgCameraX = 0; // No camera offset in FBO
-            bgCameraY = 0;
-            cameraX = 0; // Patterns drawn relative to 0
-            cameraY = 0;
-        } else {
-            // Standard camera culling
-            drawX = bgCameraX - (bgCameraX % LevelConstants.CHUNK_WIDTH);
-            drawY = bgCameraY - (bgCameraY % LevelConstants.CHUNK_HEIGHT);
+        // Calculate visible chunk range (same culling logic as foreground rendering)
+        int xStart = cameraX - (cameraX % LevelConstants.CHUNK_WIDTH);
+        int xEnd = cameraX + cameraWidth;
+        int yStart = cameraY - (cameraY % LevelConstants.CHUNK_HEIGHT);
+        int yEnd = cameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
 
-            xStart = drawX;
-            xEnd = bgCameraX + cameraWidth;
-
-            yStart = drawY;
-            yEnd = bgCameraY + cameraHeight + LevelConstants.CHUNK_HEIGHT;
-        }
-
-        for (int y = yStart; y < yEnd; y += LevelConstants.CHUNK_HEIGHT) { // Changed <= to < to avoid OOB if exact
-                                                                           // match? Check original logic. Original was
-                                                                           // <=
-            // Revert to original <= if needed, but watch out for duplicates?
-            // Original: for (int y = yStart; y <= yEnd; y += ...
-            // If yEnd is exactly on boundary, it draws one more row.
-        }
-        // Re-implementing the loop with corrected logic for FBO
         for (int y = yStart; y <= yEnd; y += LevelConstants.CHUNK_HEIGHT) {
-            int rowXStart = xStart;
-            int rowXEnd = xEnd;
-
-            if (hScroll != null) {
-                int screenY = y - bgCameraY;
-                int localMin = Integer.MAX_VALUE;
-                int localMax = Integer.MIN_VALUE;
-
-                // Check scroll values for the scanlines covered by this chunk row
-                for (int i = 0; i < LevelConstants.CHUNK_HEIGHT; i++) {
-                    int line = screenY + i;
-                    if (line < 0)
-                        line = 0;
-                    if (line >= ParallaxManager.VISIBLE_LINES)
-                        line = ParallaxManager.VISIBLE_LINES - 1;
-
-                    short val = (short) (hScroll[line] & 0xFFFF);
-                    if (val < localMin)
-                        localMin = val;
-                    if (val > localMax)
-                        localMax = val;
-                }
-
-                rowXStart = -localMax;
-                rowXEnd = cameraWidth - localMin;
-
-                // Align to chunk boundary
-                rowXStart -= (rowXStart % LevelConstants.CHUNK_WIDTH + LevelConstants.CHUNK_WIDTH)
-                        % LevelConstants.CHUNK_WIDTH;
-
-                // Add buffer
-                rowXStart -= LevelConstants.CHUNK_WIDTH;
-                rowXEnd += LevelConstants.CHUNK_WIDTH;
+            // Foreground clamps vertically (doesn't wrap)
+            if (y < 0 || y >= levelHeight) {
+                continue;
             }
 
-            for (int x = rowXStart; x <= rowXEnd; x += LevelConstants.CHUNK_WIDTH) {
-                // Handle wrapping for X
-                int wrappedX = x;
-                wrappedX = ((wrappedX % levelWidth) + levelWidth) % levelWidth;
+            for (int x = xStart; x <= xEnd; x += LevelConstants.CHUNK_WIDTH) {
+                // Handle X wrapping
+                int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
 
-                // Handle wrapping for Y
-                int wrappedY = y;
-                if (layerIndex == 1) {
-                    // Background loops vertically
-                    wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
-                } else {
-                    // Foreground Clamps
-                    if (wrappedY < 0 || wrappedY >= levelHeight)
-                        continue;
-                }
-
-                Block block = getBlockAtPosition((byte) layerIndex, wrappedX, wrappedY);
-                if (block != null) {
-                    int xBlockBit = (wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
-                    int yBlockBit = (wrappedY % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
-
-                    ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
-
-                    // Calculate screen coordinates
-                    int screenX = x - bgCameraX;
-                    int screenY = y - bgCameraY;
-
-                    // Convert to absolute coordinates expected by renderPattern (which subtracts
-                    // cameraX/Y)
-                    int renderX = screenX + cameraX;
-                    int renderY = screenY + cameraY;
-
-                    // Draw collision only for foreground (Layer 0)
-                    drawChunk(commands, chunkDesc, renderX, renderY, drawCollision, hScroll, screenY, bgCameraX,
-                            priorityPass);
-                }
-            }
-        }
-    }
-
-    /**
-     * Draws a chunk of the level based on the provided chunk description.
-     *
-     * @param commands      the list of GLCommands to add to
-     * @param chunkDesc     the description of the chunk to draw
-     * @param x             the x-coordinate to draw the chunk at
-     * @param y             the y-coordinate to draw the chunk at
-     * @param drawCollision whether to draw collision debug info
-     */
-    private void drawChunk(List<GLCommand> commands, ChunkDesc chunkDesc, int x, int y, boolean drawCollision) {
-        drawChunk(commands, chunkDesc, x, y, drawCollision, null, 0, 0, TilePriorityPass.ALL);
-    }
-
-    private void drawChunk(List<GLCommand> commands,
-            ChunkDesc chunkDesc,
-            int x,
-            int y,
-            boolean drawCollision,
-            int[] hScroll,
-            int screenY,
-            int baseBgCameraX,
-            TilePriorityPass priorityPass) {
-        int chunkIndex = chunkDesc.getChunkIndex();
-        if (chunkIndex == 0) {
-            return; // Chunk 0 is always empty/transparent
-        }
-        if (chunkIndex >= level.getChunkCount()) {
-            LOGGER.fine("Chunk index " + chunkIndex + " out of bounds; defaulting to 0.");
-            chunkIndex = 0;
-            return; // Since we default to 0, which is empty, we can just return
-        }
-
-        Chunk chunk = level.getChunk(chunkIndex);
-        if (chunk == null) {
-            LOGGER.warning("Chunk at index " + chunkIndex + " is null.");
-            return;
-        }
-
-        boolean chunkHFlip = chunkDesc.getHFlip();
-        boolean chunkVFlip = chunkDesc.getVFlip();
-
-        for (int cY = 0; cY < 2; cY++) {
-            for (int cX = 0; cX < 2; cX++) {
-                int logicalX = chunkHFlip ? 1 - cX : cX;
-                int logicalY = chunkVFlip ? 1 - cY : cY;
-
-                PatternDesc patternDesc = chunk.getPatternDesc(logicalX, logicalY);
-
-                int newIndex = patternDesc.get();
-                if (chunkHFlip) {
-                    newIndex ^= 0x800;
-                }
-                if (chunkVFlip) {
-                    newIndex ^= 0x1000;
-                }
-                PatternDesc newPatternDesc = new PatternDesc(newIndex);
-
-                int drawX = x + (cX * Pattern.PATTERN_WIDTH);
-                int drawY = y + (cY * Pattern.PATTERN_HEIGHT);
-
-                if (hScroll != null) {
-                    int line = screenY + (cY * Pattern.PATTERN_HEIGHT);
-                    if (line < 0)
-                        line = 0;
-                    if (line >= ParallaxManager.VISIBLE_LINES)
-                        line = ParallaxManager.VISIBLE_LINES - 1;
-
-                    short scroll = (short) (hScroll[line] & 0xFFFF);
-                    drawX = drawX + scroll + baseBgCameraX;
-                }
-
-                boolean isHighPriority = newPatternDesc.getPriority();
-                if (priorityPass == TilePriorityPass.LOW_ONLY && isHighPriority) {
-                    continue;
-                }
-                if (priorityPass == TilePriorityPass.HIGH_ONLY && !isHighPriority) {
+                Block block = getBlockAtPosition((byte) 0, wrappedX, y);
+                if (block == null) {
                     continue;
                 }
 
-                graphicsManager.renderPattern(newPatternDesc, drawX, drawY);
-            }
-        }
+                int xBlockBit = (wrappedX % LevelConstants.BLOCK_WIDTH) / LevelConstants.CHUNK_WIDTH;
+                int yBlockBit = (y % LevelConstants.BLOCK_HEIGHT) / LevelConstants.CHUNK_HEIGHT;
+                ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
 
-        // Handle primary and secondary collisions
-        if (drawCollision) {
-            processCollisionMode(commands, chunkDesc, chunk, true, x, y);
-            processCollisionMode(commands, chunkDesc, chunk, false, x, y);
+                int chunkIndex = chunkDesc.getChunkIndex();
+                if (chunkIndex == 0 || chunkIndex >= level.getChunkCount()) {
+                    continue;
+                }
+
+                Chunk chunk = level.getChunk(chunkIndex);
+                if (chunk == null) {
+                    continue;
+                }
+
+                // Calculate screen coordinates then convert to render coordinates
+                int screenX = x - cameraX;
+                int screenY = y - cameraY;
+                int renderX = screenX + cameraX;
+                int renderY = screenY + cameraY;
+
+                // Generate collision debug for both primary and secondary collision
+                processCollisionMode(commands, chunkDesc, chunk, true, renderX, renderY);
+                processCollisionMode(commands, chunkDesc, chunk, false, renderX, renderY);
+            }
         }
     }
 
