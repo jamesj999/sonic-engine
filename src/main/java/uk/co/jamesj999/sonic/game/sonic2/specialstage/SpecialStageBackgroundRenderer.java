@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 import com.jogamp.opengl.GL2;
 import uk.co.jamesj999.sonic.graphics.HScrollBuffer;
 import uk.co.jamesj999.sonic.graphics.ParallaxShaderProgram;
+import uk.co.jamesj999.sonic.graphics.QuadRenderer;
 
 import java.io.IOException;
 import java.nio.ShortBuffer;
@@ -43,6 +44,7 @@ public class SpecialStageBackgroundRenderer {
     // Shader and scroll buffer
     private ParallaxShaderProgram shader;
     private HScrollBuffer hScrollBuffer;
+    private final QuadRenderer quadRenderer = new QuadRenderer();
 
     // Per-scanline scroll data (224 entries)
     private final int[] hScrollData = new int[SCREEN_HEIGHT];
@@ -72,6 +74,7 @@ public class SpecialStageBackgroundRenderer {
         // Load special stage background shader
         shader = new ParallaxShaderProgram(gl, "shaders/shader_ss_background.glsl");
         shader.cacheUniformLocations(gl);
+        quadRenderer.init(gl);
 
         // Initialize H-scroll data to zero
         for (int i = 0; i < SCREEN_HEIGHT; i++) {
@@ -258,16 +261,7 @@ public class SpecialStageBackgroundRenderer {
         gl.glLoadIdentity();
 
         // Draw quad covering full screen - shader will clip to H32 viewport
-        gl.glBegin(GL2.GL_QUADS);
-        gl.glTexCoord2f(0, 0);
-        gl.glVertex2f(0, 0);
-        gl.glTexCoord2f(1, 0);
-        gl.glVertex2f(SCREEN_WIDTH, 0);
-        gl.glTexCoord2f(1, 1);
-        gl.glVertex2f(SCREEN_WIDTH, SCREEN_HEIGHT);
-        gl.glTexCoord2f(0, 1);
-        gl.glVertex2f(0, SCREEN_HEIGHT);
-        gl.glEnd();
+        quadRenderer.draw(gl, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
         gl.glPopMatrix();
         gl.glMatrixMode(GL2.GL_PROJECTION);
@@ -344,6 +338,7 @@ public class SpecialStageBackgroundRenderer {
             shader.cleanup(gl);
             shader = null;
         }
+        quadRenderer.cleanup(gl);
         if (fboId > 0) {
             gl.glDeleteFramebuffers(1, new int[] { fboId }, 0);
             fboId = -1;

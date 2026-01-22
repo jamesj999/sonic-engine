@@ -86,6 +86,7 @@ public class FadeManager {
 
     // Shader program reference (set by GraphicsManager)
     private ShaderProgram fadeShader;
+    private final QuadRenderer quadRenderer = new QuadRenderer();
 
     // Cached uniform location
     private int fadeColorLocation = -1;
@@ -403,6 +404,7 @@ public class FadeManager {
         if (state == FadeState.NONE) {
             return;
         }
+        quadRenderer.init(gl);
 
         if (fadeType == FadeType.WHITE) {
             renderWhiteFade(gl);
@@ -453,12 +455,7 @@ public class FadeManager {
         gl.glLoadIdentity();
 
         // Draw fullscreen quad (using screen coordinates 0-320 x 0-224)
-        gl.glBegin(GL2.GL_QUADS);
-        gl.glVertex2f(0, 0);
-        gl.glVertex2f(320, 0);
-        gl.glVertex2f(320, 224);
-        gl.glVertex2f(0, 224);
-        gl.glEnd();
+        quadRenderer.draw(gl, 0, 0, 320, 224);
 
         // Restore modelview matrix
         gl.glPopMatrix();
@@ -517,12 +514,7 @@ public class FadeManager {
         gl.glLoadIdentity();
 
         // Draw fullscreen quad
-        gl.glBegin(GL2.GL_QUADS);
-        gl.glVertex2f(0, 0);
-        gl.glVertex2f(320, 0);
-        gl.glVertex2f(320, 224);
-        gl.glVertex2f(0, 224);
-        gl.glEnd();
+        quadRenderer.draw(gl, 0, 0, 320, 224);
 
         // Restore modelview matrix
         gl.glPopMatrix();
@@ -581,6 +573,10 @@ public class FadeManager {
         onFadeComplete = null;
         holdDuration = 0;
         holdFrameCount = 0;
+    }
+
+    public void cleanup(GL2 gl) {
+        quadRenderer.cleanup(gl);
     }
 
     /**

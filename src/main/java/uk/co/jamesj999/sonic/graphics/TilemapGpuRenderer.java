@@ -20,6 +20,7 @@ public class TilemapGpuRenderer {
     private final TilemapTexture backgroundTexture = new TilemapTexture();
     private final TilemapTexture foregroundTexture = new TilemapTexture();
     private final PatternLookupBuffer patternLookup = new PatternLookupBuffer();
+    private final QuadRenderer quadRenderer = new QuadRenderer();
 
     private byte[] backgroundData;
     private int backgroundWidthTiles;
@@ -44,6 +45,7 @@ public class TilemapGpuRenderer {
             shader.cacheUniformLocations(gl);
             LOGGER.info("Tilemap GPU renderer initialized.");
         }
+        quadRenderer.init(gl);
     }
 
     public void setTilemapData(Layer layer, byte[] data, int widthTiles, int heightTiles) {
@@ -137,12 +139,7 @@ public class TilemapGpuRenderer {
         gl.glActiveTexture(GL2.GL_TEXTURE4);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, underwaterPaletteTextureId);
 
-        gl.glBegin(GL2.GL_QUADS);
-        gl.glVertex2f(0, 0);
-        gl.glVertex2f(windowWidth, 0);
-        gl.glVertex2f(windowWidth, windowHeight);
-        gl.glVertex2f(0, windowHeight);
-        gl.glEnd();
+        quadRenderer.draw(gl, 0, 0, windowWidth, windowHeight);
 
         gl.glActiveTexture(GL2.GL_TEXTURE3);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
@@ -166,5 +163,6 @@ public class TilemapGpuRenderer {
         backgroundTexture.cleanup(gl);
         foregroundTexture.cleanup(gl);
         patternLookup.cleanup(gl);
+        quadRenderer.cleanup(gl);
     }
 }

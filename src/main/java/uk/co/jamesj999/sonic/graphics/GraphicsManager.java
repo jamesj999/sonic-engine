@@ -572,6 +572,7 @@ public class GraphicsManager {
 		}
 		// Reset fade manager
 		if (fadeManager != null) {
+			fadeManager.cleanup(graphics);
 			fadeManager.cancel();
 			fadeManager = null;
 		}

@@ -12,11 +12,13 @@ Status: Active
 ## Implemented (Already in Code)
 - Pattern atlas for indexed 8x8 patterns (`PatternAtlas`).
 - Batched pattern rendering path (`BatchedPatternRenderer`), plus strip patterns.
+- VBO-backed batch uploads + command pooling (no client-side arrays per batch).
 - GPU tilemap rendering for BG/FG (`TilemapGpuRenderer`, `shader_tilemap.glsl`).
 - Background FBO + per-scanline parallax (`BackgroundRenderer`).
 - Water distortion shader (`WaterShaderProgram`).
 - Shadow/highlight shader (`shader_shadow.glsl`).
 - Fade shader (`FadeManager`).
+- Shared fullscreen quad VBO (tilemap, parallax, fade, special stage).
 
 ## Current Hotspots
 - Sprite/object/ring rendering still expands to per-tile submits on CPU.
@@ -24,24 +26,16 @@ Status: Active
 - Immediate-mode fullscreen quads (tilemap, parallax, fade, special stage).
 
 ## Next Steps (Ordered)
-1) **VBO-backed batched pattern renderer**  
-   Replace client-side arrays with VBO uploads per batch. Reuse command buffers
-   via a small pool to avoid per-frame allocations. No shader changes required.
-
-2) **Sprite piece instancing (optional, larger)**  
+1) **Sprite piece instancing (optional, larger)**  
    Move sprite pieces to GPU instancing with per-instance attributes:
    position, atlas UV or pattern index, palette line, flip bits.
    Requires a minimal vertex shader and `glVertexAttribDivisor`.
 
-3) **Shared fullscreen quad VBO**  
-   Replace immediate-mode quads in tilemap/parallax/fade/special stage with a
-   single reusable VBO.
-
-4) **Atlas/palette upload buffering**  
+2) **Atlas/palette upload buffering**  
    Use a small direct-buffer pool or PBOs for animated pattern uploads to reduce
    driver stalls.
 
-5) **Multi-atlas / texture array fallback**  
+3) **Multi-atlas / texture array fallback**  
    If atlas capacity is exceeded, support multiple atlases or texture arrays.
 
 ## Validation
