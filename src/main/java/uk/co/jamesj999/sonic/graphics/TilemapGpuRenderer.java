@@ -11,14 +11,25 @@ import java.util.logging.Logger;
 public class TilemapGpuRenderer {
     private static final Logger LOGGER = Logger.getLogger(TilemapGpuRenderer.class.getName());
 
+    public enum Layer {
+        BACKGROUND,
+        FOREGROUND
+    }
+
     private TilemapShaderProgram shader;
-    private final TilemapTexture tilemapTexture = new TilemapTexture();
+    private final TilemapTexture backgroundTexture = new TilemapTexture();
+    private final TilemapTexture foregroundTexture = new TilemapTexture();
     private final PatternLookupBuffer patternLookup = new PatternLookupBuffer();
 
-    private byte[] tilemapData;
-    private int tilemapWidthTiles;
-    private int tilemapHeightTiles;
-    private boolean tilemapDirty = false;
+    private byte[] backgroundData;
+    private int backgroundWidthTiles;
+    private int backgroundHeightTiles;
+    private boolean backgroundDirty = false;
+
+    private byte[] foregroundData;
+    private int foregroundWidthTiles;
+    private int foregroundHeightTiles;
+    private boolean foregroundDirty = false;
 
     private byte[] lookupData;
     private int lookupSize;
@@ -35,11 +46,18 @@ public class TilemapGpuRenderer {
         }
     }
 
-    public void setTilemapData(byte[] data, int widthTiles, int heightTiles) {
-        this.tilemapData = data;
-        this.tilemapWidthTiles = widthTiles;
-        this.tilemapHeightTiles = heightTiles;
-        this.tilemapDirty = true;
+    public void setTilemapData(Layer layer, byte[] data, int widthTiles, int heightTiles) {
+        if (layer == Layer.FOREGROUND) {
+            this.foregroundData = data;
+            this.foregroundWidthTiles = widthTiles;
+            this.foregroundHeightTiles = heightTiles;
+            this.foregroundDirty = true;
+        } else {
+            this.backgroundData = data;
+            this.backgroundWidthTiles = widthTiles;
+            this.backgroundHeightTiles = heightTiles;
+            this.backgroundDirty = true;
+        }
     }
 
     public void setPatternLookupData(byte[] data, int size) {
@@ -49,6 +67,7 @@ public class TilemapGpuRenderer {
     }
 
     public void render(GL2 gl,
+            Layer layer,
             int windowWidth,
             int windowHeight,
             float worldOffsetX,
@@ -62,13 +81,23 @@ public class TilemapGpuRenderer {
             boolean wrapY,
             boolean useUnderwaterPalette,
             float waterlineScreenY) {
+        byte[] tilemapData = layer == Layer.FOREGROUND ? foregroundData : backgroundData;
+        int tilemapWidthTiles = layer == Layer.FOREGROUND ? foregroundWidthTiles : backgroundWidthTiles;
+        int tilemapHeightTiles = layer == Layer.FOREGROUND ? foregroundHeightTiles : backgroundHeightTiles;
+        TilemapTexture tilemapTexture = layer == Layer.FOREGROUND ? foregroundTexture : backgroundTexture;
+
         if (gl == null || shader == null || tilemapData == null || lookupData == null) {
             return;
         }
 
-        if (tilemapDirty) {
+        if (layer == Layer.FOREGROUND) {
+            if (foregroundDirty) {
+                tilemapTexture.upload(gl, tilemapData, tilemapWidthTiles, tilemapHeightTiles);
+                foregroundDirty = false;
+            }
+        } else if (backgroundDirty) {
             tilemapTexture.upload(gl, tilemapData, tilemapWidthTiles, tilemapHeightTiles);
-            tilemapDirty = false;
+            backgroundDirty = false;
         }
         if (lookupDirty) {
             patternLookup.upload(gl, lookupData, lookupSize);
@@ -129,7 +158,8 @@ public class TilemapGpuRenderer {
             shader.cleanup(gl);
             shader = null;
         }
-        tilemapTexture.cleanup(gl);
+        backgroundTexture.cleanup(gl);
+        foregroundTexture.cleanup(gl);
         patternLookup.cleanup(gl);
     }
 }

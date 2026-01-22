@@ -972,11 +972,12 @@ public class LevelManager {
                     Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
                     boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
                     if (atlasId != null && paletteId != null) {
-                        tilemapRenderer.render(gl,
-                                fboWidth,
-                                fboHeight,
-                                0.0f,
-                                (float) alignedBgYFinal,
+                    tilemapRenderer.render(gl,
+                            TilemapGpuRenderer.Layer.BACKGROUND,
+                            fboWidth,
+                            fboHeight,
+                            0.0f,
+                            (float) alignedBgYFinal,
                                 graphicsManager.getPatternAtlasWidth(),
                                 graphicsManager.getPatternAtlasHeight(),
                                 atlasId,
@@ -1120,6 +1121,7 @@ public class LevelManager {
                 return;
             }
             tilemapRenderer.render(gl,
+                    TilemapGpuRenderer.Layer.FOREGROUND,
                     screenW,
                     screenH,
                     worldOffsetX,
@@ -1150,7 +1152,8 @@ public class LevelManager {
         ensurePatternLookupData();
         TilemapGpuRenderer renderer = graphicsManager.getTilemapGpuRenderer();
         if (renderer != null) {
-            renderer.setTilemapData(backgroundTilemapData, backgroundTilemapWidthTiles, backgroundTilemapHeightTiles);
+            renderer.setTilemapData(TilemapGpuRenderer.Layer.BACKGROUND, backgroundTilemapData,
+                    backgroundTilemapWidthTiles, backgroundTilemapHeightTiles);
             renderer.setPatternLookupData(patternLookupData, patternLookupSize);
         }
     }
@@ -1167,7 +1170,8 @@ public class LevelManager {
         ensurePatternLookupData();
         TilemapGpuRenderer renderer = graphicsManager.getTilemapGpuRenderer();
         if (renderer != null) {
-            renderer.setTilemapData(foregroundTilemapData, foregroundTilemapWidthTiles, foregroundTilemapHeightTiles);
+            renderer.setTilemapData(TilemapGpuRenderer.Layer.FOREGROUND, foregroundTilemapData,
+                    foregroundTilemapWidthTiles, foregroundTilemapHeightTiles);
             renderer.setPatternLookupData(patternLookupData, patternLookupSize);
         }
     }
