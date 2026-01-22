@@ -136,7 +136,7 @@ public class BackgroundRenderer {
         if (!initialized)
             return;
 
-        // Save current viewport
+        // Save current viewport to restore later (must query actual GL state)
         gl.glGetIntegerv(GL2.GL_VIEWPORT, savedViewport, 0);
 
         gl.glBindFramebuffer(GL2.GL_FRAMEBUFFER, fboId);

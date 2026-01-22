@@ -299,7 +299,7 @@ public class ObjectManager {
         int top = camera.getY();
         int right = left + camera.getWidth();
         int bottom = top + camera.getHeight();
-        AbstractObjectInstance.updateCameraBounds(new CameraBounds(left, top, right, bottom));
+        AbstractObjectInstance.updateCameraBounds(left, top, right, bottom);
     }
 
     public static int decodePlaneSwitcherHalfSpan(int subtype) {

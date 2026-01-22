@@ -22,11 +22,11 @@ public abstract class AbstractObjectInstance implements ObjectInstance {
     }
 
     /**
-     * Updates the cached camera bounds. Called once per frame by ObjectManager
+     * Updates the cached camera bounds in place. Called once per frame by ObjectManager
      * before any object updates run.
      */
-    public static void updateCameraBounds(CameraBounds bounds) {
-        cameraBounds = bounds;
+    public static void updateCameraBounds(int left, int top, int right, int bottom) {
+        cameraBounds.update(left, top, right, bottom);
     }
 
     @Override

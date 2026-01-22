@@ -25,7 +25,9 @@ public class PatternRenderCommand implements GLCommandable {
     private final float u1;
     private final float v1;
     private final int atlasIndex;
-    private final PatternDesc desc;
+    private final int paletteIndex;
+    private final boolean hFlip;
+    private final boolean vFlip;
     private final int x;
     private final int y;
 
@@ -60,7 +62,9 @@ public class PatternRenderCommand implements GLCommandable {
         this.u1 = entry.u1();
         this.v1 = entry.v1();
         this.atlasIndex = entry.atlasIndex();
-        this.desc = desc;
+        this.paletteIndex = desc.getPaletteIndex();
+        this.hFlip = desc.getHFlip();
+        this.vFlip = desc.getVFlip();
         this.x = x;
         // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height
         // (8)
@@ -129,7 +133,6 @@ public class PatternRenderCommand implements GLCommandable {
         }
 
         // Only update palette line uniform if it changed
-        int paletteIndex = desc.getPaletteIndex();
         if (paletteIndex != lastPaletteIndex) {
             shaderProgram.setPaletteLine(gl, paletteIndex);
             lastPaletteIndex = paletteIndex;
@@ -146,7 +149,7 @@ public class PatternRenderCommand implements GLCommandable {
         float y1 = screenY + 8;
 
         // Apply horizontal flip by swapping left/right
-        if (desc.getHFlip()) {
+        if (hFlip) {
             float temp = x0;
             x0 = x1;
             x1 = temp;
@@ -154,7 +157,7 @@ public class PatternRenderCommand implements GLCommandable {
 
         // Apply vertical flip by swapping top/bottom
         // Note: VFlip=false means apply flip (original VDP behavior)
-        if (!desc.getVFlip()) {
+        if (!vFlip) {
             float temp = y0;
             y0 = y1;
             y1 = temp;

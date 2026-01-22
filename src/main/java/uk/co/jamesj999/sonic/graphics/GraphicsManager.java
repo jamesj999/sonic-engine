@@ -489,9 +489,20 @@ public class GraphicsManager {
 
 	/**
 	 * Get the texture ID for a cached pattern.
+	 * @param patternIndex the pattern ID to look up
+	 * @return the texture ID, -1 in headless mode when entry exists, or null if not cached
 	 */
 	public Integer getPatternTextureId(int patternIndex) {
-		return patternAtlas != null ? patternAtlas.getTextureId() : null;
+		if (patternAtlas == null) {
+			return null;
+		}
+		PatternAtlas.Entry entry = patternAtlas.getEntry(patternIndex);
+		if (entry == null) {
+			return null;  // Pattern not cached
+		}
+		int textureId = patternAtlas.getTextureId(entry.atlasIndex());
+		// In headless mode, textureId is 0, return -1 as sentinel
+		return textureId == 0 && headlessMode ? -1 : textureId;
 	}
 
 	public Integer getPatternAtlasTextureId() {

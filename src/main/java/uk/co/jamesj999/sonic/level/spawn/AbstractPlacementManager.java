@@ -16,6 +16,7 @@ import java.util.Set;
 public abstract class AbstractPlacementManager<T extends SpawnPoint> {
     protected final List<T> spawns;
     protected final Set<T> active = new LinkedHashSet<>();
+    protected final Collection<T> activeUnmodifiable = Collections.unmodifiableCollection(active);
     protected final Map<T, Integer> spawnIndexMap = new IdentityHashMap<>();
     private final int loadAhead;
     private final int unloadBehind;
@@ -36,7 +37,7 @@ public abstract class AbstractPlacementManager<T extends SpawnPoint> {
     }
 
     public Collection<T> getActiveSpawns() {
-        return Collections.unmodifiableCollection(active);
+        return activeUnmodifiable;
     }
 
     public int getSpawnIndex(T spawn) {

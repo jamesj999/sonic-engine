@@ -26,6 +26,9 @@ public class Sonic2SpecialStageRenderer {
 
     private final GraphicsManager graphicsManager;
 
+    // Reusable PatternDesc to avoid per-tile allocations in tight render loops
+    private final PatternDesc reusableDesc = new PatternDesc();
+
     private int backgroundPatternBase;
     private int trackPatternBase;
     private int playerPatternBase;
@@ -212,7 +215,8 @@ public class Sonic2SpecialStageRenderer {
                 if (word == 0)
                     continue;
 
-                PatternDesc desc = new PatternDesc(word);
+                reusableDesc.set(word);
+                PatternDesc desc = reusableDesc;
 
                 // Calculate position within H32 viewport (0-255 range)
                 // The background is 32 tiles (256px) wide and wraps horizontally
@@ -282,7 +286,8 @@ public class Sonic2SpecialStageRenderer {
                 if (word == 0)
                     continue;
 
-                PatternDesc desc = new PatternDesc(word);
+                reusableDesc.set(word);
+                PatternDesc desc = reusableDesc;
 
                 // Calculate position in FBO space (256x256)
                 // No scroll offset - rendered at natural tile positions
@@ -310,7 +315,8 @@ public class Sonic2SpecialStageRenderer {
             for (int tx = 0; tx < H32_TILES_X; tx++) {
                 int patternId = backgroundPatternBase + ((tx + ty * 4) % 64);
 
-                PatternDesc desc = new PatternDesc();
+                reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                 desc.setPriority(false);
                 desc.setPaletteIndex(0);
                 desc.setHFlip(false);
@@ -430,7 +436,8 @@ public class Sonic2SpecialStageRenderer {
                         continue;
                     }
 
-                    PatternDesc desc = new PatternDesc(word);
+                    reusableDesc.set(word);
+                PatternDesc desc = reusableDesc;
                     int patternId = desc.getPatternIndex() + trackPatternBase;
 
                     // Calculate X position within the 256-pixel H32 viewport, with wrapping
@@ -493,7 +500,8 @@ public class Sonic2SpecialStageRenderer {
                     int word = frameTiles[tileIndex];
                     if ((word & 0x7FF) == 0) continue;
 
-                    PatternDesc desc = new PatternDesc(word);
+                    reusableDesc.set(word);
+                PatternDesc desc = reusableDesc;
                     int patternId = desc.getPatternIndex() + trackPatternBase;
                     int drawX = SCREEN_CENTER_OFFSET + col * TILE_SIZE;
 
@@ -521,7 +529,8 @@ public class Sonic2SpecialStageRenderer {
             for (int tx = trackStartX; tx < trackEndX; tx++) {
                 int patternId = trackPatternBase + ((tx + ty * 3 + trackFrameIndex) % 64);
 
-                PatternDesc desc = new PatternDesc();
+                reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                 desc.setPriority(true);
                 desc.setPaletteIndex(1);
                 desc.setHFlip(false);
@@ -653,7 +662,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndexInPiece = srcCol * piece.heightTiles + srcRow;
                     int patternId = basePattern + piece.tileIndex + tileIndexInPiece;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(true);
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(finalHFlip);
@@ -723,7 +733,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndex = srcCol * piece.heightTiles + ty;
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setHFlip(finalHFlip);
                     desc.setVFlip(piece.vFlip);
                     desc.setPatternIndex(patternId & 0x7FF);
@@ -792,7 +803,8 @@ public class Sonic2SpecialStageRenderer {
                 for (int tx = 0; tx < tilesWide; tx++) {
                     int patternId = playerPatternBase + basePatternOffset + ty * tilesWide + tx;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(true);
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(player.isRenderXFlip());
@@ -882,7 +894,8 @@ public class Sonic2SpecialStageRenderer {
                     int patternOffset = piece.tileIndexOffset + localTx * piece.heightTiles + localTy;
                     int patternId = startPatternBase + patternOffset;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(true);
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(piece.hFlip);
@@ -958,7 +971,8 @@ public class Sonic2SpecialStageRenderer {
                     int patternOffset = piece.tileIndexOffset + localTx * piece.heightTiles + localTy;
                     int patternId = startPatternBase + patternOffset;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(true);
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(piece.hFlip);
@@ -1129,7 +1143,8 @@ public class Sonic2SpecialStageRenderer {
                 patternId = messagesPatternBase + tileOffset + ty;
             }
 
-            PatternDesc desc = new PatternDesc();
+            reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
             desc.setPriority(true);
             desc.setPaletteIndex(paletteIndex);
             desc.setHFlip(false);
@@ -1154,7 +1169,8 @@ public class Sonic2SpecialStageRenderer {
         int topPatternId = hudPatternBase + tileOffset;
         int bottomPatternId = hudPatternBase + tileOffset + 1;
 
-        PatternDesc desc = new PatternDesc();
+        reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
         desc.setPriority(true);
         desc.setPaletteIndex(paletteIndex);
         desc.setHFlip(false);
@@ -1281,7 +1297,8 @@ public class Sonic2SpecialStageRenderer {
                 int localTileIndex = tx * heightTiles + ty;
                 int patternId = hudPatternBase + tileOffset + localTileIndex;
 
-                PatternDesc desc = new PatternDesc();
+                reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                 desc.setPriority(true);
                 desc.setPaletteIndex(paletteIndex);
                 desc.setHFlip(false);
@@ -1567,7 +1584,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndex = srcCol * piece.heightTiles + ty;
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setHFlip(finalHFlip);
                     desc.setVFlip(piece.vFlip);
                     desc.setPatternIndex(patternId & 0x7FF);
@@ -1619,7 +1637,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndex = tx * piece.heightTiles + ty;
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(ring.isHighPriority());
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(piece.hFlip);
@@ -1673,7 +1692,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndex = tx * piece.heightTiles + ty;
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(bomb.isHighPriority());
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(piece.hFlip);
@@ -1724,7 +1744,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndex = tx * piece.heightTiles + ty;
                     int patternId = patternBase + piece.tileIndex + tileIndex;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(true);  // Emerald always high priority
                     desc.setPaletteIndex(paletteIndex);
                     desc.setHFlip(piece.hFlip);
@@ -1803,7 +1824,8 @@ public class Sonic2SpecialStageRenderer {
                     int tileIndex = tx * piece.heightTiles + ty;
                     int patternId = ringPatternBase + piece.tileIndex + tileIndex;
 
-                    PatternDesc desc = new PatternDesc();
+                    reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                     desc.setPriority(true);
                     // ROM uses palette 3 for checkpoint rainbow rings
                     // The rainbow cycling modifies colors 11-13, which the ring art uses
@@ -1964,7 +1986,8 @@ public class Sonic2SpecialStageRenderer {
                 // Use messagesPatternBase because hand/wings use SpecialMessages art
                 int patternId = messagesPatternBase + baseTile + tileIndex;
 
-                PatternDesc desc = new PatternDesc();
+                reusableDesc.set(0);
+                    PatternDesc desc = reusableDesc;
                 desc.setPriority(true);
                 desc.setPaletteIndex(paletteIndex);
                 desc.setHFlip(hFlip);
