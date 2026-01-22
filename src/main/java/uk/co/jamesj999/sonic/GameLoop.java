@@ -20,6 +20,7 @@ import uk.co.jamesj999.sonic.game.ResultsScreen;
 import uk.co.jamesj999.sonic.game.SpecialStageProvider;
 import uk.co.jamesj999.sonic.game.TitleCardProvider;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
+import uk.co.jamesj999.sonic.debug.PerformanceProfiler;
 import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
@@ -61,6 +62,7 @@ public class GameLoop {
     private final Camera camera = Camera.getInstance();
     private final TimerManager timerManager = GameServices.timers();
     private final LevelManager levelManager = LevelManager.getInstance();
+    private final PerformanceProfiler profiler = PerformanceProfiler.getInstance();
     // Direct reference to Sonic2SpecialStageManager for debug features and Sonic
     // 2-specific logic.
     // Future games should use GameModule.getSpecialStageProvider() for
@@ -142,8 +144,15 @@ public class GameLoop {
             throw new IllegalStateException("InputHandler must be set before calling step()");
         }
 
+        profiler.beginSection("audio");
         AudioManager.getInstance().update();
+        profiler.endSection("audio");
+
+        profiler.beginSection("timers");
         timerManager.update();
+        profiler.endSection("timers");
+
+        profiler.beginSection("input");
         GameServices.debugOverlay().updateInput(inputHandler);
         DebugObjectArtViewer.getInstance().updateInput(inputHandler);
 
@@ -234,6 +243,8 @@ public class GameLoop {
             }
         }
 
+        profiler.endSection("input");
+
         // LEVEL mode (or just transitioned from TITLE_CARD)
         if (currentGameMode == GameMode.LEVEL) {
             // Continue updating title card overlay if still active
@@ -270,18 +281,25 @@ public class GameLoop {
             // Freeze level updates during special stage entry transition
             boolean freezeForSpecialStage = specialStageTransitionPending;
             if (!freezeForArtViewer && !freezeForSpecialStage) {
+                profiler.beginSection("physics");
                 spriteManager.update(inputHandler);
+                profiler.endSection("physics");
 
                 // Dynamic level events update boundary targets (game-specific)
                 LevelEventProvider levelEvents = GameModuleRegistry.getCurrent().getLevelEventProvider();
                 if (levelEvents != null) {
                     levelEvents.update();
                 }
+
+                profiler.beginSection("camera");
                 // Ease boundaries toward targets at 2px/frame
                 camera.updateBoundaryEasing();
-
                 camera.updatePosition();
+                profiler.endSection("camera");
+
+                profiler.beginSection("objects");
                 levelManager.update();
+                profiler.endSection("objects");
 
                 // Check if a checkpoint star requested a special stage
                 if (levelManager.consumeSpecialStageRequest()) {

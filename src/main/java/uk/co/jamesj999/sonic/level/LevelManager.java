@@ -29,6 +29,7 @@ import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugOverlayManager;
 import uk.co.jamesj999.sonic.debug.DebugOverlayPalette;
 import uk.co.jamesj999.sonic.debug.DebugOverlayToggle;
+import uk.co.jamesj999.sonic.debug.PerformanceProfiler;
 import uk.co.jamesj999.sonic.level.objects.HudRenderManager;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
@@ -101,6 +102,7 @@ public class LevelManager {
     private final SpriteManager spriteManager = SpriteManager.getInstance();
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
     private final DebugOverlayManager overlayManager = GameServices.debugOverlay();
+    private final PerformanceProfiler profiler = PerformanceProfiler.getInstance();
     private final List<List<LevelData>> levels = new ArrayList<>();
     private int currentAct = 0;
     private int currentZone = 0;
@@ -577,11 +579,14 @@ public class LevelManager {
         updateWaterShaderState(camera);
 
         // Draw Background (Layer 1)
+        profiler.beginSection("render.bg");
         if (useShaderBackground && graphicsManager.getBackgroundRenderer() != null) {
             renderBackgroundShader(collisionCommands, bgScrollY);
         }
+        profiler.endSection("render.bg");
 
         // Draw Foreground (Layer 0) low-priority pass
+        profiler.beginSection("render.fg");
         ensureForegroundTilemapData();
         enqueueForegroundTilemapPass(camera, 0);
 
@@ -597,6 +602,9 @@ public class LevelManager {
             }
         }
 
+        profiler.endSection("render.fg");
+
+        profiler.beginSection("render.sprites");
         graphicsManager.beginPatternBatch();
         if (ringManager != null) {
             ringManager.draw(frameCounter);
@@ -612,6 +620,7 @@ public class LevelManager {
             }
         }
         graphicsManager.flushPatternBatch();
+        profiler.endSection("render.sprites");
 
         // Draw Foreground (Layer 0) high-priority pass
         enqueueForegroundTilemapPass(camera, 1);
@@ -644,10 +653,12 @@ public class LevelManager {
             PatternRenderCommand.resetFrameState();
         }));
 
+        profiler.beginSection("render.hud");
         if (hudRenderManager != null) {
             AbstractPlayableSprite focusedPlayer = camera.getFocusedSprite();
             hudRenderManager.draw(levelGamestate, focusedPlayer);
         }
+        profiler.endSection("render.hud");
 
         boolean debugViewEnabled = configService.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
         boolean overlayEnabled = debugViewEnabled && overlayManager.isEnabled(DebugOverlayToggle.OVERLAY);

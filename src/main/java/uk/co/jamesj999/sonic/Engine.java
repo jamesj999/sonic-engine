@@ -10,6 +10,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.configuration.OptionsMenu;
 import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
+import uk.co.jamesj999.sonic.debug.PerformanceProfiler;
 import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2SpecialStageSpriteDebug;
 import uk.co.jamesj999.sonic.debug.DebugState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
@@ -55,6 +56,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	private final Camera camera = Camera.getInstance();
 	private final DebugRenderer debugRenderer = DebugRenderer.getInstance();
+	private final PerformanceProfiler profiler = PerformanceProfiler.getInstance();
 
 	private final GameLoop gameLoop = new GameLoop();
 
@@ -364,6 +366,8 @@ public class Engine extends GLCanvas implements GLEventListener {
 	 * Called back by the animator to perform rendering.
 	 */
 	public void display(GLAutoDrawable drawable) {
+		profiler.beginFrame();
+
 		GL2 gl = drawable.getGL().getGL2(); // get the OpenGL 2 graphics context
 
 		// Clear the entire window to black first (for letterbox/pillarbox bars)
@@ -402,7 +406,10 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glDisable(GL2.GL_LIGHTING);
 		gl.glDisable(GL2.GL_COLOR_MATERIAL);
 		gl.glColorMask(true, true, true, true);
+
+		profiler.beginSection("update");
 		update();
+		profiler.endSection("update");
 
 		// Update fade via unified UI render pipeline
 		var uiPipeline = graphicsManager.getUiRenderPipeline();
@@ -411,8 +418,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 		}
 
 		graphicsManager.setGraphics(gl);
+
+		profiler.beginSection("render");
 		draw();
 		graphicsManager.flush();
+		profiler.endSection("render");
 
 		// Render screen fade overlay via unified UI render pipeline (after all game rendering)
 		if (uiPipeline != null) {
@@ -426,6 +436,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 			prepareOverlayState(gl);
 		}
 
+		profiler.beginSection("debug");
 		if (getCurrentGameMode() == GameMode.SPECIAL_STAGE) {
 			if (specialStageManager.isAlignmentTestMode()) {
 				specialStageManager.renderAlignmentOverlay(drawable.getSurfaceWidth(), drawable.getSurfaceHeight());
@@ -436,7 +447,9 @@ public class Engine extends GLCanvas implements GLEventListener {
 			debugRenderer.updateViewport(viewportWidth, viewportHeight);
 			debugRenderer.renderDebugInfo();
 		}
+		profiler.endSection("debug");
 
+		profiler.endFrame();
 		overlayStateReady = false;
 	}
 

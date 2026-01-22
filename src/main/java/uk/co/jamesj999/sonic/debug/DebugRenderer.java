@@ -3,10 +3,12 @@ package uk.co.jamesj999.sonic.debug;
 import uk.co.jamesj999.sonic.game.GameServices;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 
+import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.util.awt.TextRenderer;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.objects.ObjectManager;
@@ -38,6 +40,7 @@ public class DebugRenderer {
         private TextRenderer objectRenderer;
         private TextRenderer planeSwitcherRenderer;
         private TextRenderer sensorRenderer;
+        private PerformancePanelRenderer performancePanelRenderer;
         private static final String[] SENSOR_LABELS = {"A", "B", "C", "D", "E", "F"};
 
         private final int baseWidth = configService
@@ -111,6 +114,11 @@ public class DebugRenderer {
                 }
 
                 renderer.endRendering();
+
+                // Render performance panel (requires GL2 for pie chart)
+                if (overlayManager.isEnabled(DebugOverlayToggle.PERFORMANCE)) {
+                        renderPerformancePanel();
+                }
 
                 if (playable != null && overlayManager.isEnabled(DebugOverlayToggle.SENSOR_LABELS)) {
                         sensorRenderer.beginRendering(viewportWidth, viewportHeight);
@@ -481,6 +489,21 @@ public class DebugRenderer {
                         drawOutlined(renderer, line, startX, y, new Color(180, 255, 180));
                         y -= lineHeight;
                 }
+        }
+
+        private void renderPerformancePanel() {
+                if (performancePanelRenderer == null) {
+                        performancePanelRenderer = new PerformancePanelRenderer(baseWidth, baseHeight);
+                }
+                performancePanelRenderer.updateViewport(viewportWidth, viewportHeight);
+
+                GL2 gl = GraphicsManager.getInstance().getGraphics();
+                if (gl == null) {
+                        return;
+                }
+
+                ProfileSnapshot snapshot = PerformanceProfiler.getInstance().getSnapshot();
+                performancePanelRenderer.render(gl, snapshot);
         }
 
         private String formatStateFlags(AbstractPlayableSprite sprite) {
