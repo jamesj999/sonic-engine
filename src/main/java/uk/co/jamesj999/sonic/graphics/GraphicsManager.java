@@ -451,6 +451,10 @@ public class GraphicsManager {
 		return patternAtlas != null ? patternAtlas.getTextureId() : null;
 	}
 
+	public int getPatternAtlasWidth() {
+		return patternAtlas != null ? patternAtlas.getAtlasWidth() : 0;
+	}
+
 	private Integer underwaterPaletteTextureId;
 
 	public Integer getUnderwaterPaletteTextureId() {
