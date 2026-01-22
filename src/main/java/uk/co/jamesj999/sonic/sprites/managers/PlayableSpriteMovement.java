@@ -756,9 +756,16 @@ public class PlayableSpriteMovement extends
 			int xVelPixels = Math.abs(sprite.getXSpeed() >> 8);
 			int threshold = Math.min(xVelPixels + 4, 14);
 
+			// CRITICAL: For the detachment check, use lowestResult (sensor with the BEST
+			// contact), not just the curve-selected sensor. This ensures Sonic stays
+			// grounded when transitioning from flat ground to downward slopes, where the
+			// trailing sensor may still have excellent contact even if the leading sensor
+			// is detecting the slope further away.
+			// Note: lowestResult is already computed at the start of this method.
+
 			// BUT: if player is standing on a solid object (bridge, platform),
 			// don't set to air based on terrain alone.
-			if (bestResult == null || bestResult.distance() >= threshold) {
+			if (lowestResult == null || lowestResult.distance() >= threshold) {
 				// Check if player is standing on a solid object before setting to air
 				var objectManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getObjectManager();
 				if (objectManager != null && (objectManager.isRidingObject()
@@ -769,6 +776,7 @@ public class PlayableSpriteMovement extends
 				sprite.setAir(true);
 				return;
 			}
+			// Use bestResult (curve-aware selection) for position and angle updates
 			moveForSensorResult(sprite, bestResult);
 			if (bestResult.angle() == (byte) 0xFF) {
 				sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
