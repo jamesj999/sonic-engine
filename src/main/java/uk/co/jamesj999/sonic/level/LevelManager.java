@@ -35,9 +35,11 @@ import uk.co.jamesj999.sonic.graphics.GLCommandGroup;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.graphics.ShaderProgram;
+import uk.co.jamesj999.sonic.graphics.TilemapGpuRenderer;
 import uk.co.jamesj999.sonic.graphics.WaterShaderProgram;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.graphics.PatternRenderCommand;
+import uk.co.jamesj999.sonic.graphics.PatternAtlas;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.render.BackgroundRenderer;
 // import uk.co.jamesj999.sonic.level.ParallaxManager; -> Removed unused
@@ -49,6 +51,7 @@ import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
+import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.animation.AnimatedPaletteManager;
 import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
 import uk.co.jamesj999.sonic.physics.CollisionSystem;
@@ -111,6 +114,14 @@ public class LevelManager {
     private AnimatedPaletteManager animatedPaletteManager;
     private RespawnState checkpointState;
     private LevelState levelGamestate;
+
+    // GPU tilemap data for background layer (Track B)
+    private byte[] backgroundTilemapData;
+    private int backgroundTilemapWidthTiles;
+    private int backgroundTilemapHeightTiles;
+    private byte[] backgroundPatternLookupData;
+    private int backgroundPatternLookupSize;
+    private boolean backgroundTilemapDirty = true;
 
     private boolean specialStageRequestedFromCheckpoint;
     private boolean titleCardRequested;
@@ -200,6 +211,9 @@ public class LevelManager {
             audioManager.resetRingSound();
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
+            backgroundTilemapDirty = true;
+            backgroundTilemapData = null;
+            backgroundPatternLookupData = null;
             initAnimatedPatterns();
             initAnimatedPalettes();
             RomByteReader romReader = RomByteReader.fromRom(rom);
@@ -907,6 +921,7 @@ public class LevelManager {
         // Use water shader in screen-space mode for FBO, with adjusted waterline
         WaterSystem waterSystem = WaterSystem.getInstance();
         boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
+        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED) && !hasWater;
         // Use visual water level (with oscillation) for background rendering
         int waterLevelWorldY = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
 
@@ -919,71 +934,101 @@ public class LevelManager {
         if (actualBgScrollY < 0 && actualBgScrollY % chunkHeight != 0) {
             alignedBgY -= chunkHeight; // Handle negative rounding
         }
+        final int alignedBgYFinal = alignedBgY;
 
         int vOffset = actualBgScrollY - alignedBgY;
         final float fboWaterlineY = (float) ((waterLevelWorldY - camera.getY()) + vOffset);
 
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-            bgRenderer.beginTilePass(gl, screenHeightPixels);
+        if (useGpuTilemap) {
+            ensureBackgroundTilemapData();
+            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                bgRenderer.beginTilePass(gl, screenHeightPixels);
+                TilemapGpuRenderer tilemapRenderer = graphicsManager.getTilemapGpuRenderer();
+                if (tilemapRenderer != null) {
+                    Integer atlasId = graphicsManager.getPatternAtlasTextureId();
+                    Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
+                    if (atlasId != null && paletteId != null) {
+                        tilemapRenderer.render(gl,
+                                fboWidth,
+                                fboHeight,
+                                0.0f,
+                                (float) alignedBgYFinal,
+                                graphicsManager.getPatternAtlasWidth(),
+                                graphicsManager.getPatternAtlasHeight(),
+                                atlasId,
+                                paletteId,
+                                -1,
+                                true);
+                    }
+                }
+                bgRenderer.endTilePass(gl);
+                graphicsManager.setUseUnderwaterPaletteForBackground(false);
+            }));
+        } else {
+            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                bgRenderer.beginTilePass(gl, screenHeightPixels);
 
-            if (hasWater) {
-                // Use water shader in screen-space mode with FBO dimensions
-                graphicsManager.setUseWaterShader(true);
-                WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
-                waterShader.use(gl);
-                // Use screen-space mode (not world-space) with FBO-adjusted waterline
-                waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
-                waterShader.setWindowHeight(gl, (float) fboHeight);
-                waterShader.setScreenDimensions(gl, (float) fboWidth, (float) fboHeight);
-                waterShader.setDistortionAmplitude(gl, 0.0f);
-                waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
-                waterShader.setWaterlineScreenY(gl, fboWaterlineY);
-            } else {
-                graphicsManager.setUseWaterShader(false);
-            }
-            // Clear underwater palette for background flag usage - explicitly control it
-            // Force underwater palette for background if we are fully submerged relative to
-            // FBO
-            // This ensures consistent behavior for deep water levels like ARZ
-            boolean fullyUnderwater = hasWater && fboWaterlineY <= 0;
-            graphicsManager.setUseUnderwaterPaletteForBackground(fullyUnderwater);
-        }));
+                if (hasWater) {
+                    // Use water shader in screen-space mode with FBO dimensions
+                    graphicsManager.setUseWaterShader(true);
+                    WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
+                    waterShader.use(gl);
+                    // Use screen-space mode (not world-space) with FBO-adjusted waterline
+                    waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
+                    waterShader.setWindowHeight(gl, (float) fboHeight);
+                    waterShader.setScreenDimensions(gl, (float) fboWidth, (float) fboHeight);
+                    waterShader.setDistortionAmplitude(gl, 0.0f);
+                    waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
+                    waterShader.setWaterlineScreenY(gl, fboWaterlineY);
+                } else {
+                    graphicsManager.setUseWaterShader(false);
+                }
+                // Clear underwater palette for background flag usage - explicitly control it
+                // Force underwater palette for background if we are fully submerged relative to
+                // FBO
+                // This ensures consistent behavior for deep water levels like ARZ
+                boolean fullyUnderwater = hasWater && fboWaterlineY <= 0;
+                graphicsManager.setUseUnderwaterPaletteForBackground(fullyUnderwater);
+            }));
 
-        // 3. Draw background tiles to wider FBO (uses water shader in world-space mode)
-        graphicsManager.beginPatternBatch();
-        drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidth, fboHeight, extraBuffer);
-        graphicsManager.flushPatternBatch();
+            // 3. Draw background tiles to wider FBO (uses water shader in world-space mode)
+            graphicsManager.beginPatternBatch();
+            drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidth, fboHeight, extraBuffer);
+            graphicsManager.flushPatternBatch();
+        }
 
         // 4. End Tile Pass (Unbind FBO) and switch water shader back to screen-space
         // mode. Use visual water level (with oscillation) for foreground rendering.
         int waterLevel = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 0;
         float waterlineScreenY = (float) (waterLevel - camera.getY()); // Pixels from top
 
-        graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-            bgRenderer.endTilePass(gl);
+        if (!useGpuTilemap) {
+            graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
+                bgRenderer.endTilePass(gl);
 
-            // Always reset background palette flag to avoid affecting foreground
-            graphicsManager.setUseUnderwaterPaletteForBackground(false);
+                // Always reset background palette flag to avoid affecting foreground
+                graphicsManager.setUseUnderwaterPaletteForBackground(false);
 
-            if (hasWater) {
-                // Switch water shader back to screen-space mode for foreground rendering
-                WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
-                waterShader.use(gl);
-                waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
+                if (hasWater) {
+                    // Switch water shader back to screen-space mode for foreground rendering
+                    WaterShaderProgram waterShader = graphicsManager.getWaterShaderProgram();
+                    waterShader.use(gl);
+                    waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
 
-                // Restore screen-space uniforms
-                int[] viewport = new int[4];
-                gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
-                float windowHeight = (float) viewport[3];
-                waterShader.setWindowHeight(gl, windowHeight);
-                waterShader.setWaterlineScreenY(gl, waterlineScreenY);
-                waterShader.setScreenDimensions(gl,
-                        (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
-                        (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
-                waterShader.setDistortionAmplitude(gl, 0.0f);
-                waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
-            }
-        }));
+                    // Restore screen-space uniforms
+                    int[] viewport = new int[4];
+                    gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
+                    float windowHeight = (float) viewport[3];
+                    waterShader.setWindowHeight(gl, windowHeight);
+                    waterShader.setWaterlineScreenY(gl, waterlineScreenY);
+                    waterShader.setScreenDimensions(gl,
+                            (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
+                            (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
+                    waterShader.setDistortionAmplitude(gl, 0.0f);
+                    waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
+                }
+            }));
+        }
 
         // 5. Render the FBO with Parallax Shader
         Integer paletteId = graphicsManager.getCombinedPaletteTextureId();
@@ -1015,6 +1060,155 @@ public class LevelManager {
                         screenH);
             }));
         }
+    }
+
+    private void ensureBackgroundTilemapData() {
+        if (!backgroundTilemapDirty && backgroundTilemapData != null && backgroundPatternLookupData != null) {
+            return;
+        }
+        if (level == null || level.getMap() == null) {
+            return;
+        }
+
+        buildBackgroundTilemapData();
+        backgroundTilemapDirty = false;
+
+        TilemapGpuRenderer renderer = graphicsManager.getTilemapGpuRenderer();
+        if (renderer != null) {
+            renderer.setTilemapData(backgroundTilemapData, backgroundTilemapWidthTiles, backgroundTilemapHeightTiles);
+            renderer.setPatternLookupData(backgroundPatternLookupData, backgroundPatternLookupSize);
+        }
+    }
+
+    private void buildBackgroundTilemapData() {
+        int levelWidth = level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH;
+        int levelHeight = level.getMap().getHeight() * LevelConstants.BLOCK_HEIGHT;
+
+        backgroundTilemapWidthTiles = levelWidth / Pattern.PATTERN_WIDTH;
+        backgroundTilemapHeightTiles = levelHeight / Pattern.PATTERN_HEIGHT;
+        backgroundTilemapData = new byte[backgroundTilemapWidthTiles * backgroundTilemapHeightTiles * 4];
+
+        int chunkWidth = LevelConstants.CHUNK_WIDTH;
+        int chunkHeight = LevelConstants.CHUNK_HEIGHT;
+
+        for (int y = 0; y < levelHeight; y += chunkHeight) {
+            int chunkY = y / chunkHeight;
+            for (int x = 0; x < levelWidth; x += chunkWidth) {
+                int chunkX = x / chunkWidth;
+
+                Block block = getBlockAtPosition((byte) 1, x, y);
+                if (block == null) {
+                    writeEmptyChunk(chunkX, chunkY);
+                    continue;
+                }
+
+                int xBlockBit = (x % LevelConstants.BLOCK_WIDTH) / chunkWidth;
+                int yBlockBit = (y % LevelConstants.BLOCK_HEIGHT) / chunkHeight;
+                ChunkDesc chunkDesc = block.getChunkDesc(xBlockBit, yBlockBit);
+                int chunkIndex = chunkDesc.getChunkIndex();
+
+                if (chunkIndex == 0 || chunkIndex >= level.getChunkCount()) {
+                    writeEmptyChunk(chunkX, chunkY);
+                    continue;
+                }
+
+                Chunk chunk = level.getChunk(chunkIndex);
+                if (chunk == null) {
+                    writeEmptyChunk(chunkX, chunkY);
+                    continue;
+                }
+
+                boolean chunkHFlip = chunkDesc.getHFlip();
+                boolean chunkVFlip = chunkDesc.getVFlip();
+
+                for (int cY = 0; cY < 2; cY++) {
+                    for (int cX = 0; cX < 2; cX++) {
+                        int logicalX = chunkHFlip ? 1 - cX : cX;
+                        int logicalY = chunkVFlip ? 1 - cY : cY;
+
+                        PatternDesc patternDesc = chunk.getPatternDesc(logicalX, logicalY);
+                        int newIndex = patternDesc.get();
+                        if (chunkHFlip) {
+                            newIndex ^= 0x800;
+                        }
+                        if (chunkVFlip) {
+                            newIndex ^= 0x1000;
+                        }
+                        PatternDesc newPatternDesc = new PatternDesc(newIndex);
+
+                        int tileX = chunkX * 2 + cX;
+                        int tileY = chunkY * 2 + cY;
+                        writeTileDescriptor(tileX, tileY, newPatternDesc);
+                    }
+                }
+            }
+        }
+
+        int patternCount = level.getPatternCount();
+        backgroundPatternLookupSize = Math.max(1, patternCount);
+        backgroundPatternLookupData = new byte[backgroundPatternLookupSize * 4];
+        for (int i = 0; i < patternCount; i++) {
+            PatternAtlas.Entry entry = graphicsManager.getPatternAtlasEntry(i);
+            int offset = i * 4;
+            if (entry != null) {
+                backgroundPatternLookupData[offset] = (byte) entry.tileX();
+                backgroundPatternLookupData[offset + 1] = (byte) entry.tileY();
+                backgroundPatternLookupData[offset + 2] = 0;
+                backgroundPatternLookupData[offset + 3] = (byte) 255;
+            } else {
+                backgroundPatternLookupData[offset] = 0;
+                backgroundPatternLookupData[offset + 1] = 0;
+                backgroundPatternLookupData[offset + 2] = 0;
+                backgroundPatternLookupData[offset + 3] = 0;
+            }
+        }
+    }
+
+    private void writeEmptyChunk(int chunkX, int chunkY) {
+        for (int cY = 0; cY < 2; cY++) {
+            for (int cX = 0; cX < 2; cX++) {
+                int tileX = chunkX * 2 + cX;
+                int tileY = chunkY * 2 + cY;
+                writeEmptyTile(tileX, tileY);
+            }
+        }
+    }
+
+    private void writeEmptyTile(int tileX, int tileY) {
+        if (tileX < 0 || tileY < 0 || tileX >= backgroundTilemapWidthTiles
+                || tileY >= backgroundTilemapHeightTiles) {
+            return;
+        }
+        int offset = (tileY * backgroundTilemapWidthTiles + tileX) * 4;
+        backgroundTilemapData[offset] = 0;
+        backgroundTilemapData[offset + 1] = 0;
+        backgroundTilemapData[offset + 2] = 0;
+        backgroundTilemapData[offset + 3] = 0;
+    }
+
+    private void writeTileDescriptor(int tileX, int tileY, PatternDesc desc) {
+        if (tileX < 0 || tileY < 0 || tileX >= backgroundTilemapWidthTiles
+                || tileY >= backgroundTilemapHeightTiles) {
+            return;
+        }
+        int offset = (tileY * backgroundTilemapWidthTiles + tileX) * 4;
+        int patternIndex = desc.getPatternIndex();
+        int paletteIndex = desc.getPaletteIndex();
+        boolean hFlip = desc.getHFlip();
+        boolean vFlip = desc.getVFlip();
+        boolean priority = desc.getPriority();
+
+        int r = patternIndex & 0xFF;
+        int g = ((patternIndex >> 8) & 0x7)
+                | ((paletteIndex & 0x3) << 3)
+                | (hFlip ? 0x20 : 0)
+                | (vFlip ? 0x40 : 0)
+                | (priority ? 0x80 : 0);
+
+        backgroundTilemapData[offset] = (byte) r;
+        backgroundTilemapData[offset + 1] = (byte) g;
+        backgroundTilemapData[offset + 2] = 0;
+        backgroundTilemapData[offset + 3] = (byte) 255;
     }
 
     /**

@@ -49,9 +49,11 @@ public class GraphicsManager {
 	private static final String FADE_SHADER_PATH = "shaders/shader_fade.glsl";
 	private static final String SHADOW_SHADER_PATH = "shaders/shader_shadow.glsl";
 	private static final String WATER_SHADER_PATH = "shaders/shader_water.glsl";
+	private static final String TILEMAP_SHADER_PATH = "shaders/shader_tilemap.glsl";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
+	private TilemapGpuRenderer tilemapGpuRenderer;
 
 	// Fade manager for screen transitions
 	private FadeManager fadeManager;
@@ -102,6 +104,8 @@ public class GraphicsManager {
 		this.fadeShaderProgram = new ShaderProgram(gl, FADE_SHADER_PATH);
 		this.shadowShaderProgram = new ShaderProgram(gl, SHADOW_SHADER_PATH);
 		this.shadowShaderProgram.cacheUniformLocations(gl);
+		this.tilemapGpuRenderer = new TilemapGpuRenderer();
+		this.tilemapGpuRenderer.init(gl, TILEMAP_SHADER_PATH);
 
 		// Initialize fade manager with shader
 		this.fadeManager = FadeManager.getInstance();
@@ -122,6 +126,7 @@ public class GraphicsManager {
 		if (this.patternAtlas == null) {
 			this.patternAtlas = new PatternAtlas(ATLAS_WIDTH, ATLAS_HEIGHT);
 		}
+		this.tilemapGpuRenderer = null;
 	}
 
 	/**
@@ -455,6 +460,15 @@ public class GraphicsManager {
 		return patternAtlas != null ? patternAtlas.getAtlasWidth() : 0;
 	}
 
+	public int getPatternAtlasHeight() {
+		return patternAtlas != null ? patternAtlas.getAtlasHeight() : 0;
+	}
+
+	public PatternAtlas.Entry getPatternAtlasEntry(int patternId) {
+		ensurePatternAtlas();
+		return patternAtlas != null ? patternAtlas.getEntry(patternId) : null;
+	}
+
 	private Integer underwaterPaletteTextureId;
 
 	public Integer getUnderwaterPaletteTextureId() {
@@ -545,6 +559,9 @@ public class GraphicsManager {
 		if (shadowShaderProgram != null) {
 			shadowShaderProgram.cleanup(graphics);
 		}
+		if (tilemapGpuRenderer != null) {
+			tilemapGpuRenderer.cleanup(graphics);
+		}
 		// Reset fade manager
 		if (fadeManager != null) {
 			fadeManager.cancel();
@@ -633,6 +650,10 @@ public class GraphicsManager {
 
 	public ShaderProgram getFadeShaderProgram() {
 		return fadeShaderProgram;
+	}
+
+	public TilemapGpuRenderer getTilemapGpuRenderer() {
+		return tilemapGpuRenderer;
 	}
 
 	public ShaderProgram getShadowShaderProgram() {

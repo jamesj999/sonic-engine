@@ -1,0 +1,120 @@
+package uk.co.jamesj999.sonic.graphics;
+
+import com.jogamp.opengl.GL2;
+
+import java.io.IOException;
+
+/**
+ * Shader program for GPU tilemap rendering.
+ */
+public class TilemapShaderProgram extends ShaderProgram {
+    private int tilemapTextureLocation = -1;
+    private int patternLookupLocation = -1;
+    private int atlasTextureLocation = -1;
+    private int paletteLocation = -1;
+    private int tilemapWidthLocation = -1;
+    private int tilemapHeightLocation = -1;
+    private int atlasWidthLocation = -1;
+    private int atlasHeightLocation = -1;
+    private int lookupSizeLocation = -1;
+    private int windowWidthLocation = -1;
+    private int windowHeightLocation = -1;
+    private int worldOffsetXLocation = -1;
+    private int worldOffsetYLocation = -1;
+    private int wrapYLocation = -1;
+    private int priorityPassLocation = -1;
+
+    public TilemapShaderProgram(GL2 gl, String fragmentShaderPath) throws IOException {
+        super(gl, fragmentShaderPath);
+    }
+
+    @Override
+    public void cacheUniformLocations(GL2 gl) {
+        super.cacheUniformLocations(gl);
+        int programId = getProgramId();
+        tilemapTextureLocation = gl.glGetUniformLocation(programId, "TilemapTexture");
+        patternLookupLocation = gl.glGetUniformLocation(programId, "PatternLookup");
+        atlasTextureLocation = gl.glGetUniformLocation(programId, "AtlasTexture");
+        paletteLocation = gl.glGetUniformLocation(programId, "Palette");
+        tilemapWidthLocation = gl.glGetUniformLocation(programId, "TilemapWidth");
+        tilemapHeightLocation = gl.glGetUniformLocation(programId, "TilemapHeight");
+        atlasWidthLocation = gl.glGetUniformLocation(programId, "AtlasWidth");
+        atlasHeightLocation = gl.glGetUniformLocation(programId, "AtlasHeight");
+        lookupSizeLocation = gl.glGetUniformLocation(programId, "LookupSize");
+        windowWidthLocation = gl.glGetUniformLocation(programId, "WindowWidth");
+        windowHeightLocation = gl.glGetUniformLocation(programId, "WindowHeight");
+        worldOffsetXLocation = gl.glGetUniformLocation(programId, "WorldOffsetX");
+        worldOffsetYLocation = gl.glGetUniformLocation(programId, "WorldOffsetY");
+        wrapYLocation = gl.glGetUniformLocation(programId, "WrapY");
+        priorityPassLocation = gl.glGetUniformLocation(programId, "PriorityPass");
+    }
+
+    public void setTextureUnits(GL2 gl, int tilemapUnit, int lookupUnit, int atlasUnit, int paletteUnit) {
+        if (tilemapTextureLocation >= 0) {
+            gl.glUniform1i(tilemapTextureLocation, tilemapUnit);
+        }
+        if (patternLookupLocation >= 0) {
+            gl.glUniform1i(patternLookupLocation, lookupUnit);
+        }
+        if (atlasTextureLocation >= 0) {
+            gl.glUniform1i(atlasTextureLocation, atlasUnit);
+        }
+        if (paletteLocation >= 0) {
+            gl.glUniform1i(paletteLocation, paletteUnit);
+        }
+    }
+
+    public void setTilemapDimensions(GL2 gl, float widthTiles, float heightTiles) {
+        if (tilemapWidthLocation >= 0) {
+            gl.glUniform1f(tilemapWidthLocation, widthTiles);
+        }
+        if (tilemapHeightLocation >= 0) {
+            gl.glUniform1f(tilemapHeightLocation, heightTiles);
+        }
+    }
+
+    public void setAtlasDimensions(GL2 gl, float width, float height) {
+        if (atlasWidthLocation >= 0) {
+            gl.glUniform1f(atlasWidthLocation, width);
+        }
+        if (atlasHeightLocation >= 0) {
+            gl.glUniform1f(atlasHeightLocation, height);
+        }
+    }
+
+    public void setLookupSize(GL2 gl, float size) {
+        if (lookupSizeLocation >= 0) {
+            gl.glUniform1f(lookupSizeLocation, size);
+        }
+    }
+
+    public void setWindowDimensions(GL2 gl, float width, float height) {
+        if (windowWidthLocation >= 0) {
+            gl.glUniform1f(windowWidthLocation, width);
+        }
+        if (windowHeightLocation >= 0) {
+            gl.glUniform1f(windowHeightLocation, height);
+        }
+    }
+
+    public void setWorldOffset(GL2 gl, float x, float y) {
+        if (worldOffsetXLocation >= 0) {
+            gl.glUniform1f(worldOffsetXLocation, x);
+        }
+        if (worldOffsetYLocation >= 0) {
+            gl.glUniform1f(worldOffsetYLocation, y);
+        }
+    }
+
+    public void setWrapY(GL2 gl, boolean wrap) {
+        if (wrapYLocation >= 0) {
+            gl.glUniform1i(wrapYLocation, wrap ? 1 : 0);
+        }
+    }
+
+    public void setPriorityPass(GL2 gl, int pass) {
+        if (priorityPassLocation >= 0) {
+            gl.glUniform1i(priorityPassLocation, pass);
+        }
+    }
+}
