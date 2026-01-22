@@ -925,9 +925,8 @@ public class LevelManager {
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
         int fboHeight = 256; // Full background map height for complete parallax
-        boolean padBackground = useGpuTilemap && level.getZoneIndex() == ParallaxManager.ZONE_ARZ;
-        if (padBackground) {
-            // Render one extra row to prevent bottom gaps during sub-chunk vertical scroll in ARZ.
+        if (useGpuTilemap) {
+            // Render one extra row to prevent bottom gaps during sub-chunk vertical scroll.
             fboHeight += LevelConstants.CHUNK_HEIGHT;
         }
         final int fboWidthFinal = fboWidth;
@@ -983,7 +982,7 @@ public class LevelManager {
                     if (atlasId != null && paletteId != null) {
                         int[] viewport = new int[4];
                         gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
-                        float screenYOffset = padBackground ? (fboHeightFinal - screenHeightPixels) : 0.0f;
+                        float screenYOffset = fboHeightFinal - screenHeightPixels;
                         float waterlineFbo = fboWaterlineY + screenYOffset;
                         tilemapRenderer.render(gl,
                                 TilemapGpuRenderer.Layer.BACKGROUND,
