@@ -524,6 +524,22 @@ public class PlayableSpriteMovement extends
 			if (lowestResult != null) {
 				byte distance = lowestResult.distance();
 				Direction dir = lowestResult.direction();
+				int wallAngle = lowestResult.angle() & 0xFF;
+
+				// When rolling, push sensors are positioned lower (center Y shifts down 5px),
+				// making them more likely to detect curved floor tiles as walls.
+				// Real walls have angles near 0x40 (left wall) or 0xC0 (right wall).
+				// Floor terrain has angles near 0x00/0xFF (horizontal).
+				// Filter out floor-like angles when rolling.
+				if (sprite.getRolling()) {
+					// Check if the detected angle is floor-like (within ~35 degrees of horizontal)
+					// Floor angles: 0x00-0x28 or 0xD8-0xFF
+					boolean isFloorLikeAngle = (wallAngle <= 0x28 || wallAngle >= 0xD8);
+					if (isFloorLikeAngle) {
+						// This is curved floor, not a wall - skip collision
+						return;
+					}
+				}
 
 				// Check if this "wall" is actually just curved terrain (floor wrapping around).
 				// The original game uses rotated angle scanning perpendicular to the terrain,
@@ -536,7 +552,6 @@ public class PlayableSpriteMovement extends
 				// Flat range: 0x00-0x10 or 0xF0-0xFF (within ~22 degrees of horizontal)
 				boolean onSlope = (terrainAngle > 0x10 && terrainAngle < 0xF0);
 				if (onSlope) {
-					int wallAngle = lowestResult.angle() & 0xFF;
 					int angleDiff = Math.abs(wallAngle - terrainAngle);
 					// Handle wrap-around (e.g., 0x10 vs 0xF0 should be 0x20 apart, not 0xE0)
 					if (angleDiff > 128) {
