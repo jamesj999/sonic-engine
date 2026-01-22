@@ -983,6 +983,7 @@ public class LevelManager {
                         int[] viewport = new int[4];
                         gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
                         float screenYOffset = fboHeightFinal - screenHeightPixels;
+                        float waterlineFbo = fboWaterlineY + screenYOffset;
                         tilemapRenderer.render(gl,
                                 TilemapGpuRenderer.Layer.BACKGROUND,
                                 fboWidthFinal,
@@ -1002,7 +1003,7 @@ public class LevelManager {
                                 true,
                                 screenYOffset,
                                 useUnderwaterPalette,
-                                fboWaterlineY);
+                                waterlineFbo);
                     }
                 }
                 bgRenderer.endTilePass(gl);
