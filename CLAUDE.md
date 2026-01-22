@@ -198,6 +198,24 @@ Implements both `AnimatedPatternManager` and `AnimatedPaletteManager`:
 #### CNZ Bumpers (`CNZBumperManager`)
 Combines placement windowing and ROM-accurate bounce physics with type-specific handlers for all 6 bumper types.
 
+#### Collision Pipeline (`CollisionSystem`)
+Unified collision orchestration in `uk.co.jamesj999.sonic.physics`:
+| Phase | Purpose |
+|-------|---------|
+| Terrain probes | Ground/ceiling/wall sensors via `TerrainCollisionManager` |
+| Solid object resolution | Platforms, moving solids via `ObjectManager.SolidContacts` |
+| Post-resolution | Ground mode, headroom checks |
+
+`PlayableSpriteMovement` uses `CollisionSystem.terrainProbes()` for all terrain collision. Supports trace recording for testing via `CollisionTrace` interface.
+
+#### UI Render Pipeline (`UiRenderPipeline`)
+Located in `uk.co.jamesj999.sonic.graphics.pipeline`, ensures correct render ordering:
+1. **Scene** - Level and sprites (rendered by LevelManager)
+2. **Overlay** - HUD via `HudRenderManager`
+3. **Fade pass** - Screen transitions via `FadeManager`
+
+`Engine.display()` uses `UiRenderPipeline.updateFade()` and `renderFadePass()` for screen transitions. Includes `RenderOrderRecorder` for testing.
+
 ### Terminology (differs from standard Sonic 2 naming)
 - **Pattern** - 8x8 pixel tile
 - **Chunk** - 16x16 pixel tile (composed of Patterns)
