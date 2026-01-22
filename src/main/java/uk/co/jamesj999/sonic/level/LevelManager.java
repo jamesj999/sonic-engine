@@ -972,13 +972,19 @@ public class LevelManager {
                     Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
                     boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
                     if (atlasId != null && paletteId != null) {
+                    int[] viewport = new int[4];
+                    gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
                     tilemapRenderer.render(gl,
                             TilemapGpuRenderer.Layer.BACKGROUND,
                             fboWidth,
                             fboHeight,
+                            viewport[0],
+                            viewport[1],
+                            viewport[2],
+                            viewport[3],
                             0.0f,
                             (float) alignedBgYFinal,
-                                graphicsManager.getPatternAtlasWidth(),
+                            graphicsManager.getPatternAtlasWidth(),
                                 graphicsManager.getPatternAtlasHeight(),
                                 atlasId,
                                 paletteId,
@@ -1120,10 +1126,16 @@ public class LevelManager {
             if (tilemapRenderer == null) {
                 return;
             }
+            int[] viewport = new int[4];
+            gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
             tilemapRenderer.render(gl,
                     TilemapGpuRenderer.Layer.FOREGROUND,
                     screenW,
                     screenH,
+                    viewport[0],
+                    viewport[1],
+                    viewport[2],
+                    viewport[3],
                     worldOffsetX,
                     worldOffsetY,
                     graphicsManager.getPatternAtlasWidth(),

@@ -70,6 +70,10 @@ public class TilemapGpuRenderer {
             Layer layer,
             int windowWidth,
             int windowHeight,
+            int viewportX,
+            int viewportY,
+            int viewportWidth,
+            int viewportHeight,
             float worldOffsetX,
             float worldOffsetY,
             int atlasWidth,
@@ -112,6 +116,7 @@ public class TilemapGpuRenderer {
         shader.setAtlasDimensions(gl, atlasWidth, atlasHeight);
         shader.setLookupSize(gl, lookupSize);
         shader.setWindowDimensions(gl, windowWidth, windowHeight);
+        shader.setViewport(gl, viewportX, viewportY, viewportWidth, viewportHeight);
         shader.setWorldOffset(gl, worldOffsetX, worldOffsetY);
         shader.setWrapY(gl, wrapY);
         shader.setPriorityPass(gl, priorityPass);

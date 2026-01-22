@@ -20,6 +20,10 @@ public class TilemapShaderProgram extends ShaderProgram {
     private int lookupSizeLocation = -1;
     private int windowWidthLocation = -1;
     private int windowHeightLocation = -1;
+    private int viewportWidthLocation = -1;
+    private int viewportHeightLocation = -1;
+    private int viewportOffsetXLocation = -1;
+    private int viewportOffsetYLocation = -1;
     private int worldOffsetXLocation = -1;
     private int worldOffsetYLocation = -1;
     private int wrapYLocation = -1;
@@ -47,6 +51,10 @@ public class TilemapShaderProgram extends ShaderProgram {
         lookupSizeLocation = gl.glGetUniformLocation(programId, "LookupSize");
         windowWidthLocation = gl.glGetUniformLocation(programId, "WindowWidth");
         windowHeightLocation = gl.glGetUniformLocation(programId, "WindowHeight");
+        viewportWidthLocation = gl.glGetUniformLocation(programId, "ViewportWidth");
+        viewportHeightLocation = gl.glGetUniformLocation(programId, "ViewportHeight");
+        viewportOffsetXLocation = gl.glGetUniformLocation(programId, "ViewportOffsetX");
+        viewportOffsetYLocation = gl.glGetUniformLocation(programId, "ViewportOffsetY");
         worldOffsetXLocation = gl.glGetUniformLocation(programId, "WorldOffsetX");
         worldOffsetYLocation = gl.glGetUniformLocation(programId, "WorldOffsetY");
         wrapYLocation = gl.glGetUniformLocation(programId, "WrapY");
@@ -104,6 +112,21 @@ public class TilemapShaderProgram extends ShaderProgram {
         }
         if (windowHeightLocation >= 0) {
             gl.glUniform1f(windowHeightLocation, height);
+        }
+    }
+
+    public void setViewport(GL2 gl, float offsetX, float offsetY, float width, float height) {
+        if (viewportOffsetXLocation >= 0) {
+            gl.glUniform1f(viewportOffsetXLocation, offsetX);
+        }
+        if (viewportOffsetYLocation >= 0) {
+            gl.glUniform1f(viewportOffsetYLocation, offsetY);
+        }
+        if (viewportWidthLocation >= 0) {
+            gl.glUniform1f(viewportWidthLocation, width);
+        }
+        if (viewportHeightLocation >= 0) {
+            gl.glUniform1f(viewportHeightLocation, height);
         }
     }
 

@@ -13,6 +13,10 @@ uniform float AtlasHeight;           // In pixels
 uniform float LookupSize;            // Pattern lookup width
 uniform float WindowWidth;           // Target width in pixels (FBO)
 uniform float WindowHeight;          // Target height in pixels (FBO)
+uniform float ViewportWidth;         // Actual GL viewport width
+uniform float ViewportHeight;        // Actual GL viewport height
+uniform float ViewportOffsetX;       // GL viewport X offset
+uniform float ViewportOffsetY;       // GL viewport Y offset
 uniform float WorldOffsetX;          // World X at left edge
 uniform float WorldOffsetY;          // World Y at top edge
 uniform int WrapY;                   // 1 to wrap vertically, 0 to clamp
@@ -22,9 +26,20 @@ uniform float WaterlineScreenY;
 
 void main()
 {
-    // Pixel position in screen space (0..WindowWidth/Height), origin at top-left
-    float pixelX = gl_FragCoord.x - 0.5;
-    float pixelYFromTop = WindowHeight - gl_FragCoord.y + 0.5;
+    // Pixel position in viewport space (0..ViewportWidth/Height), origin at bottom-left
+    float viewportX = gl_FragCoord.x - ViewportOffsetX - 0.5;
+    float viewportY = gl_FragCoord.y - ViewportOffsetY - 0.5;
+
+    if (viewportX < 0.0 || viewportY < 0.0 || viewportX >= ViewportWidth || viewportY >= ViewportHeight) {
+        discard;
+    }
+
+    float scaleX = ViewportWidth / WindowWidth;
+    float scaleY = ViewportHeight / WindowHeight;
+
+    // Logical pixel position in screen space (0..WindowWidth/Height), origin at top-left
+    float pixelX = viewportX / scaleX;
+    float pixelYFromTop = (ViewportHeight - 1.0 - viewportY) / scaleY;
 
     float worldX = WorldOffsetX + pixelX;
     float worldY = WorldOffsetY + pixelYFromTop;
@@ -74,7 +89,7 @@ void main()
         localX = 7.0 - localX;
     }
     // Note: VFlip=false means flip (matching PatternDesc behavior)
-    if (vFlipBit < 0.5) {
+    if (vFlipBit > 0.5) {
         localY = 7.0 - localY;
     }
 
