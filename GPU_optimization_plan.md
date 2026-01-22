@@ -168,6 +168,9 @@ Two-pass approach:
 3. **Milestone 3 (Full Tilemap Shader)**
    - GPU tilemap for background (FG later).
 
+   - NOTE: Keep `GPU_TILEMAP_ENABLED` as a fallback toggle during verification,
+     then flip default to true and remove the flag after parity validation.
+
 4. **Milestone 4 (Unification)**
    - Consolidate shaders, remove legacy paths if stable.
 
