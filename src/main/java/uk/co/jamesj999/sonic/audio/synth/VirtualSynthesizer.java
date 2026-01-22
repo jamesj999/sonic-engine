@@ -6,6 +6,12 @@ public class VirtualSynthesizer implements Synthesizer {
     private final PsgChip psg = new PsgChip();
     private final Ym2612Chip ym = new Ym2612Chip();
 
+    // Scratch buffers for render() to avoid per-call allocations
+    private int[] scratchLeft = new int[0];
+    private int[] scratchRight = new int[0];
+    private int[] scratchLeftPsg = new int[0];
+    private int[] scratchRightPsg = new int[0];
+
     @Override
     public void setDacData(DacData data) {
         ym.setDacData(data);
@@ -24,21 +30,33 @@ public class VirtualSynthesizer implements Synthesizer {
     public void render(short[] buffer) {
         // Assume buffer is Stereo Interleaved (L, R, L, R...)
         int frames = buffer.length / 2;
-        int[] left = new int[frames];
-        int[] right = new int[frames];
 
-        ym.renderStereo(left, right);
+        // Reuse scratch buffers, resize only when needed
+        if (scratchLeft.length < frames) {
+            scratchLeft = new int[frames];
+            scratchRight = new int[frames];
+            scratchLeftPsg = new int[frames];
+            scratchRightPsg = new int[frames];
+        }
+
+        // Clear reused buffers (chips accumulate into them)
+        for (int i = 0; i < frames; i++) {
+            scratchLeft[i] = 0;
+            scratchRight[i] = 0;
+            scratchLeftPsg[i] = 0;
+            scratchRightPsg[i] = 0;
+        }
+
+        ym.renderStereo(scratchLeft, scratchRight);
 
         // Attenuate YM/DAC by 50% (>> 1)
         // YM Peak ~24k -> ~12k
         for (int i = 0; i < frames; i++) {
-            left[i] >>= 1;
-            right[i] >>= 1;
+            scratchLeft[i] >>= 1;
+            scratchRight[i] >>= 1;
         }
 
-        int[] leftPsg = new int[frames];
-        int[] rightPsg = new int[frames];
-        psg.renderStereo(leftPsg, rightPsg);
+        psg.renderStereo(scratchLeftPsg, scratchRightPsg);
 
         // Attenuate PSG by 50% (>> 1) to match SMPSPlay levels.
         // SMPSPlay uses volume 0x80 for PSG vs 0x100 for YM2612.
@@ -47,14 +65,14 @@ public class VirtualSynthesizer implements Synthesizer {
         // FM Peak ~12k (after YM attenuation above).
         // Ratio FM:PSG is now ~6:1, matching SMPSPlay's 2:1 volume ratio.
         for (int i = 0; i < frames; i++) {
-            left[i] += leftPsg[i] >> 1;
-            right[i] += rightPsg[i] >> 1;
+            scratchLeft[i] += scratchLeftPsg[i] >> 1;
+            scratchRight[i] += scratchRightPsg[i] >> 1;
         }
 
         for (int i = 0; i < frames; i++) {
             // Master Gain: No division (1.0) to match SMPSPlay levels which push near clipping.
-            int l = left[i];
-            int r = right[i];
+            int l = scratchLeft[i];
+            int r = scratchRight[i];
 
             if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
             if (r > 32767) r = 32767; else if (r < -32768) r = -32768;

@@ -75,6 +75,9 @@ public class SmpsSequencer implements AudioStream {
     private int dividingTiming = 1;
     private boolean primed;
 
+    // Scratch buffer for read() to avoid per-sample allocations
+    private final short[] scratchSample = new short[1];
+
     // Speed-up tempos and channel orders are game/driver-specific (configurable).
 
     // F-Num table for Octave 4
@@ -589,11 +592,10 @@ public class SmpsSequencer implements AudioStream {
 
         for (int i = 0; i < buffer.length; i++) {
             advance(1.0);
-            short[] single = new short[1];
             if (synth instanceof VirtualSynthesizer) {
-                ((VirtualSynthesizer) synth).render(single);
+                ((VirtualSynthesizer) synth).render(scratchSample);
             }
-            buffer[i] = single[0];
+            buffer[i] = scratchSample[0];
         }
         return buffer.length;
     }

@@ -21,6 +21,9 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
 
     private final List<SmpsSequencer> pendingRemovals = new ArrayList<>();
 
+    // Scratch buffer for read() to avoid per-frame allocations
+    private final short[] scratchFrameBuf = new short[2];
+
     public void setRegion(SmpsSequencer.Region region) {
         this.region = region;
         for (SmpsSequencer seq : sequencers) {
@@ -51,7 +54,6 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     @Override
     public int read(short[] buffer) {
         int frames = buffer.length / 2;
-        short[] frameBuf = new short[2];
 
         for (int i = 0; i < frames; i++) {
             int size = sequencers.size();
@@ -73,9 +75,9 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
                 pendingRemovals.clear();
             }
 
-            super.render(frameBuf);
-            buffer[i * 2] = frameBuf[0];
-            buffer[i * 2 + 1] = frameBuf[1];
+            super.render(scratchFrameBuf);
+            buffer[i * 2] = scratchFrameBuf[0];
+            buffer[i * 2 + 1] = scratchFrameBuf[1];
         }
         return buffer.length;
     }
