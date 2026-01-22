@@ -943,7 +943,7 @@ public class LevelManager {
         // Use water shader in screen-space mode for FBO, with adjusted waterline
         WaterSystem waterSystem = WaterSystem.getInstance();
         boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
-        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED) && !hasWater;
+        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
         // Use visual water level (with oscillation) for background rendering
         int waterLevelWorldY = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
 
