@@ -152,6 +152,9 @@ public class LevelManager {
     private final List<GLCommand> debugRingCommands = new ArrayList<>(256);
     private final List<GLCommand> debugBoxCommands = new ArrayList<>(512);
     private final List<GLCommand> debugCenterCommands = new ArrayList<>(256);
+    private final List<GLCommand> collisionCommands = new ArrayList<>(256);
+    private final List<GLCommand> sensorCommands = new ArrayList<>(128);
+    private final List<GLCommand> cameraBoundsCommands = new ArrayList<>(64);
 
     // Cached screen dimensions (avoids repeated config service lookups)
     private final int cachedScreenWidth = configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
@@ -568,7 +571,7 @@ public class LevelManager {
         }
 
         parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
-        List<GLCommand> collisionCommands = new ArrayList<>(256);
+        collisionCommands.clear();
 
         // Update water shader state before rendering level
         updateWaterShaderState(camera);
@@ -1447,24 +1450,24 @@ public class LevelManager {
         int collisionCenterY = sprite.getCentreY();
         int renderCenterX = sprite.getRenderCentreX();
         int renderCenterY = sprite.getRenderCentreY();
-        List<GLCommand> commands = new ArrayList<>(128);
+        sensorCommands.clear();
 
         if (mappingBounds.width() > 0 && mappingBounds.height() > 0) {
             int mapLeft = renderCenterX + mappingBounds.minX();
             int mapRight = renderCenterX + mappingBounds.maxX();
             int mapTop = renderCenterY + mappingBounds.minY();
             int mapBottom = renderCenterY + mappingBounds.maxY();
-            appendBox(commands, mapLeft, mapTop, mapRight, mapBottom, 0.1f, 0.85f, 1f);
+            appendBox(sensorCommands, mapLeft, mapTop, mapRight, mapBottom, 0.1f, 0.85f, 1f);
         }
 
         int radiusLeft = collisionCenterX - sprite.getXRadius();
         int radiusRight = collisionCenterX + sprite.getXRadius();
         int radiusTop = collisionCenterY - sprite.getYRadius();
         int radiusBottom = collisionCenterY + sprite.getYRadius();
-        appendBox(commands, radiusLeft, radiusTop, radiusRight, radiusBottom, 1f, 0.8f, 0.1f);
+        appendBox(sensorCommands, radiusLeft, radiusTop, radiusRight, radiusBottom, 1f, 0.8f, 0.1f);
 
-        appendCross(commands, collisionCenterX, collisionCenterY, 2, 1f, 0.8f, 0.1f);
-        appendCross(commands, renderCenterX, renderCenterY, 2, 0.1f, 0.85f, 1f);
+        appendCross(sensorCommands, collisionCenterX, collisionCenterY, 2, 1f, 0.8f, 0.1f);
+        appendCross(sensorCommands, renderCenterX, renderCenterY, 2, 0.1f, 0.85f, 1f);
 
         Sensor[] sensors = sprite.getAllSensors();
         for (int i = 0; i < sensors.length; i++) {
@@ -1477,7 +1480,7 @@ public class LevelManager {
             int originY = collisionCenterY + rotatedOffset[1];
 
             float[] color = DebugOverlayPalette.sensorLineColor(i, sensor.isActive());
-            appendCross(commands, originX, originY, 1, color[0], color[1], color[2]);
+            appendCross(sensorCommands, originX, originY, 1, color[0], color[1], color[2]);
 
             if (!sensor.isActive()) {
                 continue;
@@ -1501,38 +1504,38 @@ public class LevelManager {
                 case RIGHT -> endX = originX + dist;
             }
 
-            appendLine(commands, originX, originY, endX, endY, color[0], color[1], color[2]);
+            appendLine(sensorCommands, originX, originY, endX, endY, color[0], color[1], color[2]);
         }
 
-        if (!commands.isEmpty()) {
+        if (!sensorCommands.isEmpty()) {
             graphicsManager.enqueueDebugLineState();
-            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, sensorCommands));
         }
     }
 
     private void drawCameraBounds() {
         Camera camera = Camera.getInstance();
-        List<GLCommand> commands = new ArrayList<>(64);
+        cameraBoundsCommands.clear();
 
         int camX = camera.getX();
         int camY = camera.getY();
         int camW = camera.getWidth();
         int camH = camera.getHeight();
 
-        appendBox(commands, camX, camY, camX + camW, camY + camH, 0.85f, 0.9f, 1f);
-        appendCross(commands, camX + (camW / 2), camY + (camH / 2), 4, 0.85f, 0.9f, 1f);
+        appendBox(cameraBoundsCommands, camX, camY, camX + camW, camY + camH, 0.85f, 0.9f, 1f);
+        appendCross(cameraBoundsCommands, camX + (camW / 2), camY + (camH / 2), 4, 0.85f, 0.9f, 1f);
 
         int minX = camera.getMinX();
         int minY = camera.getMinY();
         int maxX = camera.getMaxX();
         int maxY = camera.getMaxY();
         if (maxX > minX || maxY > minY) {
-            appendBox(commands, minX, minY, maxX + camW, maxY + camH, 0.2f, 0.9f, 0.9f);
+            appendBox(cameraBoundsCommands, minX, minY, maxX + camW, maxY + camH, 0.2f, 0.9f, 0.9f);
         }
 
-        if (!commands.isEmpty()) {
+        if (!cameraBoundsCommands.isEmpty()) {
             graphicsManager.enqueueDebugLineState();
-            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, commands));
+            graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_LINES, cameraBoundsCommands));
         }
     }
 

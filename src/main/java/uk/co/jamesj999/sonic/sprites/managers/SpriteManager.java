@@ -39,6 +39,7 @@ public class SpriteManager {
 	@SuppressWarnings("unchecked")
 	private final List<Sprite>[] highPriorityBuckets = new ArrayList[BUCKET_COUNT];
 	private final List<Sprite> nonPlayableSprites = new ArrayList<>();
+	private boolean bucketsDirty = true;
 
 	private LevelManager levelManager;
 
@@ -69,11 +70,12 @@ public class SpriteManager {
 	/**
 	 * Adds the given sprite to the SpriteManager. Returns true if we have
 	 * overwritten a sprite, false if we are creating a new one.
-	 * 
+	 *
 	 * @param sprite
 	 * @return
 	 */
 	public boolean addSprite(Sprite sprite) {
+		bucketsDirty = true;
 		return (sprites.put(sprite.getCode(), sprite) != null);
 	}
 
@@ -113,6 +115,7 @@ public class SpriteManager {
 
 	public void update(InputHandler handler) {
 		frameCounter++;
+		bucketsDirty = true; // Mark for re-bucketing since sprites may have changed
 		Collection<Sprite> sprites = getAllSprites();
 		boolean up = handler.isKeyDown(upKey);
 		boolean down = handler.isKeyDown(downKey);
@@ -195,27 +198,34 @@ public class SpriteManager {
 	}
 
 	public void drawPriorityBucket(int bucket, boolean highPriority) {
-		Collection<Sprite> sprites = getAllSprites();
+		bucketSprites(); // Ensure sprites are bucketed
 		int targetBucket = RenderPriority.clamp(bucket);
-		for (Sprite sprite : sprites) {
-			if (sprite instanceof AbstractPlayableSprite playable) {
-				int spriteBucket = RenderPriority.clamp(playable.getPriorityBucket());
-				if (playable.isHighPriority() == highPriority && spriteBucket == targetBucket) {
-					sprite.draw();
-				}
-				continue;
-			}
-			if (highPriority && targetBucket == RenderPriority.MIN) {
+		int idx = targetBucket - RenderPriority.MIN;
+
+		List<Sprite>[] buckets = highPriority ? highPriorityBuckets : lowPriorityBuckets;
+		for (Sprite sprite : buckets[idx]) {
+			sprite.draw();
+		}
+
+		// Non-playable sprites are only drawn once at the minimum high-priority bucket
+		if (highPriority && targetBucket == RenderPriority.MIN) {
+			for (Sprite sprite : nonPlayableSprites) {
 				sprite.draw();
 			}
 		}
 	}
 
 	private boolean removeSprite(Sprite sprite) {
+		bucketsDirty = true;
 		return (sprites.remove(sprite) != null);
 	}
 
 	private void bucketSprites() {
+		if (!bucketsDirty) {
+			return;
+		}
+		bucketsDirty = false;
+
 		for (int i = 0; i < BUCKET_COUNT; i++) {
 			lowPriorityBuckets[i].clear();
 			highPriorityBuckets[i].clear();

@@ -24,6 +24,8 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 public class ObjectManager {
+    private static final int BUCKET_COUNT = RenderPriority.MAX - RenderPriority.MIN + 1;
+
     private final Placement placement;
     private final ObjectRegistry registry;
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
@@ -31,6 +33,13 @@ public class ObjectManager {
     private final List<ObjectInstance> dynamicObjects = new ArrayList<>();
     private final List<GLCommand> renderCommands = new ArrayList<>();
     private int frameCounter;
+
+    // Pre-bucketed lists for O(n) rendering instead of O(n*buckets)
+    @SuppressWarnings("unchecked")
+    private final List<ObjectInstance>[] lowPriorityBuckets = new ArrayList[BUCKET_COUNT];
+    @SuppressWarnings("unchecked")
+    private final List<ObjectInstance>[] highPriorityBuckets = new ArrayList[BUCKET_COUNT];
+    private boolean bucketsDirty = true;
 
     private final PlaneSwitchers planeSwitchers;
     private final SolidContacts solidContacts;
@@ -48,6 +57,11 @@ public class ObjectManager {
         this.touchResponses = touchResponseTable != null
                 ? new TouchResponses(this, touchResponseTable)
                 : null;
+        // Initialize bucket arrays
+        for (int i = 0; i < BUCKET_COUNT; i++) {
+            lowPriorityBuckets[i] = new ArrayList<>();
+            highPriorityBuckets[i] = new ArrayList<>();
+        }
     }
 
     public void reset(int cameraX) {
@@ -74,6 +88,7 @@ public class ObjectManager {
     public void update(int cameraX, AbstractPlayableSprite player, int touchFrameCounter) {
         placement.update(cameraX);
         frameCounter++;
+        bucketsDirty = true; // Mark for re-bucketing since objects may have changed
         updateCameraBounds();
         syncActiveSpawns();
 
@@ -118,39 +133,67 @@ public class ObjectManager {
     }
 
     public void drawLowPriority() {
+        ensureBucketsPopulated();
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
             drawPriorityBucket(bucket, false);
         }
     }
 
     public void drawHighPriority() {
+        ensureBucketsPopulated();
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
             drawPriorityBucket(bucket, true);
         }
     }
 
-    public void drawPriorityBucket(int bucket, boolean highPriority) {
-        if (activeObjects.isEmpty() && dynamicObjects.isEmpty()) {
+    private void ensureBucketsPopulated() {
+        if (!bucketsDirty) {
             return;
         }
-        renderCommands.clear();
-        int targetBucket = RenderPriority.clamp(bucket);
-        for (ObjectInstance instance : activeObjects.values()) {
-            if (instance.isHighPriority() != highPriority) {
-                continue;
-            }
-            if (RenderPriority.clamp(instance.getPriorityBucket()) != targetBucket) {
-                continue;
-            }
-            instance.appendRenderCommands(renderCommands);
+        bucketsDirty = false;
+
+        // Clear all buckets
+        for (int i = 0; i < BUCKET_COUNT; i++) {
+            lowPriorityBuckets[i].clear();
+            highPriorityBuckets[i].clear();
         }
+
+        // Bucket active objects
+        for (ObjectInstance instance : activeObjects.values()) {
+            int bucket = RenderPriority.clamp(instance.getPriorityBucket());
+            int idx = bucket - RenderPriority.MIN;
+            if (instance.isHighPriority()) {
+                highPriorityBuckets[idx].add(instance);
+            } else {
+                lowPriorityBuckets[idx].add(instance);
+            }
+        }
+
+        // Bucket dynamic objects
         for (ObjectInstance instance : dynamicObjects) {
-            if (instance.isHighPriority() != highPriority) {
-                continue;
+            int bucket = RenderPriority.clamp(instance.getPriorityBucket());
+            int idx = bucket - RenderPriority.MIN;
+            if (instance.isHighPriority()) {
+                highPriorityBuckets[idx].add(instance);
+            } else {
+                lowPriorityBuckets[idx].add(instance);
             }
-            if (RenderPriority.clamp(instance.getPriorityBucket()) != targetBucket) {
-                continue;
-            }
+        }
+    }
+
+    public void drawPriorityBucket(int bucket, boolean highPriority) {
+        ensureBucketsPopulated();
+        int targetBucket = RenderPriority.clamp(bucket);
+        int idx = targetBucket - RenderPriority.MIN;
+        List<ObjectInstance>[] buckets = highPriority ? highPriorityBuckets : lowPriorityBuckets;
+        List<ObjectInstance> instances = buckets[idx];
+
+        if (instances.isEmpty()) {
+            return;
+        }
+
+        renderCommands.clear();
+        for (ObjectInstance instance : instances) {
             instance.appendRenderCommands(renderCommands);
         }
 
