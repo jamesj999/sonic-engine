@@ -38,8 +38,8 @@ void main()
     float scaleY = ViewportHeight / WindowHeight;
 
     // Logical pixel position in screen space (0..WindowWidth/Height), origin at top-left
-    float pixelX = floor(viewportX / scaleX);
-    float pixelYFromTop = floor((ViewportHeight - 1.0 - viewportY) / scaleY);
+    float pixelX = viewportX / scaleX;
+    float pixelYFromTop = (ViewportHeight - 1.0 - viewportY) / scaleY;
 
     float worldX = WorldOffsetX + pixelX;
     float worldY = WorldOffsetY + pixelYFromTop;
@@ -84,8 +84,6 @@ void main()
     if (localX < 0.0) localX += 8.0;
     float localY = mod(worldY, 8.0);
     if (localY < 0.0) localY += 8.0;
-    localX = floor(localX);
-    localY = floor(localY);
 
     if (hFlip > 0.5) {
         localX = 7.0 - localX;
