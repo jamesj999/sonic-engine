@@ -676,10 +676,18 @@ public class PlayableSpriteMovement extends
 			// This prevents getting stuck on convex upward slopes while rolling.
 			SensorResult bestResult = selectBestGroundSensor(results);
 
-			// AnglePos-style grounded glue: use fixed 0x0E cutoff.
+			// ROM ACCURACY FIX: AnglePos uses dynamic terrain glue threshold.
+			// ROM: threshold = min(abs(x_vel_pixels) + 4, 14) where x_vel_pixels is high byte of xSpeed
+			// At slow speeds (0-10 px/f), threshold is 4-14 pixels.
+			// At high speeds, threshold maxes out at 14 pixels (0x0E).
+			// Using a fixed 14 keeps the player "glued" to curves longer at slow speeds,
+			// causing different detachment points (later launches from curves).
+			int xVelPixels = Math.abs(sprite.getXSpeed() >> 8);
+			int threshold = Math.min(xVelPixels + 4, 14);
+
 			// BUT: if player is standing on a solid object (bridge, platform),
 			// don't set to air based on terrain alone.
-			if (bestResult == null || bestResult.distance() >= 14) {
+			if (bestResult == null || bestResult.distance() >= threshold) {
 				// Check if player is standing on a solid object before setting to air
 				var objectManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getObjectManager();
 				if (objectManager != null && (objectManager.isRidingObject()
@@ -889,8 +897,15 @@ public class PlayableSpriteMovement extends
 		// if the Player is stopped (Ground Speed is 0). Rolling slope factor
 		// has no check for if Ground Speed is 0 in any of the games.
 		// SPG: Slope Factor * sin(Ground Angle) using hex-angle trig
+		//
+		// ROM ACCURACY FIX: Use pure integer math matching the ROM's calculation:
+		// (slopeRunningVariant * sin * 256) >> 8
+		// sinHex returns -256 to 256, so (slopeRunningVariant * sinHex) >> 8 gives
+		// the correct result. Using floating-point sinHexNormalized compounds
+		// rounding errors from the velocity conversion fix.
 		if (sprite.getRolling() || gSpeed != 0) {
-			gSpeed += slopeRunningVariant * TrigLookupTable.sinHexNormalized(hexAngle);
+			int slopeEffect = (slopeRunningVariant * TrigLookupTable.sinHex(hexAngle)) >> 8;
+			gSpeed += slopeEffect;
 		}
 		if (left) {
 			if (gSpeed > 0) {
@@ -1351,11 +1366,14 @@ public class PlayableSpriteMovement extends
 		// SPG: Y Speed = Ground Speed * -sin(Ground Angle)
 		// Note: In screen coords (Y+ down) and MD clockwise angles, the sign works out
 		// such that Y Speed = gSpeed * sin(angle) gives correct direction.
-		sprite.setXSpeed((short) Math.round(gSpeed
-				* TrigLookupTable.cosHexNormalized(hexAngle)));
-
-		sprite.setYSpeed((short) Math.round(gSpeed
-				* TrigLookupTable.sinHexNormalized(hexAngle)));
+		//
+		// ROM ACCURACY FIX: Use integer math with arithmetic shift right (>>8) instead
+		// of Math.round(). The ROM uses asr.l #8 which rounds toward negative infinity.
+		// Math.round() rounds to nearest, causing 1-subpixel differences per frame
+		// that accumulate on curves. sinHex/cosHex return -256 to 256, so we multiply
+		// and shift: (gSpeed * trig) >> 8
+		sprite.setXSpeed((short) ((gSpeed * TrigLookupTable.cosHex(hexAngle)) >> 8));
+		sprite.setYSpeed((short) ((gSpeed * TrigLookupTable.sinHex(hexAngle)) >> 8));
 	}
 
 	private void jumpHandler(boolean jump) {
