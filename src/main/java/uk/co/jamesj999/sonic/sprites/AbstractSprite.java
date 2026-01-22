@@ -82,10 +82,8 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public final short getX() {
-		// TODO Not sure if this is needed, round to nearest subpixel?
-		if ((xPixel & 0xFF) > 128) {
-			return (short) (xPixel + 1);
-		}
+		// SPG: Collision calculations use whole pixel position, ignoring subpixels.
+		// No rounding should be done - the pixel position is authoritative.
 		return xPixel;
 	}
 
@@ -98,10 +96,8 @@ public abstract class AbstractSprite implements Sprite {
 	}
 
 	public final short getY() {
-		// TODO Not sure if this is needed, round to nearest subpixel?
-		if ((ySubpixel & 0xFF) > 128) {
-			return (short) (yPixel + 1);
-		}
+		// SPG: Collision calculations use whole pixel position, ignoring subpixels.
+		// No rounding should be done - the pixel position is authoritative.
 		return yPixel;
 	}
 

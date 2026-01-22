@@ -286,6 +286,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.hurt = false;
                 this.deathCountdown = 0;
                 this.air = false;
+                // Reset ground mode to GROUND - critical for sensor direction on level load.
+                // Without this, if player was on a wall/ceiling when previous level ended,
+                // sensors would point in wrong direction and collision detection would fail.
+                this.runningMode = GroundMode.GROUND;
                 this.springing = false;
                 this.springingFrames = 0;
                 this.rolling = false;
