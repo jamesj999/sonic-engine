@@ -1213,14 +1213,15 @@ public class PlayableSpriteMovement extends
 				}
 			}
 		}
-		// Air drag: Sonic 2 applies drag only when ySpeed is in (-1024, 0)
-		// subpixels/frame (SPG: Y Speed < 0 AND Y Speed > -4 pixels).
+		// Air drag: Sonic 2 applies drag only when ySpeed is in [-1024, 0)
+		// subpixels/frame (SPG: Y Speed < 0 AND Y Speed >= -4 pixels).
 		// (near jump apex, still moving up). Drag is NOT applied while falling or while
 		// hurt.
 		// Formula: xSpeed = xSpeed - (xSpeed / 32), using integer division (rounds
 		// toward zero).
 		// This naturally stops when abs(xSpeed) < 32 (since xSpeed/32 becomes 0).
-		if (ySpeed < 0 && ySpeed > -1024 && !sprite.isHurt()) {
+		// Original: cmpi.w #-$400,y_vel; blo.s skip - includes -$400 in drag range.
+		if (ySpeed < 0 && ySpeed >= -1024 && !sprite.isHurt()) {
 			xSpeed = (short) (xSpeed - (xSpeed / 32));
 		}
 		// SPG: Gravity is applied AFTER position update, not here.
@@ -1240,18 +1241,16 @@ public class PlayableSpriteMovement extends
 	private void applyAirGravity(AbstractPlayableSprite sprite) {
 		short ySpeed = sprite.getYSpeed();
 		ySpeed += sprite.getGravity();
-		if (ySpeed > 4096) {
-			ySpeed = 4096;
-		}
+		// Note: Sonic 2 has NO terminal velocity cap for falling.
+		// The cap was added in Sonic CD (1993). Sonic 2 (1992) allows
+		// unlimited falling speed, matching Sonic 1 behavior.
 		sprite.setYSpeed(ySpeed);
 	}
 
 	private void applyDeathMovement(AbstractPlayableSprite sprite) {
 		short ySpeed = sprite.getYSpeed();
 		ySpeed += sprite.getGravity();
-		if (ySpeed > 4096) {
-			ySpeed = 4096;
-		}
+		// No terminal velocity cap - matches Sonic 2 behavior
 		sprite.setGSpeed((short) 0);
 		sprite.setXSpeed((short) 0);
 		sprite.setYSpeed(ySpeed);
