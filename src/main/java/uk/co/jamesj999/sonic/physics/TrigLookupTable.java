@@ -173,11 +173,64 @@ public final class TrigLookupTable {
     /**
      * Get cosine as a normalized double using hex angle lookup.
      * Convenience method that divides by 256 for -1 to 1 result.
-     * 
+     *
      * @param hexAngle The angle in 256-step hex format
      * @return Cosine value from -1.0 to 1.0
      */
     public static double cosHexNormalized(int hexAngle) {
         return SINCOSLIST[(hexAngle + 64) & 0xFF] / 256.0;
+    }
+
+    /**
+     * Calculates the angle from velocity components, matching ROM's CalcAngle routine.
+     * ROM: CalcAngle at s2.asm - converts (xSpeed, ySpeed) to a hex angle.
+     *
+     * The Mega Drive angle convention:
+     * - 0x00 = 0° (right)
+     * - 0x40 = 90° (down, due to Y+ = down in screen coords)
+     * - 0x80 = 180° (left)
+     * - 0xC0 = 270° (up)
+     *
+     * @param xSpeed X velocity (subpixels) - positive = right
+     * @param ySpeed Y velocity (subpixels) - positive = down (screen coords)
+     * @return Hex angle (0x00-0xFF) representing the movement direction
+     */
+    public static int calcAngle(short xSpeed, short ySpeed) {
+        if (xSpeed == 0 && ySpeed == 0) {
+            return 0;
+        }
+        // atan2 returns radians from -PI to PI
+        // Note: Y is NOT inverted because in MD screen coords, positive Y = down,
+        // which matches standard atan2 convention where positive Y = up visually
+        // but we want 0x40 to represent "down" (positive Y direction)
+        double radians = Math.atan2(ySpeed, xSpeed);
+
+        // Convert radians to 0-255 angle range
+        // atan2 returns -PI to PI, we need 0 to 255
+        int hexAngle = (int) Math.round((radians / (2.0 * Math.PI)) * 256.0);
+        if (hexAngle < 0) {
+            hexAngle += 256;
+        }
+        return hexAngle & 0xFF;
+    }
+
+    /**
+     * Calculates the movement quadrant from velocity, matching ROM's collision logic.
+     * ROM: Sonic_DoLevelCollision (s2.asm:37547-37557)
+     *
+     * The quadrant determines which collision path to take:
+     * - 0x00: Moving mostly right/down-right
+     * - 0x40: Moving mostly down/down-left
+     * - 0x80: Moving mostly up/up-left
+     * - 0xC0: Moving mostly up-right/right
+     *
+     * @param xSpeed X velocity (subpixels)
+     * @param ySpeed Y velocity (subpixels)
+     * @return Movement quadrant (0x00, 0x40, 0x80, or 0xC0)
+     */
+    public static int calcMovementQuadrant(short xSpeed, short ySpeed) {
+        int moveAngle = calcAngle(xSpeed, ySpeed);
+        // ROM: subi.b #$20,d0 / andi.b #$C0,d0
+        return ((moveAngle - 0x20) & 0xC0) & 0xFF;
     }
 }

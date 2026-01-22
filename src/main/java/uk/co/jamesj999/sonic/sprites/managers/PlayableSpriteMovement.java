@@ -494,145 +494,201 @@ public class PlayableSpriteMovement extends
 	}
 
 	private void doWallCollision(AbstractPlayableSprite sprite) {
-		SensorResult[] pushResult = new SensorResult[sprite.getPushSensors().length];
-		// If grounded, we need to check if we're going to hit a wall based on our
-		// xSpeed.
-		// If we are, we need to stop moving.
 		if (!sprite.getAir()) {
-			// Original Sonic 2 "Obj01_CheckWallsOnGround" (s2.asm:36486) has two skip conditions:
-			// 1. Skip if angle is in range 0x40-0xBF (steep slopes, walls, or ceiling)
-			//    This prevents false wall collisions on curved ramps during mode transitions
-			// 2. Skip if gSpeed is 0 (not moving)
-			int angle = sprite.getAngle() & 0xFF;
-			// The original uses: addi.b #$40,d0; bmi.s return (skip if result >= 0x80)
-			// This is equivalent to: angle in range [0x40, 0xBF]
-			boolean angleInSkipRange = ((angle + 0x40) & 0x80) != 0;
-			if (angleInSkipRange || sprite.getGSpeed() == 0) {
+			doWallCollisionGround(sprite);
+		} else {
+			doWallCollisionAir(sprite);
+		}
+	}
+
+	/**
+	 * Grounded wall collision using angle-based collision selection.
+	 * ROM: Obj01_CheckWallsOnGround (s2.asm:36486)
+	 *
+	 * The original algorithm rotates the terrain angle by ±0x40 and uses the
+	 * resulting quadrant to select which collision check to perform. However,
+	 * for quadrants 0x00 (floor) and 0x80 (ceiling), the terrain collision
+	 * system already handles those cases. We only need to perform explicit
+	 * wall checks for horizontal quadrants (0x40 left, 0xC0 right).
+	 *
+	 * This prevents false wall detections on curved terrain where the rotated
+	 * check would hit the walking surface rather than an actual wall.
+	 */
+	private void doWallCollisionGround(AbstractPlayableSprite sprite) {
+		int angle = sprite.getAngle() & 0xFF;
+		short gSpeed = sprite.getGSpeed();
+
+		// Skip condition 1: angle in range 0x40-0xBF (steep slopes, walls, ceiling)
+		// ROM: addi.b #$40,d0; bmi.s return
+		// On steep terrain, wall collision is handled by terrain collision
+		boolean angleInSkipRange = ((angle + 0x40) & 0x80) != 0;
+		if (angleInSkipRange) {
+			sprite.setPushing(false);
+			return;
+		}
+
+		// Skip condition 2: not moving
+		if (gSpeed == 0) {
+			sprite.setPushing(false);
+			return;
+		}
+
+		// Calculate rotated angle based on movement direction
+		// ROM: Moving right (gSpeed > 0): angle - 0x40 (counterclockwise)
+		// ROM: Moving left (gSpeed < 0): angle + 0x40 (clockwise)
+		int rotatedAngle;
+		if (gSpeed >= 0) {
+			rotatedAngle = (angle - 0x40) & 0xFF;
+		} else {
+			rotatedAngle = (angle + 0x40) & 0xFF;
+		}
+
+		// Round to quadrant: (angle + 0x20) & 0xC0
+		int quadrant = (rotatedAngle + 0x20) & 0xC0;
+
+		// Only perform wall collision for horizontal quadrants (0x40, 0xC0)
+		// For floor/ceiling quadrants (0x00, 0x80), the terrain collision
+		// system already handles surface collision - we don't want to
+		// interfere with that by detecting the walking surface as a "wall"
+		if (quadrant != 0x40 && quadrant != 0xC0) {
+			sprite.setPushing(false);
+			return;
+		}
+
+		// Project position by velocity (ROM: CalcRoomInFront)
+		short projectedDx = (short) (sprite.getXSpeed() >> 8);
+		short projectedDy = (short) (sprite.getYSpeed() >> 8);
+
+		// Select the appropriate push sensor based on quadrant
+		// 0x40 = left wall (sensor 0), 0xC0 = right wall (sensor 1)
+		int sensorIndex = (quadrant == 0x40) ? 0 : 1;
+		SensorResult result = sprite.getPushSensors()[sensorIndex].scan(projectedDx, projectedDy);
+
+		if (result == null) {
+			sprite.setPushing(false);
+			return;
+		}
+
+		byte distance = result.distance();
+		int wallAngle = result.angle() & 0xFF;
+
+		// Filter out curved terrain that might be detected as walls.
+		// On slopes, if the detected "wall" angle is similar to the terrain angle,
+		// it's likely curved terrain (floor wrapping around), not a real wall.
+		// Real walls have angles perpendicular to the terrain.
+		boolean onSlope = (angle > 0x10 && angle < 0xF0);
+		if (onSlope) {
+			int angleDiff = Math.abs(wallAngle - angle);
+			if (angleDiff > 128) {
+				angleDiff = 256 - angleDiff;
+			}
+			// If angles are within ~45 degrees, it's likely curved terrain
+			if (angleDiff < 0x30) {
+				sprite.setPushing(false);
 				return;
 			}
+		}
 
-			// Grounded collision
-			// TODO: This really should be xSpeed and ySpeed but we only care about xSpeed
-			// for now.
-			// We scan for the wall at the position we will be at next frame.
-			// If we find a wall, we move to it and stop.
-			for (int i = 0; i < sprite.getPushSensors().length; i++) {
-				pushResult[i] = sprite.getPushSensors()[i].scan((short) (sprite.getXSpeed() / 256),
-						(short) (sprite.getYSpeed() / 256));
+		// Check if we're moving toward the wall (for distance == 0 case)
+		boolean movingTowards = (quadrant == 0x40 && sprite.getXSpeed() < 0) ||
+								(quadrant == 0xC0 && sprite.getXSpeed() > 0);
+
+		// Apply collision response if penetrating OR exactly at wall and moving toward it
+		if (distance < 0 || (distance == 0 && movingTowards)) {
+			// Calculate the exact movement needed to reach the wall surface (not past it).
+			// distance is the penetration at PROJECTED position.
+			// We want to move to the wall, so: allowedMove = projectedDx + distance (for RIGHT)
+			// or allowedMove = projectedDx - distance (for LEFT)
+			//
+			// Example (RIGHT wall): projectedDx = 6, distance = -3
+			//   allowedMove = 6 + (-3) = 3 pixels (move right to wall surface)
+			// Example (LEFT wall): projectedDx = -6, distance = -3
+			//   allowedMove = -6 - (-3) = -3 pixels (move left to wall surface)
+			int allowedMovePixels;
+			if (quadrant == 0x40) {
+				allowedMovePixels = projectedDx - distance;  // LEFT wall
+			} else {
+				allowedMovePixels = projectedDx + distance;  // RIGHT wall
 			}
-			SensorResult lowestResult = findLowestSensorResult(pushResult);
-			if (lowestResult != null) {
-				byte distance = lowestResult.distance();
-				Direction dir = lowestResult.direction();
-				int wallAngle = lowestResult.angle() & 0xFF;
 
-				// When rolling, push sensors are positioned lower (center Y shifts down 5px),
-				// making them more likely to detect curved floor tiles as walls.
-				// Real walls have angles near 0x40 (left wall) or 0xC0 (right wall).
-				// Floor terrain has angles near 0x00/0xFF (horizontal).
-				// Filter out floor-like angles when rolling.
-				if (sprite.getRolling()) {
-					// Check if the detected angle is floor-like (within ~35 degrees of horizontal)
-					// Floor angles: 0x00-0x28 or 0xD8-0xFF
-					boolean isFloorLikeAngle = (wallAngle <= 0x28 || wallAngle >= 0xD8);
-					if (isFloorLikeAngle) {
-						// This is curved floor, not a wall - skip collision
-						return;
-					}
-				}
+			// Convert to subpixels, accounting for current subpixel position
+			// This ensures pixel-perfect wall placement
+			short subX = (short) (sprite.getXSubpixel() & 0xFF);
+			sprite.setXSpeed((short) ((allowedMovePixels * 256) - subX));
 
-				// Check if this "wall" is actually just curved terrain (floor wrapping around).
-				// The original game uses rotated angle scanning perpendicular to the terrain,
-				// but our push sensors scan horizontally. On curved ramps, this can detect
-				// the curved floor as a "wall".
-				// IMPORTANT: Only apply this check when on a slope. On flat ground (angle near 0),
-				// wall tiles also often have angle 0, so we'd incorrectly skip real walls.
-				int terrainAngle = sprite.getAngle() & 0xFF;
-				// Check if we're on a significant slope (not flat ground)
-				// Flat range: 0x00-0x10 or 0xF0-0xFF (within ~22 degrees of horizontal)
-				boolean onSlope = (terrainAngle > 0x10 && terrainAngle < 0xF0);
-				if (onSlope) {
-					int angleDiff = Math.abs(wallAngle - terrainAngle);
-					// Handle wrap-around (e.g., 0x10 vs 0xF0 should be 0x20 apart, not 0xE0)
-					if (angleDiff > 128) {
-						angleDiff = 256 - angleDiff;
-					}
-					// If angles are within ~45 degrees, it's likely curved terrain, not a wall
-					// Real walls would have angles perpendicular to the terrain
-					if (angleDiff < 0x30) {
-						// Skip - this is curved floor, not a wall
-						return;
-					}
-				}
-
-				boolean movingTowards = false;
-				if (dir == Direction.LEFT && sprite.getXSpeed() < 0)
-					movingTowards = true;
-				else if (dir == Direction.RIGHT && sprite.getXSpeed() > 0)
-					movingTowards = true;
-				else if (dir == Direction.UP && sprite.getYSpeed() < 0)
-					movingTowards = true;
-				else if (dir == Direction.DOWN && sprite.getYSpeed() > 0)
-					movingTowards = true;
-
-				if (distance < 0 || (distance == 0 && movingTowards)) {
-					short lookaheadX = (short) (sprite.getXSpeed() / 256);
-					short lookaheadY = (short) (sprite.getYSpeed() / 256);
-					short subX = (short) (sprite.getXSubpixel() & 0xFF);
-					short subY = (short) (sprite.getYSubpixel() & 0xFF);
-
-					if (dir == Direction.LEFT || dir == Direction.RIGHT) {
-						short move = lookaheadX;
-						if (dir == Direction.LEFT) {
-							move -= distance;
-						} else {
-							move += distance;
-						}
-						sprite.setXSpeed((short) ((move * 256) - subX));
-					} else {
-						short move = lookaheadY;
-						if (dir == Direction.UP) {
-							move -= distance;
-						} else {
-							move += distance;
-						}
-						sprite.setYSpeed((short) ((move * 256) - subY));
-					}
-					sprite.setGSpeed((short) 0);
-				}
-			}
+			sprite.setPushing(true);
+			sprite.setGSpeed((short) 0);
 		} else {
-			// Airborne collision
-			// We scan at current position (because we already moved).
-			// If we are inside a wall, we move out.
-			for (int i = 0; i < sprite.getPushSensors().length; i++) {
-				pushResult[i] = sprite.getPushSensors()[i].scan((short) 0, (short) 0);
-			}
-			SensorResult lowestResult = findLowestSensorResult(pushResult);
-			if (lowestResult != null) {
-				byte distance = lowestResult.distance();
-				Direction dir = lowestResult.direction();
-				boolean collision = distance < 0;
-				if (!collision && distance == 0) {
-					if (dir == Direction.RIGHT && (sprite.getXSubpixel() & 0xFF) > 0)
-						collision = true;
-					else if (dir == Direction.DOWN && (sprite.getYSubpixel() & 0xFF) > 0)
-						collision = true;
-				}
+			sprite.setPushing(false);
+		}
+	}
 
-				if (collision) {
+	/**
+	 * Airborne wall collision using movement quadrant selection.
+	 * ROM: Sonic_DoLevelCollision (s2.asm:37548)
+	 *
+	 * Selectively checks wall sensors based on movement direction to avoid
+	 * redundant checks. Still finds the closest collision and applies once.
+	 */
+	private void doWallCollisionAir(AbstractPlayableSprite sprite) {
+		short xSpeed = sprite.getXSpeed();
+		short ySpeed = sprite.getYSpeed();
+
+		// Calculate movement quadrant using CalcAngle
+		int quadrant = TrigLookupTable.calcMovementQuadrant(xSpeed, ySpeed);
+
+		Sensor[] pushSensors = sprite.getPushSensors();
+		SensorResult[] results = new SensorResult[2];
+
+		// Selectively check sensors based on movement quadrant
+		// This is an optimization - checking only relevant sensors
+		switch (quadrant) {
+			case 0x00 -> {
+				// Down-right: check both walls
+				results[0] = pushSensors[0].scan((short) 0, (short) 0);
+				results[1] = pushSensors[1].scan((short) 0, (short) 0);
+			}
+			case 0x40 -> {
+				// Down-left: check left wall only
+				results[0] = pushSensors[0].scan((short) 0, (short) 0);
+			}
+			case 0x80 -> {
+				// Up-left: check both walls
+				results[0] = pushSensors[0].scan((short) 0, (short) 0);
+				results[1] = pushSensors[1].scan((short) 0, (short) 0);
+			}
+			case 0xC0 -> {
+				// Up-right: check right wall only
+				results[1] = pushSensors[1].scan((short) 0, (short) 0);
+			}
+		}
+
+		// Find the closest (most negative distance) result
+		SensorResult lowestResult = findLowestSensorResult(results);
+
+		if (lowestResult != null) {
+			byte distance = lowestResult.distance();
+			Direction dir = lowestResult.direction();
+
+			boolean collision = distance < 0;
+			if (!collision && distance == 0) {
+				// Edge case: exactly touching wall and moving toward it
+				boolean movingTowards = (dir == Direction.LEFT && xSpeed < 0) ||
+										(dir == Direction.RIGHT && xSpeed > 0);
+				collision = movingTowards;
+			}
+
+			if (collision) {
+				// Only apply position correction if actually penetrating
+				if (distance < 0) {
 					// Add a 1px buffer to prevent sticking to walls
-					if (dir == Direction.RIGHT) {
-						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1),
-								lowestResult.tileId(), lowestResult.direction());
-					} else if (dir == Direction.LEFT) {
-						lowestResult = new SensorResult(lowestResult.angle(), (byte) (lowestResult.distance() - 1),
-								lowestResult.tileId(), lowestResult.direction());
-					}
-					moveForSensorResult(sprite, lowestResult);
-					sprite.setXSpeed((short) 0);
-					sprite.setGSpeed((short) 0);
+					SensorResult adjusted = new SensorResult(lowestResult.angle(), (byte) (distance - 1),
+							lowestResult.tileId(), lowestResult.direction());
+					moveForSensorResult(sprite, adjusted);
 				}
+				// Zero velocities to stop movement into wall
+				sprite.setXSpeed((short) 0);
+				sprite.setGSpeed((short) 0);
 			}
 		}
 	}
