@@ -20,18 +20,14 @@ Status: Active
 - Shadow/highlight shader (`shader_shadow.glsl`).
 - Fade shader (`FadeManager`).
 - Shared fullscreen quad VBO (tilemap, parallax, fade, special stage).
+- Atlas/palette upload buffer reuse (no per-update allocations).
+- Multi-atlas fallback (up to 2 atlases) for pattern caching.
 
 ## Current Hotspots
-- Batched renderer uses client-side arrays and per-batch snapshots.
-- Pattern/atlas uploads allocate per-update buffers.
+- None identified in the original GPU plan scope.
 
 ## Next Steps (Ordered)
-1) **Atlas/palette upload buffering**  
-   Use a small direct-buffer pool or PBOs for animated pattern uploads to reduce
-   driver stalls.
-
-2) **Multi-atlas / texture array fallback**  
-   If atlas capacity is exceeded, support multiple atlases or texture arrays.
+- None in the original GPU plan scope.
 
 ## Validation
 - Pixel diffs on representative scenes (EHZ/CPZ/ARZ, water zones, special stage).

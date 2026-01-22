@@ -5,19 +5,22 @@ import com.jogamp.opengl.util.GLBuffers;
 import uk.co.jamesj999.sonic.level.Pattern;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
 /**
  * Texture atlas for 8x8 indexed patterns.
- * Stores all patterns in a single GL texture to avoid per-tile texture binds.
+ * Stores patterns across one or more GL textures to avoid per-tile texture binds.
  */
 public class PatternAtlas {
     private static final Logger LOGGER = Logger.getLogger(PatternAtlas.class.getName());
 
     public static final int TILE_SIZE = Pattern.PATTERN_WIDTH;
     private static final float UV_INSET_PIXELS = 0.01f;
+    private static final int MAX_ATLASES = 2;
 
     private final int atlasWidth;
     private final int atlasHeight;
@@ -26,8 +29,8 @@ public class PatternAtlas {
     private final int maxSlots;
 
     private final Map<Integer, Entry> entries = new HashMap<>();
-    private int nextSlot = 0;
-    private int textureId = 0;
+    private final List<AtlasPage> pages = new ArrayList<>();
+    private final ByteBuffer patternUploadBuffer;
     private boolean initialized = false;
 
     public PatternAtlas(int atlasWidth, int atlasHeight) {
@@ -39,6 +42,7 @@ public class PatternAtlas {
         this.tilesPerRow = atlasWidth / TILE_SIZE;
         this.tilesPerColumn = atlasHeight / TILE_SIZE;
         this.maxSlots = tilesPerRow * tilesPerColumn;
+        this.patternUploadBuffer = GLBuffers.newDirectByteBuffer(TILE_SIZE * TILE_SIZE);
     }
 
     public int getAtlasWidth() {
@@ -49,8 +53,19 @@ public class PatternAtlas {
         return atlasHeight;
     }
 
+    public int getMaxSlotsPerAtlas() {
+        return maxSlots;
+    }
+
     public int getTextureId() {
-        return textureId;
+        return getTextureId(0);
+    }
+
+    public int getTextureId(int atlasIndex) {
+        if (atlasIndex < 0 || atlasIndex >= pages.size()) {
+            return 0;
+        }
+        return pages.get(atlasIndex).textureId();
     }
 
     public boolean isInitialized() {
@@ -61,26 +76,20 @@ public class PatternAtlas {
         if (initialized || gl == null) {
             return;
         }
-
-        int[] textures = new int[1];
-        gl.glGenTextures(1, textures, 0);
-        textureId = textures[0];
-
-        gl.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-        gl.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, atlasWidth, atlasHeight, 0,
-                GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, null);
-
-        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
-        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
-        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
-        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
-
-        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+        if (pages.isEmpty()) {
+            pages.add(createPage(gl, 0));
+        } else {
+            for (AtlasPage page : pages) {
+                if (page.textureId() == 0) {
+                    page.setTextureId(createTexture(gl));
+                }
+            }
+        }
         initialized = true;
     }
 
     public Entry cachePattern(GL2 gl, Pattern pattern, int patternId) {
-        Entry entry = ensureEntry(patternId);
+        Entry entry = ensureEntry(gl, patternId);
         if (entry == null) {
             return null;
         }
@@ -98,27 +107,36 @@ public class PatternAtlas {
         return entries.get(patternId);
     }
 
-    public void cleanup(GL2 gl) {
-        if (gl != null && textureId != 0) {
-            gl.glDeleteTextures(1, new int[] { textureId }, 0);
-        }
-        textureId = 0;
-        initialized = false;
-        entries.clear();
-        nextSlot = 0;
+    public int getAtlasCount() {
+        return pages.size();
     }
 
-    private Entry ensureEntry(int patternId) {
+    public void cleanup(GL2 gl) {
+        if (gl != null) {
+            for (AtlasPage page : pages) {
+                if (page.textureId() != 0) {
+                    gl.glDeleteTextures(1, new int[] { page.textureId() }, 0);
+                }
+            }
+        }
+        initialized = false;
+        entries.clear();
+        pages.clear();
+    }
+
+    private Entry ensureEntry(GL2 gl, int patternId) {
         Entry existing = entries.get(patternId);
         if (existing != null) {
             return existing;
         }
-        if (nextSlot >= maxSlots) {
+
+        AtlasPage page = getOrCreatePage(gl);
+        if (page == null) {
             LOGGER.warning("Pattern atlas capacity exceeded; patternId=" + patternId);
             return null;
         }
 
-        int slot = nextSlot++;
+        int slot = page.allocateSlot();
         int tileX = slot % tilesPerRow;
         int tileY = slot / tilesPerRow;
 
@@ -130,13 +148,14 @@ public class PatternAtlas {
         float v0 = (pixelY + UV_INSET_PIXELS) / (float) atlasHeight;
         float v1 = (pixelY + TILE_SIZE - UV_INSET_PIXELS) / (float) atlasHeight;
 
-        Entry entry = new Entry(patternId, slot, tileX, tileY, u0, v0, u1, v1);
+        Entry entry = new Entry(patternId, page.atlasIndex(), slot, tileX, tileY, u0, v0, u1, v1);
         entries.put(patternId, entry);
         return entry;
     }
 
     private void uploadPattern(GL2 gl, Pattern pattern, Entry entry) {
-        ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(TILE_SIZE * TILE_SIZE);
+        ByteBuffer patternBuffer = patternUploadBuffer;
+        patternBuffer.clear();
         for (int col = 0; col < TILE_SIZE; col++) {
             for (int row = 0; row < TILE_SIZE; row++) {
                 byte colorIndex = pattern.getPixel(row, col);
@@ -148,13 +167,86 @@ public class PatternAtlas {
         int pixelX = entry.tileX() * TILE_SIZE;
         int pixelY = entry.tileY() * TILE_SIZE;
 
+        int textureId = getTextureId(entry.atlasIndex());
         gl.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
         gl.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, pixelX, pixelY, TILE_SIZE, TILE_SIZE,
                 GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
         gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
     }
 
-    public record Entry(int patternId, int slot, int tileX, int tileY,
+    private AtlasPage getOrCreatePage(GL2 gl) {
+        if (pages.isEmpty()) {
+            pages.add(createPage(gl, 0));
+        }
+        AtlasPage current = pages.get(pages.size() - 1);
+        if (current.hasCapacity()) {
+            return current;
+        }
+        if (pages.size() >= MAX_ATLASES) {
+            return null;
+        }
+        AtlasPage next = createPage(gl, pages.size());
+        pages.add(next);
+        return next;
+    }
+
+    private AtlasPage createPage(GL2 gl, int atlasIndex) {
+        int textureId = gl != null ? createTexture(gl) : 0;
+        return new AtlasPage(atlasIndex, textureId, maxSlots);
+    }
+
+    private int createTexture(GL2 gl) {
+        int[] textures = new int[1];
+        gl.glGenTextures(1, textures, 0);
+        int textureId = textures[0];
+
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
+        gl.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, atlasWidth, atlasHeight, 0,
+                GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, null);
+
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
+
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+        return textureId;
+    }
+
+    private static final class AtlasPage {
+        private final int atlasIndex;
+        private int textureId;
+        private final int maxSlots;
+        private int nextSlot;
+
+        private AtlasPage(int atlasIndex, int textureId, int maxSlots) {
+            this.atlasIndex = atlasIndex;
+            this.textureId = textureId;
+            this.maxSlots = maxSlots;
+        }
+
+        private boolean hasCapacity() {
+            return nextSlot < maxSlots;
+        }
+
+        private int allocateSlot() {
+            return nextSlot++;
+        }
+
+        private int atlasIndex() {
+            return atlasIndex;
+        }
+
+        private int textureId() {
+            return textureId;
+        }
+
+        private void setTextureId(int textureId) {
+            this.textureId = textureId;
+        }
+    }
+
+    public record Entry(int patternId, int atlasIndex, int slot, int tileX, int tileY,
             float u0, float v0, float u1, float v1) {
     }
 }

@@ -129,6 +129,7 @@ public class LevelManager {
     private byte[] patternLookupData;
     private int patternLookupSize;
     private boolean patternLookupDirty = true;
+    private boolean multiAtlasWarningLogged = false;
 
     private boolean specialStageRequestedFromCheckpoint;
     private boolean titleCardRequested;
@@ -212,10 +213,11 @@ public class LevelManager {
             audioManager.resetRingSound();
             audioManager.playMusic(game.getMusicId(levelIndex));
             level = game.loadLevel(levelIndex);
-            backgroundTilemapDirty = true;
-            foregroundTilemapDirty = true;
-            patternLookupDirty = true;
-            backgroundTilemapData = null;
+        backgroundTilemapDirty = true;
+        foregroundTilemapDirty = true;
+        patternLookupDirty = true;
+        multiAtlasWarningLogged = false;
+        backgroundTilemapData = null;
             foregroundTilemapData = null;
             patternLookupData = null;
             initAnimatedPatterns();
@@ -1102,7 +1104,7 @@ public class LevelManager {
             if (entry != null) {
                 patternLookupData[offset] = (byte) entry.tileX();
                 patternLookupData[offset + 1] = (byte) entry.tileY();
-                patternLookupData[offset + 2] = 0;
+                patternLookupData[offset + 2] = (byte) entry.atlasIndex();
                 patternLookupData[offset + 3] = (byte) 255;
             } else {
                 patternLookupData[offset] = 0;
@@ -1110,6 +1112,15 @@ public class LevelManager {
                 patternLookupData[offset + 2] = 0;
                 patternLookupData[offset + 3] = 0;
             }
+        }
+        PatternAtlas atlas = graphicsManager.getPatternAtlas();
+        if (!multiAtlasWarningLogged && atlas != null && atlas.getAtlasCount() > 1) {
+            LOGGER.warning("Pattern atlas overflow: using multiple atlases (count="
+                    + atlas.getAtlasCount()
+                    + ", slotsPerAtlas=" + atlas.getMaxSlotsPerAtlas()
+                    + ", atlasSize=" + atlas.getAtlasWidth() + "x" + atlas.getAtlasHeight()
+                    + ") for this level.");
+            multiAtlasWarningLogged = true;
         }
         patternLookupDirty = false;
     }
