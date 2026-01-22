@@ -918,14 +918,23 @@ public class LevelManager {
 
         Camera camera = Camera.getInstance();
 
+        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
+
         // FBO is wider than screen to accommodate per-scanline scroll range
         // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
         int fboHeight = 256; // Full background map height for complete parallax
+        if (useGpuTilemap) {
+            // Render one extra row to prevent bottom gaps during sub-chunk vertical scroll.
+            fboHeight += LevelConstants.CHUNK_HEIGHT;
+        }
+        final int fboWidthFinal = fboWidth;
+        final int fboHeightFinal = fboHeight;
 
         // Extra buffer on each side
-        int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
+        int extraBuffer = (fboWidthFinal - 320) / 2; // 352 pixels on each side
+        final int extraBufferFinal = extraBuffer;
 
         // Get pattern renderer's screen height for correct Y coordinate handling
         int screenHeightPixels = cachedScreenHeight;
@@ -936,14 +945,13 @@ public class LevelManager {
 
         // 1. Resize FBO
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-            bgRenderer.resizeFBO(gl, fboWidth, fboHeight);
+            bgRenderer.resizeFBO(gl, fboWidthFinal, fboHeightFinal);
         }));
 
         // 2. Begin Tile Pass (Bind FBO)
         // Use water shader in screen-space mode for FBO, with adjusted waterline
         WaterSystem waterSystem = WaterSystem.getInstance();
         boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
-        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
         // Use visual water level (with oscillation) for background rendering
         int waterLevelWorldY = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
 
@@ -972,19 +980,19 @@ public class LevelManager {
                     Integer underwaterPaletteId = graphicsManager.getUnderwaterPaletteTextureId();
                     boolean useUnderwaterPalette = hasWater && underwaterPaletteId != null;
                     if (atlasId != null && paletteId != null) {
-                    int[] viewport = new int[4];
-                    gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
-                    tilemapRenderer.render(gl,
-                            TilemapGpuRenderer.Layer.BACKGROUND,
-                            fboWidth,
-                            fboHeight,
-                            viewport[0],
-                            viewport[1],
-                            viewport[2],
-                            viewport[3],
-                            0.0f,
-                            (float) alignedBgYFinal,
-                            graphicsManager.getPatternAtlasWidth(),
+                        int[] viewport = new int[4];
+                        gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
+                        tilemapRenderer.render(gl,
+                                TilemapGpuRenderer.Layer.BACKGROUND,
+                                fboWidthFinal,
+                                fboHeightFinal,
+                                viewport[0],
+                                viewport[1],
+                                viewport[2],
+                                viewport[3],
+                                0.0f,
+                                (float) alignedBgYFinal,
+                                graphicsManager.getPatternAtlasWidth(),
                                 graphicsManager.getPatternAtlasHeight(),
                                 atlasId,
                                 paletteId,
@@ -1009,8 +1017,8 @@ public class LevelManager {
                     waterShader.use(gl);
                     // Use screen-space mode (not world-space) with FBO-adjusted waterline
                     waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
-                    waterShader.setWindowHeight(gl, (float) fboHeight);
-                    waterShader.setScreenDimensions(gl, (float) fboWidth, (float) fboHeight);
+                    waterShader.setWindowHeight(gl, (float) fboHeightFinal);
+                    waterShader.setScreenDimensions(gl, (float) fboWidthFinal, (float) fboHeightFinal);
                     waterShader.setDistortionAmplitude(gl, 0.0f);
                     waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
                     waterShader.setWaterlineScreenY(gl, fboWaterlineY);
@@ -1027,7 +1035,8 @@ public class LevelManager {
 
             // 3. Draw background tiles to wider FBO (uses water shader in world-space mode)
             graphicsManager.beginPatternBatch();
-            drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidth, fboHeight, extraBuffer);
+            drawBackgroundToFBOWide(commands, camera, actualBgScrollY, fboWidthFinal, fboHeightFinal,
+                    extraBufferFinal);
             graphicsManager.flushPatternBatch();
         }
 
@@ -1089,7 +1098,8 @@ public class LevelManager {
             final int finalVOffset = shaderVOffset;
 
             graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx2, cy2, cw2, ch2) -> {
-                bgRenderer.renderWithScrollWide(gl, hScrollData, baseScrollForShader, extraBuffer, finalVOffset, pId,
+                bgRenderer.renderWithScrollWide(gl, hScrollData, baseScrollForShader, extraBufferFinal, finalVOffset,
+                        pId,
                         screenW,
                         screenH);
             }));
