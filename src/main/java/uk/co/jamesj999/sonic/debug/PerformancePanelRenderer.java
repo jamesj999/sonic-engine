@@ -24,7 +24,17 @@ public class PerformancePanelRenderer {
             {1.0f, 0.8f, 0.2f},   // Yellow
             {0.8f, 0.4f, 0.9f},   // Purple
             {1.0f, 0.6f, 0.2f},   // Orange
+            {0.4f, 0.9f, 0.9f},   // Cyan
+            {0.9f, 0.6f, 0.8f},   // Pink
     };
+
+    /**
+     * Gets a consistent color index for a section name (based on hash).
+     */
+    private int getColorIndexForSection(String name) {
+        // Use absolute value of hash to get consistent color per section name
+        return Math.abs(name.hashCode()) % SECTION_COLORS.length;
+    }
 
     /** Target frame time at 60fps (16.67ms) */
     private static final float TARGET_FRAME_MS = 16.67f;
@@ -111,9 +121,10 @@ public class PerformancePanelRenderer {
         List<SectionStats> sections = snapshot.getSectionsSortedByTime();
         int legendY = textY - lineHeight;
 
-        int colorIndex = 0;
+        int count = 0;
         for (SectionStats section : sections) {
-            float[] color = SECTION_COLORS[colorIndex % SECTION_COLORS.length];
+            int colorIndex = getColorIndexForSection(section.name());
+            float[] color = SECTION_COLORS[colorIndex];
             Color textColor = new Color(color[0], color[1], color[2]);
 
             String name = section.name();
@@ -124,9 +135,9 @@ public class PerformancePanelRenderer {
             drawOutlined(textRenderer, line, textX, legendY, textColor);
 
             legendY -= lineHeight;
-            colorIndex++;
+            count++;
 
-            if (colorIndex >= 6) {
+            if (count >= 6) {
                 break;
             }
         }
@@ -137,9 +148,13 @@ public class PerformancePanelRenderer {
     /**
      * Draws a pie chart showing the time distribution across sections.
      * Uses game coordinates (0-320, 0-224 with Y=0 at bottom).
+     * Sections are drawn in alphabetical order for stable positioning.
      */
     private void drawPieChart(GL2 gl, int centerX, int centerY, int radius, ProfileSnapshot snapshot) {
-        List<SectionStats> sections = snapshot.getSectionsSortedByTime();
+        // Sort by name for stable pie chart positioning
+        List<SectionStats> sections = snapshot.getSectionsSortedByTime().stream()
+                .sorted((a, b) -> a.name().compareTo(b.name()))
+                .toList();
         if (sections.isEmpty()) {
             return;
         }
@@ -149,16 +164,15 @@ public class PerformancePanelRenderer {
         gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
 
         float startAngle = 90; // Start from top
-        int colorIndex = 0;
 
         for (SectionStats section : sections) {
             float sweepAngle = (float) (section.percentage() * 360.0 / 100.0);
             if (sweepAngle < 2.0f) {
-                colorIndex++;
                 continue; // Skip tiny slices
             }
 
-            float[] color = SECTION_COLORS[colorIndex % SECTION_COLORS.length];
+            int colorIndex = getColorIndexForSection(section.name());
+            float[] color = SECTION_COLORS[colorIndex];
             gl.glColor3f(color[0], color[1], color[2]);
 
             gl.glBegin(GL2.GL_TRIANGLE_FAN);
@@ -175,11 +189,6 @@ public class PerformancePanelRenderer {
             gl.glEnd();
 
             startAngle -= sweepAngle;
-            colorIndex++;
-
-            if (colorIndex >= 6) {
-                break;
-            }
         }
 
         // Outline
@@ -246,7 +255,7 @@ public class PerformancePanelRenderer {
         // Frame time line
         gl.glColor3f(0.3f, 0.9f, 0.3f);
         gl.glBegin(GL2.GL_LINE_STRIP);
-        for (int i = 0; i < historySize; i += 2) {
+        for (int i = 0; i < historySize; i++) {
             int idx = (currentIndex + i) % historySize;
             float frameTime = history[idx];
             float graphX = x + (float) i / historySize * width;
