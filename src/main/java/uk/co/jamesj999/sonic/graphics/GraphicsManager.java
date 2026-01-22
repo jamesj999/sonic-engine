@@ -30,6 +30,8 @@ public class GraphicsManager {
 	private final Map<String, Integer> paletteTextureMap = new HashMap<>(); // Map for palette textures
 	private Integer combinedPaletteTextureId;
 	private PatternAtlas patternAtlas;
+	private final ByteBuffer paletteUploadBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4);
+	private final ByteBuffer underwaterPaletteUploadBuffer = GLBuffers.newDirectByteBuffer(64 * 4);
 
 	private static final int ATLAS_WIDTH = 1024;
 	private static final int ATLAS_HEIGHT = 1024;
@@ -49,9 +51,13 @@ public class GraphicsManager {
 	private static final String FADE_SHADER_PATH = "shaders/shader_fade.glsl";
 	private static final String SHADOW_SHADER_PATH = "shaders/shader_shadow.glsl";
 	private static final String WATER_SHADER_PATH = "shaders/shader_water.glsl";
+	private static final String TILEMAP_SHADER_PATH = "shaders/shader_tilemap.glsl";
+	private static final String INSTANCED_VERTEX_SHADER_PATH = "shaders/shader_instanced.vert";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
+	private TilemapGpuRenderer tilemapGpuRenderer;
+	private InstancedPatternRenderer instancedPatternRenderer;
 
 	// Fade manager for screen transitions
 	private FadeManager fadeManager;
@@ -62,6 +68,8 @@ public class GraphicsManager {
 	// Batched rendering support
 	private boolean batchingEnabled = true;
 	private BatchedPatternRenderer batchedRenderer;
+	private boolean instancedBatchingEnabled = true;
+	private boolean instancedBatchActive = false;
 
 	/**
 	 * Headless mode flag. When true, GL operations are skipped.
@@ -102,6 +110,10 @@ public class GraphicsManager {
 		this.fadeShaderProgram = new ShaderProgram(gl, FADE_SHADER_PATH);
 		this.shadowShaderProgram = new ShaderProgram(gl, SHADOW_SHADER_PATH);
 		this.shadowShaderProgram.cacheUniformLocations(gl);
+		this.tilemapGpuRenderer = new TilemapGpuRenderer();
+		this.tilemapGpuRenderer.init(gl, TILEMAP_SHADER_PATH);
+		this.instancedPatternRenderer = new InstancedPatternRenderer();
+		this.instancedPatternRenderer.init(gl, INSTANCED_VERTEX_SHADER_PATH, pixelShaderPath, WATER_SHADER_PATH);
 
 		// Initialize fade manager with shader
 		this.fadeManager = FadeManager.getInstance();
@@ -122,6 +134,8 @@ public class GraphicsManager {
 		if (this.patternAtlas == null) {
 			this.patternAtlas = new PatternAtlas(ATLAS_WIDTH, ATLAS_HEIGHT);
 		}
+		this.tilemapGpuRenderer = null;
+		this.instancedPatternRenderer = null;
 	}
 
 	/**
@@ -247,7 +261,8 @@ public class GraphicsManager {
 			graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
 		}
 
-		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(COLORS_PER_PALETTE * 4);
+		ByteBuffer paletteBuffer = paletteUploadBuffer;
+		paletteBuffer.clear();
 		for (int i = 0; i < COLORS_PER_PALETTE; i++) {
 			Palette.Color color = palette.getColor(i);
 			paletteBuffer.put((byte) Byte.toUnsignedInt(color.r));
@@ -304,8 +319,12 @@ public class GraphicsManager {
 		// Only use batching if enabled, batch is active, and pattern was successfully
 		// added
 		boolean usedBatch = false;
-		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
-			usedBatch = batchedRenderer.addPattern(entry, desc.getPaletteIndex(), desc, x, y);
+		if (entry.atlasIndex() == 0) {
+			if (batchingEnabled && instancedBatchActive && instancedPatternRenderer != null) {
+				usedBatch = instancedPatternRenderer.addPattern(entry, desc.getPaletteIndex(), desc, x, y);
+			} else if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+				usedBatch = batchedRenderer.addPattern(entry, desc.getPaletteIndex(), desc, x, y);
+			}
 		}
 
 		if (!usedBatch) {
@@ -340,8 +359,12 @@ public class GraphicsManager {
 		}
 
 		// Only use batched rendering for strip patterns
-		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
-			batchedRenderer.addStripPattern(entry, desc.getPaletteIndex(), desc, x, y, stripIndex);
+		if (entry.atlasIndex() == 0) {
+			if (batchingEnabled && instancedBatchActive && instancedPatternRenderer != null) {
+				instancedPatternRenderer.addStripPattern(entry, desc.getPaletteIndex(), desc, x, y, stripIndex);
+			} else if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+				batchedRenderer.addStripPattern(entry, desc.getPaletteIndex(), desc, x, y, stripIndex);
+			}
 		}
 	}
 
@@ -350,6 +373,14 @@ public class GraphicsManager {
 	 */
 	public void beginPatternBatch() {
 		if (headlessMode) {
+			return;
+		}
+		if (!batchingEnabled) {
+			return;
+		}
+		if (instancedBatchingEnabled && instancedPatternRenderer != null && instancedPatternRenderer.isSupported()) {
+			instancedPatternRenderer.beginBatch();
+			instancedBatchActive = true;
 			return;
 		}
 		if (batchedRenderer == null) {
@@ -364,6 +395,14 @@ public class GraphicsManager {
 	 */
 	public void flushPatternBatch() {
 		if (headlessMode) {
+			return;
+		}
+		if (instancedBatchActive && instancedPatternRenderer != null) {
+			GLCommandable batchCommand = instancedPatternRenderer.endBatch();
+			if (batchCommand != null) {
+				registerCommand(batchCommand);
+			}
+			instancedBatchActive = false;
 			return;
 		}
 		if (batchedRenderer != null) {
@@ -433,6 +472,14 @@ public class GraphicsManager {
 		return batchingEnabled;
 	}
 
+	public void setInstancedBatchingEnabled(boolean enabled) {
+		this.instancedBatchingEnabled = enabled;
+	}
+
+	public boolean isInstancedBatchingEnabled() {
+		return instancedBatchingEnabled;
+	}
+
 	/**
 	 * Get the combined palette texture ID.
 	 */
@@ -451,8 +498,25 @@ public class GraphicsManager {
 		return patternAtlas != null ? patternAtlas.getTextureId() : null;
 	}
 
+	public Integer getPatternAtlasTextureId(int atlasIndex) {
+		return patternAtlas != null ? patternAtlas.getTextureId(atlasIndex) : null;
+	}
+
 	public int getPatternAtlasWidth() {
 		return patternAtlas != null ? patternAtlas.getAtlasWidth() : 0;
+	}
+
+	public int getPatternAtlasHeight() {
+		return patternAtlas != null ? patternAtlas.getAtlasHeight() : 0;
+	}
+
+	public PatternAtlas.Entry getPatternAtlasEntry(int patternId) {
+		ensurePatternAtlas();
+		return patternAtlas != null ? patternAtlas.getEntry(patternId) : null;
+	}
+
+	public PatternAtlas getPatternAtlas() {
+		return patternAtlas;
 	}
 
 	private Integer underwaterPaletteTextureId;
@@ -475,7 +539,8 @@ public class GraphicsManager {
 		}
 
 		// Upload 64 colors (16x4)
-		ByteBuffer paletteBuffer = GLBuffers.newDirectByteBuffer(64 * 4); // 64 cols * 4 bytes (RGBA)
+		ByteBuffer paletteBuffer = underwaterPaletteUploadBuffer; // 64 cols * 4 bytes (RGBA)
+		paletteBuffer.clear();
 
 		for (int pIndex = 0; pIndex < 4; pIndex++) {
 			Palette p = (palettes != null && pIndex < palettes.length) ? palettes[pIndex] : null;
@@ -517,6 +582,13 @@ public class GraphicsManager {
 			if (patternAtlas != null) {
 				patternAtlas.cleanup(null);
 			}
+			BatchedPatternRenderer existingBatch = BatchedPatternRenderer.getInstanceIfInitialized();
+			if (existingBatch != null) {
+				existingBatch.cleanup(null);
+			}
+			if (instancedPatternRenderer != null) {
+				instancedPatternRenderer.cleanup(null);
+			}
 			paletteTextureMap.clear();
 			combinedPaletteTextureId = null;
 			return;
@@ -545,8 +617,19 @@ public class GraphicsManager {
 		if (shadowShaderProgram != null) {
 			shadowShaderProgram.cleanup(graphics);
 		}
+		if (tilemapGpuRenderer != null) {
+			tilemapGpuRenderer.cleanup(graphics);
+		}
+		BatchedPatternRenderer existingBatch = BatchedPatternRenderer.getInstanceIfInitialized();
+		if (existingBatch != null) {
+			existingBatch.cleanup(graphics);
+		}
+		if (instancedPatternRenderer != null) {
+			instancedPatternRenderer.cleanup(graphics);
+		}
 		// Reset fade manager
 		if (fadeManager != null) {
+			fadeManager.cleanup(graphics);
 			fadeManager.cancel();
 			fadeManager = null;
 		}
@@ -598,6 +681,14 @@ public class GraphicsManager {
 		return waterShaderProgram;
 	}
 
+	public ShaderProgram getInstancedShaderProgram() {
+		return instancedPatternRenderer != null ? instancedPatternRenderer.getInstancedShaderProgram() : null;
+	}
+
+	public WaterShaderProgram getInstancedWaterShaderProgram() {
+		return instancedPatternRenderer != null ? instancedPatternRenderer.getInstancedWaterShaderProgram() : null;
+	}
+
 	public void setUseWaterShader(boolean use) {
 		if (use) {
 			currentShaderProgram = waterShaderProgram;
@@ -633,6 +724,10 @@ public class GraphicsManager {
 
 	public ShaderProgram getFadeShaderProgram() {
 		return fadeShaderProgram;
+	}
+
+	public TilemapGpuRenderer getTilemapGpuRenderer() {
+		return tilemapGpuRenderer;
 	}
 
 	public ShaderProgram getShadowShaderProgram() {

@@ -7,7 +7,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.PatternDesc;
 
 import java.nio.FloatBuffer;
-import java.util.Arrays;
+import java.util.ArrayDeque;
 
 /**
  * High-performance batched pattern renderer.
@@ -28,6 +28,7 @@ public class BatchedPatternRenderer {
 
     // Maximum patterns per batch
     private static final int MAX_PATTERNS_PER_BATCH = 4096;
+    private static final int COMMAND_POOL_LIMIT = 8;
 
     // 4 vertices per pattern quad, 2 floats (x,y) per vertex
     private static final int FLOATS_PER_PATTERN_VERTS = 4 * 2;
@@ -59,12 +60,19 @@ public class BatchedPatternRenderer {
         return instance;
     }
 
+    public static synchronized BatchedPatternRenderer getInstanceIfInitialized() {
+        return instance;
+    }
+
     private BatchedPatternRenderer() {
         this.screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
         this.vertexData = new float[MAX_PATTERNS_PER_BATCH * FLOATS_PER_PATTERN_VERTS];
         this.texCoordData = new float[MAX_PATTERNS_PER_BATCH * FLOATS_PER_PATTERN_TEXCOORDS];
         this.paletteCoordData = new float[MAX_PATTERNS_PER_BATCH * 4];
     }
+
+    private final ArrayDeque<BatchRenderCommand> batchCommandPool = new ArrayDeque<>();
+    private final ArrayDeque<ShadowBatchRenderCommand> shadowCommandPool = new ArrayDeque<>();
 
     /**
      * Begin a new rendering batch.
@@ -297,12 +305,8 @@ public class BatchedPatternRenderer {
             return null;
         }
 
-        // Create a snapshot command with copied data
-        BatchRenderCommand command = new BatchRenderCommand(
-                Arrays.copyOf(vertexData, patternCount * FLOATS_PER_PATTERN_VERTS),
-                Arrays.copyOf(texCoordData, patternCount * FLOATS_PER_PATTERN_TEXCOORDS),
-                Arrays.copyOf(paletteCoordData, patternCount * 4),
-                patternCount);
+        BatchRenderCommand command = obtainBatchCommand();
+        command.load(vertexData, texCoordData, paletteCoordData, patternCount);
 
         // Reset for next batch
         patternCount = 0;
@@ -405,11 +409,8 @@ public class BatchedPatternRenderer {
             return null;
         }
 
-        // Create a shadow-specific command with copied data
-        ShadowBatchRenderCommand command = new ShadowBatchRenderCommand(
-                Arrays.copyOf(vertexData, patternCount * FLOATS_PER_PATTERN_VERTS),
-                Arrays.copyOf(texCoordData, patternCount * FLOATS_PER_PATTERN_TEXCOORDS),
-                patternCount);
+        ShadowBatchRenderCommand command = obtainShadowCommand();
+        command.load(vertexData, texCoordData, patternCount);
 
         // Reset for next batch
         patternCount = 0;
@@ -418,27 +419,87 @@ public class BatchedPatternRenderer {
         return command;
     }
 
+    private BatchRenderCommand obtainBatchCommand() {
+        BatchRenderCommand command = batchCommandPool.pollFirst();
+        if (command == null) {
+            command = new BatchRenderCommand();
+        }
+        return command;
+    }
+
+    private ShadowBatchRenderCommand obtainShadowCommand() {
+        ShadowBatchRenderCommand command = shadowCommandPool.pollFirst();
+        if (command == null) {
+            command = new ShadowBatchRenderCommand();
+        }
+        return command;
+    }
+
+    private void recycleBatchCommand(BatchRenderCommand command, GL2 gl) {
+        if (batchCommandPool.size() < COMMAND_POOL_LIMIT) {
+            batchCommandPool.addLast(command);
+        } else {
+            command.dispose(gl);
+        }
+    }
+
+    private void recycleShadowCommand(ShadowBatchRenderCommand command, GL2 gl) {
+        if (shadowCommandPool.size() < COMMAND_POOL_LIMIT) {
+            shadowCommandPool.addLast(command);
+        } else {
+            command.dispose(gl);
+        }
+    }
+
+    public void cleanup(GL2 gl) {
+        for (BatchRenderCommand command : batchCommandPool) {
+            command.dispose(gl);
+        }
+        batchCommandPool.clear();
+        for (ShadowBatchRenderCommand command : shadowCommandPool) {
+            command.dispose(gl);
+        }
+        shadowCommandPool.clear();
+    }
+
     /**
      * Command that renders a batch of patterns.
      * This is a snapshot of batch data that can be queued for later execution.
      */
-    private static class BatchRenderCommand implements GLCommandable {
-        private final float[] vertexData;
-        private final float[] texCoordData;
-        private final float[] paletteCoordData;
-        private final int patternCount;
+    private class BatchRenderCommand implements GLCommandable {
+        private int patternCount;
+        private int vertexFloatCount;
+        private int texCoordFloatCount;
+        private int paletteFloatCount;
 
-        // Direct buffers for OpenGL - allocated once per command
         private FloatBuffer vertexBuffer;
         private FloatBuffer texCoordBuffer;
         private FloatBuffer paletteCoordBuffer;
 
-        BatchRenderCommand(float[] vertexData, float[] texCoordData,
-                float[] paletteCoordData, int patternCount) {
-            this.vertexData = vertexData;
-            this.texCoordData = texCoordData;
-            this.paletteCoordData = paletteCoordData;
+        private int vertexVboId;
+        private int texCoordVboId;
+        private int paletteVboId;
+
+        private void load(float[] vertexData, float[] texCoordData, float[] paletteCoordData, int patternCount) {
             this.patternCount = patternCount;
+            this.vertexFloatCount = patternCount * FLOATS_PER_PATTERN_VERTS;
+            this.texCoordFloatCount = patternCount * FLOATS_PER_PATTERN_TEXCOORDS;
+            this.paletteFloatCount = patternCount * 4;
+            vertexBuffer = ensureBuffer(vertexBuffer, vertexFloatCount);
+            texCoordBuffer = ensureBuffer(texCoordBuffer, texCoordFloatCount);
+            paletteCoordBuffer = ensureBuffer(paletteCoordBuffer, paletteFloatCount);
+
+            vertexBuffer.clear();
+            vertexBuffer.put(vertexData, 0, vertexFloatCount);
+            vertexBuffer.flip();
+
+            texCoordBuffer.clear();
+            texCoordBuffer.put(texCoordData, 0, texCoordFloatCount);
+            texCoordBuffer.flip();
+
+            paletteCoordBuffer.clear();
+            paletteCoordBuffer.put(paletteCoordData, 0, paletteFloatCount);
+            paletteCoordBuffer.flip();
         }
 
         @Override
@@ -446,16 +507,7 @@ public class BatchedPatternRenderer {
             if (patternCount == 0) {
                 return;
             }
-
-            // Allocate direct buffers on first use
-            if (vertexBuffer == null) {
-                vertexBuffer = GLBuffers.newDirectFloatBuffer(vertexData.length);
-                texCoordBuffer = GLBuffers.newDirectFloatBuffer(texCoordData.length);
-                paletteCoordBuffer = GLBuffers.newDirectFloatBuffer(paletteCoordData.length);
-                vertexBuffer.put(vertexData).flip();
-                texCoordBuffer.put(texCoordData).flip();
-                paletteCoordBuffer.put(paletteCoordData).flip();
-            }
+            ensureVbos(gl);
 
             GraphicsManager gm = GraphicsManager.getInstance();
             ShaderProgram shader = gm.getShaderProgram();
@@ -520,15 +572,31 @@ public class BatchedPatternRenderer {
             gl.glPushMatrix();
             gl.glTranslatef(-cameraX, cameraY, 0);
 
-            gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, vertexVboId);
+            vertexBuffer.rewind();
+            vertexBuffer.limit(vertexFloatCount);
+            gl.glBufferData(GL2.GL_ARRAY_BUFFER, (long) vertexFloatCount * Float.BYTES, vertexBuffer,
+                    GL2.GL_STREAM_DRAW);
+            gl.glVertexPointer(2, GL2.GL_FLOAT, 0, 0L);
             gl.glClientActiveTexture(GL2.GL_TEXTURE0);
-            gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, texCoordVboId);
+            texCoordBuffer.rewind();
+            texCoordBuffer.limit(texCoordFloatCount);
+            gl.glBufferData(GL2.GL_ARRAY_BUFFER, (long) texCoordFloatCount * Float.BYTES, texCoordBuffer,
+                    GL2.GL_STREAM_DRAW);
+            gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, 0L);
             gl.glClientActiveTexture(GL2.GL_TEXTURE1);
-            gl.glTexCoordPointer(1, GL2.GL_FLOAT, 0, paletteCoordBuffer);
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, paletteVboId);
+            paletteCoordBuffer.rewind();
+            paletteCoordBuffer.limit(paletteFloatCount);
+            gl.glBufferData(GL2.GL_ARRAY_BUFFER, (long) paletteFloatCount * Float.BYTES, paletteCoordBuffer,
+                    GL2.GL_STREAM_DRAW);
+            gl.glTexCoordPointer(1, GL2.GL_FLOAT, 0, 0L);
             gl.glClientActiveTexture(GL2.GL_TEXTURE0);
 
             gl.glDrawArrays(GL2.GL_QUADS, 0, patternCount * 4);
 
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, 0);
             gl.glPopMatrix();
 
             // Cleanup state
@@ -543,6 +611,37 @@ public class BatchedPatternRenderer {
             // Reset PatternRenderCommand state tracking so subsequent patterns
             // will properly reinitialize GL state (since we just disabled everything)
             PatternRenderCommand.resetFrameState();
+
+            recycleBatchCommand(this, gl);
+        }
+
+        private void ensureVbos(GL2 gl) {
+            if (vertexVboId != 0) {
+                return;
+            }
+            int[] buffers = new int[3];
+            gl.glGenBuffers(3, buffers, 0);
+            vertexVboId = buffers[0];
+            texCoordVboId = buffers[1];
+            paletteVboId = buffers[2];
+        }
+
+        private FloatBuffer ensureBuffer(FloatBuffer buffer, int required) {
+            if (buffer == null || buffer.capacity() < required) {
+                return GLBuffers.newDirectFloatBuffer(required);
+            }
+            return buffer;
+        }
+
+        private void dispose(GL2 gl) {
+            if (gl == null) {
+                return;
+            }
+            int[] buffers = new int[] { vertexVboId, texCoordVboId, paletteVboId };
+            gl.glDeleteBuffers(3, buffers, 0);
+            vertexVboId = 0;
+            texCoordVboId = 0;
+            paletteVboId = 0;
         }
     }
 
@@ -552,19 +651,32 @@ public class BatchedPatternRenderer {
      * This implements VDP shadow/highlight mode where palette index 14 darkens
      * pixels.
      */
-    private static class ShadowBatchRenderCommand implements GLCommandable {
-        private final float[] vertexData;
-        private final float[] texCoordData;
-        private final int patternCount;
+    private class ShadowBatchRenderCommand implements GLCommandable {
+        private int patternCount;
+        private int vertexFloatCount;
+        private int texCoordFloatCount;
 
-        // Direct buffers for OpenGL - allocated once per command
         private FloatBuffer vertexBuffer;
         private FloatBuffer texCoordBuffer;
 
-        ShadowBatchRenderCommand(float[] vertexData, float[] texCoordData, int patternCount) {
-            this.vertexData = vertexData;
-            this.texCoordData = texCoordData;
+        private int vertexVboId;
+        private int texCoordVboId;
+
+        private void load(float[] vertexData, float[] texCoordData, int patternCount) {
             this.patternCount = patternCount;
+            this.vertexFloatCount = patternCount * FLOATS_PER_PATTERN_VERTS;
+            this.texCoordFloatCount = patternCount * FLOATS_PER_PATTERN_TEXCOORDS;
+
+            vertexBuffer = ensureBuffer(vertexBuffer, vertexFloatCount);
+            texCoordBuffer = ensureBuffer(texCoordBuffer, texCoordFloatCount);
+
+            vertexBuffer.clear();
+            vertexBuffer.put(vertexData, 0, vertexFloatCount);
+            vertexBuffer.flip();
+
+            texCoordBuffer.clear();
+            texCoordBuffer.put(texCoordData, 0, texCoordFloatCount);
+            texCoordBuffer.flip();
         }
 
         @Override
@@ -572,14 +684,7 @@ public class BatchedPatternRenderer {
             if (patternCount == 0) {
                 return;
             }
-
-            // Allocate direct buffers on first use
-            if (vertexBuffer == null) {
-                vertexBuffer = GLBuffers.newDirectFloatBuffer(vertexData.length);
-                texCoordBuffer = GLBuffers.newDirectFloatBuffer(texCoordData.length);
-                vertexBuffer.put(vertexData).flip();
-                texCoordBuffer.put(texCoordData).flip();
-            }
+            ensureVbos(gl);
 
             GraphicsManager gm = GraphicsManager.getInstance();
             ShaderProgram shadowShader = gm.getShadowShaderProgram();
@@ -613,10 +718,22 @@ public class BatchedPatternRenderer {
             gl.glPushMatrix();
             gl.glTranslatef(-cameraX, cameraY, 0);
 
-            gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
-            gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, vertexVboId);
+            vertexBuffer.rewind();
+            vertexBuffer.limit(vertexFloatCount);
+            gl.glBufferData(GL2.GL_ARRAY_BUFFER, (long) vertexFloatCount * Float.BYTES, vertexBuffer,
+                    GL2.GL_STREAM_DRAW);
+            gl.glVertexPointer(2, GL2.GL_FLOAT, 0, 0L);
+
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, texCoordVboId);
+            texCoordBuffer.rewind();
+            texCoordBuffer.limit(texCoordFloatCount);
+            gl.glBufferData(GL2.GL_ARRAY_BUFFER, (long) texCoordFloatCount * Float.BYTES, texCoordBuffer,
+                    GL2.GL_STREAM_DRAW);
+            gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, 0L);
             gl.glDrawArrays(GL2.GL_QUADS, 0, patternCount * 4);
 
+            gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, 0);
             gl.glPopMatrix();
 
             // Cleanup state
@@ -626,6 +743,35 @@ public class BatchedPatternRenderer {
             gl.glDisable(GL2.GL_BLEND);
 
             PatternRenderCommand.resetFrameState();
+
+            recycleShadowCommand(this, gl);
+        }
+
+        private void ensureVbos(GL2 gl) {
+            if (vertexVboId != 0) {
+                return;
+            }
+            int[] buffers = new int[2];
+            gl.glGenBuffers(2, buffers, 0);
+            vertexVboId = buffers[0];
+            texCoordVboId = buffers[1];
+        }
+
+        private FloatBuffer ensureBuffer(FloatBuffer buffer, int required) {
+            if (buffer == null || buffer.capacity() < required) {
+                return GLBuffers.newDirectFloatBuffer(required);
+            }
+            return buffer;
+        }
+
+        private void dispose(GL2 gl) {
+            if (gl == null) {
+                return;
+            }
+            int[] buffers = new int[] { vertexVboId, texCoordVboId };
+            gl.glDeleteBuffers(2, buffers, 0);
+            vertexVboId = 0;
+            texCoordVboId = 0;
         }
     }
 }

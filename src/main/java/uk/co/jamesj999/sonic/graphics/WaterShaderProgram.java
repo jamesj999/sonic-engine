@@ -28,6 +28,10 @@ public class WaterShaderProgram extends ShaderProgram {
         super(gl, fragmentShaderPath);
     }
 
+    public WaterShaderProgram(GL2 gl, String vertexShaderPath, String fragmentShaderPath) throws IOException {
+        super(gl, vertexShaderPath, fragmentShaderPath);
+    }
+
     @Override
     public void cacheUniformLocations(GL2 gl) {
         // Cache base uniforms (Palette, IndexedColorTexture, PaletteLine)

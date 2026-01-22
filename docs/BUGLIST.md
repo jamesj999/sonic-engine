@@ -12,7 +12,7 @@ Last updated: 2026-01-22
 - [ ] CPZ: Sideways platforms and rotating platforms have incorrect spacing/timing - not spaced out when loaded (likely shared timer issue)
 - [ ] ARZ: Arrows disappear immediately when going off-screen (should persist longer like in ROM)
 - [ ] ARZ: Pillars reset immediately when going off-screen (verify if this matches ROM behavior)
-- [ ] ARZ: Grounder badnik cannot move from spawn location
+- [x] ARZ: Grounder badnik cannot move from spawn location
 
 ## ROM-Accurate Investigation Plan
 

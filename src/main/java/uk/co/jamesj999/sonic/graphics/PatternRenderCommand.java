@@ -24,6 +24,7 @@ public class PatternRenderCommand implements GLCommandable {
     private final float v0;
     private final float u1;
     private final float v1;
+    private final int atlasIndex;
     private final PatternDesc desc;
     private final int x;
     private final int y;
@@ -58,6 +59,7 @@ public class PatternRenderCommand implements GLCommandable {
         this.v0 = entry.v0();
         this.u1 = entry.u1();
         this.v1 = entry.v1();
+        this.atlasIndex = entry.atlasIndex();
         this.desc = desc;
         this.x = x;
         // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height
@@ -119,7 +121,7 @@ public class PatternRenderCommand implements GLCommandable {
         }
 
         // Only bind atlas texture if it changed
-        Integer atlasTextureId = getGraphicsManager().getPatternAtlasTextureId();
+        Integer atlasTextureId = getGraphicsManager().getPatternAtlasTextureId(atlasIndex);
         if (atlasTextureId != null && atlasTextureId != lastAtlasTextureId) {
             gl.glActiveTexture(GL2.GL_TEXTURE1);
             gl.glBindTexture(GL2.GL_TEXTURE_2D, atlasTextureId);

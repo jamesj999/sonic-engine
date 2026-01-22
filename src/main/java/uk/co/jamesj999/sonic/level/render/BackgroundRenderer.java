@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.level.render;
 import com.jogamp.opengl.GL2;
 import uk.co.jamesj999.sonic.graphics.HScrollBuffer;
 import uk.co.jamesj999.sonic.graphics.ParallaxShaderProgram;
+import uk.co.jamesj999.sonic.graphics.QuadRenderer;
 
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -39,6 +40,7 @@ public class BackgroundRenderer {
 
     private HScrollBuffer hScrollBuffer;
     private ParallaxShaderProgram parallaxShader;
+    private final QuadRenderer quadRenderer = new QuadRenderer();
 
     private boolean initialized = false;
     private final int[] savedViewport = new int[4];
@@ -61,6 +63,7 @@ public class BackgroundRenderer {
         // Load parallax shader
         parallaxShader = new ParallaxShaderProgram(gl, shaderPath);
         parallaxShader.cacheUniformLocations(gl);
+        quadRenderer.init(gl);
 
         // Create FBO for background tile rendering
         createFBO(gl, fboWidth, fboHeight);
@@ -123,13 +126,13 @@ public class BackgroundRenderer {
 
     /**
      * Begin the tile rendering pass - binds FBO and clears it.
-     * After calling this, render background tiles normally.
+     * After calling this, render background tiles using GPU tilemap.
      *
      * @param gl            OpenGL context
-     * @param displayHeight The display pixel height used by pattern renderer for
-     *                      Y-flip.
+     * @param displayHeight The display pixel height (unused, kept for API compatibility)
+     * @param gpuTilemap    True (always, GPU tilemap is the only supported path)
      */
-    public void beginTilePass(GL2 gl, int displayHeight) {
+    public void beginTilePass(GL2 gl, int displayHeight, boolean gpuTilemap) {
         if (!initialized)
             return;
 
@@ -143,16 +146,9 @@ public class BackgroundRenderer {
         gl.glPushMatrix();
         gl.glLoadIdentity();
 
-        // Pattern renderer places tiles at OpenGL Y = displayHeight - genesisY.
-        // For genesis Y=0: OpenGL Y = displayHeight (top)
-        // For genesis Y=fboHeight: OpenGL Y = displayHeight - fboHeight
-        //
-        // Set up projection to capture OpenGL Y range [displayHeight-fboHeight,
-        // displayHeight]
-        // This maps that range to FBO pixels [0, fboHeight]
-        int top = displayHeight;
-        int bottom = displayHeight - fboHeight;
-        gl.glOrtho(0, fboWidth, bottom, top, -1, 1);
+        // GPU tilemap renderer draws a quad from (0,0) to (fboWidth, fboHeight).
+        // Set up projection to cover the full quad coordinate space.
+        gl.glOrtho(0, fboWidth, 0, fboHeight, -1, 1);
 
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glPushMatrix();
@@ -314,16 +310,7 @@ public class BackgroundRenderer {
         gl.glPushMatrix();
         gl.glLoadIdentity();
 
-        gl.glBegin(GL2.GL_QUADS);
-        gl.glTexCoord2f(0, 0);
-        gl.glVertex2f(0, 0);
-        gl.glTexCoord2f(1, 0);
-        gl.glVertex2f(SCREEN_WIDTH, 0);
-        gl.glTexCoord2f(1, 1);
-        gl.glVertex2f(SCREEN_WIDTH, SCREEN_HEIGHT);
-        gl.glTexCoord2f(0, 1);
-        gl.glVertex2f(0, SCREEN_HEIGHT);
-        gl.glEnd();
+        quadRenderer.draw(gl, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
         gl.glPopMatrix();
         gl.glMatrixMode(GL2.GL_PROJECTION);
@@ -381,6 +368,7 @@ public class BackgroundRenderer {
         if (parallaxShader != null) {
             parallaxShader.cleanup(gl);
         }
+        quadRenderer.cleanup(gl);
         if (fboId > 0) {
             gl.glDeleteFramebuffers(1, new int[] { fboId }, 0);
         }

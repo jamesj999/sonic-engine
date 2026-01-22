@@ -91,6 +91,34 @@ public class ShaderProgram {
     }
 
     /**
+     * Initializes a shader program with a vertex and fragment shader.
+     *
+     * @param gl                 the OpenGL context
+     * @param vertexShaderPath   the path to the vertex shader file
+     * @param fragmentShaderPath the path to the fragment shader file
+     * @throws IOException if a shader file cannot be loaded
+     */
+    public ShaderProgram(GL2 gl, String vertexShaderPath, String fragmentShaderPath) throws IOException {
+        int vertexShaderId = ShaderLoader.loadShader(gl, vertexShaderPath, GL2.GL_VERTEX_SHADER);
+        int fragmentShaderId = ShaderLoader.loadShader(gl, fragmentShaderPath, GL2.GL_FRAGMENT_SHADER);
+
+        programId = gl.glCreateProgram();
+        gl.glAttachShader(programId, vertexShaderId);
+        gl.glAttachShader(programId, fragmentShaderId);
+        gl.glLinkProgram(programId);
+
+        int[] linked = new int[1];
+        gl.glGetProgramiv(programId, GL2.GL_LINK_STATUS, linked, 0);
+        if (linked[0] == 0) {
+            int[] logLength = new int[1];
+            gl.glGetProgramiv(programId, GL2.GL_INFO_LOG_LENGTH, logLength, 0);
+            byte[] log = new byte[logLength[0]];
+            gl.glGetProgramInfoLog(programId, log.length, null, 0, log, 0);
+            System.err.println("Shader linking failed:\n" + new String(log));
+        }
+    }
+
+    /**
      * Binds the shader program for use.
      *
      * @param gl the OpenGL context
