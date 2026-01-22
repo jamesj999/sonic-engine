@@ -42,6 +42,11 @@ import java.util.List;
  */
 public class GrounderBadnikInstance extends AbstractBadnikInstance {
 
+    // Instance counter for debug identification
+    private static int instanceCounter = 0;
+    private final int instanceId;
+    private final int spawnY; // For debug identification
+
     // Collision size index from subObjData (collision_flags = 5)
     private static final int COLLISION_SIZE_INDEX = 5;
 
@@ -56,6 +61,9 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
 
     // Edge/wall pause time from disassembly (move.b #$3B,objoff_2A)
     private static final int PAUSE_TIME = 0x3B;
+
+    // Y radius from disassembly (move.b #$14,y_radius) - used for floor detection
+    private static final int Y_RADIUS = 0x14;
 
     // Animation frame indices
     private static final int FRAME_IDLE_1 = 0;
@@ -96,6 +104,8 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
      */
     public GrounderBadnikInstance(ObjectSpawn spawn, LevelManager levelManager, boolean skipWallSetup) {
         super(spawn, levelManager, "Grounder");
+        this.instanceId = ++instanceCounter;
+        this.spawnY = spawn.y();
         this.skipWallSetup = skipWallSetup;
         this.state = State.INIT;
         this.activated = false;
@@ -123,7 +133,7 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
             case DETECTION -> updateDetection(player);
             case IDLE_ANIMATE -> updateIdleAnimate();
             case MOVEMENT_SETUP -> updateMovementSetup(player);
-            case MOVEMENT -> updateMovement(player);
+            case MOVEMENT -> updateWalking(player);
             case ROCK_THROW -> updateRockThrow();
         }
     }
@@ -135,15 +145,27 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
      * - Transition to DETECTION (or MOVEMENT_SETUP for 0x8E)
      */
     private void updateInit() {
-        // Snap to floor (AlignYToFloor)
-        TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY);
-        if (floorResult.hasCollision()) {
+        // Snap to floor - uses y_radius to check from feet
+        // ROM: jsr (ObjCheckFloorDist).l / tst.w d1 / bpl.s + / add.w d1,y_pos
+        TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
+
+        // DEBUG: Log init floor check (only for above-ground Grounder)
+        if (spawnY < 900) {
+            System.out.println("[G#" + instanceId + " spawnY=" + spawnY + "] INIT: pos=(" + currentX + "," + currentY +
+                    ") feetY=" + (currentY + Y_RADIUS) + " hasColl=" + floorResult.hasCollision() +
+                    " dist=" + floorResult.distance() + " skipWall=" + skipWallSetup);
+        }
+
+        if (floorResult.hasCollision() && floorResult.distance() < 0) {
+            if (spawnY < 900) {
+                System.out.println("[G#" + instanceId + "] -> Snapping down by " + floorResult.distance());
+            }
             currentY += floorResult.distance();
         }
 
         if (!skipWallSetup) {
-            // 0x8D variant: Spawn 4 walls and 5 rocks
-            spawnWallsAndRocks();
+            // 0x8D variant: Spawn 4 walls (rocks spawned later during DETECTION)
+            spawnWalls();
             state = State.DETECTION;
         } else {
             // 0x8E variant: Skip directly to movement setup
@@ -152,9 +174,10 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
     }
 
     /**
-     * Spawns wall pieces and rock projectiles at offsets relative to Grounder.
+     * Spawns wall pieces at offsets relative to Grounder (called during INIT).
+     * ROM: loc_36C64 spawns 4 walls via loc_36C78
      */
-    private void spawnWallsAndRocks() {
+    private void spawnWalls() {
         // Spawn 4 wall pieces at offsets from byte_36CBC
         for (int i = 0; i < 4; i++) {
             int[] offset = GrounderWallInstance.WALL_OFFSETS[i];
@@ -163,8 +186,13 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
             GrounderWallInstance wall = new GrounderWallInstance(wallX, wallY, i, this);
             levelManager.getObjectManager().addDynamicObject(wall);
         }
+    }
 
-        // Spawn 5 rock projectiles at Grounder's position
+    /**
+     * Spawns rock projectiles at Grounder's position (called during DETECTION).
+     * ROM: loc_36C2C spawns 5 rocks via loc_36C40
+     */
+    private void spawnRocks() {
         for (int i = 0; i < 5; i++) {
             GrounderRockProjectile rock = new GrounderRockProjectile(currentX, currentY, i, this);
             levelManager.getObjectManager().addDynamicObject(rock);
@@ -173,20 +201,33 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
 
     /**
      * DETECTION state (Routine 2):
-     * - Wait for player within 96 pixels
-     * - When detected, set activated flag and transition to IDLE_ANIMATE
+     * - Wait for player within 96 pixels (uses bls = branch if lower or same)
+     * - When detected: set activation flag, spawn rocks, transition to IDLE_ANIMATE
+     *
+     * ROM loc_36ADC:
+     *   bsr.w   Obj_GetOrientationToPlayer
+     *   abs.w   d2
+     *   cmpi.w  #$60,d2
+     *   bls.s   +                   ; branch if distance <= 96
+     *   jmpto   JmpTo39_MarkObjGone
+     * +
+     *   addq.b  #2,routine(a0)
+     *   st.b    objoff_2B(a0)       ; set activation flag
+     *   bsr.w   loc_36C2C           ; spawn 5 rocks
      */
     private void updateDetection(AbstractPlayableSprite player) {
         if (player == null) {
             return;
         }
 
-        // Check horizontal distance to player
+        // Check horizontal distance to player (ROM uses bls = <=)
         int dx = Math.abs(player.getCentreX() - currentX);
-        if (dx < DETECTION_RANGE) {
-            // Player detected - activate walls/rocks and start idle animation
+        if (dx <= DETECTION_RANGE) {
+            // Player detected - set flag, spawn rocks, start idle animation
             activated = true;
-            idleAnimTimer = IDLE_ANIM_DURATION * 4; // ~4 cycles of idle animation
+            spawnRocks();
+            // Idle animation: 2 frames (0, 1) at duration 7 each = 14 frames total
+            idleAnimTimer = IDLE_ANIM_DURATION * 2;
             state = State.IDLE_ANIMATE;
         }
     }
@@ -246,21 +287,31 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
      *   bge.s loc_36B5C                   ; Go to pause state
      *   add.w d1,y_pos(a0)                ; Snap to floor
      */
-    private void updateMovement(AbstractPlayableSprite player) {
+    private void updateWalking(AbstractPlayableSprite player) {
         // Apply velocity (ObjectMove behavior - NO gravity)
         // Velocity is +/-0x100 which is exactly +/-1 pixel per frame in 8.8 fixed point
         currentX += (xVelocity >> 8);
 
-        // Check floor at current position (not ahead!)
-        TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY);
+        // Check floor from feet (y + y_radius)
+        TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
 
         // Edge detection from disassembly:
         // - If distance < -1: floor is above (inside terrain) or no floor
         // - If distance >= 12 (0xC): floor is too far below (at a ledge)
         int floorDistance = floorResult.hasCollision() ? floorResult.distance() : 100;
 
+        // DEBUG: Only log the above-ground Grounder (spawnY < 900 to filter out underwater one)
+        if (spawnY < 900) {
+            System.out.println("[G#" + instanceId + " spawnY=" + spawnY + "] walk: pos=(" + currentX + "," + currentY +
+                    ") feetY=" + (currentY + Y_RADIUS) + " hasColl=" + floorResult.hasCollision() +
+                    " dist=" + floorDistance);
+        }
+
         if (floorDistance < -1 || floorDistance >= 12) {
             // At edge - pause and reverse
+            if (spawnY < 900) {
+                System.out.println("[G#" + instanceId + "] -> EDGE DETECTED (dist=" + floorDistance + "), pausing");
+            }
             pauseTimer = PAUSE_TIME;
             state = State.ROCK_THROW;
         } else {

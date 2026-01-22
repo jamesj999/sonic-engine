@@ -16,9 +16,15 @@ void main()
         discard;
     }
 
+    // Resolve palette line (uniform or per-vertex attribute via texcoord1.s)
+    float paletteLine = PaletteLine;
+    if (paletteLine < 0.0) {
+        paletteLine = gl_TexCoord[1].s;
+    }
+
     // Map the index to palette coordinates (16 colors, 4 lines)
     float paletteX = (index + 0.5) / 16.0;
-    float paletteY = (PaletteLine + 0.5) / 4.0;
+    float paletteY = (paletteLine + 0.5) / 4.0;
 
     // Sample the palette texture to get the actual color
     vec4 indexedColor = texture2D(Palette, vec2(paletteX, paletteY));

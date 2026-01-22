@@ -618,6 +618,7 @@ public class LevelManager {
             }
         }
 
+        graphicsManager.beginPatternBatch();
         if (ringManager != null) {
             ringManager.draw(frameCounter);
             ringManager.drawLostRings(frameCounter);
@@ -631,6 +632,7 @@ public class LevelManager {
                 objectManager.drawPriorityBucket(bucket, false);
             }
         }
+        graphicsManager.flushPatternBatch();
 
         // Draw Foreground (Layer 0) high-priority pass - batched for performance
         // Note: drawCollision=false so commands list is not used
@@ -638,6 +640,7 @@ public class LevelManager {
         drawLayer(null, 0, camera, 1.0f, 1.0f, TilePriorityPass.HIGH_ONLY, false, false);
         graphicsManager.flushPatternBatch();
 
+        graphicsManager.beginPatternBatch();
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
             if (spriteManager != null) {
                 spriteManager.drawPriorityBucket(bucket, true);
@@ -646,6 +649,7 @@ public class LevelManager {
                 objectManager.drawPriorityBucket(bucket, true);
             }
         }
+        graphicsManager.flushPatternBatch();
 
         // Draw water surface sprites at the water line (CPZ2, ARZ1, ARZ2)
         // Rendered last (after all sprites and tiles) so it appears in front of everything
@@ -1710,11 +1714,15 @@ public class LevelManager {
             if (chunk == null) {
                 return null;
             }
-            if (solidityBitIndex < 0x0E) {
-                return level.getSolidTile(chunk.getSolidTileIndex());
-            } else {
-                return level.getSolidTile(chunk.getSolidTileAltIndex());
+            // Get collision index - ROM treats index 0 as "no collision"
+            // (s2.asm FindFloor line 42963: beq.s loc_1E7E2)
+            int collisionIndex = (solidityBitIndex < 0x0E)
+                    ? chunk.getSolidTileIndex()
+                    : chunk.getSolidTileAltIndex();
+            if (collisionIndex == 0) {
+                return null; // No collision shape assigned
             }
+            return level.getSolidTile(collisionIndex);
         } catch (IllegalArgumentException e) {
             return null;
         }
@@ -2195,4 +2203,3 @@ public class LevelManager {
         return requested;
     }
 }
-
