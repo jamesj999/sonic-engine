@@ -837,6 +837,33 @@ public class LevelManager {
                         gl.glActiveTexture(GL2.GL_TEXTURE0);
                     }
                 }
+
+                WaterShaderProgram instancedShader = graphicsManager.getInstancedWaterShaderProgram();
+                if (instancedShader != null) {
+                    instancedShader.use(gl);
+                    instancedShader.cacheUniformLocations(gl);
+                    instancedShader.setWindowHeight(gl, windowHeight);
+                    instancedShader.setWaterlineScreenY(gl, waterlineScreenY);
+                    instancedShader.setFrameCounter(gl, frameCounter);
+                    instancedShader.setDistortionAmplitude(gl, 0.0f);
+                    instancedShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
+                    instancedShader.setScreenDimensions(gl, (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
+                            (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
+
+                    Palette[] underwaterInstanced = waterSystem.getUnderwaterPalette(zoneId, currentAct);
+                    if (underwaterInstanced != null) {
+                        graphicsManager.cacheUnderwaterPaletteTexture(underwaterInstanced);
+                        Integer texId = graphicsManager.getUnderwaterPaletteTextureId();
+                        int loc = instancedShader.getUnderwaterPaletteLocation();
+                        if (texId != null && loc != -1) {
+                            gl.glActiveTexture(GL2.GL_TEXTURE2);
+                            gl.glBindTexture(GL2.GL_TEXTURE_2D, texId);
+                            gl.glUniform1i(loc, 2);
+                            gl.glActiveTexture(GL2.GL_TEXTURE0);
+                        }
+                    }
+                    shader.use(gl);
+                }
             }));
         }
         // Note: We don't disable water shader here - that's done later before HUD

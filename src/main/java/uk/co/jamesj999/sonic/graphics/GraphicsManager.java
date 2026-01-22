@@ -50,10 +50,12 @@ public class GraphicsManager {
 	private static final String SHADOW_SHADER_PATH = "shaders/shader_shadow.glsl";
 	private static final String WATER_SHADER_PATH = "shaders/shader_water.glsl";
 	private static final String TILEMAP_SHADER_PATH = "shaders/shader_tilemap.glsl";
+	private static final String INSTANCED_VERTEX_SHADER_PATH = "shaders/shader_instanced.vert";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
 	private TilemapGpuRenderer tilemapGpuRenderer;
+	private InstancedPatternRenderer instancedPatternRenderer;
 
 	// Fade manager for screen transitions
 	private FadeManager fadeManager;
@@ -64,6 +66,8 @@ public class GraphicsManager {
 	// Batched rendering support
 	private boolean batchingEnabled = true;
 	private BatchedPatternRenderer batchedRenderer;
+	private boolean instancedBatchingEnabled = true;
+	private boolean instancedBatchActive = false;
 
 	/**
 	 * Headless mode flag. When true, GL operations are skipped.
@@ -106,6 +110,8 @@ public class GraphicsManager {
 		this.shadowShaderProgram.cacheUniformLocations(gl);
 		this.tilemapGpuRenderer = new TilemapGpuRenderer();
 		this.tilemapGpuRenderer.init(gl, TILEMAP_SHADER_PATH);
+		this.instancedPatternRenderer = new InstancedPatternRenderer();
+		this.instancedPatternRenderer.init(gl, INSTANCED_VERTEX_SHADER_PATH, pixelShaderPath, WATER_SHADER_PATH);
 
 		// Initialize fade manager with shader
 		this.fadeManager = FadeManager.getInstance();
@@ -127,6 +133,7 @@ public class GraphicsManager {
 			this.patternAtlas = new PatternAtlas(ATLAS_WIDTH, ATLAS_HEIGHT);
 		}
 		this.tilemapGpuRenderer = null;
+		this.instancedPatternRenderer = null;
 	}
 
 	/**
@@ -309,7 +316,9 @@ public class GraphicsManager {
 		// Only use batching if enabled, batch is active, and pattern was successfully
 		// added
 		boolean usedBatch = false;
-		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+		if (batchingEnabled && instancedBatchActive && instancedPatternRenderer != null) {
+			usedBatch = instancedPatternRenderer.addPattern(entry, desc.getPaletteIndex(), desc, x, y);
+		} else if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
 			usedBatch = batchedRenderer.addPattern(entry, desc.getPaletteIndex(), desc, x, y);
 		}
 
@@ -345,7 +354,9 @@ public class GraphicsManager {
 		}
 
 		// Only use batched rendering for strip patterns
-		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
+		if (batchingEnabled && instancedBatchActive && instancedPatternRenderer != null) {
+			instancedPatternRenderer.addStripPattern(entry, desc.getPaletteIndex(), desc, x, y, stripIndex);
+		} else if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
 			batchedRenderer.addStripPattern(entry, desc.getPaletteIndex(), desc, x, y, stripIndex);
 		}
 	}
@@ -355,6 +366,14 @@ public class GraphicsManager {
 	 */
 	public void beginPatternBatch() {
 		if (headlessMode) {
+			return;
+		}
+		if (!batchingEnabled) {
+			return;
+		}
+		if (instancedBatchingEnabled && instancedPatternRenderer != null && instancedPatternRenderer.isSupported()) {
+			instancedPatternRenderer.beginBatch();
+			instancedBatchActive = true;
 			return;
 		}
 		if (batchedRenderer == null) {
@@ -369,6 +388,14 @@ public class GraphicsManager {
 	 */
 	public void flushPatternBatch() {
 		if (headlessMode) {
+			return;
+		}
+		if (instancedBatchActive && instancedPatternRenderer != null) {
+			GLCommandable batchCommand = instancedPatternRenderer.endBatch();
+			if (batchCommand != null) {
+				registerCommand(batchCommand);
+			}
+			instancedBatchActive = false;
 			return;
 		}
 		if (batchedRenderer != null) {
@@ -436,6 +463,14 @@ public class GraphicsManager {
 
 	public boolean isBatchingEnabled() {
 		return batchingEnabled;
+	}
+
+	public void setInstancedBatchingEnabled(boolean enabled) {
+		this.instancedBatchingEnabled = enabled;
+	}
+
+	public boolean isInstancedBatchingEnabled() {
+		return instancedBatchingEnabled;
 	}
 
 	/**
@@ -535,6 +570,9 @@ public class GraphicsManager {
 			if (existingBatch != null) {
 				existingBatch.cleanup(null);
 			}
+			if (instancedPatternRenderer != null) {
+				instancedPatternRenderer.cleanup(null);
+			}
 			paletteTextureMap.clear();
 			combinedPaletteTextureId = null;
 			return;
@@ -569,6 +607,9 @@ public class GraphicsManager {
 		BatchedPatternRenderer existingBatch = BatchedPatternRenderer.getInstanceIfInitialized();
 		if (existingBatch != null) {
 			existingBatch.cleanup(graphics);
+		}
+		if (instancedPatternRenderer != null) {
+			instancedPatternRenderer.cleanup(graphics);
 		}
 		// Reset fade manager
 		if (fadeManager != null) {
@@ -622,6 +663,14 @@ public class GraphicsManager {
 
 	public WaterShaderProgram getWaterShaderProgram() {
 		return waterShaderProgram;
+	}
+
+	public ShaderProgram getInstancedShaderProgram() {
+		return instancedPatternRenderer != null ? instancedPatternRenderer.getInstancedShaderProgram() : null;
+	}
+
+	public WaterShaderProgram getInstancedWaterShaderProgram() {
+		return instancedPatternRenderer != null ? instancedPatternRenderer.getInstancedWaterShaderProgram() : null;
 	}
 
 	public void setUseWaterShader(boolean use) {
