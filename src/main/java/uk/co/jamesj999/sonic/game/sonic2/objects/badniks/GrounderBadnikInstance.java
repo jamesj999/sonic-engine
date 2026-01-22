@@ -42,11 +42,6 @@ import java.util.List;
  */
 public class GrounderBadnikInstance extends AbstractBadnikInstance {
 
-    // Instance counter for debug identification
-    private static int instanceCounter = 0;
-    private final int instanceId;
-    private final int spawnY; // For debug identification
-
     // Collision size index from subObjData (collision_flags = 5)
     private static final int COLLISION_SIZE_INDEX = 5;
 
@@ -104,8 +99,6 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
      */
     public GrounderBadnikInstance(ObjectSpawn spawn, LevelManager levelManager, boolean skipWallSetup) {
         super(spawn, levelManager, "Grounder");
-        this.instanceId = ++instanceCounter;
-        this.spawnY = spawn.y();
         this.skipWallSetup = skipWallSetup;
         this.state = State.INIT;
         this.activated = false;
@@ -149,17 +142,7 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
         // ROM: jsr (ObjCheckFloorDist).l / tst.w d1 / bpl.s + / add.w d1,y_pos
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
 
-        // DEBUG: Log init floor check (only for above-ground Grounder)
-        if (spawnY < 900) {
-            System.out.println("[G#" + instanceId + " spawnY=" + spawnY + "] INIT: pos=(" + currentX + "," + currentY +
-                    ") feetY=" + (currentY + Y_RADIUS) + " hasColl=" + floorResult.hasCollision() +
-                    " dist=" + floorResult.distance() + " skipWall=" + skipWallSetup);
-        }
-
         if (floorResult.hasCollision() && floorResult.distance() < 0) {
-            if (spawnY < 900) {
-                System.out.println("[G#" + instanceId + "] -> Snapping down by " + floorResult.distance());
-            }
             currentY += floorResult.distance();
         }
 
@@ -296,22 +279,15 @@ public class GrounderBadnikInstance extends AbstractBadnikInstance {
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
 
         // Edge detection from disassembly:
-        // - If distance < -1: floor is above (inside terrain) or no floor
-        // - If distance >= 12 (0xC): floor is too far below (at a ledge)
-        int floorDistance = floorResult.hasCollision() ? floorResult.distance() : 100;
-
-        // DEBUG: Only log the above-ground Grounder (spawnY < 900 to filter out underwater one)
-        if (spawnY < 900) {
-            System.out.println("[G#" + instanceId + " spawnY=" + spawnY + "] walk: pos=(" + currentX + "," + currentY +
-                    ") feetY=" + (currentY + Y_RADIUS) + " hasColl=" + floorResult.hasCollision() +
-                    " dist=" + floorDistance);
-        }
+        // - If no floor found: edge
+        // - If distance < -1: inside terrain, edge
+        // - If distance >= 12 (0xC): floor too far below, edge
+        // ROM accepts -1 to +11 as valid floor (snap to it)
+        // Note: Use foundSurface() not hasCollision() - positive distances (floor below) are valid
+        int floorDistance = floorResult.foundSurface() ? floorResult.distance() : 100;
 
         if (floorDistance < -1 || floorDistance >= 12) {
             // At edge - pause and reverse
-            if (spawnY < 900) {
-                System.out.println("[G#" + instanceId + "] -> EDGE DETECTED (dist=" + floorDistance + "), pausing");
-            }
             pauseTimer = PAUSE_TIME;
             state = State.ROCK_THROW;
         } else {

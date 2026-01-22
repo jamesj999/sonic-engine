@@ -846,7 +846,8 @@ public class LevelManager {
                 shader.setWindowHeight(gl, windowHeight);
                 shader.setWaterlineScreenY(gl, waterlineScreenY);
                 shader.setFrameCounter(gl, frameCounter);
-                shader.setDistortionAmplitude(gl, 2.0f);
+                shader.setDistortionAmplitude(gl, 0.0f);
+                shader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
                 shader.setScreenDimensions(gl, (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
                         (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
 
@@ -934,6 +935,8 @@ public class LevelManager {
                 waterShader.setWorldSpaceWater(gl, 0.0f, 0.0f, false);
                 waterShader.setWindowHeight(gl, (float) fboHeight);
                 waterShader.setScreenDimensions(gl, (float) fboWidth, (float) fboHeight);
+                waterShader.setDistortionAmplitude(gl, 0.0f);
+                waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
                 waterShader.setWaterlineScreenY(gl, fboWaterlineY);
             } else {
                 graphicsManager.setUseWaterShader(false);
@@ -977,6 +980,8 @@ public class LevelManager {
                 waterShader.setScreenDimensions(gl,
                         (float) configService.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS),
                         (float) configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS));
+                waterShader.setDistortionAmplitude(gl, 0.0f);
+                waterShader.setIndexedTextureWidth(gl, graphicsManager.getPatternAtlasWidth());
             }
         }));
 

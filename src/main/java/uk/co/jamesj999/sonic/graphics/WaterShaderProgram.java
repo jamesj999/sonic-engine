@@ -16,6 +16,7 @@ public class WaterShaderProgram extends ShaderProgram {
     private int distortionAmplitudeLocation = -1;
     private int screenHeightLocation = -1;
     private int screenWidthLocation = -1;
+    private int indexedTextureWidthLocation = -1;
     private int windowHeightLocation = -1;
 
     // World-space water level for FBO rendering
@@ -41,6 +42,7 @@ public class WaterShaderProgram extends ShaderProgram {
         distortionAmplitudeLocation = gl.glGetUniformLocation(programId, "DistortionAmplitude");
         screenHeightLocation = gl.glGetUniformLocation(programId, "ScreenHeight");
         screenWidthLocation = gl.glGetUniformLocation(programId, "ScreenWidth");
+        indexedTextureWidthLocation = gl.glGetUniformLocation(programId, "IndexedTextureWidth");
         windowHeightLocation = gl.glGetUniformLocation(programId, "WindowHeight");
 
         // World-space uniforms for FBO rendering
@@ -77,6 +79,12 @@ public class WaterShaderProgram extends ShaderProgram {
         }
         if (screenHeightLocation != -1) {
             gl.glUniform1f(screenHeightLocation, height);
+        }
+    }
+
+    public void setIndexedTextureWidth(GL2 gl, float width) {
+        if (indexedTextureWidthLocation != -1) {
+            gl.glUniform1f(indexedTextureWidthLocation, width);
         }
     }
 

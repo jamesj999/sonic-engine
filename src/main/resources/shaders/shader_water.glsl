@@ -10,6 +10,7 @@ uniform sampler2D UnderwaterPalette;    // Texture Unit 2
 uniform float WaterlineScreenY;         // Screen Y where water starts (0 = top)
 uniform float ScreenHeight;             // Screen height in pixels (e.g. 224)
 uniform float ScreenWidth;              // Screen width in pixels (e.g. 320)
+uniform float IndexedTextureWidth;      // Width of indexed texture in pixels (atlas width)
 uniform int FrameCounter;               // For animation
 uniform float DistortionAmplitude;      // Amplitude of ripple in pixels
 uniform float WindowHeight;             // Physical window height in pixels
@@ -62,7 +63,7 @@ void main()
     // Apply distortion to U coordinate
     // UV.s is 0..1 representing 0..ScreenWidth
     vec2 uv = gl_TexCoord[0].st;
-    float uDistortion = distortion / ScreenWidth;
+    float uDistortion = distortion / IndexedTextureWidth;
     uv.s += uDistortion;
     
     // Sample texture index
