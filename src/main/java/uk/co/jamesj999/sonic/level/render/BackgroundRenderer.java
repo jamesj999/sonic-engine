@@ -130,6 +130,19 @@ public class BackgroundRenderer {
      *                      Y-flip.
      */
     public void beginTilePass(GL2 gl, int displayHeight) {
+        beginTilePass(gl, displayHeight, false);
+    }
+
+    /**
+     * Begin the tile rendering pass - binds FBO and clears it.
+     * After calling this, render background tiles normally.
+     *
+     * @param gl            OpenGL context
+     * @param displayHeight The display pixel height used by pattern renderer for
+     *                      Y-flip.
+     * @param gpuTilemap    True if using GPU tilemap renderer (different projection)
+     */
+    public void beginTilePass(GL2 gl, int displayHeight, boolean gpuTilemap) {
         if (!initialized)
             return;
 
@@ -143,15 +156,23 @@ public class BackgroundRenderer {
         gl.glPushMatrix();
         gl.glLoadIdentity();
 
-        // Pattern renderer places tiles at OpenGL Y = displayHeight - genesisY.
-        // For genesis Y=0: OpenGL Y = displayHeight (top)
-        // For genesis Y=fboHeight: OpenGL Y = displayHeight - fboHeight
-        //
-        // Set up projection to capture OpenGL Y range [displayHeight-fboHeight,
-        // displayHeight]
-        // This maps that range to FBO pixels [0, fboHeight]
-        int top = displayHeight;
-        int bottom = displayHeight - fboHeight;
+        int top, bottom;
+        if (gpuTilemap) {
+            // GPU tilemap renderer draws a quad from (0,0) to (fboWidth, fboHeight).
+            // Set up projection to cover the full quad coordinate space.
+            top = fboHeight;
+            bottom = 0;
+        } else {
+            // Pattern renderer places tiles at OpenGL Y = displayHeight - genesisY.
+            // For genesis Y=0: OpenGL Y = displayHeight (top)
+            // For genesis Y=fboHeight: OpenGL Y = displayHeight - fboHeight
+            //
+            // Set up projection to capture OpenGL Y range [displayHeight-fboHeight,
+            // displayHeight]
+            // This maps that range to FBO pixels [0, fboHeight]
+            top = displayHeight;
+            bottom = displayHeight - fboHeight;
+        }
         gl.glOrtho(0, fboWidth, bottom, top, -1, 1);
 
         gl.glMatrixMode(GL2.GL_MODELVIEW);

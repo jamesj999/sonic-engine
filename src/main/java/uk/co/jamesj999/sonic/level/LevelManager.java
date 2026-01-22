@@ -918,11 +918,16 @@ public class LevelManager {
 
         Camera camera = Camera.getInstance();
 
+        // Check GPU tilemap early since FBO height depends on it
+        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
+
         // FBO is wider than screen to accommodate per-scanline scroll range
         // For EHZ, scroll difference can be up to cameraX pixels between sky and ground
         // Using 1024px width gives us 352px buffer on each side
         int fboWidth = 1024; // Wide enough for most scroll ranges
-        int fboHeight = 256; // Full background map height for complete parallax
+        // Add CHUNK_HEIGHT (16px) when using GPU tilemap to cover VScroll range
+        // This prevents bottom clipping when VScroll > 0 (max VScroll = 15, max gameY = 223, max fboY = 238 < 272)
+        int fboHeight = useGpuTilemap ? 256 + LevelConstants.CHUNK_HEIGHT : 256;
 
         // Extra buffer on each side
         int extraBuffer = (fboWidth - 320) / 2; // 352 pixels on each side
@@ -935,22 +940,19 @@ public class LevelManager {
         int actualBgScrollY = parallaxManager.getVscrollFactorBG();
 
         // 1. Resize FBO
+        final int finalFboHeight = fboHeight;
         graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-            bgRenderer.resizeFBO(gl, fboWidth, fboHeight);
+            bgRenderer.resizeFBO(gl, fboWidth, finalFboHeight);
         }));
 
         // 2. Begin Tile Pass (Bind FBO)
         // Use water shader in screen-space mode for FBO, with adjusted waterline
         WaterSystem waterSystem = WaterSystem.getInstance();
         boolean hasWater = waterSystem.hasWater(level.getZoneIndex(), currentAct);
-        boolean useGpuTilemap = configService.getBoolean(SonicConfiguration.GPU_TILEMAP_ENABLED);
         // Use visual water level (with oscillation) for background rendering
         int waterLevelWorldY = hasWater ? waterSystem.getVisualWaterLevelY(level.getZoneIndex(), currentAct) : 9999;
 
-        // Calculate waterline for FBO - use SCREEN-SPACE waterline PLUS parallax offset
-        // The parallax shader shifts the FBO sampling by (actualBgScrollY - alignedBgY)
-        // so we must shift the waterline by the same amount to keep it steady on screen
-
+        // Calculate chunk-aligned Y for tilemap rendering
         int chunkHeight = LevelConstants.CHUNK_HEIGHT;
         int alignedBgY = (actualBgScrollY / chunkHeight) * chunkHeight;
         if (actualBgScrollY < 0 && actualBgScrollY % chunkHeight != 0) {
@@ -958,13 +960,16 @@ public class LevelManager {
         }
         final int alignedBgYFinal = alignedBgY;
 
+        // Calculate waterline for FBO - use SCREEN-SPACE waterline PLUS parallax offset
+        // The parallax shader shifts the FBO sampling by (actualBgScrollY - alignedBgY)
+        // so we must shift the waterline by the same amount to keep it steady on screen
         int vOffset = actualBgScrollY - alignedBgY;
         final float fboWaterlineY = (float) ((waterLevelWorldY - camera.getY()) + vOffset);
 
         if (useGpuTilemap) {
             ensureBackgroundTilemapData();
             graphicsManager.registerCommand(new GLCommand(GLCommand.CommandType.CUSTOM, (gl, cx, cy, cw, ch) -> {
-                bgRenderer.beginTilePass(gl, screenHeightPixels);
+                bgRenderer.beginTilePass(gl, screenHeightPixels, true);
                 TilemapGpuRenderer tilemapRenderer = graphicsManager.getTilemapGpuRenderer();
                 if (tilemapRenderer != null) {
                     Integer atlasId = graphicsManager.getPatternAtlasTextureId();

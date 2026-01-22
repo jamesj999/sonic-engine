@@ -55,9 +55,10 @@ public class WaterSurfaceManager {
         this.arzPatterns = arzPatterns;
 
         // Create sprite sheets with mappings
-        // CPZ uses Y offset -8 (centered on waterline), ARZ uses 0 (top at waterline)
+        // CPZ uses Y offset -8 (centered on waterline)
+        // ARZ uses Y offset -4 (half tile above waterline to align with palette boundary)
         List<SpriteMappingFrame> cpzMappings = createWaterSurfaceMappings(cpzPatterns.length, -8);
-        List<SpriteMappingFrame> arzMappings = createWaterSurfaceMappings(arzPatterns.length, 0);
+        List<SpriteMappingFrame> arzMappings = createWaterSurfaceMappings(arzPatterns.length, -4);
 
         this.cpzSheet = new ObjectSpriteSheet(cpzPatterns, cpzMappings, 0, 1);
         this.arzSheet = new ObjectSpriteSheet(arzPatterns, arzMappings, 0, 1);
@@ -76,7 +77,7 @@ public class WaterSurfaceManager {
      * The sprite consists of multiple 8x8 tiles arranged in a horizontal strip.
      * 
      * @param patternCount Number of patterns available
-     * @param yOffset      Y offset for sprite positioning (CPZ uses -8, ARZ uses 0)
+     * @param yOffset      Y offset for sprite positioning (CPZ uses -8, ARZ uses -4)
      * @return List of mapping frames for animation
      */
     private List<SpriteMappingFrame> createWaterSurfaceMappings(int patternCount, int yOffset) {
@@ -103,8 +104,7 @@ public class WaterSurfaceManager {
             int baseTile = f * tilesPerFrame;
 
             // Create a 4x2 tile sprite piece (32x16 pixels)
-            // Y offset is zone-specific: CPZ uses -8 (centered), ARZ uses 0 (top at
-            // waterline)
+            // Y offset is zone-specific: CPZ uses -8 (centered), ARZ uses -4
             pieces.add(new SpriteMappingPiece(
                     -16, yOffset, // Centered horizontally, zone-specific Y offset
                     4, 2, // 4 tiles wide, 2 tiles tall (32x16)
