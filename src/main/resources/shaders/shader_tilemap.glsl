@@ -19,7 +19,6 @@ uniform float ViewportOffsetX;       // GL viewport X offset
 uniform float ViewportOffsetY;       // GL viewport Y offset
 uniform float WorldOffsetX;          // World X at left edge
 uniform float WorldOffsetY;          // World Y at top edge
-uniform float ScreenYOffset;         // Extra Y offset for screen-space alignment
 uniform int WrapY;                   // 1 to wrap vertically, 0 to clamp
 uniform int PriorityPass;            // -1 = all, 0 = low, 1 = high
 uniform int UseUnderwaterPalette;
@@ -43,7 +42,7 @@ void main()
     float pixelYFromTop = (ViewportHeight - 1.0 - viewportY) / scaleY;
 
     float worldX = WorldOffsetX + pixelX;
-    float worldY = WorldOffsetY + pixelYFromTop - ScreenYOffset;
+    float worldY = WorldOffsetY + pixelYFromTop;
 
     float tileXf = floor(worldX / 8.0);
     float tileYf = floor(worldY / 8.0);

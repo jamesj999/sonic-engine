@@ -982,7 +982,6 @@ public class LevelManager {
                     if (atlasId != null && paletteId != null) {
                         int[] viewport = new int[4];
                         gl.glGetIntegerv(GL2.GL_VIEWPORT, viewport, 0);
-                        float screenYOffset = fboHeightFinal - screenHeightPixels;
                         tilemapRenderer.render(gl,
                                 TilemapGpuRenderer.Layer.BACKGROUND,
                                 fboWidthFinal,
@@ -1000,7 +999,6 @@ public class LevelManager {
                                 underwaterPaletteId != null ? underwaterPaletteId : 0,
                                 -1,
                                 true,
-                                screenYOffset,
                                 useUnderwaterPalette,
                                 fboWaterlineY);
                     }
@@ -1157,7 +1155,6 @@ public class LevelManager {
                     underwaterPaletteId != null ? underwaterPaletteId : 0,
                     priorityPass,
                     false,
-                    0.0f,
                     useUnderwaterPalette,
                     waterlineScreenY);
         }));
