@@ -129,12 +129,19 @@ See `uk.co.jamesj999.sonic.tools.disasm` package for full API.
 ### Core Managers (Singleton Pattern)
 The codebase uses singletons extensively via `getInstance()`:
 - **LevelManager** - Level loading, rendering, zone/act management
-- **SpriteManager** - All game sprites (player, objects, enemies)
-- **SpriteCollisionManager** - Collision detection between sprites
+- **SpriteManager** - All game sprites (player, objects, enemies), input handling, render bucketing
 - **GraphicsManager** - OpenGL rendering, shader management
 - **AudioManager** - SMPS audio driver, YM2612/PSG synthesis
-- **GameStateManager** - Score, lives, emerald tracking
 - **Camera** - Camera position tracking, following player
+
+### Core Services Façade
+Access core singletons through the `GameServices` façade instead of direct `getInstance()` calls:
+```java
+GameServices.gameState()    // GameStateManager - score, lives, emeralds
+GameServices.timers()       // TimerManager - event timing
+GameServices.rom()          // RomManager - ROM data access
+GameServices.debugOverlay() // DebugOverlayManager - debug rendering
+```
 
 ### Key Packages
 | Package | Purpose |
@@ -152,6 +159,44 @@ The codebase uses singletons extensively via `getInstance()`:
 | `game.sonic2.scroll` | Zone-specific parallax scroll handlers |
 | `game.sonic2.constants` | ROM offsets, object IDs, audio constants |
 | `tools` | Compression utilities (KosinskiReader, etc.) |
+
+### Consolidated Subsystems
+
+Several manager classes have been consolidated to reduce complexity while preserving functionality:
+
+#### Object System (`ObjectManager`)
+The `ObjectManager` now contains all object-related functionality as inner classes:
+| Inner Class | Purpose |
+|-------------|---------|
+| `ObjectManager.Placement` | Spawn windowing, remembered objects (was `ObjectPlacementManager`) |
+| `ObjectManager.SolidContacts` | Riding, landing, ceiling, side collision (was `SolidObjectManager`) |
+| `ObjectManager.TouchResponses` | Enemy bounce, hurt, category detection (was `TouchResponseManager`) |
+| `ObjectManager.PlaneSwitchers` | Plane switching logic (was `PlaneSwitcherManager`) |
+
+#### Ring System (`RingManager`)
+The `RingManager` consolidates ring functionality:
+| Inner Class | Purpose |
+|-------------|---------|
+| `RingManager.RingPlacement` | Collection state, sparkle animation, windowed spawning |
+| `RingManager.RingRenderer` | Ring rendering with cached patterns |
+| `RingManager.LostRingPool` | Lost ring physics and collection |
+
+#### Per-Sprite Controller (`PlayableSpriteController`)
+`AbstractPlayableSprite` owns a `PlayableSpriteController` that coordinates:
+| Component | Purpose |
+|-----------|---------|
+| `PlayableSpriteMovement` | Physics and movement handling |
+| `PlayableSpriteAnimation` | Animation state and scripted animations |
+| `SpindashDustController` | Spindash dust effects |
+| `DrowningController` | Underwater drowning mechanics |
+
+#### Sonic 2 Level Animation (`Sonic2LevelAnimationManager`)
+Implements both `AnimatedPatternManager` and `AnimatedPaletteManager`:
+- `Sonic2PatternAnimator` - Animated tile scripts
+- `Sonic2PaletteCycler` - Zone-specific palette cycling
+
+#### CNZ Bumpers (`CNZBumperManager`)
+Combines placement windowing and ROM-accurate bounce physics with type-specific handlers for all 6 bumper types.
 
 ### Terminology (differs from standard Sonic 2 naming)
 - **Pattern** - 8x8 pixel tile
@@ -544,6 +589,7 @@ The special stage uses a unique pseudo-3D rendering system. Key files are in `uk
 | Class | Purpose |
 |-------|---------|
 | `Sonic2SpecialStageManager` | Main manager, coordinates all special stage systems |
+| `Sonic2SpecialStageManager.Sonic2SpecialStageObjectManager` | Nested class for object spawning/collection |
 | `Sonic2SpecialStageDataLoader` | Loads and decompresses data from ROM |
 | `Sonic2TrackAnimator` | Manages segment sequencing and animation timing |
 | `Sonic2TrackFrameDecoder` | Decodes track frame bitstream into VDP tiles |

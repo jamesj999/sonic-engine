@@ -17,7 +17,7 @@ import static uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants.*;
  * Applies Sonic 2 palette cycling (PalCycle_* routines) for supported zones.
  * Based on the original assembly routines in s2.asm.
  */
-public class Sonic2PaletteCycleManager implements AnimatedPaletteManager {
+class Sonic2PaletteCycler implements AnimatedPaletteManager {
     // ROM zone indices (from s2.constants.asm)
     private static final int ZONE_EHZ = 0x00;
     private static final int ZONE_HTZ = 0x05;
@@ -32,7 +32,7 @@ public class Sonic2PaletteCycleManager implements AnimatedPaletteManager {
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final List<PaletteCycle> cycles;
 
-    public Sonic2PaletteCycleManager(Rom rom, Level level, int zoneIndex) throws IOException {
+    public Sonic2PaletteCycler(Rom rom, Level level, int zoneIndex) throws IOException {
         this.level = level;
         RomByteReader reader = RomByteReader.fromRom(rom);
         this.cycles = loadCycles(reader, zoneIndex);

@@ -1,4 +1,6 @@
 package uk.co.jamesj999.sonic.debug;
+
+import uk.co.jamesj999.sonic.game.GameServices;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 
 import com.jogamp.opengl.util.awt.TextRenderer;
@@ -7,11 +9,10 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRegistry;
-import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseDebugHit;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseDebugState;
-import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
@@ -32,7 +33,7 @@ public class DebugRenderer {
 	private final LevelManager levelManager = LevelManager.getInstance();
         private final SonicConfigurationService configService = SonicConfigurationService
                         .getInstance();
-        private final DebugOverlayManager overlayManager = DebugOverlayManager.getInstance();
+        private final DebugOverlayManager overlayManager = GameServices.debugOverlay();
         private TextRenderer renderer;
         private TextRenderer objectRenderer;
         private TextRenderer planeSwitcherRenderer;
@@ -269,7 +270,7 @@ public class DebugRenderer {
 
         private void drawPlaneSwitcherLabels(ObjectSpawn spawn, int screenX, int screenY) {
                 int subtype = spawn.subtype();
-                boolean horizontal = PlaneSwitcherManager.isHorizontal(subtype);
+                boolean horizontal = ObjectManager.isPlaneSwitcherHorizontal(subtype);
                 String side0 = formatPlaneSwitcherSide(subtype, 0);
                 String side1 = formatPlaneSwitcherSide(subtype, 1);
 
@@ -392,11 +393,11 @@ public class DebugRenderer {
         }
 
         private void renderTouchResponsePanel(AbstractPlayableSprite sprite) {
-                TouchResponseManager manager = levelManager.getTouchResponseManager();
+                ObjectManager manager = levelManager.getObjectManager();
                 if (manager == null || renderer == null) {
                         return;
                 }
-                TouchResponseDebugState state = manager.getDebugState();
+                TouchResponseDebugState state = manager.getTouchResponseDebugState();
                 if (state == null) {
                         return;
                 }
@@ -508,17 +509,17 @@ public class DebugRenderer {
         }
 
         private String formatPlaneSwitcherSide(int subtype, int side) {
-                int path = PlaneSwitcherManager.decodePath(subtype, side);
-                boolean highPriority = PlaneSwitcherManager.decodePriority(subtype, side);
+                int path = ObjectManager.decodePlaneSwitcherPath(subtype, side);
+                boolean highPriority = ObjectManager.decodePlaneSwitcherPriority(subtype, side);
                 return formatLayer((byte) path) + " " + formatPriority(highPriority);
         }
 
         private char formatLayer(byte layer) {
-                return PlaneSwitcherManager.formatLayer(layer);
+                return ObjectManager.formatPlaneSwitcherLayer(layer);
         }
 
         private char formatPriority(boolean highPriority) {
-                return PlaneSwitcherManager.formatPriority(highPriority);
+                return ObjectManager.formatPlaneSwitcherPriority(highPriority);
         }
 
         private String formatTouchCategory(uk.co.jamesj999.sonic.level.objects.TouchCategory category) {
@@ -584,3 +585,4 @@ public class DebugRenderer {
                 return viewportHeight - toScreenY(worldY);
         }
 }
+

@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.GameStateManager;
@@ -233,7 +235,7 @@ public class BumperObjectInstance extends AbstractObjectInstance {
         AudioManager.getInstance().playSfx(GameSound.BUMPER);
 
         // Award 10 points and spawn points display (ROM: lines 44675-44683)
-        GameStateManager.getInstance().addScore(10);
+        GameServices.gameState().addScore(10);
         LevelManager levelManager = LevelManager.getInstance();
         PointsObjectInstance pointsObj = new PointsObjectInstance(
                 new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
@@ -256,3 +258,4 @@ public class BumperObjectInstance extends AbstractObjectInstance {
         }
     }
 }
+

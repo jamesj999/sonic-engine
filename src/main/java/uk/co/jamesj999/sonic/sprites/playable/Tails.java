@@ -21,14 +21,14 @@ public class Tails extends AbstractPlayableSprite {
 		// Pattern: (frames & 0x04) creates ~8-frame on/off cycle
 		if (getInvulnerableFrames() > 0 && (getInvulnerableFrames() & 0x04) != 0) {
 			// Still draw spindash dust even when blinking
-			if (getSpindashDustManager() != null) {
-				getSpindashDustManager().draw();
+			if (getSpindashDustController() != null) {
+				getSpindashDustController().draw();
 			}
 			return; // Invisible this frame
 		}
 		if (getSpriteRenderer() != null) {
-			if (getSpindashDustManager() != null) {
-				getSpindashDustManager().draw();
+			if (getSpindashDustController() != null) {
+				getSpindashDustController().draw();
 			}
 			getSpriteRenderer().drawFrame(
 					getMappingFrame(),

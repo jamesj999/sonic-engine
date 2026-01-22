@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.level.Palette;
@@ -77,7 +79,7 @@ public class Sonic2SpecialStagePalette {
      */
     private static void loadPaletteDataIfNeeded() throws IOException {
         if (cachedMainPalette == null || cachedStagePalettes == null) {
-            Rom rom = RomManager.getInstance().getRom();
+            Rom rom = GameServices.rom().getRom();
 
             // Load main palette (96 bytes = 3 palette lines)
             cachedMainPalette = rom.readBytes(PALETTE_MAIN_OFFSET, PALETTE_MAIN_SIZE);
@@ -182,7 +184,7 @@ public class Sonic2SpecialStagePalette {
      */
     private static void loadEmeraldPaletteDataIfNeeded() throws IOException {
         if (cachedEmeraldPalette == null) {
-            Rom rom = RomManager.getInstance().getRom();
+            Rom rom = GameServices.rom().getRom();
             cachedEmeraldPalette = rom.readBytes(PALETTE_EMERALD_OFFSET, PALETTE_EMERALD_SIZE);
             LOGGER.fine("Loaded emerald palette from ROM offset 0x" +
                        Long.toHexString(PALETTE_EMERALD_OFFSET) + " (" + cachedEmeraldPalette.length + " bytes)");
@@ -233,3 +235,4 @@ public class Sonic2SpecialStagePalette {
         }
     }
 }
+

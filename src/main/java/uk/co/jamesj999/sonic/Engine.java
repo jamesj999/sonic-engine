@@ -12,9 +12,7 @@ import uk.co.jamesj999.sonic.debug.DebugOption;
 import uk.co.jamesj999.sonic.debug.DebugRenderer;
 import uk.co.jamesj999.sonic.game.sonic2.debug.Sonic2SpecialStageSpriteDebug;
 import uk.co.jamesj999.sonic.debug.DebugState;
-import uk.co.jamesj999.sonic.graphics.FadeManager;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
-import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -53,7 +51,6 @@ public class Engine extends GLCanvas implements GLEventListener {
 	private final SonicConfigurationService configService = SonicConfigurationService
 			.getInstance();
 	private final SpriteManager spriteManager = SpriteManager.getInstance();
-	private final SpriteRenderManager spriteRenderManager = SpriteRenderManager.getInstance();
 	private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
 
 	private final Camera camera = Camera.getInstance();
@@ -244,7 +241,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 		} else if (getCurrentGameMode() == GameMode.TITLE_CARD) {
 			// Draw level and sprites behind the title card (Sonic is already placed and
 			// frozen)
-			levelManager.drawWithSpritePriority(spriteRenderManager);
+			levelManager.drawWithSpritePriority(spriteManager);
 
 			// Flush level commands with level camera position before switching to
 			// screen-space
@@ -262,7 +259,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 				graphicsManager.flushScreenSpace();
 			}
 		} else if (!debugViewEnabled) {
-			levelManager.drawWithSpritePriority(spriteRenderManager);
+			levelManager.drawWithSpritePriority(spriteManager);
 
 			// Draw title card text overlay if still active (TEXT_WAIT/TEXT_EXIT phases)
 			// Player control has been released but text is still sliding off
@@ -278,7 +275,7 @@ public class Engine extends GLCanvas implements GLEventListener {
 				case PATTERNS_VIEW -> levelManager.drawAllPatterns();
 				case CHUNKS_VIEW -> levelManager.drawAllChunks();
 				case BLOCKS_VIEW -> levelManager.draw();
-				case null, default -> levelManager.drawWithSpritePriority(spriteRenderManager);
+				case null, default -> levelManager.drawWithSpritePriority(spriteManager);
 			}
 
 			// Draw title card text overlay if still active (even in debug view)
@@ -408,19 +405,19 @@ public class Engine extends GLCanvas implements GLEventListener {
 		gl.glColorMask(true, true, true, true);
 		update();
 
-		// Update fade manager for screen transitions
-		FadeManager fadeManager = graphicsManager.getFadeManager();
-		if (fadeManager != null) {
-			fadeManager.update();
+		// Update fade via unified UI render pipeline
+		var uiPipeline = graphicsManager.getUiRenderPipeline();
+		if (uiPipeline != null) {
+			uiPipeline.updateFade();
 		}
 
 		graphicsManager.setGraphics(gl);
 		draw();
 		graphicsManager.flush();
 
-		// Render screen fade overlay if active (after all game rendering)
-		if (fadeManager != null && fadeManager.isActive()) {
-			fadeManager.render(gl);
+		// Render screen fade overlay via unified UI render pipeline (after all game rendering)
+		if (uiPipeline != null) {
+			uiPipeline.renderFadePass(gl);
 		}
 
 		boolean needsOverlay = (getCurrentGameMode() == GameMode.SPECIAL_STAGE) ||

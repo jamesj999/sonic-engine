@@ -201,7 +201,7 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
-        // Platform state is driven via SolidObjectManager standing checks.
+        // Platform state is driven via ObjectManager standing checks.
     }
 
     @Override
@@ -399,10 +399,10 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
 
     private boolean isStanding() {
         LevelManager manager = LevelManager.getInstance();
-        if (manager == null || manager.getSolidObjectManager() == null) {
+        if (manager == null || manager.getObjectManager() == null) {
             return false;
         }
-        return manager.getSolidObjectManager().isRidingObject(this);
+        return manager.getObjectManager().isRidingObject(this);
     }
 
     private boolean isAquaticRuin() {

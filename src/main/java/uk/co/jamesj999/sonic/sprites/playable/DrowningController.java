@@ -25,8 +25,8 @@ import java.util.logging.Logger;
  * <p>
  * Small breathing bubbles are also spawned during each air event.
  */
-public class DrowningManager {
-    private static final Logger LOGGER = Logger.getLogger(DrowningManager.class.getName());
+public class DrowningController {
+    private static final Logger LOGGER = Logger.getLogger(DrowningController.class.getName());
 
     /** Initial air value when entering water (seconds) */
     private static final int INITIAL_AIR = 30;
@@ -71,7 +71,7 @@ public class DrowningManager {
     /** Countdown number for pending second bubble (-1 if regular bubble) */
     private int pendingCountdownNumber;
 
-    public DrowningManager(AbstractPlayableSprite player) {
+    public DrowningController(AbstractPlayableSprite player) {
         this.player = player;
         reset();
     }

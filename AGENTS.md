@@ -7,7 +7,7 @@ This project is a faithful recreation of the **Sonic the Hedgehog** game engine 
 3.  Eventually support user-made characters and level editing tools.
 
 ## Current Status
-The project is in an **alpha** state. Core systems are functional with 291 passing tests.
+The project is in an **alpha** state. Core systems are functional with 291 passing tests. Recent consolidation work has unified several subsystems (ObjectManager, RingManager, SpriteManager, per-sprite controllers) to reduce complexity while maintaining ROM accuracy.
 
 ### Rendering
 *   **Status:** ✅ Functional.
@@ -59,19 +59,85 @@ The project is in an **alpha** state. Core systems are functional with 291 passi
     *   `configuration` – game settings via `SonicConfiguration` and `SonicConfigurationService`
     *   `data` – ROM loaders and game classes
     *   `debug` – debug overlay (`DebugRenderer`), enabled via the `DEBUG_VIEW_ENABLED` configuration flag
-    *   `game` – core game-agnostic interfaces and providers
+    *   `game` – core game-agnostic interfaces, providers, and `GameServices` façade
     *   `game.sonic2` – Sonic 2-specific implementations
     *   `game.sonic2.objects` – object factories and instance classes
     *   `game.sonic2.objects.badniks` – badnik AI implementations
     *   `game.sonic2.constants` – ROM offsets, object IDs, audio constants
     *   `graphics` – GL wrappers and render managers
     *   `level` – level structures (patterns, blocks, chunks, collision)
-    *   `level.objects` – game object management, rendering, factories
-    *   `physics` – sensors and terrain collision
+    *   `level.objects` – unified `ObjectManager` with placement, collision, touch response
+    *   `level.rings` – unified `RingManager` with placement, rendering, lost rings
+    *   `level.bumpers` – unified `CNZBumperManager` for Casino Night Zone
+    *   `physics` – sensors, terrain collision, and unified `CollisionSystem`
     *   `sprites` – sprite classes, including playable character logic
+    *   `sprites.playable` – `PlayableSpriteController` coordinates movement, animation, drowning
     *   `timer` – utility timers for events
     *   `tools` – utilities such as `KosinskiReader` for decompressing Sega data
 *   **Tests:** Live under `src/test/java/uk/co/jamesj999/sonic/tests` and cover ROM loading, decompression, and collision.
+
+## Core Services Façade
+
+Access core singletons through `GameServices` instead of direct `getInstance()` calls:
+```java
+GameServices.gameState()    // GameStateManager - score, lives, emeralds
+GameServices.timers()       // TimerManager - event timing
+GameServices.rom()          // RomManager - ROM data access
+GameServices.debugOverlay() // DebugOverlayManager - debug rendering
+```
+
+## Consolidated Subsystems
+
+Several manager classes have been consolidated to reduce complexity:
+
+### Object System (`ObjectManager`)
+Contains all object-related functionality as inner classes:
+- `ObjectManager.Placement` – Spawn windowing, remembered objects
+- `ObjectManager.SolidContacts` – Riding, landing, ceiling, side collision
+- `ObjectManager.TouchResponses` – Enemy bounce, hurt, category detection
+- `ObjectManager.PlaneSwitchers` – Plane switching logic
+
+### Ring System (`RingManager`)
+- `RingPlacement` – Collection state, sparkle animation, windowed spawning
+- `RingRenderer` – Ring rendering with cached patterns
+- `LostRingPool` – Lost ring physics and collection
+
+### Per-Sprite Controller (`PlayableSpriteController`)
+Owned by `AbstractPlayableSprite`, coordinates:
+- `PlayableSpriteMovement` – Physics and movement
+- `PlayableSpriteAnimation` – Animation state
+- `SpindashDustController` – Spindash dust effects
+- `DrowningController` – Underwater mechanics
+
+### Sonic 2 Level Animation (`Sonic2LevelAnimationManager`)
+Implements both `AnimatedPatternManager` and `AnimatedPaletteManager` via:
+- `Sonic2PatternAnimator` – Animated tile scripts
+- `Sonic2PaletteCycler` – Zone-specific palette cycling
+
+### CNZ Bumpers (`CNZBumperManager`)
+Combines placement windowing and ROM-accurate bounce physics with type-specific handlers.
+
+### Unified Collision Pipeline (`CollisionSystem`)
+Orchestrates terrain and solid object collision in defined phases:
+1. **Terrain probes** – Ground/ceiling/wall sensors via `TerrainCollisionManager`
+2. **Solid object resolution** – Platforms, moving solids via `ObjectManager.SolidContacts`
+3. **Post-resolution adjustments** – Ground mode, headroom checks
+
+`PlayableSpriteMovement` uses `CollisionSystem.terrainProbes()` for all terrain collision.
+
+Supports trace recording for testing via `CollisionTrace` interface:
+- `RecordingCollisionTrace` – Records events for comparison
+- `NoOpCollisionTrace` – Production no-op (default)
+
+### Unified UI Render Pipeline (`UiRenderPipeline`)
+Located in `graphics.pipeline`, ensures correct render ordering:
+1. **Scene** – Level and sprites (external)
+2. **Overlay** – HUD via `HudRenderManager`
+3. **Fade pass** – Screen transitions via `FadeManager`
+
+`Engine.display()` uses `UiRenderPipeline.updateFade()` and `renderFadePass()` for screen transitions.
+
+Includes `RenderOrderRecorder` for testing render order compliance.
 
 ## Multi-Game Support Architecture
 
@@ -114,6 +180,7 @@ Game objects use a factory pattern with game-specific registries.
 ### Key Classes
 | Class | Purpose |
 |-------|---------|
+| `ObjectManager` | Unified manager with Placement, SolidContacts, TouchResponses, PlaneSwitchers |
 | `Sonic2ObjectRegistry` | Factory registry for Sonic 2 objects |
 | `Sonic2ObjectRegistryData` | Static name mappings for object IDs |
 | `AbstractBadnikInstance` | Base class for enemy AI with collision handling |
@@ -123,6 +190,8 @@ Game objects use a factory pattern with game-specific registries.
 1. Add object ID to `Sonic2ObjectIds.java`
 2. Create instance class extending `AbstractObjectInstance` (or `AbstractBadnikInstance` for enemies)
 3. Register factory in `Sonic2ObjectRegistry.registerDefaultFactories()`
+4. For solid objects, collision is handled automatically via `ObjectManager.SolidContacts`
+5. For enemies, touch response is handled via `ObjectManager.TouchResponses`
 
 ### Game-Specific Art Loading
 

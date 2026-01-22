@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.specialstage;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.timer.Timer;
@@ -754,7 +756,7 @@ public class Sonic2SpecialStagePlayer {
             // Register invulnerability timer (30 frames = 0x1E)
             // Timer will call clearInvulnerability() when complete
             String timerCode = getInvulnerabilityTimerCode();
-            TimerManager.getInstance().registerTimer(
+            GameServices.timers().registerTimer(
                 new SSInvulnerabilityTimer(timerCode, 0x1E, this));
         }
 
@@ -805,7 +807,7 @@ public class Sonic2SpecialStagePlayer {
      * Uses the Timer framework - invulnerability is active while the timer exists.
      */
     public boolean isInvulnerable() {
-        return TimerManager.getInstance().getTimerForCode(getInvulnerabilityTimerCode()) != null;
+        return GameServices.timers().getTimerForCode(getInvulnerabilityTimerCode()) != null;
     }
 
     /**
@@ -813,7 +815,7 @@ public class Sonic2SpecialStagePlayer {
      * Returns 0 if not invulnerable.
      */
     public int getInvulnerabilityTicks() {
-        Timer timer = TimerManager.getInstance().getTimerForCode(getInvulnerabilityTimerCode());
+        Timer timer = GameServices.timers().getTimerForCode(getInvulnerabilityTimerCode());
         return timer != null ? timer.getTicks() : 0;
     }
 
@@ -855,3 +857,4 @@ public class Sonic2SpecialStagePlayer {
         return ctrlRecordBuf[framesAgo];
     }
 }
+

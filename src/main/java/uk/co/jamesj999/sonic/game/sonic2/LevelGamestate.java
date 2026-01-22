@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.game.LevelState;
 
 /**
@@ -42,11 +44,11 @@ public class LevelGamestate implements LevelState {
             // Ring Bonus Logic: 100 and 200 rings grant an extra life
             if (amount > 0) {
                 if (previousRings < 100 && rings >= 100) {
-                    uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addLife();
+                    GameServices.gameState().addLife();
                     uk.co.jamesj999.sonic.audio.AudioManager.getInstance().playMusic(
                             uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants.MUS_EXTRA_LIFE);
                 } else if (previousRings < 200 && rings >= 200) {
-                    uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addLife();
+                    GameServices.gameState().addLife();
                     uk.co.jamesj999.sonic.audio.AudioManager.getInstance().playMusic(
                             uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants.MUS_EXTRA_LIFE);
                 }
@@ -84,3 +86,4 @@ public class LevelGamestate implements LevelState {
         return timer.getElapsedSeconds();
     }
 }
+

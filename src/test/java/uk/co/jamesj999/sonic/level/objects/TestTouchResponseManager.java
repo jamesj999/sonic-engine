@@ -13,22 +13,35 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for TouchResponseManager collision detection logic.
+ * Tests for touch response collision detection logic.
  * Tests the overlap detection algorithm and touch response handling.
  */
 public class TestTouchResponseManager {
 
-    private TouchResponseManager manager;
-    private MockObjectManager objectManager;
+    private ObjectManager objectManager;
     private TouchResponseTable table;
     private AbstractPlayableSprite player;
 
     @Before
     public void setUp() {
-        objectManager = new MockObjectManager();
         // Use Mockito to mock TouchResponseTable since its constructor reads from ROM
         table = mock(TouchResponseTable.class);
-        manager = new TouchResponseManager(objectManager, table);
+        objectManager = new ObjectManager(List.of(), new ObjectRegistry() {
+            @Override
+            public ObjectInstance create(ObjectSpawn spawn) {
+                return null;
+            }
+
+            @Override
+            public void reportCoverage(List<ObjectSpawn> spawns) {
+            }
+
+            @Override
+            public String getPrimaryName(int objectId) {
+                return "Test";
+            }
+        }, 0, null, table);
+        objectManager.resetTouchResponses();
 
         // Create a mock player using Mockito
         player = mock(AbstractPlayableSprite.class);
@@ -56,9 +69,9 @@ public class TestTouchResponseManager {
         // Object far to the right of player
         MockTouchObject obj = new MockTouchObject(500, 112, 0x08); // Size index 8 = 16x16
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertFalse("Should not overlap when object is far to the right",
                 obj.wasTouched);
@@ -69,9 +82,9 @@ public class TestTouchResponseManager {
         // Object far to the left of player
         MockTouchObject obj = new MockTouchObject(10, 112, 0x08);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertFalse("Should not overlap when object is far to the left",
                 obj.wasTouched);
@@ -82,9 +95,9 @@ public class TestTouchResponseManager {
         // Object far above player
         MockTouchObject obj = new MockTouchObject(160, 10, 0x08);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertFalse("Should not overlap when object is far above",
                 obj.wasTouched);
@@ -95,9 +108,9 @@ public class TestTouchResponseManager {
         // Object far below player
         MockTouchObject obj = new MockTouchObject(160, 300, 0x08);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertFalse("Should not overlap when object is far below",
                 obj.wasTouched);
@@ -108,9 +121,9 @@ public class TestTouchResponseManager {
         // Object at same position as player
         MockTouchObject obj = new MockTouchObject(160, 112, 0x08);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertTrue("Should overlap when object is at player position",
                 obj.wasTouched);
@@ -121,9 +134,9 @@ public class TestTouchResponseManager {
         // Large object that overlaps player
         MockTouchObject obj = new MockTouchObject(180, 112, 0x10); // Size index 16 = 32x32
         setupTableSize(16, 32, 32);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertTrue("Should overlap with large object near player",
                 obj.wasTouched);
@@ -136,9 +149,9 @@ public class TestTouchResponseManager {
         // Flags 0x00-0x3F = ENEMY category
         MockTouchObject obj = new MockTouchObject(160, 112, 0x08); // 0x08 & 0xC0 = 0x00 = ENEMY
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertEquals("Category should be ENEMY for flags 0x00-0x3F",
                 TouchCategory.ENEMY, obj.lastResult.category());
@@ -149,9 +162,9 @@ public class TestTouchResponseManager {
         // Flags 0x40-0x7F = SPECIAL category
         MockTouchObject obj = new MockTouchObject(160, 112, 0x48); // 0x48 & 0xC0 = 0x40 = SPECIAL
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertEquals("Category should be SPECIAL for flags 0x40-0x7F",
                 TouchCategory.SPECIAL, obj.lastResult.category());
@@ -162,9 +175,9 @@ public class TestTouchResponseManager {
         // Flags 0x80-0xBF = HURT category
         MockTouchObject obj = new MockTouchObject(160, 112, 0x88); // 0x88 & 0xC0 = 0x80 = HURT
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertEquals("Category should be HURT for flags 0x80-0xBF",
                 TouchCategory.HURT, obj.lastResult.category());
@@ -175,9 +188,9 @@ public class TestTouchResponseManager {
         // Flags 0xC0-0xFF = BOSS category
         MockTouchObject obj = new MockTouchObject(160, 112, 0xC8); // 0xC8 & 0xC0 = 0xC0 = BOSS
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertEquals("Category should be BOSS for flags 0xC0-0xFF",
                 TouchCategory.BOSS, obj.lastResult.category());
@@ -190,9 +203,9 @@ public class TestTouchResponseManager {
         when(player.getDead()).thenReturn(true);
         MockTouchObject obj = new MockTouchObject(160, 112, 0x08);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertFalse("Should not touch objects when player is dead",
                 obj.wasTouched);
@@ -204,9 +217,9 @@ public class TestTouchResponseManager {
         // When crouching, player hitbox is smaller (20 height, shifted down 12px)
         MockTouchObject obj = new MockTouchObject(160, 70, 0x08); // Above player's head
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         // Object should NOT touch when player is crouching and object is above normal standing position
         assertFalse("Crouching should reduce hitbox height",
@@ -223,9 +236,9 @@ public class TestTouchResponseManager {
 
         MockAttackableEnemy enemy = new MockAttackableEnemy(160, 120, 0x08);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(enemy);
+        objectManager.addDynamicObject(enemy);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertTrue("Enemy should have been attacked when player is rolling", enemy.wasAttacked);
     }
@@ -241,9 +254,9 @@ public class TestTouchResponseManager {
 
         MockTouchObject enemy = new MockTouchObject(160, 112, 0x08); // ENEMY category
         setupTableSize(8, 16, 16);
-        objectManager.addObject(enemy);
+        objectManager.addDynamicObject(enemy);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         // Verify applyHurtOrDeath was called
         verify(player).applyHurtOrDeath(anyInt(), anyBoolean(), anyBoolean());
@@ -255,9 +268,9 @@ public class TestTouchResponseManager {
 
         MockTouchObject hurtObject = new MockTouchObject(160, 112, 0x88); // HURT category
         setupTableSize(8, 16, 16);
-        objectManager.addObject(hurtObject);
+        objectManager.addDynamicObject(hurtObject);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         // Verify applyHurtOrDeath was NOT called
         verify(player, never()).applyHurtOrDeath(anyInt(), anyBoolean(), anyBoolean());
@@ -269,17 +282,17 @@ public class TestTouchResponseManager {
     public void testTouchOnlyTriggersOncePerOverlap() {
         MockTouchObject obj = new MockTouchObject(160, 112, 0x48); // SPECIAL category
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
         // First update - should trigger touch
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
         assertTrue("First update should trigger touch", obj.wasTouched);
 
         // Reset touch flag
         obj.wasTouched = false;
 
         // Second update - still overlapping but should NOT trigger again
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
         assertFalse("Second update should NOT trigger touch for same overlap",
                 obj.wasTouched);
     }
@@ -288,19 +301,19 @@ public class TestTouchResponseManager {
     public void testTouchTriggersAgainAfterExitAndReenter() {
         MockTouchObject obj = new MockTouchObject(160, 112, 0x48);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
         // First update - triggers touch
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
         obj.wasTouched = false;
 
         // Move player away
         when(player.getCentreX()).thenReturn((short) 500);
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         // Move player back
         when(player.getCentreX()).thenReturn((short) 160);
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
 
         assertTrue("Touch should trigger again after exit and re-enter",
                 obj.wasTouched);
@@ -312,41 +325,21 @@ public class TestTouchResponseManager {
     public void testResetClearsOverlappingSet() {
         MockTouchObject obj = new MockTouchObject(160, 112, 0x48);
         setupTableSize(8, 16, 16);
-        objectManager.addObject(obj);
+        objectManager.addDynamicObject(obj);
 
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
         obj.wasTouched = false;
 
         // Reset should clear tracking
-        manager.reset();
+        objectManager.resetTouchResponses();
 
         // Now touch should trigger again
-        manager.update(player, 1);
+        objectManager.update(0, player, 1);
         assertTrue("Touch should trigger after reset even for same overlap",
                 obj.wasTouched);
     }
 
     // ==================== Helper Classes ====================
-
-    /**
-     * Mock ObjectManager that doesn't require real dependencies.
-     */
-    private static class MockObjectManager extends ObjectManager {
-        private final List<ObjectInstance> objects = new ArrayList<>();
-
-        public MockObjectManager() {
-            super(null, null);
-        }
-
-        public void addObject(ObjectInstance obj) {
-            objects.add(obj);
-        }
-
-        @Override
-        public Collection<ObjectInstance> getActiveObjects() {
-            return objects;
-        }
-    }
 
     /**
      * Mock object that tracks touch events.
@@ -416,3 +409,4 @@ public class TestTouchResponseManager {
         }
     }
 }
+

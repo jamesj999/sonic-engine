@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.data;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
@@ -18,7 +20,7 @@ import java.util.logging.Logger;
  *
  * Usage:
  * <pre>
- * Rom rom = RomManager.getInstance().getRom();
+ * Rom rom = GameServices.rom().getRom();
  * byte[] data = rom.readBytes(offset, length);
  * </pre>
  */
@@ -119,3 +121,4 @@ public class RomManager implements AutoCloseable {
         }
     }
 }
+

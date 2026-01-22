@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.tools;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
@@ -10,7 +12,7 @@ import uk.co.jamesj999.sonic.level.Palette;
  */
 public class PaletteClassTest {
     public static void main(String[] args) throws Exception {
-        RomManager romManager = RomManager.getInstance();
+        RomManager romManager = GameServices.rom();
         Rom rom = romManager.getRom();
         
         // Read SonicAndTails palette using Palette class
@@ -32,3 +34,4 @@ public class PaletteClassTest {
             Byte.toUnsignedInt(red.r), Byte.toUnsignedInt(red.g), Byte.toUnsignedInt(red.b));
     }
 }
+

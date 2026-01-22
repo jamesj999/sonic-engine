@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.level.objects.*;
 
 import uk.co.jamesj999.sonic.graphics.GLCommand;
@@ -57,7 +59,8 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         this.type = MonitorType.fromSubtype(spawn.subtype());
 
         // Check persistence: if remembered, spawn as broken
-        boolean previouslyBroken = LevelManager.getInstance().getObjectPlacementManager().isRemembered(spawn);
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        boolean previouslyBroken = objectManager != null && objectManager.isRemembered(spawn);
         this.broken = this.type == MonitorType.BROKEN || previouslyBroken;
 
         int initialAnim = type.id;
@@ -153,7 +156,10 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         broken = true;
 
         // Mark as broken in persistence table
-        LevelManager.getInstance().getObjectPlacementManager().markRemembered(spawn);
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        if (objectManager != null) {
+            objectManager.markRemembered(spawn);
+        }
 
         player.setYSpeed((short) -player.getYSpeed());
         mappingFrame = BROKEN_FRAME;
@@ -263,7 +269,7 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
             }
             case SONIC, TAILS -> {
                 AudioManager.getInstance().playMusic(Sonic2AudioConstants.MUS_EXTRA_LIFE);
-                uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addLife();
+                GameServices.gameState().addLife();
             }
             default -> {
                 // TODO: implement remaining monitor effects.
@@ -369,3 +375,4 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
         }
     }
 }
+

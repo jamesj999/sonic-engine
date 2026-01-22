@@ -48,7 +48,7 @@ public class InvisibleBlockObjectInstance extends BoxObjectInstance
     @Override
     public void onSolidContact(AbstractPlayableSprite player,
                                SolidContact contact, int frameCounter) {
-        // No special behavior - standard collision handled by SolidObjectManager
+        // No special behavior - standard collision handled by ObjectManager
     }
 
     @Override

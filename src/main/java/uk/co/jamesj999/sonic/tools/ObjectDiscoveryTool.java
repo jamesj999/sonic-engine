@@ -57,7 +57,7 @@ public class ObjectDiscoveryTool {
 
     // Object IDs that have implementations (factory or manager-based)
     private static final Set<Integer> IMPLEMENTED_IDS = Set.of(
-            0x03,  // LayerSwitcher (via PlaneSwitcherManager, no visual instance)
+            0x03,  // LayerSwitcher (via ObjectManager plane switchers, no visual instance)
             0x06,  // Spiral
             0x0B,  // TippingFloor (CPZ)
             0x0D,  // Signpost

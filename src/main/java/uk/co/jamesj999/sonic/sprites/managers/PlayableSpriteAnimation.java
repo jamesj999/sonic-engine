@@ -9,12 +9,12 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 /**
  * Updates a playable sprite's mapping frame based on its animation profile.
  */
-public class PlayableSpriteAnimationManager {
+public class PlayableSpriteAnimation {
     private static final int DEFAULT_RUN_SPEED_THRESHOLD = 0x600;
     private final AbstractPlayableSprite sprite;
     private int lastAnimationId = -1;
 
-    public PlayableSpriteAnimationManager(AbstractPlayableSprite sprite) {
+    public PlayableSpriteAnimation(AbstractPlayableSprite sprite) {
         this.sprite = sprite;
     }
 
@@ -25,8 +25,8 @@ public class PlayableSpriteAnimationManager {
         updateFlipAngle(frameCounter);
         boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
         sprite.setRenderFlips(facingLeft, false);
-        if (sprite.getSpindashDustManager() != null) {
-            sprite.getSpindashDustManager().update();
+        if (sprite.getSpindashDustController() != null) {
+            sprite.getSpindashDustController().update();
         }
 
         SpriteAnimationProfile profile = sprite.getAnimationProfile();

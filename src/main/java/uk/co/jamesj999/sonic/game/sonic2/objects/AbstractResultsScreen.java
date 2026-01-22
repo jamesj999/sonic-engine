@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.GameStateManager;
@@ -126,7 +128,7 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
         TallyResult result = performTallyStep();
 
         if (result.totalIncrement > 0) {
-            GameStateManager.getInstance().addScore(result.totalIncrement);
+            GameServices.gameState().addScore(result.totalIncrement);
         }
 
         // Play tick sound every N frames while tallying
@@ -317,3 +319,4 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
         return state;
     }
 }
+

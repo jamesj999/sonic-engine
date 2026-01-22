@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.debug;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.level.Pattern;
@@ -67,7 +69,7 @@ public class DebugObjectArtViewer {
         if (handler == null) {
             return;
         }
-        if (!DebugOverlayManager.getInstance().isEnabled(DebugOverlayToggle.OBJECT_ART_VIEWER)) {
+        if (!GameServices.debugOverlay().isEnabled(DebugOverlayToggle.OBJECT_ART_VIEWER)) {
             return;
         }
         if (handler.isKeyPressed(KeyEvent.VK_TAB) || handler.isKeyPressed(KeyEvent.VK_M)) {
@@ -127,7 +129,7 @@ public class DebugObjectArtViewer {
         if (renderManager == null || camera == null) {
             return;
         }
-        if (!DebugOverlayManager.getInstance().isEnabled(DebugOverlayToggle.OBJECT_ART_VIEWER)) {
+        if (!GameServices.debugOverlay().isEnabled(DebugOverlayToggle.OBJECT_ART_VIEWER)) {
             return;
         }
         PatternSpriteRenderer renderer = getRenderer(renderManager);
@@ -319,3 +321,4 @@ public class DebugObjectArtViewer {
         }
     }
 }
+

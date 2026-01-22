@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.level.objects.*;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
@@ -193,7 +195,7 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
         if (checkpointState instanceof CheckpointState cs && cs.isUsedForSpecialStage()) {
             return false;
         }
-        int emeralds = uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getEmeraldCount();
+        int emeralds = GameServices.gameState().getEmeraldCount();
         if (emeralds >= 7) {
             return false;
         }
@@ -273,3 +275,4 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
         return RenderPriority.clamp(5);
     }
 }
+

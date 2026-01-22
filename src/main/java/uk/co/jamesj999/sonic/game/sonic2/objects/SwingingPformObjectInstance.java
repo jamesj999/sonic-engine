@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
@@ -100,7 +102,7 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
     // Debug state (cached for performance)
     private static final boolean DEBUG_VIEW_ENABLED = SonicConfigurationService.getInstance()
             .getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
-    private static final DebugOverlayManager OVERLAY_MANAGER = DebugOverlayManager.getInstance();
+    private static final DebugOverlayManager OVERLAY_MANAGER = GameServices.debugOverlay();
 
     // Position state
     private int x;
@@ -376,8 +378,8 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
         // Check if player is standing on platform
         LevelManager manager = LevelManager.getInstance();
         boolean standing = manager != null &&
-                manager.getSolidObjectManager() != null &&
-                manager.getSolidObjectManager().isRidingObject(this);
+                manager.getObjectManager() != null &&
+                manager.getObjectManager().isRidingObject(this);
         playerStanding = standing;
 
         if (standing) {
@@ -659,3 +661,4 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
                 0.3f, 0.7f, 0.4f, x2, y2, 0, 0));
     }
 }
+

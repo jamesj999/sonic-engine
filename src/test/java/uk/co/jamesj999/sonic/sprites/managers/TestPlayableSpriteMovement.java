@@ -12,9 +12,9 @@ import java.lang.reflect.Method;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class TestPlayableSpriteMovementManager {
+public class TestPlayableSpriteMovement {
 
-        private PlayableSpriteMovementManager manager;
+        private PlayableSpriteMovement manager;
         private AbstractPlayableSprite mockSprite;
 
         @Before
@@ -38,7 +38,7 @@ public class TestPlayableSpriteMovementManager {
                         public void draw() {
                         }
                 };
-                manager = new PlayableSpriteMovementManager(mockSprite);
+                manager = new PlayableSpriteMovement(mockSprite);
         }
 
         @Test
@@ -52,7 +52,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setXSpeed((short) 0);
                 mockSprite.setGSpeed((short) 0);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateLanding",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateLanding",
                                 AbstractPlayableSprite.class);
                 method.setAccessible(true);
                 method.invoke(manager, mockSprite);
@@ -72,7 +72,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setXSpeed((short) 0);
                 mockSprite.setGSpeed((short) 0);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateLanding",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateLanding",
                                 AbstractPlayableSprite.class);
                 method.setAccessible(true);
                 method.invoke(manager, mockSprite);
@@ -97,7 +97,7 @@ public class TestPlayableSpriteMovementManager {
                                 { (byte) 0xE0, (byte) 0x00 } // -32 -> 0
                 };
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("doTerrainCollision",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("doTerrainCollision",
                                 AbstractPlayableSprite.class, SensorResult[].class);
                 method.setAccessible(true);
 
@@ -143,7 +143,7 @@ public class TestPlayableSpriteMovementManager {
                 SensorResult result = new SensorResult((byte) 0xFF, (byte) -1, 0, Direction.DOWN);
                 SensorResult[] results = { result, result };
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("doTerrainCollision",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("doTerrainCollision",
                                 AbstractPlayableSprite.class, SensorResult[].class);
                 method.setAccessible(true);
                 method.invoke(manager, mockSprite, results);
@@ -166,7 +166,7 @@ public class TestPlayableSpriteMovementManager {
                 // slopeRunning = 32. Accel = 32 * 0.707 = ~22.
                 mockSprite.setAngle((byte) 0x20);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateGSpeed",
                                 AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
                                 boolean.class);
                 method.setAccessible(true);
@@ -187,7 +187,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setGSpeed((short) 3000);
                 mockSprite.setAngle((byte) 0x00);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateGSpeed",
                                 AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
                                 boolean.class);
                 method.setAccessible(true);
@@ -208,7 +208,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setGSpeed((short) 1000);
                 mockSprite.setAngle((byte) 0x00);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateGSpeed",
                                 AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
                                 boolean.class);
                 method.setAccessible(true);
@@ -227,7 +227,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setGSpeed((short) -3000);
                 mockSprite.setAngle((byte) 0x00);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateGSpeed",
                                 AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
                                 boolean.class);
                 method.setAccessible(true);
@@ -252,7 +252,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -500); // Near apex, moving up slowly
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -275,7 +275,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setAir(true);
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -303,7 +303,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) 100); // Falling (positive ySpeed)
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -323,7 +323,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -1500); // High upward velocity
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -343,7 +343,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -500); // In drag range
                 mockSprite.setHurt(true); // Hurt/knockback state
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -364,7 +364,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -500); // In drag range
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -386,7 +386,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -500); // In drag range
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -408,7 +408,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -1024); // Exactly at boundary
                 mockSprite.setHurt(false);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -433,7 +433,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) 0);
                 mockSprite.setGSpeed((short) 0);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "jump", AbstractPlayableSprite.class);
                 method.setAccessible(true);
 
@@ -463,7 +463,7 @@ public class TestPlayableSpriteMovementManager {
 
                 short initialXSpeed = mockSprite.getXSpeed();
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "jump", AbstractPlayableSprite.class);
                 method.setAccessible(true);
 
@@ -490,7 +490,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) 0);
                 mockSprite.setGSpeed((short) 0);
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "jump", AbstractPlayableSprite.class);
                 method.setAccessible(true);
 
@@ -516,7 +516,7 @@ public class TestPlayableSpriteMovementManager {
                 // Verify angle is set correctly before jump
                 assertEquals("Angle should be 0x40 before jump", (byte) 0x40, mockSprite.getAngle());
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "jump", AbstractPlayableSprite.class);
                 method.setAccessible(true);
 
@@ -583,7 +583,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setHurt(true); // Hurt/knockback state
                 mockSprite.setRollingJump(false); // Not a rolling jump
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -620,7 +620,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setHurt(false); // NOT hurt
                 mockSprite.setRollingJump(false); // Not a rolling jump
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateAirMovement", AbstractPlayableSprite.class, boolean.class, boolean.class);
                 method.setAccessible(true);
 
@@ -661,7 +661,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setCrouching(true); // Was crouching
 
                 // First, update crouch state with left/right pressed (should lock down)
-                Method crouchMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method crouchMethod = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "updateCrouchState", AbstractPlayableSprite.class, boolean.class,
                                 boolean.class, boolean.class, boolean.class);
                 crouchMethod.setAccessible(true);
@@ -670,7 +670,7 @@ public class TestPlayableSpriteMovementManager {
                 // Now move at high speed and try to roll - should fail because down is locked
                 mockSprite.setGSpeed((short) 500); // High speed
 
-                Method rollMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method rollMethod = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateRoll", AbstractPlayableSprite.class, boolean.class);
                 rollMethod.setAccessible(true);
                 rollMethod.invoke(manager, mockSprite, true); // down still held
@@ -693,7 +693,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setCrouching(true);
 
                 // Lock the down key by transitioning from crouch
-                Method crouchMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method crouchMethod = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "updateCrouchState", AbstractPlayableSprite.class, boolean.class,
                                 boolean.class, boolean.class, boolean.class);
                 crouchMethod.setAccessible(true);
@@ -707,7 +707,7 @@ public class TestPlayableSpriteMovementManager {
                 // Now set up for roll - moving with high speed and press down again
                 mockSprite.setGSpeed((short) 500);
 
-                Method rollMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method rollMethod = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateRoll", AbstractPlayableSprite.class, boolean.class);
                 rollMethod.setAccessible(true);
                 rollMethod.invoke(manager, mockSprite, true); // down pressed fresh
@@ -730,7 +730,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setCrouching(false); // NOT crouching
                 mockSprite.setGSpeed((short) 500); // Already moving fast
 
-                Method rollMethod = PlayableSpriteMovementManager.class.getDeclaredMethod(
+                Method rollMethod = PlayableSpriteMovement.class.getDeclaredMethod(
                                 "calculateRoll", AbstractPlayableSprite.class, boolean.class);
                 rollMethod.setAccessible(true);
                 rollMethod.invoke(manager, mockSprite, true); // down pressed
@@ -753,7 +753,7 @@ public class TestPlayableSpriteMovementManager {
         @Test
         public void testJumpPressedClearedWhenSpringing() throws Exception {
                 // Get access to the jumpPressed field
-                java.lang.reflect.Field jumpPressedField = PlayableSpriteMovementManager.class
+                java.lang.reflect.Field jumpPressedField = PlayableSpriteMovement.class
                                 .getDeclaredField("jumpPressed");
                 jumpPressedField.setAccessible(true);
 
@@ -794,7 +794,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setYSpeed((short) -1720); // Yellow spring velocity after 15 frames
 
                 // Get access to the jumpPressed field
-                java.lang.reflect.Field jumpPressedField = PlayableSpriteMovementManager.class
+                java.lang.reflect.Field jumpPressedField = PlayableSpriteMovement.class
                                 .getDeclaredField("jumpPressed");
                 jumpPressedField.setAccessible(true);
 
@@ -813,7 +813,7 @@ public class TestPlayableSpriteMovementManager {
                 // While springing is TRUE, the velocity should NOT be capped.
                 // Let's verify this by calling jumpHandler via reflection
 
-                Method jumpHandlerMethod = PlayableSpriteMovementManager.class
+                Method jumpHandlerMethod = PlayableSpriteMovement.class
                                 .getDeclaredMethod("jumpHandler", boolean.class);
                 jumpHandlerMethod.setAccessible(true);
 
@@ -861,7 +861,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setGSpeed((short) 0); // Zero ground speed
                 mockSprite.setAngle((byte) 0x10); // Downhill to the right
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateGSpeed",
                                 AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
                                 boolean.class);
                 method.setAccessible(true);
@@ -894,7 +894,7 @@ public class TestPlayableSpriteMovementManager {
                 mockSprite.setGSpeed((short) 0); // Zero ground speed
                 mockSprite.setAngle((byte) 0xF0); // Uphill to the right
 
-                Method method = PlayableSpriteMovementManager.class.getDeclaredMethod("calculateGSpeed",
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("calculateGSpeed",
                                 AbstractPlayableSprite.class, boolean.class, boolean.class, boolean.class,
                                 boolean.class);
                 method.setAccessible(true);
@@ -913,3 +913,4 @@ public class TestPlayableSpriteMovementManager {
                                 newGSpeed > -20);
         }
 }
+

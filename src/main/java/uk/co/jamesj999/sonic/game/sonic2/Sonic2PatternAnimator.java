@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Updates Sonic 2 zone animated tiles using the Dynamic_Normal scripts.
  */
-public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
+class Sonic2PatternAnimator implements AnimatedPatternManager {
     // Disassembly: loc_3FF94 (Animated_EHZ)
     private static final int ANIMATED_EHZ_ADDR = 0x3FF94;
 
@@ -74,7 +74,7 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
     private final List<ScriptState> scripts;
     private int tableAddr = -1;
 
-    public Sonic2AnimatedPatternManager(Rom rom, Level level, int zoneIndex) throws IOException {
+    public Sonic2PatternAnimator(Rom rom, Level level, int zoneIndex) throws IOException {
         this.level = level;
         RomByteReader reader = RomByteReader.fromRom(rom);
         this.tableAddr = scanForTable(reader);
@@ -103,7 +103,7 @@ public class Sonic2AnimatedPatternManager implements AnimatedPatternManager {
                 // Ignore read errors during scan
             }
         }
-        System.err.println("Sonic2AnimatedPatternManager: Could not locate PLC_DYNANM table.");
+        System.err.println("Sonic2PatternAnimator: Could not locate PLC_DYNANM table.");
         return -1;
     }
 

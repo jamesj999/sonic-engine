@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.game.GameStateManager;
@@ -191,7 +193,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
      */
     private void loadArt() {
         try {
-            RomManager romManager = RomManager.getInstance();
+            RomManager romManager = GameServices.rom();
             if (!romManager.isRomAvailable()) {
                 LOGGER.warning("ROM not available for results art loading");
                 return;
@@ -1080,7 +1082,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         };
 
         for (int i = 0; i < 7; i++) {
-            boolean hasThisEmerald = GameStateManager.getInstance().hasEmerald(i);
+            boolean hasThisEmerald = GameServices.gameState().hasEmerald(i);
 
             if (hasThisEmerald) {
                 // ROM-accurate flash: display on odd frames only (btst #0)
@@ -1112,7 +1114,7 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
         };
 
         for (int i = 0; i < 7; i++) {
-            boolean hasThisEmerald = GameStateManager.getInstance().hasEmerald(i);
+            boolean hasThisEmerald = GameServices.gameState().hasEmerald(i);
 
             if (hasThisEmerald) {
                 // ROM-accurate flash: display on odd frames only (btst #0)
@@ -1191,3 +1193,4 @@ public class SpecialStageResultsScreenObjectInstance extends AbstractResultsScre
     public int getTotalBonus() { return totalBonus; }
     public boolean didGetEmerald() { return gotEmerald; }
 }
+

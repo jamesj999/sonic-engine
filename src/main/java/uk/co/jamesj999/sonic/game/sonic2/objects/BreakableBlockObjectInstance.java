@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
@@ -70,7 +72,8 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         this.broken = false;
 
         // Check persistence: if already broken, stay broken
-        if (LevelManager.getInstance().getObjectPlacementManager().isRemembered(spawn)) {
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        if (objectManager != null && objectManager.isRemembered(spawn)) {
             this.broken = true;
             setDestroyed(true);
         }
@@ -171,7 +174,10 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         broken = true;
 
         // Mark as broken in persistence table (stays broken on respawn/revisit)
-        LevelManager.getInstance().getObjectPlacementManager().markRemembered(spawn);
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        if (objectManager != null) {
+            objectManager.markRemembered(spawn);
+        }
 
         // Force player into rolling state with proper hitbox (disassembly lines 48916-48919)
         // bset #status.player.rolling,status(a1)
@@ -203,10 +209,9 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         AudioManager.getInstance().playSfx(GameSound.SLOW_SMASH);
 
         // Award 100 points
-        uk.co.jamesj999.sonic.game.GameStateManager.getInstance().addScore(100);
+        GameServices.gameState().addScore(100);
 
         // Spawn points display popup
-        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
         if (objectManager != null) {
             PointsObjectInstance points = new PointsObjectInstance(
                     new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
@@ -354,3 +359,4 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         }
     }
 }
+

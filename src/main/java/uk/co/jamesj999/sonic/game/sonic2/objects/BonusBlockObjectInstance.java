@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.GameStateManager;
@@ -255,7 +257,7 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         // Award points and spawn points display (ROM: lines 59687-59694)
         if (hitCount <= POINTS_PER_HIT.length) {
             int points = POINTS_PER_HIT[hitCount - 1];
-            GameStateManager.getInstance().addScore(points);
+            GameServices.gameState().addScore(points);
 
             // Spawn floating points display
             LevelManager levelManager = LevelManager.getInstance();
@@ -342,3 +344,4 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         return hitCount;
     }
 }
+

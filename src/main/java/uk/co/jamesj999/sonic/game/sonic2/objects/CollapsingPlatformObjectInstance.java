@@ -276,10 +276,10 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
 
     private boolean isPlayerStanding() {
         LevelManager manager = LevelManager.getInstance();
-        if (manager == null || manager.getSolidObjectManager() == null) {
+        if (manager == null || manager.getObjectManager() == null) {
             return false;
         }
-        return manager.getSolidObjectManager().isRidingObject(this);
+        return manager.getObjectManager().isRidingObject(this);
     }
 
     private void collapse() {

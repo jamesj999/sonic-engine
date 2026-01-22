@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.sprites.playable;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.audio.GameAudioProfile;
 
 import java.util.logging.Logger;
@@ -13,15 +15,15 @@ import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.sprites.AbstractSprite;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
-import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovementManager;
-import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteAnimationManager;
+import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteAnimation;
+import uk.co.jamesj999.sonic.sprites.managers.PlayableSpriteMovement;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteMovementManager;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationSet;
-import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpindashDustController;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.timer.timers.SpeedShoesTimer;
 
@@ -34,8 +36,7 @@ import uk.co.jamesj999.sonic.timer.timers.SpeedShoesTimer;
 public abstract class AbstractPlayableSprite extends AbstractSprite {
         private static final Logger LOGGER = Logger.getLogger(AbstractPlayableSprite.class.getName());
 
-        protected final SpriteMovementManager movementManager;
-        protected final PlayableSpriteAnimationManager animationManager;
+        protected final PlayableSpriteController controller;
 
         protected GroundMode runningMode = GroundMode.GROUND;
 
@@ -170,7 +171,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         private boolean renderVFlip = false;
         private boolean highPriority = false;
         private int priorityBucket = RenderPriority.PLAYER_DEFAULT;
-        private SpindashDustManager spindashDustManager;
 
         protected boolean shield = false;
         private ShieldObjectInstance shieldObject;
@@ -238,7 +238,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         /**
          * Manages drowning mechanics while underwater (air countdown, bubbles, etc.).
          */
-        protected DrowningManager drowningManager;
 
         /**
          * Clears all active power-ups (shield, invincibility, speed shoes).
@@ -260,7 +259,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 // Clear speed shoes
                 if (this.speedShoes) {
                         this.speedShoes = false;
-                        TimerManager.getInstance().removeTimerForCode("SpeedShoes-" + getCode());
+                        GameServices.timers().removeTimerForCode("SpeedShoes-" + getCode());
                         defineSpeeds(); // Reset speeds to default
                 }
         }
@@ -277,7 +276,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
                 this.speedShoes = false;
                 // Cancel any active speed shoes timer
-                TimerManager.getInstance().removeTimerForCode("SpeedShoes-" + getCode());
+                GameServices.timers().removeTimerForCode("SpeedShoes-" + getCode());
                 this.invincibleFrames = 0;
                 this.invulnerableFrames = 0;
                 this.invincibleFrames = 0;
@@ -340,7 +339,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.speedShoes = true;
                 // Register speed shoes timer using the existing timer framework
                 // Duration is 1200 frames (20 seconds @ 60fps) per SPG Sonic 2
-                TimerManager.getInstance().registerTimer(
+                GameServices.timers().registerTimer(
                                 new SpeedShoesTimer("SpeedShoes-" + getCode(), this));
         }
 
@@ -454,12 +453,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.animationTick = Math.max(0, animationTick);
         }
 
-        public SpindashDustManager getSpindashDustManager() {
-                return spindashDustManager;
+        public SpindashDustController getSpindashDustController() {
+                return controller.getSpindashDust();
         }
 
-        public void setSpindashDustManager(SpindashDustManager spindashDustManager) {
-                this.spindashDustManager = spindashDustManager;
+        public void setSpindashDustController(SpindashDustController spindashDustController) {
+                controller.setSpindashDust(spindashDustController);
         }
 
         public boolean getRenderHFlip() {
@@ -1118,11 +1117,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         xHistory[i] = x;
                         yHistory[i] = y;
                 }
-                // Always use PlayableSpriteMovementManager - it checks debugMode internally
-                movementManager = new PlayableSpriteMovementManager(this);
-                animationManager = new PlayableSpriteAnimationManager(this);
-                // Initialize drowning manager for underwater mechanics
-                drowningManager = new DrowningManager(this);
+                // Always use PlayableSpriteController - it checks debugMode internally
+                controller = new PlayableSpriteController(this);
         }
 
         /**
@@ -1375,11 +1371,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public SpriteMovementManager getMovementManager() {
-                return movementManager;
+                return controller.getMovement();
         }
 
-        public PlayableSpriteAnimationManager getAnimationManager() {
-                return animationManager;
+        public PlayableSpriteAnimation getAnimationManager() {
+                return controller.getAnimation();
         }
 
         protected abstract void defineSpeeds();
@@ -1588,8 +1584,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
 
                 // Update drowning manager each frame while underwater
-                if (inWater && !dead && drowningManager != null) {
-                        boolean shouldDrown = drowningManager.update();
+                if (inWater && !dead && controller.getDrowning() != null) {
+                        boolean shouldDrown = controller.getDrowning().update();
                         if (shouldDrown) {
                                 applyDrownDeath();
                         }
@@ -1622,8 +1618,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 spawnSplash();
 
                 // Reset drowning manager for new underwater session
-                if (drowningManager != null) {
-                        drowningManager.reset();
+                if (controller.getDrowning() != null) {
+                        controller.getDrowning().reset();
                 }
         }
 
@@ -1654,8 +1650,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 spawnSplash();
 
                 // Notify drowning manager of water exit (stops drowning music, resets state)
-                if (drowningManager != null) {
-                        drowningManager.onExitWater();
+                if (controller.getDrowning() != null) {
+                        controller.getDrowning().onExitWater();
                 }
         }
 
@@ -1670,7 +1666,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
 
                 // Get dust/splash renderer from spindash dust manager
-                if (spindashDustManager == null || spindashDustManager.getRenderer() == null) {
+                SpindashDustController dustController = getSpindashDustController();
+                if (dustController == null || dustController.getRenderer() == null) {
                         return;
                 }
 
@@ -1685,7 +1682,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
                 // Create splash object
                 var splash = new uk.co.jamesj999.sonic.game.sonic2.objects.SplashObjectInstance(
-                                getCentreX(), waterY, spindashDustManager.getRenderer(),
+                                getCentreX(), waterY, dustController.getRenderer(),
                                 direction == Direction.LEFT);
 
                 // Add to object manager
@@ -1743,8 +1740,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
 
                 // Delegate to drowning manager for air timer reset and music handling
-                if (drowningManager != null) {
-                        drowningManager.replenishAir();
+                if (controller.getDrowning() != null) {
+                        controller.getDrowning().replenishAir();
                 }
         }
 
@@ -1854,3 +1851,4 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 return -0x400;
         }
 }
+

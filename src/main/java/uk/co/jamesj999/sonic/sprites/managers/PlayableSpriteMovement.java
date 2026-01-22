@@ -1,10 +1,12 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.physics.CollisionSystem;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
-import uk.co.jamesj999.sonic.physics.TerrainCollisionManager;
 import uk.co.jamesj999.sonic.physics.TrigLookupTable;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
@@ -18,12 +20,11 @@ import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 import java.util.logging.Logger;
 
-public class PlayableSpriteMovementManager extends
+public class PlayableSpriteMovement extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
-	private static final Logger LOGGER = Logger.getLogger(PlayableSpriteMovementManager.class.getName());
+	private static final Logger LOGGER = Logger.getLogger(PlayableSpriteMovement.class.getName());
 
-	private final TerrainCollisionManager terrainCollisionManager = TerrainCollisionManager
-			.getInstance();
+	private final CollisionSystem collisionSystem = CollisionSystem.getInstance();
 	private final AudioManager audioManager = AudioManager.getInstance();
 
 	// These values don't change with speed shoes, so we cache them
@@ -47,7 +48,7 @@ public class PlayableSpriteMovementManager extends
 
 	private boolean testKeyPressed;
 
-	public PlayableSpriteMovementManager(AbstractPlayableSprite sprite) {
+	public PlayableSpriteMovement(AbstractPlayableSprite sprite) {
 		super(sprite);
 		// Note: max, runAccel, runDecel, and friction are read dynamically from sprite
 		// to support speed shoes power-up which modifies these values at runtime
@@ -121,7 +122,7 @@ public class PlayableSpriteMovementManager extends
 		}
 
 		// Control is locked by either the timer system or the moveLockTimer counter
-		boolean controlLocked = TimerManager.getInstance().getTimerForCode("ControlLock-" + sprite.getCode()) != null
+		boolean controlLocked = GameServices.timers().getTimerForCode("ControlLock-" + sprite.getCode()) != null
 				|| sprite.getMoveLockTimer() > 0;
 
 		// SPG: Store raw button state before control lock modifies it.
@@ -253,9 +254,9 @@ public class PlayableSpriteMovementManager extends
 			doWallCollision(sprite);
 		}
 
-		// Perform terrain checks - results are updated directly into the sprite
-		SensorResult[] groundResult = terrainCollisionManager.getSensorResult(sprite.getGroundSensors());
-		SensorResult[] ceilingResult = terrainCollisionManager.getSensorResult(sprite.getCeilingSensors());
+		// Perform terrain checks via unified collision pipeline
+		SensorResult[] groundResult = collisionSystem.terrainProbes(sprite, sprite.getGroundSensors(), "ground");
+		SensorResult[] ceilingResult = collisionSystem.terrainProbes(sprite, sprite.getCeilingSensors(), "ceiling");
 
 		doTerrainCollision(sprite, groundResult);
 		doCeilingCollision(sprite, ceilingResult);
@@ -279,7 +280,7 @@ public class PlayableSpriteMovementManager extends
 				// This allows player to maintain momentum and land correctly
 				sprite.setGSpeed((short) 0);
 				// Lock controls for 30 frames (0x1E)
-				TimerManager.getInstance()
+				GameServices.timers()
 						.registerTimer(new ControlLockTimer("ControlLock-" + sprite.getCode(), 30, sprite));
 			}
 		}
@@ -680,9 +681,9 @@ public class PlayableSpriteMovementManager extends
 			// don't set to air based on terrain alone.
 			if (bestResult == null || bestResult.distance() >= 14) {
 				// Check if player is standing on a solid object before setting to air
-				var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
-				if (solidManager != null && (solidManager.isRidingObject()
-						|| solidManager.hasStandingContact(sprite))) {
+				var objectManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getObjectManager();
+				if (objectManager != null && (objectManager.isRidingObject()
+						|| objectManager.hasStandingContact(sprite))) {
 					// Player is on an object, don't detach based on terrain
 					return;
 				}
@@ -795,7 +796,7 @@ public class PlayableSpriteMovementManager extends
 		// SPG: Camera lag timer is set to 32 - spinrev, where spinrev is between 0-8
 		// This gives a timer range of 24-32 frames
 		int spinrevForTimer = Math.min(8, (int) Math.floor(sprite.getSpindashConstant()));
-		TimerManager.getInstance()
+		GameServices.timers()
 				.registerTimer(new SpindashCameraTimer("spindash", 32 - spinrevForTimer));
 
 		sprite.setSpindashConstant(0f);
@@ -987,9 +988,9 @@ public class PlayableSpriteMovementManager extends
 
 		// Clear solid object riding state to prevent the 16-pixel sticky tolerance
 		// from keeping the player grounded on the next frame after jumping.
-		var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
-		if (solidManager != null) {
-			solidManager.clearRidingObject();
+		var objectManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getObjectManager();
+		if (objectManager != null) {
+			objectManager.clearRidingObject();
 		}
 
 		// SPG: In S1/S2/S3K, air control is locked when jumping while rolling.
@@ -1027,9 +1028,9 @@ public class PlayableSpriteMovementManager extends
 		int terrainDistance = getTerrainHeadroomDistance(sprite, hexAngle);
 
 		// Check solid object headroom
-		var solidManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getSolidObjectManager();
-		int objectDistance = (solidManager != null)
-				? solidManager.getHeadroomDistance(sprite, hexAngle)
+		var objectManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getObjectManager();
+		int objectDistance = (objectManager != null)
+				? objectManager.getHeadroomDistance(sprite, hexAngle)
 				: Integer.MAX_VALUE;
 
 		// Require at least 6 pixels of clearance from BOTH
@@ -1171,7 +1172,7 @@ public class PlayableSpriteMovementManager extends
 		// Tick death countdown and trigger respawn request when it reaches 0
 		// GameLoop will handle the fade-to-black transition before respawning
 		if (sprite.tickDeathCountdown()) {
-			uk.co.jamesj999.sonic.game.GameStateManager.getInstance().loseLife();
+			GameServices.gameState().loseLife();
 			uk.co.jamesj999.sonic.level.LevelManager.getInstance().requestRespawn();
 		}
 	}
@@ -1472,3 +1473,4 @@ public class PlayableSpriteMovementManager extends
 		}
 	}
 }
+

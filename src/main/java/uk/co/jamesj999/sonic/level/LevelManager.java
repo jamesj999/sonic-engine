@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.level;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import com.jogamp.opengl.GL2;
 import uk.co.jamesj999.sonic.Engine;
 import uk.co.jamesj999.sonic.camera.Camera;
@@ -36,34 +38,27 @@ import uk.co.jamesj999.sonic.graphics.ShaderProgram;
 import uk.co.jamesj999.sonic.graphics.WaterShaderProgram;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.graphics.PatternRenderCommand;
-import uk.co.jamesj999.sonic.graphics.SpriteRenderManager;
 import uk.co.jamesj999.sonic.level.render.SpritePieceRenderer;
 import uk.co.jamesj999.sonic.level.render.BackgroundRenderer;
 // import uk.co.jamesj999.sonic.level.ParallaxManager; -> Removed unused
 import uk.co.jamesj999.sonic.level.objects.ObjectManager;
-import uk.co.jamesj999.sonic.level.objects.ObjectPlacementManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
-import uk.co.jamesj999.sonic.level.objects.PlaneSwitcherManager;
-import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
-import uk.co.jamesj999.sonic.level.objects.TouchResponseManager;
 import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
 import uk.co.jamesj999.sonic.level.rings.RingManager;
-import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
-import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
-import uk.co.jamesj999.sonic.level.rings.LostRingManager;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.level.animation.AnimatedPaletteManager;
 import uk.co.jamesj999.sonic.level.animation.AnimatedPatternManager;
+import uk.co.jamesj999.sonic.physics.CollisionSystem;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.physics.Sensor;
 import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.art.SpriteArtSet;
-import uk.co.jamesj999.sonic.sprites.managers.SpindashDustManager;
+import uk.co.jamesj999.sonic.sprites.managers.SpindashDustController;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
@@ -102,20 +97,13 @@ public class LevelManager {
     private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
-    private final DebugOverlayManager overlayManager = DebugOverlayManager.getInstance();
+    private final DebugOverlayManager overlayManager = GameServices.debugOverlay();
     private final List<List<LevelData>> levels = new ArrayList<>();
     private int currentAct = 0;
     private int currentZone = 0;
     private int frameCounter = 0;
-    private ObjectPlacementManager objectPlacementManager;
-    private PlaneSwitcherManager planeSwitcherManager;
     private ObjectManager objectManager;
-    private SolidObjectManager solidObjectManager;
-    private TouchResponseManager touchResponseManager;
-    private RingPlacementManager ringPlacementManager;
-    private RingRenderManager ringRenderManager;
     private RingManager ringManager;
-    private LostRingManager lostRingManager;
     private ZoneFeatureProvider zoneFeatureProvider;
     private ObjectRenderManager objectRenderManager;
     private HudRenderManager hudRenderManager;
@@ -200,7 +188,7 @@ public class LevelManager {
      */
     public void loadLevel(int levelIndex) throws IOException {
         try {
-            Rom rom = RomManager.getInstance().getRom();
+            Rom rom = GameServices.rom().getRom();
             parallaxManager.load(rom);
             gameModule = GameModuleRegistry.getCurrent();
             refreshZoneList();
@@ -215,35 +203,26 @@ public class LevelManager {
             initAnimatedPatterns();
             initAnimatedPalettes();
             RomByteReader romReader = RomByteReader.fromRom(rom);
-            objectPlacementManager = new ObjectPlacementManager(level.getObjects());
-            planeSwitcherManager = new PlaneSwitcherManager(objectPlacementManager,
+            TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
+            objectManager = new ObjectManager(level.getObjects(),
+                    gameModule.createObjectRegistry(),
                     gameModule.getPlaneSwitcherObjectId(),
-                    gameModule.getPlaneSwitcherConfig());
-            objectManager = new ObjectManager(objectPlacementManager, gameModule.createObjectRegistry());
+                    gameModule.getPlaneSwitcherConfig(),
+                    touchResponseTable);
+            // Wire up CollisionSystem with ObjectManager for unified collision pipeline
+            CollisionSystem.getInstance().setObjectManager(objectManager);
             // Reset camera state from previous level (signpost may have locked it)
             Camera camera = Camera.getInstance();
             camera.setFrozen(false);
             camera.setMinX((short) 0);
             camera.setMaxX((short) (level.getMap().getWidth() * LevelConstants.BLOCK_WIDTH));
-            objectManager.reset(camera.getX(), level.getObjects());
+            objectManager.reset(camera.getX());
             // Reset game-specific object state for new level
             gameModule.onLevelLoad();
-            solidObjectManager = new SolidObjectManager(objectManager);
-            solidObjectManager.reset();
-            TouchResponseTable touchResponseTable = gameModule.createTouchResponseTable(romReader);
-            touchResponseManager = new TouchResponseManager(objectManager, touchResponseTable);
-            touchResponseManager.reset();
-            ringPlacementManager = new RingPlacementManager(level.getRings());
-            ringPlacementManager.reset(Camera.getInstance().getX());
             RingSpriteSheet ringSpriteSheet = level.getRingSpriteSheet();
-            if (ringSpriteSheet != null && ringSpriteSheet.getFrameCount() > 0) {
-                ringRenderManager = new RingRenderManager(ringSpriteSheet);
-                ringRenderManager.ensurePatternsCached(graphicsManager, level.getPatternCount());
-            } else {
-                ringRenderManager = null;
-            }
-            ringManager = new RingManager(ringPlacementManager, ringRenderManager);
-            lostRingManager = new LostRingManager(this, ringRenderManager, touchResponseTable);
+            ringManager = new RingManager(level.getRings(), ringSpriteSheet, this, touchResponseTable);
+            ringManager.reset(Camera.getInstance().getX());
+            ringManager.ensurePatternsCached(graphicsManager, level.getPatternCount());
             // Initialize zone-specific features (CNZ bumpers, CPZ pylon, water surface, etc.)
             zoneFeatureProvider = gameModule.getZoneFeatureProvider();
             if (zoneFeatureProvider != null) {
@@ -295,23 +274,11 @@ public class LevelManager {
             playable = player instanceof AbstractPlayableSprite ? (AbstractPlayableSprite) player : null;
         }
         if (objectManager != null) {
-            objectManager.update(Camera.getInstance().getX(), playable);
-        } else if (objectPlacementManager != null) {
-            objectPlacementManager.update(Camera.getInstance().getX());
-        }
-        if (solidObjectManager != null) {
-            solidObjectManager.update(playable);
-        }
-        if (touchResponseManager != null) {
-            // Pass frameCounter + 1 to match lostRingManager.update for consistent ring
-            // timing
-            touchResponseManager.update(playable, frameCounter + 1);
+            objectManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
         }
         if (ringManager != null) {
             ringManager.update(Camera.getInstance().getX(), playable, frameCounter + 1);
-        }
-        if (lostRingManager != null) {
-            lostRingManager.update(playable, frameCounter + 1);
+            ringManager.updateLostRings(playable, frameCounter + 1);
         }
         // Update zone-specific features (CNZ bumpers, etc.)
         if (zoneFeatureProvider != null && level != null) {
@@ -335,10 +302,10 @@ public class LevelManager {
     }
 
     public void applyPlaneSwitchers(AbstractPlayableSprite player) {
-        if (planeSwitcherManager == null || player == null) {
+        if (objectManager == null || player == null) {
             return;
         }
-        planeSwitcherManager.update(player);
+        objectManager.applyPlaneSwitchers(player);
     }
 
     public LevelState getLevelGamestate() {
@@ -385,22 +352,22 @@ public class LevelManager {
 
     private void initSpindashDust(AbstractPlayableSprite playable) {
         if (!(game instanceof SpindashDustArtProvider dustProvider)) {
-            playable.setSpindashDustManager(null);
+            playable.setSpindashDustController(null);
             return;
         }
         try {
             SpriteArtSet dustArt = dustProvider.loadSpindashDustArt(playable.getCode());
             if (dustArt == null || dustArt.bankSize() <= 0 || dustArt.mappingFrames().isEmpty()
                     || dustArt.dplcFrames().isEmpty()) {
-                playable.setSpindashDustManager(null);
+                playable.setSpindashDustController(null);
                 return;
             }
             PlayerSpriteRenderer dustRenderer = new PlayerSpriteRenderer(dustArt);
             dustRenderer.ensureCached(graphicsManager);
-            playable.setSpindashDustManager(new SpindashDustManager(playable, dustRenderer));
+            playable.setSpindashDustController(new SpindashDustController(playable, dustRenderer));
         } catch (IOException e) {
             LOGGER.log(SEVERE, "Failed to load spindash dust art.", e);
-            playable.setSpindashDustManager(null);
+            playable.setSpindashDustController(null);
         }
     }
 
@@ -420,6 +387,10 @@ public class LevelManager {
             int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, OBJECT_PATTERN_BASE);
 
             hudRenderManager = new HudRenderManager(graphicsManager);
+            // Wire up HUD to unified UI render pipeline
+            if (graphicsManager.getUiRenderPipeline() != null) {
+                graphicsManager.getUiRenderPipeline().setHudRenderManager(hudRenderManager);
+            }
 
             Pattern[] hudDigits = provider.getHudDigitPatterns();
             if (hudDigits != null) {
@@ -602,7 +573,7 @@ public class LevelManager {
         drawWithSpritePriority(null);
     }
 
-    public void drawWithSpritePriority(SpriteRenderManager spriteRenderManager) {
+    public void drawWithSpritePriority(SpriteManager spriteManager) {
         if (level == null) {
             LOGGER.warning("No level loaded to draw.");
             return;
@@ -612,7 +583,7 @@ public class LevelManager {
         if (animatedPatternManager != null) {
             animatedPatternManager.update();
         }
-        if (animatedPaletteManager != null) {
+        if (animatedPaletteManager != null && animatedPaletteManager != animatedPatternManager) {
             animatedPaletteManager.update();
         }
         Camera camera = Camera.getInstance();
@@ -649,14 +620,12 @@ public class LevelManager {
 
         if (ringManager != null) {
             ringManager.draw(frameCounter);
-        }
-        if (lostRingManager != null) {
-            lostRingManager.draw(frameCounter);
+            ringManager.drawLostRings(frameCounter);
         }
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
-            if (spriteRenderManager != null) {
-                spriteRenderManager.drawPriorityBucket(bucket, false);
+            if (spriteManager != null) {
+                spriteManager.drawPriorityBucket(bucket, false);
             }
             if (objectManager != null) {
                 objectManager.drawPriorityBucket(bucket, false);
@@ -670,8 +639,8 @@ public class LevelManager {
         graphicsManager.flushPatternBatch();
 
         for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
-            if (spriteRenderManager != null) {
-                spriteRenderManager.drawPriorityBucket(bucket, true);
+            if (spriteManager != null) {
+                spriteManager.drawPriorityBucket(bucket, true);
             }
             if (objectManager != null) {
                 objectManager.drawPriorityBucket(bucket, true);
@@ -706,7 +675,7 @@ public class LevelManager {
             graphicsManager.enqueueDebugLineState();
         }
 
-        if (objectPlacementManager != null && overlayEnabled) {
+        if (objectManager != null && overlayEnabled) {
             boolean showObjectPoints = overlayManager.isEnabled(DebugOverlayToggle.OBJECT_POINTS);
             boolean showPlaneSwitchers = overlayManager.isEnabled(DebugOverlayToggle.PLANE_SWITCHERS);
             debugObjectCommands.clear();
@@ -716,7 +685,7 @@ public class LevelManager {
             AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite
                     ? (AbstractPlayableSprite) player
                     : null;
-            for (ObjectSpawn spawn : objectPlacementManager.getActiveSpawns()) {
+            for (ObjectSpawn spawn : objectManager.getActiveSpawns()) {
                 // Frustum cull: skip objects outside visible area (with 32px padding for large objects)
                 if (!isInCameraFrustum(spawn.x(), spawn.y(), 32)) {
                     continue;
@@ -752,7 +721,7 @@ public class LevelManager {
                 && overlayManager.isEnabled(DebugOverlayToggle.RING_BOUNDS)) {
             Collection<RingSpawn> rings = ringManager.getActiveSpawns();
             if (!rings.isEmpty()) {
-                if (ringRenderManager == null) {
+                if (!ringManager.hasRenderer()) {
                     debugRingCommands.clear();
                     for (RingSpawn ring : rings) {
                         if (!ringManager.isRenderable(ring, frameCounter)) {
@@ -771,7 +740,7 @@ public class LevelManager {
                     graphicsManager.enqueueDebugLineState();
                     graphicsManager.registerCommand(new GLCommandGroup(GL2.GL_POINTS, debugRingCommands));
                 } else {
-                    PatternSpriteRenderer.FrameBounds bounds = ringRenderManager.getFrameBounds(frameCounter);
+                    PatternSpriteRenderer.FrameBounds bounds = ringManager.getFrameBounds(frameCounter);
                     debugBoxCommands.clear();
                     debugCenterCommands.clear();
                     int crossHalf = 2;
@@ -1580,11 +1549,11 @@ public class LevelManager {
             return;
         }
         int subtype = spawn.subtype();
-        int halfSpan = PlaneSwitcherManager.decodeHalfSpan(subtype);
-        boolean horizontal = PlaneSwitcherManager.isHorizontal(subtype);
+        int halfSpan = ObjectManager.decodePlaneSwitcherHalfSpan(subtype);
+        boolean horizontal = ObjectManager.isPlaneSwitcherHorizontal(subtype);
         int x = spawn.x();
         int y = spawn.y();
-        int sideState = planeSwitcherManager != null ? planeSwitcherManager.getSideState(spawn) : -1;
+        int sideState = objectManager != null ? objectManager.getPlaneSwitcherSideState(spawn) : -1;
         if (sideState < 0 && player != null) {
             sideState = horizontal
                     ? (player.getCentreY() >= y ? 1 : 0)
@@ -1804,45 +1773,37 @@ public class LevelManager {
     }
 
     public Collection<ObjectSpawn> getActiveObjectSpawns() {
-        if (objectPlacementManager == null) {
+        if (objectManager == null) {
             return List.of();
         }
-        return objectPlacementManager.getActiveSpawns();
-    }
-
-    public TouchResponseManager getTouchResponseManager() {
-        return touchResponseManager;
+        return objectManager.getActiveSpawns();
     }
 
     public ObjectRenderManager getObjectRenderManager() {
         return objectRenderManager;
     }
 
-    public RingRenderManager getRingRenderManager() {
-        return ringRenderManager;
+    public RingManager getRingManager() {
+        return ringManager;
     }
 
     public boolean areAllRingsCollected() {
-        return ringPlacementManager != null && ringPlacementManager.areAllCollected();
+        return ringManager != null && ringManager.areAllCollected();
     }
 
     public ObjectManager getObjectManager() {
         return objectManager;
     }
 
-    public ObjectPlacementManager getObjectPlacementManager() {
-        return objectPlacementManager;
-    }
-
     public void spawnLostRings(AbstractPlayableSprite player, int frameCounter) {
-        if (lostRingManager == null || player == null) {
+        if (ringManager == null || player == null) {
             return;
         }
         int count = player.getRingCount();
         if (count <= 0) {
             return;
         }
-        lostRingManager.spawnLostRings(player, count, frameCounter);
+        ringManager.spawnLostRings(player, count, frameCounter);
     }
 
     /**
@@ -2046,10 +2007,6 @@ public class LevelManager {
         loadCurrentLevel();
     }
 
-    public SolidObjectManager getSolidObjectManager() {
-        return solidObjectManager;
-    }
-
     public RespawnState getCheckpointState() {
         return checkpointState;
     }
@@ -2238,3 +2195,4 @@ public class LevelManager {
         return requested;
     }
 }
+

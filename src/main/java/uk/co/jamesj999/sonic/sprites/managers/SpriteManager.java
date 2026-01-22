@@ -1,14 +1,20 @@
 package uk.co.jamesj999.sonic.sprites.managers;
 
+import uk.co.jamesj999.sonic.Control.InputHandler;
+import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
+import uk.co.jamesj999.sonic.graphics.RenderPriority;
+import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.physics.Direction;
 import uk.co.jamesj999.sonic.sprites.SensorConfiguration;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,8 +33,37 @@ public class SpriteManager {
 
 	private static final SensorConfiguration[][] MOVEMENT_MAPPING_ARRAY = createMovementMappingArray();
 
+	private static final int BUCKET_COUNT = RenderPriority.MAX - RenderPriority.MIN + 1;
+	@SuppressWarnings("unchecked")
+	private final List<Sprite>[] lowPriorityBuckets = new ArrayList[BUCKET_COUNT];
+	@SuppressWarnings("unchecked")
+	private final List<Sprite>[] highPriorityBuckets = new ArrayList[BUCKET_COUNT];
+	private final List<Sprite> nonPlayableSprites = new ArrayList<>();
+
+	private LevelManager levelManager;
+
+	private int upKey;
+	private int downKey;
+	private int leftKey;
+	private int rightKey;
+	private int jumpKey;
+	private int testKey;
+	private int debugModeKey;
+	private int frameCounter;
+
 	private SpriteManager() {
 		sprites = new HashMap<String, Sprite>();
+		for (int i = 0; i < BUCKET_COUNT; i++) {
+			lowPriorityBuckets[i] = new ArrayList<>();
+			highPriorityBuckets[i] = new ArrayList<>();
+		}
+		upKey = configService.getInt(SonicConfiguration.UP);
+		downKey = configService.getInt(SonicConfiguration.DOWN);
+		leftKey = configService.getInt(SonicConfiguration.LEFT);
+		rightKey = configService.getInt(SonicConfiguration.RIGHT);
+		jumpKey = configService.getInt(SonicConfiguration.JUMP);
+		testKey = configService.getInt(SonicConfiguration.TEST);
+		debugModeKey = configService.getInt(SonicConfiguration.DEBUG_MODE_KEY);
 	}
 
 	/**
@@ -76,8 +111,138 @@ public class SpriteManager {
 		return null;
 	}
 
+	public void update(InputHandler handler) {
+		frameCounter++;
+		Collection<Sprite> sprites = getAllSprites();
+		boolean up = handler.isKeyDown(upKey);
+		boolean down = handler.isKeyDown(downKey);
+		boolean left = handler.isKeyDown(leftKey);
+		boolean right = handler.isKeyDown(rightKey);
+		boolean space = handler.isKeyDown(jumpKey);
+		boolean testButton = handler.isKeyDown(testKey);
+		boolean debugModePressed = handler.isKeyPressed(debugModeKey);
+
+		LevelManager levelManager = getLevelManager();
+		for (Sprite sprite : sprites) {
+			if (sprite instanceof AbstractPlayableSprite playable) {
+				if (debugModePressed) {
+					playable.toggleDebugMode();
+				}
+
+				boolean controlLocked = playable.isControlLocked();
+				boolean effectiveRight = right || playable.isForceInputRight() || controlLocked;
+				boolean effectiveLeft = !controlLocked && left && !playable.isForceInputRight();
+				boolean effectiveUp = !controlLocked && up;
+				boolean effectiveDown = !controlLocked && down;
+				boolean effectiveJump = !controlLocked && space;
+				boolean effectiveTest = !controlLocked && testButton;
+
+				levelManager.applyPlaneSwitchers(playable);
+				playable.getMovementManager().handleMovement(effectiveUp, effectiveDown, effectiveLeft,
+						effectiveRight, effectiveJump, effectiveTest);
+				playable.getAnimationManager().update(frameCounter);
+				playable.tickStatus();
+				playable.endOfTick();
+			}
+		}
+	}
+
+	public void updateWithoutInput() {
+		frameCounter++;
+		Collection<Sprite> sprites = getAllSprites();
+		LevelManager levelManager = getLevelManager();
+
+		for (Sprite sprite : sprites) {
+			if (sprite instanceof AbstractPlayableSprite playable) {
+				levelManager.applyPlaneSwitchers(playable);
+				playable.getMovementManager().handleMovement(false, false, false, false, false, false);
+				playable.getAnimationManager().update(frameCounter);
+				playable.tickStatus();
+				playable.endOfTick();
+			}
+		}
+	}
+
+	public void draw() {
+		Collection<Sprite> sprites = getAllSprites();
+		for (Sprite sprite : sprites) {
+			sprite.draw();
+		}
+	}
+
+	public void drawLowPriority() {
+		bucketSprites();
+		for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+			int idx = bucket - RenderPriority.MIN;
+			for (Sprite sprite : lowPriorityBuckets[idx]) {
+				sprite.draw();
+			}
+		}
+	}
+
+	public void drawHighPriority() {
+		for (int bucket = RenderPriority.MAX; bucket >= RenderPriority.MIN; bucket--) {
+			int idx = bucket - RenderPriority.MIN;
+			for (Sprite sprite : highPriorityBuckets[idx]) {
+				sprite.draw();
+			}
+			if (bucket == RenderPriority.MIN) {
+				for (Sprite sprite : nonPlayableSprites) {
+					sprite.draw();
+				}
+			}
+		}
+	}
+
+	public void drawPriorityBucket(int bucket, boolean highPriority) {
+		Collection<Sprite> sprites = getAllSprites();
+		int targetBucket = RenderPriority.clamp(bucket);
+		for (Sprite sprite : sprites) {
+			if (sprite instanceof AbstractPlayableSprite playable) {
+				int spriteBucket = RenderPriority.clamp(playable.getPriorityBucket());
+				if (playable.isHighPriority() == highPriority && spriteBucket == targetBucket) {
+					sprite.draw();
+				}
+				continue;
+			}
+			if (highPriority && targetBucket == RenderPriority.MIN) {
+				sprite.draw();
+			}
+		}
+	}
+
 	private boolean removeSprite(Sprite sprite) {
 		return (sprites.remove(sprite) != null);
+	}
+
+	private void bucketSprites() {
+		for (int i = 0; i < BUCKET_COUNT; i++) {
+			lowPriorityBuckets[i].clear();
+			highPriorityBuckets[i].clear();
+		}
+		nonPlayableSprites.clear();
+
+		Collection<Sprite> sprites = getAllSprites();
+		for (Sprite sprite : sprites) {
+			if (sprite instanceof AbstractPlayableSprite playable) {
+				int bucket = RenderPriority.clamp(playable.getPriorityBucket());
+				int idx = bucket - RenderPriority.MIN;
+				if (playable.isHighPriority()) {
+					highPriorityBuckets[idx].add(sprite);
+				} else {
+					lowPriorityBuckets[idx].add(sprite);
+				}
+			} else {
+				nonPlayableSprites.add(sprite);
+			}
+		}
+	}
+
+	private LevelManager getLevelManager() {
+		if (levelManager == null) {
+			levelManager = LevelManager.getInstance();
+		}
+		return levelManager;
 	}
 
 	public static SensorConfiguration[][] createMovementMappingArray() {

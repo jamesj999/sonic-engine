@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.Control.InputHandler;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.camera.Camera;
@@ -21,7 +23,6 @@ import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2AudioConstants;
 import uk.co.jamesj999.sonic.game.sonic2.objects.SpecialStageResultsScreenObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
-import uk.co.jamesj999.sonic.sprites.managers.SpriteCollisionManager;
 
 import java.awt.event.KeyEvent;
 import uk.co.jamesj999.sonic.sprites.managers.SpriteManager;
@@ -57,9 +58,8 @@ public class GameLoop {
 
     private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
     private final SpriteManager spriteManager = SpriteManager.getInstance();
-    private final SpriteCollisionManager spriteCollisionManager = SpriteCollisionManager.getInstance();
     private final Camera camera = Camera.getInstance();
-    private final TimerManager timerManager = TimerManager.getInstance();
+    private final TimerManager timerManager = GameServices.timers();
     private final LevelManager levelManager = LevelManager.getInstance();
     // Direct reference to Sonic2SpecialStageManager for debug features and Sonic
     // 2-specific logic.
@@ -144,7 +144,7 @@ public class GameLoop {
 
         AudioManager.getInstance().update();
         timerManager.update();
-        DebugOverlayManager.getInstance().updateInput(inputHandler);
+        GameServices.debugOverlay().updateInput(inputHandler);
         DebugObjectArtViewer.getInstance().updateInput(inputHandler);
 
         // Check for Special Stage toggle (HOME by default)
@@ -226,7 +226,7 @@ public class GameLoop {
                 // Still in locked phase - run physics without input
                 // This allows Sonic to settle onto the ground while title card is visible,
                 // preventing camera jitter when title card ends
-                spriteCollisionManager.updateWithoutInput();
+                spriteManager.updateWithoutInput();
                 // Force camera to snap to player position during title card (no smooth
                 // scrolling)
                 camera.updatePosition(true);
@@ -265,12 +265,12 @@ public class GameLoop {
                 }
             }
 
-            boolean freezeForArtViewer = DebugOverlayManager.getInstance()
+            boolean freezeForArtViewer = GameServices.debugOverlay()
                     .isEnabled(uk.co.jamesj999.sonic.debug.DebugOverlayToggle.OBJECT_ART_VIEWER);
             // Freeze level updates during special stage entry transition
             boolean freezeForSpecialStage = specialStageTransitionPending;
             if (!freezeForArtViewer && !freezeForSpecialStage) {
-                spriteCollisionManager.update(inputHandler);
+                spriteManager.update(inputHandler);
 
                 // Dynamic level events update boundary targets (game-specific)
                 LevelEventProvider levelEvents = GameModuleRegistry.getCurrent().getLevelEventProvider();
@@ -406,7 +406,7 @@ public class GameLoop {
 
         // Mark emerald as collected now (so it shows in results screen)
         if (emeraldCollected) {
-            GameStateManager gsm = GameStateManager.getInstance();
+            GameStateManager gsm = GameServices.gameState();
             gsm.markEmeraldCollected(ssStageIndex);
             LOGGER.info("DEBUG: Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
         }
@@ -433,7 +433,7 @@ public class GameLoop {
         resultsFrameCounter = 0;
 
         // Create results screen with current emerald count
-        int totalEmeralds = GameStateManager.getInstance().getEmeraldCount();
+        int totalEmeralds = GameServices.gameState().getEmeraldCount();
         resultsScreen = new SpecialStageResultsScreenObjectInstance(
                 ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
 
@@ -488,7 +488,7 @@ public class GameLoop {
         AudioManager.getInstance().fadeOutMusic();
 
         // Determine which stage to enter
-        GameStateManager gsm = GameStateManager.getInstance();
+        GameStateManager gsm = GameServices.gameState();
         final int stageIndex = gsm.consumeCurrentSpecialStageIndexAndAdvance();
 
         // Start fade-to-white, then enter special stage when complete
@@ -558,7 +558,7 @@ public class GameLoop {
 
         // Mark emerald as collected now (so it shows in results screen)
         if (emeraldCollected) {
-            GameStateManager gsm = GameStateManager.getInstance();
+            GameStateManager gsm = GameServices.gameState();
             gsm.markEmeraldCollected(ssStageIndex);
             LOGGER.info("Collected emerald " + (ssStageIndex + 1) + "! Total: " + gsm.getEmeraldCount());
         }
@@ -587,7 +587,7 @@ public class GameLoop {
         resultsFrameCounter = 0;
 
         // Create results screen with current emerald count via provider
-        int totalEmeralds = GameStateManager.getInstance().getEmeraldCount();
+        int totalEmeralds = GameServices.gameState().getEmeraldCount();
         if (ssProvider != null) {
             resultsScreen = ssProvider.createResultsScreen(
                     ssRingsCollected, ssEmeraldCollected, ssStageIndex, totalEmeralds);
@@ -1007,3 +1007,4 @@ public class GameLoop {
                 ssProvider.getLagCompensation() * 100, effectiveUpdates));
     }
 }
+

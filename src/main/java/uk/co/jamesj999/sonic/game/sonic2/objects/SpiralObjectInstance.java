@@ -4,7 +4,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
-import uk.co.jamesj999.sonic.level.objects.SolidObjectManager;
+import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -146,8 +146,8 @@ public class SpiralObjectInstance extends AbstractObjectInstance {
 
         // Initial range checks for "locking on"
         int vx = player.getXSpeed();
-        SolidObjectManager solidManager = LevelManager.getInstance().getSolidObjectManager();
-        boolean onObject = (solidManager != null && solidManager.isRidingObject()) || wasOnSpiral;
+        ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+        boolean onObject = (objectManager != null && objectManager.isRidingObject()) || wasOnSpiral;
 
         // Debug range
         if (Math.abs(dx) < 250 && frameCounter % 30 == 0) {

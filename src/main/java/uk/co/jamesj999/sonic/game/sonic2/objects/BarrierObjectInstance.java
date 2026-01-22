@@ -220,7 +220,7 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
 
     @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
-        // Solid collision is handled by SolidObjectManager
+        // Solid collision is handled by ObjectManager
     }
 
     @Override

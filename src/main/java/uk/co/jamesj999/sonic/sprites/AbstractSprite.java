@@ -158,7 +158,7 @@ public abstract class AbstractSprite implements Sprite {
 		xSubpixel = updatedXSubpixel;
 
 		// Y boundary: prevent going above Y=0 (top of level)
-		// X boundary enforcement is handled by PlayableSpriteMovementManager.doLevelBoundary()
+		// X boundary enforcement is handled by PlayableSpriteMovement.doLevelBoundary()
 		if (updatedYPixel < 0) {
 			yPixel = 0;
 			ySubpixel = 0;

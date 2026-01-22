@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2.titlecard;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomManager;
 import uk.co.jamesj999.sonic.game.TitleCardProvider;
@@ -291,7 +293,7 @@ public class TitleCardManager implements TitleCardProvider {
      */
     private void loadArt() {
         try {
-            RomManager romManager = RomManager.getInstance();
+            RomManager romManager = GameServices.rom();
             if (!romManager.isRomAvailable()) {
                 LOGGER.warning("ROM not available for title card art loading");
                 return;
@@ -966,3 +968,4 @@ public class TitleCardManager implements TitleCardProvider {
         return currentAct;
     }
 }
+

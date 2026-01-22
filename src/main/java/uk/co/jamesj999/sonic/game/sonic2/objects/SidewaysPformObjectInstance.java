@@ -121,7 +121,7 @@ public class SidewaysPformObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
-        // Platform state is driven via SolidObjectManager standing checks.
+        // Platform state is driven via ObjectManager standing checks.
     }
 
     @Override

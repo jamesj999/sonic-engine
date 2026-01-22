@@ -103,10 +103,10 @@ public class BridgeObjectInstance extends BoxObjectInstance implements SlopedSol
 
         // Calculate Target Sag if player is riding
         if (player != null) {
-            uk.co.jamesj999.sonic.level.objects.SolidObjectManager solidManager = uk.co.jamesj999.sonic.level.LevelManager
-                    .getInstance().getSolidObjectManager();
+            uk.co.jamesj999.sonic.level.objects.ObjectManager objectManager = uk.co.jamesj999.sonic.level.LevelManager
+                    .getInstance().getObjectManager();
 
-            if (solidManager != null && solidManager.isRidingObject(this)) {
+            if (objectManager != null && objectManager.isRidingObject(this)) {
                 calculateTargetSag(player, logCount);
             }
         }

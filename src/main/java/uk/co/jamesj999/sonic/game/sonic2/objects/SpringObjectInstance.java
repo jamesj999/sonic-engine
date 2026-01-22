@@ -136,7 +136,7 @@ public class SpringObjectInstance extends BoxObjectInstance
      * spring face)
      */
     private void applyUpSpring(AbstractPlayableSprite player) {
-        // Don't adjust Y position - SolidObjectManager already handles collision
+        // Don't adjust Y position - ObjectManager already handles collision
         // positioning
 
         // ROM: y_vel = negative value (negative = up in Y-down coordinate system)

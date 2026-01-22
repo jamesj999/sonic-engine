@@ -8,7 +8,7 @@ import uk.co.jamesj999.sonic.sprites.render.PlayerSpriteRenderer;
 /**
  * Handles spindash dust animation and drawing.
  */
-public class SpindashDustManager {
+public class SpindashDustController {
     private static final int[] DASH_FRAMES = { 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10 };
     private static final int FRAME_DELAY = 1;
     private static final int TAILS_Y_OFFSET = -4;
@@ -20,7 +20,7 @@ public class SpindashDustManager {
     private int currentFrame;
     private boolean activeLastTick;
 
-    public SpindashDustManager(AbstractPlayableSprite sprite, PlayerSpriteRenderer renderer) {
+    public SpindashDustController(AbstractPlayableSprite sprite, PlayerSpriteRenderer renderer) {
         this.sprite = sprite;
         this.renderer = renderer;
         this.frameIndex = 0;

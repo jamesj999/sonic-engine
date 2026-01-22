@@ -325,12 +325,16 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         return objectArt.loadForZone(zoneIndex);
     }
 
+    private Sonic2LevelAnimationManager levelAnimationManager;
+    private Level levelAnimationLevel;
+    private int levelAnimationZone = -1;
+
     @Override
     public AnimatedPatternManager loadAnimatedPatternManager(Level level, int zoneIndex) throws IOException {
         if (level == null) {
             return null;
         }
-        return new Sonic2AnimatedPatternManager(rom, level, zoneIndex);
+        return getOrCreateLevelAnimationManager(level, zoneIndex);
     }
 
     @Override
@@ -338,7 +342,16 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         if (level == null) {
             return null;
         }
-        return new Sonic2PaletteCycleManager(rom, level, zoneIndex);
+        return getOrCreateLevelAnimationManager(level, zoneIndex);
+    }
+
+    private Sonic2LevelAnimationManager getOrCreateLevelAnimationManager(Level level, int zoneIndex) throws IOException {
+        if (levelAnimationManager == null || levelAnimationLevel != level || levelAnimationZone != zoneIndex) {
+            levelAnimationManager = new Sonic2LevelAnimationManager(rom, level, zoneIndex);
+            levelAnimationLevel = level;
+            levelAnimationZone = zoneIndex;
+        }
+        return levelAnimationManager;
     }
 
     private int getSolidTileHeightsAddr() {

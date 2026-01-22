@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.level.objects;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.LevelState;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
@@ -21,9 +23,9 @@ public class HudRenderManager {
     // similar if we want to bypass sprite system,
     // OR create sprites for HUD elements.
     // Given the HUD overlay nature, direct pattern drawing via GraphicsManager
-    // (like DebugOverlay) or a dedicated SpriteRenderManager bucket is best.
+    // (like DebugOverlay) or a dedicated SpriteManager bucket is best.
     // We'll follow the pattern of DebugOverlayManager / DebugRenderer for now, or
-    // similar to RingRenderManager.
+    // similar to ring rendering helpers.
 
     // BUT, Sonic 2 HUD is effectively a set of sprites/patterns fixed to screen.
     // Let's assume we can draw direct patterns to screen coordinates.
@@ -114,7 +116,7 @@ public class HudRenderManager {
         } else {
             // Normal gameplay: Draw Score
             drawHudString(16, 8, "SCORE", hudPatternDesc);
-            drawScore(GameStateManager.getInstance().getScore());
+            drawScore(GameServices.gameState().getScore());
 
             // Draw Time
             boolean flashTime = levelGamestate.shouldFlashTimer();
@@ -123,7 +125,7 @@ public class HudRenderManager {
         }
 
         drawCores(levelGamestate.getRings(), levelGamestate.getFlashCycle());
-        drawLives(uk.co.jamesj999.sonic.game.GameStateManager.getInstance().getLives());
+        drawLives(GameServices.gameState().getLives());
     }
 
     private void drawCores(int rings, boolean flashCycle) {
@@ -384,3 +386,4 @@ public class HudRenderManager {
         }
     }
 }
+

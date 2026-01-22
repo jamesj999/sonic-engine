@@ -92,7 +92,7 @@ public class SplashObjectInstance extends AbstractObjectInstance {
         }
 
         // Get the dust/splash renderer from the player's dust manager
-        var dustManager = player.getSpindashDustManager();
+        var dustManager = player.getSpindashDustController();
         if (dustManager == null) {
             return null;
         }

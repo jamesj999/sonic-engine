@@ -11,9 +11,8 @@ import uk.co.jamesj999.sonic.game.sonic2.scroll.Sonic2ZoneConstants;
 import uk.co.jamesj999.sonic.graphics.GraphicsManager;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.Pattern;
-import uk.co.jamesj999.sonic.level.bumpers.CNZBumperCollisionManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperDataLoader;
-import uk.co.jamesj999.sonic.level.bumpers.CNZBumperPlacementManager;
+import uk.co.jamesj999.sonic.level.bumpers.CNZBumperManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperSpawn;
 import uk.co.jamesj999.sonic.level.objects.ObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
@@ -43,7 +42,7 @@ import java.util.logging.Logger;
 public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     private static final Logger LOGGER = Logger.getLogger(Sonic2ZoneFeatureProvider.class.getName());
 
-    private CNZBumperCollisionManager cnzBumperManager;
+    private CNZBumperManager cnzBumperManager;
     private ObjectInstance cpzPylon;
     private WaterSurfaceManager waterSurfaceManager;
     private int currentZone = -1;
@@ -87,9 +86,8 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
                 return;
             }
 
-            CNZBumperPlacementManager placementManager = new CNZBumperPlacementManager(bumpers);
-            placementManager.reset(cameraX);
-            cnzBumperManager = new CNZBumperCollisionManager(placementManager);
+            cnzBumperManager = new CNZBumperManager(bumpers);
+            cnzBumperManager.reset(cameraX);
 
             LOGGER.info("Initialized CNZ bumper system with " + bumpers.size() + " bumpers");
         } catch (IOException e) {
@@ -205,13 +203,5 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         return Integer.MAX_VALUE;
     }
 
-    /**
-     * Gets the CNZ bumper collision manager.
-     * Used by LevelManager for direct access during the transition period.
-     *
-     * @return the bumper manager, or null if not in CNZ
-     */
-    public CNZBumperCollisionManager getCNZBumperManager() {
-        return cnzBumperManager;
-    }
+    // Intentionally no public accessors for bumper system.
 }

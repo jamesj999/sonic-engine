@@ -4,7 +4,7 @@ import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.graphics.RenderPriority;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
-import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
+import uk.co.jamesj999.sonic.level.rings.RingManager;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -21,7 +21,7 @@ public class SignpostSparkleObjectInstance extends AbstractObjectInstance {
 
     private int animTimer = 0;
     private int animFrame = 0;
-    private int totalFrames = 4; // Default, will be updated from RingRenderManager
+    private int totalFrames = 4; // Default, will be updated from RingManager
     private int sparkleStartIndex = 4; // Default sparkle frame start
     private final int worldX;
     private final int worldY;
@@ -31,8 +31,8 @@ public class SignpostSparkleObjectInstance extends AbstractObjectInstance {
         this.worldX = x;
         this.worldY = y;
 
-        // Try to get actual sparkle frame info from RingRenderManager
-        RingRenderManager ringManager = LevelManager.getInstance().getRingRenderManager();
+        // Try to get actual sparkle frame info from RingManager
+        RingManager ringManager = LevelManager.getInstance().getRingManager();
         if (ringManager != null) {
             int count = ringManager.getSparkleFrameCount();
             if (count > 0) {
@@ -56,7 +56,7 @@ public class SignpostSparkleObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        RingRenderManager ringManager = LevelManager.getInstance().getRingRenderManager();
+        RingManager ringManager = LevelManager.getInstance().getRingManager();
         if (ringManager == null) {
             return;
         }

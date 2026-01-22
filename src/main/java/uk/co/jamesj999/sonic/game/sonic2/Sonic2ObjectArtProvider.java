@@ -1,5 +1,7 @@
 package uk.co.jamesj999.sonic.game.sonic2;
 
+import uk.co.jamesj999.sonic.game.GameServices;
+
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.data.RomManager;
@@ -68,7 +70,7 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
 
     private void ensureArtLoader() throws IOException {
         if (artLoader == null) {
-            Rom rom = RomManager.getInstance().getRom();
+            Rom rom = GameServices.rom().getRom();
             if (rom == null) {
                 throw new IllegalStateException("ROM not loaded");
             }
@@ -298,3 +300,4 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         return artData;
     }
 }
+

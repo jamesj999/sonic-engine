@@ -6,8 +6,6 @@ import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.rings.RingFrame;
 import uk.co.jamesj999.sonic.level.rings.RingFramePiece;
 import uk.co.jamesj999.sonic.level.rings.RingManager;
-import uk.co.jamesj999.sonic.level.rings.RingPlacementManager;
-import uk.co.jamesj999.sonic.level.rings.RingRenderManager;
 import uk.co.jamesj999.sonic.level.rings.RingSpawn;
 import uk.co.jamesj999.sonic.level.rings.RingSpriteSheet;
 import uk.co.jamesj999.sonic.physics.Sensor;
@@ -24,46 +22,42 @@ public class TestRingManager {
     @Test
     public void testRingCollectionAndSparkleLifecycle() {
         RingSpawn spawn = new RingSpawn(100, 100);
-        RingPlacementManager placementManager = new RingPlacementManager(List.of(spawn));
-        RingRenderManager renderManager = buildRenderManager();
-        RingManager ringManager = new RingManager(placementManager, renderManager);
+        RingManager ringManager = buildRingManager(List.of(spawn));
+        ringManager.reset(0);
         TestPlayableSprite player = new TestPlayableSprite((short) 100, (short) 100);
 
         ringManager.update(0, player, 0);
 
-        int index = placementManager.getSpawnIndex(spawn);
-        assertTrue(placementManager.isCollected(index));
+        assertTrue(ringManager.isCollected(spawn));
         assertEquals(1, player.getRingCount());
-        assertEquals(0, placementManager.getSparkleStartFrame(index));
+        assertEquals(0, ringManager.getSparkleStartFrame(spawn));
         assertTrue(ringManager.isRenderable(spawn, 1));
 
         assertFalse(ringManager.isRenderable(spawn, 2));
-        assertEquals(-1, placementManager.getSparkleStartFrame(index));
+        assertEquals(-1, ringManager.getSparkleStartFrame(spawn));
     }
 
     @Test
     public void testCollectedRingsPersistOffscreen() {
         RingSpawn spawn = new RingSpawn(100, 100);
-        RingPlacementManager placementManager = new RingPlacementManager(List.of(spawn));
-        RingRenderManager renderManager = buildRenderManager();
-        RingManager ringManager = new RingManager(placementManager, renderManager);
+        RingManager ringManager = buildRingManager(List.of(spawn));
+        ringManager.reset(0);
         TestPlayableSprite player = new TestPlayableSprite((short) 100, (short) 100);
 
         ringManager.update(0, player, 0);
 
-        int index = placementManager.getSpawnIndex(spawn);
-        assertTrue(placementManager.isCollected(index));
+        assertTrue(ringManager.isCollected(spawn));
 
         ringManager.update(10000, player, 1);
-        assertTrue(placementManager.isCollected(index));
+        assertTrue(ringManager.isCollected(spawn));
         assertEquals(1, player.getRingCount());
 
         ringManager.update(0, player, 2);
-        assertTrue(placementManager.isCollected(index));
+        assertTrue(ringManager.isCollected(spawn));
         assertEquals(1, player.getRingCount());
     }
 
-    private RingRenderManager buildRenderManager() {
+    private RingManager buildRingManager(List<RingSpawn> spawns) {
         Pattern pattern = new Pattern();
         pattern.setPixel(0, 0, (byte) 1);
 
@@ -75,9 +69,9 @@ public class TestRingManager {
         frames.add(frame);
 
         RingSpriteSheet spriteSheet = new RingSpriteSheet(new Pattern[] { pattern }, frames, 1, 1, 1, 2);
-        RingRenderManager renderManager = new RingRenderManager(spriteSheet);
-        renderManager.ensurePatternsCached(GraphicsManager.getInstance(), 0);
-        return renderManager;
+        RingManager ringManager = new RingManager(spawns, spriteSheet, null, null);
+        ringManager.ensurePatternsCached(GraphicsManager.getInstance(), 0);
+        return ringManager;
     }
 
     private static final class TestPlayableSprite extends AbstractPlayableSprite {

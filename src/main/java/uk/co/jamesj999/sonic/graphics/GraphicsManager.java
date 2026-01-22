@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.graphics;
 
 import uk.co.jamesj999.sonic.camera.Camera;
+import uk.co.jamesj999.sonic.graphics.pipeline.UiRenderPipeline;
 import uk.co.jamesj999.sonic.level.Palette;
 import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.PatternDesc;
@@ -52,6 +53,9 @@ public class GraphicsManager {
 	// Fade manager for screen transitions
 	private FadeManager fadeManager;
 
+	// Unified UI render pipeline for overlay + fade ordering
+	private UiRenderPipeline uiRenderPipeline;
+
 	// Batched rendering support
 	private boolean batchingEnabled = true;
 	private BatchedPatternRenderer batchedRenderer;
@@ -97,6 +101,10 @@ public class GraphicsManager {
 		// Initialize fade manager with shader
 		this.fadeManager = FadeManager.getInstance();
 		this.fadeManager.setFadeShader(this.fadeShaderProgram);
+
+		// Initialize unified UI render pipeline
+		this.uiRenderPipeline = new UiRenderPipeline(this);
+		this.uiRenderPipeline.setFadeManager(this.fadeManager);
 	}
 
 	/**
@@ -715,5 +723,12 @@ public class GraphicsManager {
 		if (headlessMode || graphics == null)
 			return;
 		graphics.glDisable(GL2.GL_SCISSOR_TEST);
+	}
+
+	/**
+	 * Get the unified UI render pipeline for overlay + fade ordering.
+	 */
+	public UiRenderPipeline getUiRenderPipeline() {
+		return uiRenderPipeline;
 	}
 }

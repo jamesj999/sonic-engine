@@ -115,7 +115,7 @@ public final class ObjectTerrainUtils {
 
     /**
      * Internal floor distance check at exact position.
-     * Implements the same logic as ringCheckFloorDist in LostRingManager.
+     * Implements the same logic as ringCheckFloorDist in RingManager's lost ring pool.
      */
     private static TerrainCheckResult checkFloorDistAtPoint(int x, int y) {
         LevelManager levelManager = LevelManager.getInstance();

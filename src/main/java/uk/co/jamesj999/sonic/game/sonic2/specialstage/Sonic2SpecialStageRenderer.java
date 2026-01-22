@@ -42,7 +42,7 @@ public class Sonic2SpecialStageRenderer {
     private int starsPatternBase;      // For ring sparkle animation (uses separate art)
     private int explosionPatternBase;  // For bomb explosion animation (uses separate art)
     private int emeraldPatternBase;    // For chaos emerald
-    private Sonic2SpecialStageObjectManager objectManager;
+    private Sonic2SpecialStageManager.Sonic2SpecialStageObjectManager objectManager;
     private Sonic2PerspectiveData perspectiveData;
 
     // Shadow rendering (Phase 5)
@@ -147,7 +147,7 @@ public class Sonic2SpecialStageRenderer {
         this.shadowSidePatternBase = sideBase;
     }
 
-    public void setObjectManager(Sonic2SpecialStageObjectManager objectManager) {
+    public void setObjectManager(Sonic2SpecialStageManager.Sonic2SpecialStageObjectManager objectManager) {
         this.objectManager = objectManager;
     }
 
