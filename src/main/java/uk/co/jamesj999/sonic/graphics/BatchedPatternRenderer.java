@@ -37,8 +37,7 @@ public class BatchedPatternRenderer {
     // Pre-allocated buffers - reused each frame
     private final float[] vertexData;
     private final float[] texCoordData;
-    private final int[] patternTextureIds;
-    private final int[] paletteIndices;
+    private final float[] paletteCoordData;
     private int patternCount = 0;
 
     // Screen height for Y coordinate flipping
@@ -64,8 +63,7 @@ public class BatchedPatternRenderer {
         this.screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
         this.vertexData = new float[MAX_PATTERNS_PER_BATCH * FLOATS_PER_PATTERN_VERTS];
         this.texCoordData = new float[MAX_PATTERNS_PER_BATCH * FLOATS_PER_PATTERN_TEXCOORDS];
-        this.patternTextureIds = new int[MAX_PATTERNS_PER_BATCH];
-        this.paletteIndices = new int[MAX_PATTERNS_PER_BATCH];
+        this.paletteCoordData = new float[MAX_PATTERNS_PER_BATCH * 4];
     }
 
     /**
@@ -88,7 +86,7 @@ public class BatchedPatternRenderer {
      *
      * @return true if the pattern was added, false if batch is full or not active
      */
-    public boolean addPattern(int patternTextureId, int paletteIndex, PatternDesc desc, int x, int y) {
+    public boolean addPattern(PatternAtlas.Entry entry, int paletteIndex, PatternDesc desc, int x, int y) {
         if (!batchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
             return false;
         }
@@ -107,20 +105,19 @@ public class BatchedPatternRenderer {
 
         // Handle flips by adjusting texture coordinates
         // Note: VFlip=false means apply vertical flip (this is the default)
-        float u0, u1, v0, v1;
+        float u0 = entry.u0();
+        float u1 = entry.u1();
+        float v0 = entry.v0();
+        float v1 = entry.v1();
         if (desc.getHFlip()) {
-            u0 = 1.0f;
-            u1 = 0.0f;
-        } else {
-            u0 = 0.0f;
-            u1 = 1.0f;
+            float tmp = u0;
+            u0 = u1;
+            u1 = tmp;
         }
-        if (desc.getVFlip()) {
-            v0 = 0.0f;
-            v1 = 1.0f;
-        } else {
-            v0 = 1.0f;
-            v1 = 0.0f;
+        if (!desc.getVFlip()) {
+            float tmp = v0;
+            v0 = v1;
+            v1 = tmp;
         }
 
         // Calculate array offsets
@@ -147,9 +144,11 @@ public class BatchedPatternRenderer {
         texCoordData[texOffset + 6] = u0;
         texCoordData[texOffset + 7] = v1;
 
-        // Store texture ID and palette for this pattern
-        patternTextureIds[patternCount] = patternTextureId;
-        paletteIndices[patternCount] = paletteIndex;
+        int paletteOffset = patternCount * 4;
+        paletteCoordData[paletteOffset + 0] = paletteIndex;
+        paletteCoordData[paletteOffset + 1] = paletteIndex;
+        paletteCoordData[paletteOffset + 2] = paletteIndex;
+        paletteCoordData[paletteOffset + 3] = paletteIndex;
         patternCount++;
 
         return true;
@@ -163,7 +162,7 @@ public class BatchedPatternRenderer {
      * scanlines
      * each. This method renders a single strip (8 wide × 2 high).
      *
-     * @param patternTextureId The pattern texture ID
+     * @param entry            Atlas entry for the pattern
      * @param paletteIndex     The palette line to use
      * @param desc             The pattern descriptor (handles H/V flip)
      * @param x                Screen X position
@@ -172,7 +171,7 @@ public class BatchedPatternRenderer {
      *                         of tile)
      * @return true if the pattern was added, false if batch is full or not active
      */
-    public boolean addStripPattern(int patternTextureId, int paletteIndex, PatternDesc desc,
+    public boolean addStripPattern(PatternAtlas.Entry entry, int paletteIndex, PatternDesc desc,
             int x, int y, int stripIndex) {
         if (!batchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
             return false;
@@ -210,19 +209,20 @@ public class BatchedPatternRenderer {
         // Strip 1 (rows 2-3): top=0.3125, bottom=0.4375
         // Strip 2 (rows 4-5): top=0.5625, bottom=0.6875
         // Strip 3 (rows 6-7): top=0.8125, bottom=0.9375
-        float firstRowCenter = (stripIndex * 2 + 0.5f) / 8.0f; // Center of first row of strip
-        float secondRowCenter = (stripIndex * 2 + 1.5f) / 8.0f; // Center of second row of strip
-        float stripTop = firstRowCenter;
-        float stripBottom = secondRowCenter;
+        int rowTop = stripIndex * 2;
+        int rowBottom = stripIndex * 2 + 1;
+        float rowStep = (entry.v1() - entry.v0()) / 8.0f;
+        float stripTop = entry.v0() + rowStep * ((7 - rowTop) + 0.5f);
+        float stripBottom = entry.v0() + rowStep * ((7 - rowBottom) + 0.5f);
 
         // Handle flips by adjusting texture coordinates
         float u0, u1, v0, v1;
         if (desc.getHFlip()) {
-            u0 = 1.0f;
-            u1 = 0.0f;
+            u0 = entry.u1();
+            u1 = entry.u0();
         } else {
-            u0 = 0.0f;
-            u1 = 1.0f;
+            u0 = entry.u0();
+            u1 = entry.u1();
         }
 
         // V coordinates for the strip
@@ -262,9 +262,11 @@ public class BatchedPatternRenderer {
         texCoordData[texOffset + 6] = u0;
         texCoordData[texOffset + 7] = v1;
 
-        // Store texture ID and palette for this pattern
-        patternTextureIds[patternCount] = patternTextureId;
-        paletteIndices[patternCount] = paletteIndex;
+        int paletteOffset = patternCount * 4;
+        paletteCoordData[paletteOffset + 0] = paletteIndex;
+        paletteCoordData[paletteOffset + 1] = paletteIndex;
+        paletteCoordData[paletteOffset + 2] = paletteIndex;
+        paletteCoordData[paletteOffset + 3] = paletteIndex;
         patternCount++;
 
         return true;
@@ -299,8 +301,7 @@ public class BatchedPatternRenderer {
         BatchRenderCommand command = new BatchRenderCommand(
                 Arrays.copyOf(vertexData, patternCount * FLOATS_PER_PATTERN_VERTS),
                 Arrays.copyOf(texCoordData, patternCount * FLOATS_PER_PATTERN_TEXCOORDS),
-                Arrays.copyOf(patternTextureIds, patternCount),
-                Arrays.copyOf(paletteIndices, patternCount),
+                Arrays.copyOf(paletteCoordData, patternCount * 4),
                 patternCount);
 
         // Reset for next batch
@@ -336,7 +337,7 @@ public class BatchedPatternRenderer {
      * Add a pattern to the current shadow batch.
      * Uses the same buffer management as normal batches.
      */
-    public boolean addShadowPattern(int patternTextureId, PatternDesc desc, int x, int y) {
+    public boolean addShadowPattern(PatternAtlas.Entry entry, PatternDesc desc, int x, int y) {
         if (!shadowBatchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
             return false;
         }
@@ -351,20 +352,19 @@ public class BatchedPatternRenderer {
         float y1 = screenY + 8;
 
         // Handle flips by adjusting texture coordinates
-        float u0, u1, v0, v1;
+        float u0 = entry.u0();
+        float u1 = entry.u1();
+        float v0 = entry.v0();
+        float v1 = entry.v1();
         if (desc.getHFlip()) {
-            u0 = 1.0f;
-            u1 = 0.0f;
-        } else {
-            u0 = 0.0f;
-            u1 = 1.0f;
+            float tmp = u0;
+            u0 = u1;
+            u1 = tmp;
         }
-        if (desc.getVFlip()) {
-            v0 = 0.0f;
-            v1 = 1.0f;
-        } else {
-            v0 = 1.0f;
-            v1 = 0.0f;
+        if (!desc.getVFlip()) {
+            float tmp = v0;
+            v0 = v1;
+            v1 = tmp;
         }
 
         // Calculate array offsets
@@ -391,9 +391,6 @@ public class BatchedPatternRenderer {
         texCoordData[texOffset + 6] = u0;
         texCoordData[texOffset + 7] = v1;
 
-        // Store texture ID (palette is not used for shadow rendering)
-        patternTextureIds[patternCount] = patternTextureId;
-        paletteIndices[patternCount] = 0; // Not used for shadows
         patternCount++;
 
         return true;
@@ -412,7 +409,6 @@ public class BatchedPatternRenderer {
         ShadowBatchRenderCommand command = new ShadowBatchRenderCommand(
                 Arrays.copyOf(vertexData, patternCount * FLOATS_PER_PATTERN_VERTS),
                 Arrays.copyOf(texCoordData, patternCount * FLOATS_PER_PATTERN_TEXCOORDS),
-                Arrays.copyOf(patternTextureIds, patternCount),
                 patternCount);
 
         // Reset for next batch
@@ -429,20 +425,19 @@ public class BatchedPatternRenderer {
     private static class BatchRenderCommand implements GLCommandable {
         private final float[] vertexData;
         private final float[] texCoordData;
-        private final int[] patternTextureIds;
-        private final int[] paletteIndices;
+        private final float[] paletteCoordData;
         private final int patternCount;
 
         // Direct buffers for OpenGL - allocated once per command
         private FloatBuffer vertexBuffer;
         private FloatBuffer texCoordBuffer;
+        private FloatBuffer paletteCoordBuffer;
 
         BatchRenderCommand(float[] vertexData, float[] texCoordData,
-                int[] patternTextureIds, int[] paletteIndices, int patternCount) {
+                float[] paletteCoordData, int patternCount) {
             this.vertexData = vertexData;
             this.texCoordData = texCoordData;
-            this.patternTextureIds = patternTextureIds;
-            this.paletteIndices = paletteIndices;
+            this.paletteCoordData = paletteCoordData;
             this.patternCount = patternCount;
         }
 
@@ -456,8 +451,10 @@ public class BatchedPatternRenderer {
             if (vertexBuffer == null) {
                 vertexBuffer = GLBuffers.newDirectFloatBuffer(vertexData.length);
                 texCoordBuffer = GLBuffers.newDirectFloatBuffer(texCoordData.length);
+                paletteCoordBuffer = GLBuffers.newDirectFloatBuffer(paletteCoordData.length);
                 vertexBuffer.put(vertexData).flip();
                 texCoordBuffer.put(texCoordData).flip();
+                paletteCoordBuffer.put(paletteCoordData).flip();
             }
 
             GraphicsManager gm = GraphicsManager.getInstance();
@@ -472,9 +469,13 @@ public class BatchedPatternRenderer {
             // Set texture unit uniforms once
             gl.glUniform1i(shader.getPaletteLocation(), 0);
             gl.glUniform1i(shader.getIndexedColorTextureLocation(), 1);
+            shader.setPaletteLine(gl, -1.0f);
 
             // Enable vertex arrays
             gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE0);
+            gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE1);
             gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
 
             // Bind palette texture (use underwater palette if flag is set for background
@@ -495,6 +496,12 @@ public class BatchedPatternRenderer {
                 gl.glBindTexture(GL2.GL_TEXTURE_2D, paletteTextureId);
             }
 
+            Integer atlasTextureId = gm.getPatternAtlasTextureId();
+            if (atlasTextureId != null) {
+                gl.glActiveTexture(GL2.GL_TEXTURE1);
+                gl.glBindTexture(GL2.GL_TEXTURE_2D, atlasTextureId);
+            }
+
             // If using water shader, bind underwater palette to texture unit 2
             if (shader instanceof WaterShaderProgram) {
                 WaterShaderProgram waterShader = (WaterShaderProgram) shader;
@@ -510,43 +517,25 @@ public class BatchedPatternRenderer {
                 }
             }
 
-            int lastTextureId = -1;
-            int lastPaletteIndex = -1;
-
             gl.glPushMatrix();
             gl.glTranslatef(-cameraX, cameraY, 0);
 
-            for (int i = 0; i < patternCount; i++) {
-                // Change pattern texture if needed
-                if (patternTextureIds[i] != lastTextureId) {
-                    gl.glActiveTexture(GL2.GL_TEXTURE1);
-                    gl.glBindTexture(GL2.GL_TEXTURE_2D, patternTextureIds[i]);
-                    lastTextureId = patternTextureIds[i];
-                }
+            gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE0);
+            gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE1);
+            gl.glTexCoordPointer(1, GL2.GL_FLOAT, 0, paletteCoordBuffer);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE0);
 
-                // Change palette line if needed
-                if (paletteIndices[i] != lastPaletteIndex) {
-                    shader.setPaletteLine(gl, paletteIndices[i]);
-                    lastPaletteIndex = paletteIndices[i];
-                }
-
-                // Set buffer position for this pattern's data
-                int vertOffset = i * 8; // 4 vertices * 2 floats
-                int texOffset = i * 8;
-
-                vertexBuffer.position(vertOffset);
-                texCoordBuffer.position(texOffset);
-
-                gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
-                gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
-
-                gl.glDrawArrays(GL2.GL_QUADS, 0, 4);
-            }
+            gl.glDrawArrays(GL2.GL_QUADS, 0, patternCount * 4);
 
             gl.glPopMatrix();
 
             // Cleanup state
             gl.glDisableClientState(GL2.GL_VERTEX_ARRAY);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE1);
+            gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE0);
             gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
             shader.stop(gl);
             gl.glDisable(GL2.GL_BLEND);
@@ -566,18 +555,15 @@ public class BatchedPatternRenderer {
     private static class ShadowBatchRenderCommand implements GLCommandable {
         private final float[] vertexData;
         private final float[] texCoordData;
-        private final int[] patternTextureIds;
         private final int patternCount;
 
         // Direct buffers for OpenGL - allocated once per command
         private FloatBuffer vertexBuffer;
         private FloatBuffer texCoordBuffer;
 
-        ShadowBatchRenderCommand(float[] vertexData, float[] texCoordData,
-                int[] patternTextureIds, int patternCount) {
+        ShadowBatchRenderCommand(float[] vertexData, float[] texCoordData, int patternCount) {
             this.vertexData = vertexData;
             this.texCoordData = texCoordData;
-            this.patternTextureIds = patternTextureIds;
             this.patternCount = patternCount;
         }
 
@@ -618,31 +604,18 @@ public class BatchedPatternRenderer {
             gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
             gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
 
-            int lastTextureId = -1;
+            Integer atlasTextureId = gm.getPatternAtlasTextureId();
+            if (atlasTextureId != null) {
+                gl.glActiveTexture(GL2.GL_TEXTURE0);
+                gl.glBindTexture(GL2.GL_TEXTURE_2D, atlasTextureId);
+            }
 
             gl.glPushMatrix();
             gl.glTranslatef(-cameraX, cameraY, 0);
 
-            for (int i = 0; i < patternCount; i++) {
-                // Change pattern texture if needed
-                if (patternTextureIds[i] != lastTextureId) {
-                    gl.glActiveTexture(GL2.GL_TEXTURE0);
-                    gl.glBindTexture(GL2.GL_TEXTURE_2D, patternTextureIds[i]);
-                    lastTextureId = patternTextureIds[i];
-                }
-
-                // Set buffer position for this pattern's data
-                int vertOffset = i * 8;
-                int texOffset = i * 8;
-
-                vertexBuffer.position(vertOffset);
-                texCoordBuffer.position(texOffset);
-
-                gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
-                gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
-
-                gl.glDrawArrays(GL2.GL_QUADS, 0, 4);
-            }
+            gl.glVertexPointer(2, GL2.GL_FLOAT, 0, vertexBuffer);
+            gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, texCoordBuffer);
+            gl.glDrawArrays(GL2.GL_QUADS, 0, patternCount * 4);
 
             gl.glPopMatrix();
 
