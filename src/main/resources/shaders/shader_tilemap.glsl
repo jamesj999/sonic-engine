@@ -84,6 +84,8 @@ void main()
     if (localX < 0.0) localX += 8.0;
     float localY = mod(worldY, 8.0);
     if (localY < 0.0) localY += 8.0;
+    localX = floor(localX);
+    localY = floor(localY);
 
     if (hFlip > 0.5) {
         localX = 7.0 - localX;
