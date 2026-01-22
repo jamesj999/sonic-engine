@@ -531,6 +531,10 @@ public class GraphicsManager {
 			if (patternAtlas != null) {
 				patternAtlas.cleanup(null);
 			}
+			BatchedPatternRenderer existingBatch = BatchedPatternRenderer.getInstanceIfInitialized();
+			if (existingBatch != null) {
+				existingBatch.cleanup(null);
+			}
 			paletteTextureMap.clear();
 			combinedPaletteTextureId = null;
 			return;
@@ -561,6 +565,10 @@ public class GraphicsManager {
 		}
 		if (tilemapGpuRenderer != null) {
 			tilemapGpuRenderer.cleanup(graphics);
+		}
+		BatchedPatternRenderer existingBatch = BatchedPatternRenderer.getInstanceIfInitialized();
+		if (existingBatch != null) {
+			existingBatch.cleanup(graphics);
 		}
 		// Reset fade manager
 		if (fadeManager != null) {
