@@ -76,9 +76,15 @@ void main()
     if (isTransparent) {
         discard;
     } else {
+        // Resolve palette line (uniform or per-vertex attribute via texcoord1.s)
+        float paletteLine = PaletteLine;
+        if (paletteLine < 0.0) {
+            paletteLine = gl_TexCoord[1].s;
+        }
+
         // Standard palette lookup
         float paletteX = (index + 0.5) / 16.0;
-        float paletteY = (PaletteLine + 0.5) / 4.0;
+        float paletteY = (paletteLine + 0.5) / 4.0;
         
         if (pixelYFromTop >= waterlineY) {
              // Use underwater palette

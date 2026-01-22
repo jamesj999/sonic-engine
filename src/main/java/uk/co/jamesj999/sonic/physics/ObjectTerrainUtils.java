@@ -1,5 +1,6 @@
 package uk.co.jamesj999.sonic.physics;
 
+import uk.co.jamesj999.sonic.level.Chunk;
 import uk.co.jamesj999.sonic.level.ChunkDesc;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
@@ -127,12 +128,40 @@ public final class ObjectTerrainUtils {
         SolidTile tile = getSolidTile(levelManager, chunkDesc, SOLIDITY_TOP);
         byte metric = getHeightMetric(tile, chunkDesc, x, y);
 
+        // DEBUG: Log floor checks for above-ground Grounder area
+        // Grounder at Y=827, feetY=847 - check around problem X positions
+        boolean debugThis = (y >= 845 && y <= 865) && (x >= 2285 && x <= 2315);
+        if (debugThis) {
+            // Get collision index for detailed debugging
+            int collisionIdx = -1;
+            if (chunkDesc != null && tile == null) {
+                // tile is null - either no solidity or collision index is 0
+                Chunk chunk = levelManager.getCurrentLevel().getChunk(chunkDesc.getChunkIndex());
+                if (chunk != null) {
+                    collisionIdx = chunk.getSolidTileIndex();
+                }
+            }
+            System.out.println("  FloorCheck@(" + x + "," + y + "): metric=" + metric +
+                    " chunkIdx=" + (chunkDesc != null ? chunkDesc.getChunkIndex() : "null") +
+                    " solidTop=" + (chunkDesc != null && chunkDesc.isSolidityBitSet(SOLIDITY_TOP)) +
+                    " tile=" + (tile != null) +
+                    (tile == null ? " collisionIdx=" + collisionIdx : ""));
+        }
+
         if (metric == 0) {
             // No solid surface at this tile - check 16 pixels down (extension)
             int nextY = y + 16;
             ChunkDesc nextDesc = levelManager.getChunkDescAt((byte) 0, x, nextY);
             SolidTile nextTile = getSolidTile(levelManager, nextDesc, SOLIDITY_TOP);
             byte nextMetric = getHeightMetric(nextTile, nextDesc, x, nextY);
+
+            // DEBUG: Log extension for above-ground Grounder
+            if (debugThis) {
+                System.out.println("    -> metric=0, Extension@y=" + nextY + ": nextMetric=" + nextMetric +
+                        " nextChunk=" + (nextDesc != null ? nextDesc.getChunkIndex() : "null") +
+                        " nextSolidTop=" + (nextDesc != null && nextDesc.isSolidityBitSet(SOLIDITY_TOP)));
+            }
+
             if (nextMetric > 0) {
                 int dist = calculateDistance(nextMetric, y, nextY);
                 byte angle = nextTile != null ? nextTile.getAngle() : 0;
@@ -322,11 +351,29 @@ public final class ObjectTerrainUtils {
     /**
      * Calculate distance to floor surface.
      * Returns negative if surface is above checkY (collision).
+     *
+     * ROM formula from FindFloor (s2.asm lines 42994-42999):
+     *   move.w d2,d1        ; d1 = y (the tile lookup position)
+     *   andi.w #$F,d1       ; d1 = y & 0xF
+     *   add.w  d1,d0        ; d0 = height + (y & 0xF)
+     *   move.w #$F,d1       ; d1 = 15
+     *   sub.w  d0,d1        ; d1 = 15 - (height + (y & 0xF))
+     *
+     * For extension tiles (16 down), ROM uses (y+16) & 0xF then adds 16 to result.
+     * For previous tiles (16 up), ROM uses (y-16) & 0xF then subtracts 16 from result.
+     *
+     * @param metric Height metric from collision array (0-16)
+     * @param checkY The original Y position being checked
+     * @param tileY The Y position used for tile lookup (may differ for extension checks)
      */
     private static int calculateDistance(byte metric, int checkY, int tileY) {
-        int tileTop = tileY & ~0x0F;
-        int surfaceY = tileTop + 16 - metric;
-        return surfaceY - checkY;
+        // ROM uses the tile lookup position for yInTile calculation
+        int yInTile = tileY & 0x0F;
+        int baseDist = 15 - (metric + yInTile);
+
+        // Add offset based on which tile we're checking relative to original
+        int tileOffset = tileY - checkY;  // 0 for current, +16 for extension, -16 for previous
+        return baseDist + tileOffset;
     }
 
     /**

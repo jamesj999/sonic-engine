@@ -1,0 +1,160 @@
+package uk.co.jamesj999.sonic.graphics;
+
+import com.jogamp.opengl.GL2;
+import com.jogamp.opengl.util.GLBuffers;
+import uk.co.jamesj999.sonic.level.Pattern;
+
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.logging.Logger;
+
+/**
+ * Texture atlas for 8x8 indexed patterns.
+ * Stores all patterns in a single GL texture to avoid per-tile texture binds.
+ */
+public class PatternAtlas {
+    private static final Logger LOGGER = Logger.getLogger(PatternAtlas.class.getName());
+
+    public static final int TILE_SIZE = Pattern.PATTERN_WIDTH;
+    private static final float UV_INSET_PIXELS = 0.01f;
+
+    private final int atlasWidth;
+    private final int atlasHeight;
+    private final int tilesPerRow;
+    private final int tilesPerColumn;
+    private final int maxSlots;
+
+    private final Map<Integer, Entry> entries = new HashMap<>();
+    private int nextSlot = 0;
+    private int textureId = 0;
+    private boolean initialized = false;
+
+    public PatternAtlas(int atlasWidth, int atlasHeight) {
+        if (atlasWidth % TILE_SIZE != 0 || atlasHeight % TILE_SIZE != 0) {
+            throw new IllegalArgumentException("Atlas size must be divisible by tile size");
+        }
+        this.atlasWidth = atlasWidth;
+        this.atlasHeight = atlasHeight;
+        this.tilesPerRow = atlasWidth / TILE_SIZE;
+        this.tilesPerColumn = atlasHeight / TILE_SIZE;
+        this.maxSlots = tilesPerRow * tilesPerColumn;
+    }
+
+    public int getAtlasWidth() {
+        return atlasWidth;
+    }
+
+    public int getAtlasHeight() {
+        return atlasHeight;
+    }
+
+    public int getTextureId() {
+        return textureId;
+    }
+
+    public boolean isInitialized() {
+        return initialized;
+    }
+
+    public void init(GL2 gl) {
+        if (initialized || gl == null) {
+            return;
+        }
+
+        int[] textures = new int[1];
+        gl.glGenTextures(1, textures, 0);
+        textureId = textures[0];
+
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
+        gl.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, atlasWidth, atlasHeight, 0,
+                GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, null);
+
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
+        gl.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
+
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+        initialized = true;
+    }
+
+    public Entry cachePattern(GL2 gl, Pattern pattern, int patternId) {
+        Entry entry = ensureEntry(patternId);
+        if (entry == null) {
+            return null;
+        }
+        if (gl != null && initialized && pattern != null) {
+            uploadPattern(gl, pattern, entry);
+        }
+        return entry;
+    }
+
+    public Entry updatePattern(GL2 gl, Pattern pattern, int patternId) {
+        return cachePattern(gl, pattern, patternId);
+    }
+
+    public Entry getEntry(int patternId) {
+        return entries.get(patternId);
+    }
+
+    public void cleanup(GL2 gl) {
+        if (gl != null && textureId != 0) {
+            gl.glDeleteTextures(1, new int[] { textureId }, 0);
+        }
+        textureId = 0;
+        initialized = false;
+        entries.clear();
+        nextSlot = 0;
+    }
+
+    private Entry ensureEntry(int patternId) {
+        Entry existing = entries.get(patternId);
+        if (existing != null) {
+            return existing;
+        }
+        if (nextSlot >= maxSlots) {
+            LOGGER.warning("Pattern atlas capacity exceeded; patternId=" + patternId);
+            return null;
+        }
+
+        int slot = nextSlot++;
+        int tileX = slot % tilesPerRow;
+        int tileY = slot / tilesPerRow;
+
+        int pixelX = tileX * TILE_SIZE;
+        int pixelY = tileY * TILE_SIZE;
+
+        float u0 = (pixelX + UV_INSET_PIXELS) / (float) atlasWidth;
+        float u1 = (pixelX + TILE_SIZE - UV_INSET_PIXELS) / (float) atlasWidth;
+        float v0 = (pixelY + UV_INSET_PIXELS) / (float) atlasHeight;
+        float v1 = (pixelY + TILE_SIZE - UV_INSET_PIXELS) / (float) atlasHeight;
+
+        Entry entry = new Entry(patternId, slot, tileX, tileY, u0, v0, u1, v1);
+        entries.put(patternId, entry);
+        return entry;
+    }
+
+    private void uploadPattern(GL2 gl, Pattern pattern, Entry entry) {
+        ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(TILE_SIZE * TILE_SIZE);
+        for (int col = 0; col < TILE_SIZE; col++) {
+            for (int row = 0; row < TILE_SIZE; row++) {
+                byte colorIndex = pattern.getPixel(row, col);
+                patternBuffer.put(colorIndex);
+            }
+        }
+        patternBuffer.flip();
+
+        int pixelX = entry.tileX() * TILE_SIZE;
+        int pixelY = entry.tileY() * TILE_SIZE;
+
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
+        gl.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, pixelX, pixelY, TILE_SIZE, TILE_SIZE,
+                GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+        gl.glBindTexture(GL2.GL_TEXTURE_2D, 0);
+    }
+
+    public record Entry(int patternId, int slot, int tileX, int tileY,
+            float u0, float v0, float u1, float v1) {
+    }
+}

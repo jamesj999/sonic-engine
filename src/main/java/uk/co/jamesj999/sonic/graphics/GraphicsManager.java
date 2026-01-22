@@ -27,9 +27,12 @@ public class GraphicsManager {
 	private static GraphicsManager graphicsManager;
 	List<GLCommandable> commands = new ArrayList<>();
 
-	private final Map<String, Integer> patternTextureMap = new HashMap<>(); // Map for pattern textures
 	private final Map<String, Integer> paletteTextureMap = new HashMap<>(); // Map for palette textures
 	private Integer combinedPaletteTextureId;
+	private PatternAtlas patternAtlas;
+
+	private static final int ATLAS_WIDTH = 1024;
+	private static final int ATLAS_HEIGHT = 1024;
 
 	private final Camera camera = Camera.getInstance();
 	private GL2 graphics;
@@ -85,6 +88,8 @@ public class GraphicsManager {
 			return;
 		}
 		this.graphics = gl;
+		this.patternAtlas = new PatternAtlas(ATLAS_WIDTH, ATLAS_HEIGHT);
+		this.patternAtlas.init(gl);
 		this.defaultShaderProgram = new ShaderProgram(gl, pixelShaderPath); // Load default shader
 		this.defaultShaderProgram.cacheUniformLocations(gl);
 
@@ -114,6 +119,9 @@ public class GraphicsManager {
 	public void initHeadless() {
 		this.headlessMode = true;
 		this.graphics = null;
+		if (this.patternAtlas == null) {
+			this.patternAtlas = new PatternAtlas(ATLAS_WIDTH, ATLAS_HEIGHT);
+		}
 	}
 
 	/**
@@ -204,64 +212,21 @@ public class GraphicsManager {
 	 * Cache a pattern texture (contains color indices) in the GPU.
 	 */
 	public void cachePatternTexture(Pattern pattern, int patternId) {
-		if (headlessMode) {
-			// In headless mode, just record that the pattern was cached
-			patternTextureMap.put("pattern_" + patternId, -1);
+		ensurePatternAtlas();
+		if (headlessMode || graphics == null) {
+			patternAtlas.cachePattern(null, pattern, patternId);
 			return;
 		}
-		int textureId = glGenTexture();
-
-		// Create a buffer to store the color indices (8x8 grid of 1-byte indices)
-		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
-
-		// Fill the buffer with the pattern's color indices
-		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
-			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
-				byte colorIndex = pattern.getPixel(row, col); // Get color index (0-15)
-				patternBuffer.put(colorIndex);
-			}
-		}
-		patternBuffer.flip();
-
-		// Upload the pattern buffer to the GPU as a 2D texture
-		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexImage2D(GL2.GL_TEXTURE_2D, 0, GL2.GL_RED, 8, 8, 0, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE,
-				patternBuffer);
-
-		// Set texture parameters (wrapping and filtering)
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_S, GL2.GL_CLAMP_TO_EDGE);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_WRAP_T, GL2.GL_CLAMP_TO_EDGE);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MIN_FILTER, GL2.GL_NEAREST);
-		graphics.glTexParameteri(GL2.GL_TEXTURE_2D, GL2.GL_TEXTURE_MAG_FILTER, GL2.GL_NEAREST);
-
-		patternTextureMap.put("pattern_" + patternId, textureId);
+		patternAtlas.cachePattern(graphics, pattern, patternId);
 	}
 
 	public void updatePatternTexture(Pattern pattern, int patternId) {
+		ensurePatternAtlas();
 		if (headlessMode || graphics == null) {
-			// In headless mode, just ensure pattern is tracked
-			if (headlessMode && !patternTextureMap.containsKey("pattern_" + patternId)) {
-				patternTextureMap.put("pattern_" + patternId, -1);
-			}
+			patternAtlas.updatePattern(null, pattern, patternId);
 			return;
 		}
-		Integer textureId = patternTextureMap.get("pattern_" + patternId);
-		if (textureId == null) {
-			cachePatternTexture(pattern, patternId);
-			return;
-		}
-
-		ByteBuffer patternBuffer = GLBuffers.newDirectByteBuffer(Pattern.PATTERN_WIDTH * Pattern.PATTERN_HEIGHT);
-		for (int col = 0; col < Pattern.PATTERN_HEIGHT; col++) {
-			for (int row = 0; row < Pattern.PATTERN_WIDTH; row++) {
-				byte colorIndex = pattern.getPixel(row, col);
-				patternBuffer.put(colorIndex);
-			}
-		}
-		patternBuffer.flip();
-
-		graphics.glBindTexture(GL2.GL_TEXTURE_2D, textureId);
-		graphics.glTexSubImage2D(GL2.GL_TEXTURE_2D, 0, 0, 0, 8, 8, GL2.GL_RED, GL2.GL_UNSIGNED_BYTE, patternBuffer);
+		patternAtlas.updatePattern(graphics, pattern, patternId);
 	}
 
 	public void cachePaletteTexture(Palette palette, int paletteId) {
@@ -316,10 +281,20 @@ public class GraphicsManager {
 	 * This allows using pattern IDs beyond the 11-bit limit of PatternDesc.
 	 */
 	public void renderPatternWithId(int patternId, PatternDesc desc, int x, int y) {
-		Integer patternTextureId = patternTextureMap.get("pattern_" + patternId);
-		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
+		if (headlessMode) {
+			return;
+		}
+		ensurePatternAtlas();
+		PatternAtlas.Entry entry = patternAtlas != null ? patternAtlas.getEntry(patternId) : null;
 
-		if (patternTextureId == null || paletteTextureId == null) {
+		Integer paletteTextureId;
+		if (useUnderwaterPaletteForBackground && underwaterPaletteTextureId != null) {
+			paletteTextureId = underwaterPaletteTextureId;
+		} else {
+			paletteTextureId = combinedPaletteTextureId;
+		}
+
+		if (entry == null || paletteTextureId == null) {
 			System.err.println("Pattern or Palette not cached. Pattern: " + patternId + ", Palette: "
 					+ desc.getPaletteIndex());
 			return;
@@ -330,12 +305,12 @@ public class GraphicsManager {
 		// added
 		boolean usedBatch = false;
 		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
-			usedBatch = batchedRenderer.addPattern(patternTextureId, desc.getPaletteIndex(), desc, x, y);
+			usedBatch = batchedRenderer.addPattern(entry, desc.getPaletteIndex(), desc, x, y);
 		}
 
 		if (!usedBatch) {
 			// Fallback to individual commands
-			PatternRenderCommand command = new PatternRenderCommand(patternTextureId, paletteTextureId, desc, x, y);
+			PatternRenderCommand command = new PatternRenderCommand(entry, paletteTextureId, desc, x, y);
 			registerCommand(command);
 		}
 	}
@@ -355,16 +330,18 @@ public class GraphicsManager {
 	 *                   tile)
 	 */
 	public void renderStripPatternWithId(int patternId, PatternDesc desc, int x, int y, int stripIndex) {
-		Integer patternTextureId = patternTextureMap.get("pattern_" + patternId);
-		Integer paletteTextureId = paletteTextureMap.get("palette_" + desc.getPaletteIndex());
-
-		if (patternTextureId == null || paletteTextureId == null) {
+		if (headlessMode) {
+			return;
+		}
+		ensurePatternAtlas();
+		PatternAtlas.Entry entry = patternAtlas != null ? patternAtlas.getEntry(patternId) : null;
+		if (entry == null || combinedPaletteTextureId == null) {
 			return;
 		}
 
 		// Only use batched rendering for strip patterns
 		if (batchingEnabled && batchedRenderer != null && batchedRenderer.isBatchActive()) {
-			batchedRenderer.addStripPattern(patternTextureId, desc.getPaletteIndex(), desc, x, y, stripIndex);
+			batchedRenderer.addStripPattern(entry, desc.getPaletteIndex(), desc, x, y, stripIndex);
 		}
 	}
 
@@ -419,12 +396,13 @@ public class GraphicsManager {
 		if (headlessMode) {
 			return;
 		}
-		Integer patternTextureId = patternTextureMap.get("pattern_" + patternIndex);
-		if (patternTextureId == null) {
+		ensurePatternAtlas();
+		PatternAtlas.Entry entry = patternAtlas != null ? patternAtlas.getEntry(patternIndex) : null;
+		if (entry == null) {
 			return;
 		}
 		if (batchedRenderer != null && batchedRenderer.isShadowBatchActive()) {
-			batchedRenderer.addShadowPattern(patternTextureId, desc, x, y);
+			batchedRenderer.addShadowPattern(entry, desc, x, y);
 		}
 	}
 
@@ -466,7 +444,11 @@ public class GraphicsManager {
 	 * Get the texture ID for a cached pattern.
 	 */
 	public Integer getPatternTextureId(int patternIndex) {
-		return patternTextureMap.get("pattern_" + patternIndex);
+		return patternAtlas != null ? patternAtlas.getTextureId() : null;
+	}
+
+	public Integer getPatternAtlasTextureId() {
+		return patternAtlas != null ? patternAtlas.getTextureId() : null;
 	}
 
 	private Integer underwaterPaletteTextureId;
@@ -528,14 +510,16 @@ public class GraphicsManager {
 	public void cleanup() {
 		if (headlessMode || graphics == null) {
 			// In headless mode, just clear the tracking maps
-			patternTextureMap.clear();
+			if (patternAtlas != null) {
+				patternAtlas.cleanup(null);
+			}
 			paletteTextureMap.clear();
 			combinedPaletteTextureId = null;
 			return;
 		}
-		// Delete pattern textures
-		for (int textureId : patternTextureMap.values()) {
-			graphics.glDeleteTextures(1, new int[] { textureId }, 0);
+		// Delete pattern atlas texture
+		if (patternAtlas != null) {
+			patternAtlas.cleanup(graphics);
 		}
 		// Delete palette textures
 		for (int textureId : new java.util.HashSet<>(paletteTextureMap.values())) {
@@ -571,6 +555,15 @@ public class GraphicsManager {
 		int[] texture = new int[1];
 		graphics.glGenTextures(1, texture, 0);
 		return texture[0];
+	}
+
+	private void ensurePatternAtlas() {
+		if (patternAtlas == null) {
+			patternAtlas = new PatternAtlas(ATLAS_WIDTH, ATLAS_HEIGHT);
+		}
+		if (!patternAtlas.isInitialized() && graphics != null) {
+			patternAtlas.init(graphics);
+		}
 	}
 
 	/**

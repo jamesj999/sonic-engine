@@ -19,14 +19,17 @@ import java.nio.FloatBuffer;
  */
 public class PatternRenderCommand implements GLCommandable {
 
-    private final int patternTextureId;
     private final int paletteTextureId;
+    private final float u0;
+    private final float v0;
+    private final float u1;
+    private final float v1;
     private final PatternDesc desc;
     private final int x;
     private final int y;
 
     // Static state tracking for batch optimization
-    private static int lastPatternTextureId = -1;
+    private static int lastAtlasTextureId = -1;
     private static int lastPaletteTextureId = -1;
     private static int lastPaletteIndex = -1;
     private static boolean stateInitialized = false;
@@ -49,9 +52,12 @@ public class PatternRenderCommand implements GLCommandable {
         return graphicsManager;
     }
 
-    public PatternRenderCommand(int patternTextureId, int paletteTextureId, PatternDesc desc, int x, int y) {
-        this.patternTextureId = patternTextureId;
+    public PatternRenderCommand(PatternAtlas.Entry entry, int paletteTextureId, PatternDesc desc, int x, int y) {
         this.paletteTextureId = paletteTextureId;
+        this.u0 = entry.u0();
+        this.v0 = entry.v0();
+        this.u1 = entry.u1();
+        this.v1 = entry.v1();
         this.desc = desc;
         this.x = x;
         // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height
@@ -65,7 +71,7 @@ public class PatternRenderCommand implements GLCommandable {
      * Call this before beginning a new frame of rendering.
      */
     public static void resetFrameState() {
-        lastPatternTextureId = -1;
+        lastAtlasTextureId = -1;
         lastPaletteTextureId = -1;
         lastPaletteIndex = -1;
         stateInitialized = false;
@@ -84,6 +90,7 @@ public class PatternRenderCommand implements GLCommandable {
             gl.glUniform1i(shaderProgram.getPaletteLocation(), 0);
             gl.glUniform1i(shaderProgram.getIndexedColorTextureLocation(), 1);
             gl.glEnableClientState(GL2.GL_VERTEX_ARRAY);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE0);
             gl.glEnableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
 
             // If using water shader, bind underwater palette to texture unit 2
@@ -111,11 +118,12 @@ public class PatternRenderCommand implements GLCommandable {
             lastPaletteTextureId = paletteTextureId;
         }
 
-        // Only bind pattern texture if it changed
-        if (patternTextureId != lastPatternTextureId) {
+        // Only bind atlas texture if it changed
+        Integer atlasTextureId = getGraphicsManager().getPatternAtlasTextureId();
+        if (atlasTextureId != null && atlasTextureId != lastAtlasTextureId) {
             gl.glActiveTexture(GL2.GL_TEXTURE1);
-            gl.glBindTexture(GL2.GL_TEXTURE_2D, patternTextureId);
-            lastPatternTextureId = patternTextureId;
+            gl.glBindTexture(GL2.GL_TEXTURE_2D, atlasTextureId);
+            lastAtlasTextureId = atlasTextureId;
         }
 
         // Only update palette line uniform if it changed
@@ -151,9 +159,6 @@ public class PatternRenderCommand implements GLCommandable {
         }
 
         // Compute texture coordinates based on flips
-        float u0 = 0.0f, u1 = 1.0f;
-        float v0 = 0.0f, v1 = 1.0f;
-
         // Fill vertex buffer
         VERTEX_BUFFER.clear();
         VERTEX_BUFFER.put(x0).put(y0); // Bottom-left
@@ -172,6 +177,7 @@ public class PatternRenderCommand implements GLCommandable {
         TEX_COORD_BUFFER.flip();
 
         gl.glVertexPointer(2, GL2.GL_FLOAT, 0, VERTEX_BUFFER);
+        gl.glClientActiveTexture(GL2.GL_TEXTURE0);
         gl.glTexCoordPointer(2, GL2.GL_FLOAT, 0, TEX_COORD_BUFFER);
         gl.glDrawArrays(GL2.GL_QUADS, 0, 4);
     }
@@ -183,6 +189,7 @@ public class PatternRenderCommand implements GLCommandable {
     public static void cleanupFrameState(GL2 gl) {
         if (stateInitialized) {
             gl.glDisableClientState(GL2.GL_VERTEX_ARRAY);
+            gl.glClientActiveTexture(GL2.GL_TEXTURE0);
             gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
             ShaderProgram shaderProgram = getGraphicsManager().getShaderProgram();
             if (shaderProgram != null) {
