@@ -147,6 +147,13 @@ public class PlayableSpriteMovement extends
 			right = false;
 		}
 
+		// ROM: Sonic_MoveLeft/Sonic_MoveRight clear pushing when direction flips.
+		if (left && !right && sprite.getDirection() == Direction.RIGHT) {
+			sprite.setPushing(false);
+		} else if (right && !left && sprite.getDirection() == Direction.LEFT) {
+			sprite.setPushing(false);
+		}
+
 		short originalX = sprite.getX();
 		short originalY = sprite.getY();
 		if (sprite.getDead()) {
@@ -542,10 +549,6 @@ public class PlayableSpriteMovement extends
 		int angle = sprite.getAngle() & 0xFF;
 		short gSpeed = sprite.getGSpeed();
 
-		// Clear pushing at start - it will only be set if actively pushing into a wall.
-		// This ensures pushing is false when direction is released (gSpeed=0).
-		sprite.setPushing(false);
-
 		// Skip condition 1: angle in range 0x40-0xBF (steep slopes, walls, ceiling)
 		// ROM: addi.b #$40,d0; bmi.s return
 		// On steep terrain, wall collision is handled by terrain collision
@@ -581,9 +584,10 @@ public class PlayableSpriteMovement extends
 			return;
 		}
 
-		// Project position by velocity (ROM: CalcRoomInFront)
-		short projectedDx = (short) (sprite.getXSpeed() >> 8);
-		short projectedDy = (short) (sprite.getYSpeed() >> 8);
+		// Project position by velocity (ROM: CalcRoomInFront uses x_pos + (x_vel<<8))
+		// Include current subpixel so the projection matches the fixed-point math.
+		short projectedDx = (short) ((sprite.getXSpeed() + (sprite.getXSubpixel() & 0xFF)) >> 8);
+		short projectedDy = (short) ((sprite.getYSpeed() + (sprite.getYSubpixel() & 0xFF)) >> 8);
 
 		// Select the appropriate push sensor based on quadrant
 		// 0x40 = left wall (sensor 0), 0xC0 = right wall (sensor 1)
@@ -595,51 +599,20 @@ public class PlayableSpriteMovement extends
 		}
 
 		byte distance = result.distance();
-		int wallAngle = result.angle() & 0xFF;
 
-		// Filter out curved terrain that might be detected as walls.
-		// On slopes, if the detected "wall" angle is similar to the terrain angle,
-		// it's likely curved terrain (floor wrapping around), not a real wall.
-		// Real walls have angles perpendicular to the terrain.
-		boolean onSlope = (angle > 0x10 && angle < 0xF0);
-		if (onSlope) {
-			int angleDiff = Math.abs(wallAngle - angle);
-			if (angleDiff > 128) {
-				angleDiff = 256 - angleDiff;
-			}
-			// If angles are within ~45 degrees, it's likely curved terrain
-			if (angleDiff < 0x30) {
-				return;
-			}
-		}
-
-		// Check if we're moving toward the wall (for distance == 0 case)
-		boolean movingTowards = (quadrant == 0x40 && sprite.getXSpeed() < 0) ||
-								(quadrant == 0xC0 && sprite.getXSpeed() > 0);
-
-		// Apply collision response if penetrating OR exactly at wall and moving toward it
-		if (distance < 0 || (distance == 0 && movingTowards)) {
-			// Calculate the exact movement needed to reach the wall surface (not past it).
-			// distance is the penetration at PROJECTED position.
-			// We want to move to the wall, so: allowedMove = projectedDx + distance (for RIGHT)
-			// or allowedMove = projectedDx - distance (for LEFT)
-			//
-			// Example (RIGHT wall): projectedDx = 6, distance = -3
-			//   allowedMove = 6 + (-3) = 3 pixels (move right to wall surface)
-			// Example (LEFT wall): projectedDx = -6, distance = -3
-			//   allowedMove = -6 - (-3) = -3 pixels (move left to wall surface)
-			int allowedMovePixels;
+		// ROM: Only react when distance is negative (penetrating).
+		// distance == 0 does NOT trigger a stop in the original.
+		if (distance < 0) {
+			// ROM: d1 is distance in pixels, then d1 << 8 is added/subtracted
+			// from velocity. This preserves subpixel precision.
+			int delta = distance << 8;
 			if (quadrant == 0x40) {
-				allowedMovePixels = projectedDx - distance;  // LEFT wall
+				// Left wall: sub.w d1,x_vel (d1 negative -> move right)
+				sprite.setXSpeed((short) (sprite.getXSpeed() - delta));
 			} else {
-				allowedMovePixels = projectedDx + distance;  // RIGHT wall
+				// Right wall: add.w d1,x_vel (d1 negative -> move left)
+				sprite.setXSpeed((short) (sprite.getXSpeed() + delta));
 			}
-
-			// Convert to subpixels, accounting for current subpixel position
-			// This ensures pixel-perfect wall placement
-			short subX = (short) (sprite.getXSubpixel() & 0xFF);
-			sprite.setXSpeed((short) ((allowedMovePixels * 256) - subX));
-
 			sprite.setPushing(true);
 			sprite.setGSpeed((short) 0);
 		}
@@ -1138,6 +1111,15 @@ public class PlayableSpriteMovement extends
 			} else {
 				gSpeed -= Math.min(Math.abs(gSpeed), friction)
 						* Math.signum(gSpeed);
+			}
+		}
+
+		// ROM: If no input, no slope, and stopped, clear pushing (Sonic_Move).
+		if (!left && !right) {
+			int angle = sprite.getAngle() & 0xFF;
+			boolean onSlope = ((angle + 0x20) & 0xC0) != 0;
+			if (!onSlope && gSpeed == 0) {
+				sprite.setPushing(false);
 			}
 		}
 
@@ -1648,4 +1630,3 @@ public class PlayableSpriteMovement extends
 		}
 	}
 }
-
