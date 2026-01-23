@@ -255,6 +255,8 @@ public class SpringObjectInstance extends BoxObjectInstance
             if (!player.getRolling()) {
                 player.setAnimationId(Sonic2AnimationIds.WALK);
             }
+            // ROM: loc_18BAA clears pushing flags after horizontal spring triggers
+            player.setPushing(false);
         } else if (type == TYPE_UP || type == TYPE_DIAGONAL_UP) {
             // ROM: loc_189CA/loc_18E10 - Up springs set Spring animation first
             player.setAnimationId(Sonic2AnimationIds.SPRING);
