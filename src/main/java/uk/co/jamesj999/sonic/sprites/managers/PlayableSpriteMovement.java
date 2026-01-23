@@ -166,6 +166,9 @@ public class PlayableSpriteMovement extends
 		// in order to shorten the jump.
 		if (jumpPressed) {
 			jumpHandler(jump);
+		} else if (sprite.getAir()) {
+			// ROM: Sonic_UpVelCap (s2.asm:37088) - applies when airborne but not jumping
+			applyUpwardVelocityCap();
 		}
 
 		// SPG: When a spring launches the player, reset jumpPressed to prevent
@@ -1483,6 +1486,30 @@ public class PlayableSpriteMovement extends
 		}
 		if (!sprite.getAir() && !jump) {
 			jumpPressed = false;
+		}
+	}
+
+	/**
+	 * ROM: Sonic_UpVelCap (s2.asm:37088)
+	 * Applies absolute upward velocity cap when airborne but not from a player-initiated jump.
+	 * This affects spring launches, bumper bounces, etc.
+	 * The cap is -0xFC0 (-63.75 pixels/frame) unless pinball_mode is set.
+	 */
+	private void applyUpwardVelocityCap() {
+		// Only apply when in air but not from a player jump
+		if (!sprite.getAir() || jumpPressed) {
+			return;
+		}
+		// ROM: tst.b pinball_mode(a0) / bne.s return_1AB36
+		// Pinball mode (spindash launchers, CNZ tubes) bypasses the cap
+		if (sprite.getPinballMode()) {
+			return;
+		}
+		// ROM: cmpi.w #-$FC0,y_vel(a0) / bge.s return_1AB36
+		// Cap upward velocity to -0xFC0 (negative = upward)
+		short yVel = sprite.getYSpeed();
+		if (yVel < -0xFC0) {
+			sprite.setYSpeed((short) -0xFC0);
 		}
 	}
 
