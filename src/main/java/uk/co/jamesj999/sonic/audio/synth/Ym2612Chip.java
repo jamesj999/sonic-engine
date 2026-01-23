@@ -410,6 +410,27 @@ public class Ym2612Chip {
         stopDac();
     }
 
+    /**
+     * Force-silence a channel by directly resetting envelope state.
+     * This is used when SFX steals a channel from music to prevent the
+     * "chirp" artifact caused by envelope state persisting across notes.
+     * Unlike register writes, this takes effect immediately without needing
+     * audio samples to be rendered.
+     */
+    public void forceSilenceChannel(int chIdx) {
+        if (chIdx < 0 || chIdx >= 6) return;
+        Channel ch = channels[chIdx];
+        for (int op = 0; op < 4; op++) {
+            Operator sl = ch.ops[op];
+            // Fully reset envelope to silent state
+            sl.eCnt = ENV_END;
+            sl.eInc = 0;
+            sl.eCmp = ENV_END + 1;
+            sl.curEnv = EnvState.RELEASE;
+            sl.chgEnM = 0xFFFFFFFF; // Allow next keyOn to proceed
+        }
+    }
+
     public void setDacInterpolate(boolean interpolate) {
         this.dacInterpolate = interpolate;
     }

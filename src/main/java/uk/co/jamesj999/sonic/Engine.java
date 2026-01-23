@@ -336,8 +336,12 @@ public class Engine extends GLCanvas implements GLEventListener {
 						new Thread() {
 							@Override
 							public void run() {
-								if (animator.isStarted())
+								if (animator.isStarted()) {
+									if (animator.isPaused()) {
+										animator.resume();
+									}
 									animator.stop();
+								}
 								System.exit(0);
 							}
 						}.start();

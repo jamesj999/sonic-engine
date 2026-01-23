@@ -168,6 +168,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         if (ch >= 0 && ch < 6) {
             if (isSfx(source)) {
                 if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
+                    // Silence channel if stealing from music (not from another SFX or self)
+                    if (fmLocks[ch] != source && !isSfx(fmLocks[ch])) {
+                        silenceFmChannel(ch);
+                    }
                     fmLocks[ch] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
                 }
@@ -195,6 +199,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
 
             if (isSfx(source)) {
                 if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
+                    // Silence channel if stealing from music (not from another SFX or self)
+                    if (psgLocks[ch] != source && !isSfx(psgLocks[ch])) {
+                        silencePsgChannel(ch);
+                    }
                     psgLocks[ch] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
                 }
@@ -214,6 +222,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
                 if (isSfx(source)) {
                     // Update lock just in case? Already locked by Latch.
                     if (shouldStealLock(psgLocks[ch], (SmpsSequencer) source)) {
+                        // Silence channel if stealing from music (not from another SFX or self)
+                        if (psgLocks[ch] != source && !isSfx(psgLocks[ch])) {
+                            silencePsgChannel(ch);
+                        }
                         psgLocks[ch] = (SmpsSequencer) source;
                         updateOverrides(SmpsSequencer.TrackType.PSG, ch, true);
                     }
@@ -242,6 +254,10 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         if (channelId >= 0 && channelId < 6) {
             if (isSfx(source)) {
                 if (shouldStealLock(fmLocks[channelId], (SmpsSequencer) source)) {
+                    // Silence channel if stealing from music (not from another SFX or self)
+                    if (fmLocks[channelId] != source && !isSfx(fmLocks[channelId])) {
+                        silenceFmChannel(channelId);
+                    }
                     fmLocks[channelId] = (SmpsSequencer) source;
                     updateOverrides(SmpsSequencer.TrackType.FM, channelId, true);
                 }
@@ -263,6 +279,11 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         int ch = 5;
         if (isSfx(source)) {
             if (shouldStealLock(fmLocks[ch], (SmpsSequencer) source)) {
+                // Silence channel if stealing from music (not from another SFX or self)
+                if (fmLocks[ch] != source && !isSfx(fmLocks[ch])) {
+                    silenceFmChannel(5);
+                    super.stopDac(null);
+                }
                 fmLocks[ch] = (SmpsSequencer) source;
                 updateOverrides(SmpsSequencer.TrackType.FM, ch, true);
             }
@@ -299,6 +320,38 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
             return challengerIdx > currentIdx;
         }
         return false; // Lower priority cannot steal
+    }
+
+    /**
+     * Silence an FM channel before SFX takes it over from music.
+     * This directly resets envelope state to prevent the "chirp" artifact
+     * that occurs when SFX first samples inherit envelope state from the
+     * previous music note.
+     *
+     * Unlike register writes (which would be overwritten by the subsequent
+     * voice load), this directly resets the envelope counters to fully
+     * silent state, ensuring the next Key On starts from a clean slate.
+     */
+    private void silenceFmChannel(int ch) {
+        // Directly reset envelope state - this takes effect immediately
+        // without needing audio samples to be rendered
+        super.forceSilenceChannel(ch);
+
+        // Also send Key Off via registers for completeness
+        int port = (ch < 3) ? 0 : 1;
+        int hwCh = ch % 3;
+        int chVal = (port == 0) ? hwCh : (hwCh + 4);
+        super.writeFm(null, 0, 0x28, 0x00 | chVal);
+    }
+
+    /**
+     * Silence a PSG channel before SFX takes it over from music.
+     * Sets volume to 0xF (silence).
+     */
+    private void silencePsgChannel(int ch) {
+        if (ch >= 0 && ch <= 3) {
+            super.writePsg(null, 0x80 | (ch << 5) | (1 << 4) | 0x0F);
+        }
     }
 
     @Override

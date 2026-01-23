@@ -117,4 +117,12 @@ public class VirtualSynthesizer implements Synthesizer {
         ym.silenceAll();
         psg.silenceAll();
     }
+
+    /**
+     * Force-silence an FM channel by directly resetting envelope state.
+     * Used when SFX steals a channel to prevent chirp artifacts.
+     */
+    public void forceSilenceChannel(int channelId) {
+        ym.forceSilenceChannel(channelId);
+    }
 }
