@@ -621,7 +621,11 @@ public class Ym2612Chip {
                 break;
             case 0xB0:
                 ch.algo = val & 7;
-                ch.feedback = 9 - ((val >> 3) & 7);
+                int fb = (val >> 3) & 7;
+                // When feedback is 0 (disabled), use shift=31 to effectively disable it.
+                // For non-zero feedback (1-7), use 9-fb as shift amount (lower = more feedback).
+                // This matches libvgm's handling for games like Thunder Force 4, Gynoug, Aladdin.
+                ch.feedback = (fb != 0) ? (9 - fb) : 31;
                 break;
             case 0xB4:
                 ch.pan = (val >> 6) & 3;
@@ -684,6 +688,16 @@ public class Ym2612Chip {
             sl.eInc = sl.eIncA;
             sl.eCmp = ENV_DECAY;
             sl.curEnv = EnvState.ATTACK;
+
+            // Reset feedback history when operator 0 (feedback operator) keys on.
+            // This ensures multi-channel SFX like Signpost (0xCF) that have staggered
+            // note starts get clean feedback state for each note. Without this,
+            // channels that rest before their first note accumulate feedback values
+            // during the rest period, causing phase/reverb artifacts.
+            if (idx == 0) {
+                ch.opOut[0] = 0;
+                ch.opOut[1] = 0;
+            }
         }
     }
 
@@ -794,6 +808,14 @@ public class Ym2612Chip {
         int fms = ch.fms;
         int lfoShift = fms != 0 ? (fms * freqLfo) >> (LFO_HBITS - 1) : 0;
 
+        // GET_CURRENT_PHASE - capture fCnt BEFORE incrementing (like libvgm)
+        // Slot order matches ym2612.c: S0=op0, S1=op2, S2=op1, S3=op3
+        in0 = ch.ops[0].fCnt;
+        in1 = ch.ops[2].fCnt;
+        in2 = ch.ops[1].fCnt;
+        in3 = ch.ops[3].fCnt;
+
+        // UPDATE_PHASE - increment fCnt AFTER capturing
         for (int i=0; i<4; i++) {
             Operator op = ch.ops[i];
             int finc = op.fInc;
@@ -803,11 +825,13 @@ public class Ym2612Chip {
             op.fCnt += finc;
         }
 
+        // GET_CURRENT_ENV
         GET_CURRENT_ENV(ch, 0, envLfo);
         GET_CURRENT_ENV(ch, 1, envLfo);
         GET_CURRENT_ENV(ch, 2, envLfo);
         GET_CURRENT_ENV(ch, 3, envLfo);
 
+        // UPDATE_ENV
         for (int i=0; i<4; i++) {
             Operator op = ch.ops[i];
             op.eCnt += op.eInc;
@@ -847,11 +871,8 @@ public class Ym2612Chip {
     }
 
     private void doAlgo(Channel ch) {
-        in0 = ch.ops[0].fCnt;
-        // Slot order matches ym2612.c: S1=op0, S2=op2, S3=op1, S4=op3
-        in1 = ch.ops[2].fCnt;
-        in2 = ch.ops[1].fCnt;
-        in3 = ch.ops[3].fCnt;
+        // Phase values (in0..in3) are already set by renderChannel's GET_CURRENT_PHASE step.
+        // Slot order: S0=op0, S1=op2, S2=op1, S3=op3 (matches libvgm ym2612.c)
 
         final int env0 = en0;
         final int env1 = en2;
@@ -953,15 +974,22 @@ public class Ym2612Chip {
         if (chIdx < 0 || chIdx >= 6 || voice.length < 1) return;
         Channel ch = channels[chIdx];
 
-        // Reset feedback history when loading a new voice.
-        // This ensures SFX channels start with clean feedback state,
-        // preventing residual values from previous sounds (music/SFX)
-        // from affecting the feedback operator's behavior.
+        int port = (chIdx < 3) ? 0 : 1;
+        int hwCh = chIdx % 3;
+        int chVal = (port == 0) ? hwCh : (hwCh + 4);
+
+        // Key off all operators before loading new voice (like Z80 zFMSilenceChannel).
+        // This ensures any residual sound from previous notes is silenced.
+        write(0, 0x28, 0x00 | chVal);
+
+        // Reset feedback history AND phase counters when loading a new voice.
+        // This ensures SFX channels start with clean state, preventing
+        // residual values from previous sounds from causing phase effects.
         // Without this, multi-channel SFX like Signpost (0xCF) that use
-        // high feedback can exhibit "phase effects" due to different
-        // feedback histories on each channel.
+        // high feedback exhibit "reverb/phase" artifacts.
         for (int i = 0; i < 4; i++) {
             ch.opOut[i] = 0;
+            ch.ops[i].fCnt = 0;
         }
 
         boolean hasTl = voice.length >= 25;
@@ -978,9 +1006,6 @@ public class Ym2612Chip {
         int val00 = get.applyAsInt(0);
         int feedback = (val00 >> 3) & 7;
         int algo = val00 & 7;
-
-        int port = (chIdx < 3) ? 0 : 1;
-        int hwCh = chIdx % 3;
 
         write(port, 0xB0 + hwCh, (feedback << 3) | algo);
 
