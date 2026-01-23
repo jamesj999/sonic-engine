@@ -1002,7 +1002,13 @@ public class PlayableSpriteMovement extends
 		// sinHex returns -256 to 256, so (slopeRunningVariant * sinHex) >> 8 gives
 		// the correct result. Using floating-point sinHexNormalized compounds
 		// rounding errors from the velocity conversion fix.
-		if (sprite.getRolling() || gSpeed != 0) {
+		//
+		// ROM ACCURACY FIX: Angle gating - skip slope effect on steep surfaces.
+		// ROM: Sonic_SlopeResist (s2.asm:37360-37364) and Sonic_RollRepel (s2.asm:37393-37397)
+		// Check: (angle + 0x60) >= 0xC0 in unsigned byte arithmetic
+		// This skips slope effect for angles 0x60-0x9F (walls, ceilings, near-vertical surfaces)
+		boolean onSteepSurface = ((hexAngle + 0x60) & 0xFF) >= 0xC0;
+		if (!onSteepSurface && (sprite.getRolling() || gSpeed != 0)) {
 			int slopeEffect = (slopeRunningVariant * TrigLookupTable.sinHex(hexAngle)) >> 8;
 			gSpeed += slopeEffect;
 		}
@@ -1119,10 +1125,15 @@ public class PlayableSpriteMovement extends
 		// SPG: Y Speed -= jump_force * cos(Ground Angle)
 		// Note: Due to Mega Drive clockwise angle system + screen Y-down coordinates,
 		// the signs work out such that we ADD sin for X and SUBTRACT cos for Y.
-		sprite.setXSpeed((short) (sprite.getXSpeed() + sprite.getJump()
-				* TrigLookupTable.sinHexNormalized(hexAngle)));
-		sprite.setYSpeed((short) (sprite.getYSpeed() - sprite.getJump()
-				* TrigLookupTable.cosHexNormalized(hexAngle)));
+		//
+		// ROM ACCURACY FIX: Use integer math matching ROM's CalcSine + asr #8 (s2.asm:37021-37030)
+		// The ROM does: muls.w d2,d0 / asr.l #8,d0 (multiply first, then shift)
+		// Using floating-point sinHexNormalized introduces ±1 subpixel drift due to
+		// division precision loss before multiplication.
+		int xJumpChange = (TrigLookupTable.sinHex(hexAngle) * sprite.getJump()) >> 8;
+		int yJumpChange = (TrigLookupTable.cosHex(hexAngle) * sprite.getJump()) >> 8;
+		sprite.setXSpeed((short) (sprite.getXSpeed() + xJumpChange));
+		sprite.setYSpeed((short) (sprite.getYSpeed() - yJumpChange));
 	}
 
 	/**
