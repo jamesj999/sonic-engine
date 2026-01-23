@@ -144,11 +144,13 @@ public abstract class AbstractSprite implements Sprite {
 		xTotal += xSpeed;
 		yTotal += ySpeed;
 
-		short updatedXPixel = (short) (xTotal / 256);
-		short updatedYPixel = (short) (yTotal / 256);
+		// ROM-accurate: 68000 asr.l #8 rounds toward negative infinity
+		// Java / rounds toward zero, which causes drift when moving left/up
+		short updatedXPixel = (short) (xTotal >> 8);
+		short updatedYPixel = (short) (yTotal >> 8);
 
-		byte updatedXSubpixel = (byte) (xTotal % 256);
-		byte updatedYSubpixel = (byte) (yTotal % 256);
+		byte updatedXSubpixel = (byte) (xTotal & 0xFF);
+		byte updatedYSubpixel = (byte) (yTotal & 0xFF);
 
 		xPixel = updatedXPixel;
 		xSubpixel = updatedXSubpixel;

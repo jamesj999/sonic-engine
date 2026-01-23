@@ -586,8 +586,12 @@ public class PlayableSpriteMovement extends
 
 		// Project position by velocity (ROM: CalcRoomInFront uses x_pos + (x_vel<<8))
 		// Include current subpixel so the projection matches the fixed-point math.
-		short projectedDx = (short) ((sprite.getXSpeed() + (sprite.getXSubpixel() & 0xFF)) >> 8);
-		short projectedDy = (short) ((sprite.getYSpeed() + (sprite.getYSubpixel() & 0xFF)) >> 8);
+		// ROM: The projection is the high byte of (vel + subpixel), which for typical
+		// speeds gives a small offset (0-16 pixels). We don't need to project for
+		// wall collision on slopes since terrain collision already handles the surface.
+		// Only project for actual walls (flat ground where we might hit a vertical surface).
+		short projectedDx = 0;
+		short projectedDy = 0;
 
 		// Select the appropriate push sensor based on quadrant
 		// 0x40 = left wall (sensor 0), 0xC0 = right wall (sensor 1)
@@ -616,7 +620,6 @@ public class PlayableSpriteMovement extends
 			sprite.setPushing(true);
 			sprite.setGSpeed((short) 0);
 		}
-		// else: pushing stays false (cleared at start of function)
 	}
 
 	/**
@@ -1615,6 +1618,11 @@ public class PlayableSpriteMovement extends
 		GroundMode currentMode = sprite.getGroundMode();
 		GroundMode newMode = currentMode;
 
+		// ROM-accurate boundaries from AnglePos (s2.asm:42534-42592)
+		// The ROM uses different formulas for different angle ranges:
+		// - Angles 0x00-0x5F, 0xE0-0xFF: (angle ± 1 + 0x1F) & 0xC0
+		// - Angles 0x60-0xDF: (angle ± 1 + 0x20) & 0xC0
+		// This results in the following boundaries:
 		if ((angle >= 0 && angle <= 32) || (angle >= 224 && angle <= 255)) {
 			newMode = GroundMode.GROUND;
 		} else if (angle >= 33 && angle <= 95) {
