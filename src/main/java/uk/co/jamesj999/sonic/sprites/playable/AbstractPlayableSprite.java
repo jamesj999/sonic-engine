@@ -106,6 +106,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean pushing = false;
 
         /**
+         * Whether or not this sprite is currently skidding (braking).
+         * ROM: Set when pressing opposite direction from movement at speed >= 0x400.
+         */
+        protected boolean skidding = false;
+
+        /**
+         * Timer for skid dust spawning. ROM spawns dust every 4 frames while skidding.
+         * Decrements each frame; when < 0, spawn dust and reset to 3.
+         */
+        protected int skidDustTimer = 0;
+
+        /**
          * Frames remaining for post-hit invulnerability.
          */
         protected int invulnerableFrames = 0;
@@ -300,6 +312,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.pinballMode = false;
                 this.spindash = false;
                 this.pushing = false;
+                this.skidding = false;
+                this.skidDustTimer = 0;
                 this.crouching = false;
                 this.highPriority = false;
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
@@ -615,6 +629,26 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setPushing(boolean pushing) {
                 this.pushing = pushing;
+        }
+
+        public boolean getSkidding() {
+                return skidding;
+        }
+
+        public void setSkidding(boolean skidding) {
+                this.skidding = skidding;
+                if (!skidding) {
+                        // Reset dust timer when skidding ends
+                        this.skidDustTimer = 0;
+                }
+        }
+
+        public int getSkidDustTimer() {
+                return skidDustTimer;
+        }
+
+        public void setSkidDustTimer(int timer) {
+                this.skidDustTimer = timer;
         }
 
         public boolean getInvulnerable() {

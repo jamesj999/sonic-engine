@@ -10,6 +10,7 @@ import uk.co.jamesj999.sonic.physics.SensorResult;
 import uk.co.jamesj999.sonic.physics.TrigLookupTable;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
+import uk.co.jamesj999.sonic.game.sonic2.objects.SkidDustObjectInstance;
 import uk.co.jamesj999.sonic.sprites.animation.ScriptedVelocityAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.animation.SpriteAnimationProfile;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
@@ -50,7 +51,6 @@ public class PlayableSpriteMovement extends
 
 	private boolean jumpPressed;
 	private boolean jumpHeld;
-	private boolean skidding;
 
 	// Tracks when the down button was held while crouching.
 	// When the player crouches (standing still with down held) and then presses
@@ -1026,12 +1026,24 @@ public class PlayableSpriteMovement extends
 				if (gSpeed <= 0) {
 					gSpeed = (short) -128;
 				}
-				if (!sprite.getRolling() && gSpeed >= 4 * 256 && !skidding) {
-					audioManager.playSfx(GameSound.SKID);
-					skidding = true;
+				// ROM: Skid triggers when speed >= 0x400 (1024 subpixels) and pressing opposite direction
+				if (!sprite.getRolling() && gSpeed >= 4 * 256) {
+					if (!sprite.getSkidding()) {
+						// First frame of skidding - play sound and set state
+						audioManager.playSfx(GameSound.SKID);
+						sprite.setSkidding(true);
+					}
+					// ROM: Spawn dust every 4 frames while skidding (timer counts 3,2,1,0,-1 then resets)
+					int dustTimer = sprite.getSkidDustTimer() - 1;
+					if (dustTimer < 0) {
+						dustTimer = 3;
+						SkidDustObjectInstance.spawn(sprite);
+					}
+					sprite.setSkidDustTimer(dustTimer);
 				}
 			} else if (!sprite.getRolling()) {
-				skidding = false;
+				// Direction now matches input - no longer braking
+				sprite.setSkidding(false);
 				if (gSpeed > -maxSpeed) {
 					gSpeed -= accel;
 					if (gSpeed < -maxSpeed) {
@@ -1052,12 +1064,24 @@ public class PlayableSpriteMovement extends
 				if (gSpeed >= 0) {
 					gSpeed = (short) 128;
 				}
-				if (!sprite.getRolling() && gSpeed <= -4 * 256 && !skidding) {
-					audioManager.playSfx(GameSound.SKID);
-					skidding = true;
+				// ROM: Skid triggers when speed >= 0x400 (1024 subpixels) and pressing opposite direction
+				if (!sprite.getRolling() && gSpeed <= -4 * 256) {
+					if (!sprite.getSkidding()) {
+						// First frame of skidding - play sound and set state
+						audioManager.playSfx(GameSound.SKID);
+						sprite.setSkidding(true);
+					}
+					// ROM: Spawn dust every 4 frames while skidding (timer counts 3,2,1,0,-1 then resets)
+					int dustTimer = sprite.getSkidDustTimer() - 1;
+					if (dustTimer < 0) {
+						dustTimer = 3;
+						SkidDustObjectInstance.spawn(sprite);
+					}
+					sprite.setSkidDustTimer(dustTimer);
 				}
 			} else if (!sprite.getRolling()) {
-				skidding = false;
+				// Direction now matches input - no longer braking
+				sprite.setSkidding(false);
 				if (gSpeed < maxSpeed) {
 					gSpeed = (short) (gSpeed + accel);
 					if (gSpeed > maxSpeed) {
@@ -1066,8 +1090,9 @@ public class PlayableSpriteMovement extends
 				}
 			}
 		}
+		// Clear skidding when player releases directional input
 		if (!left && !right) {
-			skidding = false;
+			sprite.setSkidding(false);
 		}
 		// SPG: Friction check uses RAW button state. During control lock, if player
 		// is pressing left/right (even though input is locked), friction is NOT

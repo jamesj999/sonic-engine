@@ -8,7 +8,6 @@ import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
-import uk.co.jamesj999.sonic.level.objects.TouchResponseProvider;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
@@ -22,7 +21,7 @@ import java.util.List;
  *   <li>Starts hidden (waits for parent's activation flag)</li>
  *   <li>When activated, applies velocity from direction table and falls with gravity</li>
  *   <li>Self-destructs when off-screen</li>
- *   <li>collision_flags = 0x84 (HURT + size index 4)</li>
+ *   <li>collision_flags = 0 (no collision - purely cosmetic debris)</li>
  * </ul>
  * <p>
  * Rock velocities from Obj90_Directions table:
@@ -34,11 +33,8 @@ import java.util.List;
  * Index 8: X=-3, Y=-3
  * </pre>
  */
-public class GrounderRockProjectile extends AbstractObjectInstance
-        implements TouchResponseProvider {
+public class GrounderRockProjectile extends AbstractObjectInstance {
 
-    // Collision from subObjData: collision_flags = $84 (HURT + size 4)
-    private static final int COLLISION_FLAGS = 0x84;
     private static final int GRAVITY = 0x38; // 0.21875 pixels/frame (from ObjectMoveAndFall)
 
     // Rock velocity table from Obj90_Directions (X, Y in 8.8 fixed point)
@@ -127,20 +123,6 @@ public class GrounderRockProjectile extends AbstractObjectInstance
         if (!isOnScreen(64)) {
             setDestroyed(true);
         }
-    }
-
-    @Override
-    public int getCollisionFlags() {
-        // Only check collision when activated
-        if (!activated) {
-            return 0;
-        }
-        return COLLISION_FLAGS;
-    }
-
-    @Override
-    public int getCollisionProperty() {
-        return 0;
     }
 
     @Override

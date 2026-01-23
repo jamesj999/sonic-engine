@@ -17,6 +17,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     private final int springAnimId;
     private final int deathAnimId;
     private final int hurtAnimId;
+    private final int skidAnimId;
     private final int airAnimId;
     private final int runSpeedThreshold;
     private final int walkSpeedThreshold;
@@ -104,6 +105,27 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int walkSpeedThreshold,
             int runSpeedThreshold,
             int fallbackFrame) {
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, duckAnimId, spindashAnimId,
+                springAnimId, deathAnimId, hurtAnimId, -1, airAnimId, walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
+    }
+
+    public ScriptedVelocityAnimationProfile(
+            int idleAnimId,
+            int walkAnimId,
+            int runAnimId,
+            int rollAnimId,
+            int roll2AnimId,
+            int pushAnimId,
+            int duckAnimId,
+            int spindashAnimId,
+            int springAnimId,
+            int deathAnimId,
+            int hurtAnimId,
+            int skidAnimId,
+            int airAnimId,
+            int walkSpeedThreshold,
+            int runSpeedThreshold,
+            int fallbackFrame) {
         this.idleAnimId = Math.max(0, idleAnimId);
         this.walkAnimId = Math.max(0, walkAnimId);
         this.runAnimId = Math.max(0, runAnimId);
@@ -115,6 +137,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         this.springAnimId = Math.max(-1, springAnimId);
         this.deathAnimId = Math.max(-1, deathAnimId);
         this.hurtAnimId = Math.max(-1, hurtAnimId);
+        this.skidAnimId = Math.max(-1, skidAnimId);
         this.airAnimId = Math.max(0, airAnimId);
         this.walkSpeedThreshold = Math.max(0, walkSpeedThreshold);
         this.runSpeedThreshold = Math.max(0, runSpeedThreshold);
@@ -144,6 +167,14 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         }
         if (sprite.getCrouching() && duckAnimId >= 0) {
             return duckAnimId;
+        }
+        // ROM-accurate: Pushing state takes priority over speed-based animations
+        if (sprite.getPushing() && pushAnimId >= 0) {
+            return pushAnimId;
+        }
+        // ROM-accurate: Skidding state (braking at speed >= 0x400)
+        if (sprite.getSkidding() && skidAnimId >= 0) {
+            return skidAnimId;
         }
         int speed = Math.abs(sprite.getGSpeed());
         if (speed >= runSpeedThreshold) {
@@ -201,6 +232,10 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     public int getDeathAnimId() {
         return deathAnimId;
+    }
+
+    public int getSkidAnimId() {
+        return skidAnimId;
     }
 
     public int getAirAnimId() {

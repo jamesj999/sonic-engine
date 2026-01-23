@@ -87,21 +87,22 @@ public class Sonic2PlayerArt {
                 ? loadSonicAnimations()
                 : null;
         SpriteAnimationProfile animationProfile = new ScriptedVelocityAnimationProfile(
-                Sonic2AnimationIds.WAIT,
-                Sonic2AnimationIds.WALK,
-                Sonic2AnimationIds.RUN,
-                Sonic2AnimationIds.ROLL,
-                Sonic2AnimationIds.ROLL2,
-                Sonic2AnimationIds.PUSH,
-                Sonic2AnimationIds.DUCK,
-                Sonic2AnimationIds.SPINDASH,
-                Sonic2AnimationIds.SPRING,
-                Sonic2AnimationIds.DEATH,
-                Sonic2AnimationIds.HURT,
-                Sonic2AnimationIds.WALK,
-                0x40,
-                0x600,
-                0);
+                Sonic2AnimationIds.WAIT,      // idleAnimId
+                Sonic2AnimationIds.WALK,      // walkAnimId
+                Sonic2AnimationIds.RUN,       // runAnimId
+                Sonic2AnimationIds.ROLL,      // rollAnimId
+                Sonic2AnimationIds.ROLL2,     // roll2AnimId
+                Sonic2AnimationIds.PUSH,      // pushAnimId
+                Sonic2AnimationIds.DUCK,      // duckAnimId
+                Sonic2AnimationIds.SPINDASH,  // spindashAnimId
+                Sonic2AnimationIds.SPRING,    // springAnimId
+                Sonic2AnimationIds.DEATH,     // deathAnimId
+                Sonic2AnimationIds.HURT,      // hurtAnimId
+                Sonic2AnimationIds.SKID,      // skidAnimId
+                Sonic2AnimationIds.WALK,      // airAnimId
+                0x40,                         // walkSpeedThreshold
+                0x600,                        // runSpeedThreshold
+                0);                           // fallbackFrame
 
         return new SpriteArtSet(
                 artTiles,

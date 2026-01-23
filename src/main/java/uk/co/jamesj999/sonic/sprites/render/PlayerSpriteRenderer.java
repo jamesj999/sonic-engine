@@ -33,8 +33,13 @@ public class PlayerSpriteRenderer {
             return;
         }
         if (frameIndex != lastFrame) {
-            applyDplc(frameIndex);
-            lastFrame = frameIndex;
+            // ROM behavior: Only update lastFrame when tiles were actually loaded.
+            // Empty DPLCs mean "reuse previously loaded tiles", so we shouldn't
+            // update lastFrame in that case - otherwise a subsequent frame with
+            // a real DPLC would not reload its tiles.
+            if (applyDplc(frameIndex)) {
+                lastFrame = frameIndex;
+            }
         }
 
         SpriteMappingFrame frame = artSet.mappingFrames().get(frameIndex);
@@ -70,14 +75,22 @@ public class PlayerSpriteRenderer {
         return SpritePieceRenderer.computeFrameBounds(frame.pieces(), hFlip, vFlip);
     }
 
-    private void applyDplc(int frameIndex) {
+    /**
+     * Applies DPLC (Dynamic Pattern Load Cues) for a frame, loading tiles into VRAM.
+     *
+     * @param frameIndex The frame index to load DPLC for
+     * @return true if tiles were loaded, false if DPLC was empty (tiles unchanged)
+     */
+    private boolean applyDplc(int frameIndex) {
         if (frameIndex < 0 || frameIndex >= artSet.dplcFrames().size()) {
-            return;
+            return false;
         }
         SpriteDplcFrame dplcFrame = artSet.dplcFrames().get(frameIndex);
         if (dplcFrame == null || dplcFrame.requests().isEmpty()) {
-            return;
+            // ROM behavior: empty DPLC means "reuse previously loaded tiles"
+            return false;
         }
         patternBank.applyRequests(dplcFrame.requests(), artSet.artTiles());
+        return true;
     }
 }
