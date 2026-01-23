@@ -41,6 +41,13 @@ public class Camera {
 	private short width;
 	private short height;
 
+	// ROM: Camera_Y_pos_bias - vertical position target for camera centering
+	// Default is 96 (0x60). Used as center point for scroll windows.
+	private static final short DEFAULT_Y_BIAS = 96;
+
+	// ROM: Airborne window is ±0x20 (32) around the bias
+	private static final short AIRBORNE_WINDOW_HALF = 32;
+
 	private Camera() {
 		SonicConfigurationService configService = SonicConfigurationService
 				.getInstance();
@@ -111,24 +118,28 @@ public class Camera {
 
 		// Vertical scroll logic (ROM: ScrollVerti)
 		if (focusedSprite.getAir()) {
-			if (focusedSpriteRealY < 96) {
-				short difference = (short) (focusedSpriteRealY - 96);
+			// ROM: Airborne uses ±0x20 window around bias (default 96)
+			// Upper bound: bias - 32 = 64, Lower bound: bias + 32 = 128
+			short upperBound = DEFAULT_Y_BIAS - AIRBORNE_WINDOW_HALF; // 64
+			short lowerBound = DEFAULT_Y_BIAS + AIRBORNE_WINDOW_HALF; // 128
+			if (focusedSpriteRealY < upperBound) {
+				short difference = (short) (focusedSpriteRealY - upperBound);
 				if (difference < -16) {
 					y -= 16;
 				} else {
 					y += difference;
 				}
-			} else if (focusedSpriteRealY > 160) {
-				short difference = (short) (focusedSpriteRealY - 160);
+			} else if (focusedSpriteRealY >= lowerBound) {
+				short difference = (short) (focusedSpriteRealY - lowerBound);
 				if (difference > 16) {
 					y += 16;
 				} else {
 					y += difference;
 				}
 			}
-		} else if (focusedSpriteRealY > 96) {
+		} else if (focusedSpriteRealY > DEFAULT_Y_BIAS) {
 			short ySpeed = (short) (focusedSprite.getYSpeed() / 256);
-			short difference = (short) (focusedSpriteRealY - 96);
+			short difference = (short) (focusedSpriteRealY - DEFAULT_Y_BIAS);
 			byte tolerance;
 
 			if (ySpeed > 6) {
@@ -142,9 +153,9 @@ public class Camera {
 			} else {
 				y += difference;
 			}
-		} else if (focusedSpriteRealY < 96) {
+		} else if (focusedSpriteRealY < DEFAULT_Y_BIAS) {
 			short ySpeed = (short) (focusedSprite.getYSpeed() / 256);
-			short difference = (short) (focusedSpriteRealY - 96);
+			short difference = (short) (focusedSpriteRealY - DEFAULT_Y_BIAS);
 			byte tolerance;
 
 			if (ySpeed < -6) {
