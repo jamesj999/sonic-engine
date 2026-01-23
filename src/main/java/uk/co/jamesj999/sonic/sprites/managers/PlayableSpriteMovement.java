@@ -23,6 +23,20 @@ public class PlayableSpriteMovement extends
 		AbstractSpriteMovementManager<AbstractPlayableSprite> {
 	private static final Logger LOGGER = Logger.getLogger(PlayableSpriteMovement.class.getName());
 
+	// ROM-accurate spindash speed table (s2.asm:37294 SpindashSpeeds)
+	// Index corresponds to high byte of spindash_counter (0-8)
+	private static final short[] SPINDASH_SPEEDS = {
+		0x0800, // 0 - minimum (immediate release)
+		0x0880, // 1
+		0x0900, // 2 - after first rev
+		0x0980, // 3
+		0x0A00, // 4 - after second rev
+		0x0A80, // 5
+		0x0B00, // 6 - after third rev
+		0x0B80, // 7
+		0x0C00  // 8 - maximum (fully charged)
+	};
+
 	private final CollisionSystem collisionSystem = CollisionSystem.getInstance();
 	private final AudioManager audioManager = AudioManager.getInstance();
 
@@ -850,10 +864,13 @@ public class PlayableSpriteMovement extends
 
 	private void handleSpindash(AbstractPlayableSprite sprite) {
 		if (!sprite.getSpindash()) {
+			// ROM: spindash_counter starts at 0 when spindash begins.
+			// The first ABC press AFTER starting the spindash adds 0x200.
 			sprite.setSpindash(true);
-			sprite.setSpindashConstant(2f);
+			sprite.setSpindashConstant(0f);
 		} else {
-			// SPG: spinrev is increased by 2, up to a maximum of 8
+			// ROM: Each ABC press while charging adds 0x200, capped at 0x800.
+			// Our constant maps to high byte of counter (0-8 range).
 			float newConstant = sprite.getSpindashConstant() + 2f;
 			if (newConstant > 8f) {
 				newConstant = 8f;
@@ -870,17 +887,23 @@ public class PlayableSpriteMovement extends
 		sprite.setRolling(true);
 		forceRollAnimation(sprite);
 		audioManager.playSfx(GameSound.SPINDASH_RELEASE);
-		short spindashGSpeed = (short) ((8 + ((Math.floor(sprite.getSpindashConstant()) / 2))) * 256);
+
+		// ROM: Speed is looked up from table using high byte of spindash_counter (s2.asm:37251-37253)
+		// Our spindashConstant maps to this high byte (0-8 range)
+		int speedIndex = Math.max(0, Math.min(8, (int) Math.floor(sprite.getSpindashConstant())));
+		short spindashGSpeed = SPINDASH_SPEEDS[speedIndex];
+
 		if (Direction.LEFT.equals(sprite.getDirection())) {
-			sprite.setGSpeed((short) (0 - spindashGSpeed));
+			sprite.setGSpeed((short) -spindashGSpeed);
 		} else if (Direction.RIGHT.equals(sprite.getDirection())) {
 			sprite.setGSpeed(spindashGSpeed);
 		}
-		// ROM: Horiz_scroll_delay_val is set to 32 - spinrev (where spinrev is 0-8)
-		// This gives a delay range of 24-32 frames for horizontal scroll only.
-		// Vertical scroll continues normally (ROM: ScrollVerti doesn't check delay).
-		int spinrevForDelay = Math.min(8, (int) Math.floor(sprite.getSpindashConstant()));
-		Camera.getInstance().setHorizScrollDelay(32 - spinrevForDelay);
+
+		// ROM: Camera lag is derived from actual speed (s2.asm:37261-37272 with fixBugs):
+		// delay = 32 - ((inertia - 0x800) >> 7)
+		// This gives delay range 24-32: faster = less lag so Sonic stays on screen.
+		int scrollDelay = 32 - ((spindashGSpeed - 0x800) >> 7);
+		Camera.getInstance().setHorizScrollDelay(scrollDelay);
 
 		sprite.setSpindashConstant(0f);
 	}
