@@ -542,18 +542,21 @@ public class PlayableSpriteMovement extends
 		int angle = sprite.getAngle() & 0xFF;
 		short gSpeed = sprite.getGSpeed();
 
+		// Clear pushing at start - it will only be set if actively pushing into a wall.
+		// This ensures pushing is false when direction is released (gSpeed=0).
+		sprite.setPushing(false);
+
 		// Skip condition 1: angle in range 0x40-0xBF (steep slopes, walls, ceiling)
 		// ROM: addi.b #$40,d0; bmi.s return
 		// On steep terrain, wall collision is handled by terrain collision
 		boolean angleInSkipRange = ((angle + 0x40) & 0x80) != 0;
 		if (angleInSkipRange) {
-			sprite.setPushing(false);
 			return;
 		}
 
 		// Skip condition 2: not moving
+		// When gSpeed=0, player is not actively pushing into anything.
 		if (gSpeed == 0) {
-			sprite.setPushing(false);
 			return;
 		}
 
@@ -575,7 +578,6 @@ public class PlayableSpriteMovement extends
 		// system already handles surface collision - we don't want to
 		// interfere with that by detecting the walking surface as a "wall"
 		if (quadrant != 0x40 && quadrant != 0xC0) {
-			sprite.setPushing(false);
 			return;
 		}
 
@@ -589,7 +591,6 @@ public class PlayableSpriteMovement extends
 		SensorResult result = sprite.getPushSensors()[sensorIndex].scan(projectedDx, projectedDy);
 
 		if (result == null) {
-			sprite.setPushing(false);
 			return;
 		}
 
@@ -608,7 +609,6 @@ public class PlayableSpriteMovement extends
 			}
 			// If angles are within ~45 degrees, it's likely curved terrain
 			if (angleDiff < 0x30) {
-				sprite.setPushing(false);
 				return;
 			}
 		}
@@ -642,9 +642,8 @@ public class PlayableSpriteMovement extends
 
 			sprite.setPushing(true);
 			sprite.setGSpeed((short) 0);
-		} else {
-			sprite.setPushing(false);
 		}
+		// else: pushing stays false (cleared at start of function)
 	}
 
 	/**

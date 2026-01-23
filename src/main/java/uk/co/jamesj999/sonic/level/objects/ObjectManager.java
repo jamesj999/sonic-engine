@@ -113,7 +113,9 @@ public class ObjectManager {
             }
         }
 
-        solidContacts.update(player);
+        // Note: solidContacts.update() is now called during SpriteManager.update(),
+        // after movement but before animation. This ensures pushing flag is set correctly
+        // for both terrain and solid objects before animation resolves.
         if (touchResponses != null) {
             touchResponses.update(player, touchFrameCounter);
         }
@@ -985,7 +987,9 @@ public class ObjectManager {
                 return;
             }
 
-            player.setPushing(false);
+            // Note: Do NOT clear pushing here. Terrain collision handles pushing for terrain walls,
+            // and solid object collision sets pushing when appropriate. Clearing here would
+            // override the pushing flag set by terrain collision earlier in the same frame.
 
             Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
 
@@ -1262,8 +1266,9 @@ public class ObjectManager {
             // If player X <= monitor X, pop left; otherwise pop right
             boolean leftSide = playerCenterX <= anchorX;
 
-            boolean pushing = !player.getAir();
+            // Only set pushing if player is on ground AND actively pressing into the monitor
             boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
+            boolean pushing = !player.getAir() && movingInto;
             if (apply) {
                 if (movingInto) {
                     player.setXSpeed((short) 0);
@@ -1346,15 +1351,19 @@ public class ObjectManager {
                 if (topSolidOnly) {
                     return null;
                 }
-                boolean leftSide = distX > 0;
+                // Determine which side player is on based on relX, not distX.
+                // When distX=0 (at exact edge), distX>0 would be false for both sides,
+                // causing incorrect movingInto detection for left side pushes.
+                boolean leftSide = relX < halfWidth;
                 boolean nearVerticalEdge = absDistY <= 6;
+                // Only set pushing if player is on ground AND actively pressing into the object
+                boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
+                boolean pushing = !player.getAir() && movingInto;
 
                 if (nearVerticalEdge) {
-                    return new SolidContact(false, true, false, false, false);
+                    // Near top/bottom edge: don't stop player (allows walking onto platforms)
+                    return new SolidContact(false, true, false, false, pushing);
                 }
-
-                boolean pushing = !player.getAir();
-                boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
                 if (apply) {
                     if (movingInto) {
                         player.setXSpeed((short) 0);

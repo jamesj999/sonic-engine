@@ -953,6 +953,17 @@ public class Ym2612Chip {
         if (chIdx < 0 || chIdx >= 6 || voice.length < 1) return;
         Channel ch = channels[chIdx];
 
+        // Reset feedback history when loading a new voice.
+        // This ensures SFX channels start with clean feedback state,
+        // preventing residual values from previous sounds (music/SFX)
+        // from affecting the feedback operator's behavior.
+        // Without this, multi-channel SFX like Signpost (0xCF) that use
+        // high feedback can exhibit "phase effects" due to different
+        // feedback histories on each channel.
+        for (int i = 0; i < 4; i++) {
+            ch.opOut[i] = 0;
+        }
+
         boolean hasTl = voice.length >= 25;
         int expectedLen = hasTl ? 25 : 21;
         if (voice.length < expectedLen) {

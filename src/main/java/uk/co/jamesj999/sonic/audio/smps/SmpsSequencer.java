@@ -109,6 +109,9 @@ public class SmpsSequencer implements AudioStream {
     // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3,
     // Op4) mapped to bits 0-3.
     // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
+    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3,
+    // Op4) mapped to bits 0-3.
+    // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
     private static final int[] ALGO_OUT_MASK = { 0x08, 0x08, 0x08, 0x08, 0x0A, 0x0E, 0x0E, 0x0F };
 
     public enum TrackType {

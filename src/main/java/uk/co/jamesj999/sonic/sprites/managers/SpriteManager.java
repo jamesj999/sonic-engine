@@ -143,6 +143,12 @@ public class SpriteManager {
 				levelManager.applyPlaneSwitchers(playable);
 				playable.getMovementManager().handleMovement(effectiveUp, effectiveDown, effectiveLeft,
 						effectiveRight, effectiveJump, effectiveTest);
+				// Update solid object contacts AFTER terrain collision but BEFORE animation.
+				// This ensures pushing flag is set correctly for both terrain and solid objects
+				// before animation resolves which animation to display.
+				if (levelManager.getObjectManager() != null) {
+					levelManager.getObjectManager().updateSolidContacts(playable);
+				}
 				playable.getAnimationManager().update(frameCounter);
 				playable.tickStatus();
 				playable.endOfTick();
@@ -159,6 +165,10 @@ public class SpriteManager {
 			if (sprite instanceof AbstractPlayableSprite playable) {
 				levelManager.applyPlaneSwitchers(playable);
 				playable.getMovementManager().handleMovement(false, false, false, false, false, false);
+				// Update solid object contacts AFTER terrain collision but BEFORE animation
+				if (levelManager.getObjectManager() != null) {
+					levelManager.getObjectManager().updateSolidContacts(playable);
+				}
 				playable.getAnimationManager().update(frameCounter);
 				playable.tickStatus();
 				playable.endOfTick();

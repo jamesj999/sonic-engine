@@ -258,6 +258,23 @@ public class PlayableSpriteAnimation {
                     sprite.setAnimationFrameIndex(0);
                     return;
                 }
+                // ROM ACCURACY: Check if the profile wants the CURRENT animation to continue.
+                // In the original game, $FD only sets 'anim' but not 'prev_anim'. If the
+                // movement code immediately sets 'anim' back to the current animation,
+                // the comparison 'anim == prev_anim' passes and no reset occurs.
+                // This allows animations like skid to HOLD on the last frame while the
+                // triggering condition (skidding) persists, rather than switching and
+                // then immediately switching back with a reset.
+                SpriteAnimationProfile profile = sprite.getAnimationProfile();
+                if (profile != null) {
+                    Integer desired = profile.resolveAnimationId(sprite, 0,
+                            sprite.getAnimationSet() != null ? sprite.getAnimationSet().getScriptCount() : 0);
+                    if (desired != null && desired == sprite.getAnimationId()) {
+                        // Profile wants current animation - HOLD on last frame instead of switching
+                        sprite.setAnimationFrameIndex(script.frames().size() - 1);
+                        return;
+                    }
+                }
                 sprite.setAnimationId(nextAnimId);
                 resetScriptState();
                 return;
