@@ -397,9 +397,11 @@ public class TestPlayableSpriteMovement {
         }
 
         /**
-         * Test air drag does NOT apply at exactly ySpeed = -1024 (boundary condition).
-         * SPG specifies: air drag applies when ySpeed > -1024 (strictly greater than).
-         * At exactly -1024, the condition is false.
+         * Test air drag DOES apply at exactly ySpeed = -1024 (boundary condition).
+         * ROM: cmpi.w #-$400,y_vel / blo.s return - uses unsigned comparison.
+         * At y_vel = -1024 (0xFC00), comparing with 0xFC00 gives equal, so blo
+         * (branch if lower) does NOT branch, meaning air drag applies.
+         * Air drag applies when ySpeed >= -1024 (not just > -1024).
          */
         @Test
         public void testAirDragAtYSpeedBoundary() throws Exception {
@@ -414,9 +416,9 @@ public class TestPlayableSpriteMovement {
 
                 method.invoke(manager, mockSprite, false, false);
 
-                // SPG: Air drag only applies when ySpeed > -1024, NOT when ySpeed == -1024
-                // So xSpeed should remain unchanged
-                assertEquals("Air drag should NOT apply at ySpeed = -1024 (SPG boundary)", (short) 3072, mockSprite.getXSpeed());
+                // ROM: Air drag applies when ySpeed >= -1024 (includes -1024)
+                // Formula: xSpeed = xSpeed - (xSpeed / 32) = 3072 - 96 = 2976
+                assertEquals("Air drag SHOULD apply at ySpeed = -1024 (ROM boundary)", (short) 2976, mockSprite.getXSpeed());
         }
 
         /**
