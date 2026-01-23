@@ -160,7 +160,13 @@ public class JOALAudioBackend implements AudioBackend {
             if (smpsDriver != null) {
                 smpsDriver.stopAllSfx();
             }
-            pushCurrentState();
+            // Only push state if current music is NOT an override (e.g., not already playing 1up jingle).
+            // This prevents stacking multiple jingles - the ROM restarts the jingle instead,
+            // keeping the original music at the bottom of the stack.
+            boolean currentIsOverride = audioProfile != null && audioProfile.isMusicOverride(currentMusicId);
+            if (!currentIsOverride) {
+                pushCurrentState();
+            }
             // ROM behavior: only 1-up jingle blocks SFX (1upPlaying flag), not invincibility
             if (audioProfile.isSfxBlockingMusic(musicId)) {
                 sfxBlocked = true;

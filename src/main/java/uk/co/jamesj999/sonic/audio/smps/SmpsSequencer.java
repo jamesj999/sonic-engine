@@ -760,18 +760,12 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private void processFade() {
-        if (!fadeState.active || fadeState.steps == 0) {
+        if (!fadeState.active) {
             return;
         }
 
-        if (fadeState.delayCounter > 0) {
-            fadeState.delayCounter--;
-            return;
-        }
-
-        fadeState.delayCounter = fadeState.delayInit;
-        fadeState.steps--;
-
+        // ROM: Check if fade counter is already 0 BEFORE processing
+        // This happens after all steps have been applied
         if (fadeState.steps == 0) {
             if (fadeState.fadeOut) {
                 // Stop all tracks
@@ -794,6 +788,16 @@ public class SmpsSequencer implements AudioStream {
             fadeState.active = false;
             return;
         }
+
+        // ROM: Check delay counter, decrement and return if not yet 0
+        if (fadeState.delayCounter > 0) {
+            fadeState.delayCounter--;
+            return;
+        }
+
+        // ROM: Decrement fade counter and apply volume change
+        fadeState.steps--;
+        fadeState.delayCounter = fadeState.delayInit;
 
         int dir = fadeState.fadeOut ? 1 : -1;
 
@@ -1646,7 +1650,8 @@ public class SmpsSequencer implements AudioStream {
         fadeState.delayInit = delay;
         fadeState.addFm = 1;
         fadeState.addPsg = 1;
-        fadeState.delayCounter = fadeState.delayInit;
+        // ROM: FadeInDelay is NOT initialized, so first step happens immediately
+        fadeState.delayCounter = 0;
         fadeState.active = true;
         fadeState.fadeOut = false; // Fade IN
 
