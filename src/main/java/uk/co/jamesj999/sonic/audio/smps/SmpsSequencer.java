@@ -631,7 +631,8 @@ public class SmpsSequencer implements AudioStream {
                     if (t.type == TrackType.PSG) {
                         processPsgEnvelope(t);
                     }
-                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled) {
+                    // Skip modulation if track is at rest (0x80). Matches Z80 driver zDoModulation check.
+                    if ((t.type == TrackType.FM || t.type == TrackType.PSG) && t.modEnabled && t.note != 0x80) {
                         applyModulation(t);
                     }
                     continue;
@@ -1488,16 +1489,17 @@ public class SmpsSequencer implements AudioStream {
         int valA0 = fnum & 0xFF;
         synth.writeFm(this, port, 0xA4 + ch, valA4);
         synth.writeFm(this, port, 0xA0 + ch, valA0);
-        if (isSfx) {
-            int chVal = (port == 0) ? ch : (ch + 4);
-            synth.writeFm(this, 0, 0x28, 0xF0 | (chVal & 0x0F));
-            LOGGER.fine("FM KEY ON (freq latch): chVal=" + Integer.toHexString(chVal) + " fnum="
-                    + Integer.toHexString(fnum) + " block=" + block);
-        }
+        // Note: Key On is handled by playNote(), NOT here.
+        // The original Z80 driver's zFMUpdateFreq only writes frequency registers.
+        // Adding Key On here caused re-keying during rests, breaking SFX like 0xAD.
     }
 
     private void applyModulation(Track t) {
         if (!t.modEnabled)
+            return;
+        // Match original Z80 driver behavior: skip modulation when track is at rest.
+        // From s2.sounddriver.asm zDoModulation: "bit 1,(ix+zTrack.PlaybackControl) / ret nz"
+        if (t.note == 0x80)  // 0x80 = rest note
             return;
 
         boolean changed = false;
