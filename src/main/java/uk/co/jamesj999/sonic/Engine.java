@@ -342,13 +342,44 @@ public class Engine extends GLCanvas implements GLEventListener {
 							}
 						}.start();
 					}
+
+					@Override
+					public void windowIconified(WindowEvent e) {
+						((Engine) canvas).gameLoop.pause();
+						animator.pause();
+					}
+
+					@Override
+					public void windowDeiconified(WindowEvent e) {
+						animator.resume();
+						((Engine) canvas).gameLoop.resume();
+					}
+
+					@Override
+					public void windowDeactivated(WindowEvent e) {
+						((Engine) canvas).gameLoop.pause();
+						animator.pause();
+					}
+
+					@Override
+					public void windowActivated(WindowEvent e) {
+						animator.resume();
+						((Engine) canvas).gameLoop.resume();
+					}
 				});
 
 				frame.addWindowFocusListener(new WindowAdapter() {
 					@Override
 					public void windowGainedFocus(WindowEvent e) {
 						canvas.requestFocusInWindow();
-						// request focus back to the canvas
+						animator.resume();
+						((Engine) canvas).gameLoop.resume();
+					}
+
+					@Override
+					public void windowLostFocus(WindowEvent e) {
+						((Engine) canvas).gameLoop.pause();
+						animator.pause();
 					}
 				});
 

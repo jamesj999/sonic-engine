@@ -69,4 +69,16 @@ public interface AudioBackend {
     void update();
 
     void destroy();
+
+    /**
+     * Pauses audio playback. Called when the game window is minimized or loses focus.
+     * Audio should be suspended but state preserved so it can resume seamlessly.
+     */
+    void pause();
+
+    /**
+     * Resumes audio playback after being paused.
+     * Called when the game window is restored or regains focus.
+     */
+    void resume();
 }

@@ -210,4 +210,22 @@ public class AudioManager {
             backend.destroy();
         }
     }
+
+    /**
+     * Pauses audio playback. Called when the game window is minimized or loses focus.
+     */
+    public void pause() {
+        if (backend != null) {
+            backend.pause();
+        }
+    }
+
+    /**
+     * Resumes audio playback after being paused.
+     */
+    public void resume() {
+        if (backend != null) {
+            backend.resume();
+        }
+    }
 }

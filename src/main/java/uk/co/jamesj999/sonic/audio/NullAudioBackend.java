@@ -81,4 +81,12 @@ public class NullAudioBackend implements AudioBackend {
     @Override
     public void destroy() {
     }
+
+    @Override
+    public void pause() {
+    }
+
+    @Override
+    public void resume() {
+    }
 }

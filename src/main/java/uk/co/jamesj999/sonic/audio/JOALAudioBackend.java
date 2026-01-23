@@ -698,4 +698,32 @@ public class JOALAudioBackend implements AudioBackend {
             alc.alcCloseDevice(device);
         }
     }
+
+    @Override
+    public void pause() {
+        if (musicSource >= 0) {
+            al.alSourcePause(musicSource);
+        }
+        for (int src : sfxSources) {
+            al.alSourcePause(src);
+        }
+    }
+
+    @Override
+    public void resume() {
+        if (musicSource >= 0) {
+            int[] state = new int[1];
+            al.alGetSourcei(musicSource, AL.AL_SOURCE_STATE, state, 0);
+            if (state[0] == AL.AL_PAUSED) {
+                al.alSourcePlay(musicSource);
+            }
+        }
+        for (int src : sfxSources) {
+            int[] state = new int[1];
+            al.alGetSourcei(src, AL.AL_SOURCE_STATE, state, 0);
+            if (state[0] == AL.AL_PAUSED) {
+                al.alSourcePlay(src);
+            }
+        }
+    }
 }

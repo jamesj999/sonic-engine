@@ -99,6 +99,8 @@ public class GameLoop {
         void onGameModeChanged(GameMode oldMode, GameMode newMode);
     }
 
+    private volatile boolean paused = false;
+
     public GameLoop() {
     }
 
@@ -136,10 +138,42 @@ public class GameLoop {
     }
 
     /**
+     * Pauses the game loop. When paused, step() does nothing.
+     * Audio is also paused to prevent music continuing while game is frozen.
+     */
+    public void pause() {
+        if (!paused) {
+            paused = true;
+            AudioManager.getInstance().pause();
+        }
+    }
+
+    /**
+     * Resumes the game loop after being paused.
+     * Audio playback is restored.
+     */
+    public void resume() {
+        if (paused) {
+            paused = false;
+            AudioManager.getInstance().resume();
+        }
+    }
+
+    /**
+     * @return true if the game loop is currently paused
+     */
+    public boolean isPaused() {
+        return paused;
+    }
+
+    /**
      * Advances the game by one frame. This is the main update loop.
      * Call this method at your target FPS (typically 60fps).
      */
     public void step() {
+        if (paused) {
+            return;
+        }
         if (inputHandler == null) {
             throw new IllegalStateException("InputHandler must be set before calling step()");
         }
