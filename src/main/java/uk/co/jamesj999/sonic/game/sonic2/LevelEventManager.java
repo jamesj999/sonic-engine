@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.game.sonic2;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.game.LevelEventProvider;
+import uk.co.jamesj999.sonic.level.ParallaxManager;
 import uk.co.jamesj999.sonic.level.WaterSystem;
 
 /**
@@ -159,10 +160,111 @@ public class LevelEventManager implements LevelEventProvider {
     /**
      * Hill Top Zone events.
      * ROM: LevEvents_HTZ (s2.asm:20543-20670)
+     *
+     * HTZ has complex earthquake/lava events with screen shake zones.
+     * The screen shake is triggered when the player enters certain areas
+     * and cleared when they exit those areas.
+     *
+     * Act 1 shake triggers:
+     * - Routine 1: Camera_X >= 0x1800 AND Camera_Y >= 0x400
+     * - Routine 3: Camera_X < 0x1F00
+     *
+     * Act 2 shake triggers:
+     * - Routine 1: Camera_X >= 0x14C0
+     * - Routine 3: Camera_X < 0x1B00
+     * - Routine 5: Camera_X < 0x1B00
      */
     private void updateHTZ() {
-        // HTZ has complex earthquake/lava events
-        // Implement as needed
+        if (currentAct == 0) {
+            updateHTZAct1();
+        } else {
+            updateHTZAct2();
+        }
+    }
+
+    // HTZ Act 1 screen shake trigger coordinates
+    private static final int HTZ1_SHAKE_TRIGGER_X = 0x1800;
+    private static final int HTZ1_SHAKE_TRIGGER_Y = 0x400;
+    private static final int HTZ1_SHAKE_EXIT_X = 0x1F00;
+
+    // HTZ Act 2 screen shake trigger coordinates
+    private static final int HTZ2_SHAKE_TRIGGER_X = 0x14C0;
+    private static final int HTZ2_SHAKE_EXIT_X = 0x1B00;
+
+    /**
+     * HTZ Act 1 events.
+     * ROM: LevEvents_HTZ1 (s2.asm:20674-20838)
+     */
+    private void updateHTZAct1() {
+        switch (eventRoutine) {
+            case 0 -> {
+                // Routine 0: Wait for shake trigger
+                // ROM: LevEvents_HTZ_Routine1 checks Camera_Y >= $400 AND Camera_X >= $1800
+                if (camera.getY() >= HTZ1_SHAKE_TRIGGER_Y &&
+                    camera.getX() >= HTZ1_SHAKE_TRIGGER_X) {
+                    // Enable screen shake
+                    ParallaxManager.getInstance().setHtzScreenShake(true);
+                    eventRoutine += 2;
+                } else {
+                    // Routine 1 Part 2: If shake was active but we're out of range, clear it
+                    ParallaxManager.getInstance().setHtzScreenShake(false);
+                }
+            }
+            case 2 -> {
+                // Routine 1: Shaking area - check for exit at X >= $1E00 to clear shake flag
+                if (camera.getX() >= 0x1E00) {
+                    // Exit shake area
+                    ParallaxManager.getInstance().setHtzScreenShake(false);
+                    eventRoutine += 2;
+                }
+            }
+            case 4 -> {
+                // Routine 2: Post-shake area
+                // Check for re-entry into shake zone (Routine 3)
+                if (camera.getX() < HTZ1_SHAKE_EXIT_X) {
+                    ParallaxManager.getInstance().setHtzScreenShake(true);
+                    eventRoutine -= 2;  // Go back to routine 1
+                }
+            }
+            default -> {
+                // Further routines handle boss area etc.
+            }
+        }
+    }
+
+    /**
+     * HTZ Act 2 events.
+     * ROM: LevEvents_HTZ2 (s2.asm:20920-21193)
+     */
+    private void updateHTZAct2() {
+        switch (eventRoutine) {
+            case 0 -> {
+                // Routine 0: Wait for shake trigger
+                if (camera.getX() >= HTZ2_SHAKE_TRIGGER_X) {
+                    ParallaxManager.getInstance().setHtzScreenShake(true);
+                    eventRoutine += 2;
+                } else {
+                    ParallaxManager.getInstance().setHtzScreenShake(false);
+                }
+            }
+            case 2 -> {
+                // Routine 1: Shaking area
+                if (camera.getX() >= 0x1A00) {
+                    ParallaxManager.getInstance().setHtzScreenShake(false);
+                    eventRoutine += 2;
+                }
+            }
+            case 4 -> {
+                // Routine 2: Post-shake
+                if (camera.getX() < HTZ2_SHAKE_EXIT_X) {
+                    ParallaxManager.getInstance().setHtzScreenShake(true);
+                    eventRoutine -= 2;
+                }
+            }
+            default -> {
+                // Further routines handle additional shake zones and boss
+            }
+        }
     }
 
     /**

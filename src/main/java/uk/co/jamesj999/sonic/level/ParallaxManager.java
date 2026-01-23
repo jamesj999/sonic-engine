@@ -2,6 +2,7 @@ package uk.co.jamesj999.sonic.level;
 
 import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.game.sonic2.DynamicHtz;
 import uk.co.jamesj999.sonic.level.scroll.BackgroundCamera;
 import uk.co.jamesj999.sonic.level.scroll.ParallaxTables;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlArz;
@@ -9,10 +10,10 @@ import uk.co.jamesj999.sonic.level.scroll.SwScrlCnz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlCpz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlEhz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlMcz;
+import uk.co.jamesj999.sonic.level.scroll.SwScrlHtz;
 import uk.co.jamesj999.sonic.level.scroll.SwScrlOoz;
 
 import java.io.IOException;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -62,8 +63,12 @@ public class ParallaxManager {
     private SwScrlCnz cnzHandler;
     private SwScrlEhz ehzHandler;
     private SwScrlCpz cpzHandler;
+    private SwScrlHtz htzHandler;
     private SwScrlMcz mczHandler;
     private SwScrlOoz oozHandler;
+
+    // HTZ dynamic art streaming (mountains and clouds)
+    private DynamicHtz dynamicHtz;
 
     private int currentZone = -1;
     private int currentAct = -1;
@@ -89,12 +94,15 @@ public class ParallaxManager {
             cnzHandler = new SwScrlCnz(tables);
             ehzHandler = new SwScrlEhz(tables);
             cpzHandler = new SwScrlCpz(tables);
+            htzHandler = new SwScrlHtz(tables, bgCamera);
             mczHandler = new SwScrlMcz(tables);
             oozHandler = new SwScrlOoz(tables);
+            dynamicHtz = new DynamicHtz();
+            dynamicHtz.init();
             loaded = true;
             LOGGER.info("Parallax tables loaded.");
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to load parallax data: " + e.getMessage(), e);
+            LOGGER.log(java.util.logging.Level.SEVERE, "Failed to load parallax data: " + e.getMessage(), e);
         }
     }
 
@@ -108,6 +116,11 @@ public class ParallaxManager {
                 arzHandler.init(actId, cameraX, cameraY);
             } else if (zoneId == ZONE_CPZ && cpzHandler != null) {
                 cpzHandler.init(cameraX, cameraY);
+            } else if (zoneId == ZONE_HTZ && htzHandler != null) {
+                htzHandler.init();
+                if (dynamicHtz != null) {
+                    dynamicHtz.reset();
+                }
             } else if (zoneId == ZONE_OOZ && oozHandler != null) {
                 oozHandler.init(cameraX, cameraY);
             }
@@ -146,6 +159,16 @@ public class ParallaxManager {
     public void setScreenShakeFlag(boolean screenShakeFlag) {
         if (mczHandler != null) {
             mczHandler.setScreenShakeFlag(screenShakeFlag);
+        }
+    }
+
+    /**
+     * Set the HTZ screen shake mode flag.
+     * When true, uses simplified scroll with ripple-based shake effect.
+     */
+    public void setHtzScreenShake(boolean active) {
+        if (htzHandler != null) {
+            htzHandler.setScreenShakeActive(active);
         }
     }
 
@@ -209,7 +232,17 @@ public class ParallaxManager {
                 }
                 break;
             case ZONE_HTZ:
-                fillHtz(cameraX, bgScrollY);
+                if (htzHandler != null) {
+                    htzHandler.update(hScroll, cameraX, cameraY, frameCounter, actId);
+                    minScroll = htzHandler.getMinScrollOffset();
+                    maxScroll = htzHandler.getMaxScrollOffset();
+                    vscrollFactorBG = htzHandler.getVscrollFactorBG();
+                    if (htzHandler.isScreenShakeActive()) {
+                        vscrollFactorFG = htzHandler.getVscrollFactorFG();
+                    }
+                } else {
+                    fillHtz(cameraX, bgScrollY);
+                }
                 break;
             case ZONE_MCZ:
                 if (mczHandler != null) {
@@ -249,6 +282,27 @@ public class ParallaxManager {
             default:
                 fillMinimal(cam);
                 break;
+        }
+    }
+
+    /**
+     * Update parallax scrolling with dynamic art streaming support.
+     * This overload handles zone-specific dynamic art updates (HTZ mountains/clouds).
+     *
+     * @param zoneId Zone identifier
+     * @param actId Act identifier
+     * @param cam Camera instance
+     * @param frameCounter Current frame counter
+     * @param bgScrollY Background scroll Y value
+     * @param level Level instance for dynamic art updates (may be null)
+     */
+    public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY, Level level) {
+        // Perform standard parallax update
+        update(zoneId, actId, cam, frameCounter, bgScrollY);
+
+        // Update zone-specific dynamic art
+        if (zoneId == ZONE_HTZ && dynamicHtz != null && level != null && htzHandler != null) {
+            dynamicHtz.update(level, cam.getX(), htzHandler);
         }
     }
 

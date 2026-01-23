@@ -514,6 +514,10 @@ public class Sonic2Level implements Level {
      *
      * <p>For zones like HTZ, this loads the base EHZ_HTZ patterns first, then
      * overlays HTZ-specific patterns at the specified offset (0x3F80 bytes).
+     *
+     * <p>HTZ also requires extended pattern space for dynamic art (mountains/clouds)
+     * which are normally loaded by Dynamic_HTZ at runtime. We pre-fill these with
+     * sky blue placeholder patterns to avoid garbled rendering.
      */
     private void loadPatternsWithPlan(Rom rom, LevelResourcePlan plan) throws IOException {
         GraphicsManager graphicsMan = GraphicsManager.getInstance();
@@ -522,13 +526,23 @@ public class Sonic2Level implements Level {
         // Use a large initial buffer - will be trimmed to actual size
         byte[] result = loader.loadWithOverlays(plan.getPatternOps(), 0x10000);
 
-        patternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
+        int loadedPatternCount = result.length / Pattern.PATTERN_SIZE_IN_ROM;
         if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent pattern data after overlay composition");
         }
 
+        // For HTZ, extend pattern array to include dynamic art tile indices
+        // The background map references tiles at $0500-$0520 (1280-1312) for mountains/clouds
+        int requiredPatterns = loadedPatternCount;
+        if (zoneIndex == Sonic2Constants.ZONE_HTZ) {
+            requiredPatterns = Math.max(requiredPatterns, Sonic2Constants.HTZ_DYNAMIC_TILES_END);
+        }
+
+        patternCount = requiredPatterns;
         patterns = new Pattern[patternCount];
-        for (int i = 0; i < patternCount; i++) {
+
+        // Load patterns from ROM data
+        for (int i = 0; i < loadedPatternCount; i++) {
             patterns[i] = new Pattern();
             byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
                     (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
@@ -539,11 +553,43 @@ public class Sonic2Level implements Level {
             }
         }
 
+        // Fill any extended patterns (for HTZ dynamic art region) with sky blue
+        if (patternCount > loadedPatternCount) {
+            fillHtzDynamicArtPatterns(graphicsMan, loadedPatternCount);
+        }
+
         if (plan.hasPatternOverlays()) {
             LOG.info("Pattern count: " + patternCount + " (" + result.length + " bytes) [with overlays]");
         } else {
             LOG.fine("Pattern count: " + patternCount + " (" + result.length + " bytes)");
         }
+    }
+
+    /**
+     * Fills HTZ dynamic art pattern slots with sky blue placeholder patterns.
+     *
+     * <p>The original game uses Dynamic_HTZ to stream mountain and cloud art
+     * to VRAM tiles $0500-$0520 based on camera position. Without this dynamic
+     * streaming, those tiles would show garbage. We fill them with sky blue (palette
+     * index 0 in HTZ, which maps to the sky color) to provide a clean fallback.
+     *
+     * <p>TODO: Implement proper Dynamic_HTZ to stream the actual cliff/cloud art.
+     */
+    private void fillHtzDynamicArtPatterns(GraphicsManager graphicsMan, int startIndex) {
+        // Create a sky blue pattern (all pixels = palette index 0, which is sky blue in HTZ)
+        byte[] skyPattern = new byte[Pattern.PATTERN_SIZE_IN_ROM];
+        // All zeros = palette index 0 for all pixels, which is sky blue in HTZ palette
+
+        for (int i = startIndex; i < patternCount; i++) {
+            patterns[i] = new Pattern();
+            patterns[i].fromSegaFormat(skyPattern);
+
+            if (graphicsMan.getGraphics() != null) {
+                graphicsMan.cachePatternTexture(patterns[i], i);
+            }
+        }
+
+        LOG.info("HTZ: Filled " + (patternCount - startIndex) + " dynamic art pattern slots with sky blue placeholders");
     }
 
     /**

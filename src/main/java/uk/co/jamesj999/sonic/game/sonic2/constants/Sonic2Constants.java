@@ -325,6 +325,16 @@ public class Sonic2Constants {
     // HTZ ROM zone ID (from s2.constants.asm)
     public static final int ZONE_HTZ = 0x07;  // hill_top_zone
 
+    // HTZ Dynamic Art Tile Indices (from s2.constants.asm)
+    // These tiles are normally populated by Dynamic_HTZ at runtime
+    // ArtTile_ArtUnc_HTZMountains = $0500 (24 tiles for mountain/cliff art)
+    // ArtTile_ArtUnc_HTZClouds = $0518 (8 tiles for cloud art)
+    public static final int HTZ_MOUNTAINS_TILE_INDEX = 0x0500;  // Tile index 1280
+    public static final int HTZ_MOUNTAINS_TILE_COUNT = 0x18;    // 24 tiles
+    public static final int HTZ_CLOUDS_TILE_INDEX = 0x0518;     // Tile index 1304
+    public static final int HTZ_CLOUDS_TILE_COUNT = 8;          // 8 tiles
+    public static final int HTZ_DYNAMIC_TILES_END = 0x0520;     // First tile after dynamic art (1312)
+
     public static final int[][] START_POSITIONS = {
             { 0x0060, 0x028F }, // 0 Emerald Hill 1 (EHZ_1.bin)
             { 0x0060, 0x02AF }, // 1 Emerald Hill 2 (EHZ_2.bin)

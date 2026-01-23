@@ -85,12 +85,24 @@ public class BackgroundCamera {
                 break;
 
             case ZONE_MTZ:
-            case ZONE_HTZ:
                 // InitCam_Std ($C2E4):
                 // Camera_BG_Y_pos = Camera_Y_pos >> 2
                 // Camera_BG_X_pos = Camera_X_pos >> 3
                 bgYPos = cameraY >> 2;
                 bgXPos = cameraX >> 3;
+                break;
+
+            case ZONE_HTZ:
+                // InitCam_HTZ ($C2D4): Clears all BG positions and first 12 bytes of TempArray_LayerDef
+                // reset() already zeros bgXPos/bgYPos, just need to clear TempArray_LayerDef
+                // The disassembly clears: Camera_BG_X_pos, Camera_BG_Y_pos, Camera_BG2_Y_pos,
+                // Camera_BG3_Y_pos, and first 12 bytes of TempArray_LayerDef
+                setTempWord(0, 0);
+                setTempWord(2, 0);
+                setTempWord(4, 0);
+                setTempWord(6, 0);
+                setTempWord(8, 0);
+                setTempWord(10, 0);
                 break;
 
             case ZONE_OOZ:

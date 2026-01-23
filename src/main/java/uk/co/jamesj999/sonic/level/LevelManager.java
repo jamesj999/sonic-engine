@@ -572,7 +572,7 @@ public class LevelManager {
             bgScrollY = scroll[1];
         }
 
-        parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY);
+        parallaxManager.update(currentZone, currentAct, camera, frameCounter, bgScrollY, level);
         collisionCommands.clear();
 
         // Update water shader state before rendering level
