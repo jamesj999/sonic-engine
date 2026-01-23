@@ -1152,9 +1152,12 @@ public class PlayableSpriteMovement extends
 	}
 
 	/**
-	 * Gets terrain headroom distance by scanning ceiling sensors.
-	 * Based on the original CalcRoomOverHead routine which uses FindFloor/FindWall
-	 * to check terrain in the "overhead" direction.
+	 * Gets terrain headroom distance by scanning sensors in the "overhead" direction.
+	 * Based on the original CalcRoomOverHead routine (s2.asm:43536) which dispatches to:
+	 * - Quadrant 0x00 (DOWN): Sonic_CheckFloor - when on ceiling, overhead is floor
+	 * - Quadrant 0x40 (LEFT): CheckLeftCeilingDist - when on right wall, overhead is left
+	 * - Quadrant 0x80 (UP): Sonic_CheckCeiling - normal ground, overhead is ceiling
+	 * - Quadrant 0xC0 (RIGHT): CheckRightCeilingDist - when on left wall, overhead is right
 	 *
 	 * @param sprite The playable sprite
 	 * @param hexAngle The current ground angle (0-255)
@@ -1166,32 +1169,54 @@ public class PlayableSpriteMovement extends
 		int overheadAngle = (hexAngle + 0x80) & 0xFF;
 		int quadrant = (overheadAngle + 0x20) & 0xC0;
 
-		// For standard ground (quadrant 0x80 = UP), use ceiling sensors
-		if (quadrant == 0x80) {
-			int minDistance = Integer.MAX_VALUE;
-			Sensor[] ceilingSensors = sprite.getCeilingSensors();
-			if (ceilingSensors == null) {
+		// Select appropriate sensors based on quadrant.
+		// Key insight: ceiling sensors check "up relative to sprite" which maps to:
+		// - UP on GROUND mode, DOWN on CEILING mode
+		// Ground sensors check "down relative to sprite" which maps to:
+		// - DOWN on GROUND, UP on CEILING, RIGHT on RIGHTWALL, LEFT on LEFTWALL
+		// This means ceiling sensors work for vertical checks (0x00/0x80) and
+		// ground sensors work for horizontal checks (0x40/0xC0).
+		Sensor[] sensors;
+		switch (quadrant) {
+			case 0x00: // DOWN - overhead is floor (when on ceiling)
+				// Ceiling sensors on CEILING mode check DOWN
+				sensors = sprite.getCeilingSensors();
+				break;
+			case 0x40: // LEFT - overhead is left wall (when on right wall)
+				// Ground sensors on LEFTWALL mode check LEFT
+				sensors = sprite.getGroundSensors();
+				break;
+			case 0x80: // UP - overhead is ceiling (normal ground)
+				// Ceiling sensors on GROUND mode check UP
+				sensors = sprite.getCeilingSensors();
+				break;
+			case 0xC0: // RIGHT - overhead is right wall (when on left wall)
+				// Ground sensors on RIGHTWALL mode check RIGHT
+				sensors = sprite.getGroundSensors();
+				break;
+			default:
 				return Integer.MAX_VALUE;
-			}
-			for (Sensor sensor : ceilingSensors) {
-				boolean wasActive = sensor.isActive();
-				sensor.setActive(true);
-				SensorResult result = sensor.scan();
-				sensor.setActive(wasActive);
-				if (result != null) {
-					// Positive distance = clearance above, negative = penetrating terrain
-					int clearance = result.distance() >= 0 ? result.distance() : 0;
-					if (clearance < minDistance) {
-						minDistance = clearance;
-					}
-				}
-			}
-			return minDistance;
 		}
 
-		// For slopes (quadrant 0x40 = LEFT, 0xC0 = RIGHT), could add push sensor checks
-		// For now, return max value (no terrain obstruction) for edge cases
-		return Integer.MAX_VALUE;
+		if (sensors == null) {
+			return Integer.MAX_VALUE;
+		}
+
+		int minDistance = Integer.MAX_VALUE;
+		for (Sensor sensor : sensors) {
+			boolean wasActive = sensor.isActive();
+			sensor.setActive(true);
+			SensorResult result = sensor.scan();
+			sensor.setActive(wasActive);
+			if (result != null) {
+				// Positive distance = clearance, negative = penetrating terrain
+				int clearance = result.distance() >= 0 ? result.distance() : 0;
+				if (clearance < minDistance) {
+					minDistance = clearance;
+				}
+			}
+		}
+		return minDistance;
 	}
 
 	/**
