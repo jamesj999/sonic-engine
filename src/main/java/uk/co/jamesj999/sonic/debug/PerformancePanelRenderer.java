@@ -103,6 +103,9 @@ public class PerformancePanelRenderer {
         int graphY = panelTop - 115;  // Below the pie chart
         drawFrameHistoryGraph(gl, graphX, graphY, graphWidth, graphHeight, snapshot);
 
+        // Draw memory stats below the frame graph
+        MemoryStats.Snapshot memSnapshot = MemoryStats.getInstance().snapshot();
+
         // Draw text stats (uses viewport coordinates via uiX/uiY)
         textRenderer.beginRendering(viewportWidth, viewportHeight);
 
@@ -139,6 +142,34 @@ public class PerformancePanelRenderer {
 
             if (count >= 6) {
                 break;
+            }
+        }
+
+        // Memory stats below the frame graph
+        int memY = uiY(graphY - 8);
+        String heapLine = String.format("Heap: %.0fMB/%.0fMB (%d%%)",
+                memSnapshot.heapUsedMB(), memSnapshot.heapMaxMB(), memSnapshot.heapPercentage());
+        drawOutlined(textRenderer, heapLine, textX, memY, Color.LIGHT_GRAY);
+
+        memY -= lineHeight;
+        String gcLine = String.format("GC: %d (%dms) | Alloc: %.1fMB/s",
+                memSnapshot.gcCount(), memSnapshot.gcTimeMs(), memSnapshot.allocationRateMBPerSec());
+        drawOutlined(textRenderer, gcLine, textX, memY, Color.LIGHT_GRAY);
+
+        // Top allocators
+        List<MemoryStats.SectionAllocation> topAllocators = memSnapshot.topAllocators();
+        if (!topAllocators.isEmpty()) {
+            memY -= lineHeight;
+            drawOutlined(textRenderer, "Top Alloc:", textX, memY, Color.ORANGE);
+
+            for (MemoryStats.SectionAllocation alloc : topAllocators) {
+                memY -= lineHeight;
+                String name = alloc.name();
+                if (name.length() > 8) {
+                    name = name.substring(0, 8);
+                }
+                String allocLine = String.format("%.1fKB %s", alloc.kbPerFrame(), name);
+                drawOutlined(textRenderer, allocLine, textX, memY, Color.ORANGE);
             }
         }
 

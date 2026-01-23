@@ -93,6 +93,9 @@ public class PerformanceProfiler {
         long frameEndNanos = System.nanoTime();
         long frameDurationNanos = frameEndNanos - frameStartNanos;
 
+        // Update memory stats tracking
+        MemoryStats.getInstance().update();
+
         // Convert to milliseconds for history
         float frameTimeMs = frameDurationNanos / 1_000_000f;
         frameHistory[historyIndex] = frameTimeMs;
@@ -142,6 +145,7 @@ public class PerformanceProfiler {
         }
         activeSection = name;
         sectionStartNanos = System.nanoTime();
+        MemoryStats.getInstance().beginSection(name);
     }
 
     /**
@@ -157,6 +161,7 @@ public class PerformanceProfiler {
         long duration = endNanos - sectionStartNanos;
         currentFrameSections.merge(name, duration, Long::sum);
         activeSection = null;
+        MemoryStats.getInstance().endSection(name);
     }
 
     /**
