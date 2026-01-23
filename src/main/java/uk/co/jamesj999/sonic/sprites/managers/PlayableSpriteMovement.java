@@ -16,7 +16,6 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.GroundMode;
 import uk.co.jamesj999.sonic.timer.TimerManager;
 import uk.co.jamesj999.sonic.timer.timers.ControlLockTimer;
-import uk.co.jamesj999.sonic.timer.timers.SpindashCameraTimer;
 
 import java.util.logging.Logger;
 
@@ -877,12 +876,11 @@ public class PlayableSpriteMovement extends
 		} else if (Direction.RIGHT.equals(sprite.getDirection())) {
 			sprite.setGSpeed(spindashGSpeed);
 		}
-		Camera.getInstance().setFrozen(true);
-		// SPG: Camera lag timer is set to 32 - spinrev, where spinrev is between 0-8
-		// This gives a timer range of 24-32 frames
-		int spinrevForTimer = Math.min(8, (int) Math.floor(sprite.getSpindashConstant()));
-		GameServices.timers()
-				.registerTimer(new SpindashCameraTimer("spindash", 32 - spinrevForTimer));
+		// ROM: Horiz_scroll_delay_val is set to 32 - spinrev (where spinrev is 0-8)
+		// This gives a delay range of 24-32 frames for horizontal scroll only.
+		// Vertical scroll continues normally (ROM: ScrollVerti doesn't check delay).
+		int spinrevForDelay = Math.min(8, (int) Math.floor(sprite.getSpindashConstant()));
+		Camera.getInstance().setHorizScrollDelay(32 - spinrevForDelay);
 
 		sprite.setSpindashConstant(0f);
 	}

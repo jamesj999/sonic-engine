@@ -28,8 +28,12 @@ public class Camera {
 	// When true, normal vertical scroll rules may be modified
 	private boolean maxYChanging = false;
 
-	private int framesBehind = 0;
+	// ROM: Horiz_scroll_delay_val - horizontal scroll delay counter
+	// When > 0, horizontal scroll uses position history while vertical scroll continues normally
+	private int horizScrollDelayFrames = 0;
 
+	// Full camera freeze (both X and Y) - used for death, cutscenes, etc.
+	// This is separate from horizScrollDelayFrames which only affects horizontal scroll.
 	private boolean frozen = false;
 
 	private AbstractPlayableSprite focusedSprite;
@@ -63,37 +67,35 @@ public class Camera {
 			if (y > maxY) y = maxY;
 			return;
 		}
+
+		// Full camera freeze (death, cutscenes) - don't update X or Y at all
 		if (frozen) {
-			// Clamp framesBehind to prevent exceeding history array length (32)
-			if (framesBehind < 31) {
-				framesBehind++;
-			}
 			return;
 		}
+
+		// ROM behavior: Horiz_scroll_delay_val only affects horizontal scrolling.
+		// Vertical scrolling (ScrollVerti) always uses current position and runs normally.
+		// See s2.asm ScrollHoriz (line ~18009) vs ScrollVerti (line ~18112).
+
+		// Horizontal scroll - may use position history if delay is active
 		short focusedSpriteRealX;
-		short focusedSpriteRealY;
-		if (framesBehind > 0) {
-			// SPG: During spindash lag catchup, use the average of two consecutive
-			// historical positions. This smoothly interpolates through the 64 recorded
-			// positions (32 during freeze + 32 during catchup) over 32 frames.
-			// Position pair: (framesBehind) and (framesBehind - 1)
-			int idx1 = framesBehind;
-			int idx2 = Math.max(0, framesBehind - 1);
-			short x1 = focusedSprite.getCentreX(idx1);
-			short x2 = focusedSprite.getCentreX(idx2);
-			short y1 = focusedSprite.getCentreY(idx1);
-			short y2 = focusedSprite.getCentreY(idx2);
-			// Average the two positions (add together and use as the target)
-			focusedSpriteRealX = (short) (((x1 + x2) / 2) - x);
-			focusedSpriteRealY = (short) (((y1 + y2) / 2) - y);
+		if (horizScrollDelayFrames > 0) {
+			// ROM: ScrollHoriz uses position buffer when Horiz_scroll_delay_val is set
+			// Use historical X position, clamped to buffer size (64 entries)
+			int historyIndex = Math.min(horizScrollDelayFrames, 63);
+			focusedSpriteRealX = (short) (focusedSprite.getCentreX(historyIndex) - x);
+			horizScrollDelayFrames--;
 		} else {
 			focusedSpriteRealX = (short) (focusedSprite.getCentreX() - x);
-			focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
 		}
 
+		// Vertical scroll - always uses current position (ROM: ScrollVerti has no delay)
+		short focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
+
+		// Horizontal scroll logic (ROM: ScrollHoriz)
 		if (focusedSpriteRealX < 144) {
 			short difference = (short) (focusedSpriteRealX - 144);
-			if (difference > 16) {
+			if (difference < -16) {
 				x -= 16;
 			} else {
 				x += difference;
@@ -107,6 +109,7 @@ public class Camera {
 			}
 		}
 
+		// Vertical scroll logic (ROM: ScrollVerti)
 		if (focusedSprite.getAir()) {
 			if (focusedSpriteRealY < 96) {
 				short difference = (short) (focusedSpriteRealY - 96);
@@ -156,6 +159,8 @@ public class Camera {
 				y += difference;
 			}
 		}
+
+		// Clamp to boundaries
 		if (x < 0) {
 			x = 0;
 		}
@@ -168,25 +173,47 @@ public class Camera {
 		if (y > maxY) {
 			y = maxY;
 		}
-		if (framesBehind > 0) {
-			// SPG: Decrement by 2 each frame since we're processing position pairs
-			// This means we catch up through the full 64 positions (32 freeze + 32 catchup)
-			// in approximately 32 frames
-			framesBehind -= 2;
-			if (framesBehind < 0) {
-				framesBehind = 0;
-			}
+	}
+
+	/**
+	 * Sets horizontal scroll delay frames (ROM: Horiz_scroll_delay_val).
+	 * When delay > 0, horizontal scroll uses position history while vertical scroll
+	 * continues normally. This matches ROM behavior where ScrollHoriz checks
+	 * Horiz_scroll_delay_val but ScrollVerti does not.
+	 *
+	 * @param delayFrames Number of frames to delay horizontal scroll (0 to clear)
+	 */
+	public void setHorizScrollDelay(int delayFrames) {
+		this.horizScrollDelayFrames = delayFrames;
+	}
+
+	/**
+	 * @return Current horizontal scroll delay frames remaining
+	 */
+	public int getHorizScrollDelay() {
+		return horizScrollDelayFrames;
+	}
+
+	/**
+	 * Sets full camera freeze (both X and Y).
+	 * Use this for death, cutscenes, boss arenas, etc. where the camera should
+	 * completely stop following the player.
+	 *
+	 * For spindash-style horizontal-only delay, use setHorizScrollDelay() instead.
+	 *
+	 * @param frozen true to freeze camera, false to unfreeze
+	 */
+	public void setFrozen(boolean frozen) {
+		this.frozen = frozen;
+		// When unfreezing, also clear any horizontal delay
+		if (!frozen) {
+			this.horizScrollDelayFrames = 0;
 		}
 	}
 
-	public void setFrozen(boolean frozen) {
-		this.frozen = frozen;
-		// SPG: When unfreezing, do NOT reset framesBehind!
-		// The camera should continue using the position history while framesBehind > 0,
-		// gradually catching up to the current player position by processing
-		// pairs of positions from history.
-	}
-
+	/**
+	 * @return true if camera is fully frozen (both X and Y)
+	 */
 	public boolean getFrozen() {
 		return frozen;
 	}

@@ -66,9 +66,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected short xSpeed = 0;
         protected short ySpeed = 0;
 
-        private short[] xHistory = new short[32];
-        private short[] yHistory = new short[32];
+        // ROM: Sonic_Pos_Record_Buf is $100 bytes (256 bytes / 4 bytes per entry = 64 entries)
+        // Used for spindash camera lag and Tails CPU following
+        private short[] xHistory = new short[64];
+        private short[] yHistory = new short[64];
 
+        // ROM: Sonic_Pos_Record_Index - wraps at 256 (64 entries * 4 bytes)
         private byte historyPos = 0;
 
         /**
@@ -1117,7 +1120,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
                 // Set our entire history for x and y to be the starting position so if
                 // the player spindashes immediately the camera effect won't be b0rked.
-                for (short i = 0; i < 32; i++) {
+                // ROM: Sonic_Pos_Record_Buf has 64 entries
+                for (short i = 0; i < 64; i++) {
                         xHistory[i] = x;
                         yHistory[i] = y;
                 }
@@ -1543,7 +1547,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * of the tick so all movement calculations have been performed.
          */
         public void endOfTick() {
-                if (historyPos == 31) {
+                // ROM: Sonic_Pos_Record_Index wraps at 256 bytes (64 entries * 4 bytes per entry)
+                if (historyPos == 63) {
                         historyPos = 0;
                 } else {
                         historyPos++;
