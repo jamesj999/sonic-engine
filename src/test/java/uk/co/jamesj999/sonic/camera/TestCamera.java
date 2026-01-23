@@ -35,6 +35,7 @@ public class TestCamera {
         when(mockSprite.getY()).thenReturn((short) 112);
         when(mockSprite.getAir()).thenReturn(false);
         when(mockSprite.getYSpeed()).thenReturn((short) 0);
+        when(mockSprite.getGSpeed()).thenReturn((short) 0);
 
         camera.setFocusedSprite(mockSprite);
 
@@ -158,17 +159,50 @@ public class TestCamera {
     }
 
     @Test
-    public void testCameraVerticalSpeedIncreasesWhenFalling() {
+    public void testCameraVerticalSpeedIncreasesWithHighInertia() {
+        // ROM: s2.asm:18166-18168 - uses inertia (gSpeed), not ySpeed
+        // When inertia >= 0x800 (2048), use 16px cap instead of 6px
         when(mockSprite.getAir()).thenReturn(false);
-        when(mockSprite.getYSpeed()).thenReturn((short) (7 * 256)); // ySpeed > 6 (in subpixels)
+        when(mockSprite.getGSpeed()).thenReturn((short) 0x800); // Inertia threshold for fast scroll
         camera.setY((short) 0);
         when(mockSprite.getCentreY()).thenReturn((short) 200);
 
         camera.updatePosition();
 
-        // With high ySpeed, tolerance is 16 instead of 6
-        assertTrue("Camera should move faster vertically when player is falling fast",
+        // With high inertia (>= 0x800), tolerance is 16 instead of 6
+        assertTrue("Camera should move faster vertically when player has high ground speed",
                 camera.getY() >= 16);
+    }
+
+    @Test
+    public void testCameraSlowScrollWhenBiasNotDefault() {
+        // ROM: s2.asm:18164-18184 - when bias != 96, use 2px cap (slow scroll)
+        when(mockSprite.getAir()).thenReturn(false);
+        when(mockSprite.getGSpeed()).thenReturn((short) 0x1000); // High inertia (would be 16px normally)
+        camera.setY((short) 0);
+        camera.setYBias((short) 0); // Bias not default (looking up)
+        when(mockSprite.getCentreY()).thenReturn((short) 200);
+
+        camera.updatePosition();
+
+        // With non-default bias, tolerance is capped at 2px regardless of inertia
+        assertEquals("Camera should use slow scroll (2px) when bias is not default",
+                2, camera.getY());
+    }
+
+    @Test
+    public void testCameraMediumScrollWithLowInertia() {
+        // ROM: s2.asm:18169-18175 - when bias == 96 and inertia < 0x800, use 6px cap
+        when(mockSprite.getAir()).thenReturn(false);
+        when(mockSprite.getGSpeed()).thenReturn((short) 0x400); // Low inertia (< 0x800)
+        camera.setY((short) 0);
+        when(mockSprite.getCentreY()).thenReturn((short) 200);
+
+        camera.updatePosition();
+
+        // With low inertia and default bias, tolerance is 6px
+        assertEquals("Camera should use medium scroll (6px) when inertia is low",
+                6, camera.getY());
     }
 
     // ==================== Boundary Tests ====================

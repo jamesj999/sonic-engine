@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.sprites.Sprite;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
+import uk.co.jamesj999.sonic.sprites.playable.Tails;
 
 public class Camera {
 	private static Camera camera;
@@ -45,8 +46,15 @@ public class Camera {
 	// Default is 96 (0x60). Used as center point for scroll windows.
 	private static final short DEFAULT_Y_BIAS = 96;
 
+	// ROM: Camera_Y_pos_bias - dynamic bias that can change during gameplay
+	// (looking up/down, spindash, etc). Starts at 96.
+	private short yBias = DEFAULT_Y_BIAS;
+
 	// ROM: Airborne window is ±0x20 (32) around the bias
 	private static final short AIRBORNE_WINDOW_HALF = 32;
+
+	// ROM: Inertia threshold for fast scroll (0x800 = 2048)
+	private static final short FAST_SCROLL_INERTIA_THRESHOLD = 0x800;
 
 	private Camera() {
 		SonicConfigurationService configService = SonicConfigurationService
@@ -99,6 +107,17 @@ public class Camera {
 		// Vertical scroll - always uses current position (ROM: ScrollVerti has no delay)
 		short focusedSpriteRealY = (short) (focusedSprite.getCentreY() - y);
 
+		// ROM: s2.asm:18121-18132 - Rolling height compensation
+		// When rolling, Sonic's center shifts down by ~5px due to height change.
+		// Subtract 5 from the Y delta to prevent camera jolt.
+		// Tails is 4 pixels shorter, so only subtract 1 for Tails.
+		if (focusedSprite.getRolling()) {
+			focusedSpriteRealY -= 5;
+			if (focusedSprite instanceof Tails) {
+				focusedSpriteRealY += 4; // Net: subtract 1 for Tails
+			}
+		}
+
 		// Horizontal scroll logic (ROM: ScrollHoriz)
 		if (focusedSpriteRealX < 144) {
 			short difference = (short) (focusedSpriteRealX - 144);
@@ -118,10 +137,10 @@ public class Camera {
 
 		// Vertical scroll logic (ROM: ScrollVerti)
 		if (focusedSprite.getAir()) {
-			// ROM: Airborne uses ±0x20 window around bias (default 96)
-			// Upper bound: bias - 32 = 64, Lower bound: bias + 32 = 128
-			short upperBound = DEFAULT_Y_BIAS - AIRBORNE_WINDOW_HALF; // 64
-			short lowerBound = DEFAULT_Y_BIAS + AIRBORNE_WINDOW_HALF; // 128
+			// ROM: Airborne uses ±0x20 window around bias
+			// Upper bound: bias - 32, Lower bound: bias + 32
+			short upperBound = (short) (yBias - AIRBORNE_WINDOW_HALF);
+			short lowerBound = (short) (yBias + AIRBORNE_WINDOW_HALF);
 			if (focusedSpriteRealY < upperBound) {
 				short difference = (short) (focusedSpriteRealY - upperBound);
 				if (difference < -16) {
@@ -137,38 +156,50 @@ public class Camera {
 					y += difference;
 				}
 			}
-		} else if (focusedSpriteRealY > DEFAULT_Y_BIAS) {
-			short ySpeed = (short) (focusedSprite.getYSpeed() / 256);
-			short difference = (short) (focusedSpriteRealY - DEFAULT_Y_BIAS);
-			byte tolerance;
+		} else {
+			// ROM: s2.asm:18150-18195 - Grounded vertical scroll
+			// Uses bias state and inertia (ground speed), NOT ySpeed
+			short difference = (short) (focusedSpriteRealY - yBias);
 
-			if (ySpeed > 6) {
-				tolerance = 16;
-			} else {
-				tolerance = 6;
-			}
+			if (difference != 0) {
+				// ROM: .decideScrollType - choose scroll cap based on bias and inertia
+				short tolerance;
+				if (yBias != DEFAULT_Y_BIAS) {
+					// ROM: .doScroll_slow - bias is not normal (looking up/down)
+					// Use 2px cap
+					tolerance = 2;
+				} else {
+					// Bias is normal (96) - check inertia for medium vs fast
+					short absInertia = (short) Math.abs(focusedSprite.getGSpeed());
+					if (absInertia >= FAST_SCROLL_INERTIA_THRESHOLD) {
+						// ROM: .doScroll_fast - player moving very fast on ground
+						// Use 16px cap
+						tolerance = 16;
+					} else {
+						// ROM: .doScroll_medium - normal ground movement
+						// Use 6px cap
+						tolerance = 6;
+					}
+				}
 
-			if (difference > tolerance) {
-				y += tolerance;
-			} else {
-				y += difference;
+				// Apply scroll with capping
+				if (difference > 0) {
+					// Scroll down
+					if (difference > tolerance) {
+						y += tolerance;
+					} else {
+						y += difference;
+					}
+				} else {
+					// Scroll up (difference is negative)
+					if (difference < -tolerance) {
+						y -= tolerance;
+					} else {
+						y += difference;
+					}
+				}
 			}
-		} else if (focusedSpriteRealY < DEFAULT_Y_BIAS) {
-			short ySpeed = (short) (focusedSprite.getYSpeed() / 256);
-			short difference = (short) (focusedSpriteRealY - DEFAULT_Y_BIAS);
-			byte tolerance;
-
-			if (ySpeed < -6) {
-				tolerance = -16;
-			} else {
-				tolerance = -6;
-			}
-
-			if (difference < tolerance) {
-				y += tolerance;
-			} else {
-				y += difference;
-			}
+			// else: ROM: .doNotScroll - player is at bias, no scroll needed
 		}
 
 		// Clamp to boundaries
@@ -463,6 +494,40 @@ public class Camera {
 
 	public void incrementY(short amount) {
 		y += amount;
+	}
+
+	/**
+	 * Gets the current Y bias (ROM: Camera_Y_pos_bias).
+	 * Default is 96. Used as the vertical target position for camera centering.
+	 * @return Current Y bias value
+	 */
+	public short getYBias() {
+		return yBias;
+	}
+
+	/**
+	 * Sets the Y bias (ROM: Camera_Y_pos_bias).
+	 * When bias != 96, grounded vertical scroll uses slower 2px/frame cap.
+	 * Used by looking up/down mechanics and spindash release.
+	 * @param yBias New bias value (default is 96)
+	 */
+	public void setYBias(short yBias) {
+		this.yBias = yBias;
+	}
+
+	/**
+	 * Resets Y bias to the default value (96).
+	 */
+	public void resetYBias() {
+		this.yBias = DEFAULT_Y_BIAS;
+	}
+
+	/**
+	 * Gets the default Y bias value.
+	 * @return Default Y bias (96)
+	 */
+	public static short getDefaultYBias() {
+		return DEFAULT_Y_BIAS;
 	}
 
 	public static synchronized Camera getInstance() {
