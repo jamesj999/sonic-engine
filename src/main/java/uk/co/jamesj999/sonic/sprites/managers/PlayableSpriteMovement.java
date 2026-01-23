@@ -43,7 +43,6 @@ public class PlayableSpriteMovement extends
 	// These values don't change with speed shoes, so we cache them
 	private final short slopeRunning;
 	private final short minStartRollSpeed;
-	private final short minRollSpeed;
 	private final short maxRoll;
 	private final short slopeRollingUp;
 	private final short slopeRollingDown;
@@ -67,7 +66,6 @@ public class PlayableSpriteMovement extends
 		// to support speed shoes power-up which modifies these values at runtime
 		slopeRunning = sprite.getSlopeRunning();
 		minStartRollSpeed = sprite.getMinStartRollSpeed();
-		minRollSpeed = sprite.getMinRollSpeed();
 		maxRoll = sprite.getMaxRoll();
 		slopeRollingUp = sprite.getSlopeRollingUp();
 		slopeRollingDown = sprite.getSlopeRollingDown();
@@ -1373,10 +1371,10 @@ public class PlayableSpriteMovement extends
 			return;
 		}
 
-		// If we're rolling and our ground speed is less than the minimum roll
-		// speed then check if we should stop rolling:
-		if (sprite.getRolling()
-				&& ((gSpeed < minRollSpeed && gSpeed >= 0) || (gSpeed > -minRollSpeed && gSpeed <= 0))) {
+		// Sonic_CheckRollStop (s2.asm:36709-36711): Only stop rolling when
+		// gSpeed reaches exactly 0. The ROM uses "tst.w inertia(a0); bne.s ..."
+		// which only falls through to stop rolling when inertia == 0.
+		if (sprite.getRolling() && gSpeed == 0) {
 			// Sonic_CheckRollStop (s2.asm:36712): If pinball_mode is set, give a boost
 			// instead of stopping. This keeps the player rolling in "must roll" areas.
 			if (sprite.getPinballMode()) {
