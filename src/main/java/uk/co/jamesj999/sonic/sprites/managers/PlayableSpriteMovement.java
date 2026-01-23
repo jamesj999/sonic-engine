@@ -734,16 +734,30 @@ public class PlayableSpriteMovement extends
 					return;
 				}
 
-				// Work out the ySpeed threshold required to land.
-				// REV01 uses the *pixel* y-speed (high byte) with a +8 buffer,
-				// then negates it to compare against the signed floor distance.
-				// CRITICAL: Must use arithmetic right shift (>>8) not division,
-				// because Java division rounds toward zero, but M68K move.b gets
-				// the actual high byte. For negative values, >>8 gives correct result.
-				short ySpeedPixels = (short) (sprite.getYSpeed() >> 8);
-				short requiredSpeed = (short) (-(ySpeedPixels + 8));
-				// Check whether
-				if (results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed) {
+				// SPG: Landing threshold depends on movement direction.
+				// When moving mostly horizontally (|X| >= |Y|): land immediately (Y speed >= 0 suffices)
+				// When moving mostly vertically (|X| < |Y|): apply -(YSpeed + 8) distance threshold
+				int absXSpeed = Math.abs(sprite.getXSpeed());
+				int absYSpeed = Math.abs(sprite.getYSpeed());
+				boolean canLand;
+
+				if (absXSpeed >= absYSpeed) {
+					// Mostly horizontal movement: land immediately if sensors detect ground
+					// (Y speed >= 0 already checked above, distance < 0 checked at line 725)
+					canLand = true;
+				} else {
+					// Mostly vertical movement: apply distance threshold
+					// REV01 uses the *pixel* y-speed (high byte) with a +8 buffer,
+					// then negates it to compare against the signed floor distance.
+					// CRITICAL: Must use arithmetic right shift (>>8) not division,
+					// because Java division rounds toward zero, but M68K move.b gets
+					// the actual high byte. For negative values, >>8 gives correct result.
+					short ySpeedPixels = (short) (sprite.getYSpeed() >> 8);
+					short requiredSpeed = (short) (-(ySpeedPixels + 8));
+					canLand = results[0].distance() >= requiredSpeed || results[1].distance() >= requiredSpeed;
+				}
+
+				if (canLand) {
 					// sonic has collided with the ground. Work out which ground mode we are in to
 					// work out how to move Sonic.
 					moveForSensorResult(sprite, lowestResult);
@@ -771,13 +785,17 @@ public class PlayableSpriteMovement extends
 			// "It selects the closer surface (the smaller distance), adopts the
 			// corresponding angle, and returns the chosen distance in d1."
 
-			// ROM ACCURACY: AnglePos uses fixed 0x0E threshold for ground glue.
-			// If distance >= 14 (0x0E), treat as "no floor" - Sonic detaches from ground.
-			int threshold = 14;
+			// SPG: Sonic 2+ uses dynamic positive threshold based on speed.
+			// Positive limit: min(|X Speed| + 4, 14) - less sticky at low speeds
+			// Negative limit: -14 (fixed) - always detach if floor is 14+ pixels above
+			int absXSpeedPixels = Math.abs(sprite.getXSpeed() >> 8);
+			int positiveThreshold = Math.min(absXSpeedPixels + 4, 14);
+			int negativeThreshold = -14;
 
 			// BUT: if player is standing on a solid object (bridge, platform),
 			// don't set to air based on terrain alone.
-			if (lowestResult == null || lowestResult.distance() >= threshold) {
+			if (lowestResult == null || lowestResult.distance() >= positiveThreshold
+					|| lowestResult.distance() < negativeThreshold) {
 				// Check if player is standing on a solid object before setting to air
 				var objectManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance().getObjectManager();
 				if (objectManager != null && (objectManager.isRidingObject()
@@ -790,10 +808,25 @@ public class PlayableSpriteMovement extends
 			}
 			// Use lowestResult (closest sensor) for position and angle updates
 			moveForSensorResult(sprite, lowestResult);
-			if (lowestResult.angle() == (byte) 0xFF) {
+			byte tileAngle = lowestResult.angle();
+			if (tileAngle == (byte) 0xFF) {
+				// Flagged tile: snap to nearest 90° quadrant
 				sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
 			} else {
-				sprite.setAngle(lowestResult.angle());
+				// SPG: Sonic 2+ snaps angle when |Ground Angle - Tile Angle| > 0x20
+				// This prevents jarring angle changes on sharp terrain transitions
+				int currentAngle = sprite.getAngle() & 0xFF;
+				int newAngle = tileAngle & 0xFF;
+				int diff = (newAngle - currentAngle) & 0xFF;
+				if (diff > 0x80) {
+					diff = 0x100 - diff; // Handle wraparound for circular angles
+				}
+				if (diff > 0x20) {
+					// Difference too large: snap to nearest 90° quadrant
+					sprite.setAngle((byte) ((currentAngle + 0x20) & 0xC0));
+				} else {
+					sprite.setAngle(tileAngle);
+				}
 			}
 			updateGroundMode(sprite);
 		}

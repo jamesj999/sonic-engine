@@ -525,8 +525,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (!air && this.air) {
                         rollingJump = false;
                 }
-                // TODO Update ground sensors here
                 this.air = air;
+                // SPG: Push sensor Y offset changes based on air state
+                updatePushSensorYOffset();
                 if (air) {
                         setGroundMode(GroundMode.GROUND);
                         // SPG: Angle should gradually return to 0 while airborne,
@@ -1410,6 +1411,24 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                         pushSensors[0].setOffset((byte) -push, (byte) 0);
                         pushSensors[1].setOffset(push, (byte) 0);
                 }
+                // Update push sensor Y offset based on current ground state
+                updatePushSensorYOffset();
+        }
+
+        /**
+         * SPG: Push sensors shift down by +8 on flat ground so low steps are pushed
+         * against instead of being stepped onto. In air or on slopes, Y offset is 0.
+         */
+        public void updatePushSensorYOffset() {
+                if (pushSensors == null || pushSensors.length < 2) {
+                        return;
+                }
+                // On flat ground (not air AND ground mode is GROUND): Y offset = +8
+                // In air or on walls/ceiling: Y offset = 0
+                byte yOffset = (!air && runningMode == GroundMode.GROUND) ? (byte) 8 : (byte) 0;
+                byte push = (byte) (xRadius + 1);
+                pushSensors[0].setOffset((byte) -push, yOffset);
+                pushSensors[1].setOffset(push, yOffset);
         }
 
         public SpriteMovementManager getMovementManager() {
@@ -1434,6 +1453,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (this.runningMode != groundMode) {
                         updateSpriteShapeForRunningMode(groundMode, this.runningMode);
                         this.runningMode = groundMode;
+                        // SPG: Push sensor Y offset changes based on ground mode
+                        updatePushSensorYOffset();
                 }
         }
 
