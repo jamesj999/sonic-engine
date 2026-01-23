@@ -1580,10 +1580,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         public void updateWaterState(int waterLevelY) {
                 wasInWater = inWater;
 
-                // Check if player's center Y is below water surface
-                // Original uses player's Y position, not center - checking bottom of sprite
-                int playerBottomY = yPixel + height;
-                inWater = playerBottomY > waterLevelY;
+                // ROM compares y_pos (center Y) with Water_Level_1:
+                //   cmp.w y_pos(a0),d0 ; is Sonic above the water?
+                //   bge.s Obj01_OutWater
+                // Player is in water when center Y > water level
+                int playerCenterY = getCentreY();
+                inWater = playerCenterY > waterLevelY;
 
                 // Detect transitions
                 if (!wasInWater && inWater) {
@@ -1608,17 +1610,13 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected void onEnterWater() {
                 LOGGER.fine("Player entered water");
 
-                // Halve horizontal velocity (xSpeed and gSpeed)
+                // ROM: asr.w x_vel(a0) - halve horizontal velocity once
                 xSpeed = (short) (xSpeed / 2);
                 gSpeed = (short) (gSpeed / 2);
 
-                // Reduce downward velocity more significantly
-                if (ySpeed > 0) {
-                        ySpeed = (short) (ySpeed / 4);
-                } else {
-                        // Upward velocity halved
-                        ySpeed = (short) (ySpeed / 2);
-                }
+                // ROM: asr.w y_vel(a0) twice - divide by 4 unconditionally
+                // (both upward and downward velocity)
+                ySpeed = (short) (ySpeed / 4);
 
                 // Play splash sound
                 AudioManager.getInstance().playSfx(GameSound.SPLASH);
@@ -1639,17 +1637,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected void onExitWater() {
                 LOGGER.fine("Player exited water");
 
-                // Double horizontal velocity
-                xSpeed = (short) Math.min(xSpeed * 2, max);
-                gSpeed = (short) Math.min(gSpeed * 2, max);
+                // ROM does NOT modify x_vel on water exit - only top_speed/accel/decel
+                // change, which affects future acceleration but not current velocity
 
-                // Boost upward velocity (only if moving upward)
-                if (ySpeed < 0) {
+                // ROM: cmpi.b #4,routine(a0) - skip y_vel doubling if hurt
+                //      beq.s +
+                //      asl y_vel(a0)
+                if (!isHurt()) {
+                        // Double y velocity (both up and down)
                         ySpeed = (short) (ySpeed * 2);
-                        // Cap to reasonable value
-                        if (ySpeed < -0x1000) {
-                                ySpeed = -0x1000;
-                        }
+                }
+
+                // ROM: cmpi.w #-$1000,y_vel(a0) - cap upward velocity at -$1000
+                //      bgt.s +
+                //      move.w #-$1000,y_vel(a0)
+                if (ySpeed < -0x1000) {
+                        ySpeed = -0x1000;
                 }
 
                 // Play splash sound

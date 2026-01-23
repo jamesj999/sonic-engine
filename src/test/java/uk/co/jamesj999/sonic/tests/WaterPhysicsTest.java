@@ -51,7 +51,7 @@ public class WaterPhysicsTest {
     }
 
     @Test
-    public void testWaterEntry_HalvesUpwardVelocity() {
+    public void testWaterEntry_QuartersUpwardVelocity() {
         // Set initial upward velocity
         sprite.setXSpeed((short) 0);
         sprite.setYSpeed((short) -400); // Moving up
@@ -61,12 +61,12 @@ public class WaterPhysicsTest {
         sprite.updateWaterState(400);
 
         assertTrue("Player should be in water", sprite.isInWater());
-        // Upward velocity should be halved (-400 / 2 = -200)
-        assertEquals("YSpeed should be halved when negative", -200, sprite.getYSpeed());
+        // ROM: asr.w y_vel(a0) twice - divides by 4 unconditionally (both up and down)
+        assertEquals("YSpeed should be quartered (ROM-accurate)", -100, sprite.getYSpeed());
     }
 
     @Test
-    public void testWaterExit_DoublesHorizontalVelocity() {
+    public void testWaterExit_DoesNotModifyHorizontalVelocity() {
         // Start in water
         sprite.setInWater(true);
         sprite.setXSpeed((short) 500);
@@ -78,8 +78,9 @@ public class WaterPhysicsTest {
         sprite.updateWaterState(400); // Water at Y=400, player is above
 
         assertFalse("Player should be out of water", sprite.isInWater());
-        assertEquals("XSpeed should be doubled", 1000, sprite.getXSpeed());
-        assertEquals("GSpeed should be doubled", 1000, sprite.getGSpeed());
+        // ROM does NOT modify x_vel on water exit - only top_speed/accel/decel change
+        assertEquals("XSpeed should be unchanged (ROM-accurate)", 500, sprite.getXSpeed());
+        assertEquals("GSpeed should be unchanged (ROM-accurate)", 500, sprite.getGSpeed());
     }
 
     @Test
@@ -96,6 +97,24 @@ public class WaterPhysicsTest {
         assertFalse("Player should be out of water", sprite.isInWater());
         // Upward velocity should be doubled (-300 * 2 = -600)
         assertEquals("YSpeed should be doubled when exiting upward", -600, sprite.getYSpeed());
+    }
+
+    @Test
+    public void testWaterExit_SkipsBoostWhenHurt() {
+        // ROM: cmpi.b #4,routine(a0) - skip y_vel doubling if hurt (routine=4)
+        // Start in water moving up, but in hurt state
+        sprite.setInWater(true);
+        sprite.setHurt(true);
+        sprite.setXSpeed((short) 0);
+        sprite.setYSpeed((short) -300); // Moving up
+
+        // Simulate water exit
+        sprite.setTestY((short) 300);
+        sprite.updateWaterState(400);
+
+        assertFalse("Player should be out of water", sprite.isInWater());
+        // When hurt, y velocity should NOT be doubled (ROM-accurate)
+        assertEquals("YSpeed should be unchanged when hurt (ROM-accurate)", -300, sprite.getYSpeed());
     }
 
     @Test
