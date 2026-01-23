@@ -51,6 +51,19 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
         silenceAll();
     }
 
+    /**
+     * Stop all SFX sequencers, releasing their channel locks and silencing them.
+     * Used when starting override music to prevent partial SFX playback on restore.
+     */
+    public void stopAllSfx() {
+        List<SmpsSequencer> sfxToRemove = new ArrayList<>(sfxSequencers);
+        for (SmpsSequencer sfx : sfxToRemove) {
+            sequencers.remove(sfx);
+            releaseLocks(sfx);
+            sfxSequencers.remove(sfx);
+        }
+    }
+
     @Override
     public int read(short[] buffer) {
         int frames = buffer.length / 2;

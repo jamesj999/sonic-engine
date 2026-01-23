@@ -54,6 +54,14 @@ public class SmpsSequencer implements AudioStream {
         return sfxPriority;
     }
 
+    /**
+     * Set a callback to be invoked when a fade-in completes.
+     * Used by JOALAudioBackend to clear sfxBlocked flag after override music restoration.
+     */
+    public void setOnFadeComplete(Runnable callback) {
+        this.onFadeComplete = callback;
+    }
+
     private static class FadeState {
         int steps;
         int delayInit;
@@ -65,6 +73,7 @@ public class SmpsSequencer implements AudioStream {
     }
 
     private final FadeState fadeState = new FadeState();
+    private Runnable onFadeComplete;
 
     private static final double SAMPLE_RATE = 44100.0;
     // Base tempo weight is game/driver-specific (configured externally).
@@ -301,6 +310,13 @@ public class SmpsSequencer implements AudioStream {
      * Force-silence a hardware channel that was previously owned by this sequencer.
      * Used by the driver when releasing SFX locks so stray tones don't linger
      * if there is no music track to immediately rewrite the channel.
+     *
+     * For FM channels, this matches ROM behavior (zSetMaxRelRate + zFMSilenceChannel):
+     * - Set D1L/RR to 0xFF for all operators (fastest release)
+     * - Set TL to 0x7F for all operators (max attenuation)
+     * - Key off
+     * This ensures the envelope is fully silenced before music refreshes the channel,
+     * preventing corrupted first samples when music resumes.
      */
     public void forceSilence(TrackType type, int channelId) {
         if (type == TrackType.FM) {
@@ -308,7 +324,24 @@ public class SmpsSequencer implements AudioStream {
             int port = (hwCh < 3) ? 0 : 1;
             int ch = hwCh % 3;
             int chVal = (port == 0) ? ch : (ch + 4);
-            synth.writeFm(this, 0, 0x28, 0x00 | chVal); // key off
+
+            // ROM: zSetMaxRelRate - Set D1L/RR to 0xFF (fastest release) for all operators
+            // Register 0x80-0x8F: D1L/RR (Sustain Level / Release Rate)
+            // Operator register offsets: 0x00 (Op1), 0x08 (Op3), 0x04 (Op2), 0x0C (Op4)
+            int[] opOffsets = {0x00, 0x08, 0x04, 0x0C};
+            for (int opOffset : opOffsets) {
+                synth.writeFm(this, port, 0x80 + opOffset + ch, 0xFF);
+            }
+
+            // ROM: zFMSilenceChannel - Set TL to 0x7F (max attenuation) for all operators
+            // Register 0x40-0x4F: TL (Total Level)
+            for (int opOffset : opOffsets) {
+                synth.writeFm(this, port, 0x40 + opOffset + ch, 0x7F);
+            }
+
+            // Key off
+            synth.writeFm(this, 0, 0x28, 0x00 | chVal);
+
             if (hwCh == 5) {
                 // If this was DAC (FM6), stop DAC playback too.
                 synth.stopDac(this);
@@ -379,6 +412,14 @@ public class SmpsSequencer implements AudioStream {
                     }
                     if (t.type == TrackType.FM) {
                         applyFmPanAmsFms(t);
+                        // Ensure channel is keyed-off after restore to prevent clicks/pops.
+                        // The music track's note was interrupted by SFX; it should remain
+                        // silent until the next note event naturally keys-on.
+                        int hwCh = t.channelId;
+                        int port = (hwCh < 3) ? 0 : 1;
+                        int ch = hwCh % 3;
+                        int chVal = (port == 0) ? ch : (ch + 4);
+                        synth.writeFm(this, 0, 0x28, 0x00 | chVal);
                     }
                     if (t.duration > 0) {
                         restoreFrequency(t);
@@ -744,6 +785,10 @@ public class SmpsSequencer implements AudioStream {
                     if (t.type == TrackType.DAC) {
                         t.dacMuted = false;
                     }
+                }
+                // Notify listener that fade-in is complete (e.g., to unblock SFX)
+                if (onFadeComplete != null) {
+                    onFadeComplete.run();
                 }
             }
             fadeState.active = false;

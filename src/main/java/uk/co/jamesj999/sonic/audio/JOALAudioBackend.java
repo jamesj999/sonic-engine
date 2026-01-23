@@ -62,6 +62,7 @@ public class JOALAudioBackend implements AudioBackend {
     private final Deque<MusicState> musicStack = new ArrayDeque<>();
     private int currentMusicId = -1;
     private volatile boolean pendingRestore = false;
+    private volatile boolean sfxBlocked = false;  // Block SFX during override jingle/fade-in (ROM: 1upPlaying, FadeInFlag)
 
     // Fallback mappings
     private final Map<Integer, String> musicFallback = new HashMap<>();
@@ -155,7 +156,15 @@ public class JOALAudioBackend implements AudioBackend {
         int musicId = data.getId();
         boolean isOverride = audioProfile != null && audioProfile.isMusicOverride(musicId);
         if (isOverride) {
+            // Stop any playing SFX before pushing state to prevent partial playback on restore
+            if (smpsDriver != null) {
+                smpsDriver.stopAllSfx();
+            }
             pushCurrentState();
+            // ROM behavior: only 1-up jingle blocks SFX (1upPlaying flag), not invincibility
+            if (audioProfile.isSfxBlockingMusic(musicId)) {
+                sfxBlocked = true;
+            }
 
             // Just disconnect the current driver from the source without stopping/clearing
             // it.
@@ -207,6 +216,11 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playSfxSmps(AbstractSmpsData data, DacData dacData, float pitch) {
+        // ROM behavior: completely block SFX during override jingle and fade-in period
+        if (sfxBlocked) {
+            return;
+        }
+
         boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
@@ -370,6 +384,8 @@ public class JOALAudioBackend implements AudioBackend {
             // Restore speed shoes state to the saved sequencer
             currentSmps.setSpeedShoes(speedShoesEnabled);
             currentSmps.refreshAllVoices();
+            // Set callback to unblock SFX when fade-in completes
+            currentSmps.setOnFadeComplete(() -> sfxBlocked = false);
             currentSmps.triggerFadeIn(0x28, 2);
         }
 
@@ -592,6 +608,7 @@ public class JOALAudioBackend implements AudioBackend {
     private void clearMusicStack() {
         musicStack.clear();
         pendingRestore = false;
+        sfxBlocked = false;  // Unblock SFX when stack is cleared (e.g., level transition)
     }
 
     private boolean removeSavedOverride(int musicId) {
