@@ -245,6 +245,11 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     }
 
     @Override
+    public boolean hasMonitorSolidity() {
+        return true;
+    }
+
+    @Override
     public void onSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
         // Solid contact used for standing/edge checks in ROM; no behavior yet.
     }

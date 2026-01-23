@@ -20,6 +20,13 @@ public class GameStateManager {
     private int emeraldCount;
     private final boolean[] gotEmeralds = new boolean[SPECIAL_STAGE_COUNT];
 
+    /**
+     * Current boss ID (ROM: Current_Boss_ID).
+     * 0 = no boss active, non-zero = boss fight in progress.
+     * Used by level boundary logic to remove the +64 right buffer during boss fights.
+     */
+    private int currentBossId;
+
     private GameStateManager() {
         resetSession();
     }
@@ -43,6 +50,8 @@ public class GameStateManager {
         for (int i = 0; i < gotEmeralds.length; i++) {
             gotEmeralds[i] = false;
         }
+
+        this.currentBossId = 0;
     }
 
     public int getScore() {
@@ -119,6 +128,31 @@ public class GameStateManager {
      */
     public boolean hasAllEmeralds() {
         return emeraldCount >= SPECIAL_STAGE_COUNT;
+    }
+
+    /**
+     * Gets the current boss ID.
+     * ROM: Current_Boss_ID - 0 means no boss active.
+     */
+    public int getCurrentBossId() {
+        return currentBossId;
+    }
+
+    /**
+     * Sets the current boss ID.
+     * ROM: Current_Boss_ID - set to non-zero when entering a boss fight,
+     * 0 when the boss is defeated. When non-zero, the +64 right boundary
+     * buffer is removed to keep the player within the boss arena.
+     */
+    public void setCurrentBossId(int bossId) {
+        this.currentBossId = bossId;
+    }
+
+    /**
+     * Checks if a boss fight is currently active.
+     */
+    public boolean isBossFightActive() {
+        return currentBossId != 0;
     }
 }
 

@@ -62,22 +62,24 @@ public class Tails extends AbstractPlayableSprite {
 		minRollSpeed = 128;
 		maxRoll = 4096;
 		rollHeight = 28;
-		runHeight = 38;
+		runHeight = 30; // Tails is shorter: 2 * 15 = 30
 		standXRadius = 9;
-		standYRadius = 19;
+		standYRadius = 15; // Tails: 0x0F (shorter than Sonic's 0x13)
 		rollXRadius = 7;
 		rollYRadius = 14;
 	}
 
 	@Override
 	protected void createSensorLines() {
+		// Ground Sensors - Y offset matches standYRadius (0x0F = 15)
 		groundSensors = new Sensor[2];
-		groundSensors[0] = new GroundSensor(this, Direction.DOWN, (byte) -9, (byte) 20, true);
-		groundSensors[1] = new GroundSensor(this, Direction.DOWN, (byte) 9, (byte) 20, true);
+		groundSensors[0] = new GroundSensor(this, Direction.DOWN, (byte) -9, (byte) 15, true);
+		groundSensors[1] = new GroundSensor(this, Direction.DOWN, (byte) 9, (byte) 15, true);
 
+		// Ceiling Sensors - Y offset matches -standYRadius (-0x0F = -15)
 		ceilingSensors = new Sensor[2];
-		ceilingSensors[0] = new GroundSensor(this, Direction.UP, (byte) -9, (byte) -20, false);
-		ceilingSensors[1] = new GroundSensor(this, Direction.UP, (byte) 9, (byte) -20, false);
+		ceilingSensors[0] = new GroundSensor(this, Direction.UP, (byte) -9, (byte) -15, false);
+		ceilingSensors[1] = new GroundSensor(this, Direction.UP, (byte) 9, (byte) -15, false);
 
 		pushSensors = new Sensor[2];
 		pushSensors[0] = new GroundSensor(this, Direction.LEFT, (byte) -10, (byte) 0, false);

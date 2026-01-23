@@ -41,7 +41,22 @@ public class GroundSensor extends Sensor {
         short originalX = (short) (centreX + xOffset + dx);
         short originalY = (short) (centreY + yOffset + dy);
 
-        int solidityBitIndex = (globalDirection == Direction.DOWN)
+        // ROM ACCURACY FIX: Use the sensor's LOCAL direction (this.direction) to determine
+        // which solidity bit to check, NOT the global direction after ground mode rotation.
+        //
+        // In the original game (s2.asm):
+        // - AnglePos and Sonic_CheckFloor (floor detection): always use top_solid_bit
+        // - CalcRoomInFront and CalcRoomOverHead (wall/ceiling checks): use lrb_solid_bit
+        //
+        // The sensor's local direction indicates its ROLE:
+        // - DOWN = floor sensor → top_solid_bit (check if walkable from above)
+        // - LEFT/RIGHT = push sensor → lrb_solid_bit (check if solid from the side)
+        // - UP = ceiling sensor → lrb_solid_bit (check if solid from below)
+        //
+        // Previously this used globalDirection which caused floor sensors on steep slopes
+        // (RIGHTWALL/LEFTWALL modes) to incorrectly use lrb_solid_bit, leading to collision
+        // issues when crossing paths with different collision layers.
+        int solidityBitIndex = (direction == Direction.DOWN)
                 ? sprite.getTopSolidBit()
                 : sprite.getLrbSolidBit();
 

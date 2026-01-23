@@ -848,7 +848,7 @@ public class ObjectManager {
                             slopeData, sloped.isSlopeFlipped(), provider.isTopSolidOnly(), instance, false);
                 } else {
                     contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                            provider.isTopSolidOnly(), instance, false);
+                            provider.isTopSolidOnly(), provider.hasMonitorSolidity(), instance, false);
                 }
                 if (contact != null && contact.standing()) {
                     return true;
@@ -866,8 +866,9 @@ public class ObjectManager {
                 int anchorY = multiPiece.getPieceY(i) + params.offsetY();
                 int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
 
+                // Multi-piece solids don't use monitor solidity
                 SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                        multiPiece.isTopSolidOnly(), instance, false);
+                        multiPiece.isTopSolidOnly(), false, instance, false);
                 if (contact != null && contact.standing()) {
                     return true;
                 }
@@ -1067,7 +1068,7 @@ public class ObjectManager {
                             slopeData, sloped.isSlopeFlipped(), provider.isTopSolidOnly(), instance, true);
                 } else {
                     contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                            provider.isTopSolidOnly(), instance, true);
+                            provider.isTopSolidOnly(), provider.hasMonitorSolidity(), instance, true);
                 }
                 if (contact == null) {
                     continue;
@@ -1114,8 +1115,9 @@ public class ObjectManager {
                 int anchorY = pieceY + params.offsetY();
                 int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
 
+                // Multi-piece solids don't use monitor solidity
                 SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                        multiPiece.isTopSolidOnly(), instance, true);
+                        multiPiece.isTopSolidOnly(), false, instance, true);
 
                 if (contact == null) {
                     continue;
@@ -1157,8 +1159,8 @@ public class ObjectManager {
         }
 
         private SolidContact resolveContact(AbstractPlayableSprite player,
-                int anchorX, int anchorY, int halfWidth, int halfHeight, boolean topSolidOnly, ObjectInstance instance,
-                boolean apply) {
+                int anchorX, int anchorY, int halfWidth, int halfHeight, boolean topSolidOnly,
+                boolean monitorSolidity, ObjectInstance instance, boolean apply) {
             int playerCenterX = player.getCentreX();
             int playerCenterY = player.getCentreY();
 
@@ -1169,7 +1171,9 @@ public class ObjectManager {
 
             int playerYRadius = player.getYRadius();
             int maxTop = halfHeight + playerYRadius;
-            int relY = playerCenterY - anchorY + 4 + maxTop;
+            // SPG: Monitors don't add +4 during vertical overlap check
+            int verticalOffset = monitorSolidity ? 0 : 4;
+            int relY = playerCenterY - anchorY + verticalOffset + maxTop;
 
             boolean riding = isRidingObject(instance);
             int minRelY = riding ? -16 : 0;
@@ -1178,8 +1182,98 @@ public class ObjectManager {
                 return null;
             }
 
+            if (monitorSolidity) {
+                return resolveMonitorContact(player, relX, relY, halfWidth, maxTop, playerCenterX, playerCenterY,
+                        anchorX, riding, apply);
+            }
             return resolveContactInternal(player, relX, relY, halfWidth, maxTop, playerCenterX, playerCenterY,
                     topSolidOnly, riding, apply);
+        }
+
+        /**
+         * Monitor-specific collision resolution (SPG: "Item Monitor").
+         * Differences from normal solid objects:
+         * - Landing only if playerY - topCombinedBox < 16 AND within monitor X ± (halfWidth + 4)
+         * - Never pushes player downward, only to sides
+         */
+        private SolidContact resolveMonitorContact(AbstractPlayableSprite player, int relX, int relY,
+                int halfWidth, int maxTop, int playerCenterX, int playerCenterY, int anchorX,
+                boolean sticky, boolean apply) {
+            // Calculate distances from center
+            int distX;
+            int absDistX;
+            if (relX >= halfWidth) {
+                distX = relX - (halfWidth * 2);
+                absDistX = -distX;
+            } else {
+                distX = relX;
+                absDistX = distX;
+            }
+
+            int distY;
+            if (relY <= maxTop) {
+                distY = relY;
+            } else {
+                // No +4 offset for monitor bottom collision (since we didn't add it in overlap)
+                distY = relY - (maxTop * 2);
+            }
+
+            // SPG: Landing check - player Y relative to top of combined box must be < 16
+            // AND player X must be within monitor width + 4px margin on each side
+            // distY represents playerY - topCombinedBox when relY <= maxTop
+            boolean canLand = distY >= 0 && distY < 16;
+
+            // Check X margin for landing: player must be within halfWidth + 4 of center
+            // relX is already relative to left edge, so center-relative = relX - halfWidth
+            int xFromCenter = relX - halfWidth;
+            int landingXMargin = halfWidth + 4;
+            boolean withinLandingX = Math.abs(xFromCenter) <= landingXMargin;
+
+            if (canLand && withinLandingX) {
+                // Landing on top
+                if (player.getYSpeed() < 0) {
+                    return null;
+                }
+
+                if (apply) {
+                    int newCenterY = playerCenterY - distY + 3;
+                    int newY = newCenterY - (player.getHeight() / 2);
+                    player.setY((short) newY);
+                    if (player.getYSpeed() > 0) {
+                        player.setYSpeed((short) 0);
+                    }
+                    if (player.getAir()) {
+                        LOGGER.fine(() -> "Monitor landing at (" + player.getX() + "," + player.getY() +
+                            ") distY=" + distY);
+                        player.setGSpeed(player.getXSpeed());
+                        player.setAir(false);
+                        if (!player.getPinballMode()) {
+                            player.setRolling(false);
+                        }
+                        player.setPinballMode(false);
+                        player.setAngle((byte) 0);
+                        player.setGroundMode(GroundMode.GROUND);
+                    }
+                }
+                return new SolidContact(true, false, false, true, false);
+            }
+
+            // SPG: Monitors never push player downward, only to sides
+            // If player X <= monitor X, pop left; otherwise pop right
+            boolean leftSide = playerCenterX <= anchorX;
+
+            boolean pushing = !player.getAir();
+            boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
+            if (apply) {
+                if (movingInto) {
+                    player.setXSpeed((short) 0);
+                    player.setGSpeed((short) 0);
+                }
+                // Pop out to side
+                int pushDist = leftSide ? -absDistX : absDistX;
+                player.setCentreX((short) (playerCenterX + pushDist));
+            }
+            return new SolidContact(false, true, false, false, pushing);
         }
 
         private SolidContact resolveSlopedContact(AbstractPlayableSprite player, int anchorX, int anchorY, int halfWidth,

@@ -225,6 +225,10 @@ public class PlayableSpriteMovement extends
 			doWallCollision(sprite);
 		}
 
+		// ROM order: Sonic_LevelBound is called BEFORE ObjectMove
+		// It uses predictive position (x_pos + x_vel) to check boundaries
+		doLevelBoundary(sprite);
+
 		// Now, move the sprite as per the air movement or GSpeed rules:
 		sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
 
@@ -233,9 +237,6 @@ public class PlayableSpriteMovement extends
 		if (inAir) {
 			applyAirGravity(sprite);
 		}
-
-		// Enforce level boundaries (ROM: Sonic_LevelBound)
-		doLevelBoundary(sprite);
 
 		// Has the sprite slowed down enough to stop rolling? Do we need to start
 		// rolling?
@@ -433,14 +434,16 @@ public class PlayableSpriteMovement extends
 
 	/**
 	 * Enforces level boundaries, preventing Sonic from leaving the playable area.
-	 * ROM: Sonic_LevelBound (s2.asm:36890-36988)
+	 * ROM: Sonic_LevelBound (s2.asm:36890-36944)
 	 *
-	 * The original game calculates boundaries as:
-	 * - Left: Camera_Min_X_pos + 16
-	 * - Right: Camera_Max_X_pos + screen_width - 24 (+ 64 if not in boss fight)
+	 * Key ROM behaviors:
+	 * 1. Uses Camera_Min_X/Max_X (not level bounds) - these can be locked by signpost/boss
+	 * 2. Calculates predictive position: x_pos + x_vel BEFORE movement is applied
+	 * 3. Only adds +64 right buffer when Current_Boss_ID == 0
+	 * 4. Checks bottom boundary and kills player if y_pos > Camera_Max_Y + 224
 	 *
-	 * When a boundary is hit:
-	 * - X position is clamped to the boundary
+	 * When a side boundary is hit:
+	 * - X position is clamped to the boundary value
 	 * - X subpixel is cleared
 	 * - X velocity is zeroed
 	 * - Ground speed (inertia) is zeroed
@@ -448,48 +451,55 @@ public class PlayableSpriteMovement extends
 	 * @param sprite The player sprite to check
 	 */
 	private void doLevelBoundary(AbstractPlayableSprite sprite) {
-		// Get the LEVEL's boundaries, not the camera's current limits
-		// (camera limits can be temporarily locked by signpost, boss arenas, etc.)
-		uk.co.jamesj999.sonic.level.LevelManager levelManager =
-				uk.co.jamesj999.sonic.level.LevelManager.getInstance();
-		uk.co.jamesj999.sonic.level.Level level = levelManager.getCurrentLevel();
-		if (level == null) {
-			return;
-		}
-
-		short playerX = sprite.getX();
+		Camera camera = Camera.getInstance();
 
 		// ROM constants for boundary calculation
-		// Screen width is 320, Sonic's width is ~24 for boundary purposes
 		final int SCREEN_WIDTH = 320;
 		final int SONIC_WIDTH = 24;
 		final int LEFT_OFFSET = 16;
-		final int RIGHT_EXTRA_BUFFER = 64; // Added when not in boss fight
+		final int RIGHT_EXTRA_BUFFER = 64; // Only added when not in boss fight
 
-		// Use level's actual boundaries, not camera's (which may be locked)
-		int levelMinX = level.getMinX();
-		int levelMaxX = level.getMaxX();
+		// ROM: Calculate predicted position BEFORE movement
+		// move.l x_pos(a0),d1 / move.w x_vel(a0),d0 / ext.l d0 / asl.l #8,d0 / add.l d0,d1 / swap d1
+		// This is: predicted_x = (x_pos.l + (x_vel << 8)) >> 16 (integer part after adding velocity)
+		int xTotal = (sprite.getX() * 256) + (sprite.getXSubpixel() & 0xFF);
+		xTotal += sprite.getXSpeed();
+		int predictedX = xTotal / 256;
 
-		// Calculate left boundary: Level_Min_X + 16
-		// This prevents walking off the left edge of the level
-		int leftBoundary = levelMinX + LEFT_OFFSET;
+		// ROM: Use Camera_Min_X_pos and Camera_Max_X_pos (which can be locked by signpost/boss)
+		int cameraMinX = camera.getMinX();
+		int cameraMaxX = camera.getMaxX();
 
-		// Calculate right boundary: Level_Max_X + screen_width - Sonic_width + buffer
-		// The +64 buffer allows running past camera scroll limit when not in boss
-		// TODO: Check Current_Boss_ID and remove buffer during boss fights
-		int rightBoundary = levelMaxX + SCREEN_WIDTH - SONIC_WIDTH + RIGHT_EXTRA_BUFFER;
+		// Calculate left boundary: Camera_Min_X + 16
+		int leftBoundary = cameraMinX + LEFT_OFFSET;
 
-		// Check left boundary
-		if (playerX < leftBoundary) {
+		// Calculate right boundary: Camera_Max_X + screen_width - Sonic_width
+		int rightBoundary = cameraMaxX + SCREEN_WIDTH - SONIC_WIDTH;
+
+		// ROM: Only add +64 buffer when not in boss fight (Current_Boss_ID == 0)
+		if (!GameServices.gameState().isBossFightActive()) {
+			rightBoundary += RIGHT_EXTRA_BUFFER;
+		}
+
+		// Check left boundary (ROM: cmp.w d1,d0 / bhi.s Sonic_Boundary_Sides)
+		if (predictedX < leftBoundary) {
 			sprite.setX((short) leftBoundary); // setX also clears subpixel
 			sprite.setXSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
 		}
-		// Check right boundary
-		else if (playerX > rightBoundary) {
+		// Check right boundary (ROM: cmp.w d1,d0 / bls.s Sonic_Boundary_Sides)
+		else if (predictedX > rightBoundary) {
 			sprite.setX((short) rightBoundary); // setX also clears subpixel
 			sprite.setXSpeed((short) 0);
 			sprite.setGSpeed((short) 0);
+		}
+
+		// ROM: Sonic_Boundary_CheckBottom - check if fallen below camera bounds
+		// move.w (Camera_Max_Y_pos).w,d0 / addi.w #224,d0 / cmp.w y_pos(a0),d0 / blt.s Sonic_Boundary_Bottom
+		int bottomBoundary = camera.getMaxY() + 224;
+		if (sprite.getY() > bottomBoundary) {
+			// ROM: JmpTo_KillCharacter - player has fallen off the level
+			sprite.applyPitDeath();
 		}
 	}
 
@@ -679,12 +689,11 @@ public class PlayableSpriteMovement extends
 			}
 
 			if (collision) {
-				// Only apply position correction if actually penetrating
+				// Apply position correction if actually penetrating
+				// ROM: sub.w d1,x_pos (left wall) / add.w d1,x_pos (right wall)
+				// Uses raw sensor distance with no extra offset
 				if (distance < 0) {
-					// Add a 1px buffer to prevent sticking to walls
-					SensorResult adjusted = new SensorResult(lowestResult.angle(), (byte) (distance - 1),
-							lowestResult.tileId(), lowestResult.direction());
-					moveForSensorResult(sprite, adjusted);
+					moveForSensorResult(sprite, lowestResult);
 				}
 				// Zero velocities to stop movement into wall
 				sprite.setXSpeed((short) 0);
@@ -743,25 +752,14 @@ public class PlayableSpriteMovement extends
 				}
 			}
 		} else {
-			// Use smarter sensor selection for grounded collision on curves.
-			// This prevents getting stuck on convex upward slopes while rolling.
-			SensorResult bestResult = selectBestGroundSensor(results);
+			// ROM ACCURACY: AnglePos simply selects the sensor with the smaller distance.
+			// See docs/sonic2_rev01_player_collision_sensors.md section on AnglePos:
+			// "It selects the closer surface (the smaller distance), adopts the
+			// corresponding angle, and returns the chosen distance in d1."
 
-			// ROM ACCURACY FIX: AnglePos uses dynamic terrain glue threshold.
-			// ROM: threshold = min(abs(x_vel_pixels) + 4, 14) where x_vel_pixels is high byte of xSpeed
-			// At slow speeds (0-10 px/f), threshold is 4-14 pixels.
-			// At high speeds, threshold maxes out at 14 pixels (0x0E).
-			// Using a fixed 14 keeps the player "glued" to curves longer at slow speeds,
-			// causing different detachment points (later launches from curves).
-			int xVelPixels = Math.abs(sprite.getXSpeed() >> 8);
-			int threshold = Math.min(xVelPixels + 4, 14);
-
-			// CRITICAL: For the detachment check, use lowestResult (sensor with the BEST
-			// contact), not just the curve-selected sensor. This ensures Sonic stays
-			// grounded when transitioning from flat ground to downward slopes, where the
-			// trailing sensor may still have excellent contact even if the leading sensor
-			// is detecting the slope further away.
-			// Note: lowestResult is already computed at the start of this method.
+			// ROM ACCURACY: AnglePos uses fixed 0x0E threshold for ground glue.
+			// If distance >= 14 (0x0E), treat as "no floor" - Sonic detaches from ground.
+			int threshold = 14;
 
 			// BUT: if player is standing on a solid object (bridge, platform),
 			// don't set to air based on terrain alone.
@@ -776,12 +774,12 @@ public class PlayableSpriteMovement extends
 				sprite.setAir(true);
 				return;
 			}
-			// Use bestResult (curve-aware selection) for position and angle updates
-			moveForSensorResult(sprite, bestResult);
-			if (bestResult.angle() == (byte) 0xFF) {
+			// Use lowestResult (closest sensor) for position and angle updates
+			moveForSensorResult(sprite, lowestResult);
+			if (lowestResult.angle() == (byte) 0xFF) {
 				sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
 			} else {
-				sprite.setAngle(bestResult.angle());
+				sprite.setAngle(lowestResult.angle());
 			}
 			updateGroundMode(sprite);
 		}
@@ -1479,64 +1477,6 @@ public class PlayableSpriteMovement extends
 			}
 		}
 		return lowestResult;
-	}
-
-	/**
-	 * Selects the best sensor result for grounded terrain collision on curves.
-	 * On convex curves (like upward slopes that get steeper), the standard
-	 * "lowest distance" approach can cause oscillation. This method improves
-	 * behavior by considering the direction of movement when sensors detect
-	 * significantly different terrain angles.
-	 *
-	 * @param results The two ground sensor results [left, right]
-	 * @return The best sensor result to use for collision
-	 */
-	private SensorResult selectBestGroundSensor(SensorResult[] results) {
-		SensorResult left = results[0];
-		SensorResult right = results[1];
-
-		// If only one sensor has a result, use it
-		if (left == null) return right;
-		if (right == null) return left;
-
-		// Check if both sensors are detecting terrain (within glue distance)
-		boolean leftOnTerrain = left.distance() < 14;
-		boolean rightOnTerrain = right.distance() < 14;
-
-		// If only one is on terrain, use it
-		if (leftOnTerrain && !rightOnTerrain) return left;
-		if (rightOnTerrain && !leftOnTerrain) return right;
-
-		// If neither on terrain, use lowest (standard behavior)
-		if (!leftOnTerrain && !rightOnTerrain) {
-			return findLowestSensorResult(results);
-		}
-
-		// Both sensors on terrain - check for significant angle difference (curve)
-		int leftAngle = left.angle() & 0xFF;
-		int rightAngle = right.angle() & 0xFF;
-		int angleDiff = Math.abs(leftAngle - rightAngle);
-		// Handle angle wraparound (e.g., 250 vs 10 should be diff of 16, not 240)
-		if (angleDiff > 128) angleDiff = 256 - angleDiff;
-
-		// If angles are similar (< 16 hex units ≈ 22°), use standard lowest approach
-		if (angleDiff < 16) {
-			return findLowestSensorResult(results);
-		}
-
-		// Significant curve detected - prefer sensor in direction of movement
-		// This prevents getting stuck on convex curves while rolling
-		short gSpeed = sprite.getGSpeed();
-		if (gSpeed > 0) {
-			// Moving right - prefer right sensor (front sensor)
-			return right;
-		} else if (gSpeed < 0) {
-			// Moving left - prefer left sensor (front sensor)
-			return left;
-		}
-
-		// Standing still - use lowest (standard)
-		return findLowestSensorResult(results);
 	}
 
 	private void moveForSensorResult(AbstractPlayableSprite sprite, SensorResult result) {

@@ -72,15 +72,15 @@ public class Sonic extends AbstractPlayableSprite {
 
 	@Override
 	protected void createSensorLines() {
-		// Ground Sensors
+		// Ground Sensors - Y offset matches standYRadius (0x13 = 19)
 		groundSensors = new Sensor[2];
-		groundSensors[0] = new GroundSensor(this, Direction.DOWN, (byte) -9, (byte) 20, true);
-		groundSensors[1] = new GroundSensor(this, Direction.DOWN, (byte) 9, (byte) 20, true);
+		groundSensors[0] = new GroundSensor(this, Direction.DOWN, (byte) -9, (byte) 19, true);
+		groundSensors[1] = new GroundSensor(this, Direction.DOWN, (byte) 9, (byte) 19, true);
 
-		// Ceiling Sensors
+		// Ceiling Sensors - Y offset matches -standYRadius (-0x13 = -19)
 		ceilingSensors = new Sensor[2];
-		ceilingSensors[0] = new GroundSensor(this, Direction.UP, (byte) -9, (byte) -20, false);
-		ceilingSensors[1] = new GroundSensor(this, Direction.UP, (byte) 9, (byte) -20, false);
+		ceilingSensors[0] = new GroundSensor(this, Direction.UP, (byte) -9, (byte) -19, false);
+		ceilingSensors[1] = new GroundSensor(this, Direction.UP, (byte) 9, (byte) -19, false);
 
 		// Push Sensors
 		pushSensors = new Sensor[2];
