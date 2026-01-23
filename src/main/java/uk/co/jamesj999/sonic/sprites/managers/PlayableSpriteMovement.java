@@ -1067,17 +1067,10 @@ public class PlayableSpriteMovement extends
 				// ROM: Skid triggers when speed >= 0x400 (1024 subpixels) and pressing opposite direction
 				if (!sprite.getRolling() && gSpeed <= -4 * 256) {
 					if (!sprite.getSkidding()) {
-<<<<<<< HEAD
-						// First frame of skidding - play sound and set state
-						audioManager.playSfx(GameSound.SKID);
-						sprite.setSkidding(true);
-					}
-=======
 						sprite.setSkidding(true);
 					}
 					// ROM: Sound is played every frame while skidding - SMPS driver handles not restarting
 					audioManager.playSfx(GameSound.SKID);
->>>>>>> f53c1fd6 (Fix Grounder's Rock Ruckus)
 					// ROM: Spawn dust every 4 frames while skidding (timer counts 3,2,1,0,-1 then resets)
 					int dustTimer = sprite.getSkidDustTimer() - 1;
 					if (dustTimer < 0) {
