@@ -49,21 +49,12 @@ public class VirtualSynthesizer implements Synthesizer {
 
         ym.renderStereo(scratchLeft, scratchRight);
 
-        // Attenuate YM/DAC by 50% (>> 1)
-        // YM Peak ~24k -> ~12k
-        for (int i = 0; i < frames; i++) {
-            scratchLeft[i] >>= 1;
-            scratchRight[i] >>= 1;
-        }
+        // GPGX-style: FM output is clipped to ±8191 internally.
+        // No output gain applied here - volume issues are in the EG/feedback implementation.
 
         psg.renderStereo(scratchLeftPsg, scratchRightPsg);
 
-        // Attenuate PSG by 50% (>> 1) to match SMPSPlay levels.
-        // SMPSPlay uses volume 0x80 for PSG vs 0x100 for YM2612.
-        // PsgChip is Bipolar +/- 1.0 (Max Table 4096)
-        // PSG Peak ~4k -> ~2k after attenuation.
-        // FM Peak ~12k (after YM attenuation above).
-        // Ratio FM:PSG is now ~6:1, matching SMPSPlay's 2:1 volume ratio.
+        // Mix PSG at ~50% level relative to FM
         for (int i = 0; i < frames; i++) {
             scratchLeft[i] += scratchLeftPsg[i] >> 1;
             scratchRight[i] += scratchRightPsg[i] >> 1;

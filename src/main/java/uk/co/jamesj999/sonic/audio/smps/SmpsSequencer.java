@@ -12,6 +12,11 @@ import java.util.logging.Logger;
 
 public class SmpsSequencer implements AudioStream {
     private static final Logger LOGGER = Logger.getLogger(SmpsSequencer.class.getName());
+
+    // Debug flag for tracing Signpost SFX (0xCF) - set to true to enable verbose logging
+    private static final boolean DEBUG_SIGNPOST_TRACE = false;
+    private static final int SIGNPOST_SFX_ID = 0xCF;
+
     private final AbstractSmpsData smpsData;
     private AbstractSmpsData fallbackVoiceData;
     private final byte[] data;
@@ -106,13 +111,9 @@ public class SmpsSequencer implements AudioStream {
             0x01B, 0x01A, 0x018, 0x017, 0x016, 0x015, 0x013, 0x012, 0x011, 0x010
     };
 
-    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3,
-    // Op4) mapped to bits 0-3.
-    // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
-    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3,
-    // Op4) mapped to bits 0-3.
-    // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
-    private static final int[] ALGO_OUT_MASK = { 0x08, 0x08, 0x08, 0x08, 0x0A, 0x0E, 0x0E, 0x0F };
+    // Carrier bitmask per YM2612 algorithm in SMPS slot order:
+    // Op1, Op3, Op2, Op4 mapped to bits 0-3 (matches zVolTLMaskTbl).
+    private static final int[] ALGO_OUT_MASK = { 0x08, 0x08, 0x08, 0x08, 0x0C, 0x0E, 0x0E, 0x0F };
 
     public enum TrackType {
         FM, PSG, DAC
@@ -189,6 +190,12 @@ public class SmpsSequencer implements AudioStream {
             SmpsSequencerConfig config) {
         this.smpsData = smpsData;
         this.isSfx = smpsData instanceof SmpsSfxData;
+        if (DEBUG_SIGNPOST_TRACE) {
+            System.out.println("[DEBUG] Sequencer created: id=0x" + Integer.toHexString(smpsData.getId())
+                    + " (decimal=" + smpsData.getId() + ") isSfx=" + isSfx
+                    + " class=" + smpsData.getClass().getSimpleName()
+                    + " SIGNPOST_SFX_ID=0x" + Integer.toHexString(SIGNPOST_SFX_ID));
+        }
         this.data = smpsData.getData();
         this.synth = synth;
         this.config = Objects.requireNonNull(config, "config");
@@ -1283,6 +1290,12 @@ public class SmpsSequencer implements AudioStream {
                 synth.writeFm(this, 0, 0x28, 0xF0 | chVal); // Key On after latching frequency/pan
                 LOGGER.fine("FM KEY ON: chVal=" + Integer.toHexString(chVal) + " port=" + port + " fnum="
                         + Integer.toHexString(fnum) + " block=" + block + " note=" + Integer.toHexString(t.note));
+                // Debug trace for Signpost SFX
+                if (DEBUG_SIGNPOST_TRACE && smpsData.getId() == SIGNPOST_SFX_ID) {
+                    System.out.println("[SIGNPOST] KEY ON: ch=" + t.channelId + " (FM" + (t.channelId + 1)
+                            + ") note=0x" + Integer.toHexString(t.note) + " vol=" + t.volumeOffset
+                            + " duration=" + t.duration + " isSfx=" + isSfx);
+                }
             }
             t.tieNext = false;
 
@@ -1392,7 +1405,40 @@ public class SmpsSequencer implements AudioStream {
 
     private void refreshVolume(Track t) {
         if (t.type == TrackType.FM) {
-            refreshInstrument(t);
+            // Z80 driver zSetChanVol: Only update TL registers for carriers, NO key-off.
+            // The original driver does NOT reload the entire voice or key-off when
+            // smpsAlterVol is called - it only writes the carrier TL registers.
+            // Calling refreshInstrument here was causing key-off during volume fades,
+            // cutting off notes prematurely and causing hollow/flanging artifacts.
+            if (t.voiceData == null || t.voiceData.length < 25) {
+                return; // Need voice data with TL bytes
+            }
+
+            int algo = t.voiceData[0] & 0x07;
+            int mask = ALGO_OUT_MASK[algo];
+            int volume = t.volumeOffset & 0xFF;
+            // Z80 zSetChanVol: if volume has bit7 set, skip updating TLs.
+            if ((volume & 0x80) != 0) {
+                return;
+            }
+
+            int hwCh = t.channelId;
+            int port = (hwCh < 3) ? 0 : 1;
+            int ch = hwCh % 3;
+
+            // Voice TL bytes are at indices 21-24 in SMPS order: Op1, Op3, Op2, Op4.
+            // Must use same swapped mapping as setInstrument: {21, 23, 22, 24}.
+            int[] tlIndices = {21, 23, 22, 24};
+            for (int slot = 0; slot < 4; slot++) {
+                if ((mask & (1 << slot)) != 0) {
+                    int tlIdx = tlIndices[slot];
+                    int tl = (t.voiceData[tlIdx] & 0x7F) + volume;
+                    tl &= 0x7F; // wrap like Z80 (7-bit)
+
+                    // Write TL register: 0x40 + slot*4 + ch
+                    synth.writeFm(this, port, 0x40 + slot * 4 + ch, tl);
+                }
+            }
         } else if (t.type == TrackType.PSG) {
             if (t.envAtRest) {
                 return;
@@ -1505,17 +1551,10 @@ public class SmpsSequencer implements AudioStream {
         if (tlBase >= 0) {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
-            // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
-            // Voice data is in Slot Order (Op1, Op3, Op2, Op4). Identity mapping.
-            // Voice TL bytes are stored in SMPS slot order: Op1, Op3, Op2, Op4.
-            // Mask bits are YM operator order (Op1, Op2, Op3, Op4); TL bytes are SMPS order
-            // (Op1, Op3, Op2, Op4).
-            // Map mask bit -> TL index offset.
-            int[] opMap = { 0, 2, 1, 3 };
-
-            for (int op = 0; op < 4; op++) {
-                if ((mask & (1 << op)) != 0) {
-                    int idx = tlBase + opMap[op];
+            // Mask bits and TL bytes are both in SMPS slot order: Op1, Op3, Op2, Op4.
+            for (int slot = 0; slot < 4; slot++) {
+                if ((mask & (1 << slot)) != 0) {
+                    int idx = tlBase + slot;
                     int tl = (voice[idx] & 0x7F) + t.volumeOffset;
                     tl &= 0x7F; // wrap like the Z80 interpreter (7-bit)
                     voice[idx] = (byte) tl;

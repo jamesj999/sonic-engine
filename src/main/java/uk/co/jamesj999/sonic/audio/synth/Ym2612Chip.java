@@ -9,19 +9,26 @@ import uk.co.jamesj999.sonic.audio.smps.DacData;
  */
 public class Ym2612Chip {
     private static final double CLOCK = 7670453.0;
-    private static final double SAMPLE_RATE = 44100.0;
+    private static final double OUTPUT_RATE = 44100.0;
+    // GPGX: Internal rate is CLOCK/144 (~53267 Hz)
+    private static final double INTERNAL_RATE = CLOCK / 144.0;  // 53267.034...
+    // Resampling ratio for converting internal to output rate
+    private static final double RESAMPLE_RATIO = INTERNAL_RATE / OUTPUT_RATE;  // ~1.208
 
     // Constants from ym2612.c
     private static final int SIN_HBITS = 12;
     private static final int SIN_LBITS = 14; // 26 - SIN_HBITS
+    // Genesis-Plus-GX SIN_BITS for feedback calculation (different from SIN_HBITS)
+    private static final int SIN_BITS = 10;
     private static final int ENV_HBITS = 12;
     private static final int ENV_LBITS = 16; // 28 - ENV_HBITS
-    private static final int LFO_HBITS = 10;
-    private static final int LFO_LBITS = 18; // 28 - LFO_HBITS
+    // GPGX: 128-step inverted triangle LFO instead of 1024-step sine
+    private static final int LFO_HBITS = 7;  // 128 = 2^7
+    private static final int LFO_LBITS = 21; // 28 - LFO_HBITS
 
     private static final int SIN_LEN = 1 << SIN_HBITS; // 4096
     private static final int ENV_LEN = 1 << ENV_HBITS; // 4096
-    private static final int LFO_LEN = 1 << LFO_HBITS; // 1024
+    private static final int LFO_LEN = 1 << LFO_HBITS; // 128 (GPGX-style)
 
     private static final int TL_LEN = ENV_LEN * 3;
 
@@ -38,11 +45,25 @@ public class Ym2612Chip {
 
     // Output bits logic
     private static final int MAX_OUT_BITS = SIN_HBITS + SIN_LBITS + 2; // 28
-    private static final int OUT_BITS = 14; // OUTPUT_BITS - 2 = 16 - 2 = 14
-    private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 14
-    private static final int LIMIT_CH_OUT = (int) ((1 << OUT_BITS) * 1.5) - 1;
+    private static final int OUT_BITS = 13; // Adjusted for GPGX-style ±8191 clipping
+    private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 15
+    // GPGX-style output clipping: ±8191 (asymmetric: +8191 / -8192)
+    // With OUT_SHIFT=15, max pre-clip output is ~8191, matching the clip limit.
+    private static final int LIMIT_CH_OUT_POS = 8191;
+    private static final int LIMIT_CH_OUT_NEG = -8192;
 
     private static final int PG_CUT_OFF = (int) (78.0 / ENV_STEP);
+
+    // GPGX ENV_QUIET threshold: when envelope exceeds this, operator output is forced to 0.
+    // This causes feedback buffer to naturally decay when notes fade out.
+    // GPGX uses 0x380 (896) in their 10-bit scale (max ~2039).
+    // Our volOut scale is (volume << 2) + tll where:
+    //   - volume << 2 gives 0-4092
+    //   - tll = tl << 5 gives 0-4064
+    //   - max volOut ≈ 8156
+    // Scale factor: 896/2039 ≈ 0.44 → 0.44 * 8156 ≈ 3589
+    // We use PG_CUT_OFF (3328) as the threshold since that's where TL_TAB produces zero.
+    private static final int ENV_QUIET = PG_CUT_OFF;
 
     // Rate constants
     private static final int AR_RATE = 399128;
@@ -66,6 +87,55 @@ public class Ym2612Chip {
     private static final int[] LFO_ENV_TAB = new int[LFO_LEN];
     private static final int[] LFO_FREQ_TAB = new int[LFO_LEN];
     private static final int[] LFO_INC_TAB = new int[8];
+
+    // GPGX EG (Envelope Generator) tables for 3-sample stepping
+    // EG_INC: Envelope increment table indexed by rate_index + ((egCnt >> shift) & 7)
+    // Each row of 8 values corresponds to a rate level
+    private static final int[] EG_INC = {
+        // Rate 0-3 (0-3): no increment
+        0, 0, 0, 0, 0, 0, 0, 0,
+        // Rate 4-7 (4-7): cycle 0 only
+        0, 1, 0, 1, 0, 1, 0, 1,
+        // Rate 8-11 (8-11): cycle 0,4
+        0, 1, 0, 1, 0, 1, 1, 1,
+        // Rate 12-15 (12-15)
+        0, 1, 1, 1, 0, 1, 1, 1,
+        // Rate 16-19 (16-19)
+        1, 1, 1, 1, 1, 1, 1, 1,
+        // Rate 20-23 (20-23)
+        1, 1, 1, 2, 1, 1, 1, 2,
+        // Rate 24-27 (24-27)
+        1, 2, 1, 2, 1, 2, 1, 2,
+        // Rate 28-31 (28-31)
+        1, 2, 2, 2, 1, 2, 2, 2,
+        // Rate 32-35 (32-35)
+        2, 2, 2, 2, 2, 2, 2, 2,
+        // Rate 36-39 (36-39)
+        2, 2, 2, 4, 2, 2, 2, 4,
+        // Rate 40-43 (40-43)
+        2, 4, 2, 4, 2, 4, 2, 4,
+        // Rate 44-47 (44-47)
+        2, 4, 4, 4, 2, 4, 4, 4,
+        // Rate 48-51 (48-51)
+        4, 4, 4, 4, 4, 4, 4, 4,
+        // Rate 52-55 (52-55)
+        4, 4, 4, 8, 4, 4, 4, 8,
+        // Rate 56-59 (56-59)
+        4, 8, 4, 8, 4, 8, 4, 8,
+        // Rate 60-63 (60-63): max rate
+        4, 8, 8, 8, 4, 8, 8, 8,
+        // Rate 64+ (64-67): instant attack
+        8, 8, 8, 8, 8, 8, 8, 8,
+        // Rate 68-71
+        8, 8, 8, 8, 8, 8, 8, 8,
+        // Rate 72+ (clamped)
+        8, 8, 8, 8, 8, 8, 8, 8
+    };
+
+    // EG_RATE_SELECT: Maps rate value (0-127) to base index in EG_INC (multiply by 8)
+    private static final int[] EG_RATE_SELECT = new int[128];
+    // EG_RATE_SHIFT: Maps rate value (0-127) to shift for egCnt gating
+    private static final int[] EG_RATE_SHIFT = new int[128];
 
     // Reference tables from ym2612.c
     private static final int[] DT_DEF_TAB = {
@@ -94,7 +164,8 @@ public class Ym2612Chip {
             LFO_FMS_BASE * 12, LFO_FMS_BASE * 24
     };
 
-    private static final double YM2612_FREQUENCY = (CLOCK / SAMPLE_RATE) / 144.0;
+    // GPGX: When running at internal rate, frequency multiplier is 1.0
+    private static final double YM2612_FREQUENCY = 1.0;
     private static final int MAX_OUT = (1 << MAX_OUT_BITS) - 1;
     // Operator slot order matches ym2612.c (S0,S1,S2,S3) mapping to ops[0,2,1,3]
     private static final int[] OP_TO_SLOT = {0, 2, 1, 3};
@@ -128,17 +199,24 @@ public class Ym2612Chip {
         SIN_TAB[0] = PG_CUT_OFF;
         SIN_TAB[SIN_LEN / 2] = PG_CUT_OFF;
 
-        // LFO Table
-        for (int i = 0; i < LFO_LEN; i++) {
-            double x = StrictMath.sin(2.0 * StrictMath.PI * i / LFO_LEN);
-            x += 1.0;
-            x /= 2.0; // positive only
-            x *= 11.8 / ENV_STEP; // adjusted to MAX envelope modulation
-            LFO_ENV_TAB[i] = (int) x;
+        // GPGX LFO Table: 128-step inverted triangle
+        // LFO_ENV_TAB: AM modulation (0-126, inverted triangle)
+        // LFO_FREQ_TAB: PM modulation (0-31, 4x slower than AM)
+        for (int i = 0; i < LFO_LEN; i++) {  // LFO_LEN = 128
+            // Inverted triangle for AM: 126 -> 0 -> 126
+            if (i < 64) {
+                LFO_ENV_TAB[i] = (63 - i) << 1;  // 126, 124, ... 2, 0
+            } else {
+                LFO_ENV_TAB[i] = (i - 64) << 1;  // 0, 2, 4, ... 124, 126
+            }
 
-            x = StrictMath.sin(2.0 * StrictMath.PI * i / LFO_LEN);
-            x *= (double) ((1 << (LFO_HBITS - 1)) - 1);
-            LFO_FREQ_TAB[i] = (int) x;
+            // PM frequency modulation: triangle, but 4x slower than AM
+            // Values range 0-31 for frequency modulation
+            if (i < 64) {
+                LFO_FREQ_TAB[i] = 32 - (i >> 1);  // 32 -> 0
+            } else {
+                LFO_FREQ_TAB[i] = (i - 64) >> 1;  // 0 -> 31
+            }
         }
 
         // Envelope Table
@@ -209,9 +287,8 @@ public class Ym2612Chip {
             }
         }
 
-        // LFO Inc Table
-        double rate = SAMPLE_RATE;
-        double lfoBase = (double) (1 << (LFO_HBITS + LFO_LBITS)) / rate;
+        // LFO Inc Table - use internal rate for GPGX compatibility
+        double lfoBase = (double) (1 << (LFO_HBITS + LFO_LBITS)) / INTERNAL_RATE;
         LFO_INC_TAB[0] = (int) (3.98 * lfoBase);
         LFO_INC_TAB[1] = (int) (5.56 * lfoBase);
         LFO_INC_TAB[2] = (int) (6.02 * lfoBase);
@@ -220,6 +297,26 @@ public class Ym2612Chip {
         LFO_INC_TAB[5] = (int) (9.63 * lfoBase);
         LFO_INC_TAB[6] = (int) (48.1 * lfoBase);
         LFO_INC_TAB[7] = (int) (72.2 * lfoBase);
+
+        // GPGX EG Rate Tables initialization
+        // Maps rate values to EG_INC indices and shift values for counter gating
+        for (int i = 0; i < 128; i++) {
+            int rate = Math.min(i, 63);  // Clamp to 63
+            if (rate < 4) {
+                // Rates 0-3: no increment
+                EG_RATE_SELECT[i] = 0;
+                EG_RATE_SHIFT[i] = 12;  // Very slow gate (basically never)
+            } else if (rate < 64) {
+                // Rates 4-63: normal range
+                EG_RATE_SELECT[i] = (rate >> 2) * 8;  // Index into EG_INC (8 entries per rate)
+                EG_RATE_SHIFT[i] = 11 - (rate >> 2);  // Shift decreases as rate increases
+                if (EG_RATE_SHIFT[i] < 0) EG_RATE_SHIFT[i] = 0;
+            } else {
+                // Rates 64+: maximum speed
+                EG_RATE_SELECT[i] = 15 * 8;  // Max rate index
+                EG_RATE_SHIFT[i] = 0;
+            }
+        }
     }
 
     private DacData dacData;
@@ -243,6 +340,11 @@ public class Ym2612Chip {
     private static final int HIGHPASS_FRACT = 15;
     private static final int HIGHPASS_SHIFT = 9;
 
+    // Resampling state (internal 53kHz -> output 44.1kHz)
+    private double resampleAccum = 0.0;
+    private int lastLeft = 0, lastRight = 0;
+    private int prevLeft = 0, prevRight = 0;
+
     private int status;
     private int mode;
     private double busyCycles;
@@ -250,7 +352,7 @@ public class Ym2612Chip {
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
     private static final int BUSY_CYCLES_DATA = 47;
-    private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / SAMPLE_RATE;
+    private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / INTERNAL_RATE;
 
     private static final int TIMER_BASE_INT = (int) (YM2612_FREQUENCY * 4096.0);
 
@@ -265,6 +367,9 @@ public class Ym2612Chip {
 
     private int lfoCnt;
     private int lfoInc;
+
+    // GPGX EG counter: 12-bit, cycles 1-4095, skips 0
+    private int egCnt = 1;
 
     private boolean channel3SpecialMode;
 
@@ -287,6 +392,15 @@ public class Ym2612Chip {
         int eCnt;
         int eInc;
         int eCmp;
+
+        // GPGX EG rate cache - precomputed shift/select for each envelope phase
+        int egShAr, egSelAr;    // Attack rate shift/select
+        int egShD1r, egSelD1r;  // Decay1 rate shift/select
+        int egShD2r, egSelD2r;  // Decay2/Sustain rate shift/select
+        int egShRr, egSelRr;    // Release rate shift/select
+        int volume;             // GPGX-style volume (0 = max, 1023 = silent)
+        int volOut;             // GPGX-style cached vol_out = (volume << 2) + tll
+        int slReg;              // Raw 4-bit sustain level register value (0-15)
         EnvState curEnv = EnvState.RELEASE;
 
         int eIncA, eIncD, eIncS, eIncR;
@@ -295,6 +409,11 @@ public class Ym2612Chip {
         int chgEnM = 0;
         boolean amsOn;
         int ams;
+
+        // GPGX-style key flag: tracks whether key is currently pressed,
+        // separate from envelope state. This fixes edge cases where
+        // envelope state alone doesn't properly gate key-on/key-off.
+        boolean key = false;
     }
 
     private static class Channel {
@@ -356,14 +475,22 @@ public class Ym2612Chip {
         lfoCnt = 0;
         lfoInc = 0;
 
+        // Reset GPGX EG counter
+        egCnt = 1;
+
         dacEnabled = false;
         dac_highpass = 0;
+
+        // Reset resampling state
+        resampleAccum = 0.0;
+        lastLeft = lastRight = 0;
+        prevLeft = prevRight = 0;
 
         for (Channel ch : channels) {
             ch.fNum = 0;
             ch.block = 0;
             ch.kCode = 0;
-            ch.feedback = 31;
+            ch.feedback = 31;  // fb=0 means no feedback (large shift effectively disables it)
             ch.algo = 0;
             ch.ams = 0;
             ch.fms = 0;
@@ -383,6 +510,15 @@ public class Ym2612Chip {
                 o.eCmp = 0;
                 o.curEnv = EnvState.RELEASE;
                 o.chgEnM = 0;
+                o.key = false;
+                // GPGX EG state
+                o.volume = 1023;  // Start silent
+                o.volOut = (1023 << 2) + o.tll;  // Cache vol_out
+                o.slReg = 0;      // Sustain level register
+                o.egShAr = o.egSelAr = 0;
+                o.egShD1r = o.egSelD1r = 0;
+                o.egShD2r = o.egSelD2r = 0;
+                o.egShRr = o.egSelRr = 0;
             }
         }
     }
@@ -411,23 +547,38 @@ public class Ym2612Chip {
     }
 
     /**
-     * Force-silence a channel by directly resetting envelope state.
-     * This is used when SFX steals a channel from music to prevent the
-     * "chirp" artifact caused by envelope state persisting across notes.
+     * Force-silence a channel by directly resetting envelope and feedback state.
+     * This is used when SFX steals a channel from music to prevent artifacts
+     * caused by state persisting across notes.
+     *
      * Unlike register writes, this takes effect immediately without needing
      * audio samples to be rendered.
+     *
+     * The feedback buffer (opOut) is reset to ensure multi-channel SFX
+     * (like the Signpost which uses FM4+FM5) start with identical state.
+     * Without this reset, residual feedback from different music channels
+     * causes the SFX channels to have different waveforms, creating
+     * a phaser/chorus effect.
      */
     public void forceSilenceChannel(int chIdx) {
         if (chIdx < 0 || chIdx >= 6) return;
         Channel ch = channels[chIdx];
+
+        // Reset feedback buffer to ensure clean, identical state for multi-channel SFX
+        ch.opOut[0] = 0;
+        ch.opOut[1] = 0;
+
         for (int op = 0; op < 4; op++) {
             Operator sl = ch.ops[op];
             // Fully reset envelope to silent state
             sl.eCnt = ENV_END;
             sl.eInc = 0;
             sl.eCmp = ENV_END + 1;
-            sl.curEnv = EnvState.RELEASE;
+            sl.curEnv = EnvState.IDLE;
             sl.chgEnM = 0xFFFFFFFF; // Allow next keyOn to proceed
+            sl.key = false; // Reset key flag for GPGX-style key handling
+            sl.volume = 1023;  // GPGX: silent
+            sl.volOut = (1023 << 2) + sl.tll;  // Update cache
         }
     }
 
@@ -551,6 +702,8 @@ public class Ym2612Chip {
                 sl.tl = val & 0x7F;
                 if ((ENV_HBITS - 7) < 0) sl.tll = sl.tl >> (7 - ENV_HBITS);
                 else sl.tll = sl.tl << (ENV_HBITS - 7);
+                // GPGX: update vol_out cache when TL changes
+                sl.volOut = (sl.volume << 2) + sl.tll;
                 break;
             case 0x50:
                 sl.ar = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
@@ -558,6 +711,7 @@ public class Ym2612Chip {
                 ch.ops[0].fInc = -1;
                 sl.eIncA = AR_TAB[sl.ar + sl.ksr];
                 if (sl.curEnv == EnvState.ATTACK) sl.eInc = sl.eIncA;
+                updateEgRateCache(sl);
                 break;
             case 0x60:
                 sl.amsOn = (val & 0x80) != 0;
@@ -565,17 +719,21 @@ public class Ym2612Chip {
                 sl.d1r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
                 sl.eIncD = DR_TAB[sl.d1r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY1) sl.eInc = sl.eIncD;
+                updateEgRateCache(sl);
                 break;
             case 0x70:
                 sl.d2r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
                 sl.eIncS = DR_TAB[sl.d2r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY2) sl.eInc = sl.eIncS;
+                updateEgRateCache(sl);
                 break;
             case 0x80:
-                sl.d1l = SL_TAB[val >> 4];
+                sl.slReg = (val >> 4) & 0x0F;  // Store raw 4-bit SL value
+                sl.d1l = SL_TAB[sl.slReg];
                 sl.rr = ((val & 0xF) << 2) + 2;
                 sl.eIncR = DR_TAB[sl.rr + sl.ksr];
                 if (sl.curEnv == EnvState.RELEASE) sl.eInc = sl.eIncR;
+                updateEgRateCache(sl);
                 break;
             case 0x90:
                 sl.ssgEg = val & 0x0F;
@@ -622,10 +780,11 @@ public class Ym2612Chip {
             case 0xB0:
                 ch.algo = val & 7;
                 int fb = (val >> 3) & 7;
-                // When feedback is 0 (disabled), use shift=31 to effectively disable it.
-                // For non-zero feedback (1-7), use 9-fb as shift amount (lower = more feedback).
-                // This matches libvgm's handling for games like Thunder Force 4, Gynoug, Aladdin.
-                ch.feedback = (fb != 0) ? (9 - fb) : 31;
+                // GPGX feedback formula: phase += (out << (9 - fb)) >> 16 = out >> (16 - fb)
+                // For fb=7 (max): shift by 9
+                // For fb=1 (min): shift by 15
+                // For fb=0: disabled (use large shift to zero result)
+                ch.feedback = (fb != 0) ? (16 - fb) : 31;
                 break;
             case 0xB4:
                 ch.pan = (val >> 6) & 3;
@@ -656,7 +815,36 @@ public class Ym2612Chip {
                 if (sl.curEnv == EnvState.DECAY2) sl.eInc = sl.eIncS;
                 else if (sl.curEnv == EnvState.RELEASE) sl.eInc = sl.eIncR;
             }
+
+            // Update GPGX EG rate cache
+            updateEgRateCache(sl);
         }
+    }
+
+    /**
+     * Update GPGX-style EG rate cache for an operator.
+     * Called when ar, d1r, d2r, rr, or ksr changes.
+     */
+    private void updateEgRateCache(Operator sl) {
+        // Attack rate
+        int rateAr = Math.min(63, sl.ar + sl.ksr);
+        sl.egShAr = EG_RATE_SHIFT[rateAr];
+        sl.egSelAr = EG_RATE_SELECT[rateAr];
+
+        // Decay1 rate
+        int rateD1r = Math.min(63, sl.d1r + sl.ksr);
+        sl.egShD1r = EG_RATE_SHIFT[rateD1r];
+        sl.egSelD1r = EG_RATE_SELECT[rateD1r];
+
+        // Decay2/Sustain rate
+        int rateD2r = Math.min(63, sl.d2r + sl.ksr);
+        sl.egShD2r = EG_RATE_SHIFT[rateD2r];
+        sl.egSelD2r = EG_RATE_SELECT[rateD2r];
+
+        // Release rate
+        int rateRr = Math.min(63, sl.rr + sl.ksr);
+        sl.egShRr = EG_RATE_SHIFT[rateRr];
+        sl.egSelRr = EG_RATE_SELECT[rateRr];
     }
 
     private void calcFIncChannel(Channel ch) {
@@ -680,37 +868,45 @@ public class Ym2612Chip {
 
     private void keyOn(Channel ch, int idx) {
         Operator sl = ch.ops[idx];
-        if (sl.curEnv == EnvState.RELEASE) {
+        // GPGX-style: use separate key flag instead of checking envelope state.
+        // This properly gates key-on to only trigger on 0->1 transitions.
+        if (!sl.key) {
+            // Restart phase generator (GPGX: SLOT->phase = 0)
             sl.fCnt = 0;
-            int decayAtt = DECAY_TO_ATTACK[ENV_TAB[sl.eCnt >> ENV_LBITS]] + ENV_ATTACK;
-            sl.eCnt = decayAtt & sl.chgEnM;
+
+            // Reset SSG-EG inversion (GPGX: SLOT->ssgn = 0)
+            // Our SSG-EG uses different approach but reset is still needed
+            sl.ssgEg &= 0x0F; // Keep SSG-EG mode, clear any runtime state
+
+            // GPGX: Start attack from current volume level (decay-to-attack behavior)
+            // Volume is already set from previous note, so attack will ramp from there
+            sl.curEnv = EnvState.ATTACK;
+
+            // Keep legacy eCnt in sync for any code that still uses it
+            sl.eCnt = ENV_ATTACK;
             sl.chgEnM = 0xFFFFFFFF;
             sl.eInc = sl.eIncA;
             sl.eCmp = ENV_DECAY;
-            sl.curEnv = EnvState.ATTACK;
-
-            // Reset feedback history when operator 0 (feedback operator) keys on.
-            // This ensures multi-channel SFX like Signpost (0xCF) that have staggered
-            // note starts get clean feedback state for each note. Without this,
-            // channels that rest before their first note accumulate feedback values
-            // during the rest period, causing phase/reverb artifacts.
-            if (idx == 0) {
-                ch.opOut[0] = 0;
-                ch.opOut[1] = 0;
-            }
+            // Note: Do NOT reset opOut (feedback history) here.
+            // libvgm does not clear feedback on keyOn.
         }
+        sl.key = true;
     }
 
     private void keyOff(Channel ch, int idx) {
         Operator sl = ch.ops[idx];
-        if (sl.curEnv != EnvState.RELEASE) {
-            if (sl.eCnt < ENV_DECAY) {
-                sl.eCnt = (ENV_TAB[sl.eCnt >> ENV_LBITS] << ENV_LBITS) + ENV_DECAY;
+        // GPGX-style: only transition to RELEASE if key was on and not already releasing
+        if (sl.key) {
+            if (sl.curEnv != EnvState.RELEASE) {
+                if (sl.eCnt < ENV_DECAY) {
+                    sl.eCnt = (ENV_TAB[sl.eCnt >> ENV_LBITS] << ENV_LBITS) + ENV_DECAY;
+                }
+                sl.eInc = sl.eIncR;
+                sl.eCmp = ENV_END;
+                sl.curEnv = EnvState.RELEASE;
             }
-            sl.eInc = sl.eIncR;
-            sl.eCmp = ENV_END;
-            sl.curEnv = EnvState.RELEASE;
         }
+        sl.key = false;
     }
 
     private void envNextEvent(Operator sl, EnvState cur) {
@@ -752,57 +948,211 @@ public class Ym2612Chip {
                 sl.eCnt = ENV_END;
                 sl.eInc = 0;
                 sl.eCmp = ENV_END + 1;
+                sl.volume = 1023;
+                sl.volOut = (1023 << 2) + sl.tll;  // Update cache
             } else {
                 sl.eCnt = 0;
                 sl.eInc = sl.eIncA;
                 sl.eCmp = ENV_DECAY;
                 sl.curEnv = EnvState.ATTACK;
+                sl.volume = 0;
+                sl.volOut = sl.tll;  // Update cache (volume=0)
             }
             sl.ssgEg ^= (sl.ssgEg & 2) << 1;
         } else {
             sl.eCnt = ENV_END;
             sl.eInc = 0;
             sl.eCmp = ENV_END + 1;
+            sl.volume = 1023;
+            sl.volOut = (1023 << 2) + sl.tll;  // Update cache
+        }
+    }
+
+    // Sustain level lookup table: maps 4-bit register value to GPGX volume scale (0-1023)
+    // SL reg values 0-14 map to 0-960 in 64-step increments, SL=15 maps to 1023 (max/silence)
+    private static final int[] SL_VOL_TAB = new int[16];
+    static {
+        for (int i = 0; i < 15; i++) {
+            SL_VOL_TAB[i] = i * 64;  // 0, 64, 128, ... 896
+        }
+        SL_VOL_TAB[15] = 1023;  // Max attenuation = silence
+    }
+
+    /**
+     * GPGX-style envelope advancement with rate-gated 3-sample stepping.
+     * Uses global egCnt to determine when to update each operator's envelope.
+     */
+    private void advanceEgOperator(Operator sl) {
+        switch (sl.curEnv) {
+            case ATTACK:
+                // Rate-gated check: only update if counter passes the gate
+                if ((egCnt & ((1 << sl.egShAr) - 1)) == 0) {
+                    int inc = EG_INC[sl.egSelAr + ((egCnt >> sl.egShAr) & 7)];
+                    // Exponential attack: volume += ((~volume) * inc) >> 4
+                    sl.volume += ((~sl.volume) * inc) >> 4;
+                    if (sl.volume <= 0) {
+                        sl.volume = 0;
+                        // Transition to decay phase using stored slReg directly
+                        sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
+                        sl.eCnt = ENV_DECAY;  // Keep legacy eCnt in sync
+                    }
+                    // GPGX: update vol_out cache when volume changes
+                    sl.volOut = (sl.volume << 2) + sl.tll;
+                }
+                break;
+
+            case DECAY1:
+                if ((egCnt & ((1 << sl.egShD1r) - 1)) == 0) {
+                    int inc = EG_INC[sl.egSelD1r + ((egCnt >> sl.egShD1r) & 7)];
+                    // Linear decay
+                    sl.volume += inc;
+                    // Get sustain level using stored slReg directly
+                    int sustainLevel = SL_VOL_TAB[sl.slReg];
+                    if (sl.volume >= sustainLevel) {
+                        sl.volume = sustainLevel;
+                        sl.curEnv = EnvState.DECAY2;
+                        sl.eCnt = sl.d1l;  // Keep legacy eCnt in sync
+                    }
+                    // GPGX: update vol_out cache when volume changes
+                    sl.volOut = (sl.volume << 2) + sl.tll;
+                }
+                break;
+
+            case DECAY2:
+                if ((egCnt & ((1 << sl.egShD2r) - 1)) == 0) {
+                    int inc = EG_INC[sl.egSelD2r + ((egCnt >> sl.egShD2r) & 7)];
+                    // Linear decay to silence
+                    sl.volume += inc;
+                    if (sl.volume >= 1023) {
+                        sl.volume = 1023;
+                        if (sl.ssgEnabled) {
+                            handleSsgEnd(sl);
+                        } else {
+                            sl.curEnv = EnvState.IDLE;
+                            sl.eCnt = ENV_END;
+                        }
+                    }
+                    // GPGX: update vol_out cache when volume changes
+                    sl.volOut = (sl.volume << 2) + sl.tll;
+                }
+                break;
+
+            case RELEASE:
+                if ((egCnt & ((1 << sl.egShRr) - 1)) == 0) {
+                    int inc = EG_INC[sl.egSelRr + ((egCnt >> sl.egShRr) & 7)];
+                    // Linear release
+                    sl.volume += inc;
+                    if (sl.volume >= 1023) {
+                        sl.volume = 1023;
+                        sl.curEnv = EnvState.IDLE;
+                        sl.eCnt = ENV_END;
+                    }
+                    // GPGX: update vol_out cache when volume changes
+                    sl.volOut = (sl.volume << 2) + sl.tll;
+                }
+                break;
+
+            case IDLE:
+                // Do nothing
+                break;
         }
     }
 
 
+    /**
+     * Render stereo output at 44.1kHz by generating at internal rate (~53kHz) and resampling.
+     * This matches GPGX's timing accuracy while maintaining standard audio output rate.
+     */
     public void renderStereo(int[] leftBuf, int[] rightBuf) {
-        int len = Math.min(leftBuf.length, rightBuf.length);
-        for (int i = 0; i < len; i++) {
-            int freqLfo = 0;
-            int envLfo = 0;
-            if (lfoInc != 0) {
-                lfoCnt += lfoInc;
-                int idx = (lfoCnt >> LFO_LBITS) & LFO_MASK;
-                envLfo = LFO_ENV_TAB[idx];
-                freqLfo = LFO_FREQ_TAB[idx];
-            }
+        int outputLen = Math.min(leftBuf.length, rightBuf.length);
 
-            int dacOut = renderDac();
-            Channel dacCh = channels[5];
-            boolean dacLeft = dacCh.leftMask != 0;
-            boolean dacRight = dacCh.rightMask != 0;
-            if (!mutes[5]) {
-                if (dacLeft) leftBuf[i] += dacOut;
-                if (dacRight) rightBuf[i] += dacOut;
+        for (int outIdx = 0; outIdx < outputLen; outIdx++) {
+            // Generate internal samples until we have enough for this output sample
+            // resampleAccum tracks our position in internal sample time
+            while (resampleAccum < 1.0) {
+                prevLeft = lastLeft;
+                prevRight = lastRight;
+                renderOneSample();  // Updates lastLeft, lastRight
+                resampleAccum += 1.0 / RESAMPLE_RATIO;  // ~0.828 per internal sample
             }
+            resampleAccum -= 1.0;
 
-            for (int ch = 0; ch < 6; ch++) {
-                if (mutes[ch]) continue;
-                if (ch == 5 && dacEnabled) continue;
-                int out = renderChannel(ch, envLfo, freqLfo);
-                boolean left = channels[ch].leftMask != 0;
-                boolean right = channels[ch].rightMask != 0;
-                if (left) leftBuf[i] += out;
-                if (right) rightBuf[i] += out;
-            }
-            tickTimers(1);
+            // Linear interpolation between previous and current internal samples
+            double t = resampleAccum * RESAMPLE_RATIO;
+            int left = (int)(prevLeft + t * (lastLeft - prevLeft));
+            int right = (int)(prevRight + t * (lastRight - prevRight));
+
+            leftBuf[outIdx] += left;
+            rightBuf[outIdx] += right;
         }
     }
+
+    /**
+     * Generate one internal sample at ~53kHz. Updates lastLeft/lastRight.
+     */
+    private void renderOneSample() {
+        // GPGX: LFO values are read BEFORE update (for use in channel calc)
+        // and then updated AFTER channel calculation
+        int freqLfo = 0;
+        int envLfo = 126;  // GPGX: 126 (max AM) when disabled
+
+        if (lfoInc != 0) {
+            int idx = (lfoCnt >> LFO_LBITS) & LFO_MASK;
+            envLfo = LFO_ENV_TAB[idx];
+            freqLfo = LFO_FREQ_TAB[idx];
+        }
+
+        int leftSum = 0;
+        int rightSum = 0;
+
+        // DAC output
+        int dacOut = renderDac();
+        Channel dacCh = channels[5];
+        if (!mutes[5]) {
+            if (dacCh.leftMask != 0) leftSum += dacOut;
+            if (dacCh.rightMask != 0) rightSum += dacOut;
+        }
+
+        // FM channels
+        for (int ch = 0; ch < 6; ch++) {
+            if (mutes[ch]) continue;
+            if (ch == 5 && dacEnabled) continue;
+            int out = renderChannel(ch, envLfo, freqLfo);
+            if (channels[ch].leftMask != 0) leftSum += out;
+            if (channels[ch].rightMask != 0) rightSum += out;
+        }
+
+        lastLeft = leftSum;
+        lastRight = rightSum;
+
+        // GPGX: LFO counter updated AFTER channel calculation
+        if (lfoInc != 0) {
+            lfoCnt += lfoInc;
+        }
+
+        // GPGX EG counter: increment, wrap 4095->1 (skip 0)
+        egCnt++;
+        if (egCnt >= 4096) egCnt = 1;
+
+        tickTimers(1);
+    }
+
+    // DEBUG: Set to true to mute FM4 (channel 3) for Signpost SFX debugging
+    private static final boolean DEBUG_MUTE_FM4 = false;
 
     private int renderChannel(int chIdx, int envLfo, int freqLfo) {
         Channel ch = channels[chIdx];
+
+        // DEBUG: Mute FM4 to test if two-channel interference causes the reverb
+        if (DEBUG_MUTE_FM4 && chIdx == 3) {
+            return 0;
+        }
+
+        // Note: Do NOT early-exit for silent channels. Even when all operators are
+        // at ENV_END, we must continue updating phase (fCnt) and feedback (opOut).
+        // Early-exit was preventing proper feedback accumulation, causing artifacts
+        // in high-feedback instruments like Signpost SFX (0xCF).
+
         if (ch.ops[0].fInc == -1) calcFIncChannel(ch);
 
         int fms = ch.fms;
@@ -831,19 +1181,17 @@ public class Ym2612Chip {
         GET_CURRENT_ENV(ch, 2, envLfo);
         GET_CURRENT_ENV(ch, 3, envLfo);
 
-        // UPDATE_ENV
+        // UPDATE_ENV - GPGX style with rate-gated 3-sample stepping
         for (int i=0; i<4; i++) {
             Operator op = ch.ops[i];
-            op.eCnt += op.eInc;
-            if (op.eCnt >= op.eCmp) {
-                envNextEvent(op, op.curEnv);
-            }
+            advanceEgOperator(op);
         }
 
         doAlgo(ch);
 
-        if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
-        else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
+        // GPGX-style asymmetric clipping
+        if (ch.out > LIMIT_CH_OUT_POS) ch.out = LIMIT_CH_OUT_POS;
+        else if (ch.out < LIMIT_CH_OUT_NEG) ch.out = LIMIT_CH_OUT_NEG;
 
 
         return ch.out;
@@ -851,7 +1199,9 @@ public class Ym2612Chip {
 
     private void GET_CURRENT_ENV(Channel ch, int slot, int envLfo) {
         Operator sl = ch.ops[slot];
-        int env = ENV_TAB[sl.eCnt >> ENV_LBITS] + sl.tll;
+        // GPGX: Use cached vol_out (= (volume << 2) + tll)
+        // This avoids per-sample recalculation
+        int env = sl.volOut;
 
         if ((sl.ssgEg & 4) != 0) {
              if (env > ENV_MASK) env = 0;
@@ -870,100 +1220,148 @@ public class Ym2612Chip {
         }
     }
 
+    /**
+     * Bounds-checked TL_TAB lookup, matching Genesis-Plus-GX op_calc behavior.
+     * Returns 0 (silence) when index exceeds table bounds.
+     * This ensures proper fade-out when envelope/TL gets very high.
+     *
+     * Phase modulation: modulation is added AFTER phase shift.
+     * The pm value is a 28-bit output from TL_TAB. We shift it by SIN_LBITS
+     * to bring it to sine index scale, matching the original modulation depth.
+     */
+    private static int opCalc(int phase, int env, int pm) {
+        // Phase shift first, then add scaled modulation
+        // pm >> SIN_LBITS brings modulation to sine index scale
+        int idx = ((phase >> SIN_LBITS) + (pm >> SIN_LBITS)) & SIN_MASK;
+        int p = SIN_TAB[idx] + env;
+        if (p >= TL_LEN * 2) return 0;
+        return TL_TAB[p];
+    }
+
+    /**
+     * opCalc without modulation (for carriers with no input modulation)
+     */
+    private static int opCalc(int phase, int env) {
+        int p = SIN_TAB[(phase >> SIN_LBITS) & SIN_MASK] + env;
+        if (p >= TL_LEN * 2) return 0;
+        return TL_TAB[p];
+    }
+
     private void doAlgo(Channel ch) {
         // Phase values (in0..in3) are already set by renderChannel's GET_CURRENT_PHASE step.
-        // Slot order: S0=op0, S1=op2, S2=op1, S3=op3 (matches libvgm ym2612.c)
-
+        // in0..in3 are in slot order S0,S1,S2,S3. Our GET_CURRENT_ENV stores:
+        // en0=S0, en1=S2, en2=S1, en3=S3 (because ops[] is [S0,S2,S1,S3]).
+        // Reorder here to match libvgm's S0,S1,S2,S3 expectations.
         final int env0 = en0;
         final int env1 = en2;
         final int env2 = en1;
         final int env3 = en3;
 
+        // GPGX-style: Modulation is now passed separately to opCalc() instead of
+        // being added to the phase directly. This allows GPGX-accurate scaling.
+
+        // GPGX ENV_QUIET check: when envelope is quiet, force feedback output to 0.
+        // This causes the feedback buffer to naturally decay when notes fade out,
+        // preventing the "reverb" effect caused by stale feedback values.
+        boolean s0Quiet = env0 >= ENV_QUIET;
+
         switch (ch.algo) {
-            case 0:
-                // DO_FEEDBACK
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+            case 0: {
+                // S0 -> S1 -> S2 -> S3 (carrier)
+                // DO_FEEDBACK: feedback still added directly to phase for S0
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                // DO_ALGO_0 (libvgm)
-                in1 += ch.opOut[1];
-                in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);  // S0 with feedback
+                ch.opOut[0] = s0_out;
+                // GPGX: S1 modulated by delayed S0 output (opOut[1])
+                int s1_out = opCalc(in1, env1, ch.opOut[1]);
+                int s2_out = opCalc(in2, env2, s1_out);
+                ch.out = opCalc(in3, env3, s2_out) >> OUT_SHIFT;
                 break;
-            case 1:
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+            }
+            case 1: {
+                // (S0 + S1) -> S2 -> S3 (carrier)
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                in2 += ch.opOut[1] + TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                int s1_out = opCalc(in1, env1);  // S1 no modulation
+                // S2 modulated by both S0 (delayed) and S1
+                int s2_out = opCalc(in2, env2, ch.opOut[1] + s1_out);
+                ch.out = opCalc(in3, env3, s2_out) >> OUT_SHIFT;
                 break;
-            case 2:
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+            }
+            case 2: {
+                // S0 + (S1 -> S2) -> S3 (carrier)
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                in2 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1];
-                in3 += ch.opOut[1] + TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                int s1_out = opCalc(in1, env1);
+                int s2_out = opCalc(in2, env2, s1_out);
+                // S3 modulated by both S0 (delayed) and S2
+                ch.out = opCalc(in3, env3, ch.opOut[1] + s2_out) >> OUT_SHIFT;
                 break;
-            case 3:
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+            }
+            case 3: {
+                // S0 -> S1 + S2 -> S3 (carrier)
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                in1 += ch.opOut[1];
-                in3 += TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
-                       TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
-                ch.out = TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] >> OUT_SHIFT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                int s1_out = opCalc(in1, env1, ch.opOut[1]);
+                int s2_out = opCalc(in2, env2);  // S2 no modulation
+                // S3 modulated by S1 + S2
+                ch.out = opCalc(in3, env3, s1_out + s2_out) >> OUT_SHIFT;
                 break;
+            }
             case 4: {
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                // S0 -> S1 (carrier) + S2 -> S3 (carrier)
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                in1 += ch.opOut[1];
-                in3 += TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1]) >> OUT_SHIFT;
-                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
-                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                int s1_out = opCalc(in1, env1, s0_out);  // S1 modulated by current S0
+                int s2_out = opCalc(in2, env2);  // S2 no modulation
+                int s3_out = opCalc(in3, env3, s2_out);  // S3 modulated by S2
+                ch.out = (s1_out + s3_out) >> OUT_SHIFT;
                 break;
             }
             case 5: {
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                // S0 -> (S1 + S2 + S3) all carriers
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                in1 += ch.opOut[1];
-                in2 += ch.opOut[1];
-                in3 += ch.opOut[1];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2]) >> OUT_SHIFT;
-                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
-                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                // All carriers modulated by current S0
+                int s1_out = opCalc(in1, env1, s0_out);
+                int s2_out = opCalc(in2, env2, s0_out);
+                int s3_out = opCalc(in3, env3, s0_out);
+                ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 break;
             }
             case 6: {
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                // S0 -> S1 (carrier) + S2 (carrier) + S3 (carrier)
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                in1 += ch.opOut[1];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2]) >> OUT_SHIFT;
-                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
-                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                int s1_out = opCalc(in1, env1, s0_out);  // S1 modulated by current S0
+                int s2_out = opCalc(in2, env2);  // S2 no modulation
+                int s3_out = opCalc(in3, env3);  // S3 no modulation
+                ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 break;
             }
             case 7: {
-                in0 += (ch.opOut[0] + ch.opOut[1]) >> ch.feedback;
+                // All carriers, no modulation
+                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                ch.opOut[0] = TL_TAB[SIN_TAB[(in0 >> SIN_LBITS) & SIN_MASK] + env0];
-                ch.out = (TL_TAB[SIN_TAB[(in3 >> SIN_LBITS) & SIN_MASK] + env3] +
-                          TL_TAB[SIN_TAB[(in1 >> SIN_LBITS) & SIN_MASK] + env1] +
-                          TL_TAB[SIN_TAB[(in2 >> SIN_LBITS) & SIN_MASK] + env2] +
-                          ch.opOut[1]) >> OUT_SHIFT;
-                if (ch.out > LIMIT_CH_OUT) ch.out = LIMIT_CH_OUT;
-                else if (ch.out < -LIMIT_CH_OUT) ch.out = -LIMIT_CH_OUT;
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;
+                int s1_out = opCalc(in1, env1);
+                int s2_out = opCalc(in2, env2);
+                int s3_out = opCalc(in3, env3);
+                ch.out = (s0_out + s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 break;
             }
         }
@@ -982,15 +1380,13 @@ public class Ym2612Chip {
         // This ensures any residual sound from previous notes is silenced.
         write(0, 0x28, 0x00 | chVal);
 
-        // Reset feedback history AND phase counters when loading a new voice.
-        // This ensures SFX channels start with clean state, preventing
-        // residual values from previous sounds from causing phase effects.
-        // Without this, multi-channel SFX like Signpost (0xCF) that use
-        // high feedback exhibit "reverb/phase" artifacts.
-        for (int i = 0; i < 4; i++) {
-            ch.opOut[i] = 0;
-            ch.ops[i].fCnt = 0;
-        }
+        // Minimal reset: only mark frequency for recalculation.
+        // Do NOT reset opOut (feedback history) or full envelope state here.
+        // libvgm does not perform comprehensive resets on voice load - it relies
+        // on the register writes to set up the channel. Aggressive resets were
+        // causing Signpost SFX (0xCF) to have altered timbre due to feedback
+        // state being cleared when it should persist naturally.
+        ch.ops[0].fInc = -1;
 
         boolean hasTl = voice.length >= 25;
         int expectedLen = hasTl ? 25 : 21;
@@ -1015,6 +1411,7 @@ public class Ym2612Chip {
         int d2rBase = 13;
         int d1lRrBase = 17;
         // Reorder SMPS voice (Op1, Op3, Op2, Op4) into YM operator order (Op1, Op2, Op3, Op4).
+        // SMPS stores parameters as: [Op1, Op3, Op2, Op4] but YM2612 expects [Op1, Op2, Op3, Op4].
         int[] dtIdx   = {1, 3, 2, 4};
         int[] tlIdx   = {21, 23, 22, 24};
         int[] rsArIdx = {5, 7, 6, 8};
@@ -1060,7 +1457,8 @@ public class Ym2612Chip {
             double cyclesPerBlock = DAC_BASE_CYCLES + (DAC_LOOP_CYCLES * rateByte);
             double cyclesPerSample = cyclesPerBlock / DAC_LOOP_SAMPLES;
             double rateHz = Z80_CLOCK / cyclesPerSample;
-            this.dacStep = Math.max(0.0001, rateHz / SAMPLE_RATE);
+            // DAC step is now relative to internal rate since renderDac() is called at ~53kHz
+            this.dacStep = Math.max(0.0001, rateHz / INTERNAL_RATE);
         }
     }
 
