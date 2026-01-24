@@ -1405,40 +1405,7 @@ public class SmpsSequencer implements AudioStream {
 
     private void refreshVolume(Track t) {
         if (t.type == TrackType.FM) {
-            // Z80 driver zSetChanVol: Only update TL registers for carriers, NO key-off.
-            // The original driver does NOT reload the entire voice or key-off when
-            // smpsAlterVol is called - it only writes the carrier TL registers.
-            // Calling refreshInstrument here was causing key-off during volume fades,
-            // cutting off notes prematurely and causing hollow/flanging artifacts.
-            if (t.voiceData == null || t.voiceData.length < 25) {
-                return; // Need voice data with TL bytes
-            }
-
-            int algo = t.voiceData[0] & 0x07;
-            int mask = ALGO_OUT_MASK[algo];
-            int volume = t.volumeOffset & 0xFF;
-            // Z80 zSetChanVol: if volume has bit7 set, skip updating TLs.
-            if ((volume & 0x80) != 0) {
-                return;
-            }
-
-            int hwCh = t.channelId;
-            int port = (hwCh < 3) ? 0 : 1;
-            int ch = hwCh % 3;
-
-            // Voice TL bytes are at indices 21-24 in SMPS order: Op1, Op3, Op2, Op4.
-            // Must use same swapped mapping as setInstrument: {21, 23, 22, 24}.
-            int[] tlIndices = {21, 23, 22, 24};
-            for (int slot = 0; slot < 4; slot++) {
-                if ((mask & (1 << slot)) != 0) {
-                    int tlIdx = tlIndices[slot];
-                    int tl = (t.voiceData[tlIdx] & 0x7F) + volume;
-                    tl &= 0x7F; // wrap like Z80 (7-bit)
-
-                    // Write TL register: 0x40 + slot*4 + ch
-                    synth.writeFm(this, port, 0x40 + slot * 4 + ch, tl);
-                }
-            }
+            refreshInstrument(t);
         } else if (t.type == TrackType.PSG) {
             if (t.envAtRest) {
                 return;
