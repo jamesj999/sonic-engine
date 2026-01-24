@@ -190,9 +190,12 @@ public class GroundSensor extends Sensor {
             return new WallScanResult(WallScanState.REGRESS, 0, null, null);
         }
 
+        // ROM ACCURACY FIX: Use 16 instead of 15 for correct distance calculation
+        // Distance = surface - sensorPosition, where surface is at tileStart + (16 - metric)
+        // So distance = (16 - metric) - xInTile = 16 - metric - xInTile
         int distance = (direction == Direction.LEFT)
-                ? (xInTile - metric)
-                : (15 - (metric + xInTile));
+                ? (xInTile - metric + 1)
+                : (16 - metric - xInTile);
         return new WallScanResult(WallScanState.FOUND, distance, tile, chunkDesc);
     }
 
@@ -224,9 +227,10 @@ public class GroundSensor extends Sensor {
             return new WallScanResult(WallScanState.FOUND, distance, tile, chunkDesc);
         }
 
+        // ROM ACCURACY FIX: Use corrected distance formula (same as evaluateWallTile)
         int distance = (direction == Direction.LEFT)
-                ? (xInTile - metric)
-                : (15 - (metric + xInTile));
+                ? (xInTile - metric + 1)
+                : (16 - metric - xInTile);
         return new WallScanResult(WallScanState.FOUND, distance, tile, chunkDesc);
     }
 
@@ -309,7 +313,11 @@ public class GroundSensor extends Sensor {
     }
 
     private SensorResult createResultWithDistance(SolidTile tile, ChunkDesc desc, byte distance, Direction direction) {
-        byte angle = 0;
+        // ROM ACCURACY: When no tile is found, use angle 0x03 (odd, flagged)
+        // ROM: AnglePos (s2.asm:42548-42550) initializes angles to 3 before scanning.
+        // Odd angles trigger snap to cardinal direction in Sonic_Angle (s2.asm:42656-42657).
+        // Previously this was 0, which was treated as valid "flat ground".
+        byte angle = 0x03;
         int index = 0;
         if (tile != null) {
             // Get angle with flips

@@ -180,7 +180,7 @@ public class TestCamera {
         when(mockSprite.getAir()).thenReturn(false);
         when(mockSprite.getGSpeed()).thenReturn((short) 0x1000); // High inertia (would be 16px normally)
         camera.setY((short) 0);
-        camera.setYBias((short) 0); // Bias not default (looking up)
+        camera.setYPosBias((short) 0); // Bias not default (looking up)
         when(mockSprite.getCentreY()).thenReturn((short) 200);
 
         camera.updatePosition();

@@ -101,6 +101,28 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean air = false;
 
         /**
+         * Whether this sprite is currently jumping (ROM: jumping(a0) status bit).
+         * Distinct from 'air' - you can be airborne without having jumped
+         * (e.g., walked off an edge, hit by enemy, launched by spring).
+         * Set when jump starts, cleared on landing.
+         */
+        protected boolean jumping = false;
+
+        /**
+         * Whether this sprite is standing on a solid object (platform, moving block).
+         * ROM: status.player.on_object
+         * When true, AnglePos skips terrain collision - the object handles positioning.
+         */
+        protected boolean onObject = false;
+
+        /**
+         * Whether to stick to convex surfaces even at low speeds.
+         * ROM: stick_to_convex status bit
+         * When true, prevents slope repel/detachment on convex terrain.
+         */
+        protected boolean stickToConvex = false;
+
+        /**
          * Whether or not this sprite is pushing a solid object.
          */
         protected boolean pushing = false;
@@ -172,7 +194,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         protected boolean crouching = false;
 
-        protected float spindashConstant = 0f;
+        /**
+         * ROM-accurate spindash counter (spindash_counter).
+         * Range: 0x000 to 0x800 (0 to 2048).
+         * Speed table is indexed by counter >> 8 (gives 0-8).
+         */
+        protected short spindashCounter = 0;
 
         private PlayerSpriteRenderer spriteRenderer;
         private int mappingFrame = 0;
@@ -301,6 +328,9 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.hurt = false;
                 this.deathCountdown = 0;
                 this.air = false;
+                this.jumping = false;
+                this.onObject = false;
+                this.stickToConvex = false;
                 // Reset ground mode to GROUND - critical for sensor direction on level load.
                 // Without this, if player was on a wall/ceiling when previous level ended,
                 // sensors would point in wrong direction and collision detection would fail.
@@ -525,6 +555,10 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (!air && this.air) {
                         rollingJump = false;
                 }
+                // Clear jumping flag when landing
+                if (!air && this.air) {
+                        jumping = false;
+                }
                 this.air = air;
                 // SPG: Push sensor Y offset changes based on air state
                 updatePushSensorYOffset();
@@ -538,6 +572,30 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 }
         }
 
+        public boolean isJumping() {
+                return jumping;
+        }
+
+        public void setJumping(boolean jumping) {
+                this.jumping = jumping;
+        }
+
+        public boolean isOnObject() {
+                return onObject;
+        }
+
+        public void setOnObject(boolean onObject) {
+                this.onObject = onObject;
+        }
+
+        public boolean isStickToConvex() {
+                return stickToConvex;
+        }
+
+        public void setStickToConvex(boolean stickToConvex) {
+                this.stickToConvex = stickToConvex;
+        }
+
         /**
          * SPG: While airborne, Ground Angle smoothly returns toward 0 by 2 hex units per frame.
          * This affects the visual rotation of the sprite during air time.
@@ -548,17 +606,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (currentAngle == 0) {
                         return; // Already at 0
                 }
-                // Determine shortest path to 0: through positive or negative direction
-                // Angles 1-127 should decrease toward 0
-                // Angles 128-255 should increase toward 0 (wrapping through 256)
-                if (currentAngle <= 128) {
-                        // Decrease toward 0
+                // ROM: Sonic_JumpAngle (s2.asm:37465-37486)
+                // ROM uses bpl (branch if positive, i.e., bit 7 clear) to determine direction
+                // Angles 0x01-0x7F (1-127): bit 7 clear = positive, subtract 2
+                // Angles 0x80-0xFF (128-255): bit 7 set = negative, add 2
+                if (currentAngle < 128) {
+                        // Positive range (0x01-0x7F): decrease toward 0
                         currentAngle -= 2;
                         if (currentAngle < 0) {
                                 currentAngle = 0;
                         }
                 } else {
-                        // Increase toward 0 (256)
+                        // Negative range (0x80-0xFF): increase toward 0 (wrapping through 256)
                         currentAngle += 2;
                         if (currentAngle >= 256) {
                                 currentAngle = 0;
@@ -874,12 +933,20 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 };
         }
 
-        public float getSpindashConstant() {
-                return spindashConstant;
+        /**
+         * Get the spindash counter (ROM: spindash_counter).
+         * Range: 0x000 to 0x800. Speed index = counter >> 8.
+         */
+        public short getSpindashCounter() {
+                return spindashCounter;
         }
 
-        public void setSpindashConstant(float spindashConstant) {
-                this.spindashConstant = spindashConstant;
+        /**
+         * Set the spindash counter (ROM: spindash_counter).
+         * @param spindashCounter Value 0x000 to 0x800
+         */
+        public void setSpindashCounter(short spindashCounter) {
+                this.spindashCounter = spindashCounter;
         }
 
         public boolean isForceInputRight() {
@@ -1247,16 +1314,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         /**
-         * Override gravity to reduce it underwater or when hurt.
+         * Returns the base gravity value applied by ObjectMoveAndFall.
+         * This method returns the FULL gravity (0x38) regardless of water state.
+         * Underwater gravity reduction is handled separately in PlayableSpriteMovement.modeAirborne()
+         * by subtracting 0x28 AFTER applying gravity, matching ROM behavior exactly:
+         *   - ROM: ObjectMoveAndFall adds 0x38 to y_vel
+         *   - ROM: Then Obj01_MdAir subtracts 0x28 if underwater
+         *   - Net underwater gravity = 0x38 - 0x28 = 0x10
+         *
          * Normal: 0x38 (56 subpixels)
          * Hurt: 0x30 (48 subpixels) - per SPG hurt_gravity_force
-         * Underwater: 0x10 (16 subpixels)
+         *
+         * @see docs/s2disasm/s2.asm lines 29950 (ObjectMoveAndFall) and 36170 (underwater adjustment)
          */
         @Override
         public float getGravity() {
-                if (inWater) {
-                        return 0x10; // Reduced underwater gravity
-                }
                 if (hurt) {
                         return 0x30; // Reduced hurt gravity (SPG: 0.1875 = 48 subpixels)
                 }
@@ -1283,40 +1355,40 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 return rolling;
         }
 
+        /**
+         * Sets the rolling state and handles hitbox changes.
+         *
+         * IMPORTANT: This method changes the rolling flag, hitbox radii, and visual dimensions.
+         * It does NOT adjust Y position. The Y position adjustment (+5 when starting roll,
+         * -5 when ending roll) must be done by the caller because:
+         * 1. ROM does the adjustment in specific contexts (jump, spindash, roll start/end)
+         * 2. Some callers (like applyHurt) should NOT adjust Y position
+         *
+         * ROM reference: y_radius changes from 19 (standing) to 14 (rolling), diff = 5
+         * The caller should use: setY(getY() + 5) when starting roll, setY(getY() - 5) when ending.
+         *
+         * @param rolling true to enter rolling state, false to exit
+         */
         public void setRolling(boolean rolling) {
                 if (this.rolling == rolling) {
                         return;
                 }
 
+                // Update visual dimensions (no position adjustment)
                 if (GroundMode.CEILING.equals(runningMode) || GroundMode.GROUND.equals(runningMode)) {
-                        int oldHeight = getHeight();
                         int newHeight = rolling ? rollHeight : runHeight;
-                        if (oldHeight != newHeight) {
-                                int delta = (oldHeight - newHeight) / 2;
-                                yPixel = (short) (yPixel + delta);
-                                setHeight(newHeight);
-                        }
+                        setHeight(newHeight);
                 } else {
-                        int oldWidth = getWidth();
                         int newWidth = rolling ? rollHeight : runHeight;
-                        if (oldWidth != newWidth) {
-                                int delta = (oldWidth - newWidth) / 2;
-                                xPixel = (short) (xPixel + delta);
-                                setWidth(newWidth);
-                        }
+                        setWidth(newWidth);
                 }
 
+                // Apply appropriate collision radii
                 if (rolling) {
                         applyRollingRadii(false);
                 } else {
                         applyStandingRadii(false);
                 }
-
-                byte delta = 5;
-                if (!rolling) {
-                        delta = (byte) -delta;
-                }
-                moveForGroundModeAndDirection(delta, Direction.DOWN);
 
                 this.rolling = rolling;
         }
@@ -1374,11 +1446,21 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 return yRadius;
         }
 
-        protected void applyStandingRadii(boolean adjustY) {
+        /**
+         * Apply standing hitbox radii (y_radius=19, x_radius=9).
+         * ROM: Used when unrolling or landing.
+         * @param adjustY If true, adjust Y position for height change (not used - always pass false)
+         */
+        public void applyStandingRadii(boolean adjustY) {
                 setCollisionRadii(standXRadius, standYRadius, adjustY);
         }
 
-        protected void applyRollingRadii(boolean adjustY) {
+        /**
+         * Apply rolling hitbox radii (y_radius=14, x_radius=7).
+         * ROM: Used when starting roll, spindash release, or jumping.
+         * @param adjustY If true, adjust Y position for height change (not used - always pass false)
+         */
+        public void applyRollingRadii(boolean adjustY) {
                 setCollisionRadii(rollXRadius, rollYRadius, adjustY);
         }
 
@@ -1395,7 +1477,8 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
                 byte xRad = (byte) xRadius;
                 byte yRad = (byte) yRadius;
-                byte push = (byte) (xRadius + 1);
+                // SPG: Push sensors always use x = +/-10, regardless of rolling state
+                byte push = 10;
 
                 if (groundSensors != null && groundSensors.length >= 2) {
                         groundSensors[0].setOffset((byte) -xRad, yRad);
@@ -1423,10 +1506,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 if (pushSensors == null || pushSensors.length < 2) {
                         return;
                 }
-                // On flat ground (not air AND ground mode is GROUND): Y offset = +8
-                // In air or on walls/ceiling: Y offset = 0
-                byte yOffset = (!air && runningMode == GroundMode.GROUND) ? (byte) 8 : (byte) 0;
-                byte push = (byte) (xRadius + 1);
+                // SPG: Y offset = +8 only on truly flat ground (not air, GROUND mode, angle = 0)
+                // On slopes or in air, Y offset = 0
+                boolean onFlatGround = !air && runningMode == GroundMode.GROUND && angle == 0;
+                byte yOffset = onFlatGround ? (byte) 8 : (byte) 0;
+                // SPG: Push sensors always use x = +/-10, regardless of rolling state
+                byte push = 10;
                 pushSensors[0].setOffset((byte) -push, yOffset);
                 pushSensors[1].setOffset(push, yOffset);
         }
@@ -1535,15 +1620,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                                 }
                         }
                 } else {
-                        boolean pushActive = Math.abs(angle) <= 64;
-                        if (xSpeed > 0) {
+                        // Push sensors active on floor/ceiling, disabled on walls
+                        boolean pushActive = (runningMode == GroundMode.GROUND || runningMode == GroundMode.CEILING);
+                        // Use gSpeed (speed along surface) instead of xSpeed for direction
+                        if (gSpeed > 0) {
                                 sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
                                 sensorsToDeactivate = new Sensor[] { pushE };
                                 if (!pushActive) {
                                         sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
                                         sensorsToDeactivate = new Sensor[] { pushE, pushF };
                                 }
-                        } else if (xSpeed < 0) {
+                        } else if (gSpeed < 0) {
                                 sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
                                 sensorsToDeactivate = new Sensor[] { pushF };
                                 if (!pushActive) {

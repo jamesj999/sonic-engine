@@ -196,8 +196,9 @@ public final class TrigLookupTable {
      * @return Hex angle (0x00-0xFF) representing the movement direction
      */
     public static int calcAngle(short xSpeed, short ySpeed) {
+        // ROM: CalcAngle_Zero returns 0x40 (90 degrees / down) for zero velocity
         if (xSpeed == 0 && ySpeed == 0) {
-            return 0;
+            return 0x40;
         }
         // atan2 returns radians from -PI to PI
         // Note: Y is NOT inverted because in MD screen coords, positive Y = down,

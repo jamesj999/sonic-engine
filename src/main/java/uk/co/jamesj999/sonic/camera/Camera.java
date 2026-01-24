@@ -43,12 +43,18 @@ public class Camera {
 	private short height;
 
 	// ROM: Camera_Y_pos_bias - vertical position target for camera centering
-	// Default is 96 (0x60). Used as center point for scroll windows.
+	// Default is (224/2)-16 = 96 (0x60). Used as center point for scroll windows.
 	private static final short DEFAULT_Y_BIAS = 96;
+
+	// ROM: Look up target bias: 0xC8 (200) - shifts camera up to show more above Sonic
+	private static final short LOOK_UP_BIAS = (short) 0xC8;
+
+	// ROM: Look down target bias: 8 - shifts camera down to show more below Sonic
+	private static final short LOOK_DOWN_BIAS = 8;
 
 	// ROM: Camera_Y_pos_bias - dynamic bias that can change during gameplay
 	// (looking up/down, spindash, etc). Starts at 96.
-	private short yBias = DEFAULT_Y_BIAS;
+	private short yPosBias = DEFAULT_Y_BIAS;
 
 	// ROM: Airborne window is ±0x20 (32) around the bias
 	private static final short AIRBORNE_WINDOW_HALF = 32;
@@ -139,8 +145,8 @@ public class Camera {
 		if (focusedSprite.getAir()) {
 			// ROM: Airborne uses ±0x20 window around bias
 			// Upper bound: bias - 32, Lower bound: bias + 32
-			short upperBound = (short) (yBias - AIRBORNE_WINDOW_HALF);
-			short lowerBound = (short) (yBias + AIRBORNE_WINDOW_HALF);
+			short upperBound = (short) (yPosBias - AIRBORNE_WINDOW_HALF);
+			short lowerBound = (short) (yPosBias + AIRBORNE_WINDOW_HALF);
 			if (focusedSpriteRealY < upperBound) {
 				short difference = (short) (focusedSpriteRealY - upperBound);
 				if (difference < -16) {
@@ -159,12 +165,12 @@ public class Camera {
 		} else {
 			// ROM: s2.asm:18150-18195 - Grounded vertical scroll
 			// Uses bias state and inertia (ground speed), NOT ySpeed
-			short difference = (short) (focusedSpriteRealY - yBias);
+			short difference = (short) (focusedSpriteRealY - yPosBias);
 
 			if (difference != 0) {
 				// ROM: .decideScrollType - choose scroll cap based on bias and inertia
 				short tolerance;
-				if (yBias != DEFAULT_Y_BIAS) {
+				if (yPosBias != DEFAULT_Y_BIAS) {
 					// ROM: .doScroll_slow - bias is not normal (looking up/down)
 					// Use 2px cap
 					tolerance = 2;
@@ -497,29 +503,53 @@ public class Camera {
 	}
 
 	/**
-	 * Gets the current Y bias (ROM: Camera_Y_pos_bias).
+	 * Gets the current Y position bias (ROM: Camera_Y_pos_bias).
 	 * Default is 96. Used as the vertical target position for camera centering.
-	 * @return Current Y bias value
+	 * @return Current Y position bias value
 	 */
-	public short getYBias() {
-		return yBias;
+	public short getYPosBias() {
+		return yPosBias;
 	}
 
 	/**
-	 * Sets the Y bias (ROM: Camera_Y_pos_bias).
+	 * Sets the Y position bias (ROM: Camera_Y_pos_bias).
 	 * When bias != 96, grounded vertical scroll uses slower 2px/frame cap.
 	 * Used by looking up/down mechanics and spindash release.
-	 * @param yBias New bias value (default is 96)
+	 * @param yPosBias New bias value (default is 96)
 	 */
-	public void setYBias(short yBias) {
-		this.yBias = yBias;
+	public void setYPosBias(short yPosBias) {
+		this.yPosBias = yPosBias;
 	}
 
 	/**
-	 * Resets Y bias to the default value (96).
+	 * Resets Y position bias to the default value (96).
+	 * ROM: Called during Obj01_ResetScr equivalents - rolling, spindash release, jumping.
+	 * The bias gradually eases back to 96 at 2px/frame (4 toward, 2 back = net 2).
 	 */
 	public void resetYBias() {
-		this.yBias = DEFAULT_Y_BIAS;
+		// ROM: Obj01_ResetScr_Part2 / Obj01_Jump_ResetScr
+		// The actual reset is gradual: if bias < 96, add 4 then subtract 2 (net +2)
+		// if bias > 96, just subtract 2
+		// This method initiates the reset process - actual easing happens in updateYBiasEasing()
+		this.yPosBias = DEFAULT_Y_BIAS;
+	}
+
+	/**
+	 * Sets the bias for looking up (ROM target: 0xC8 = 200).
+	 * This shifts the camera target up to show more area above Sonic.
+	 * ROM: s2.asm:36406-36408 - gradual shift at 2px/frame up to 0xC8.
+	 */
+	public void setLookUpBias() {
+		this.yPosBias = LOOK_UP_BIAS;
+	}
+
+	/**
+	 * Sets the bias for looking down/crouching (ROM target: 8).
+	 * This shifts the camera target down to show more area below Sonic.
+	 * ROM: s2.asm:36420-36422 - gradual shift at 2px/frame down to 8.
+	 */
+	public void setLookDownBias() {
+		this.yPosBias = LOOK_DOWN_BIAS;
 	}
 
 	/**
@@ -528,6 +558,22 @@ public class Camera {
 	 */
 	public static short getDefaultYBias() {
 		return DEFAULT_Y_BIAS;
+	}
+
+	/**
+	 * Gets the look up bias target value.
+	 * @return Look up bias (200 / 0xC8)
+	 */
+	public static short getLookUpBias() {
+		return LOOK_UP_BIAS;
+	}
+
+	/**
+	 * Gets the look down bias target value.
+	 * @return Look down bias (8)
+	 */
+	public static short getLookDownBias() {
+		return LOOK_DOWN_BIAS;
 	}
 
 	public static synchronized Camera getInstance() {
