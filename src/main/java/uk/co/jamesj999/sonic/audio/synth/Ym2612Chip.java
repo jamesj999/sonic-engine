@@ -45,10 +45,10 @@ public class Ym2612Chip {
 
     // Output bits logic
     private static final int MAX_OUT_BITS = SIN_HBITS + SIN_LBITS + 2; // 28
-    private static final int OUT_BITS = 13; // Adjusted for GPGX-style ±8191 clipping
-    private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 15
+    private static final int OUT_BITS = 14; // OUTPUT_BITS - 2 = 16 - 2 = 14
+    private static final int OUT_SHIFT = MAX_OUT_BITS - OUT_BITS; // 14
     // GPGX-style output clipping: ±8191 (asymmetric: +8191 / -8192)
-    // With OUT_SHIFT=15, max pre-clip output is ~8191, matching the clip limit.
+    // Max pre-clip output is ~16383; peaks above 8191 will clip.
     private static final int LIMIT_CH_OUT_POS = 8191;
     private static final int LIMIT_CH_OUT_NEG = -8192;
 
@@ -89,53 +89,56 @@ public class Ym2612Chip {
     private static final int[] LFO_INC_TAB = new int[8];
 
     // GPGX EG (Envelope Generator) tables for 3-sample stepping
-    // EG_INC: Envelope increment table indexed by rate_index + ((egCnt >> shift) & 7)
-    // Each row of 8 values corresponds to a rate level
+    // EG_INC: Envelope increment table - 19 rows of 8 values each
+    // Indexed by eg_rate_select[rate] + ((egCnt >> eg_rate_shift[rate]) & 7)
+    // Copied directly from GPGX ym2612.c
     private static final int[] EG_INC = {
-        // Rate 0-3 (0-3): no increment
-        0, 0, 0, 0, 0, 0, 0, 0,
-        // Rate 4-7 (4-7): cycle 0 only
+        // Row 0: rates 00..11 with (rate&3)==0 - increment by 0 or 1
         0, 1, 0, 1, 0, 1, 0, 1,
-        // Rate 8-11 (8-11): cycle 0,4
-        0, 1, 0, 1, 0, 1, 1, 1,
-        // Rate 12-15 (12-15)
+        // Row 1: rates 00..11 with (rate&3)==1
+        0, 1, 0, 1, 1, 1, 0, 1,
+        // Row 2: rates 00..11 with (rate&3)==2
         0, 1, 1, 1, 0, 1, 1, 1,
-        // Rate 16-19 (16-19)
+        // Row 3: rates 00..11 with (rate&3)==3
+        0, 1, 1, 1, 1, 1, 1, 1,
+        // Row 4: rate 12 with (rate&3)==0 - increment by 1
         1, 1, 1, 1, 1, 1, 1, 1,
-        // Rate 20-23 (20-23)
+        // Row 5: rate 12 with (rate&3)==1
         1, 1, 1, 2, 1, 1, 1, 2,
-        // Rate 24-27 (24-27)
+        // Row 6: rate 12 with (rate&3)==2
         1, 2, 1, 2, 1, 2, 1, 2,
-        // Rate 28-31 (28-31)
+        // Row 7: rate 12 with (rate&3)==3
         1, 2, 2, 2, 1, 2, 2, 2,
-        // Rate 32-35 (32-35)
+        // Row 8: rate 13 with (rate&3)==0 - increment by 2
         2, 2, 2, 2, 2, 2, 2, 2,
-        // Rate 36-39 (36-39)
+        // Row 9: rate 13 with (rate&3)==1
         2, 2, 2, 4, 2, 2, 2, 4,
-        // Rate 40-43 (40-43)
+        // Row 10: rate 13 with (rate&3)==2
         2, 4, 2, 4, 2, 4, 2, 4,
-        // Rate 44-47 (44-47)
+        // Row 11: rate 13 with (rate&3)==3
         2, 4, 4, 4, 2, 4, 4, 4,
-        // Rate 48-51 (48-51)
+        // Row 12: rate 14 with (rate&3)==0 - increment by 4
         4, 4, 4, 4, 4, 4, 4, 4,
-        // Rate 52-55 (52-55)
+        // Row 13: rate 14 with (rate&3)==1
         4, 4, 4, 8, 4, 4, 4, 8,
-        // Rate 56-59 (56-59)
+        // Row 14: rate 14 with (rate&3)==2
         4, 8, 4, 8, 4, 8, 4, 8,
-        // Rate 60-63 (60-63): max rate
+        // Row 15: rate 14 with (rate&3)==3
         4, 8, 8, 8, 4, 8, 8, 8,
-        // Rate 64+ (64-67): instant attack
+        // Row 16: rate 15 (all) - increment by 8
         8, 8, 8, 8, 8, 8, 8, 8,
-        // Rate 68-71
-        8, 8, 8, 8, 8, 8, 8, 8,
-        // Rate 72+ (clamped)
-        8, 8, 8, 8, 8, 8, 8, 8
+        // Row 17: rate 15 for attack (16x increment) - NOT USED in our implementation
+        16, 16, 16, 16, 16, 16, 16, 16,
+        // Row 18: infinity/zero increment (dummy rates 0-1)
+        0, 0, 0, 0, 0, 0, 0, 0
     };
 
-    // EG_RATE_SELECT: Maps rate value (0-127) to base index in EG_INC (multiply by 8)
-    private static final int[] EG_RATE_SELECT = new int[128];
-    // EG_RATE_SHIFT: Maps rate value (0-127) to shift for egCnt gating
-    private static final int[] EG_RATE_SHIFT = new int[128];
+    // EG_RATE_SELECT: Maps rate value (0-63) to base index in EG_INC
+    // Pattern from GPGX: rates cycle through rows 0-3, then 4-7, 8-11, 12-15, 16
+    private static final int[] EG_RATE_SELECT = new int[64];
+    // EG_RATE_SHIFT: Maps rate value (0-63) to shift for egCnt gating
+    // Shift decreases as rate increases (faster rates update more often)
+    private static final int[] EG_RATE_SHIFT = new int[64];
 
     // Reference tables from ym2612.c
     private static final int[] DT_DEF_TAB = {
@@ -298,23 +301,39 @@ public class Ym2612Chip {
         LFO_INC_TAB[6] = (int) (48.1 * lfoBase);
         LFO_INC_TAB[7] = (int) (72.2 * lfoBase);
 
-        // GPGX EG Rate Tables initialization
-        // Maps rate values to EG_INC indices and shift values for counter gating
-        for (int i = 0; i < 128; i++) {
-            int rate = Math.min(i, 63);  // Clamp to 63
-            if (rate < 4) {
-                // Rates 0-3: no increment
-                EG_RATE_SELECT[i] = 0;
-                EG_RATE_SHIFT[i] = 12;  // Very slow gate (basically never)
-            } else if (rate < 64) {
-                // Rates 4-63: normal range
-                EG_RATE_SELECT[i] = (rate >> 2) * 8;  // Index into EG_INC (8 entries per rate)
-                EG_RATE_SHIFT[i] = 11 - (rate >> 2);  // Shift decreases as rate increases
-                if (EG_RATE_SHIFT[i] < 0) EG_RATE_SHIFT[i] = 0;
+        // GPGX EG Rate Tables initialization - copied from ym2612.c
+        // The pattern matches GPGX's eg_rate_select and eg_rate_shift tables
+        for (int rate = 0; rate < 64; rate++) {
+            if (rate < 2) {
+                // Rates 0-1: dummy (zero increment from row 18)
+                EG_RATE_SELECT[rate] = 18 * 8;  // Row 18 = zero increment
+                EG_RATE_SHIFT[rate] = 11;
+            } else if (rate < 4) {
+                // Rates 2-3: use rows 2-3
+                EG_RATE_SELECT[rate] = (rate & 3) * 8;
+                EG_RATE_SHIFT[rate] = 11;
+            } else if (rate < 48) {
+                // Rates 4-47: cycle through rows 0-3 based on (rate & 3)
+                EG_RATE_SELECT[rate] = (rate & 3) * 8;
+                // Shift: 11 - ((rate - 4) / 4) = 10 for rates 4-7, 9 for 8-11, etc.
+                EG_RATE_SHIFT[rate] = 11 - ((rate - 4) >> 2) - 1;
+                if (EG_RATE_SHIFT[rate] < 0) EG_RATE_SHIFT[rate] = 0;
+            } else if (rate < 52) {
+                // Rates 48-51 (rate 12): use rows 4-7
+                EG_RATE_SELECT[rate] = (4 + (rate & 3)) * 8;
+                EG_RATE_SHIFT[rate] = 0;
+            } else if (rate < 56) {
+                // Rates 52-55 (rate 13): use rows 8-11
+                EG_RATE_SELECT[rate] = (8 + (rate & 3)) * 8;
+                EG_RATE_SHIFT[rate] = 0;
+            } else if (rate < 60) {
+                // Rates 56-59 (rate 14): use rows 12-15
+                EG_RATE_SELECT[rate] = (12 + (rate & 3)) * 8;
+                EG_RATE_SHIFT[rate] = 0;
             } else {
-                // Rates 64+: maximum speed
-                EG_RATE_SELECT[i] = 15 * 8;  // Max rate index
-                EG_RATE_SHIFT[i] = 0;
+                // Rates 60-63 (rate 15): use row 16 (max rate)
+                EG_RATE_SELECT[rate] = 16 * 8;
+                EG_RATE_SHIFT[rate] = 0;
             }
         }
     }
@@ -369,7 +388,9 @@ public class Ym2612Chip {
     private int lfoInc;
 
     // GPGX EG counter: 12-bit, cycles 1-4095, skips 0
+    // EG only advances every 3 samples (frequency = chipclock/144/3)
     private int egCnt = 1;
+    private int egTimer = 0;  // Counts 0, 1, 2, then triggers egCnt increment
 
     private boolean channel3SpecialMode;
 
@@ -475,8 +496,9 @@ public class Ym2612Chip {
         lfoCnt = 0;
         lfoInc = 0;
 
-        // Reset GPGX EG counter
+        // Reset GPGX EG counter and timer
         egCnt = 1;
+        egTimer = 0;
 
         dacEnabled = false;
         dac_highpass = 0;
@@ -780,11 +802,11 @@ public class Ym2612Chip {
             case 0xB0:
                 ch.algo = val & 7;
                 int fb = (val >> 3) & 7;
-                // GPGX feedback formula: phase += (out << (9 - fb)) >> 16 = out >> (16 - fb)
-                // For fb=7 (max): shift by 9
-                // For fb=1 (min): shift by 15
+                // GPGX feedback formula: SIN_BITS - fb where SIN_BITS=10
+                // For fb=7 (max): shift by 3 (strongest feedback)
+                // For fb=1 (min): shift by 9 (weakest non-zero feedback)
                 // For fb=0: disabled (use large shift to zero result)
-                ch.feedback = (fb != 0) ? (16 - fb) : 31;
+                ch.feedback = (fb != 0) ? (10 - fb) : 31;
                 break;
             case 0xB4:
                 ch.pan = (val >> 6) & 3;
@@ -1130,9 +1152,23 @@ public class Ym2612Chip {
             lfoCnt += lfoInc;
         }
 
-        // GPGX EG counter: increment, wrap 4095->1 (skip 0)
-        egCnt++;
-        if (egCnt >= 4096) egCnt = 1;
+        // GPGX EG timer: only advance egCnt and envelopes every 3 samples
+        // This matches hardware where EG runs at chipclock/144/3
+        egTimer++;
+        if (egTimer >= 3) {
+            egTimer = 0;
+            // Simple increment, wrap from 4096 to 1 (skip 0)
+            egCnt++;
+            if (egCnt >= 4096) egCnt = 1;
+
+            // Advance envelope generators for all channels (GPGX: advance_eg_channels)
+            for (int ch = 0; ch < 6; ch++) {
+                Channel c = channels[ch];
+                for (int op = 0; op < 4; op++) {
+                    advanceEgOperator(c.ops[op]);
+                }
+            }
+        }
 
         tickTimers(1);
     }
@@ -1175,17 +1211,12 @@ public class Ym2612Chip {
             op.fCnt += finc;
         }
 
-        // GET_CURRENT_ENV
+        // GET_CURRENT_ENV - read envelope values for this sample
+        // Note: EG advancement happens separately every 3 samples in renderOneSample
         GET_CURRENT_ENV(ch, 0, envLfo);
         GET_CURRENT_ENV(ch, 1, envLfo);
         GET_CURRENT_ENV(ch, 2, envLfo);
         GET_CURRENT_ENV(ch, 3, envLfo);
-
-        // UPDATE_ENV - GPGX style with rate-gated 3-sample stepping
-        for (int i=0; i<4; i++) {
-            Operator op = ch.ops[i];
-            advanceEgOperator(op);
-        }
 
         doAlgo(ch);
 
@@ -1260,56 +1291,54 @@ public class Ym2612Chip {
         // GPGX-style: Modulation is now passed separately to opCalc() instead of
         // being added to the phase directly. This allows GPGX-accurate scaling.
 
-        // GPGX ENV_QUIET check: when envelope is quiet, force feedback output to 0.
-        // This causes the feedback buffer to naturally decay when notes fade out,
-        // preventing the "reverb" effect caused by stale feedback values.
+        // GPGX ENV_QUIET check: when envelope is quiet, operator output is forced to 0.
+        // This causes feedback buffer to naturally decay when notes fade out.
         boolean s0Quiet = env0 >= ENV_QUIET;
 
         switch (ch.algo) {
             case 0: {
                 // S0 -> S1 -> S2 -> S3 (carrier)
-                // DO_FEEDBACK: feedback still added directly to phase for S0
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                // GPGX: When S0 quiet, output becomes 0. Feedback and modulation naturally decay.
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
-                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);  // S0 with feedback
-                ch.opOut[0] = s0_out;
-                // GPGX: S1 modulated by delayed S0 output (opOut[1])
-                int s1_out = opCalc(in1, env1, ch.opOut[1]);
+                int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
+                ch.opOut[0] = s0_out;  // ALWAYS update - quiet means 0 propagates
+                int s1_out = opCalc(in1, env1, s0_out);
                 int s2_out = opCalc(in2, env2, s1_out);
                 ch.out = opCalc(in3, env3, s2_out) >> OUT_SHIFT;
                 break;
             }
             case 1: {
                 // (S0 + S1) -> S2 -> S3 (carrier)
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
                 int s1_out = opCalc(in1, env1);  // S1 no modulation
-                // S2 modulated by both S0 (delayed) and S1
-                int s2_out = opCalc(in2, env2, ch.opOut[1] + s1_out);
+                // S2 modulated by S0 + S1
+                int s2_out = opCalc(in2, env2, s0_out + s1_out);
                 ch.out = opCalc(in3, env3, s2_out) >> OUT_SHIFT;
                 break;
             }
             case 2: {
                 // S0 + (S1 -> S2) -> S3 (carrier)
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
                 int s1_out = opCalc(in1, env1);
                 int s2_out = opCalc(in2, env2, s1_out);
-                // S3 modulated by both S0 (delayed) and S2
-                ch.out = opCalc(in3, env3, ch.opOut[1] + s2_out) >> OUT_SHIFT;
+                // S3 modulated by S0 + S2
+                ch.out = opCalc(in3, env3, s0_out + s2_out) >> OUT_SHIFT;
                 break;
             }
             case 3: {
                 // S0 -> S1 + S2 -> S3 (carrier)
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
-                int s1_out = opCalc(in1, env1, ch.opOut[1]);
+                int s1_out = opCalc(in1, env1, s0_out);
                 int s2_out = opCalc(in2, env2);  // S2 no modulation
                 // S3 modulated by S1 + S2
                 ch.out = opCalc(in3, env3, s1_out + s2_out) >> OUT_SHIFT;
@@ -1317,23 +1346,23 @@ public class Ym2612Chip {
             }
             case 4: {
                 // S0 -> S1 (carrier) + S2 -> S3 (carrier)
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
-                int s1_out = opCalc(in1, env1, s0_out);  // S1 modulated by current S0
+                int s1_out = opCalc(in1, env1, s0_out);
                 int s2_out = opCalc(in2, env2);  // S2 no modulation
-                int s3_out = opCalc(in3, env3, s2_out);  // S3 modulated by S2
+                int s3_out = opCalc(in3, env3, s2_out);
                 ch.out = (s1_out + s3_out) >> OUT_SHIFT;
                 break;
             }
             case 5: {
                 // S0 -> (S1 + S2 + S3) all carriers
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
-                // All carriers modulated by current S0
+                // All carriers modulated by S0
                 int s1_out = opCalc(in1, env1, s0_out);
                 int s2_out = opCalc(in2, env2, s0_out);
                 int s3_out = opCalc(in3, env3, s0_out);
@@ -1342,11 +1371,11 @@ public class Ym2612Chip {
             }
             case 6: {
                 // S0 -> S1 (carrier) + S2 (carrier) + S3 (carrier)
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
-                int s1_out = opCalc(in1, env1, s0_out);  // S1 modulated by current S0
+                int s1_out = opCalc(in1, env1, s0_out);
                 int s2_out = opCalc(in2, env2);  // S2 no modulation
                 int s3_out = opCalc(in3, env3);  // S3 no modulation
                 ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
@@ -1354,7 +1383,7 @@ public class Ym2612Chip {
             }
             case 7: {
                 // All carriers, no modulation
-                int fb = (ch.feedback < 16) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
+                int fb = (ch.feedback < 10) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
                 ch.opOut[1] = ch.opOut[0];
                 int s0_out = s0Quiet ? 0 : opCalc(in0 + fb, env0);
                 ch.opOut[0] = s0_out;
