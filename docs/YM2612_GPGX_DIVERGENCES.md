@@ -9,6 +9,7 @@ Scope: Compare `src/main/java/uk/co/jamesj999/sonic/audio/synth/Ym2612Chip.java`
 ## Status Legend
 - ✅ **FIXED** - Implemented to match GPGX
 - ⚠️ **PARTIAL** - Partially implemented, some differences remain
+- 🛠️ **ATTEMPTED** - Implementation in progress; not yet verified against GPGX
 - ❌ **DIVERGENT** - Not yet aligned with GPGX
 
 ## Reference notation
@@ -35,7 +36,7 @@ Java:
 Impact:
 - ✅ Now matches GPGX EG timing behavior.
 
-### 2) LFO PM/AM waveform, timing, and PM table ⚠️ PARTIAL
+### 2) LFO PM/AM waveform, timing, and PM table 🛠️ ATTEMPTED
 GPGX:
 - LFO is a 128-step inverted triangle updated using discrete sample counts, with
   AM depth shifts and PM lookup tables based on FNUM bits. PM does not modify block
@@ -43,25 +44,27 @@ GPGX:
   `docs/gensplusgx/ym2612.c:484`, `docs/gensplusgx/ym2612.c:1037-1062`,
   `docs/gensplusgx/ym2612.c:1295`, `docs/gensplusgx/ym2612.c:1321`)
 Java:
-- **PARTIALLY IMPLEMENTED:**
-  - ✅ LFO_LEN = 128 (was 1024)
-  - ✅ 128-step inverted triangle waveform in `LFO_ENV_TAB` and `LFO_FREQ_TAB` (Lines 205-223)
-  - ✅ LFO updated AFTER channel calculation (Line 1150-1153)
-  - ❌ PM still applied by scaling `fInc` rather than FNUM-based lookup tables
-  - ❌ AM uses simple `envLfo >> sl.ams` rather than GPGX's `AM & AMmask`
+- **ATTEMPTED:**
+  - ✅ 128-step inverted triangle waveform
+  - ✅ LFO updated AFTER channel calculation
+  - ✅ PM now uses FNUM-based lookup table (`lfo_pm_table`)
+  - ✅ AM uses `AM & AMmask` with channel AMS depth shifts
+Status:
+- Pending verification against GPGX.
 Impact:
 - Waveform shape is correct, but PM/AM depth mapping still differs from GPGX.
 
-### 3) SSG-EG accuracy and key-off inversion handling ❌ DIVERGENT
+### 3) SSG-EG accuracy and key-off inversion handling 🛠️ ATTEMPTED
 GPGX:
 - Tracks `ssgn`, updates SSG inversion on key-on/off, and runs a dedicated SSG-EG
   update process with correct inversion and hold/loop behavior.
   (`docs/gensplusgx/ym2612.c:640-706`, `docs/gensplusgx/ym2612.c:1222-1278`,
   `docs/gensplusgx/ym2612.c:1610-1616`)
 Java:
-- Uses simplified SSG-EG with `ssgEnabled` flag and basic bit toggling.
-- No `ssgn` inversion flag and no key-off conversion path.
+- **ATTEMPTED:** Added `ssgn` inversion flag, key-off conversion, and per-sample SSG update pass.
 - SSG-EG test is @Ignored due to known inaccuracies.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Misses GPGX fix for inverted attenuation on key-off and other SSG-EG edge cases.
 
@@ -77,42 +80,47 @@ Java:
 Impact:
 - Misses GPGX DAC distortion/precision behavior, and the 9-bit vs 14-bit DAC modes.
 
-### 5) Algorithm memory (MEM) delay path ❌ DIVERGENT
+### 5) Algorithm memory (MEM) delay path 🛠️ ATTEMPTED
 GPGX:
 - Uses a one-sample delay memory (`mem_value`) with per-algorithm routing.
   (`docs/gensplusgx/ym2612.c:631-633`, `docs/gensplusgx/ym2612.c:931-949`,
   `docs/gensplusgx/ym2612.c:1447-1481`)
 Java:
-- Uses `opOut[0]` and `opOut[1]` for feedback buffer (two-sample averaging).
-- No separate MEM delay path for inter-operator modulation.
-- Algorithms pass current operator output directly to downstream operators.
+- **ATTEMPTED:** Added per-channel one-sample `memValue` delay and algorithm routing.
+- Algorithms 0-3 and 5 now route via MEM; 4/6/7 bypass MEM (GPGX-style).
+Status:
+- Pending verification against GPGX.
 Impact:
 - Algorithms 0-3 and 5 rely on the MEM delay in GPGX; Java will diverge for those.
   Algorithms 4, 6, and 7 do not use MEM in GPGX.
 
-### 6) Timers and CSM key-off gating ❌ DIVERGENT
+### 6) Timers and CSM key-off gating 🛠️ ATTEMPTED
 GPGX:
 - Timer A/B have specific internal stepping and overflow handling; CSM key-off is
   only issued if Timer A does not retrigger. (`docs/gensplusgx/ym2612.c:782-803`,
   `docs/gensplusgx/ym2612.c:825`, `docs/gensplusgx/ym2612.c:2137-2152`,
   `docs/gensplusgx/ym2612.c:2157`)
 Java:
-- Timers use different tick scaling and do not implement CSM key-off gating.
-- CSM key-on triggered immediately on mode write when `0x80` is set.
+- **ATTEMPTED:** Added CSM key-on on Timer A overflow and key-off gating when no retrigger.
+- Status bit setting now gated by timer enable flags.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Misses GPGX timer overflow behavior and CSM key-off timing.
 - **Java's CSM is effectively non-functional** after first key-on.
 
-### 7) Table resolutions and scaling (SIN/ENV/TL) ⚠️ PARTIAL
+### 7) Table resolutions and scaling (SIN/ENV/TL) 🛠️ ATTEMPTED
 GPGX:
 - Uses `ENV_BITS=10`, `SIN_BITS=10`, `ENV_STEP=128.0/ENV_LEN`, and a TL table sized
   for real chip resolution. (`docs/gensplusgx/ym2612.c:153-185`)
 - `op_calc` uses `(env << 3) + sin_tab[...]` for envelope scaling.
 Java:
-- Uses `ENV_HBITS=12`, `SIN_HBITS=12`, `ENV_STEP=96.0/ENV_LEN`.
-- Defines `SIN_BITS=10` separately for feedback formula.
-- **MISSING:** `opCalc` uses `SIN_TAB[idx] + env` without `env << 3` scaling.
-- Uses `volOut = (volume << 2) + tll` caching (GPGX-style).
+- **ATTEMPTED:** Switched to `ENV_BITS=10`, `SIN_BITS=10`, `ENV_STEP=128/ENV_LEN`.
+- Rebuilt TL/SIN tables using GPGX formulas.
+- `opCalc` now uses `(env << 3) + sin_tab[...]` and GPGX PM scaling.
+- `volOut` cache now uses `volume + tll`.
+Status:
+- Pending verification against GPGX.
 Impact:
 - **CRITICAL:** Missing `env << 3` in opCalc affects attenuation curve and silence detection.
 - Amplitude scaling differs from GPGX hardware-accurate tables.
@@ -128,18 +136,18 @@ Java:
 Impact:
 - Detune and AR behavior can diverge, especially at extreme rates or keyscale settings.
 
-### 9) Key-on logic differences ⚠️ PARTIAL
+### 9) Key-on logic differences 🛠️ ATTEMPTED
 GPGX:
 - Key-on resets phase and uses AR+KSR threshold logic to force immediate decay/sustain.
   (`docs/gensplusgx/ym2612.c:640-663`)
 Java:
-- **IMPLEMENTED:** Uses separate `key` boolean flag for proper 0→1 transition gating.
-- **IMPLEMENTED:** Phase reset on key-on (`sl.fCnt = 0`).
-- ❌ Missing AR+KSR threshold logic for immediate decay/sustain on fast attacks.
+- **ATTEMPTED:** AR+KSR threshold logic added for immediate decay/sustain on fast attacks.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Re-triggering behavior correct, but fast-attack edge cases differ from GPGX.
 
-### 10) Write-time EG state corrections ⚠️ PARTIAL
+### 10) Write-time EG state corrections 🛠️ ATTEMPTED
 GPGX:
 - TL/AR/SL/SSG writes perform write-time corrections: SL write can trigger DECAY→SUS
   state transition, SSG inversion conversions update `vol_out`, and AR-max blocking
@@ -147,11 +155,9 @@ GPGX:
   (`docs/gensplusgx/ym2612.c:960-999`, `docs/gensplusgx/ym2612.c:1022-1029`,
   (`docs/gensplusgx/ym2612.c:1610-1616`)
 Java:
-- **IMPLEMENTED:** `volOut` caching (`(volume << 2) + tll`), updated on TL and volume changes.
-- **IMPLEMENTED:** `slReg` stores raw 4-bit sustain level for advanceEgOperator.
-- ❌ Missing SL-triggered DECAY→SUS state transition at write time.
-- ❌ Missing SSG conversion on key-off.
-- ❌ Missing AR-max attack blocking at write time.
+- **ATTEMPTED:** SL-triggered DECAY→SUS state transition, SSG write-time conversion, and AR-max attack blocking.
+Status:
+- Pending verification against GPGX.
 Impact:
 - TL/env changes take effect correctly. Write-time edge-case state corrections missing.
 
@@ -175,43 +181,49 @@ Java:
 Impact:
 - ✅ Now matches GPGX LFO timing.
 
-### 13) Address/data port behavior ❌ DIVERGENT
+### 13) Address/data port behavior 🛠️ ATTEMPTED
 GPGX:
 - Uses an address latch and data port semantics that match hardware.
   (`docs/gensplusgx/ym2612.c:1961-1974`)
 Java:
-- `write(port, reg, val)` directly maps register value with no latched address behavior.
+- **ATTEMPTED:** Added address latch and data port semantics; `write()` now routes through latch.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Misses GPGX port behavior fixes (not critical for SMPS driver usage).
 
-### 14) Operator output masking (DAC quantization) ❌ DIVERGENT
+### 14) Operator output masking (DAC quantization) 🛠️ ATTEMPTED
 GPGX:
 - Applies per-operator DAC bitmasking via `opmask` parameter in `op_calc`, supporting
   chip-type-specific quantization. (`docs/gensplusgx/ym2612.c:1418-1425`,
   `docs/gensplusgx/ym2612.c:636`, `docs/gensplusgx/ym2612.c:1443-1444`)
 Java:
-- `opCalc` returns unmasked TL_TAB values, no chip type selection.
+- **ATTEMPTED:** `opCalc` applies per-operator output masks based on chip type.
+Status:
+- Pending verification against GPGX.
 Impact:
 - No support for discrete/integrated chip type quantization (minor audio difference).
 
-### 15) AM depth calculation method ⚠️ PARTIAL
+### 15) AM depth calculation method 🛠️ ATTEMPTED
 GPGX:
 - AM uses `volume_calc(OP) = vol_out + (AM & AMmask)` with LFO_AM as a 0-126 triangle.
   (`docs/gensplusgx/ym2612.c:1416`, `docs/gensplusgx/ym2612.c:1054-1057`)
 Java:
-- ✅ LFO waveform now 128-step inverted triangle (0-126 range).
-- ❌ AM applied as `envLfo >> sl.ams` rather than `AM & AMmask`.
-- AMS depth table differs from GPGX's `lfo_ams_depth_shift` mapping.
+- **ATTEMPTED:** AM now applied as `AM & AMmask` and AMS depth uses GPGX shift table.
+Status:
+- Pending verification against GPGX.
 Impact:
 - AM depth scaling still differs from GPGX.
 
-### 16) SSG-EG 4x rate multiplier ❌ DIVERGENT
+### 16) SSG-EG 4x rate multiplier 🛠️ ATTEMPTED
 GPGX:
 - SSG-EG decay/sustain/release increments are multiplied by 4 (`4 * eg_inc[...]`).
   (`docs/gensplusgx/ym2612.c:1113`, `docs/gensplusgx/ym2612.c:1148`,
   `docs/gensplusgx/ym2612.c:1183`)
 Java:
-- No 4x multiplier for SSG-EG rates; uses standard increment logic.
+- **ATTEMPTED:** 4x multiplier applied to SSG-EG decay/sustain/release.
+Status:
+- Pending verification against GPGX.
 Impact:
 - SSG-EG envelopes decay 4x slower than GPGX.
 
@@ -226,14 +238,15 @@ Java:
 Impact:
 - ✅ Now matches GPGX LFO reset state.
 
-### 18) Timer control semantics and status reset ❌ DIVERGENT
+### 18) Timer control semantics and status reset 🛠️ ATTEMPTED
 GPGX:
 - `set_timers` handles load bits, status flag reset, and CSM key-off on mode change.
   CSM key-on occurs on Timer A overflow, with key-off gated in the render loop.
   (`docs/gensplusgx/ym2612.c:825-860`, `docs/gensplusgx/ym2612.c:2137-2149`)
 Java:
-- Status reset logic and timer load semantics differ.
-- CSM key-on triggered immediately on mode write when `0x80` is set.
+- **ATTEMPTED:** Timer load on 0→1 transitions, status reset mask, and CSM gating added.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Timer status flags, reload behavior, and CSM key-on/off timing diverge.
 
@@ -262,22 +275,26 @@ Java:
 Impact:
 - ✅ Core timebase now matches GPGX hardware-accurate rate.
 
-### 21) DAC amplitude scaling ❌ DIVERGENT
+### 21) DAC amplitude scaling 🛠️ ATTEMPTED
 GPGX:
 - DAC output conversion: `(v - 0x80) << 6` (14-bit, ~64x gain).
   (`docs/gensplusgx/ym2612.c:1979-1981`)
 Java:
-- DAC uses `sample * DAC_GAIN` where `DAC_GAIN = 128` (~128x gain, effectively `<<7`).
+- **ATTEMPTED:** DAC gain adjusted to `<<6` (64x) to match GPGX `(v - 0x80) << 6`.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Java DAC output is 2x louder than GPGX before any ladder/quantization effects.
 
-### 22) Timer B multi-overflow handling ❌ DIVERGENT
+### 22) Timer B multi-overflow handling 🛠️ ATTEMPTED
 GPGX:
 - Timer B reload uses a loop: `do { TBC += TBL; } while (TBC <= 0);` to handle
   multiple overflows in a single update step.
   (`docs/gensplusgx/ym2612.c:815-820`)
 Java:
-- Timer B reload performs only one `timerBCount += timerBLoad;` per overflow check.
+- **ATTEMPTED:** Timer B reload loops until counter > 0.
+Status:
+- Pending verification against GPGX.
 Impact:
 - Java can miss multiple Timer B overflows if tick scaling or update step is large.
 
@@ -287,20 +304,21 @@ Impact:
 
 | Status | Count | Items |
 |--------|-------|-------|
-| ✅ FIXED | 8 | #1 (EG timing), #11 (feedback), #12 (LFO order), #17 (LFO reset), #19 (clipping), #20 (timebase) |
-| ⚠️ PARTIAL | 5 | #2 (LFO waveform), #7 (table scaling), #9 (key-on), #10 (write-time EG), #15 (AM depth) |
-| ❌ DIVERGENT | 9 | #3 (SSG-EG), #4 (DAC), #5 (MEM delay), #6 (timers), #8 (detune), #13 (ports), #14 (op mask), #16 (SSG 4x), #18 (timer reset), #21 (DAC gain), #22 (Timer B) |
+| ✅ FIXED | 6 | #1 (EG timing), #11 (feedback), #12 (LFO order), #17 (LFO reset), #19 (clipping), #20 (timebase) |
+| ⚠️ PARTIAL | 0 | — |
+| 🛠️ ATTEMPTED | 14 | #2 (LFO PM/AM), #3 (SSG-EG), #5 (MEM delay), #6 (timers), #7 (table scaling), #9 (key-on), #10 (write-time EG), #13 (ports), #14 (op mask), #15 (AM depth), #16 (SSG 4x), #18 (timer reset), #21 (DAC gain), #22 (Timer B) |
+| ❌ DIVERGENT | 2 | #4 (DAC), #8 (detune) |
 
 ## Priority Fixes for Signpost SFX Issue
 
 Based on the debug diary analysis, the most likely remaining cause of audio issues is:
 
-1. **#7 Table scaling (CRITICAL):** Missing `env << 3` in opCalc affects attenuation curve
+1. **#7 Table scaling (CRITICAL):** Implementation attempted; verify against GPGX
    - GPGX: `p = (env << 3) + sin_tab[...]`
    - Java: `p = SIN_TAB[idx] + env` (env NOT shifted)
    - This affects when silence is detected and how fade-out behaves
 
-2. **#5 MEM delay path:** Algorithms 0-3,5 need proper one-sample delay memory
+2. **#5 MEM delay path:** Implementation attempted; verify against GPGX
    - Currently using opOut[] for feedback only, not inter-operator modulation delay
 
 ---

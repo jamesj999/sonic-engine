@@ -36,7 +36,6 @@ public class Ym2612Chip {
     private static final int TL_TAB_LEN = 13 * 2 * TL_RES_LEN;
 
     private static final int SIN_MASK = SIN_LEN - 1;
-    private static final int ENV_MASK = ENV_LEN - 1;
     private static final int LFO_MASK = LFO_LEN - 1;
 
     // envelope step in dB (GPGX: 128.0 / ENV_LEN)
@@ -45,6 +44,8 @@ public class Ym2612Chip {
     private static final int ENV_ATTACK = 0;
     private static final int ENV_DECAY = ENV_LEN << ENV_LBITS;
     private static final int ENV_END = (ENV_LEN * 2) << ENV_LBITS;
+    private static final int MAX_ATT_INDEX = ENV_LEN - 1;
+    private static final int SSG_THRESHOLD = 0x200;
 
     // Output bits logic
     private static final int OUT_BITS = 14;
@@ -63,8 +64,6 @@ public class Ym2612Chip {
     private static final int DR_RATE = 5514396;
 
     // LFO constants
-    private static final int LFO_FMS_LBITS = 9;
-    private static final int LFO_FMS_BASE = (int) (0.05946309436 * 0.0338 * (double) (1 << LFO_FMS_LBITS));
 
     // Tables
     private static final int[] SIN_TAB = new int[SIN_LEN]; // indices into TL_TAB (includes sign bit)
@@ -78,7 +77,6 @@ public class Ym2612Chip {
     private static final int[][] DT_TAB = new int[8][32];
 
     private static final int[] LFO_ENV_TAB = new int[LFO_LEN];
-    private static final int[] LFO_FREQ_TAB = new int[LFO_LEN];
     private static final int[] LFO_INC_TAB = new int[8];
 
     // GPGX EG (Envelope Generator) tables for 3-sample stepping
@@ -152,13 +150,80 @@ public class Ym2612Chip {
             3, 3, 3, 3
     };
 
-    private static final int[] LFO_AMS_TAB = {31, 4, 1, 0};
-    private static final int[] LFO_FMS_TAB = {
-            LFO_FMS_BASE * 0, LFO_FMS_BASE * 1,
-            LFO_FMS_BASE * 2, LFO_FMS_BASE * 3,
-            LFO_FMS_BASE * 4, LFO_FMS_BASE * 6,
-            LFO_FMS_BASE * 12, LFO_FMS_BASE * 24
+    private static final int[] LFO_AMS_DEPTH_SHIFT = {8, 3, 1, 0};
+
+    private static final int[][] LFO_PM_OUTPUT = {
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 1, 1, 1, 1},
+
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 1, 1, 1, 1},
+            {0, 0, 1, 1, 2, 2, 2, 3},
+
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 1},
+            {0, 0, 0, 0, 1, 1, 1, 1},
+            {0, 0, 1, 1, 2, 2, 2, 3},
+            {0, 0, 2, 3, 4, 4, 5, 6},
+
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0, 0, 1, 1},
+            {0, 0, 0, 0, 1, 1, 1, 1},
+            {0, 0, 0, 1, 1, 1, 1, 2},
+            {0, 0, 1, 1, 2, 2, 2, 3},
+            {0, 0, 2, 3, 4, 4, 5, 6},
+            {0, 0, 4, 6, 8, 8, 10, 12},
+
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 1, 1, 1, 1},
+            {0, 0, 0, 1, 1, 1, 2, 2},
+            {0, 0, 1, 1, 2, 2, 3, 3},
+            {0, 0, 1, 2, 2, 2, 3, 4},
+            {0, 0, 2, 3, 4, 4, 5, 6},
+            {0, 0, 4, 6, 8, 8, 10, 12},
+            {0, 0, 8, 12, 16, 16, 20, 24},
+
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 2, 2, 2, 2},
+            {0, 0, 0, 2, 2, 2, 4, 4},
+            {0, 0, 2, 2, 4, 4, 6, 6},
+            {0, 0, 2, 4, 4, 4, 6, 8},
+            {0, 0, 4, 6, 8, 8, 10, 12},
+            {0, 0, 8, 12, 16, 16, 20, 24},
+            {0, 0, 16, 24, 32, 32, 40, 48},
+
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 4, 4, 4, 4},
+            {0, 0, 0, 4, 4, 4, 8, 8},
+            {0, 0, 4, 4, 8, 8, 12, 12},
+            {0, 0, 4, 8, 8, 8, 12, 16},
+            {0, 0, 8, 12, 16, 16, 20, 24},
+            {0, 0, 16, 24, 32, 32, 40, 48},
+            {0, 0, 32, 48, 64, 64, 80, 96},
     };
+
+    private static final int[] LFO_PM_TABLE = new int[128 * 8 * 32];
+
+    private static final int YM2612_DISCRETE = 0;
+    private static final int YM2612_INTEGRATED = 1;
+    private static final int YM2612_ENHANCED = 2;
+
+    private static final int EG_RATE_ZERO = 18 * 8;
 
     // GPGX: When running at internal rate, frequency multiplier is 1.0
     private static final double YM2612_FREQUENCY = 1.0;
@@ -199,7 +264,6 @@ public class Ym2612Chip {
 
         // GPGX LFO Table: 128-step inverted triangle
         // LFO_ENV_TAB: AM modulation (0-126, inverted triangle)
-        // LFO_FREQ_TAB: PM modulation (0-31, 4x slower than AM)
         for (int i = 0; i < LFO_LEN; i++) {  // LFO_LEN = 128
             // Inverted triangle for AM: 126 -> 0 -> 126
             if (i < 64) {
@@ -208,13 +272,7 @@ public class Ym2612Chip {
                 LFO_ENV_TAB[i] = (i - 64) << 1;  // 0, 2, 4, ... 124, 126
             }
 
-            // PM frequency modulation: triangle, but 4x slower than AM
-            // Values range 0-31 for frequency modulation
-            if (i < 64) {
-                LFO_FREQ_TAB[i] = 32 - (i >> 1);  // 32 -> 0
-            } else {
-                LFO_FREQ_TAB[i] = (i - 64) >> 1;  // 0 -> 31
-            }
+            // PM uses lfo_cnt >> 2 (GPGX) rather than a separate table.
         }
 
         // Envelope Table
@@ -331,6 +389,26 @@ public class Ym2612Chip {
                 EG_RATE_SHIFT[rate] = 0;
             }
         }
+
+        // LFO PM table generation (GPGX)
+        for (int depth = 0; depth < 8; depth++) {
+            for (int fnum = 0; fnum < 128; fnum++) {
+                for (int step = 0; step < 8; step++) {
+                    int value = 0;
+                    for (int bit = 0; bit < 7; bit++) {
+                        if ((fnum & (1 << bit)) != 0) {
+                            value += LFO_PM_OUTPUT[bit * 8 + depth][step];
+                        }
+                    }
+                    int base = (fnum * 32 * 8) + (depth * 32);
+                    LFO_PM_TABLE[base + step] = value;
+                    LFO_PM_TABLE[base + (step ^ 7) + 8] = value;
+                    LFO_PM_TABLE[base + step + 16] = -value;
+                    LFO_PM_TABLE[base + (step ^ 7) + 24] = -value;
+                }
+            }
+        }
+
     }
 
     private DacData dacData;
@@ -347,7 +425,7 @@ public class Ym2612Chip {
     private static final double DAC_LOOP_CYCLES = 26.0;
     private static final double DAC_LOOP_SAMPLES = 2.0;
     private static final double Z80_CLOCK = 3579545.0;
-    private static final double DAC_GAIN = 128.0;
+    private static final double DAC_GAIN = 64.0;
     private boolean dacInterpolate = true;
     private boolean dacHighpassEnabled = false;
     private int dac_highpass;
@@ -361,21 +439,22 @@ public class Ym2612Chip {
 
     private int status;
     private int mode;
+    private int csmKeyFlag;
+    private final int[] addressLatch = new int[2];
+    private int chipType = YM2612_DISCRETE;
     private double busyCycles;
+    private final int[][] opMask = new int[8][4];
     private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
     private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
     private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
     private static final int BUSY_CYCLES_DATA = 47;
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / INTERNAL_RATE;
 
-    private static final int TIMER_BASE_INT = (int) (YM2612_FREQUENCY * 4096.0);
 
     private int timerACount;
     private int timerBCount;
     private int timerALoad;
     private int timerBLoad;
-    private boolean timerAEnabled;
-    private boolean timerBEnabled;
     private int timerAPeriod;
     private int timerBPeriod;
 
@@ -401,6 +480,7 @@ public class Ym2612Chip {
         int d2r;
         int d1l, rr;
         int ssgEg;
+        int ssgn;
         int ksr;
 
         int fCnt;
@@ -423,8 +503,7 @@ public class Ym2612Chip {
         boolean ssgEnabled;
 
         int chgEnM = 0;
-        boolean amsOn;
-        int ams;
+        int amMask;
 
         // GPGX-style key flag: tracks whether key is currently pressed,
         // separate from envelope state. This fixes edge cases where
@@ -443,7 +522,7 @@ public class Ym2612Chip {
 
         int feedback;
         int algo;
-        int ams, fms;
+        int ams, pms;
         int pan;
         int leftMask = 0;
         int rightMask = 0;
@@ -474,20 +553,24 @@ public class Ym2612Chip {
             channels[i] = new Channel();
         }
         reset();
+        setChipType(YM2612_DISCRETE);
     }
 
     public void reset() {
         status = 0;
         mode = 0;
+        csmKeyFlag = 0;
+        addressLatch[0] = 0;
+        addressLatch[1] = 0;
         busyCycles = 0;
         channel3SpecialMode = false;
 
         timerACount = 0;
         timerBCount = 0;
-        timerALoad = 0;
-        timerBLoad = 0;
-        timerAEnabled = false;
-        timerBEnabled = false;
+        timerALoad = 1024;
+        timerBLoad = 256 << 4;
+        timerAPeriod = 0;
+        timerBPeriod = 0;
 
         lfoCnt = 0;
         lfoInc = 0;
@@ -510,8 +593,8 @@ public class Ym2612Chip {
             ch.kCode = 0;
             ch.feedback = 31;  // fb=0 means no feedback (large shift effectively disables it)
             ch.algo = 0;
-            ch.ams = 0;
-            ch.fms = 0;
+            ch.ams = LFO_AMS_DEPTH_SHIFT[0];
+            ch.pms = 0;
             ch.leftMask = 0xFFFFFFFF;
             ch.rightMask = 0xFFFFFFFF;
             ch.memValue = 0;
@@ -523,6 +606,7 @@ public class Ym2612Chip {
                 o.ksr = 0; o.ar = 0; o.am = 0; o.d1r = 0;
                 o.d2r = 0; o.d1l = 0; o.rr = 0;
                 o.ssgEg = 0;
+                o.ssgn = 0;
                 o.fCnt = 0;
                 o.eCnt = ENV_END;
                 o.eInc = 0;
@@ -538,6 +622,7 @@ public class Ym2612Chip {
                 o.egShD1r = o.egSelD1r = 0;
                 o.egShD2r = o.egSelD2r = 0;
                 o.egShRr = o.egSelRr = 0;
+                o.amMask = 0;
             }
         }
     }
@@ -599,6 +684,7 @@ public class Ym2612Chip {
             sl.key = false; // Reset key flag for GPGX-style key handling
             sl.volume = 1023;  // GPGX: silent
             sl.volOut = 1023 + sl.tll;  // Update cache
+            sl.ssgn = 0;
         }
     }
 
@@ -621,8 +707,23 @@ public class Ym2612Chip {
     }
 
     public void write(int port, int reg, int val) {
+        int resolvedPort = port & 1;
+        int resolvedReg = reg & 0x1FF;
+        if ((resolvedReg & 0x100) != 0) {
+            resolvedPort = 1;
+            resolvedReg &= 0xFF;
+        }
+        writeAddress(resolvedPort, resolvedReg);
+        writeData(resolvedPort, val);
+    }
+
+    public void writeAddress(int port, int reg) {
+        addressLatch[port & 1] = reg & 0xFF;
+    }
+
+    public void writeData(int port, int val) {
         busyCycles = BUSY_CYCLES_DATA;
-        int addr = reg;
+        int addr = addressLatch[port & 1];
         if (port == 1) addr += 0x100;
 
         if (addr < 0x30) {
@@ -632,6 +733,37 @@ public class Ym2612Chip {
                 writeSlot(addr, val);
             } else {
                 writeChannel(addr, val);
+            }
+        }
+    }
+
+    public void setChipType(int type) {
+        chipType = type;
+        resetOpMask();
+        if (chipType < YM2612_ENHANCED) {
+            opMask[0][3] = 0xFFFFFFE0;
+            opMask[1][3] = 0xFFFFFFE0;
+            opMask[2][3] = 0xFFFFFFE0;
+            opMask[3][3] = 0xFFFFFFE0;
+            opMask[4][1] = 0xFFFFFFE0;
+            opMask[4][3] = 0xFFFFFFE0;
+            opMask[5][1] = 0xFFFFFFE0;
+            opMask[5][2] = 0xFFFFFFE0;
+            opMask[5][3] = 0xFFFFFFE0;
+            opMask[6][1] = 0xFFFFFFE0;
+            opMask[6][2] = 0xFFFFFFE0;
+            opMask[6][3] = 0xFFFFFFE0;
+            opMask[7][0] = 0xFFFFFFE0;
+            opMask[7][1] = 0xFFFFFFE0;
+            opMask[7][2] = 0xFFFFFFE0;
+            opMask[7][3] = 0xFFFFFFE0;
+        }
+    }
+
+    private void resetOpMask() {
+        for (int algo = 0; algo < 8; algo++) {
+            for (int op = 0; op < 4; op++) {
+                opMask[algo][op] = 0xFFFFFFFF;
             }
         }
     }
@@ -648,33 +780,18 @@ public class Ym2612Chip {
                 break;
             case 0x24:
                 timerAPeriod = (timerAPeriod & 0x03) | (val << 2);
-                timerALoad = (1024 - timerAPeriod) << 12;
-                if (timerAEnabled) timerACount = timerALoad;
+                timerALoad = 1024 - timerAPeriod;
                 break;
             case 0x25:
                 timerAPeriod = (timerAPeriod & 0x3FC) | (val & 0x03);
-                timerALoad = (1024 - timerAPeriod) << 12;
-                if (timerAEnabled) timerACount = timerALoad;
+                timerALoad = 1024 - timerAPeriod;
                 break;
             case 0x26:
                 timerBPeriod = val & 0xFF;
-                timerBLoad = (256 - timerBPeriod) << 16;
-                if (timerBEnabled) timerBCount = timerBLoad;
+                timerBLoad = (256 - timerBPeriod) << 4;
                 break;
             case 0x27:
-                if (((mode ^ val) & 0x40) != 0) {
-                    channels[2].ops[0].fInc = -1;
-                }
-                status &= (~val >> 4) & (val >> 2);
-                mode = val;
-                channel3SpecialMode = (val & 0x40) != 0;
-                timerAEnabled = (val & 0x01) != 0;
-                timerBEnabled = (val & 0x02) != 0;
-                if (timerAEnabled) timerACount = timerALoad;
-                if (timerBEnabled) timerBCount = timerBLoad;
-                if ((val & 0x80) != 0) {
-                    csmKeyControl();
-                }
+                setTimers(val);
                 break;
             case 0x28:
                 int chIdx = val & 0x03;
@@ -697,6 +814,27 @@ public class Ym2612Chip {
                 if (!dacEnabled) stopDac();
                 break;
         }
+    }
+
+    private void setTimers(int val) {
+        if (((mode ^ val) & 0xC0) != 0) {
+            channels[2].ops[0].fInc = -1;
+            if (((val & 0xC0) != 0x80) && csmKeyFlag != 0) {
+                csmKeyOff();
+            }
+        }
+
+        if ((val & 0x01) != 0 && (mode & 0x01) == 0) {
+            timerACount = timerALoad;
+        }
+        if ((val & 0x02) != 0 && (mode & 0x02) == 0) {
+            timerBCount = timerBLoad;
+        }
+
+        status &= (~val >> 4);
+
+        mode = val;
+        channel3SpecialMode = (val & 0x40) != 0;
     }
 
     private void writeSlot(int addr, int val) {
@@ -723,7 +861,7 @@ public class Ym2612Chip {
                 if ((ENV_HBITS - 7) < 0) sl.tll = sl.tl >> (7 - ENV_HBITS);
                 else sl.tll = sl.tl << (ENV_HBITS - 7);
                 // GPGX: update vol_out cache when TL changes
-                sl.volOut = sl.volume + sl.tll;
+                updateVolOut(sl);
                 break;
             case 0x50:
                 sl.ar = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
@@ -734,8 +872,7 @@ public class Ym2612Chip {
                 updateEgRateCache(sl);
                 break;
             case 0x60:
-                sl.amsOn = (val & 0x80) != 0;
-                sl.ams = sl.amsOn ? ch.ams : 31;
+                sl.amMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
                 sl.d1r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
                 sl.eIncD = DR_TAB[sl.d1r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY1) sl.eInc = sl.eIncD;
@@ -753,11 +890,21 @@ public class Ym2612Chip {
                 sl.rr = ((val & 0xF) << 2) + 2;
                 sl.eIncR = DR_TAB[sl.rr + sl.ksr];
                 if (sl.curEnv == EnvState.RELEASE) sl.eInc = sl.eIncR;
+                if (sl.curEnv == EnvState.DECAY1) {
+                    int sustainLevel = SL_VOL_TAB[sl.slReg];
+                    if (sl.volume >= sustainLevel) {
+                        sl.curEnv = EnvState.DECAY2;
+                        sl.eCnt = sl.d1l;
+                    }
+                }
                 updateEgRateCache(sl);
                 break;
             case 0x90:
                 sl.ssgEg = val & 0x0F;
                 sl.ssgEnabled = (val & 0x08) != 0;
+                if (sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
+                    updateVolOut(sl);
+                }
                 break;
         }
     }
@@ -810,11 +957,8 @@ public class Ym2612Chip {
                 ch.pan = (val >> 6) & 3;
                 ch.leftMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
                 ch.rightMask = (val & 0x40) != 0 ? 0xFFFFFFFF : 0;
-                ch.ams = LFO_AMS_TAB[(val >> 4) & 3];
-                ch.fms = LFO_FMS_TAB[val & 7];
-                for (Operator op : ch.ops) {
-                    op.ams = op.amsOn ? ch.ams : 31;
-                }
+                ch.ams = LFO_AMS_DEPTH_SHIFT[(val >> 4) & 3];
+                ch.pms = (val & 7) * 32;
                 break;
         }
     }
@@ -847,9 +991,15 @@ public class Ym2612Chip {
      */
     private void updateEgRateCache(Operator sl) {
         // Attack rate
-        int rateAr = Math.min(63, sl.ar + sl.ksr);
-        sl.egShAr = EG_RATE_SHIFT[rateAr];
-        sl.egSelAr = EG_RATE_SELECT[rateAr];
+        int rateArRaw = sl.ar + sl.ksr;
+        if (rateArRaw >= 94) {
+            sl.egShAr = 0;
+            sl.egSelAr = EG_RATE_ZERO;
+        } else {
+            int rateAr = Math.min(63, rateArRaw);
+            sl.egShAr = EG_RATE_SHIFT[rateAr];
+            sl.egSelAr = EG_RATE_SELECT[rateAr];
+        }
 
         // Decay1 rate
         int rateD1r = Math.min(63, sl.d1r + sl.ksr);
@@ -890,17 +1040,23 @@ public class Ym2612Chip {
         Operator sl = ch.ops[idx];
         // GPGX-style: use separate key flag instead of checking envelope state.
         // This properly gates key-on to only trigger on 0->1 transitions.
-        if (!sl.key) {
+        if (!sl.key && csmKeyFlag == 0) {
             // Restart phase generator (GPGX: SLOT->phase = 0)
             sl.fCnt = 0;
 
             // Reset SSG-EG inversion (GPGX: SLOT->ssgn = 0)
             // Our SSG-EG uses different approach but reset is still needed
-            sl.ssgEg &= 0x0F; // Keep SSG-EG mode, clear any runtime state
+            sl.ssgn = 0;
 
-            // GPGX: Start attack from current volume level (decay-to-attack behavior)
-            // Volume is already set from previous note, so attack will ramp from there
-            sl.curEnv = EnvState.ATTACK;
+            if ((sl.ar + sl.ksr) < 94) {
+                sl.curEnv = (sl.volume <= 0)
+                        ? ((sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1)
+                        : EnvState.ATTACK;
+            } else {
+                sl.volume = 0;
+                sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
+            }
+            updateVolOut(sl);
 
             // Keep legacy eCnt in sync for any code that still uses it
             sl.eCnt = ENV_ATTACK;
@@ -916,76 +1072,27 @@ public class Ym2612Chip {
     private void keyOff(Channel ch, int idx) {
         Operator sl = ch.ops[idx];
         // GPGX-style: only transition to RELEASE if key was on and not already releasing
-        if (sl.key) {
+        if (sl.key && csmKeyFlag == 0) {
             if (sl.curEnv != EnvState.RELEASE) {
+                sl.curEnv = EnvState.RELEASE;
                 if (sl.eCnt < ENV_DECAY) {
                     sl.eCnt = (ENV_TAB[sl.eCnt >> ENV_LBITS] << ENV_LBITS) + ENV_DECAY;
                 }
                 sl.eInc = sl.eIncR;
                 sl.eCmp = ENV_END;
-                sl.curEnv = EnvState.RELEASE;
+                if (sl.ssgEnabled) {
+                    if (((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0)) {
+                        sl.volume = (SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX;
+                    }
+                    if (sl.volume >= SSG_THRESHOLD) {
+                        sl.volume = MAX_ATT_INDEX;
+                        sl.curEnv = EnvState.IDLE;
+                    }
+                }
+                updateVolOut(sl);
             }
         }
         sl.key = false;
-    }
-
-    private void envNextEvent(Operator sl, EnvState cur) {
-        switch (cur) {
-            case ATTACK:
-                sl.eCnt = ENV_DECAY;
-                sl.eInc = sl.eIncD;
-                sl.eCmp = sl.d1l;
-                sl.curEnv = EnvState.DECAY1;
-                break;
-            case DECAY1:
-                sl.eCnt = sl.d1l;
-                sl.eInc = sl.eIncS;
-                sl.eCmp = ENV_END;
-                sl.curEnv = EnvState.DECAY2;
-                break;
-            case DECAY2:
-                if (sl.ssgEnabled) {
-                    handleSsgEnd(sl);
-                } else {
-                    sl.eCnt = ENV_END;
-                    sl.eInc = 0;
-                    sl.eCmp = ENV_END + 1;
-                }
-                break;
-            case RELEASE:
-                sl.eCnt = ENV_END;
-                sl.eInc = 0;
-                sl.eCmp = ENV_END + 1;
-                break;
-            default:
-                break;
-        }
-    }
-
-    private void handleSsgEnd(Operator sl) {
-        if ((sl.ssgEg & 8) != 0) {
-            if ((sl.ssgEg & 1) != 0) {
-                sl.eCnt = ENV_END;
-                sl.eInc = 0;
-                sl.eCmp = ENV_END + 1;
-                sl.volume = 1023;
-                sl.volOut = 1023 + sl.tll;  // Update cache
-            } else {
-                sl.eCnt = 0;
-                sl.eInc = sl.eIncA;
-                sl.eCmp = ENV_DECAY;
-                sl.curEnv = EnvState.ATTACK;
-                sl.volume = 0;
-                sl.volOut = sl.tll;  // Update cache (volume=0)
-            }
-            sl.ssgEg ^= (sl.ssgEg & 2) << 1;
-        } else {
-            sl.eCnt = ENV_END;
-            sl.eInc = 0;
-            sl.eCmp = ENV_END + 1;
-            sl.volume = 1023;
-            sl.volOut = 1023 + sl.tll;  // Update cache
-        }
     }
 
     // Sustain level lookup table: maps 4-bit register value to GPGX volume scale (0-1023)
@@ -995,7 +1102,7 @@ public class Ym2612Chip {
         for (int i = 0; i < 15; i++) {
             SL_VOL_TAB[i] = i * 64;  // 0, 64, 128, ... 896
         }
-        SL_VOL_TAB[15] = 1023;  // Max attenuation = silence
+        SL_VOL_TAB[15] = MAX_ATT_INDEX;  // Max attenuation = silence
     }
 
     /**
@@ -1016,59 +1123,73 @@ public class Ym2612Chip {
                         sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
                         sl.eCnt = ENV_DECAY;  // Keep legacy eCnt in sync
                     }
-                    // GPGX: update vol_out cache when volume changes
-                    sl.volOut = sl.volume + sl.tll;
+                    updateVolOut(sl);
                 }
                 break;
 
             case DECAY1:
                 if ((egCnt & ((1 << sl.egShD1r) - 1)) == 0) {
                     int inc = EG_INC[sl.egSelD1r + ((egCnt >> sl.egShD1r) & 7)];
-                    // Linear decay
-                    sl.volume += inc;
-                    // Get sustain level using stored slReg directly
+                    if (sl.ssgEnabled) {
+                        if (sl.volume < SSG_THRESHOLD) {
+                            sl.volume += 4 * inc;
+                            updateVolOut(sl);
+                        }
+                    } else {
+                        sl.volume += inc;
+                        updateVolOut(sl);
+                    }
                     int sustainLevel = SL_VOL_TAB[sl.slReg];
                     if (sl.volume >= sustainLevel) {
                         sl.volume = sustainLevel;
                         sl.curEnv = EnvState.DECAY2;
                         sl.eCnt = sl.d1l;  // Keep legacy eCnt in sync
+                        updateVolOut(sl);
                     }
-                    // GPGX: update vol_out cache when volume changes
-                    sl.volOut = sl.volume + sl.tll;
                 }
                 break;
 
             case DECAY2:
                 if ((egCnt & ((1 << sl.egShD2r) - 1)) == 0) {
                     int inc = EG_INC[sl.egSelD2r + ((egCnt >> sl.egShD2r) & 7)];
-                    // Linear decay to silence
-                    sl.volume += inc;
-                    if (sl.volume >= 1023) {
-                        sl.volume = 1023;
-                        if (sl.ssgEnabled) {
-                            handleSsgEnd(sl);
+                    if (sl.ssgEnabled) {
+                        if (sl.volume < SSG_THRESHOLD) {
+                            sl.volume += 4 * inc;
+                            updateVolOut(sl);
+                        }
+                    } else {
+                        sl.volume += inc;
+                        if (sl.volume >= MAX_ATT_INDEX) {
+                            sl.volume = MAX_ATT_INDEX;
+                            updateVolOut(sl);
                         } else {
-                            sl.curEnv = EnvState.IDLE;
-                            sl.eCnt = ENV_END;
+                            updateVolOut(sl);
                         }
                     }
-                    // GPGX: update vol_out cache when volume changes
-                    sl.volOut = sl.volume + sl.tll;
                 }
                 break;
 
             case RELEASE:
                 if ((egCnt & ((1 << sl.egShRr) - 1)) == 0) {
                     int inc = EG_INC[sl.egSelRr + ((egCnt >> sl.egShRr) & 7)];
-                    // Linear release
-                    sl.volume += inc;
-                    if (sl.volume >= 1023) {
-                        sl.volume = 1023;
-                        sl.curEnv = EnvState.IDLE;
-                        sl.eCnt = ENV_END;
+                    if (sl.ssgEnabled) {
+                        if (sl.volume < SSG_THRESHOLD) {
+                            sl.volume += 4 * inc;
+                        }
+                        if (sl.volume >= SSG_THRESHOLD) {
+                            sl.volume = MAX_ATT_INDEX;
+                            sl.curEnv = EnvState.IDLE;
+                            sl.eCnt = ENV_END;
+                        }
+                    } else {
+                        sl.volume += inc;
+                        if (sl.volume >= MAX_ATT_INDEX) {
+                            sl.volume = MAX_ATT_INDEX;
+                            sl.curEnv = EnvState.IDLE;
+                            sl.eCnt = ENV_END;
+                        }
                     }
-                    // GPGX: update vol_out cache when volume changes
-                    sl.volOut = sl.volume + sl.tll;
+                    updateVolOut(sl);
                 }
                 break;
 
@@ -1113,17 +1234,19 @@ public class Ym2612Chip {
     private void renderOneSample() {
         // GPGX: LFO values are read BEFORE update (for use in channel calc)
         // and then updated AFTER channel calculation
-        int freqLfo = 0;
+        int pmLfo = 0;
         int envLfo = 126;  // GPGX: 126 (max AM) when disabled
 
         if (lfoInc != 0) {
             int idx = (lfoCnt >> LFO_LBITS) & LFO_MASK;
             envLfo = LFO_ENV_TAB[idx];
-            freqLfo = LFO_FREQ_TAB[idx];
+            pmLfo = idx >> 2;
         }
 
         int leftSum = 0;
         int rightSum = 0;
+
+        updateSsgEg();
 
         // DAC output
         int dacOut = renderDac();
@@ -1137,7 +1260,7 @@ public class Ym2612Chip {
         for (int ch = 0; ch < 6; ch++) {
             if (mutes[ch]) continue;
             if (ch == 5 && dacEnabled) continue;
-            int out = renderChannel(ch, envLfo, freqLfo);
+            int out = renderChannel(ch, envLfo, pmLfo);
             if (channels[ch].leftMask != 0) leftSum += out;
             if (channels[ch].rightMask != 0) rightSum += out;
         }
@@ -1174,7 +1297,7 @@ public class Ym2612Chip {
     // DEBUG: Set to true to mute FM4 (channel 3) for Signpost SFX debugging
     private static final boolean DEBUG_MUTE_FM4 = false;
 
-    private int renderChannel(int chIdx, int envLfo, int freqLfo) {
+    private int renderChannel(int chIdx, int envLfo, int pmLfo) {
         Channel ch = channels[chIdx];
 
         // DEBUG: Mute FM4 to test if two-channel interference causes the reverb
@@ -1189,9 +1312,6 @@ public class Ym2612Chip {
 
         if (ch.ops[0].fInc == -1) calcFIncChannel(ch);
 
-        int fms = ch.fms;
-        int lfoShift = fms != 0 ? (fms * freqLfo) >> (LFO_HBITS - 1) : 0;
-
         // GET_CURRENT_PHASE - capture fCnt BEFORE incrementing (like libvgm)
         // Slot order matches ym2612.c: S0=op0, S1=op2, S2=op1, S3=op3
         in0 = ch.ops[0].fCnt;
@@ -1200,13 +1320,48 @@ public class Ym2612Chip {
         in3 = ch.ops[3].fCnt;
 
         // UPDATE_PHASE - increment fCnt AFTER capturing
-        for (int i=0; i<4; i++) {
-            Operator op = ch.ops[i];
-            int finc = op.fInc;
-            if (lfoShift != 0) {
-                finc += (finc * lfoShift) >> LFO_FMS_LBITS;
+        boolean lfoPmActive = lfoInc != 0 && ch.pms != 0;
+        if (lfoPmActive) {
+            if (channel3SpecialMode && chIdx == 2) {
+                for (int i = 0; i < 4; i++) {
+                    Operator op = ch.ops[i];
+                    int fnum = i == 0 ? ch.fNum : ch.slotFnum[i];
+                    int block = i == 0 ? ch.block : ch.slotBlock[i];
+                    int kc = i == 0 ? ch.kCode : ch.slotKCode[i];
+                    int pm = ch.pms + pmLfo;
+                    int lfoOffset = LFO_PM_TABLE[((fnum & 0x7F0) << 4) + pm];
+                    if (lfoOffset != 0) {
+                        int fnumLfo = ((fnum << 1) + lfoOffset) & 0xFFF;
+                        int finc = FINC_TAB[fnumLfo >> 1] >> (7 - block);
+                        finc += DT_TAB[op.dt1][kc];
+                        op.fCnt += (int) (finc * op.mul);
+                    } else {
+                        op.fCnt += op.fInc;
+                    }
+                }
+            } else {
+                int fnum = ch.fNum;
+                int block = ch.block;
+                int kc = ch.kCode;
+                int pm = ch.pms + pmLfo;
+                int lfoOffset = LFO_PM_TABLE[((fnum & 0x7F0) << 4) + pm];
+                if (lfoOffset != 0) {
+                    int fnumLfo = ((fnum << 1) + lfoOffset) & 0xFFF;
+                    int fincBase = FINC_TAB[fnumLfo >> 1] >> (7 - block);
+                    for (Operator op : ch.ops) {
+                        int finc = fincBase + DT_TAB[op.dt1][kc];
+                        op.fCnt += (int) (finc * op.mul);
+                    }
+                } else {
+                    for (Operator op : ch.ops) {
+                        op.fCnt += op.fInc;
+                    }
+                }
             }
-            op.fCnt += finc;
+        } else {
+            for (Operator op : ch.ops) {
+                op.fCnt += op.fInc;
+            }
         }
 
         // GET_CURRENT_ENV - read envelope values for this sample
@@ -1231,14 +1386,9 @@ public class Ym2612Chip {
         // GPGX: Use cached vol_out (= volume + tll)
         // This avoids per-sample recalculation
         int env = sl.volOut;
-
-        if ((sl.ssgEg & 4) != 0) {
-             if (env > ENV_MASK) env = 0;
-             else env = (env ^ ENV_MASK) + (lfoInc != 0 ? (envLfo >> sl.ams) : 0);
-        } else {
-             if (lfoInc != 0) {
-                env += (envLfo >> sl.ams);
-             }
+        if (lfoInc != 0) {
+            int am = envLfo >> ch.ams;
+            env += (am & sl.amMask);
         }
 
         switch(slot) {
@@ -1274,6 +1424,16 @@ public class Ym2612Chip {
         return TL_TAB[p];
     }
 
+    private static int opCalc(int phase, int env, int pm, int mask) {
+        int out = opCalc(phase, env, pm);
+        return out & mask;
+    }
+
+    private static int opCalcNoModMasked(int phase, int env, int mask) {
+        int out = opCalc(phase, env);
+        return out & mask;
+    }
+
     private void doAlgo(Channel ch) {
         // Phase values (in0..in3) are already set by renderChannel's GET_CURRENT_PHASE step.
         // in0..in3 are in slot order S0,S1,S2,S3. Our GET_CURRENT_ENV stores:
@@ -1291,58 +1451,64 @@ public class Ym2612Chip {
         // This causes feedback buffer to naturally decay when notes fade out.
         boolean s0Quiet = env0 >= ENV_QUIET;
 
+        int[] mask = opMask[ch.algo];
+        int mask0 = mask[0];
+        int mask1 = mask[1];
+        int mask2 = mask[2];
+        int mask3 = mask[3];
+
         int fb = (ch.feedback < SIN_BITS) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
         ch.opOut[1] = ch.opOut[0];
-        int s0_out = s0Quiet ? 0 : opCalc(in0, env0, fb << 1);
+        int s0_out = s0Quiet ? 0 : opCalc(in0, env0, fb << 1, mask0);
         ch.opOut[0] = s0_out;  // ALWAYS update - quiet means 0 propagates
 
         switch (ch.algo) {
             case 0: {
                 // S0 -> S1 -> MEM -> S2 -> S3 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalc(in1, env1, s0_out);
+                int s1_out = opCalc(in1, env1, s0_out, mask2);
                 int mem = s1_out;
-                int s2_out = opCalc(in2, env2, m2);
-                ch.out = opCalc(in3, env3, s2_out) >> OUT_SHIFT;
+                int s2_out = opCalc(in2, env2, m2, mask1);
+                ch.out = opCalc(in3, env3, s2_out, mask3) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 1: {
                 // (S0 + S1) -> MEM -> S2 -> S3 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalc(in1, env1);  // S1 no modulation
+                int s1_out = opCalcNoModMasked(in1, env1, mask2);  // S1 no modulation
                 int mem = s0_out + s1_out;
-                int s2_out = opCalc(in2, env2, m2);
-                ch.out = opCalc(in3, env3, s2_out) >> OUT_SHIFT;
+                int s2_out = opCalc(in2, env2, m2, mask1);
+                ch.out = opCalc(in3, env3, s2_out, mask3) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 2: {
                 // S0 + (S1 -> MEM -> S2) -> S3 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalc(in1, env1);  // S1 no modulation
+                int s1_out = opCalcNoModMasked(in1, env1, mask2);  // S1 no modulation
                 int mem = s1_out;
-                int s2_out = opCalc(in2, env2, m2);
-                ch.out = opCalc(in3, env3, s0_out + s2_out) >> OUT_SHIFT;
+                int s2_out = opCalc(in2, env2, m2, mask1);
+                ch.out = opCalc(in3, env3, s0_out + s2_out, mask3) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 3: {
                 // S0 -> S1 -> MEM + S2 -> S3 (carrier)
                 int c2 = ch.memValue;
-                int s1_out = opCalc(in1, env1, s0_out);
+                int s1_out = opCalc(in1, env1, s0_out, mask2);
                 int mem = s1_out;
-                int s2_out = opCalc(in2, env2);  // S2 no modulation
+                int s2_out = opCalcNoModMasked(in2, env2, mask1);  // S2 no modulation
                 c2 += s2_out;
-                ch.out = opCalc(in3, env3, c2) >> OUT_SHIFT;
+                ch.out = opCalc(in3, env3, c2, mask3) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 4: {
                 // S0 -> S1 (carrier) + S2 -> S3 (carrier)
-                int s1_out = opCalc(in1, env1, s0_out);
-                int s2_out = opCalc(in2, env2);  // S2 no modulation
-                int s3_out = opCalc(in3, env3, s2_out);
+                int s1_out = opCalc(in1, env1, s0_out, mask2);
+                int s2_out = opCalcNoModMasked(in2, env2, mask1);  // S2 no modulation
+                int s3_out = opCalc(in3, env3, s2_out, mask3);
                 ch.out = (s1_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = 0;
                 break;
@@ -1351,27 +1517,27 @@ public class Ym2612Chip {
                 // S0 -> (S1 + MEM -> S2 + S3) all carriers
                 int m2 = ch.memValue;
                 int mem = s0_out;
-                int s1_out = opCalc(in1, env1, s0_out);
-                int s2_out = opCalc(in2, env2, m2);
-                int s3_out = opCalc(in3, env3, s0_out);
+                int s1_out = opCalc(in1, env1, s0_out, mask2);
+                int s2_out = opCalc(in2, env2, m2, mask1);
+                int s3_out = opCalc(in3, env3, s0_out, mask3);
                 ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 6: {
                 // S0 -> S1 (carrier) + S2 (carrier) + S3 (carrier)
-                int s1_out = opCalc(in1, env1, s0_out);
-                int s2_out = opCalc(in2, env2);  // S2 no modulation
-                int s3_out = opCalc(in3, env3);  // S3 no modulation
+                int s1_out = opCalc(in1, env1, s0_out, mask2);
+                int s2_out = opCalcNoModMasked(in2, env2, mask1);  // S2 no modulation
+                int s3_out = opCalcNoModMasked(in3, env3, mask3);  // S3 no modulation
                 ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = 0;
                 break;
             }
             case 7: {
                 // All carriers, no modulation
-                int s1_out = opCalc(in1, env1);
-                int s2_out = opCalc(in2, env2);
-                int s3_out = opCalc(in3, env3);
+                int s1_out = opCalcNoModMasked(in1, env1, mask2);
+                int s2_out = opCalcNoModMasked(in2, env2, mask1);
+                int s3_out = opCalcNoModMasked(in3, env3, mask3);
                 ch.out = (s0_out + s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = 0;
                 break;
@@ -1524,9 +1690,17 @@ public class Ym2612Chip {
 
     /**
      * Legacy helper for unit tests (TestYm2612AlgorithmRouting).
-     * Defines the abstract routing for documentation/verification purposes.
+     * Assumes MEM = 0 (pre-GPGX) and does not model output masking.
      */
     public static double computeModulationInput(int algo, int opIndex, double[] opOut, double feedback) {
+        return computeModulationInputWithMem(algo, opIndex, opOut, feedback, 0.0);
+    }
+
+    /**
+     * Helper for unit tests (TestYm2612AlgorithmRouting).
+     * Models the GPGX MEM path for algorithms 0-3 and 5. Output masking is not modeled.
+     */
+    public static double computeModulationInputWithMem(int algo, int opIndex, double[] opOut, double feedback, double memValue) {
         if (opIndex == 0) return feedback;
         if (opIndex < 0 || opIndex >= OP_TO_SLOT.length) return 0;
         // Map op outputs into slot order (S0,S1,S2,S3) used by ym2612.c algorithms.
@@ -1537,12 +1711,12 @@ public class Ym2612Chip {
         int slotIndex = OP_TO_SLOT[opIndex];
 
         return switch (algo) {
-            case 0 -> (slotIndex == 1 ? slot0 : slotIndex == 2 ? slot1 : slotIndex == 3 ? slot2 : 0);
-            case 1 -> (slotIndex == 2 ? slot0 + slot1 : slotIndex == 3 ? slot2 : 0);
-            case 2 -> (slotIndex == 2 ? slot1 : slotIndex == 3 ? slot0 + slot2 : 0);
-            case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot1 + slot2 : 0);
+            case 0 -> (slotIndex == 1 ? slot0 : slotIndex == 2 ? memValue : slotIndex == 3 ? slot2 : 0);
+            case 1 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot2 : 0);
+            case 2 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 + slot2 : 0);
+            case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? memValue + slot2 : 0);
             case 4 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot2 : 0);
-            case 5 -> (slotIndex == 1 || slotIndex == 2 || slotIndex == 3 ? slot0 : 0);
+            case 5 -> (slotIndex == 1 ? slot0 : slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 : 0);
             case 6 -> (slotIndex == 1 ? slot0 : 0);
             case 7 -> 0;
             default -> 0;
@@ -1566,32 +1740,133 @@ public class Ym2612Chip {
         };
     }
 
-    private void csmKeyControl() {
+    private void csmKeyOn() {
         Channel ch = channels[2];
-        keyOn(ch, 0);
-        keyOn(ch, 1);
-        keyOn(ch, 2);
-        keyOn(ch, 3);
+        keyOnCsm(ch, 0);
+        keyOnCsm(ch, 1);
+        keyOnCsm(ch, 2);
+        keyOnCsm(ch, 3);
+        csmKeyFlag = 1;
+    }
+
+    private void csmKeyOff() {
+        Channel ch = channels[2];
+        keyOffCsm(ch, 0);
+        keyOffCsm(ch, 1);
+        keyOffCsm(ch, 2);
+        keyOffCsm(ch, 3);
+        csmKeyFlag = 0;
+    }
+
+    private void keyOnCsm(Channel ch, int idx) {
+        Operator sl = ch.ops[idx];
+        if (!sl.key && csmKeyFlag == 0) {
+            sl.fCnt = 0;
+            sl.ssgn = 0;
+            if ((sl.ar + sl.ksr) < 94) {
+                sl.curEnv = (sl.volume <= 0)
+                        ? ((sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1)
+                        : EnvState.ATTACK;
+            } else {
+                sl.volume = 0;
+                sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
+            }
+            updateVolOut(sl);
+        }
+    }
+
+    private void updateVolOut(Operator sl) {
+        if (sl.ssgEnabled && ((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0)) {
+            sl.volOut = ((SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX) + sl.tll;
+        } else {
+            sl.volOut = sl.volume + sl.tll;
+        }
+    }
+
+    private void updateSsgEg() {
+        for (int ch = 0; ch < 6; ch++) {
+            Channel channel = channels[ch];
+            for (int op = 0; op < 4; op++) {
+                Operator sl = channel.ops[op];
+                if ((sl.ssgEg & 0x08) != 0 && sl.volume >= SSG_THRESHOLD
+                        && sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
+                    if ((sl.ssgEg & 0x01) != 0) {
+                        if ((sl.ssgEg & 0x02) != 0) {
+                            sl.ssgn = 4;
+                        }
+                        if (sl.curEnv != EnvState.ATTACK && ((sl.ssgn ^ (sl.ssgEg & 0x04)) == 0)) {
+                            sl.volume = MAX_ATT_INDEX;
+                        }
+                    } else {
+                        if ((sl.ssgEg & 0x02) != 0) {
+                            sl.ssgn ^= 4;
+                        } else {
+                            sl.fCnt = 0;
+                        }
+                        if (sl.curEnv != EnvState.ATTACK) {
+                            if ((sl.ar + sl.ksr) < 94) {
+                                sl.curEnv = (sl.volume <= 0)
+                                        ? ((sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1)
+                                        : EnvState.ATTACK;
+                            } else {
+                                sl.volume = 0;
+                                sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
+                            }
+                        }
+                    }
+                    updateVolOut(sl);
+                }
+            }
+        }
+    }
+
+    private void keyOffCsm(Channel ch, int idx) {
+        Operator sl = ch.ops[idx];
+        if (!sl.key && sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
+            sl.curEnv = EnvState.RELEASE;
+            if (sl.ssgEnabled) {
+                if (((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0)) {
+                    sl.volume = (SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX;
+                }
+                if (sl.volume >= SSG_THRESHOLD) {
+                    sl.volume = MAX_ATT_INDEX;
+                    sl.curEnv = EnvState.IDLE;
+                }
+            }
+            updateVolOut(sl);
+        }
     }
 
     private void tickTimers(int samples) {
         if (samples <= 0) return;
-        int ticks = TIMER_BASE_INT * samples;
-        if (timerAEnabled) {
-            timerACount -= ticks;
-            if (timerACount <= 0) {
-                status |= FM_STATUS_TIMERA_BIT_MASK;
-                timerACount += timerALoad;
-                if ((mode & 0x80) != 0) {
-                    csmKeyControl();
+        for (int i = 0; i < samples; i++) {
+            csmKeyFlag <<= 1;
+            if ((mode & 0x01) != 0) {
+                timerACount--;
+                if (timerACount <= 0) {
+                    if ((mode & 0x04) != 0) {
+                        status |= FM_STATUS_TIMERA_BIT_MASK;
+                    }
+                    timerACount = timerALoad;
+                    if ((mode & 0xC0) == 0x80) {
+                        csmKeyOn();
+                    }
                 }
             }
-        }
-        if (timerBEnabled) {
-            timerBCount -= ticks;
-            if (timerBCount <= 0) {
-                status |= FM_STATUS_TIMERB_BIT_MASK;
-                timerBCount += timerBLoad;
+            if ((csmKeyFlag & 2) != 0) {
+                csmKeyOff();
+            }
+
+            if ((mode & 0x02) != 0) {
+                timerBCount--;
+                if (timerBCount <= 0) {
+                    if ((mode & 0x08) != 0) {
+                        status |= FM_STATUS_TIMERB_BIT_MASK;
+                    }
+                    do {
+                        timerBCount += timerBLoad;
+                    } while (timerBCount <= 0);
+                }
             }
         }
         if (busyCycles > 0) {
