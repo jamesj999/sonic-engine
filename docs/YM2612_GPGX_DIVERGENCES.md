@@ -126,15 +126,17 @@ Impact:
 - Amplitude scaling differs from GPGX hardware-accurate tables.
 - This is likely a major cause of remaining audio issues (fade-out behavior).
 
-### 8) Phase generator, detune overflow, and KSR handling ❌ DIVERGENT
+### 8) Phase generator, detune overflow, and KSR handling ✅ FIXED
 GPGX:
 - Detune/multiple uses fixed-point tables and includes detune overflow behavior;
   `set_ar_ksr` includes a hardware-verified AR max rule. (`docs/gensplusgx/ym2612.c:952-999`)
 Java:
-- `calcFIncSlot` uses floating-point multiply for detune.
-- No detune overflow handling or AR max gating rule.
+- **NOW IMPLEMENTED:** Added `DT_BITS=17`, `DT_LEN`, `DT_MASK` constants for phase-generator overflow.
+- `calcFIncSlot` applies `& DT_MASK` after adding detune, matching GPGX `refresh_fc_eg_slot`.
+- `DT_TAB` now uses raw detune values without scaling (matches GPGX line 1886).
+- GPGX-style `fc = (fNum << block) >> 1` and integer phase increment.
 Impact:
-- Detune and AR behavior can diverge, especially at extreme rates or keyscale settings.
+- ✅ Now matches GPGX phase generator with correct detune handling.
 
 ### 9) Key-on logic differences 🛠️ ATTEMPTED
 GPGX:
@@ -304,10 +306,10 @@ Impact:
 
 | Status | Count | Items |
 |--------|-------|-------|
-| ✅ FIXED | 6 | #1 (EG timing), #11 (feedback), #12 (LFO order), #17 (LFO reset), #19 (clipping), #20 (timebase) |
+| ✅ FIXED | 7 | #1 (EG timing), #8 (phase/detune), #11 (feedback), #12 (LFO order), #17 (LFO reset), #19 (clipping), #20 (timebase) |
 | ⚠️ PARTIAL | 0 | — |
 | 🛠️ ATTEMPTED | 14 | #2 (LFO PM/AM), #3 (SSG-EG), #5 (MEM delay), #6 (timers), #7 (table scaling), #9 (key-on), #10 (write-time EG), #13 (ports), #14 (op mask), #15 (AM depth), #16 (SSG 4x), #18 (timer reset), #21 (DAC gain), #22 (Timer B) |
-| ❌ DIVERGENT | 2 | #4 (DAC), #8 (detune) |
+| ❌ DIVERGENT | 1 | #4 (DAC) |
 
 ## Priority Fixes for Signpost SFX Issue
 

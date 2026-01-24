@@ -11,9 +11,9 @@ public class Ym2612Chip {
     private static final double CLOCK = 7670453.0;
     private static final double OUTPUT_RATE = 44100.0;
     // GPGX: Internal rate is CLOCK/144 (~53267 Hz)
-    private static final double INTERNAL_RATE = CLOCK / 144.0;  // 53267.034...
+    private static final double INTERNAL_RATE = CLOCK / 144.0; // 53267.034...
     // Resampling ratio for converting internal to output rate
-    private static final double RESAMPLE_RATIO = INTERNAL_RATE / OUTPUT_RATE;  // ~1.208
+    private static final double RESAMPLE_RATIO = INTERNAL_RATE / OUTPUT_RATE; // ~1.208
 
     // Constants from ym2612.c
     private static final int SIN_HBITS = 10;
@@ -25,7 +25,7 @@ public class Ym2612Chip {
     // Legacy envelope counter fractional bits (kept for compatibility)
     private static final int ENV_LBITS = 16;
     // GPGX: 128-step inverted triangle LFO instead of 1024-step sine
-    private static final int LFO_HBITS = 7;  // 128 = 2^7
+    private static final int LFO_HBITS = 7; // 128 = 2^7
     private static final int LFO_LBITS = 21; // 28 - LFO_HBITS
 
     private static final int SIN_LEN = 1 << SIN_HBITS; // 1024
@@ -37,6 +37,12 @@ public class Ym2612Chip {
 
     private static final int SIN_MASK = SIN_LEN - 1;
     private static final int LFO_MASK = LFO_LEN - 1;
+
+    // Phase generator detune overflow (GPGX: ym2612.c:166-169)
+    // Implements frequency phase overflow verified by Nemesis on real hardware
+    private static final int DT_BITS = 17;
+    private static final int DT_LEN = 1 << DT_BITS;
+    private static final int DT_MASK = DT_LEN - 1;
 
     // envelope step in dB (GPGX: 128.0 / ENV_LEN)
     private static final double ENV_STEP = 128.0 / (1 << ENV_BITS);
@@ -55,7 +61,8 @@ public class Ym2612Chip {
     private static final int LIMIT_CH_OUT_POS = 8191;
     private static final int LIMIT_CH_OUT_NEG = -8192;
 
-    // GPGX ENV_QUIET threshold: when envelope exceeds this, operator output is forced to 0.
+    // GPGX ENV_QUIET threshold: when envelope exceeds this, operator output is
+    // forced to 0.
     // This causes feedback buffer to naturally decay when notes fade out.
     private static final int ENV_QUIET = TL_TAB_LEN >> 3;
 
@@ -84,44 +91,44 @@ public class Ym2612Chip {
     // Indexed by eg_rate_select[rate] + ((egCnt >> eg_rate_shift[rate]) & 7)
     // Copied directly from GPGX ym2612.c
     private static final int[] EG_INC = {
-        // Row 0: rates 00..11 with (rate&3)==0 - increment by 0 or 1
-        0, 1, 0, 1, 0, 1, 0, 1,
-        // Row 1: rates 00..11 with (rate&3)==1
-        0, 1, 0, 1, 1, 1, 0, 1,
-        // Row 2: rates 00..11 with (rate&3)==2
-        0, 1, 1, 1, 0, 1, 1, 1,
-        // Row 3: rates 00..11 with (rate&3)==3
-        0, 1, 1, 1, 1, 1, 1, 1,
-        // Row 4: rate 12 with (rate&3)==0 - increment by 1
-        1, 1, 1, 1, 1, 1, 1, 1,
-        // Row 5: rate 12 with (rate&3)==1
-        1, 1, 1, 2, 1, 1, 1, 2,
-        // Row 6: rate 12 with (rate&3)==2
-        1, 2, 1, 2, 1, 2, 1, 2,
-        // Row 7: rate 12 with (rate&3)==3
-        1, 2, 2, 2, 1, 2, 2, 2,
-        // Row 8: rate 13 with (rate&3)==0 - increment by 2
-        2, 2, 2, 2, 2, 2, 2, 2,
-        // Row 9: rate 13 with (rate&3)==1
-        2, 2, 2, 4, 2, 2, 2, 4,
-        // Row 10: rate 13 with (rate&3)==2
-        2, 4, 2, 4, 2, 4, 2, 4,
-        // Row 11: rate 13 with (rate&3)==3
-        2, 4, 4, 4, 2, 4, 4, 4,
-        // Row 12: rate 14 with (rate&3)==0 - increment by 4
-        4, 4, 4, 4, 4, 4, 4, 4,
-        // Row 13: rate 14 with (rate&3)==1
-        4, 4, 4, 8, 4, 4, 4, 8,
-        // Row 14: rate 14 with (rate&3)==2
-        4, 8, 4, 8, 4, 8, 4, 8,
-        // Row 15: rate 14 with (rate&3)==3
-        4, 8, 8, 8, 4, 8, 8, 8,
-        // Row 16: rate 15 (all) - increment by 8
-        8, 8, 8, 8, 8, 8, 8, 8,
-        // Row 17: rate 15 for attack (16x increment) - NOT USED in our implementation
-        16, 16, 16, 16, 16, 16, 16, 16,
-        // Row 18: infinity/zero increment (dummy rates 0-1)
-        0, 0, 0, 0, 0, 0, 0, 0
+            // Row 0: rates 00..11 with (rate&3)==0 - increment by 0 or 1
+            0, 1, 0, 1, 0, 1, 0, 1,
+            // Row 1: rates 00..11 with (rate&3)==1
+            0, 1, 0, 1, 1, 1, 0, 1,
+            // Row 2: rates 00..11 with (rate&3)==2
+            0, 1, 1, 1, 0, 1, 1, 1,
+            // Row 3: rates 00..11 with (rate&3)==3
+            0, 1, 1, 1, 1, 1, 1, 1,
+            // Row 4: rate 12 with (rate&3)==0 - increment by 1
+            1, 1, 1, 1, 1, 1, 1, 1,
+            // Row 5: rate 12 with (rate&3)==1
+            1, 1, 1, 2, 1, 1, 1, 2,
+            // Row 6: rate 12 with (rate&3)==2
+            1, 2, 1, 2, 1, 2, 1, 2,
+            // Row 7: rate 12 with (rate&3)==3
+            1, 2, 2, 2, 1, 2, 2, 2,
+            // Row 8: rate 13 with (rate&3)==0 - increment by 2
+            2, 2, 2, 2, 2, 2, 2, 2,
+            // Row 9: rate 13 with (rate&3)==1
+            2, 2, 2, 4, 2, 2, 2, 4,
+            // Row 10: rate 13 with (rate&3)==2
+            2, 4, 2, 4, 2, 4, 2, 4,
+            // Row 11: rate 13 with (rate&3)==3
+            2, 4, 4, 4, 2, 4, 4, 4,
+            // Row 12: rate 14 with (rate&3)==0 - increment by 4
+            4, 4, 4, 4, 4, 4, 4, 4,
+            // Row 13: rate 14 with (rate&3)==1
+            4, 4, 4, 8, 4, 4, 4, 8,
+            // Row 14: rate 14 with (rate&3)==2
+            4, 8, 4, 8, 4, 8, 4, 8,
+            // Row 15: rate 14 with (rate&3)==3
+            4, 8, 8, 8, 4, 8, 8, 8,
+            // Row 16: rate 15 (all) - increment by 8
+            8, 8, 8, 8, 8, 8, 8, 8,
+            // Row 17: rate 15 for attack (16x increment) - NOT USED in our implementation
+            16, 16, 16, 16, 16, 16, 16, 16,
+            // Row 18: infinity/zero increment (dummy rates 0-1)
+            0, 0, 0, 0, 0, 0, 0, 0
     };
 
     // EG_RATE_SELECT: Maps rate value (0-63) to base index in EG_INC
@@ -150,71 +157,71 @@ public class Ym2612Chip {
             3, 3, 3, 3
     };
 
-    private static final int[] LFO_AMS_DEPTH_SHIFT = {8, 3, 1, 0};
+    private static final int[] LFO_AMS_DEPTH_SHIFT = { 8, 3, 1, 0 };
 
     private static final int[][] LFO_PM_OUTPUT = {
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 1, 1, 1, 1},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 1, 1, 1, 1 },
 
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 1, 1, 1, 1},
-            {0, 0, 1, 1, 2, 2, 2, 3},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 1, 1, 1, 1 },
+            { 0, 0, 1, 1, 2, 2, 2, 3 },
 
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 1},
-            {0, 0, 0, 0, 1, 1, 1, 1},
-            {0, 0, 1, 1, 2, 2, 2, 3},
-            {0, 0, 2, 3, 4, 4, 5, 6},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 1 },
+            { 0, 0, 0, 0, 1, 1, 1, 1 },
+            { 0, 0, 1, 1, 2, 2, 2, 3 },
+            { 0, 0, 2, 3, 4, 4, 5, 6 },
 
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 0, 0, 1, 1},
-            {0, 0, 0, 0, 1, 1, 1, 1},
-            {0, 0, 0, 1, 1, 1, 1, 2},
-            {0, 0, 1, 1, 2, 2, 2, 3},
-            {0, 0, 2, 3, 4, 4, 5, 6},
-            {0, 0, 4, 6, 8, 8, 10, 12},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 0, 0, 1, 1 },
+            { 0, 0, 0, 0, 1, 1, 1, 1 },
+            { 0, 0, 0, 1, 1, 1, 1, 2 },
+            { 0, 0, 1, 1, 2, 2, 2, 3 },
+            { 0, 0, 2, 3, 4, 4, 5, 6 },
+            { 0, 0, 4, 6, 8, 8, 10, 12 },
 
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 1, 1, 1, 1},
-            {0, 0, 0, 1, 1, 1, 2, 2},
-            {0, 0, 1, 1, 2, 2, 3, 3},
-            {0, 0, 1, 2, 2, 2, 3, 4},
-            {0, 0, 2, 3, 4, 4, 5, 6},
-            {0, 0, 4, 6, 8, 8, 10, 12},
-            {0, 0, 8, 12, 16, 16, 20, 24},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 1, 1, 1, 1 },
+            { 0, 0, 0, 1, 1, 1, 2, 2 },
+            { 0, 0, 1, 1, 2, 2, 3, 3 },
+            { 0, 0, 1, 2, 2, 2, 3, 4 },
+            { 0, 0, 2, 3, 4, 4, 5, 6 },
+            { 0, 0, 4, 6, 8, 8, 10, 12 },
+            { 0, 0, 8, 12, 16, 16, 20, 24 },
 
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 2, 2, 2, 2},
-            {0, 0, 0, 2, 2, 2, 4, 4},
-            {0, 0, 2, 2, 4, 4, 6, 6},
-            {0, 0, 2, 4, 4, 4, 6, 8},
-            {0, 0, 4, 6, 8, 8, 10, 12},
-            {0, 0, 8, 12, 16, 16, 20, 24},
-            {0, 0, 16, 24, 32, 32, 40, 48},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 2, 2, 2, 2 },
+            { 0, 0, 0, 2, 2, 2, 4, 4 },
+            { 0, 0, 2, 2, 4, 4, 6, 6 },
+            { 0, 0, 2, 4, 4, 4, 6, 8 },
+            { 0, 0, 4, 6, 8, 8, 10, 12 },
+            { 0, 0, 8, 12, 16, 16, 20, 24 },
+            { 0, 0, 16, 24, 32, 32, 40, 48 },
 
-            {0, 0, 0, 0, 0, 0, 0, 0},
-            {0, 0, 0, 0, 4, 4, 4, 4},
-            {0, 0, 0, 4, 4, 4, 8, 8},
-            {0, 0, 4, 4, 8, 8, 12, 12},
-            {0, 0, 4, 8, 8, 8, 12, 16},
-            {0, 0, 8, 12, 16, 16, 20, 24},
-            {0, 0, 16, 24, 32, 32, 40, 48},
-            {0, 0, 32, 48, 64, 64, 80, 96},
+            { 0, 0, 0, 0, 0, 0, 0, 0 },
+            { 0, 0, 0, 0, 4, 4, 4, 4 },
+            { 0, 0, 0, 4, 4, 4, 8, 8 },
+            { 0, 0, 4, 4, 8, 8, 12, 12 },
+            { 0, 0, 4, 8, 8, 8, 12, 16 },
+            { 0, 0, 8, 12, 16, 16, 20, 24 },
+            { 0, 0, 16, 24, 32, 32, 40, 48 },
+            { 0, 0, 32, 48, 64, 64, 80, 96 },
     };
 
     private static final int[] LFO_PM_TABLE = new int[128 * 8 * 32];
@@ -228,7 +235,7 @@ public class Ym2612Chip {
     // GPGX: When running at internal rate, frequency multiplier is 1.0
     private static final double YM2612_FREQUENCY = 1.0;
     // Operator slot order matches ym2612.c (S0,S1,S2,S3) mapping to ops[0,2,1,3]
-    private static final int[] OP_TO_SLOT = {0, 2, 1, 3};
+    private static final int[] OP_TO_SLOT = { 0, 2, 1, 3 };
 
     static {
         // TL_TAB generation (GPGX linear power table)
@@ -237,8 +244,10 @@ public class Ym2612Chip {
             m = StrictMath.floor(m);
             int n = (int) m;
             n >>= 4;
-            if ((n & 1) != 0) n = (n >> 1) + 1;
-            else n >>= 1;
+            if ((n & 1) != 0)
+                n = (n >> 1) + 1;
+            else
+                n >>= 1;
             n <<= 2;
 
             TL_TAB[x * 2] = n;
@@ -257,19 +266,21 @@ public class Ym2612Chip {
             double o = 8.0 * StrictMath.log(1.0 / StrictMath.abs(m)) / StrictMath.log(2.0);
             o = o / (ENV_STEP / 4.0);
             int n = (int) (2.0 * o);
-            if ((n & 1) != 0) n = (n >> 1) + 1;
-            else n >>= 1;
+            if ((n & 1) != 0)
+                n = (n >> 1) + 1;
+            else
+                n >>= 1;
             SIN_TAB[i] = n * 2 + (m >= 0.0 ? 0 : 1);
         }
 
         // GPGX LFO Table: 128-step inverted triangle
         // LFO_ENV_TAB: AM modulation (0-126, inverted triangle)
-        for (int i = 0; i < LFO_LEN; i++) {  // LFO_LEN = 128
+        for (int i = 0; i < LFO_LEN; i++) { // LFO_LEN = 128
             // Inverted triangle for AM: 126 -> 0 -> 126
             if (i < 64) {
-                LFO_ENV_TAB[i] = (63 - i) << 1;  // 126, 124, ... 2, 0
+                LFO_ENV_TAB[i] = (63 - i) << 1; // 126, 124, ... 2, 0
             } else {
-                LFO_ENV_TAB[i] = (i - 64) << 1;  // 0, 2, 4, ... 124, 126
+                LFO_ENV_TAB[i] = (i - 64) << 1; // 0, 2, 4, ... 124, 126
             }
 
             // PM uses lfo_cnt >> 2 (GPGX) rather than a separate table.
@@ -291,7 +302,8 @@ public class Ym2612Chip {
 
         // Decay to Attack conversion
         for (int i = 0, j = ENV_LEN - 1; i < ENV_LEN; i++) {
-            while (j > 0 && ENV_TAB[j] < i) j--;
+            while (j > 0 && ENV_TAB[j] < i)
+                j--;
             DECAY_TO_ATTACK[i] = j << ENV_LBITS;
         }
 
@@ -333,13 +345,13 @@ public class Ym2612Chip {
             DR_TAB[i] = 0;
         }
 
-        // Detune Table
+        // Detune Table - GPGX-style: use raw values without scaling
+        // These values are added directly to the 17-bit fc before the DT_MASK is
+        // applied
         for (int i = 0; i < 4; i++) {
             for (int k = 0; k < 32; k++) {
-                double x;
-                x = (double) DT_DEF_TAB[(i << 5) + k] * YM2612_FREQUENCY * (double) (1 << (SIN_LBITS + SIN_HBITS - 21));
-                DT_TAB[i + 0][k] = (int) x;
-                DT_TAB[i + 4][k] = (int) -x;
+                DT_TAB[i + 0][k] = DT_DEF_TAB[(i << 5) + k];
+                DT_TAB[i + 4][k] = -DT_TAB[i][k];
             }
         }
 
@@ -359,7 +371,7 @@ public class Ym2612Chip {
         for (int rate = 0; rate < 64; rate++) {
             if (rate < 2) {
                 // Rates 0-1: dummy (zero increment from row 18)
-                EG_RATE_SELECT[rate] = 18 * 8;  // Row 18 = zero increment
+                EG_RATE_SELECT[rate] = 18 * 8; // Row 18 = zero increment
                 EG_RATE_SHIFT[rate] = 11;
             } else if (rate < 4) {
                 // Rates 2-3: use rows 2-3
@@ -370,7 +382,8 @@ public class Ym2612Chip {
                 EG_RATE_SELECT[rate] = (rate & 3) * 8;
                 // Shift: 11 - ((rate - 4) / 4) = 10 for rates 4-7, 9 for 8-11, etc.
                 EG_RATE_SHIFT[rate] = 11 - ((rate - 4) >> 2) - 1;
-                if (EG_RATE_SHIFT[rate] < 0) EG_RATE_SHIFT[rate] = 0;
+                if (EG_RATE_SHIFT[rate] < 0)
+                    EG_RATE_SHIFT[rate] = 0;
             } else if (rate < 52) {
                 // Rates 48-51 (rate 12): use rows 4-7
                 EG_RATE_SELECT[rate] = (4 + (rate & 3)) * 8;
@@ -420,7 +433,8 @@ public class Ym2612Chip {
     private boolean dacHasLatched;
     // DAC timing from s2.sounddriver.asm:314,727-728:
     // "295 cycles for two samples. dpcmLoopCounter should use 295 divided by 2."
-    // Base overhead = 295 cycles per 2 samples, djnz loops add 13*2=26 cycles per rateByte
+    // Base overhead = 295 cycles per 2 samples, djnz loops add 13*2=26 cycles per
+    // rateByte
     private static final double DAC_BASE_CYCLES = 295.0;
     private static final double DAC_LOOP_CYCLES = 26.0;
     private static final double DAC_LOOP_SAMPLES = 2.0;
@@ -450,7 +464,6 @@ public class Ym2612Chip {
     private static final int BUSY_CYCLES_DATA = 47;
     private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / INTERNAL_RATE;
 
-
     private int timerACount;
     private int timerBCount;
     private int timerALoad;
@@ -464,15 +477,17 @@ public class Ym2612Chip {
     // GPGX EG counter: 12-bit, cycles 1-4095, skips 0
     // EG only advances every 3 samples (frequency = chipclock/144/3)
     private int egCnt = 1;
-    private int egTimer = 0;  // Counts 0, 1, 2, then triggers egCnt increment
+    private int egTimer = 0; // Counts 0, 1, 2, then triggers egCnt increment
 
     private boolean channel3SpecialMode;
 
-    private enum EnvState { ATTACK, DECAY1, DECAY2, RELEASE, IDLE }
+    private enum EnvState {
+        ATTACK, DECAY1, DECAY2, RELEASE, IDLE
+    }
 
     private static class Operator {
         int dt1;
-        double mul;
+        int mul; // GPGX: 1 for reg=0, or reg*2 for reg=1-15
         int tl;
         int tll;
         int rs, ar;
@@ -490,13 +505,13 @@ public class Ym2612Chip {
         int eCmp;
 
         // GPGX EG rate cache - precomputed shift/select for each envelope phase
-        int egShAr, egSelAr;    // Attack rate shift/select
-        int egShD1r, egSelD1r;  // Decay1 rate shift/select
-        int egShD2r, egSelD2r;  // Decay2/Sustain rate shift/select
-        int egShRr, egSelRr;    // Release rate shift/select
-        int volume;             // GPGX-style volume (0 = max, 1023 = silent)
-        int volOut;             // GPGX-style cached vol_out = volume + tll
-        int slReg;              // Raw 4-bit sustain level register value (0-15)
+        int egShAr, egSelAr; // Attack rate shift/select
+        int egShD1r, egSelD1r; // Decay1 rate shift/select
+        int egShD2r, egSelD2r; // Decay2/Sustain rate shift/select
+        int egShRr, egSelRr; // Release rate shift/select
+        int volume; // GPGX-style volume (0 = max, 1023 = silent)
+        int volOut; // GPGX-style cached vol_out = volume + tll
+        int slReg; // Raw 4-bit sustain level register value (0-15)
         EnvState curEnv = EnvState.RELEASE;
 
         int eIncA, eIncD, eIncS, eIncR;
@@ -519,6 +534,10 @@ public class Ym2612Chip {
         final int[] slotFnum = new int[4];
         final int[] slotBlock = new int[4];
         final int[] slotKCode = new int[4];
+        int fc; // GPGX: base frequency = (fNum << block) >> 1
+        final int[] slotFc = new int[4]; // CH3 special mode per-slot fc
+        int blockFnum; // GPGX: (block << 11) | fNum for LFO PM
+        final int[] slotBlockFnum = new int[4]; // CH3 special mode
 
         int feedback;
         int algo;
@@ -591,7 +610,7 @@ public class Ym2612Chip {
             ch.fNum = 0;
             ch.block = 0;
             ch.kCode = 0;
-            ch.feedback = 31;  // fb=0 means no feedback (large shift effectively disables it)
+            ch.feedback = 31; // fb=0 means no feedback (large shift effectively disables it)
             ch.algo = 0;
             ch.ams = LFO_AMS_DEPTH_SHIFT[0];
             ch.pms = 0;
@@ -602,9 +621,17 @@ public class Ym2612Chip {
             for (int i = 0; i < 4; i++) {
                 ch.opOut[i] = 0;
                 Operator o = ch.ops[i];
-                o.dt1 = 0; o.mul = 0.5; o.tl = 0; o.tll = 0;
-                o.ksr = 0; o.ar = 0; o.am = 0; o.d1r = 0;
-                o.d2r = 0; o.d1l = 0; o.rr = 0;
+                o.dt1 = 0;
+                o.mul = 1; // GPGX: mul=1 when reg=0
+                o.tl = 0;
+                o.tll = 0;
+                o.ksr = 0;
+                o.ar = 0;
+                o.am = 0;
+                o.d1r = 0;
+                o.d2r = 0;
+                o.d1l = 0;
+                o.rr = 0;
                 o.ssgEg = 0;
                 o.ssgn = 0;
                 o.fCnt = 0;
@@ -615,9 +642,9 @@ public class Ym2612Chip {
                 o.chgEnM = 0;
                 o.key = false;
                 // GPGX EG state
-                o.volume = 1023;  // Start silent
-                o.volOut = 1023 + o.tll;  // Cache vol_out
-                o.slReg = 0;      // Sustain level register
+                o.volume = 1023; // Start silent
+                o.volOut = 1023 + o.tll; // Cache vol_out
+                o.slReg = 0; // Sustain level register
                 o.egShAr = o.egSelAr = 0;
                 o.egShD1r = o.egSelD1r = 0;
                 o.egShD2r = o.egSelD2r = 0;
@@ -628,7 +655,8 @@ public class Ym2612Chip {
     }
 
     public void setMute(int ch, boolean mute) {
-        if (ch >= 0 && ch < 6) mutes[ch] = mute;
+        if (ch >= 0 && ch < 6)
+            mutes[ch] = mute;
     }
 
     /**
@@ -638,8 +666,8 @@ public class Ym2612Chip {
     public void silenceAll() {
         // Key-off all 6 channels (reg 0x28, value = channel with no operator keys)
         for (int ch = 0; ch < 3; ch++) {
-            write(0, 0x28, ch);         // Part I channels 0-2
-            write(0, 0x28, ch | 0x04);  // Part II channels 3-5
+            write(0, 0x28, ch); // Part I channels 0-2
+            write(0, 0x28, ch | 0x04); // Part II channels 3-5
         }
         // Write 0xFF to registers 0x30-0x8F on both ports to kill all operator params
         for (int reg = 0x30; reg < 0x90; reg++) {
@@ -665,7 +693,8 @@ public class Ym2612Chip {
      * a phaser/chorus effect.
      */
     public void forceSilenceChannel(int chIdx) {
-        if (chIdx < 0 || chIdx >= 6) return;
+        if (chIdx < 0 || chIdx >= 6)
+            return;
         Channel ch = channels[chIdx];
 
         // Reset feedback buffer to ensure clean, identical state for multi-channel SFX
@@ -682,8 +711,8 @@ public class Ym2612Chip {
             sl.curEnv = EnvState.IDLE;
             sl.chgEnM = 0xFFFFFFFF; // Allow next keyOn to proceed
             sl.key = false; // Reset key flag for GPGX-style key handling
-            sl.volume = 1023;  // GPGX: silent
-            sl.volOut = 1023 + sl.tll;  // Update cache
+            sl.volume = 1023; // GPGX: silent
+            sl.volOut = 1023 + sl.tll; // Update cache
             sl.ssgn = 0;
         }
     }
@@ -701,8 +730,10 @@ public class Ym2612Chip {
     }
 
     public int readStatus() {
-        if (busyCycles > 0) status |= FM_STATUS_BUSY_BIT_MASK;
-        else status &= ~FM_STATUS_BUSY_BIT_MASK;
+        if (busyCycles > 0)
+            status |= FM_STATUS_BUSY_BIT_MASK;
+        else
+            status &= ~FM_STATUS_BUSY_BIT_MASK;
         return status;
     }
 
@@ -724,7 +755,8 @@ public class Ym2612Chip {
     public void writeData(int port, int val) {
         busyCycles = BUSY_CYCLES_DATA;
         int addr = addressLatch[port & 1];
-        if (port == 1) addr += 0x100;
+        if (port == 1)
+            addr += 0x100;
 
         if (addr < 0x30) {
             writeYm(addr, val);
@@ -795,14 +827,28 @@ public class Ym2612Chip {
                 break;
             case 0x28:
                 int chIdx = val & 0x03;
-                if (chIdx == 3) return;
-                if ((val & 0x04) != 0) chIdx += 3;
+                if (chIdx == 3)
+                    return;
+                if ((val & 0x04) != 0)
+                    chIdx += 3;
                 Channel ch = channels[chIdx];
                 int mask = (val >> 4) & 0xF;
-                if ((mask & 1) != 0) keyOn(ch, 0); else keyOff(ch, 0);
-                if ((mask & 2) != 0) keyOn(ch, 2); else keyOff(ch, 2);
-                if ((mask & 4) != 0) keyOn(ch, 1); else keyOff(ch, 1);
-                if ((mask & 8) != 0) keyOn(ch, 3); else keyOff(ch, 3);
+                if ((mask & 1) != 0)
+                    keyOn(ch, 0);
+                else
+                    keyOff(ch, 0);
+                if ((mask & 2) != 0)
+                    keyOn(ch, 2);
+                else
+                    keyOff(ch, 2);
+                if ((mask & 4) != 0)
+                    keyOn(ch, 1);
+                else
+                    keyOff(ch, 1);
+                if ((mask & 8) != 0)
+                    keyOn(ch, 3);
+                else
+                    keyOff(ch, 3);
                 break;
             case 0x2A:
                 dacLatchedValue = (val & 0xFF) - 128;
@@ -811,7 +857,8 @@ public class Ym2612Chip {
                 break;
             case 0x2B:
                 dacEnabled = (val & 0x80) != 0;
-                if (!dacEnabled) stopDac();
+                if (!dacEnabled)
+                    stopDac();
                 break;
         }
     }
@@ -839,10 +886,12 @@ public class Ym2612Chip {
 
     private void writeSlot(int addr, int val) {
         int nch = addr & 3;
-        if (nch == 3) return;
-        if ((addr & 0x100) != 0) nch += 3;
+        if (nch == 3)
+            return;
+        if ((addr & 0x100) != 0)
+            nch += 3;
 
-        int[] regToOp = {0, 2, 1, 3};
+        int[] regToOp = { 0, 2, 1, 3 };
         int regSlot = (addr >> 2) & 3;
         int opIdx = regToOp[regSlot];
 
@@ -852,14 +901,17 @@ public class Ym2612Chip {
         switch (addr & 0xF0) {
             case 0x30:
                 int mulVal = val & 0x0F;
-                sl.mul = (mulVal == 0) ? 0.5 : (double) mulVal;
+                // GPGX: mul = 1 when register is 0, otherwise reg * 2
+                sl.mul = (mulVal == 0) ? 1 : mulVal * 2;
                 sl.dt1 = (val >> 4) & 7;
                 ch.ops[0].fInc = -1;
                 break;
             case 0x40:
                 sl.tl = val & 0x7F;
-                if ((ENV_HBITS - 7) < 0) sl.tll = sl.tl >> (7 - ENV_HBITS);
-                else sl.tll = sl.tl << (ENV_HBITS - 7);
+                if ((ENV_HBITS - 7) < 0)
+                    sl.tll = sl.tl >> (7 - ENV_HBITS);
+                else
+                    sl.tll = sl.tl << (ENV_HBITS - 7);
                 // GPGX: update vol_out cache when TL changes
                 updateVolOut(sl);
                 break;
@@ -868,28 +920,32 @@ public class Ym2612Chip {
                 sl.rs = 3 - (val >> 6);
                 ch.ops[0].fInc = -1;
                 sl.eIncA = AR_TAB[sl.ar + sl.ksr];
-                if (sl.curEnv == EnvState.ATTACK) sl.eInc = sl.eIncA;
+                if (sl.curEnv == EnvState.ATTACK)
+                    sl.eInc = sl.eIncA;
                 updateEgRateCache(sl);
                 break;
             case 0x60:
                 sl.amMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
                 sl.d1r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
                 sl.eIncD = DR_TAB[sl.d1r + sl.ksr];
-                if (sl.curEnv == EnvState.DECAY1) sl.eInc = sl.eIncD;
+                if (sl.curEnv == EnvState.DECAY1)
+                    sl.eInc = sl.eIncD;
                 updateEgRateCache(sl);
                 break;
             case 0x70:
                 sl.d2r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
                 sl.eIncS = DR_TAB[sl.d2r + sl.ksr];
-                if (sl.curEnv == EnvState.DECAY2) sl.eInc = sl.eIncS;
+                if (sl.curEnv == EnvState.DECAY2)
+                    sl.eInc = sl.eIncS;
                 updateEgRateCache(sl);
                 break;
             case 0x80:
-                sl.slReg = (val >> 4) & 0x0F;  // Store raw 4-bit SL value
+                sl.slReg = (val >> 4) & 0x0F; // Store raw 4-bit SL value
                 sl.d1l = SL_TAB[sl.slReg];
                 sl.rr = ((val & 0xF) << 2) + 2;
                 sl.eIncR = DR_TAB[sl.rr + sl.ksr];
-                if (sl.curEnv == EnvState.RELEASE) sl.eInc = sl.eIncR;
+                if (sl.curEnv == EnvState.RELEASE)
+                    sl.eInc = sl.eIncR;
                 if (sl.curEnv == EnvState.DECAY1) {
                     int sustainLevel = SL_VOL_TAB[sl.slReg];
                     if (sl.volume >= sustainLevel) {
@@ -911,20 +967,27 @@ public class Ym2612Chip {
 
     private void writeChannel(int addr, int val) {
         int nch = addr & 3;
-        if (nch == 3) return;
-        if ((addr & 0x100) != 0) nch += 3;
+        if (nch == 3)
+            return;
+        if ((addr & 0x100) != 0)
+            nch += 3;
         Channel ch = channels[nch];
 
         switch (addr & 0xFC) {
             case 0xA0:
                 ch.fNum = (ch.fNum & 0x700) | (val & 0xFF);
                 ch.kCode = (ch.block << 2) | FKEY_TAB[ch.fNum >> 7];
+                // GPGX: fc = (fNum << block) >> 1
+                ch.fc = (ch.fNum << ch.block) >> 1;
+                ch.blockFnum = (ch.block << 11) | ch.fNum;
                 ch.ops[0].fInc = -1;
                 break;
             case 0xA4:
                 ch.fNum = (ch.fNum & 0xFF) | ((val & 0x07) << 8);
                 ch.block = (val >> 3) & 7;
                 ch.kCode = (ch.block << 2) | FKEY_TAB[ch.fNum >> 7];
+                ch.fc = (ch.fNum << ch.block) >> 1;
+                ch.blockFnum = (ch.block << 11) | ch.fNum;
                 ch.ops[0].fInc = -1;
                 break;
             case 0xA8:
@@ -932,6 +995,8 @@ public class Ym2612Chip {
                     int slot = (addr & 3) + 1;
                     ch.slotFnum[slot] = (ch.slotFnum[slot] & 0x700) | (val & 0xFF);
                     ch.slotKCode[slot] = (ch.slotBlock[slot] << 2) | FKEY_TAB[ch.slotFnum[slot] >> 7];
+                    ch.slotFc[slot] = (ch.slotFnum[slot] << ch.slotBlock[slot]) >> 1;
+                    ch.slotBlockFnum[slot] = (ch.slotBlock[slot] << 11) | ch.slotFnum[slot];
                     ch.ops[0].fInc = -1;
                 }
                 break;
@@ -941,6 +1006,8 @@ public class Ym2612Chip {
                     ch.slotFnum[slot] = (ch.slotFnum[slot] & 0xFF) | ((val & 0x07) << 8);
                     ch.slotBlock[slot] = (val >> 3) & 7;
                     ch.slotKCode[slot] = (ch.slotBlock[slot] << 2) | FKEY_TAB[ch.slotFnum[slot] >> 7];
+                    ch.slotFc[slot] = (ch.slotFnum[slot] << ch.slotBlock[slot]) >> 1;
+                    ch.slotBlockFnum[slot] = (ch.slotBlock[slot] << 11) | ch.slotFnum[slot];
                     ch.ops[0].fInc = -1;
                 }
                 break;
@@ -963,8 +1030,11 @@ public class Ym2612Chip {
         }
     }
 
-    private void calcFIncSlot(Operator sl, int finc, int kc) {
-        sl.fInc = (int) ((finc + DT_TAB[sl.dt1][kc]) * sl.mul);
+    private void calcFIncSlot(Operator sl, int fc, int kc) {
+        // GPGX refresh_fc_eg_slot: add detune, apply overflow mask, then multiply
+        fc = (fc + DT_TAB[sl.dt1][kc]) & DT_MASK;
+        // GPGX: Incr = (fc * mul) >> 1 (because mul is 1 or reg*2)
+        sl.fInc = (fc * sl.mul) >> 1;
         int ksr = kc >> sl.rs;
         if (sl.ksr != ksr) {
             sl.ksr = ksr;
@@ -973,11 +1043,15 @@ public class Ym2612Chip {
             sl.eIncS = DR_TAB[sl.d2r + ksr];
             sl.eIncR = DR_TAB[sl.rr + ksr];
 
-            if (sl.curEnv == EnvState.ATTACK) sl.eInc = sl.eIncA;
-            else if (sl.curEnv == EnvState.DECAY1) sl.eInc = sl.eIncD;
+            if (sl.curEnv == EnvState.ATTACK)
+                sl.eInc = sl.eIncA;
+            else if (sl.curEnv == EnvState.DECAY1)
+                sl.eInc = sl.eIncD;
             else if (sl.eCnt < ENV_END) {
-                if (sl.curEnv == EnvState.DECAY2) sl.eInc = sl.eIncS;
-                else if (sl.curEnv == EnvState.RELEASE) sl.eInc = sl.eIncR;
+                if (sl.curEnv == EnvState.DECAY2)
+                    sl.eInc = sl.eIncS;
+                else if (sl.curEnv == EnvState.RELEASE)
+                    sl.eInc = sl.eIncR;
             }
 
             // Update GPGX EG rate cache
@@ -1018,21 +1092,19 @@ public class Ym2612Chip {
     }
 
     private void calcFIncChannel(Channel ch) {
+        // GPGX: refresh_fc_eg_chan uses pre-calculated fc from register write
         if (channel3SpecialMode && ch == channels[2]) {
-            for (int i=0; i<4; i++) {
-                int fnum = i==0 ? ch.fNum : ch.slotFnum[i];
-                int block = i==0 ? ch.block : ch.slotBlock[i];
-                int kc = i==0 ? ch.kCode : ch.slotKCode[i];
-                int finc = FINC_TAB[fnum] >> (7 - block);
-                calcFIncSlot(ch.ops[i], finc, kc);
+            for (int i = 0; i < 4; i++) {
+                // Slot 0 uses channel fc, slots 1-3 use slotFc
+                int fc = (i == 0) ? ch.fc : ch.slotFc[i];
+                int kc = (i == 0) ? ch.kCode : ch.slotKCode[i];
+                calcFIncSlot(ch.ops[i], fc, kc);
             }
         } else {
-            int finc = FINC_TAB[ch.fNum] >> (7 - ch.block);
-            int kc = ch.kCode;
-            calcFIncSlot(ch.ops[0], finc, kc);
-            calcFIncSlot(ch.ops[1], finc, kc);
-            calcFIncSlot(ch.ops[2], finc, kc);
-            calcFIncSlot(ch.ops[3], finc, kc);
+            calcFIncSlot(ch.ops[0], ch.fc, ch.kCode);
+            calcFIncSlot(ch.ops[1], ch.fc, ch.kCode);
+            calcFIncSlot(ch.ops[2], ch.fc, ch.kCode);
+            calcFIncSlot(ch.ops[3], ch.fc, ch.kCode);
         }
     }
 
@@ -1071,7 +1143,8 @@ public class Ym2612Chip {
 
     private void keyOff(Channel ch, int idx) {
         Operator sl = ch.ops[idx];
-        // GPGX-style: only transition to RELEASE if key was on and not already releasing
+        // GPGX-style: only transition to RELEASE if key was on and not already
+        // releasing
         if (sl.key && csmKeyFlag == 0) {
             if (sl.curEnv != EnvState.RELEASE) {
                 sl.curEnv = EnvState.RELEASE;
@@ -1095,14 +1168,16 @@ public class Ym2612Chip {
         sl.key = false;
     }
 
-    // Sustain level lookup table: maps 4-bit register value to GPGX volume scale (0-1023)
-    // SL reg values 0-14 map to 0-960 in 64-step increments, SL=15 maps to 1023 (max/silence)
+    // Sustain level lookup table: maps 4-bit register value to GPGX volume scale
+    // (0-1023)
+    // SL reg values 0-14 map to 0-960 in 64-step increments, SL=15 maps to 1023
+    // (max/silence)
     private static final int[] SL_VOL_TAB = new int[16];
     static {
         for (int i = 0; i < 15; i++) {
-            SL_VOL_TAB[i] = i * 64;  // 0, 64, 128, ... 896
+            SL_VOL_TAB[i] = i * 64; // 0, 64, 128, ... 896
         }
-        SL_VOL_TAB[15] = MAX_ATT_INDEX;  // Max attenuation = silence
+        SL_VOL_TAB[15] = MAX_ATT_INDEX; // Max attenuation = silence
     }
 
     /**
@@ -1121,7 +1196,7 @@ public class Ym2612Chip {
                         sl.volume = 0;
                         // Transition to decay phase using stored slReg directly
                         sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
-                        sl.eCnt = ENV_DECAY;  // Keep legacy eCnt in sync
+                        sl.eCnt = ENV_DECAY; // Keep legacy eCnt in sync
                     }
                     updateVolOut(sl);
                 }
@@ -1143,7 +1218,7 @@ public class Ym2612Chip {
                     if (sl.volume >= sustainLevel) {
                         sl.volume = sustainLevel;
                         sl.curEnv = EnvState.DECAY2;
-                        sl.eCnt = sl.d1l;  // Keep legacy eCnt in sync
+                        sl.eCnt = sl.d1l; // Keep legacy eCnt in sync
                         updateVolOut(sl);
                     }
                 }
@@ -1199,10 +1274,11 @@ public class Ym2612Chip {
         }
     }
 
-
     /**
-     * Render stereo output at 44.1kHz by generating at internal rate (~53kHz) and resampling.
-     * This matches GPGX's timing accuracy while maintaining standard audio output rate.
+     * Render stereo output at 44.1kHz by generating at internal rate (~53kHz) and
+     * resampling.
+     * This matches GPGX's timing accuracy while maintaining standard audio output
+     * rate.
      */
     public void renderStereo(int[] leftBuf, int[] rightBuf) {
         int outputLen = Math.min(leftBuf.length, rightBuf.length);
@@ -1213,15 +1289,15 @@ public class Ym2612Chip {
             while (resampleAccum < 1.0) {
                 prevLeft = lastLeft;
                 prevRight = lastRight;
-                renderOneSample();  // Updates lastLeft, lastRight
-                resampleAccum += 1.0 / RESAMPLE_RATIO;  // ~0.828 per internal sample
+                renderOneSample(); // Updates lastLeft, lastRight
+                resampleAccum += 1.0 / RESAMPLE_RATIO; // ~0.828 per internal sample
             }
             resampleAccum -= 1.0;
 
             // Linear interpolation between previous and current internal samples
             double t = resampleAccum * RESAMPLE_RATIO;
-            int left = (int)(prevLeft + t * (lastLeft - prevLeft));
-            int right = (int)(prevRight + t * (lastRight - prevRight));
+            int left = (int) (prevLeft + t * (lastLeft - prevLeft));
+            int right = (int) (prevRight + t * (lastRight - prevRight));
 
             leftBuf[outIdx] += left;
             rightBuf[outIdx] += right;
@@ -1235,7 +1311,7 @@ public class Ym2612Chip {
         // GPGX: LFO values are read BEFORE update (for use in channel calc)
         // and then updated AFTER channel calculation
         int pmLfo = 0;
-        int envLfo = 126;  // GPGX: 126 (max AM) when disabled
+        int envLfo = 126; // GPGX: 126 (max AM) when disabled
 
         if (lfoInc != 0) {
             int idx = (lfoCnt >> LFO_LBITS) & LFO_MASK;
@@ -1252,17 +1328,23 @@ public class Ym2612Chip {
         int dacOut = renderDac();
         Channel dacCh = channels[5];
         if (!mutes[5]) {
-            if (dacCh.leftMask != 0) leftSum += dacOut;
-            if (dacCh.rightMask != 0) rightSum += dacOut;
+            if (dacCh.leftMask != 0)
+                leftSum += dacOut;
+            if (dacCh.rightMask != 0)
+                rightSum += dacOut;
         }
 
         // FM channels
         for (int ch = 0; ch < 6; ch++) {
-            if (mutes[ch]) continue;
-            if (ch == 5 && dacEnabled) continue;
+            if (mutes[ch])
+                continue;
+            if (ch == 5 && dacEnabled)
+                continue;
             int out = renderChannel(ch, envLfo, pmLfo);
-            if (channels[ch].leftMask != 0) leftSum += out;
-            if (channels[ch].rightMask != 0) rightSum += out;
+            if (channels[ch].leftMask != 0)
+                leftSum += out;
+            if (channels[ch].rightMask != 0)
+                rightSum += out;
         }
 
         lastLeft = leftSum;
@@ -1280,7 +1362,8 @@ public class Ym2612Chip {
             egTimer = 0;
             // Simple increment, wrap from 4096 to 1 (skip 0)
             egCnt++;
-            if (egCnt >= 4096) egCnt = 1;
+            if (egCnt >= 4096)
+                egCnt = 1;
 
             // Advance envelope generators for all channels (GPGX: advance_eg_channels)
             for (int ch = 0; ch < 6; ch++) {
@@ -1310,7 +1393,8 @@ public class Ym2612Chip {
         // Early-exit was preventing proper feedback accumulation, causing artifacts
         // in high-feedback instruments like Signpost SFX (0xCF).
 
-        if (ch.ops[0].fInc == -1) calcFIncChannel(ch);
+        if (ch.ops[0].fInc == -1)
+            calcFIncChannel(ch);
 
         // GET_CURRENT_PHASE - capture fCnt BEFORE incrementing (like libvgm)
         // Slot order matches ym2612.c: S0=op0, S1=op2, S2=op1, S3=op3
@@ -1325,32 +1409,33 @@ public class Ym2612Chip {
             if (channel3SpecialMode && chIdx == 2) {
                 for (int i = 0; i < 4; i++) {
                     Operator op = ch.ops[i];
-                    int fnum = i == 0 ? ch.fNum : ch.slotFnum[i];
-                    int block = i == 0 ? ch.block : ch.slotBlock[i];
-                    int kc = i == 0 ? ch.kCode : ch.slotKCode[i];
+                    int blockFnum = (i == 0) ? ch.blockFnum : ch.slotBlockFnum[i];
+                    int kc = (i == 0) ? ch.kCode : ch.slotKCode[i];
                     int pm = ch.pms + pmLfo;
-                    int lfoOffset = LFO_PM_TABLE[((fnum & 0x7F0) << 4) + pm];
+                    int lfoOffset = LFO_PM_TABLE[((blockFnum & 0x7F0) << 4) + pm];
                     if (lfoOffset != 0) {
-                        int fnumLfo = ((fnum << 1) + lfoOffset) & 0xFFF;
-                        int finc = FINC_TAB[fnumLfo >> 1] >> (7 - block);
-                        finc += DT_TAB[op.dt1][kc];
-                        op.fCnt += (int) (finc * op.mul);
+                        // GPGX: LFO works with one more bit of precision (12-bit)
+                        int blk = blockFnum >> 11;
+                        int fc = ((blockFnum << 1) + lfoOffset) & 0xFFF;
+                        fc = (fc << blk) >> 2; // GPGX formula
+                        fc = (fc + DT_TAB[op.dt1][kc]) & DT_MASK;
+                        op.fCnt += (fc * op.mul) >> 1;
                     } else {
                         op.fCnt += op.fInc;
                     }
                 }
             } else {
-                int fnum = ch.fNum;
-                int block = ch.block;
-                int kc = ch.kCode;
+                int blockFnum = ch.blockFnum;
                 int pm = ch.pms + pmLfo;
-                int lfoOffset = LFO_PM_TABLE[((fnum & 0x7F0) << 4) + pm];
+                int lfoOffset = LFO_PM_TABLE[((blockFnum & 0x7F0) << 4) + pm];
                 if (lfoOffset != 0) {
-                    int fnumLfo = ((fnum << 1) + lfoOffset) & 0xFFF;
-                    int fincBase = FINC_TAB[fnumLfo >> 1] >> (7 - block);
+                    int blk = blockFnum >> 11;
+                    int kc = ch.kCode;
+                    int fcBase = ((blockFnum << 1) + lfoOffset) & 0xFFF;
+                    fcBase = (fcBase << blk) >> 2;
                     for (Operator op : ch.ops) {
-                        int finc = fincBase + DT_TAB[op.dt1][kc];
-                        op.fCnt += (int) (finc * op.mul);
+                        int fc = (fcBase + DT_TAB[op.dt1][kc]) & DT_MASK;
+                        op.fCnt += (fc * op.mul) >> 1;
                     }
                 } else {
                     for (Operator op : ch.ops) {
@@ -1374,9 +1459,10 @@ public class Ym2612Chip {
         doAlgo(ch);
 
         // GPGX-style asymmetric clipping
-        if (ch.out > LIMIT_CH_OUT_POS) ch.out = LIMIT_CH_OUT_POS;
-        else if (ch.out < LIMIT_CH_OUT_NEG) ch.out = LIMIT_CH_OUT_NEG;
-
+        if (ch.out > LIMIT_CH_OUT_POS)
+            ch.out = LIMIT_CH_OUT_POS;
+        else if (ch.out < LIMIT_CH_OUT_NEG)
+            ch.out = LIMIT_CH_OUT_NEG;
 
         return ch.out;
     }
@@ -1391,7 +1477,7 @@ public class Ym2612Chip {
             env += (am & sl.amMask);
         }
 
-        switch(slot) {
+        switch (slot) {
             case 0 -> en0 = env;
             case 1 -> en1 = env;
             case 2 -> en2 = env;
@@ -1408,10 +1494,11 @@ public class Ym2612Chip {
      * GPGX uses pm >> 1 for op_calc (and pm directly for op_calc1 feedback).
      */
     private static int opCalc(int phase, int env, int pm) {
-        // Phase shift first, then add scaled modulation
-        int idx = ((phase >> SIN_LBITS) + (pm >> 1)) & SIN_MASK;
+        // GPGX: (phase >> SIN_BITS) + pm, where SIN_BITS=10
+        int idx = ((phase >> SIN_BITS) + (pm >> 1)) & SIN_MASK;
         int p = (env << 3) + SIN_TAB[idx];
-        if (p >= TL_TAB_LEN) return 0;
+        if (p >= TL_TAB_LEN)
+            return 0;
         return TL_TAB[p];
     }
 
@@ -1419,8 +1506,10 @@ public class Ym2612Chip {
      * opCalc without modulation (for carriers with no input modulation)
      */
     private static int opCalc(int phase, int env) {
-        int p = (env << 3) + SIN_TAB[(phase >> SIN_LBITS) & SIN_MASK];
-        if (p >= TL_TAB_LEN) return 0;
+        // GPGX: (phase >> SIN_BITS) & SIN_MASK
+        int p = (env << 3) + SIN_TAB[(phase >> SIN_BITS) & SIN_MASK];
+        if (p >= TL_TAB_LEN)
+            return 0;
         return TL_TAB[p];
     }
 
@@ -1435,7 +1524,8 @@ public class Ym2612Chip {
     }
 
     private void doAlgo(Channel ch) {
-        // Phase values (in0..in3) are already set by renderChannel's GET_CURRENT_PHASE step.
+        // Phase values (in0..in3) are already set by renderChannel's GET_CURRENT_PHASE
+        // step.
         // in0..in3 are in slot order S0,S1,S2,S3. Our GET_CURRENT_ENV stores:
         // en0=S0, en1=S2, en2=S1, en3=S3 (because ops[] is [S0,S2,S1,S3]).
         // Reorder here to match libvgm's S0,S1,S2,S3 expectations.
@@ -1460,7 +1550,7 @@ public class Ym2612Chip {
         int fb = (ch.feedback < SIN_BITS) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
         ch.opOut[1] = ch.opOut[0];
         int s0_out = s0Quiet ? 0 : opCalc(in0, env0, fb << 1, mask0);
-        ch.opOut[0] = s0_out;  // ALWAYS update - quiet means 0 propagates
+        ch.opOut[0] = s0_out; // ALWAYS update - quiet means 0 propagates
 
         switch (ch.algo) {
             case 0: {
@@ -1476,7 +1566,7 @@ public class Ym2612Chip {
             case 1: {
                 // (S0 + S1) -> MEM -> S2 -> S3 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalcNoModMasked(in1, env1, mask2);  // S1 no modulation
+                int s1_out = opCalcNoModMasked(in1, env1, mask2); // S1 no modulation
                 int mem = s0_out + s1_out;
                 int s2_out = opCalc(in2, env2, m2, mask1);
                 ch.out = opCalc(in3, env3, s2_out, mask3) >> OUT_SHIFT;
@@ -1486,7 +1576,7 @@ public class Ym2612Chip {
             case 2: {
                 // S0 + (S1 -> MEM -> S2) -> S3 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalcNoModMasked(in1, env1, mask2);  // S1 no modulation
+                int s1_out = opCalcNoModMasked(in1, env1, mask2); // S1 no modulation
                 int mem = s1_out;
                 int s2_out = opCalc(in2, env2, m2, mask1);
                 ch.out = opCalc(in3, env3, s0_out + s2_out, mask3) >> OUT_SHIFT;
@@ -1498,7 +1588,7 @@ public class Ym2612Chip {
                 int c2 = ch.memValue;
                 int s1_out = opCalc(in1, env1, s0_out, mask2);
                 int mem = s1_out;
-                int s2_out = opCalcNoModMasked(in2, env2, mask1);  // S2 no modulation
+                int s2_out = opCalcNoModMasked(in2, env2, mask1); // S2 no modulation
                 c2 += s2_out;
                 ch.out = opCalc(in3, env3, c2, mask3) >> OUT_SHIFT;
                 ch.memValue = mem;
@@ -1507,7 +1597,7 @@ public class Ym2612Chip {
             case 4: {
                 // S0 -> S1 (carrier) + S2 -> S3 (carrier)
                 int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int s2_out = opCalcNoModMasked(in2, env2, mask1);  // S2 no modulation
+                int s2_out = opCalcNoModMasked(in2, env2, mask1); // S2 no modulation
                 int s3_out = opCalc(in3, env3, s2_out, mask3);
                 ch.out = (s1_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = 0;
@@ -1527,8 +1617,8 @@ public class Ym2612Chip {
             case 6: {
                 // S0 -> S1 (carrier) + S2 (carrier) + S3 (carrier)
                 int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int s2_out = opCalcNoModMasked(in2, env2, mask1);  // S2 no modulation
-                int s3_out = opCalcNoModMasked(in3, env3, mask3);  // S3 no modulation
+                int s2_out = opCalcNoModMasked(in2, env2, mask1); // S2 no modulation
+                int s3_out = opCalcNoModMasked(in3, env3, mask3); // S3 no modulation
                 ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = 0;
                 break;
@@ -1547,7 +1637,8 @@ public class Ym2612Chip {
     }
 
     public void setInstrument(int chIdx, byte[] voice) {
-        if (chIdx < 0 || chIdx >= 6 || voice.length < 1) return;
+        if (chIdx < 0 || chIdx >= 6 || voice.length < 1)
+            return;
         Channel ch = channels[chIdx];
 
         int port = (chIdx < 3) ? 0 : 1;
@@ -1588,28 +1679,30 @@ public class Ym2612Chip {
         int amD1rBase = 9;
         int d2rBase = 13;
         int d1lRrBase = 17;
-        // Reorder SMPS voice (Op1, Op3, Op2, Op4) into YM operator order (Op1, Op2, Op3, Op4).
-        // SMPS stores parameters as: [Op1, Op3, Op2, Op4] but YM2612 expects [Op1, Op2, Op3, Op4].
-        int[] dtIdx   = {1, 3, 2, 4};
-        int[] tlIdx   = {21, 23, 22, 24};
-        int[] rsArIdx = {5, 7, 6, 8};
-        int[] amIdx   = {9, 11, 10, 12};
-        int[] d2rIdx  = {13, 15, 14, 16};
-        int[] d1lRrIdx= {17, 19, 18, 20};
+        // Reorder SMPS voice (Op1, Op3, Op2, Op4) into YM operator order (Op1, Op2,
+        // Op3, Op4).
+        // SMPS stores parameters as: [Op1, Op3, Op2, Op4] but YM2612 expects [Op1, Op2,
+        // Op3, Op4].
+        int[] dtIdx = { 1, 3, 2, 4 };
+        int[] tlIdx = { 21, 23, 22, 24 };
+        int[] rsArIdx = { 5, 7, 6, 8 };
+        int[] amIdx = { 9, 11, 10, 12 };
+        int[] d2rIdx = { 13, 15, 14, 16 };
+        int[] d1lRrIdx = { 17, 19, 18, 20 };
 
         // Map to YM order into temporary arrays for clarity
-        int[] dt   = new int[4];
-        int[] tl   = new int[4];
+        int[] dt = new int[4];
+        int[] tl = new int[4];
         int[] rsar = new int[4];
         int[] amd1 = new int[4];
-        int[] d2r  = new int[4];
-        int[] d1lrr= new int[4];
+        int[] d2r = new int[4];
+        int[] d1lrr = new int[4];
         for (int i = 0; i < 4; i++) {
-            dt[i]    = get.applyAsInt(dtIdx[i]);
-            tl[i]    = hasTl ? get.applyAsInt(tlIdx[i]) : 0;
-            rsar[i]  = get.applyAsInt(rsArIdx[i]);
-            amd1[i]  = get.applyAsInt(amIdx[i]);
-            d2r[i]   = get.applyAsInt(d2rIdx[i]);
+            dt[i] = get.applyAsInt(dtIdx[i]);
+            tl[i] = hasTl ? get.applyAsInt(tlIdx[i]) : 0;
+            rsar[i] = get.applyAsInt(rsArIdx[i]);
+            amd1[i] = get.applyAsInt(amIdx[i]);
+            d2r[i] = get.applyAsInt(d2rIdx[i]);
             d1lrr[i] = get.applyAsInt(d1lRrIdx[i]);
         }
 
@@ -1626,7 +1719,8 @@ public class Ym2612Chip {
     }
 
     public void playDac(int note) {
-        if (dacData == null) return;
+        if (dacData == null)
+            return;
         DacData.DacEntry entry = dacData.mapping.get(note);
         if (entry != null) {
             this.currentDacSampleId = entry.sampleId;
@@ -1635,7 +1729,8 @@ public class Ym2612Chip {
             double cyclesPerBlock = DAC_BASE_CYCLES + (DAC_LOOP_CYCLES * rateByte);
             double cyclesPerSample = cyclesPerBlock / DAC_LOOP_SAMPLES;
             double rateHz = Z80_CLOCK / cyclesPerSample;
-            // DAC step is now relative to internal rate since renderDac() is called at ~53kHz
+            // DAC step is now relative to internal rate since renderDac() is called at
+            // ~53kHz
             this.dacStep = Math.max(0.0001, rateHz / INTERNAL_RATE);
         }
     }
@@ -1657,7 +1752,7 @@ public class Ym2612Chip {
                 int idx = (int) dacPos;
                 double frac = dacPos - idx;
                 int s1 = (data[idx] & 0xFF) - 128;
-            if (dacInterpolate) {
+                if (dacInterpolate) {
                     int s2 = (idx + 1 < data.length) ? ((data[idx + 1] & 0xFF) - 128) : s1;
                     double lerp = s1 * (1.0 - frac) + s2 * frac;
                     sample = (int) Math.round(lerp);
@@ -1698,11 +1793,15 @@ public class Ym2612Chip {
 
     /**
      * Helper for unit tests (TestYm2612AlgorithmRouting).
-     * Models the GPGX MEM path for algorithms 0-3 and 5. Output masking is not modeled.
+     * Models the GPGX MEM path for algorithms 0-3 and 5. Output masking is not
+     * modeled.
      */
-    public static double computeModulationInputWithMem(int algo, int opIndex, double[] opOut, double feedback, double memValue) {
-        if (opIndex == 0) return feedback;
-        if (opIndex < 0 || opIndex >= OP_TO_SLOT.length) return 0;
+    public static double computeModulationInputWithMem(int algo, int opIndex, double[] opOut, double feedback,
+            double memValue) {
+        if (opIndex == 0)
+            return feedback;
+        if (opIndex < 0 || opIndex >= OP_TO_SLOT.length)
+            return 0;
         // Map op outputs into slot order (S0,S1,S2,S3) used by ym2612.c algorithms.
         double slot0 = opOut[0]; // Op1 (feedback operator)
         double slot1 = opOut[2]; // Op3
@@ -1838,7 +1937,8 @@ public class Ym2612Chip {
     }
 
     private void tickTimers(int samples) {
-        if (samples <= 0) return;
+        if (samples <= 0)
+            return;
         for (int i = 0; i < samples; i++) {
             csmKeyFlag <<= 1;
             if ((mode & 0x01) != 0) {
