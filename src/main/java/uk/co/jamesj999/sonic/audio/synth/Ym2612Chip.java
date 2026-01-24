@@ -79,7 +79,7 @@ public class Ym2612Chip {
     private static final int[] DECAY_TO_ATTACK = new int[ENV_LEN];
     private static final int[] FINC_TAB = new int[2048];
     private static final int[] AR_TAB = new int[128];
-    private static final int[] DR_TAB = new int[96];
+    private static final int[] DR_TAB = new int[128];
     private static final int[] SL_TAB = new int[16];
     private static final int[][] DT_TAB = new int[8][32];
 
@@ -131,12 +131,43 @@ public class Ym2612Chip {
             0, 0, 0, 0, 0, 0, 0, 0
     };
 
-    // EG_RATE_SELECT: Maps rate value (0-63) to base index in EG_INC
-    // Pattern from GPGX: rates cycle through rows 0-3, then 4-7, 8-11, 12-15, 16
-    private static final int[] EG_RATE_SELECT = new int[64];
-    // EG_RATE_SHIFT: Maps rate value (0-63) to shift for egCnt gating
-    // Shift decreases as rate increases (faster rates update more often)
-    private static final int[] EG_RATE_SHIFT = new int[64];
+    // GPGX EG rate tables (32 dummy + 64 rates + 32 dummy), copied from ym2612.c
+    private static final int[] EG_RATE_SELECT = {
+            144, 144, 144, 144, 144, 144, 144, 144,
+            144, 144, 144, 144, 144, 144, 144, 144,
+            144, 144, 144, 144, 144, 144, 144, 144,
+            144, 144, 144, 144, 144, 144, 144, 144,
+            144, 144, 16, 24, 0, 8, 16, 24,
+            0, 8, 16, 24, 0, 8, 16, 24,
+            0, 8, 16, 24, 0, 8, 16, 24,
+            0, 8, 16, 24, 0, 8, 16, 24,
+            0, 8, 16, 24, 0, 8, 16, 24,
+            0, 8, 16, 24, 0, 8, 16, 24,
+            32, 40, 48, 56, 64, 72, 80, 88,
+            96, 104, 112, 120, 128, 128, 128, 128,
+            128, 128, 128, 128, 128, 128, 128, 128,
+            128, 128, 128, 128, 128, 128, 128, 128,
+            128, 128, 128, 128, 128, 128, 128, 128,
+            128, 128, 128, 128, 128, 128, 128, 128
+    };
+    private static final int[] EG_RATE_SHIFT = {
+            11, 11, 11, 11, 11, 11, 11, 11,
+            11, 11, 11, 11, 11, 11, 11, 11,
+            11, 11, 11, 11, 11, 11, 11, 11,
+            11, 11, 11, 11, 11, 11, 11, 11,
+            11, 11, 11, 11, 10, 10, 10, 10,
+            9, 9, 9, 9, 8, 8, 8, 8,
+            7, 7, 7, 7, 6, 6, 6, 6,
+            5, 5, 5, 5, 4, 4, 4, 4,
+            3, 3, 3, 3, 2, 2, 2, 2,
+            1, 1, 1, 1, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0
+    };
 
     // Reference tables from ym2612.c
     private static final int[] DT_DEF_TAB = {
@@ -237,6 +268,11 @@ public class Ym2612Chip {
     // Operator slot order matches ym2612.c (S0,S1,S2,S3) mapping to ops[0,2,1,3]
     private static final int[] OP_TO_SLOT = { 0, 2, 1, 3 };
 
+    // Debug tracing: set to true to log key on/off envelope state.
+    private static final boolean TRACE_KEY_EVENTS = false;
+    private static final int TRACE_CHANNEL = 4; // -1 = all channels, otherwise 0..5
+    private static final int TRACE_EVENT_LIMIT = 64;
+
     static {
         // TL_TAB generation (GPGX linear power table)
         for (int x = 0; x < TL_RES_LEN; x++) {
@@ -336,7 +372,7 @@ public class Ym2612Chip {
             AR_TAB[i + 4] = (int) (x / AR_RATE);
             DR_TAB[i + 4] = (int) (x / DR_RATE);
         }
-        for (int i = 64; i < 96; i++) {
+        for (int i = 64; i < 128; i++) {
             AR_TAB[i] = AR_TAB[63];
             DR_TAB[i] = DR_TAB[63];
         }
@@ -365,43 +401,6 @@ public class Ym2612Chip {
         LFO_INC_TAB[5] = (int) (9.63 * lfoBase);
         LFO_INC_TAB[6] = (int) (48.1 * lfoBase);
         LFO_INC_TAB[7] = (int) (72.2 * lfoBase);
-
-        // GPGX EG Rate Tables initialization - copied from ym2612.c
-        // The pattern matches GPGX's eg_rate_select and eg_rate_shift tables
-        for (int rate = 0; rate < 64; rate++) {
-            if (rate < 2) {
-                // Rates 0-1: dummy (zero increment from row 18)
-                EG_RATE_SELECT[rate] = 18 * 8; // Row 18 = zero increment
-                EG_RATE_SHIFT[rate] = 11;
-            } else if (rate < 4) {
-                // Rates 2-3: use rows 2-3
-                EG_RATE_SELECT[rate] = (rate & 3) * 8;
-                EG_RATE_SHIFT[rate] = 11;
-            } else if (rate < 48) {
-                // Rates 4-47: cycle through rows 0-3 based on (rate & 3)
-                EG_RATE_SELECT[rate] = (rate & 3) * 8;
-                // Shift: 11 - ((rate - 4) / 4) = 10 for rates 4-7, 9 for 8-11, etc.
-                EG_RATE_SHIFT[rate] = 11 - ((rate - 4) >> 2) - 1;
-                if (EG_RATE_SHIFT[rate] < 0)
-                    EG_RATE_SHIFT[rate] = 0;
-            } else if (rate < 52) {
-                // Rates 48-51 (rate 12): use rows 4-7
-                EG_RATE_SELECT[rate] = (4 + (rate & 3)) * 8;
-                EG_RATE_SHIFT[rate] = 0;
-            } else if (rate < 56) {
-                // Rates 52-55 (rate 13): use rows 8-11
-                EG_RATE_SELECT[rate] = (8 + (rate & 3)) * 8;
-                EG_RATE_SHIFT[rate] = 0;
-            } else if (rate < 60) {
-                // Rates 56-59 (rate 14): use rows 12-15
-                EG_RATE_SELECT[rate] = (12 + (rate & 3)) * 8;
-                EG_RATE_SHIFT[rate] = 0;
-            } else {
-                // Rates 60-63 (rate 15): use row 16 (max rate)
-                EG_RATE_SELECT[rate] = 16 * 8;
-                EG_RATE_SHIFT[rate] = 0;
-            }
-        }
 
         // LFO PM table generation (GPGX)
         for (int depth = 0; depth < 8; depth++) {
@@ -566,6 +565,7 @@ public class Ym2612Chip {
 
     private int in0, in1, in2, in3;
     private int en0, en1, en2, en3;
+    private int traceEvents;
 
     public Ym2612Chip() {
         for (int i = 0; i < 6; i++) {
@@ -916,7 +916,7 @@ public class Ym2612Chip {
                 updateVolOut(sl);
                 break;
             case 0x50:
-                sl.ar = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
+                sl.ar = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
                 sl.rs = 3 - (val >> 6);
                 ch.ops[0].fInc = -1;
                 sl.eIncA = AR_TAB[sl.ar + sl.ksr];
@@ -926,14 +926,14 @@ public class Ym2612Chip {
                 break;
             case 0x60:
                 sl.amMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
-                sl.d1r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
+                sl.d1r = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
                 sl.eIncD = DR_TAB[sl.d1r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY1)
                     sl.eInc = sl.eIncD;
                 updateEgRateCache(sl);
                 break;
             case 0x70:
-                sl.d2r = (val & 0x1F) != 0 ? (val & 0x1F) << 1 : 0;
+                sl.d2r = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
                 sl.eIncS = DR_TAB[sl.d2r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY2)
                     sl.eInc = sl.eIncS;
@@ -942,7 +942,7 @@ public class Ym2612Chip {
             case 0x80:
                 sl.slReg = (val >> 4) & 0x0F; // Store raw 4-bit SL value
                 sl.d1l = SL_TAB[sl.slReg];
-                sl.rr = ((val & 0xF) << 2) + 2;
+                sl.rr = 34 + ((val & 0xF) << 2);
                 sl.eIncR = DR_TAB[sl.rr + sl.ksr];
                 if (sl.curEnv == EnvState.RELEASE)
                     sl.eInc = sl.eIncR;
@@ -1070,23 +1070,22 @@ public class Ym2612Chip {
             sl.egShAr = 0;
             sl.egSelAr = EG_RATE_ZERO;
         } else {
-            int rateAr = Math.min(63, rateArRaw);
-            sl.egShAr = EG_RATE_SHIFT[rateAr];
-            sl.egSelAr = EG_RATE_SELECT[rateAr];
+            sl.egShAr = EG_RATE_SHIFT[rateArRaw];
+            sl.egSelAr = EG_RATE_SELECT[rateArRaw];
         }
 
         // Decay1 rate
-        int rateD1r = Math.min(63, sl.d1r + sl.ksr);
+        int rateD1r = sl.d1r + sl.ksr;
         sl.egShD1r = EG_RATE_SHIFT[rateD1r];
         sl.egSelD1r = EG_RATE_SELECT[rateD1r];
 
         // Decay2/Sustain rate
-        int rateD2r = Math.min(63, sl.d2r + sl.ksr);
+        int rateD2r = sl.d2r + sl.ksr;
         sl.egShD2r = EG_RATE_SHIFT[rateD2r];
         sl.egSelD2r = EG_RATE_SELECT[rateD2r];
 
         // Release rate
-        int rateRr = Math.min(63, sl.rr + sl.ksr);
+        int rateRr = sl.rr + sl.ksr;
         sl.egShRr = EG_RATE_SHIFT[rateRr];
         sl.egSelRr = EG_RATE_SELECT[rateRr];
     }
@@ -1109,6 +1108,11 @@ public class Ym2612Chip {
     }
 
     private void keyOn(Channel ch, int idx) {
+        // Ensure ksr/EG rate cache is up to date before key-on state decisions.
+        // This avoids stale ksr causing attack to be chosen when it should be blocked.
+        if (ch.ops[0].fInc == -1) {
+            calcFIncChannel(ch);
+        }
         Operator sl = ch.ops[idx];
         // GPGX-style: use separate key flag instead of checking envelope state.
         // This properly gates key-on to only trigger on 0->1 transitions.
@@ -1139,6 +1143,7 @@ public class Ym2612Chip {
             // libvgm does not clear feedback on keyOn.
         }
         sl.key = true;
+        traceKeyEvent("KEY_ON", ch, idx, sl);
     }
 
     private void keyOff(Channel ch, int idx) {
@@ -1166,19 +1171,15 @@ public class Ym2612Chip {
             }
         }
         sl.key = false;
+        traceKeyEvent("KEY_OFF", ch, idx, sl);
     }
 
-    // Sustain level lookup table: maps 4-bit register value to GPGX volume scale
-    // (0-1023)
-    // SL reg values 0-14 map to 0-960 in 64-step increments, SL=15 maps to 1023
-    // (max/silence)
-    private static final int[] SL_VOL_TAB = new int[16];
-    static {
-        for (int i = 0; i < 15; i++) {
-            SL_VOL_TAB[i] = i * 64; // 0, 64, 128, ... 896
-        }
-        SL_VOL_TAB[15] = MAX_ATT_INDEX; // Max attenuation = silence
-    }
+    // Sustain level lookup table: maps 4-bit register value to GPGX volume scale.
+    // 3 dB steps: 0..14 map to 0..448 in 32-step increments, SL=15 maps to 992.
+    private static final int[] SL_VOL_TAB = {
+            0, 32, 64, 96, 128, 160, 192, 224,
+            256, 288, 320, 352, 384, 416, 448, 992
+    };
 
     /**
      * GPGX-style envelope advancement with rate-gated 3-sample stepping.
@@ -1607,8 +1608,8 @@ public class Ym2612Chip {
                 // S0 -> (S1 + MEM -> S2 + S3) all carriers
                 int m2 = ch.memValue;
                 int mem = s0_out;
-                int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int s2_out = opCalc(in2, env2, m2, mask1);
+                int s1_out = opCalc(in1, env1, m2, mask2);
+                int s2_out = opCalc(in2, env2, s0_out, mask1);
                 int s3_out = opCalc(in3, env3, s0_out, mask3);
                 ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
                 ch.memValue = mem;
@@ -1815,7 +1816,7 @@ public class Ym2612Chip {
             case 2 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 + slot2 : 0);
             case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? memValue + slot2 : 0);
             case 4 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot2 : 0);
-            case 5 -> (slotIndex == 1 ? slot0 : slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 : 0);
+            case 5 -> (slotIndex == 1 ? memValue : slotIndex == 2 ? slot0 : slotIndex == 3 ? slot0 : 0);
             case 6 -> (slotIndex == 1 ? slot0 : 0);
             case 7 -> 0;
             default -> 0;
@@ -1858,6 +1859,10 @@ public class Ym2612Chip {
     }
 
     private void keyOnCsm(Channel ch, int idx) {
+        // Ensure ksr/EG rate cache is up to date before key-on state decisions.
+        if (ch.ops[0].fInc == -1) {
+            calcFIncChannel(ch);
+        }
         Operator sl = ch.ops[idx];
         if (!sl.key && csmKeyFlag == 0) {
             sl.fCnt = 0;
@@ -1872,6 +1877,7 @@ public class Ym2612Chip {
             }
             updateVolOut(sl);
         }
+        traceKeyEvent("CSM_KEY_ON", ch, idx, sl);
     }
 
     private void updateVolOut(Operator sl) {
@@ -1934,6 +1940,38 @@ public class Ym2612Chip {
             }
             updateVolOut(sl);
         }
+        traceKeyEvent("CSM_KEY_OFF", ch, idx, sl);
+    }
+
+    private void traceKeyEvent(String event, Channel ch, int opIdx, Operator sl) {
+        if (!TRACE_KEY_EVENTS || traceEvents >= TRACE_EVENT_LIMIT) {
+            return;
+        }
+        int chIdx = channelIndex(ch);
+        if (TRACE_CHANNEL >= 0 && TRACE_CHANNEL != chIdx) {
+            return;
+        }
+        traceEvents++;
+        System.out.println("YM2612 " + event
+                + " ch=" + chIdx
+                + " op=" + opIdx
+                + " key=" + sl.key
+                + " env=" + sl.curEnv
+                + " vol=" + sl.volume
+                + " volOut=" + sl.volOut
+                + " tl=" + sl.tl
+                + " ssg=0x" + Integer.toHexString(sl.ssgEg)
+                + " ar=" + sl.ar
+                + " ksr=" + sl.ksr);
+    }
+
+    private int channelIndex(Channel ch) {
+        for (int i = 0; i < channels.length; i++) {
+            if (channels[i] == ch) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void tickTimers(int samples) {

@@ -382,7 +382,6 @@ public final class SoundTestApp {
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
             updateLabel();
-            playCurrent();
             refreshTimer = new Timer(200, e -> updateDetails());
             refreshTimer.start();
         }
