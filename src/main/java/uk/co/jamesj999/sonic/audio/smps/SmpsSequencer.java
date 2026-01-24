@@ -152,6 +152,7 @@ public class SmpsSequencer implements AudioStream {
         int modRate;
         int modDelta;
         int modSteps;
+        int modStepsFull;
         int modRateCounter;
         int modStepCounter;
         int modAccumulator;
@@ -1064,7 +1065,9 @@ public class SmpsSequencer implements AudioStream {
             int rate = data[t.pos++] & 0xFF;
             t.modRate = (rate == 0) ? 256 : rate;
             t.modDelta = data[t.pos++];
-            t.modSteps = (data[t.pos++] & 0xFF) / 2;
+            int steps = data[t.pos++] & 0xFF;
+            t.modStepsFull = steps;
+            t.modSteps = steps / 2;
 
             t.modRateCounter = t.modRate;
             t.modStepCounter = t.modSteps;
@@ -1602,7 +1605,7 @@ public class SmpsSequencer implements AudioStream {
             changed = true;
 
             if (t.modStepCounter == 0) {
-                t.modStepCounter = t.modSteps;
+                t.modStepCounter = t.modStepsFull;
                 t.modCurrentDelta = -t.modCurrentDelta;
                 // Z80 driver returns early here (no frequency update this tick).
                 return;
