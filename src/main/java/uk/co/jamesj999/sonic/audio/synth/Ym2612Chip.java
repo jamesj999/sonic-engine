@@ -11,11 +11,11 @@ import java.util.Arrays;
  */
 public class Ym2612Chip {
     private static final double CLOCK = 7670453.0;
-    private static final double OUTPUT_RATE = 44100.0;
+    private static final double DEFAULT_OUTPUT_RATE = 44100.0;
     // GPGX: Internal rate is CLOCK/144 (~53267 Hz)
     private static final double INTERNAL_RATE = CLOCK / 144.0; // 53267.034...
     // Resampling ratio for converting internal to output rate
-    private static final double RESAMPLE_RATIO = INTERNAL_RATE / OUTPUT_RATE; // ~1.208
+    private static final double DEFAULT_RESAMPLE_RATIO = INTERNAL_RATE / DEFAULT_OUTPUT_RATE; // ~1.208
 
     // Constants from ym2612.c
     private static final int SIN_HBITS = 10;
@@ -268,6 +268,9 @@ public class Ym2612Chip {
     private static final int[] OP_TO_SLOT = { 0, 2, 1, 3 };
     // Inverse mapping: slot -> op index (S0,S1,S2,S3 -> ops[0,2,1,3])
     private static final int[] SLOT_TO_OP = { 0, 2, 1, 3 };
+    // CH3 special mode: A8/A9/AA (and AC/AD/AE) map to ops in hardware order.
+    // A8/AC -> SLOT3 (op index 1), A9/AD -> SLOT1 (op index 0), AA/AE -> SLOT2 (op index 2).
+    private static final int[] CH3_SPECIAL_OP_MAP = { 1, 0, 2 };
 
     // Debug tracing: set to true to log key on/off envelope state.
     private static final boolean TRACE_KEY_EVENTS = false;
@@ -408,15 +411,17 @@ public class Ym2612Chip {
     private static final int HIGHPASS_FRACT = 15;
     private static final int HIGHPASS_SHIFT = 9;
 
-    // Resampling state (internal 53kHz -> output 44.1kHz)
+    // Resampling state (internal 53kHz -> output rate)
     private double resampleAccum = 0.0;
     private int lastLeft = 0, lastRight = 0;
     private int prevLeft = 0, prevRight = 0;
     private final int[] channelOut = new int[6];
 
     // Band-limited resampler (replaces simple linear interpolation)
-    private final BlipResampler blipResampler = new BlipResampler(INTERNAL_RATE, OUTPUT_RATE);
-    private static final boolean useBlipResampler = true;  // Disabled for testing - set true to enable band-limited resampling
+    private BlipResampler blipResampler = new BlipResampler(INTERNAL_RATE, DEFAULT_OUTPUT_RATE);
+    private boolean useBlipResampler = true;  // Disabled for testing - set true to enable band-limited resampling
+    private double outputRate = DEFAULT_OUTPUT_RATE;
+    private double resampleRatio = DEFAULT_RESAMPLE_RATIO;
 
     private int status;
     private int mode;
@@ -699,6 +704,35 @@ public class Ym2612Chip {
         this.dacHighpassEnabled = enabled;
     }
 
+    public static double getInternalRate() {
+        return INTERNAL_RATE;
+    }
+
+    public static double getDefaultOutputRate() {
+        return DEFAULT_OUTPUT_RATE;
+    }
+
+    public double getOutputSampleRate() {
+        return outputRate;
+    }
+
+    public void setOutputSampleRate(double newOutputRate) {
+        if (newOutputRate <= 0.0) {
+            return;
+        }
+        outputRate = newOutputRate;
+        resampleRatio = INTERNAL_RATE / outputRate;
+        blipResampler = new BlipResampler(INTERNAL_RATE, outputRate);
+        resampleAccum = 0.0;
+        lastLeft = lastRight = 0;
+        prevLeft = prevRight = 0;
+        blipResampler.reset();
+    }
+
+    public void setUseBlipResampler(boolean use) {
+        this.useBlipResampler = use;
+    }
+
     public void setDacData(DacData data) {
         this.dacData = data;
     }
@@ -970,22 +1004,28 @@ public class Ym2612Chip {
                 break;
             case 0xA8:
                 if (nch == 2) {
-                    int slot = (addr & 3) + 1;
-                    ch.slotFnum[slot] = (ch.slotFnum[slot] & 0x700) | (val & 0xFF);
-                    ch.slotKCode[slot] = (ch.slotBlock[slot] << 2) | FKEY_TAB[ch.slotFnum[slot] >> 7];
-                    ch.slotFc[slot] = (ch.slotFnum[slot] << ch.slotBlock[slot]) >> 1;
-                    ch.slotBlockFnum[slot] = (ch.slotBlock[slot] << 11) | ch.slotFnum[slot];
+                    int regIdx = addr & 3;
+                    if (regIdx < 3) {
+                        int opIdx = CH3_SPECIAL_OP_MAP[regIdx];
+                        ch.slotFnum[opIdx] = (ch.slotFnum[opIdx] & 0x700) | (val & 0xFF);
+                        ch.slotKCode[opIdx] = (ch.slotBlock[opIdx] << 2) | FKEY_TAB[ch.slotFnum[opIdx] >> 7];
+                        ch.slotFc[opIdx] = (ch.slotFnum[opIdx] << ch.slotBlock[opIdx]) >> 1;
+                        ch.slotBlockFnum[opIdx] = (ch.slotBlock[opIdx] << 11) | ch.slotFnum[opIdx];
+                    }
                     ch.ops[0].fInc = -1;
                 }
                 break;
             case 0xAC:
                 if (nch == 2) {
-                    int slot = (addr & 3) + 1;
-                    ch.slotFnum[slot] = (ch.slotFnum[slot] & 0xFF) | ((val & 0x07) << 8);
-                    ch.slotBlock[slot] = (val >> 3) & 7;
-                    ch.slotKCode[slot] = (ch.slotBlock[slot] << 2) | FKEY_TAB[ch.slotFnum[slot] >> 7];
-                    ch.slotFc[slot] = (ch.slotFnum[slot] << ch.slotBlock[slot]) >> 1;
-                    ch.slotBlockFnum[slot] = (ch.slotBlock[slot] << 11) | ch.slotFnum[slot];
+                    int regIdx = addr & 3;
+                    if (regIdx < 3) {
+                        int opIdx = CH3_SPECIAL_OP_MAP[regIdx];
+                        ch.slotFnum[opIdx] = (ch.slotFnum[opIdx] & 0xFF) | ((val & 0x07) << 8);
+                        ch.slotBlock[opIdx] = (val >> 3) & 7;
+                        ch.slotKCode[opIdx] = (ch.slotBlock[opIdx] << 2) | FKEY_TAB[ch.slotFnum[opIdx] >> 7];
+                        ch.slotFc[opIdx] = (ch.slotFnum[opIdx] << ch.slotBlock[opIdx]) >> 1;
+                        ch.slotBlockFnum[opIdx] = (ch.slotBlock[opIdx] << 11) | ch.slotFnum[opIdx];
+                    }
                     ch.ops[0].fInc = -1;
                 }
                 break;
@@ -1072,9 +1112,9 @@ public class Ym2612Chip {
         // GPGX: refresh_fc_eg_chan uses pre-calculated fc from register write
         if (channel3SpecialMode && ch == channels[2]) {
             for (int i = 0; i < 4; i++) {
-                // Slot 0 uses channel fc, slots 1-3 use slotFc
-                int fc = (i == 0) ? ch.fc : ch.slotFc[i];
-                int kc = (i == 0) ? ch.kCode : ch.slotKCode[i];
+                // CH3 special: slot4 (op index 3) uses channel fc, others use per-op slotFc.
+                int fc = (i == 3) ? ch.fc : ch.slotFc[i];
+                int kc = (i == 3) ? ch.kCode : ch.slotKCode[i];
                 calcFIncSlot(ch.ops[i], fc, kc);
             }
         } else {
@@ -1254,13 +1294,21 @@ public class Ym2612Chip {
     }
 
     /**
-     * Render stereo output at 44.1kHz by generating at internal rate (~53kHz) and
-     * resampling.
-     * This matches GPGX's timing accuracy while maintaining standard audio output
-     * rate.
+     * Render stereo output at the configured output rate by generating at internal
+     * rate (~53kHz) and resampling when needed.
      */
     public void renderStereo(int[] leftBuf, int[] rightBuf) {
         int outputLen = Math.min(leftBuf.length, rightBuf.length);
+
+        if (Math.abs(resampleRatio - 1.0) < 1e-9) {
+            // Direct output at internal rate (no resampling).
+            for (int outIdx = 0; outIdx < outputLen; outIdx++) {
+                renderOneSample();
+                leftBuf[outIdx] += lastLeft;
+                rightBuf[outIdx] += lastRight;
+            }
+            return;
+        }
 
         if (useBlipResampler) {
             // Band-limited resampling using windowed-sinc filter
@@ -1285,11 +1333,11 @@ public class Ym2612Chip {
                     prevLeft = lastLeft;
                     prevRight = lastRight;
                     renderOneSample();
-                    resampleAccum += 1.0 / RESAMPLE_RATIO;
+                    resampleAccum += 1.0 / resampleRatio;
                 }
                 resampleAccum -= 1.0;
 
-                double t = resampleAccum * RESAMPLE_RATIO;
+                double t = resampleAccum * resampleRatio;
                 int left = (int) (prevLeft + t * (lastLeft - prevLeft));
                 int right = (int) (prevRight + t * (lastRight - prevRight));
 
@@ -1414,10 +1462,10 @@ public class Ym2612Chip {
         boolean lfoPmActive = ch.pms != 0;
         if (lfoPmActive) {
             if (channel3SpecialMode && chIdx == 2) {
-                int kc = ch.kCode; // GPGX: keyscale code is not modified by LFO
                 for (int i = 0; i < 4; i++) {
                     Operator op = ch.ops[i];
-                    int blockFnum = (i == 0) ? ch.blockFnum : ch.slotBlockFnum[i];
+                    int blockFnum = (i == 3) ? ch.blockFnum : ch.slotBlockFnum[i];
+                    int kc = (i == 3) ? ch.kCode : ch.slotKCode[i]; // GPGX: keyscale code not modified by LFO
                     int pm = ch.pms + pmLfo;
                     int lfoOffset = LFO_PM_TABLE[((blockFnum & 0x7F0) << 4) + pm];
                     if (lfoOffset != 0) {
@@ -1568,8 +1616,8 @@ public class Ym2612Chip {
         // Our operators: M1=SLOT1 (in0), C1=SLOT2 (in1), M2=SLOT3 (in2), C2=SLOT4 (in3)
         int[] mask = opMask[ch.algo];
         int maskM1 = mask[0];  // SLOT1
-        int maskC1 = mask[1];  // SLOT2 - for in1/env1
-        int maskM2 = mask[2];  // SLOT3 - for in2/env2
+        int maskC1 = mask[2];  // SLOT3 - for in1/env1
+        int maskM2 = mask[1];  // SLOT2 - for in2/env2
         int maskC2 = mask[3];  // SLOT4
 
         // GPGX: feedback uses opCalc1() which applies pm directly (no >> 1 shift)
@@ -1900,12 +1948,11 @@ public class Ym2612Chip {
     }
 
     private void updateVolOut(Operator sl) {
-        // GPGX behavior (ym2612.c:1095-1098): Always calculate vol_out based on
-        // SSG-EG inversion state regardless of envelope phase. This allows the
-        // feedback buffer (opOut[]) to naturally decay when operators go quiet.
-        // Previous code had extra guards: && sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE
-        // These are NOT in GPGX and caused metallic echo artifacts on ring sounds.
+        // GPGX behavior: apply SSG-EG inversion only during ATTACK/DECAY/SUSTAIN.
+        // In RELEASE/OFF, vol_out uses the non-inverted attenuation level.
         boolean invert = sl.ssgEnabled
+                && sl.curEnv != EnvState.RELEASE
+                && sl.curEnv != EnvState.IDLE
                 && ((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0);
         if (invert) {
             sl.volOut = ((SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX) + sl.tll;

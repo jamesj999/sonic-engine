@@ -12,6 +12,7 @@ import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencerConfig;
+import uk.co.jamesj999.sonic.audio.synth.Ym2612Chip;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsConstants;
@@ -186,7 +187,7 @@ public class JOALAudioBackend implements AudioBackend {
             clearMusicStack();
         }
 
-        smpsDriver = new SmpsDriver();
+        smpsDriver = new SmpsDriver(getSmpsOutputRate());
 
         // Configure Region
         String regionStr = SonicConfigurationService.getInstance().getString(SonicConfiguration.REGION);
@@ -198,10 +199,12 @@ public class JOALAudioBackend implements AudioBackend {
 
         boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
         smpsDriver.setDacInterpolate(dacInterpolate);
+        smpsDriver.setOutputSampleRate(getSmpsOutputRate());
 
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
         SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
+        seq.setSampleRate(smpsDriver.getOutputSampleRate());
         seq.setSpeedShoes(speedShoesEnabled);
         seq.setFm6DacOff(fm6DacOff);
         // Music is the primary voice source for SFX fallback
@@ -238,6 +241,7 @@ public class JOALAudioBackend implements AudioBackend {
             // Note: DAC interpolation is global on the driver/synth.
             // FM6 DAC Off is per-sequencer.
             SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
+            seq.setSampleRate(smpsDriver.getOutputSampleRate());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -252,11 +256,13 @@ public class JOALAudioBackend implements AudioBackend {
             if (sfxStream instanceof SmpsDriver) {
                 sfxDriver = (SmpsDriver) sfxStream;
             } else {
-                sfxDriver = new SmpsDriver();
+                sfxDriver = new SmpsDriver(getSmpsOutputRate());
                 sfxDriver.setDacInterpolate(dacInterpolate);
                 sfxStream = sfxDriver;
             }
+            sfxDriver.setOutputSampleRate(getSmpsOutputRate());
             SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver, requireSmpsConfig());
+            seq.setSampleRate(sfxDriver.getOutputSampleRate());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -425,7 +431,32 @@ public class JOALAudioBackend implements AudioBackend {
         }
 
         ShortBuffer sBuffer = Buffers.newDirectShortBuffer(data);
-        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, data.length * 2, 44100);
+        int sampleRate = (int) Math.round(getStreamSampleRate());
+        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, data.length * 2, sampleRate);
+    }
+
+    private double getSmpsOutputRate() {
+        boolean internalRate = SonicConfigurationService.getInstance()
+                .getBoolean(SonicConfiguration.AUDIO_INTERNAL_RATE_OUTPUT);
+        return internalRate ? Ym2612Chip.getInternalRate() : Ym2612Chip.getDefaultOutputRate();
+    }
+
+    private double getStreamSampleRate() {
+        double rate = Ym2612Chip.getDefaultOutputRate();
+        SmpsDriver musicDriver = (currentStream instanceof SmpsDriver driver) ? driver : null;
+        SmpsDriver sfxDriver = (sfxStream instanceof SmpsDriver driver) ? driver : null;
+        if (musicDriver != null) {
+            rate = musicDriver.getOutputSampleRate();
+        } else if (sfxDriver != null) {
+            rate = sfxDriver.getOutputSampleRate();
+        }
+        if (musicDriver != null && sfxDriver != null) {
+            double sfxRate = sfxDriver.getOutputSampleRate();
+            if (Math.abs(rate - sfxRate) > 1e-6) {
+                LOGGER.warning("Audio stream sample rate mismatch: music=" + rate + " sfx=" + sfxRate);
+            }
+        }
+        return rate;
     }
 
     /**

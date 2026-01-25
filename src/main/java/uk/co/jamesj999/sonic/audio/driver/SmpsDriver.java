@@ -24,6 +24,14 @@ public class SmpsDriver extends VirtualSynthesizer implements AudioStream {
     // Scratch buffer for read() to avoid per-frame allocations
     private final short[] scratchFrameBuf = new short[2];
 
+    public SmpsDriver() {
+        super();
+    }
+
+    public SmpsDriver(double outputSampleRate) {
+        super(outputSampleRate);
+    }
+
     public void setRegion(SmpsSequencer.Region region) {
         this.region = region;
         for (SmpsSequencer seq : sequencers) {

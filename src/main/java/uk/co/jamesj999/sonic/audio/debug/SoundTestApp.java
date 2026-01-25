@@ -14,6 +14,7 @@ import uk.co.jamesj999.sonic.data.Rom;
 
 import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
+import uk.co.jamesj999.sonic.audio.synth.Ym2612Chip;
 import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
 import javax.swing.JFrame;
@@ -620,7 +621,7 @@ public final class SoundTestApp {
                     SwingUtilities.invokeLater(() -> {
                         frame.setEnabled(true);
                         updateLabel();
-                        double seconds = samplesWritten / 44100.0;
+                        double seconds = samplesWritten / getOutputSampleRate();
                         JOptionPane.showMessageDialog(frame,
                             String.format("Exported %.2f seconds to:\n%s", seconds, finalOutputFile.getAbsolutePath()),
                             "Export Complete", JOptionPane.INFORMATION_MESSAGE);
@@ -645,18 +646,19 @@ public final class SoundTestApp {
          */
         private int renderToWav(AbstractSmpsData data, DacData dacSamples, File outputFile, boolean isSfx) throws IOException {
             // Create a standalone driver for rendering
-            SmpsDriver driver = new SmpsDriver();
+            SmpsDriver driver = new SmpsDriver(getOutputSampleRate());
             driver.setRegion(SmpsSequencer.Region.NTSC);
             driver.setDacInterpolate(true);
 
             SmpsSequencer seq = new SmpsSequencer(data, dacSamples, driver, Sonic2SmpsSequencerConfig.CONFIG);
+            seq.setSampleRate(driver.getOutputSampleRate());
             if (isSfx) {
                 seq.setSfxMode(true);
             }
             driver.addSequencer(seq, isSfx);
 
             // Render parameters
-            int sampleRate = 44100;
+            int sampleRate = (int) Math.round(driver.getOutputSampleRate());
             int maxSamples = isSfx ? sampleRate * 10 : sampleRate * 60; // 10s for SFX, 60s for music
             int bufferSize = 1024;
             short[] buffer = new short[bufferSize * 2]; // Stereo
@@ -734,6 +736,12 @@ public final class SoundTestApp {
         private void writeShortLE(RandomAccessFile raf, short value) throws IOException {
             raf.writeByte(value & 0xFF);
             raf.writeByte((value >> 8) & 0xFF);
+        }
+
+        private double getOutputSampleRate() {
+            boolean internalRate = SonicConfigurationService.getInstance()
+                    .getBoolean(SonicConfiguration.AUDIO_INTERNAL_RATE_OUTPUT);
+            return internalRate ? Ym2612Chip.getInternalRate() : Ym2612Chip.getDefaultOutputRate();
         }
     }
 

@@ -44,6 +44,13 @@ public class SmpsSequencer implements AudioStream {
         this.pitch = pitch;
     }
 
+    public void setSampleRate(double sampleRate) {
+        if (sampleRate > 0.0) {
+            this.sampleRate = sampleRate;
+            this.samplesPerFrame = sampleRate / region.frameRate;
+        }
+    }
+
     public void setSfxPriority(int priority) {
         this.sfxPriority = priority;
     }
@@ -73,7 +80,7 @@ public class SmpsSequencer implements AudioStream {
     private final FadeState fadeState = new FadeState();
     private Runnable onFadeComplete;
 
-    private static final double SAMPLE_RATE = 44100.0;
+    private double sampleRate = 44100.0;
     // Base tempo weight is game/driver-specific (configured externally).
     private double samplesPerFrame = 44100.0 / 60.0;
     private double sampleCounter = 0;
@@ -367,7 +374,7 @@ public class SmpsSequencer implements AudioStream {
 
     public void setRegion(Region region) {
         this.region = region;
-        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
+        this.samplesPerFrame = sampleRate / region.frameRate;
         calculateTempo();
     }
 
@@ -396,7 +403,7 @@ public class SmpsSequencer implements AudioStream {
         }
         // SFX tick every tempo frame; keep frame pacing tied to region to avoid
         // double-speed playback.
-        this.samplesPerFrame = SAMPLE_RATE / region.frameRate;
+        this.samplesPerFrame = sampleRate / region.frameRate;
         calculateTempo();
 
         // Safety: cap SFX to a reasonable tick budget so bad data doesn't hang forever.
@@ -1037,8 +1044,8 @@ public class SmpsSequencer implements AudioStream {
             t.modDelta = data[t.pos++];
             int steps = data[t.pos++] & 0xFF;
             t.modStepsFull = steps;
-            // Z80 driver: srl a; inc a - halve then add 1 for initial half-cycle
-            t.modSteps = (steps >> 1) + 1;
+            // Z80 driver: srl a
+            t.modSteps = steps / 2;
 
             t.modRateCounter = t.modRate;
             t.modStepCounter = t.modSteps;

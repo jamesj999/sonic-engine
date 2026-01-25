@@ -3,8 +3,9 @@ package uk.co.jamesj999.sonic.audio.synth;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 
 public class VirtualSynthesizer implements Synthesizer {
-    private final PsgChip psg = new PsgChip();
-    private final Ym2612Chip ym = new Ym2612Chip();
+    private final PsgChip psg;
+    private final Ym2612Chip ym;
+    private double outputSampleRate = Ym2612Chip.getDefaultOutputRate();
 
     // Output headroom: reduce overall level so 6 FM channels + PSG don't clip 16-bit output.
     private static final int MASTER_GAIN_SHIFT = 1; // -6 dB
@@ -15,7 +16,29 @@ public class VirtualSynthesizer implements Synthesizer {
     private int[] scratchLeftPsg = new int[0];
     private int[] scratchRightPsg = new int[0];
 
-    @Override
+    public VirtualSynthesizer() {
+        this(Ym2612Chip.getDefaultOutputRate());
+    }
+
+    public VirtualSynthesizer(double outputSampleRate) {
+        this.psg = new PsgChip(outputSampleRate);
+        this.ym = new Ym2612Chip();
+        setOutputSampleRate(outputSampleRate);
+    }
+
+    public void setOutputSampleRate(double outputSampleRate) {
+        if (outputSampleRate <= 0.0) {
+            return;
+        }
+        this.outputSampleRate = outputSampleRate;
+        ym.setOutputSampleRate(outputSampleRate);
+        psg.setSampleRate(outputSampleRate);
+    }
+
+    public double getOutputSampleRate() {
+        return outputSampleRate;
+    }
+
     public void setDacData(DacData data) {
         ym.setDacData(data);
     }
