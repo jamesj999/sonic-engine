@@ -122,6 +122,11 @@ public enum SonicConfiguration {
 	DAC_INTERPOLATE,
 
 	/**
+	 * Whether to output audio at the internal YM2612 rate (~53kHz).
+	 */
+	AUDIO_INTERNAL_RATE_OUTPUT,
+
+	/**
 	 * Whether to mute FM6 when playing a note on it (if DAC is enabled).
 	 * Parity hack from SMPSPlay.
 	 */

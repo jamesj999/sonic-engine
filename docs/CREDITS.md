@@ -27,10 +27,11 @@ This project uses documentation, tools, and reference implementations from many 
 
 ## Disassembly & ROM Research
 
-| Contributor | Contribution |
-|-------------|--------------|
-| **Sonic Retro** | Sonic 2 disassembly (s2disasm) and SCHG documentation |
-| **Nemesis** | Hacking Guide on Sonic Retro (legacy), Nemesis compression research |
+| Contributor        | Contribution                                                        |
+|--------------------|---------------------------------------------------------------------|
+| **Sonic Retro**    | Sonic 2 disassembly (s2disasm) and SCHG documentation               |
+| **Nemesis**        | Hacking Guide on Sonic Retro (legacy), Nemesis compression research |
+| **Brett Kosinski** | Kosinski compression research                                       |
 
 ## Compression & Tools
 

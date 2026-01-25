@@ -12,10 +12,18 @@ import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.data.Rom;
 
+import uk.co.jamesj999.sonic.audio.driver.SmpsDriver;
+import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
+import uk.co.jamesj999.sonic.audio.synth.Ym2612Chip;
+import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsSequencerConfig;
+
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Font;
 import java.awt.event.KeyAdapter;
@@ -23,7 +31,10 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.RandomAccessFile;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -265,7 +276,7 @@ public final class SoundTestApp {
             tracksPanel.add(heading);
             frame.getContentPane().add(tracksPanel, BorderLayout.CENTER);
             JLabel info = new JLabel(String.format(
-                    "ROM: %s | Backend: %s%s | Tab: Music/SFX | Up/Down change | Enter play | S Speed Shoes | Esc quit",
+                    "ROM: %s | Backend: %s%s | Tab: Music/SFX | Up/Down change | Enter play | S Speed | Ctrl+E export WAV | Esc quit",
                     romPath, backend.getClass().getSimpleName(), nullAudio ? " (silent)" : ""), SwingConstants.CENTER);
             info.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             frame.getContentPane().add(info, BorderLayout.SOUTH);
@@ -347,6 +358,11 @@ public final class SoundTestApp {
                             backend.setSpeedShoes(speedShoes);
                             updateLabel();
                             break;
+                        case KeyEvent.VK_E:
+                            if (e.isControlDown()) {
+                                exportToWav();
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -367,7 +383,6 @@ public final class SoundTestApp {
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
             updateLabel();
-            playCurrent();
             refreshTimer = new Timer(200, e -> updateDetails());
             refreshTimer.start();
         }
@@ -548,6 +563,185 @@ public final class SoundTestApp {
             if (frame != null) {
                 frame.dispose();
             }
+        }
+
+        private void exportToWav() {
+            // Determine what to export
+            int exportId;
+            String exportName;
+            boolean isSfxExport;
+            AbstractSmpsData exportData;
+
+            if (sfxMode) {
+                exportId = sfxId;
+                String name = sfxNames.get(sfxId);
+                exportName = name != null ? name : "SFX_" + toHex(sfxId);
+                isSfxExport = true;
+                exportData = loader.loadSfx(sfxId);
+            } else {
+                exportId = songId;
+                String title = lookupTitle(songId);
+                exportName = title != null ? title.replace(" ", "_") : "Music_" + toHex(songId);
+                isSfxExport = false;
+                exportData = loader.loadMusic(songId);
+            }
+
+            if (exportData == null) {
+                JOptionPane.showMessageDialog(frame,
+                    "Failed to load " + (isSfxExport ? "SFX" : "music") + " " + toHex(exportId),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Show file chooser
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Export WAV");
+            fileChooser.setSelectedFile(new File(exportName + ".wav"));
+            fileChooser.setFileFilter(new FileNameExtensionFilter("WAV Audio Files", "wav"));
+
+            if (fileChooser.showSaveDialog(frame) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
+
+            File outputFile = fileChooser.getSelectedFile();
+            if (!outputFile.getName().toLowerCase().endsWith(".wav")) {
+                outputFile = new File(outputFile.getPath() + ".wav");
+            }
+
+            // Disable UI during export
+            frame.setEnabled(false);
+            titleLabel.setText("Exporting " + exportName + "...");
+
+            // Run export in background thread
+            final File finalOutputFile = outputFile;
+            final boolean finalIsSfx = isSfxExport;
+            new Thread(() -> {
+                try {
+                    int samplesWritten = renderToWav(exportData, dacData, finalOutputFile, finalIsSfx);
+                    SwingUtilities.invokeLater(() -> {
+                        frame.setEnabled(true);
+                        updateLabel();
+                        double seconds = samplesWritten / getOutputSampleRate();
+                        JOptionPane.showMessageDialog(frame,
+                            String.format("Exported %.2f seconds to:\n%s", seconds, finalOutputFile.getAbsolutePath()),
+                            "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+                    });
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    SwingUtilities.invokeLater(() -> {
+                        frame.setEnabled(true);
+                        updateLabel();
+                        JOptionPane.showMessageDialog(frame,
+                            "Export failed: " + ex.getMessage(),
+                            "Export Error", JOptionPane.ERROR_MESSAGE);
+                    });
+                }
+            }).start();
+        }
+
+        /**
+         * Renders SMPS data to a WAV file.
+         * For SFX, renders until complete.
+         * For music, renders for a fixed duration (default 60 seconds).
+         */
+        private int renderToWav(AbstractSmpsData data, DacData dacSamples, File outputFile, boolean isSfx) throws IOException {
+            // Create a standalone driver for rendering
+            SmpsDriver driver = new SmpsDriver(getOutputSampleRate());
+            driver.setRegion(SmpsSequencer.Region.NTSC);
+            driver.setDacInterpolate(true);
+
+            SmpsSequencer seq = new SmpsSequencer(data, dacSamples, driver, Sonic2SmpsSequencerConfig.CONFIG);
+            seq.setSampleRate(driver.getOutputSampleRate());
+            if (isSfx) {
+                seq.setSfxMode(true);
+            }
+            driver.addSequencer(seq, isSfx);
+
+            // Render parameters
+            int sampleRate = (int) Math.round(driver.getOutputSampleRate());
+            int maxSamples = isSfx ? sampleRate * 10 : sampleRate * 60; // 10s for SFX, 60s for music
+            int bufferSize = 1024;
+            short[] buffer = new short[bufferSize * 2]; // Stereo
+
+            // Use RandomAccessFile so we can update header after writing
+            try (RandomAccessFile raf = new RandomAccessFile(outputFile, "rw")) {
+                // Write placeholder header (44 bytes)
+                byte[] header = new byte[44];
+                raf.write(header);
+
+                int totalSamples = 0;
+                while (totalSamples < maxSamples) {
+                    driver.read(buffer);
+
+                    // Write samples as little-endian 16-bit
+                    for (int i = 0; i < buffer.length; i++) {
+                        raf.writeByte(buffer[i] & 0xFF);
+                        raf.writeByte((buffer[i] >> 8) & 0xFF);
+                    }
+
+                    totalSamples += bufferSize;
+
+                    // Check if SFX is complete
+                    if (isSfx && driver.isComplete()) {
+                        break;
+                    }
+                }
+
+                // Calculate sizes
+                int dataSize = totalSamples * 2 * 2; // samples * 2 channels * 2 bytes per sample
+                int fileSize = dataSize + 36;
+
+                // Go back and write proper WAV header
+                raf.seek(0);
+                writeWavHeader(raf, sampleRate, 2, 16, dataSize);
+
+                return totalSamples;
+            }
+        }
+
+        /**
+         * Writes a WAV file header.
+         */
+        private void writeWavHeader(RandomAccessFile raf, int sampleRate, int channels, int bitsPerSample, int dataSize) throws IOException {
+            int byteRate = sampleRate * channels * bitsPerSample / 8;
+            int blockAlign = channels * bitsPerSample / 8;
+
+            // RIFF header
+            raf.writeBytes("RIFF");
+            writeIntLE(raf, dataSize + 36); // File size - 8
+            raf.writeBytes("WAVE");
+
+            // fmt chunk
+            raf.writeBytes("fmt ");
+            writeIntLE(raf, 16); // Chunk size
+            writeShortLE(raf, (short) 1); // Audio format (PCM)
+            writeShortLE(raf, (short) channels);
+            writeIntLE(raf, sampleRate);
+            writeIntLE(raf, byteRate);
+            writeShortLE(raf, (short) blockAlign);
+            writeShortLE(raf, (short) bitsPerSample);
+
+            // data chunk
+            raf.writeBytes("data");
+            writeIntLE(raf, dataSize);
+        }
+
+        private void writeIntLE(RandomAccessFile raf, int value) throws IOException {
+            raf.writeByte(value & 0xFF);
+            raf.writeByte((value >> 8) & 0xFF);
+            raf.writeByte((value >> 16) & 0xFF);
+            raf.writeByte((value >> 24) & 0xFF);
+        }
+
+        private void writeShortLE(RandomAccessFile raf, short value) throws IOException {
+            raf.writeByte(value & 0xFF);
+            raf.writeByte((value >> 8) & 0xFF);
+        }
+
+        private double getOutputSampleRate() {
+            boolean internalRate = SonicConfigurationService.getInstance()
+                    .getBoolean(SonicConfiguration.AUDIO_INTERNAL_RATE_OUTPUT);
+            return internalRate ? Ym2612Chip.getInternalRate() : Ym2612Chip.getDefaultOutputRate();
         }
     }
 

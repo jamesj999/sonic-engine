@@ -2,10 +2,10 @@ package uk.co.jamesj999.sonic.audio.synth;
 
 public class PsgChip {
     private static final double CLOCK = 3579545.0; // Master NTSC clock
-    private static final double SAMPLE_RATE = 44100.0;
+    private static final double DEFAULT_SAMPLE_RATE = 44100.0;
     // SN76489 pre-divides master by 16 (see libvgm sn76489.c dClock)
     private static final double CLOCK_DIV = 16.0;
-    private static final double STEP = (CLOCK / CLOCK_DIV) / SAMPLE_RATE;
+    private double step = (CLOCK / CLOCK_DIV) / DEFAULT_SAMPLE_RATE;
 
     // SN76489 Volume Values (from sn76489.c, Mega Drive behavior)
     private static final double[] VOLUME_TABLE = {
@@ -34,6 +34,11 @@ public class PsgChip {
     private final boolean[] mutes = new boolean[4];
 
     public PsgChip() {
+        this(DEFAULT_SAMPLE_RATE);
+    }
+
+    public PsgChip(double sampleRate) {
+        setSampleRate(sampleRate);
         for (int i = 1; i < 8; i += 2) {
             registers[i] = 0xF; // Silence
         }
@@ -46,6 +51,12 @@ public class PsgChip {
         // Match libvgm: ToneFreqPos[3] = 1, independent of LFSR state
         outputs[3] = true;
         counters[3] = 0;
+    }
+
+    public void setSampleRate(double sampleRate) {
+        if (sampleRate > 0.0) {
+            this.step = (CLOCK / CLOCK_DIV) / sampleRate;
+        }
     }
 
     public void setMute(int ch, boolean mute) {
@@ -147,7 +158,7 @@ public class PsgChip {
             }
 
             // Update Clock & Counters
-            clock += STEP;
+            clock += step;
             double numClocksForSample = Math.floor(clock);
             clock -= numClocksForSample;
 

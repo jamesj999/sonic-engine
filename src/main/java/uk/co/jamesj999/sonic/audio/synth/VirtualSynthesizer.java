@@ -3,8 +3,12 @@ package uk.co.jamesj999.sonic.audio.synth;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 
 public class VirtualSynthesizer implements Synthesizer {
-    private final PsgChip psg = new PsgChip();
-    private final Ym2612Chip ym = new Ym2612Chip();
+    private final PsgChip psg;
+    private final Ym2612Chip ym;
+    private double outputSampleRate = Ym2612Chip.getDefaultOutputRate();
+
+    // Output headroom: reduce overall level so 6 FM channels + PSG don't clip 16-bit output.
+    private static final int MASTER_GAIN_SHIFT = 1; // -6 dB
 
     // Scratch buffers for render() to avoid per-call allocations
     private int[] scratchLeft = new int[0];
@@ -12,7 +16,29 @@ public class VirtualSynthesizer implements Synthesizer {
     private int[] scratchLeftPsg = new int[0];
     private int[] scratchRightPsg = new int[0];
 
-    @Override
+    public VirtualSynthesizer() {
+        this(Ym2612Chip.getDefaultOutputRate());
+    }
+
+    public VirtualSynthesizer(double outputSampleRate) {
+        this.psg = new PsgChip(outputSampleRate);
+        this.ym = new Ym2612Chip();
+        setOutputSampleRate(outputSampleRate);
+    }
+
+    public void setOutputSampleRate(double outputSampleRate) {
+        if (outputSampleRate <= 0.0) {
+            return;
+        }
+        this.outputSampleRate = outputSampleRate;
+        ym.setOutputSampleRate(outputSampleRate);
+        psg.setSampleRate(outputSampleRate);
+    }
+
+    public double getOutputSampleRate() {
+        return outputSampleRate;
+    }
+
     public void setDacData(DacData data) {
         ym.setDacData(data);
     }
@@ -49,30 +75,26 @@ public class VirtualSynthesizer implements Synthesizer {
 
         ym.renderStereo(scratchLeft, scratchRight);
 
-        // Attenuate YM/DAC by 50% (>> 1)
-        // YM Peak ~24k -> ~12k
-        for (int i = 0; i < frames; i++) {
-            scratchLeft[i] >>= 1;
-            scratchRight[i] >>= 1;
-        }
+        // GPGX-style: FM output is clipped to ±8191 internally.
+        // No output gain applied here - volume issues are in the EG/feedback implementation.
 
         psg.renderStereo(scratchLeftPsg, scratchRightPsg);
 
-        // Attenuate PSG by 50% (>> 1) to match SMPSPlay levels.
-        // SMPSPlay uses volume 0x80 for PSG vs 0x100 for YM2612.
-        // PsgChip is Bipolar +/- 1.0 (Max Table 4096)
-        // PSG Peak ~4k -> ~2k after attenuation.
-        // FM Peak ~12k (after YM attenuation above).
-        // Ratio FM:PSG is now ~6:1, matching SMPSPlay's 2:1 volume ratio.
+        // Mix PSG at ~50% level relative to FM
         for (int i = 0; i < frames; i++) {
             scratchLeft[i] += scratchLeftPsg[i] >> 1;
             scratchRight[i] += scratchRightPsg[i] >> 1;
         }
 
         for (int i = 0; i < frames; i++) {
-            // Master Gain: No division (1.0) to match SMPSPlay levels which push near clipping.
+            // Master gain: apply fixed headroom scaling before 16-bit clamp.
             int l = scratchLeft[i];
             int r = scratchRight[i];
+
+            if (MASTER_GAIN_SHIFT > 0) {
+                l >>= MASTER_GAIN_SHIFT;
+                r >>= MASTER_GAIN_SHIFT;
+            }
 
             if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
             if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
