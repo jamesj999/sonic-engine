@@ -86,12 +86,15 @@ public class BlipResampler {
     private final double ratio;  // inputRate / outputRate
 
     // Circular buffer for input samples (stereo)
-    private final int[] historyL = new int[FILTER_TAPS * 2];
-    private final int[] historyR = new int[FILTER_TAPS * 2];
-    private int historyPos = FILTER_TAPS;
+    private static final int BUFFER_SIZE = 1 << 14;
+    private static final int BUFFER_MASK = BUFFER_SIZE - 1;
+    private final int[] historyL = new int[BUFFER_SIZE];
+    private final int[] historyR = new int[BUFFER_SIZE];
+    private int head = 0;
+    private long inputIndex = 0;
 
-    // Fractional position in input stream (0.0 to 1.0)
-    private double inputFrac = 0.0;
+    // Output sample position expressed in input sample units.
+    private double outputPos = 0.0;
 
     public BlipResampler(double inputRate, double outputRate) {
         this.ratio = inputRate / outputRate;
@@ -105,51 +108,41 @@ public class BlipResampler {
             historyL[i] = 0;
             historyR[i] = 0;
         }
-        historyPos = FILTER_TAPS;
-        inputFrac = 0.0;
+        head = 0;
+        inputIndex = 0;
+        outputPos = 0.0;
     }
 
     /**
      * Add one input sample to the history buffer.
      */
     public void addInputSample(int left, int right) {
-        historyL[historyPos] = left;
-        historyR[historyPos] = right;
-
-        // Mirror to handle wraparound without modulo in interpolation
-        if (historyPos < FILTER_TAPS) {
-            historyL[historyPos + FILTER_TAPS * 2 - FILTER_TAPS] = left;
-            historyR[historyPos + FILTER_TAPS * 2 - FILTER_TAPS] = right;
-        }
-
-        historyPos++;
-        if (historyPos >= FILTER_TAPS * 2) {
-            // Shift buffer and reset position
-            System.arraycopy(historyL, FILTER_TAPS, historyL, 0, FILTER_TAPS);
-            System.arraycopy(historyR, FILTER_TAPS, historyR, 0, FILTER_TAPS);
-            historyPos = FILTER_TAPS;
-        }
+        historyL[head] = left;
+        historyR[head] = right;
+        head = (head + 1) & BUFFER_MASK;
+        inputIndex++;
     }
 
     /**
      * Check if an output sample is available.
      */
     public boolean hasOutputSample() {
-        return inputFrac >= 1.0;
+        long center = (long) Math.floor(outputPos);
+        return inputIndex > center + (FILTER_TAPS / 2);
     }
 
     /**
      * Consume input time for one output sample.
      */
     public void advanceOutput() {
-        inputFrac -= 1.0;
+        outputPos += ratio;
     }
 
     /**
      * Advance input time by one input sample.
      */
     public void advanceInput() {
-        inputFrac += 1.0 / ratio;
+        // No-op: output readiness is derived from inputIndex vs outputPos.
     }
 
     /**
@@ -167,29 +160,31 @@ public class BlipResampler {
     }
 
     private int interpolate(int[] history) {
-        // Calculate phase from fractional position
-        double fracPos = inputFrac * ratio;  // Position within input samples
-        int intPos = (int) fracPos;
-        double frac = fracPos - intPos;
-
-        // Select phase (0 to PHASE_COUNT)
+        double frac = outputPos - Math.floor(outputPos);
         int phase = (int) (frac * PHASE_COUNT);
         if (phase >= PHASE_COUNT) phase = PHASE_COUNT - 1;
-
-        // Get filter coefficients for this phase
         double[] coeffs = SINC_TABLE[phase];
 
-        // Convolve with history
-        double sum = 0.0;
-        int startIdx = historyPos - FILTER_TAPS + intPos;
-        if (startIdx < 0) startIdx += FILTER_TAPS * 2;
+        long center = (long) Math.floor(outputPos);
+        long start = center - (FILTER_TAPS / 2) + 1;
 
+        double sum = 0.0;
         for (int tap = 0; tap < FILTER_TAPS; tap++) {
-            int idx = (startIdx + tap) % (FILTER_TAPS * 2);
-            sum += history[idx] * coeffs[tap];
+            long idx = start + tap;
+            int sample = sampleAt(history, idx);
+            sum += sample * coeffs[tap];
         }
 
         return (int) Math.round(sum);
+    }
+
+    private int sampleAt(int[] history, long idx) {
+        long oldest = inputIndex - BUFFER_SIZE;
+        if (idx < oldest || idx >= inputIndex) {
+            return 0;
+        }
+        int pos = (head - (int) (inputIndex - idx)) & BUFFER_MASK;
+        return history[pos];
     }
 
     /**
