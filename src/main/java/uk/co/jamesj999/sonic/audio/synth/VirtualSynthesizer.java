@@ -26,6 +26,8 @@ public class VirtualSynthesizer implements Synthesizer {
         this.psg = new PsgChip(outputSampleRate);
         this.ym = new Ym2612Chip();
         setOutputSampleRate(outputSampleRate);
+        // Match typical driver init: silence chips on startup to avoid power-on noise.
+        silenceAll();
     }
 
     public void setOutputSampleRate(double outputSampleRate) {
@@ -80,10 +82,9 @@ public class VirtualSynthesizer implements Synthesizer {
 
         psg.renderStereo(scratchLeftPsg, scratchRightPsg);
 
-        // Mix PSG at ~50% level relative to FM
         for (int i = 0; i < frames; i++) {
-            scratchLeft[i] += scratchLeftPsg[i] >> 1;
-            scratchRight[i] += scratchRightPsg[i] >> 1;
+            scratchLeft[i] += scratchLeftPsg[i];
+            scratchRight[i] += scratchRightPsg[i];
         }
 
         for (int i = 0; i < frames; i++) {

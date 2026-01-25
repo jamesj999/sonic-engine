@@ -2,8 +2,6 @@ package uk.co.jamesj999.sonic.audio.synth;
 
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 
-import java.util.Arrays;
-
 /**
  * YM2612 Emulator
  * <p>
@@ -422,6 +420,10 @@ public class Ym2612Chip {
     private boolean useBlipResampler = true;  // Disabled for testing - set true to enable band-limited resampling
     private double outputRate = DEFAULT_OUTPUT_RATE;
     private double resampleRatio = DEFAULT_RESAMPLE_RATIO;
+    private double inverseResampleRatio = 1.0 / DEFAULT_RESAMPLE_RATIO;
+
+    // SSG-EG active operator count - skip updateSsgEg() when 0
+    private int ssgEgActiveCount = 0;
 
     private int status;
     private int mode;
@@ -585,6 +587,9 @@ public class Ym2612Chip {
         prevLeft = prevRight = 0;
         blipResampler.reset();
 
+        // Reset SSG-EG tracking
+        ssgEgActiveCount = 0;
+
         for (Channel ch : channels) {
             ch.fNum = 0;
             ch.block = 0;
@@ -613,6 +618,7 @@ public class Ym2612Chip {
                 o.rr = 0;
                 o.ssgEg = 0;
                 o.ssgn = 0;
+                o.ssgEnabled = false;
                 o.fCnt = 0;
                 o.eCnt = ENV_END;
                 o.eInc = 0;
@@ -722,11 +728,11 @@ public class Ym2612Chip {
         }
         outputRate = newOutputRate;
         resampleRatio = INTERNAL_RATE / outputRate;
-        blipResampler = new BlipResampler(INTERNAL_RATE, outputRate);
+        inverseResampleRatio = 1.0 / resampleRatio;
+        blipResampler.reset(INTERNAL_RATE, outputRate);  // Reuse existing buffers instead of allocating new
         resampleAccum = 0.0;
         lastLeft = lastRight = 0;
         prevLeft = prevRight = 0;
-        blipResampler.reset();
     }
 
     public void setUseBlipResampler(boolean use) {
@@ -968,8 +974,15 @@ public class Ym2612Chip {
                 updateEgRateCache(sl);
                 break;
             case 0x90:
+                boolean wasEnabled = sl.ssgEnabled;
                 sl.ssgEg = val & 0x0F;
                 sl.ssgEnabled = (val & 0x08) != 0;
+                // Track active SSG-EG count for optimization
+                if (sl.ssgEnabled && !wasEnabled) {
+                    ssgEgActiveCount++;
+                } else if (!sl.ssgEnabled && wasEnabled) {
+                    ssgEgActiveCount--;
+                }
                 if (sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
                     updateVolOut(sl);
                 }
@@ -1333,7 +1346,7 @@ public class Ym2612Chip {
                     prevLeft = lastLeft;
                     prevRight = lastRight;
                     renderOneSample();
-                    resampleAccum += 1.0 / resampleRatio;
+                    resampleAccum += inverseResampleRatio;
                 }
                 resampleAccum -= 1.0;
 
@@ -1356,9 +1369,18 @@ public class Ym2612Chip {
         int pmLfo = lfoPm;
         int envLfo = lfoAm; // GPGX: 126 (max AM) when disabled
 
-        Arrays.fill(channelOut, 0);
+        // Explicit zeroing is faster than Arrays.fill() for small arrays in hot path
+        channelOut[0] = 0;
+        channelOut[1] = 0;
+        channelOut[2] = 0;
+        channelOut[3] = 0;
+        channelOut[4] = 0;
+        channelOut[5] = 0;
 
-        updateSsgEg();
+        // Skip SSG-EG processing when no operators use it (common case)
+        if (ssgEgActiveCount > 0) {
+            updateSsgEg();
+        }
 
         // DAC output
         int dacOut = renderDac();
@@ -1885,7 +1907,7 @@ public class Ym2612Chip {
             case 2 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 + slot2 : 0);
             case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? memValue + slot2 : 0);
             case 4 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot2 : 0);
-            case 5 -> slotIndex == 1 ? memValue : slot0;
+            case 5 -> slotIndex == 2 ? memValue : slot0;
             case 6 -> (slotIndex == 1 ? slot0 : 0);
             default -> 0;
         };

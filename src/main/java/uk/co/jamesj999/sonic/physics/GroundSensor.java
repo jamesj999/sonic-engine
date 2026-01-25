@@ -226,7 +226,7 @@ public class GroundSensor extends Sensor {
 
         int distance = (direction == Direction.LEFT)
                 ? (xInTile - metric)
-                : (15 - (metric + xInTile));
+                : (16 - (metric + xInTile));
         return new WallScanResult(WallScanState.FOUND, distance, tile, chunkDesc);
     }
 

@@ -36,7 +36,7 @@ public class TestYm2612ChipBasics {
         // Period = 0 -> max length, but still overflows within ~850 samples at 44.1 kHz using current timing
         chip.write(0, 0x24, 0x00); // Timer A high
         chip.write(0, 0x25, 0x00); // Timer A low
-        chip.write(0, 0x27, 0x01); // Enable timer A
+        chip.write(0, 0x27, 0x05); // Enable timer A run + flag
 
         int[] left = new int[900];
         int[] right = new int[900];
