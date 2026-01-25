@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.audio.synth;
 
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 
+import java.util.Arrays;
+
 /**
  * YM2612 Emulator
  * <p>
@@ -75,8 +77,6 @@ public class Ym2612Chip {
     private static final int[] SIN_TAB = new int[SIN_LEN]; // indices into TL_TAB (includes sign bit)
     private static final int[] TL_TAB = new int[TL_TAB_LEN]; // signed 14-bit output values
     private static final int[] ENV_TAB = new int[2 * ENV_LEN + 8];
-    private static final int[] DECAY_TO_ATTACK = new int[ENV_LEN];
-    private static final int[] FINC_TAB = new int[2048];
     private static final int[] AR_TAB = new int[128];
     private static final int[] DR_TAB = new int[128];
     private static final int[] SL_TAB = new int[16];
@@ -325,13 +325,6 @@ public class Ym2612Chip {
         }
         ENV_TAB[ENV_END >> ENV_LBITS] = ENV_LEN - 1;
 
-        // Decay to Attack conversion
-        for (int i = 0, j = ENV_LEN - 1; i < ENV_LEN; i++) {
-            while (j > 0 && ENV_TAB[j] < i)
-                j--;
-            DECAY_TO_ATTACK[i] = j << ENV_LBITS;
-        }
-
         // Sustain Level Table
         for (int i = 0; i < 15; i++) {
             double x = i * 3.0;
@@ -343,14 +336,6 @@ public class Ym2612Chip {
         int j = ENV_LEN - 1;
         j <<= ENV_LBITS;
         SL_TAB[15] = j + ENV_DECAY;
-
-        // FINC Table
-        for (int i = 0; i < 2048; i++) {
-            double x = (double) i * YM2612_FREQUENCY;
-            x *= (double) (1 << (SIN_LBITS + SIN_HBITS - (21 - 7))); // 12
-            x *= 0.5; // MUL = value * 2 in the hardware step, so pre-divide here
-            FINC_TAB[i] = (int) x;
-        }
 
         // AR/DR Tables
         for (int i = 0; i < 60; i++) {
@@ -375,7 +360,7 @@ public class Ym2612Chip {
         // applied
         for (int i = 0; i < 4; i++) {
             for (int k = 0; k < 32; k++) {
-                DT_TAB[i + 0][k] = DT_DEF_TAB[(i << 5) + k];
+                DT_TAB[i][k] = DT_DEF_TAB[(i << 5) + k];
                 DT_TAB[i + 4][k] = -DT_TAB[i][k];
             }
         }
@@ -428,6 +413,10 @@ public class Ym2612Chip {
     private int lastLeft = 0, lastRight = 0;
     private int prevLeft = 0, prevRight = 0;
     private final int[] channelOut = new int[6];
+
+    // Band-limited resampler (replaces simple linear interpolation)
+    private final BlipResampler blipResampler = new BlipResampler(INTERNAL_RATE, OUTPUT_RATE);
+    private boolean useBlipResampler = false;  // Disabled for testing - set true to enable band-limited resampling
 
     private int status;
     private int mode;
@@ -589,6 +578,7 @@ public class Ym2612Chip {
         resampleAccum = 0.0;
         lastLeft = lastRight = 0;
         prevLeft = prevRight = 0;
+        blipResampler.reset();
 
         for (Channel ch : channels) {
             ch.fNum = 0;
@@ -666,10 +656,10 @@ public class Ym2612Chip {
      * Force-silence a channel by directly resetting envelope and feedback state.
      * This is used when SFX steals a channel from music to prevent artifacts
      * caused by state persisting across notes.
-     *
+     * <p>
      * Unlike register writes, this takes effect immediately without needing
      * audio samples to be rendered.
-     *
+     * <p>
      * The feedback buffer (opOut) is reset to ensure multi-channel SFX
      * (like the Signpost which uses FM4+FM5) start with identical state.
      * Without this reset, residual feedback from different music channels
@@ -756,22 +746,22 @@ public class Ym2612Chip {
         resetOpMask();
         if (chipType < YM2612_ENHANCED) {
             // GPGX op_mask is defined in slot order (S0,S1,S2,S3). Map to ops[] order.
-            setOpMaskSlot(0, 3, 0xFFFFFFE0);
-            setOpMaskSlot(1, 3, 0xFFFFFFE0);
-            setOpMaskSlot(2, 3, 0xFFFFFFE0);
-            setOpMaskSlot(3, 3, 0xFFFFFFE0);
-            setOpMaskSlot(4, 1, 0xFFFFFFE0);
-            setOpMaskSlot(4, 3, 0xFFFFFFE0);
-            setOpMaskSlot(5, 1, 0xFFFFFFE0);
-            setOpMaskSlot(5, 2, 0xFFFFFFE0);
-            setOpMaskSlot(5, 3, 0xFFFFFFE0);
-            setOpMaskSlot(6, 1, 0xFFFFFFE0);
-            setOpMaskSlot(6, 2, 0xFFFFFFE0);
-            setOpMaskSlot(6, 3, 0xFFFFFFE0);
-            setOpMaskSlot(7, 0, 0xFFFFFFE0);
-            setOpMaskSlot(7, 1, 0xFFFFFFE0);
-            setOpMaskSlot(7, 2, 0xFFFFFFE0);
-            setOpMaskSlot(7, 3, 0xFFFFFFE0);
+            setOpMaskSlot(0, 3);
+            setOpMaskSlot(1, 3);
+            setOpMaskSlot(2, 3);
+            setOpMaskSlot(3, 3);
+            setOpMaskSlot(4, 1);
+            setOpMaskSlot(4, 3);
+            setOpMaskSlot(5, 1);
+            setOpMaskSlot(5, 2);
+            setOpMaskSlot(5, 3);
+            setOpMaskSlot(6, 1);
+            setOpMaskSlot(6, 2);
+            setOpMaskSlot(6, 3);
+            setOpMaskSlot(7, 0);
+            setOpMaskSlot(7, 1);
+            setOpMaskSlot(7, 2);
+            setOpMaskSlot(7, 3);
         }
     }
 
@@ -783,9 +773,9 @@ public class Ym2612Chip {
         }
     }
 
-    private void setOpMaskSlot(int algo, int slot, int mask) {
+    private void setOpMaskSlot(int algo, int slot) {
         int op = SLOT_TO_OP[slot & 3];
-        opMask[algo][op] = mask;
+        opMask[algo][op] = -32;
     }
 
     private void writeYm(int addr, int val) {
@@ -888,6 +878,7 @@ public class Ym2612Chip {
         Channel ch = channels[nch];
         Operator sl = ch.ops[opIdx];
 
+        int ar = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
         switch (addr & 0xF0) {
             case 0x30:
                 int mulVal = val & 0x0F;
@@ -898,15 +889,12 @@ public class Ym2612Chip {
                 break;
             case 0x40:
                 sl.tl = val & 0x7F;
-                if ((ENV_HBITS - 7) < 0)
-                    sl.tll = sl.tl >> (7 - ENV_HBITS);
-                else
-                    sl.tll = sl.tl << (ENV_HBITS - 7);
+                sl.tll = sl.tl << (ENV_HBITS - 7);
                 // GPGX: update vol_out cache when TL changes
                 updateVolOut(sl);
                 break;
             case 0x50:
-                sl.ar = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
+                sl.ar = ar;
                 sl.rs = 3 - (val >> 6);
                 ch.ops[0].fInc = -1;
                 sl.eIncA = AR_TAB[sl.ar + sl.ksr];
@@ -916,14 +904,14 @@ public class Ym2612Chip {
                 break;
             case 0x60:
                 sl.amMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
-                sl.d1r = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
+                sl.d1r = ar;
                 sl.eIncD = DR_TAB[sl.d1r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY1)
                     sl.eInc = sl.eIncD;
                 updateEgRateCache(sl);
                 break;
             case 0x70:
-                sl.d2r = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
+                sl.d2r = ar;
                 sl.eIncS = DR_TAB[sl.d2r + sl.ksr];
                 if (sl.curEnv == EnvState.DECAY2)
                     sl.eInc = sl.eIncS;
@@ -1274,25 +1262,53 @@ public class Ym2612Chip {
     public void renderStereo(int[] leftBuf, int[] rightBuf) {
         int outputLen = Math.min(leftBuf.length, rightBuf.length);
 
-        for (int outIdx = 0; outIdx < outputLen; outIdx++) {
-            // Generate internal samples until we have enough for this output sample
-            // resampleAccum tracks our position in internal sample time
-            while (resampleAccum < 1.0) {
-                prevLeft = lastLeft;
-                prevRight = lastRight;
-                renderOneSample(); // Updates lastLeft, lastRight
-                resampleAccum += 1.0 / RESAMPLE_RATIO; // ~0.828 per internal sample
+        if (useBlipResampler) {
+            // Band-limited resampling using windowed-sinc filter
+            // This properly prevents aliasing artifacts (metallic/ringing sounds)
+            for (int outIdx = 0; outIdx < outputLen; outIdx++) {
+                // Generate internal samples until we have enough for next output
+                while (!blipResampler.hasOutputSample()) {
+                    renderOneSample();
+                    blipResampler.addInputSample(lastLeft, lastRight);
+                    blipResampler.advanceInput();
+                }
+
+                // Get the band-limited interpolated output
+                leftBuf[outIdx] += blipResampler.getOutputLeft();
+                rightBuf[outIdx] += blipResampler.getOutputRight();
+                blipResampler.advanceOutput();
             }
-            resampleAccum -= 1.0;
+        } else {
+            // Legacy linear interpolation (kept for comparison/debugging)
+            for (int outIdx = 0; outIdx < outputLen; outIdx++) {
+                while (resampleAccum < 1.0) {
+                    prevLeft = lastLeft;
+                    prevRight = lastRight;
+                    renderOneSample();
+                    resampleAccum += 1.0 / RESAMPLE_RATIO;
+                }
+                resampleAccum -= 1.0;
 
-            // Linear interpolation between previous and current internal samples
-            double t = resampleAccum * RESAMPLE_RATIO;
-            int left = (int) (prevLeft + t * (lastLeft - prevLeft));
-            int right = (int) (prevRight + t * (lastRight - prevRight));
+                double t = resampleAccum * RESAMPLE_RATIO;
+                int left = (int) (prevLeft + t * (lastLeft - prevLeft));
+                int right = (int) (prevRight + t * (lastRight - prevRight));
 
-            leftBuf[outIdx] += left;
-            rightBuf[outIdx] += right;
+                leftBuf[outIdx] += left;
+                rightBuf[outIdx] += right;
+            }
         }
+    }
+
+    /**
+     * Enable or disable the band-limited resampler.
+     * When disabled, falls back to simple linear interpolation.
+     */
+    public void setUseBlipResampler(boolean use) {
+        this.useBlipResampler = use;
+    }
+
+    public boolean isUseBlipResampler() {
+        return useBlipResampler;
     }
 
     /**
@@ -1304,9 +1320,7 @@ public class Ym2612Chip {
         int pmLfo = lfoPm;
         int envLfo = lfoAm; // GPGX: 126 (max AM) when disabled
 
-        for (int i = 0; i < channelOut.length; i++) {
-            channelOut[i] = 0;
-        }
+        Arrays.fill(channelOut, 0);
 
         updateSsgEg();
 
@@ -1379,7 +1393,7 @@ public class Ym2612Chip {
             }
         }
 
-        tickTimers(1);
+        tickTimers();
     }
 
     // DEBUG: Set to true to mute FM4 (channel 3) for Signpost SFX debugging
@@ -1489,20 +1503,38 @@ public class Ym2612Chip {
     }
 
     /**
-     * Bounds-checked TL_TAB lookup, matching Genesis-Plus-GX op_calc behavior.
+     * Bounds-checked TL_TAB lookup for cross-modulation between operators.
      * Returns 0 (silence) when index exceeds table bounds.
      * This ensures proper fade-out when envelope/TL gets very high.
-     *
+     * <p>
      * Phase modulation: modulation is added AFTER phase shift.
-     * GPGX uses pm >> 1 for op_calc (and pm directly for op_calc1 feedback).
+     * GPGX uses pm >> 1 for cross-modulation (op_calc).
      */
     private static int opCalc(int phase, int env, int pm) {
-        // GPGX: (phase >> SIN_BITS) + pm, where SIN_BITS=10
+        // GPGX op_calc(): (phase >> SIN_BITS) + (pm >> 1)
         int idx = ((phase >> SIN_BITS) + (pm >> 1)) & SIN_MASK;
         int p = (env << 3) + SIN_TAB[idx];
         if (p >= TL_TAB_LEN)
             return 0;
         return TL_TAB[p];
+    }
+
+    /**
+     * Feedback calculation for Slot 1 - uses pm directly without >> 1 shift.
+     * GPGX op_calc1() (ym2612.c:1427) applies feedback modulation at full strength.
+     */
+    private static int opCalc1(int phase, int env, int pm) {
+        // GPGX op_calc1(): (phase >> SIN_BITS) + pm (no >> 1)
+        int idx = ((phase >> SIN_BITS) + pm) & SIN_MASK;
+        int p = (env << 3) + SIN_TAB[idx];
+        if (p >= TL_TAB_LEN)
+            return 0;
+        return TL_TAB[p];
+    }
+
+    private static int opCalc1(int phase, int env, int pm, int mask) {
+        int out = opCalc1(phase, env, pm);
+        return out & mask;
     }
 
     /**
@@ -1544,92 +1576,97 @@ public class Ym2612Chip {
         // This causes feedback buffer to naturally decay when notes fade out.
         boolean s0Quiet = env0 >= ENV_QUIET;
 
+        // GPGX mask indices follow SLOT numbers: SLOT1=mask[0], SLOT2=mask[1], SLOT3=mask[2], SLOT4=mask[3]
+        // Our operators: M1=SLOT1 (in0), C1=SLOT2 (in1), M2=SLOT3 (in2), C2=SLOT4 (in3)
         int[] mask = opMask[ch.algo];
-        int mask0 = mask[0];
-        int mask1 = mask[1];
-        int mask2 = mask[2];
-        int mask3 = mask[3];
+        int maskM1 = mask[0];  // SLOT1
+        int maskC1 = mask[1];  // SLOT2 - for in1/env1
+        int maskM2 = mask[2];  // SLOT3 - for in2/env2
+        int maskC2 = mask[3];  // SLOT4
 
+        // GPGX: feedback uses opCalc1() which applies pm directly (no >> 1 shift)
+        // Previous code used opCalc() with fb << 1 to compensate, but this creates subtle phase differences
         int fb = (ch.feedback < SIN_BITS) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
         ch.opOut[1] = ch.opOut[0];
-        int s0_out = s0Quiet ? 0 : opCalc(in0, env0, fb << 1, mask0);
+        int s0_out = s0Quiet ? 0 : opCalc1(in0, env0, fb, maskM1);
         ch.opOut[0] = s0_out; // ALWAYS update - quiet means 0 propagates
 
         switch (ch.algo) {
             case 0: {
-                // S0 -> S1 -> MEM -> S2 -> S3 (carrier)
+                // M1 -> C1 -> MEM -> M2 -> C2 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int mem = s1_out;
-                int s2_out = opCalc(in2, env2, m2, mask1);
-                ch.out = opCalc(in3, env3, s2_out, mask3) >> OUT_SHIFT;
+                int mem = opCalc(in1, env1, s0_out, maskC1);
+                int m2_out = opCalc(in2, env2, m2, maskM2);
+                ch.out = opCalc(in3, env3, m2_out, maskC2) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 1: {
-                // (S0 + S1) -> MEM -> S2 -> S3 (carrier)
+                // (M1 + C1) -> MEM -> M2 -> C2 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalcNoModMasked(in1, env1, mask2); // S1 no modulation
-                int mem = s0_out + s1_out;
-                int s2_out = opCalc(in2, env2, m2, mask1);
-                ch.out = opCalc(in3, env3, s2_out, mask3) >> OUT_SHIFT;
+                int c1_out = opCalcNoModMasked(in1, env1, maskC1); // C1 no modulation
+                int mem = s0_out + c1_out;
+                int m2_out = opCalc(in2, env2, m2, maskM2);
+                ch.out = opCalc(in3, env3, m2_out, maskC2) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 2: {
-                // S0 + (S1 -> MEM -> S2) -> S3 (carrier)
+                // M1 + (C1 -> MEM -> M2) -> C2 (carrier)
                 int m2 = ch.memValue;
-                int s1_out = opCalcNoModMasked(in1, env1, mask2); // S1 no modulation
-                int mem = s1_out;
-                int s2_out = opCalc(in2, env2, m2, mask1);
-                ch.out = opCalc(in3, env3, s0_out + s2_out, mask3) >> OUT_SHIFT;
+                // C1 no modulation
+                int mem = opCalcNoModMasked(in1, env1, maskC1);
+                int m2_out = opCalc(in2, env2, m2, maskM2);
+                ch.out = opCalc(in3, env3, s0_out + m2_out, maskC2) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 3: {
-                // S0 -> S1 -> MEM + S2 -> S3 (carrier)
+                // M1 -> C1 -> MEM + M2 -> C2 (carrier)
                 int c2 = ch.memValue;
-                int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int mem = s1_out;
-                int s2_out = opCalcNoModMasked(in2, env2, mask1); // S2 no modulation
-                c2 += s2_out;
-                ch.out = opCalc(in3, env3, c2, mask3) >> OUT_SHIFT;
+                int mem = opCalc(in1, env1, s0_out, maskC1);
+                int m2_out = opCalcNoModMasked(in2, env2, maskM2); // M2 no modulation
+                c2 += m2_out;
+                ch.out = opCalc(in3, env3, c2, maskC2) >> OUT_SHIFT;
                 ch.memValue = mem;
                 break;
             }
             case 4: {
-                // S0 -> S1 (carrier) + S2 -> S3 (carrier)
-                int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int s2_out = opCalcNoModMasked(in2, env2, mask1); // S2 no modulation
-                int s3_out = opCalc(in3, env3, s2_out, mask3);
-                ch.out = (s1_out + s3_out) >> OUT_SHIFT;
+                // M1 -> C1 (carrier) + M2 -> C2 (carrier)
+                int c1_out = opCalc(in1, env1, s0_out, maskC1);
+                int m2_out = opCalcNoModMasked(in2, env2, maskM2); // M2 no modulation
+                int c2_out = opCalc(in3, env3, m2_out, maskC2);
+                ch.out = (c1_out + c2_out) >> OUT_SHIFT;
                 break;
             }
             case 5: {
-                // S0 -> (S1 + MEM -> S2 + S3) all carriers
+                // GPGX: M1 -> (C1 + M2 + C2) all carriers, M2 uses delayed MEM
+                // connect1 = NULL special: mem = c1 = c2 = M1_out
+                // C1 (SLOT2, in1) uses c1 = this M1
+                // M2 (SLOT3, in2) uses m2 = old mem (1-sample delayed M1)
+                // C2 (SLOT4, in3) uses c2 = this M1
                 int m2 = ch.memValue;
-                int mem = s0_out;
-                int s1_out = opCalc(in1, env1, m2, mask2);
-                int s2_out = opCalc(in2, env2, s0_out, mask1);
-                int s3_out = opCalc(in3, env3, s0_out, mask3);
-                ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
-                ch.memValue = mem;
+                int c1_out = opCalc(in1, env1, s0_out, maskC1);  // C1 uses this M1
+                int m2_out = opCalc(in2, env2, m2, maskM2);      // M2 uses old mem
+                int c2_out = opCalc(in3, env3, s0_out, maskC2);  // C2 uses this M1
+                ch.out = (c1_out + m2_out + c2_out) >> OUT_SHIFT;
+                ch.memValue = s0_out;
                 break;
             }
             case 6: {
-                // S0 -> S1 (carrier) + S2 (carrier) + S3 (carrier)
-                int s1_out = opCalc(in1, env1, s0_out, mask2);
-                int s2_out = opCalcNoModMasked(in2, env2, mask1); // S2 no modulation
-                int s3_out = opCalcNoModMasked(in3, env3, mask3); // S3 no modulation
-                ch.out = (s1_out + s2_out + s3_out) >> OUT_SHIFT;
+                // M1 -> C1 (carrier) + M2 (carrier) + C2 (carrier)
+                int c1_out = opCalc(in1, env1, s0_out, maskC1);
+                int m2_out = opCalcNoModMasked(in2, env2, maskM2); // M2 no modulation
+                int c2_out = opCalcNoModMasked(in3, env3, maskC2); // C2 no modulation
+                ch.out = (c1_out + m2_out + c2_out) >> OUT_SHIFT;
                 break;
             }
             case 7: {
                 // All carriers, no modulation
-                int s1_out = opCalcNoModMasked(in1, env1, mask2);
-                int s2_out = opCalcNoModMasked(in2, env2, mask1);
-                int s3_out = opCalcNoModMasked(in3, env3, mask3);
-                ch.out = (s0_out + s1_out + s2_out + s3_out) >> OUT_SHIFT;
+                int c1_out = opCalcNoModMasked(in1, env1, maskC1);
+                int m2_out = opCalcNoModMasked(in2, env2, maskM2);
+                int c2_out = opCalcNoModMasked(in3, env3, maskC2);
+                ch.out = (s0_out + c1_out + m2_out + c2_out) >> OUT_SHIFT;
                 break;
             }
         }
@@ -1647,7 +1684,7 @@ public class Ym2612Chip {
 
         // Key off all operators before loading new voice (like Z80 zFMSilenceChannel).
         // This ensures any residual sound from previous notes is silenced.
-        write(0, 0x28, 0x00 | chVal);
+        write(0, 0x28, chVal);
 
         // Minimal reset: only mark frequency for recalculation.
         // Do NOT reset opOut (feedback history) or full envelope state here.
@@ -1704,14 +1741,13 @@ public class Ym2612Chip {
         }
 
         for (int slot = 0; slot < 4; slot++) {
-            int base = hwCh;
-            write(port, 0x30 + slot * 4 + base, dt[slot]);
-            write(port, 0x40 + slot * 4 + base, tl[slot]);
-            write(port, 0x50 + slot * 4 + base, rsar[slot]);
-            write(port, 0x60 + slot * 4 + base, amd1[slot]);
-            write(port, 0x70 + slot * 4 + base, d2r[slot]);
-            write(port, 0x80 + slot * 4 + base, d1lrr[slot]);
-            write(port, 0x90 + slot * 4 + base, 0);
+            write(port, 0x30 + slot * 4 + hwCh, dt[slot]);
+            write(port, 0x40 + slot * 4 + hwCh, tl[slot]);
+            write(port, 0x50 + slot * 4 + hwCh, rsar[slot]);
+            write(port, 0x60 + slot * 4 + hwCh, amd1[slot]);
+            write(port, 0x70 + slot * 4 + hwCh, d2r[slot]);
+            write(port, 0x80 + slot * 4 + hwCh, d1lrr[slot]);
+            write(port, 0x90 + slot * 4 + hwCh, 0);
         }
     }
 
@@ -1806,15 +1842,15 @@ public class Ym2612Chip {
         double slot3 = opOut[3]; // Op4
         int slotIndex = OP_TO_SLOT[opIndex];
 
+        final double v = slotIndex == 2 ? memValue : slotIndex == 3 ? slot2 : 0;
         return switch (algo) {
-            case 0 -> (slotIndex == 1 ? slot0 : slotIndex == 2 ? memValue : slotIndex == 3 ? slot2 : 0);
-            case 1 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot2 : 0);
+            case 0 -> (slotIndex == 1 ? slot0 : v);
+            case 1 -> v;
             case 2 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 + slot2 : 0);
             case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? memValue + slot2 : 0);
             case 4 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot2 : 0);
-            case 5 -> (slotIndex == 1 ? memValue : slotIndex == 2 ? slot0 : slotIndex == 3 ? slot0 : 0);
+            case 5 -> slotIndex == 1 ? memValue : slot0;
             case 6 -> (slotIndex == 1 ? slot0 : 0);
-            case 7 -> 0;
             default -> 0;
         };
     }
@@ -1828,7 +1864,6 @@ public class Ym2612Chip {
         double slot2 = opOut[1];
         double slot3 = opOut[3];
         return switch (algo) {
-            case 0, 1, 2, 3 -> slot3;
             case 4 -> slot1 + slot3;
             case 5, 6 -> slot1 + slot2 + slot3;
             case 7 -> slot0 + slot1 + slot2 + slot3;
@@ -1877,10 +1912,13 @@ public class Ym2612Chip {
     }
 
     private void updateVolOut(Operator sl) {
+        // GPGX behavior (ym2612.c:1095-1098): Always calculate vol_out based on
+        // SSG-EG inversion state regardless of envelope phase. This allows the
+        // feedback buffer (opOut[]) to naturally decay when operators go quiet.
+        // Previous code had extra guards: && sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE
+        // These are NOT in GPGX and caused metallic echo artifacts on ring sounds.
         boolean invert = sl.ssgEnabled
-                && ((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0)
-                && sl.curEnv != EnvState.RELEASE
-                && sl.curEnv != EnvState.IDLE;
+                && ((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0);
         if (invert) {
             sl.volOut = ((SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX) + sl.tll;
         } else {
@@ -1910,9 +1948,7 @@ public class Ym2612Chip {
                         }
                         if (sl.curEnv != EnvState.ATTACK) {
                             if ((sl.ar + sl.ksr) < 94) {
-                                sl.curEnv = (sl.volume <= 0)
-                                        ? ((sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1)
-                                        : EnvState.ATTACK;
+                                sl.curEnv = EnvState.ATTACK;
                             } else {
                                 sl.volume = 0;
                                 sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
@@ -1990,10 +2026,8 @@ public class Ym2612Chip {
         return -1;
     }
 
-    private void tickTimers(int samples) {
-        if (samples <= 0)
-            return;
-        for (int i = 0; i < samples; i++) {
+    private void tickTimers() {
+        for (int i = 0; i < 1; i++) {
             csmKeyFlag <<= 1;
             if ((mode & 0x01) != 0) {
                 timerACount--;
@@ -2012,7 +2046,7 @@ public class Ym2612Chip {
             }
         }
         if ((mode & 0x02) != 0) {
-            timerBCount -= samples;
+            timerBCount -= 1;
             if (timerBCount <= 0) {
                 if ((mode & 0x08) != 0) {
                     status |= FM_STATUS_TIMERB_BIT_MASK;
@@ -2023,7 +2057,7 @@ public class Ym2612Chip {
             }
         }
         if (busyCycles > 0) {
-            busyCycles = Math.max(0, busyCycles - (YM_CYCLES_PER_SAMPLE * samples));
+            busyCycles = Math.max(0, busyCycles - (YM_CYCLES_PER_SAMPLE * 1));
         }
     }
 }
