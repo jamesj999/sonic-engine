@@ -5,6 +5,7 @@ This document tracks intentional deviations from the original Sonic 2 ROM implem
 ## Table of Contents
 
 1. [Gloop Sound Toggle](#gloop-sound-toggle)
+2. [Spindash Release Transpose Fix](#spindash-release-transpose-fix)
 
 ---
 
@@ -64,3 +65,41 @@ private void playGloopSound() {
 ### Verification
 
 Both implementations result in the Gloop sound playing at 50% frequency, which prevents overwhelming audio when multiple BlueBalls objects are bouncing with staggered timers.
+
+---
+
+## Spindash Release Transpose Fix
+
+**Location:** `Sonic2SfxData.java`
+**ROM Reference:** `docs/s2disasm/sound/sfx/BC - Spin Dash Release.asm`
+
+### Original Implementation
+
+The ROM SFX header for Spindash Release (0xBC) uses an invalid transpose value for FM5:
+
+```asm
+    smpsHeaderSFXChannel cFM5, Sound3C_SpindashRelease_FM5, $90, $00
+```
+
+This value is called out in the disasm as a bug. Some SMPS drivers interpret `$90` as a large negative transpose, which can underflow the note calculation and skip the initial FM burst.
+
+### Our Implementation
+
+We patch only this invalid FM transpose value when parsing SFX headers:
+
+```java
+int transpose = (byte) data[pos + 4];
+if ((channelId & 0x80) == 0 && transpose == (byte) 0x90) {
+    transpose = 0x10;
+}
+```
+
+### Rationale
+
+1. **Targets a known bad data value** - The disasm explicitly documents the `$90` transpose as invalid for this SFX.
+2. **Preserves other SFX behavior** - We do not mask or normalize all transposes, only this exact FM case.
+3. **Improves fidelity** - Restores the missing initial FM burst for 0xBC that is audible in hardware/driver-correct playback.
+
+### Verification
+
+Spindash Release now includes the initial FM5 hit before the delayed PSG noise, matching expected playback.
