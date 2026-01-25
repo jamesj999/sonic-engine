@@ -304,14 +304,17 @@ public class BlipDeltaBuffer {
 
         // Shift buffer
         int remain = available + BUF_EXTRA - count;
-        if (remain > 0) {
-            if (remain > size) {
-                remain = size;
+        if (remain > 0 && count < size) {
+            // Ensure source range [count, count+remain) doesn't exceed buffer size
+            if (count + remain > size) {
+                remain = size - count;
             }
-            System.arraycopy(bufferL, count, bufferL, 0, remain);
-            System.arraycopy(bufferR, count, bufferR, 0, remain);
-            Arrays.fill(bufferL, remain, size, 0);
-            Arrays.fill(bufferR, remain, size, 0);
+            if (remain > 0) {
+                System.arraycopy(bufferL, count, bufferL, 0, remain);
+                System.arraycopy(bufferR, count, bufferR, 0, remain);
+                Arrays.fill(bufferL, remain, size, 0);
+                Arrays.fill(bufferR, remain, size, 0);
+            }
         }
 
         offset -= (long) count << FRAC_BITS;
