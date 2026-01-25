@@ -8,6 +8,8 @@ package uk.co.jamesj999.sonic.audio.synth;
  * Based on the same principles as Blip Buffer used in Genesis Plus GX,
  * but adapted for sample-based (rather than delta-based) synthesis.
  */
+import java.util.Arrays;
+
 public class BlipResampler {
 
     // Filter parameters
@@ -83,7 +85,7 @@ public class BlipResampler {
     }
 
     // Instance state
-    private final double ratio;  // inputRate / outputRate
+    private double ratio;  // inputRate / outputRate
 
     // Circular buffer for input samples (stereo)
     private static final int BUFFER_SIZE = 1 << 14;
@@ -104,13 +106,20 @@ public class BlipResampler {
      * Reset the resampler state.
      */
     public void reset() {
-        for (int i = 0; i < historyL.length; i++) {
-            historyL[i] = 0;
-            historyR[i] = 0;
-        }
+        Arrays.fill(historyL, 0);
+        Arrays.fill(historyR, 0);
         head = 0;
         inputIndex = 0;
         outputPos = 0.0;
+    }
+
+    /**
+     * Reset the resampler state and update sample rates.
+     * This avoids allocating new history buffers when only the rate changes.
+     */
+    public void reset(double inputRate, double outputRate) {
+        this.ratio = inputRate / outputRate;
+        reset();
     }
 
     /**

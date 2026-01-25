@@ -13,7 +13,7 @@ This project uses documentation, tools, and reference implementations from many 
 | **Maxim** | SN76489 PSG documentation (SMS Power!)                      |
 | **Stephan Dittrich** | Gens YM2612 Java port (YM2612.java.example)                 |
 | **Xeeynamo** | SMPSPlay contributions (wave output, channel muting)        |
-| **MainMemory** | SMPSOUT.DLL for Sonic & Knuckles PC Collection              |
+| **Eke-Eke** | Genesis Plus GX - YM2612 and PSG emulation cores          |
 | **MAME Team** | Sound emulation cores used by SMPSPlay                      |
 | **libvgm** | Audio output and emulation libraries                        |
 

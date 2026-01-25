@@ -2,6 +2,8 @@ package uk.co.jamesj999.sonic.audio.synth;
 
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 
+import java.util.Arrays;
+
 public class VirtualSynthesizer implements Synthesizer {
     private final PsgChip psg;
     private final Ym2612Chip ym;
@@ -66,12 +68,10 @@ public class VirtualSynthesizer implements Synthesizer {
         }
 
         // Clear reused buffers (chips accumulate into them)
-        for (int i = 0; i < frames; i++) {
-            scratchLeft[i] = 0;
-            scratchRight[i] = 0;
-            scratchLeftPsg[i] = 0;
-            scratchRightPsg[i] = 0;
-        }
+        Arrays.fill(scratchLeft, 0, frames, 0);
+        Arrays.fill(scratchRight, 0, frames, 0);
+        Arrays.fill(scratchLeftPsg, 0, frames, 0);
+        Arrays.fill(scratchRightPsg, 0, frames, 0);
 
         ym.renderStereo(scratchLeft, scratchRight);
 

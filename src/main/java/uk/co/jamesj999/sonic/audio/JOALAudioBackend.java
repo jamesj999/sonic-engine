@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
 import java.util.*;
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -43,6 +44,9 @@ public class JOALAudioBackend implements AudioBackend {
     private int[] streamBuffers;
     private static final int STREAM_BUFFER_COUNT = 3;
     private static final int STREAM_BUFFER_SIZE = 1024;
+    // Pre-allocated buffers for fillBuffer() to avoid per-call allocations (~43 times/sec)
+    private final short[] streamData = new short[STREAM_BUFFER_SIZE * 2];
+    private final short[] sfxStreamData = new short[STREAM_BUFFER_SIZE * 2];
     private SmpsSequencer currentSmps;
     private SmpsDriver smpsDriver;
 
@@ -137,7 +141,9 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playMusic(int musicId) {
-        LOGGER.info("Requesting Music ID: " + Integer.toHexString(musicId));
+        if (LOGGER.isLoggable(Level.INFO)) {
+            LOGGER.info("Requesting Music ID: " + Integer.toHexString(musicId));
+        }
         stopStream(); // Stop any running stream
         clearMusicStack();
         currentMusicId = -1;
@@ -405,24 +411,24 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void fillBuffer(int bufferId) {
-        // Stereo buffer: 2 channels * STREAM_BUFFER_SIZE
-        short[] data = new short[STREAM_BUFFER_SIZE * 2];
+        // Clear and reuse pre-allocated buffer
+        Arrays.fill(streamData, (short) 0);
         if (currentStream != null) {
-            currentStream.read(data);
+            currentStream.read(streamData);
         }
         // If music stream ended or not present, buffer is 0.
 
         if (sfxStream != null) {
-            short[] sfxData = new short[STREAM_BUFFER_SIZE * 2];
-            sfxStream.read(sfxData);
+            Arrays.fill(sfxStreamData, (short) 0);
+            sfxStream.read(sfxStreamData);
 
-            for (int i = 0; i < data.length; i++) {
-                int mixed = data[i] + sfxData[i];
+            for (int i = 0; i < streamData.length; i++) {
+                int mixed = streamData[i] + sfxStreamData[i];
                 if (mixed > 32000)
                     mixed = 32000;
                 if (mixed < -32000)
                     mixed = -32000;
-                data[i] = (short) mixed;
+                streamData[i] = (short) mixed;
             }
 
             if (sfxStream.isComplete()) {
@@ -430,9 +436,9 @@ public class JOALAudioBackend implements AudioBackend {
             }
         }
 
-        ShortBuffer sBuffer = Buffers.newDirectShortBuffer(data);
+        ShortBuffer sBuffer = Buffers.newDirectShortBuffer(streamData);
         int sampleRate = (int) Math.round(getStreamSampleRate());
-        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, data.length * 2, sampleRate);
+        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, streamData.length * 2, sampleRate);
     }
 
     private double getSmpsOutputRate() {
