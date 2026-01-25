@@ -82,9 +82,10 @@ public class VirtualSynthesizer implements Synthesizer {
 
         psg.renderStereo(scratchLeftPsg, scratchRightPsg);
 
+        // Mix PSG at ~50% level relative to FM
         for (int i = 0; i < frames; i++) {
-            scratchLeft[i] += scratchLeftPsg[i];
-            scratchRight[i] += scratchRightPsg[i];
+            scratchLeft[i] += scratchLeftPsg[i] >> 1;
+            scratchRight[i] += scratchRightPsg[i] >> 1;
         }
 
         for (int i = 0; i < frames; i++) {
