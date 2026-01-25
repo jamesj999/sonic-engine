@@ -106,13 +106,25 @@ public class SmpsSequencer implements AudioStream {
             0x01B, 0x01A, 0x018, 0x017, 0x016, 0x015, 0x013, 0x012, 0x011, 0x010
     };
 
-    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3,
-    // Op4) mapped to bits 0-3.
-    // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
-    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3,
-    // Op4) mapped to bits 0-3.
-    // Works with opMap {0,2,1,3} to reach SMPS TL order (Op1, Op3, Op2, Op4).
-    private static final int[] ALGO_OUT_MASK = { 0x08, 0x08, 0x08, 0x08, 0x0A, 0x0E, 0x0E, 0x0F };
+    // Carrier bitmask per YM2612 algorithm in YM operator order (Op1, Op2, Op3, Op4).
+    // Algo output mask from SMPSPlay is in slot/register order (40/44/48/4C = slots 1/2/3/4).
+    // Our SMPS operator order is Op1, Op3, Op2, Op4, so we convert masks once here.
+    private static final int[] ALGO_OUT_MASK_SLOT = { 0x08, 0x08, 0x08, 0x08, 0x0C, 0x0E, 0x0E, 0x0F };
+    private static final int[] ALGO_OUT_MASK = toSmpsOrderMask(ALGO_OUT_MASK_SLOT);
+
+    private static int[] toSmpsOrderMask(int[] slotMasks) {
+        int[] out = new int[slotMasks.length];
+        for (int i = 0; i < slotMasks.length; i++) {
+            int mask = slotMasks[i];
+            int smps = 0;
+            if ((mask & 0x01) != 0) smps |= 1 << 0; // slot1 -> op1
+            if ((mask & 0x04) != 0) smps |= 1 << 1; // slot3 -> op3
+            if ((mask & 0x02) != 0) smps |= 1 << 2; // slot2 -> op2
+            if ((mask & 0x08) != 0) smps |= 1 << 3; // slot4 -> op4
+            out[i] = smps;
+        }
+        return out;
+    }
 
     public enum TrackType {
         FM, PSG, DAC
@@ -1425,7 +1437,6 @@ public class SmpsSequencer implements AudioStream {
         }
         int algo = t.voiceData[0] & 0x07;
         int mask = ALGO_OUT_MASK[algo];
-        // YM operator order (Op1, Op2, Op3, Op4) maps to SMPS TL indices (Op1, Op3, Op2, Op4).
         int[] tlIdx = { 21, 23, 22, 24 };
 
         int hwCh = t.channelId;
@@ -1540,12 +1551,6 @@ public class SmpsSequencer implements AudioStream {
         if (tlBase >= 0) {
             int algo = voice[0] & 0x07;
             int mask = ALGO_OUT_MASK[algo];
-            // Mask bits are in slot order: bit0=Op1, bit1=Op3, bit2=Op2, bit3=Op4.
-            // Voice data is in Slot Order (Op1, Op3, Op2, Op4). Identity mapping.
-            // Voice TL bytes are stored in SMPS slot order: Op1, Op3, Op2, Op4.
-            // Mask bits are YM operator order (Op1, Op2, Op3, Op4); TL bytes are SMPS order
-            // (Op1, Op3, Op2, Op4).
-            // Map mask bit -> TL index offset.
             int[] opMap = { 0, 2, 1, 3 };
 
             for (int op = 0; op < 4; op++) {

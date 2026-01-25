@@ -179,4 +179,5 @@ public class Sonic2SfxData extends AbstractSmpsData implements SmpsSfxData {
     public int getPsgBaseNoteOffset() {
         return 0; // PSG base note C for SFX (matches DefDrv default)
     }
+
 }
