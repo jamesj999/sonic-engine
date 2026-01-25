@@ -416,7 +416,7 @@ public class Ym2612Chip {
 
     // Band-limited resampler (replaces simple linear interpolation)
     private final BlipResampler blipResampler = new BlipResampler(INTERNAL_RATE, OUTPUT_RATE);
-    private boolean useBlipResampler = false;  // Disabled for testing - set true to enable band-limited resampling
+    private static final boolean useBlipResampler = true;  // Disabled for testing - set true to enable band-limited resampling
 
     private int status;
     private int mode;
@@ -1297,18 +1297,6 @@ public class Ym2612Chip {
                 rightBuf[outIdx] += right;
             }
         }
-    }
-
-    /**
-     * Enable or disable the band-limited resampler.
-     * When disabled, falls back to simple linear interpolation.
-     */
-    public void setUseBlipResampler(boolean use) {
-        this.useBlipResampler = use;
-    }
-
-    public boolean isUseBlipResampler() {
-        return useBlipResampler;
     }
 
     /**

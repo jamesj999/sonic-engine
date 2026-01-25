@@ -4,7 +4,7 @@ package uk.co.jamesj999.sonic.audio.synth;
  * Band-limited resampler using windowed-sinc interpolation.
  * This provides proper anti-aliasing when downsampling from ~53kHz to 44.1kHz,
  * preventing the metallic/ringing artifacts caused by simple linear interpolation.
- *
+ * <p>
  * Based on the same principles as Blip Buffer used in Genesis Plus GX,
  * but adapted for sample-based (rather than delta-based) synthesis.
  */
@@ -30,7 +30,7 @@ public class BlipResampler {
 
             for (int tap = 0; tap < FILTER_TAPS; tap++) {
                 // Center the filter
-                double t = tap - (FILTER_TAPS / 2 - 1) - phaseOffset;
+                double t = tap - ((double) FILTER_TAPS / 2 - 1) - phaseOffset;
 
                 // Sinc function
                 double sinc;
@@ -83,8 +83,6 @@ public class BlipResampler {
     }
 
     // Instance state
-    private final double inputRate;
-    private final double outputRate;
     private final double ratio;  // inputRate / outputRate
 
     // Circular buffer for input samples (stereo)
@@ -96,8 +94,6 @@ public class BlipResampler {
     private double inputFrac = 0.0;
 
     public BlipResampler(double inputRate, double outputRate) {
-        this.inputRate = inputRate;
-        this.outputRate = outputRate;
         this.ratio = inputRate / outputRate;
     }
 
