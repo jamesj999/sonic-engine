@@ -4,16 +4,17 @@ import uk.co.jamesj999.sonic.game.GameServices;
 
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
-import uk.co.jamesj999.sonic.game.GameStateManager;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance;
+import uk.co.jamesj999.sonic.level.objects.ObjectManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRenderManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
 import uk.co.jamesj999.sonic.level.render.PatternSpriteRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -59,13 +60,14 @@ import java.util.List;
  * Bits 5-0: Index into CNZ_saucer_data array for hit tracking
  * </pre>
  *
- * <h3>Hit Tracking</h3>
+ * <h3>Hit Tracking &amp; Group Bonus System</h3>
  * <ul>
- *   <li>Uses CNZ_saucer_data array (64 bytes max)</li>
- *   <li>Each instance tracks hits independently via subtype index</li>
- *   <li>Points awarded: 1st hit = 10pts, 2nd hit = 10pts, 3rd hit = 500pts</li>
+ *   <li>Uses CNZ_saucer_data array (64 bytes max) for group tracking</li>
+ *   <li>Group index from subtype bits 5-0 - blocks sharing same index are in same group</li>
+ *   <li>Hits 1-2: Award 10 points each, change palette (green→yellow→red)</li>
+ *   <li>Hit 3 (destruction): Awards 10 pts normally, OR 500 pts if 3rd block in group</li>
  *   <li>Block deletes after 3rd hit (no explosion)</li>
- *   <li>Palette changes with each hit</li>
+ *   <li>Group counters reset on level load via {@link #resetGroupCounters()}</li>
  * </ul>
  *
  * <h3>Physics</h3>
@@ -110,16 +112,25 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
     private static final int MAX_HITS = 3;
 
     // ========================================================================
-    // Points Constants
+    // Group Tracking (Static State)
     // ========================================================================
 
     /**
-     * Points awarded per hit (index = hit count - 1).
+     * Group destroy counter array - tracks how many blocks in each group have been destroyed.
      * <p>
-     * ROM Reference: s2.asm lines 59671, 59684
-     * Hits 1-2 use d0=1 (10 pts), hit 3 uses d0=50 (500 pts).
+     * ROM Reference: CNZ_saucer_data at s2.asm line 59676
+     * <p>
+     * Blocks sharing the same group index (subtype bits 5-0) are tracked together.
+     * When the 3rd block in a group is destroyed, it awards 500 points instead of 10.
      */
-    private static final int[] POINTS_PER_HIT = {10, 10, 500};
+    private static final int[] groupDestroyCount = new int[64];
+
+    /**
+     * Reset group destroy counters. Called on level load.
+     */
+    public static void resetGroupCounters() {
+        Arrays.fill(groupDestroyCount, 0);
+    }
 
     // ========================================================================
     // Animation Constants
@@ -141,6 +152,18 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
     /** Current hit count (0-3, deleted at 3) */
     private int hitCount = 0;
 
+    /**
+     * Current palette index (0-2).
+     * <p>
+     * ROM Reference: s2.asm line 59536 - initial art_tile with palette line 2
+     * <ul>
+     *   <li>2 = Green (initial)</li>
+     *   <li>1 = Yellow (after 1st hit)</li>
+     *   <li>0 = Red (after 2nd hit)</li>
+     * </ul>
+     */
+    private int paletteIndex = 2;
+
     /** Base animation frame based on subtype orientation */
     private int baseAnimFrame;
 
@@ -149,9 +172,6 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
 
     /** Animation timer */
     private int animTimer = 0;
-
-    /** Whether this block has been destroyed */
-    private boolean destroyed = false;
 
     /** Hit cooldown to prevent multiple hits per frame */
     private int hitCooldown = 0;
@@ -192,7 +212,7 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        if (destroyed) {
+        if (isDestroyed()) {
             return;
         }
 
@@ -240,12 +260,26 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
      * ROM Reference: ObjD8_Hit at s2.asm line 59606
      * <p>
      * Behavior:
-     * - Sound plays on every hit (line 59667)
-     * - Color changes via palette line decrement (line 59672)
-     * - After 3 hits, block deletes via animation (no explosion)
+     * <ul>
+     *   <li>Sound plays on every hit (line 59667)</li>
+     *   <li>Palette line decremented on each hit (line 59672): 2→1→0</li>
+     *   <li>Hits 1-2: Award 10 points, change color</li>
+     *   <li>Hit 3: If 3rd block in group destroyed, award 500 pts; otherwise 10 pts</li>
+     * </ul>
+     * <p>
+     * Group bonus system (lines 59676-59683):
+     * <pre>
+     * lea     (CNZ_saucer_data).w,a1
+     * move.b  subtype(a0),d1
+     * andi.w  #$3F,d1              ; Get group index (bits 5-0)
+     * lea     (a1,d1.w),a1
+     * addq.b  #1,(a1)              ; Increment group destroy counter
+     * cmpi.b  #3,(a1)              ; Is this 3rd block in group?
+     * blo.s   loc_2C85C            ; If < 3, award 10 pts
+     * moveq   #50,d0               ; 500 pts (d0*10)
+     * </pre>
      */
     private void handleHit(AbstractPlayableSprite player) {
-        hitCount++;
         hitCooldown = HIT_COOLDOWN_FRAMES;
 
         // Apply bounce
@@ -254,28 +288,55 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         // Play sound on every hit (ROM: line 59667)
         AudioManager.getInstance().playSfx(GameSound.BONUS_BUMPER);
 
+        int points = 10;  // Default for all hits
+
+        // ROM: subi.w #palette_line_1,art_tile(a0) (line 59672)
+        paletteIndex--;
+
+        // ROM: bcc.s loc_2C85C - if no borrow (paletteIndex >= 0), this is hit 1 or 2
+        if (paletteIndex >= 0) {
+            // Hits 1-2: just change palette, award 10 pts
+            hitCount++;
+        } else {
+            // Hit 3: borrow occurred (0 - 1 = -1)
+            // ROM: addi.w #palette_line_1,art_tile(a0) - restore palette
+            paletteIndex = 0;
+            // ROM: move.b #4,routine(a0) - mark for deletion
+            setDestroyed(true);
+            hitCount++;
+
+            // Mark as destroyed in persistence table to prevent respawning
+            ObjectManager objectManager = LevelManager.getInstance().getObjectManager();
+            if (objectManager != null) {
+                objectManager.markRemembered(spawn);
+            }
+
+            // ROM: Increment group destroy counter (lines 59676-59680)
+            int groupIndex = getSaucerDataIndex();
+            groupDestroyCount[groupIndex]++;
+
+            // ROM: cmpi.b #3,(a1) / blo.s loc_2C85C (lines 59681-59682)
+            // If this is the 3rd block in the group, award 500 pts
+            if (groupDestroyCount[groupIndex] >= 3) {
+                points = 500;
+            }
+        }
+
         // Award points and spawn points display (ROM: lines 59687-59694)
-        if (hitCount <= POINTS_PER_HIT.length) {
-            int points = POINTS_PER_HIT[hitCount - 1];
-            GameServices.gameState().addScore(points);
+        GameServices.gameState().addScore(points);
 
-            // Spawn floating points display
-            LevelManager levelManager = LevelManager.getInstance();
-            PointsObjectInstance pointsObj = new PointsObjectInstance(
-                    new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
-                    levelManager, points);
-            levelManager.getObjectManager().addDynamicObject(pointsObj);
+        // Spawn floating points display
+        LevelManager levelManager = LevelManager.getInstance();
+        PointsObjectInstance pointsObj = new PointsObjectInstance(
+                new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
+                levelManager, points);
+        levelManager.getObjectManager().addDynamicObject(pointsObj);
+
+        // Trigger hit animation
+        if (!isDestroyed()) {
+            animFrame = baseAnimFrame + HIT_FRAME_OFFSET;
+            animTimer = ANIM_DURATION;
         }
-
-        // Check for destruction (ROM: sets routine 4, deletes via animation)
-        if (hitCount >= MAX_HITS) {
-            destroyed = true;
-            return;
-        }
-
-        // Trigger hit animation (color changes via palette in ROM)
-        animFrame = baseAnimFrame + HIT_FRAME_OFFSET;
-        animTimer = ANIM_DURATION;
     }
 
     /**
@@ -313,7 +374,7 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (destroyed) {
+        if (isDestroyed()) {
             return;
         }
 
@@ -326,15 +387,9 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         if (renderer != null && renderer.isReady()) {
             boolean hFlip = (spawn.renderFlags() & 0x1) != 0;
             boolean vFlip = (spawn.renderFlags() & 0x2) != 0;
-            renderer.drawFrameIndex(animFrame, spawn.x(), spawn.y(), hFlip, vFlip);
+            // Pass paletteIndex for color change (2=green, 1=yellow, 0=red)
+            renderer.drawFrameIndex(animFrame, spawn.x(), spawn.y(), hFlip, vFlip, paletteIndex);
         }
-    }
-
-    /**
-     * Check if this block has been destroyed.
-     */
-    public boolean isDestroyed() {
-        return destroyed;
     }
 
     /**

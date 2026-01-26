@@ -17,6 +17,7 @@ public final class Sonic2AudioConstants {
     public static final int SFX_DROWN = 0xB2;
     public static final int SFX_SPRING = 0xCC;
     public static final int SFX_BUMPER = 0xB4; // Round/Hex bumper (SndID_Bumper)
+    public static final int SFX_BONUS_BUMPER = 0xD8; // CNZ drop target / bonus block (SndID_BonusBumper)
     public static final int SFX_LARGE_BUMPER = 0xD9; // CNZ map triangular bumpers (SndID_LargeBumper)
     public static final int SFX_FLIPPER = 0xE3; // CNZ Flipper (SndID_Flipper)
     public static final int SFX_CNZ_LAUNCH = 0xE2; // CNZ LauncherSpring (SndID_CNZLaunch)

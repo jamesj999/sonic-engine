@@ -25,6 +25,7 @@ import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2AudioProfile;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectConstants;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
 import uk.co.jamesj999.sonic.game.sonic2.objects.BlueBallsObjectInstance;
+import uk.co.jamesj999.sonic.game.sonic2.objects.BonusBlockObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.Sonic2ObjectRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.titlecard.TitleCardManager;
 import uk.co.jamesj999.sonic.level.objects.ObjectRegistry;
@@ -156,6 +157,7 @@ public class Sonic2GameModule implements GameModule {
         OscillationManager.reset();
         // Reset object-specific static state that persists across load/unload cycles
         BlueBallsObjectInstance.resetGlobalState();
+        BonusBlockObjectInstance.resetGroupCounters();
     }
 
     @Override

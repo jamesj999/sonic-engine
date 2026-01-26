@@ -211,15 +211,21 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
 
     /**
      * Returns the current X position of the platform.
+     * Overrides base to return the oscillating position, not the spawn position.
+     * Required for SolidContacts to correctly track platform movement and carry the player.
      */
-    public int getCurrentX() {
+    @Override
+    public int getX() {
         return x;
     }
 
     /**
      * Returns the current Y position of the platform.
+     * Overrides base to return the oscillating position, not the spawn position.
+     * Required for SolidContacts to correctly track platform movement and carry the player.
      */
-    public int getCurrentY() {
+    @Override
+    public int getY() {
         return y;
     }
 }
