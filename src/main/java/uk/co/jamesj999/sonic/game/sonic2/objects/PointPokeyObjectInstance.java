@@ -3,6 +3,7 @@ package uk.co.jamesj999.sonic.game.sonic2.objects;
 import uk.co.jamesj999.sonic.audio.AudioManager;
 import uk.co.jamesj999.sonic.audio.GameSound;
 import uk.co.jamesj999.sonic.game.GameModuleRegistry;
+import uk.co.jamesj999.sonic.game.GameServices;
 import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ObjectArtKeys;
 import uk.co.jamesj999.sonic.game.sonic2.Sonic2ZoneFeatureProvider;
@@ -300,9 +301,19 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
         // Animate cage (Bug fix #2: toggle between frames 0 and 1)
         updateCageAnimation();
 
-        // Play SFX when countdown is at 16-frame boundary (s2.asm: countdown & 0x0F == 0)
+        // At 16-frame boundaries: play SFX, award 100 points, spawn floating score sprite
+        // (s2.asm lines 58730-58746: loc_2BE5E)
         if ((countdown & 0x0F) == 0) {
             playCasinoBonusSound();
+
+            // Award 100 points (per ROM: d0=10 → AddPoints2 adds d0*10 = 100)
+            GameServices.gameState().addScore(100);
+
+            // Spawn floating "100" points sprite at cage position
+            PointsObjectInstance points = new PointsObjectInstance(
+                    new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
+                    levelManager, 100);
+            levelManager.getObjectManager().addDynamicObject(points);
         }
 
         // Check if countdown expired

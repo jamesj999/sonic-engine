@@ -8,21 +8,33 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 
+/**
+ * Floating points display object (Obj29).
+ * <p>
+ * From s2.asm Obj29_Init/Obj29_Main:
+ * - Initial y_vel = -$300 (-768 subpixels = -3 pixels/frame upward)
+ * - Each frame: position += velocity, then velocity += $18 (gravity)
+ * - Deleted when y_vel >= 0 (about to fall back down)
+ */
 public class PointsObjectInstance extends uk.co.jamesj999.sonic.level.objects.AbstractObjectInstance {
+    // ROM constants from Obj29_Init and Obj29_Main
+    private static final int INITIAL_Y_VEL = -0x300;  // -768 subpixels (upward)
+    private static final int GRAVITY = 0x18;          // +24 subpixels per frame
+
     private final PatternSpriteRenderer renderer;
     private final LevelManager levelManager;
     private int currentX;
-    private int currentY;
+    private int ySubpixel;  // 8.8 fixed-point Y position (high byte = pixel)
+    private int yVel;       // Y velocity in subpixels
     private int scoreFrame;
-    private int timer;
 
     public PointsObjectInstance(ObjectSpawn spawn, LevelManager levelManager, int points) {
         super(spawn, "Points");
         this.levelManager = levelManager;
         this.renderer = levelManager.getObjectRenderManager().getPointsRenderer();
         this.currentX = spawn.x();
-        this.currentY = spawn.y();
-        this.timer = 60; // 1 second
+        this.ySubpixel = spawn.y() << 8;  // Convert to 8.8 fixed-point
+        this.yVel = INITIAL_Y_VEL;
         setScore(points);
     }
 
@@ -51,22 +63,27 @@ public class PointsObjectInstance extends uk.co.jamesj999.sonic.level.objects.Ab
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
-        if (timer % 2 == 0) {
-            currentY--; // Rise 1px every 2 frames
-        }
-
-        timer--;
-        if (timer <= 0) {
+        // ROM: tst.w y_vel(a0) / bpl.w DeleteObject
+        // Delete when velocity becomes non-negative (object would start falling)
+        if (yVel >= 0) {
             setDestroyed(true);
             return;
         }
+
+        // ROM: bsr.w ObjectMove - apply velocity to position
+        ySubpixel += yVel;
+
+        // ROM: addi.w #$18,y_vel(a0) - apply gravity (slow down upward motion)
+        yVel += GRAVITY;
     }
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         if (isDestroyed())
             return;
-        renderer.drawFrameIndex(scoreFrame, currentX, currentY, false, false);
+        // Convert 8.8 fixed-point to pixel position (high byte)
+        int pixelY = ySubpixel >> 8;
+        renderer.drawFrameIndex(scoreFrame, currentX, pixelY, false, false);
     }
 
     public int getX() {
@@ -74,6 +91,7 @@ public class PointsObjectInstance extends uk.co.jamesj999.sonic.level.objects.Ab
     }
 
     public int getY() {
-        return currentY;
+        // Return pixel position (high byte of 8.8 fixed-point)
+        return ySubpixel >> 8;
     }
 }
