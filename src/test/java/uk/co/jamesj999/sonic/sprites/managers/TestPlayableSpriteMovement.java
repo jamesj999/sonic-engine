@@ -29,6 +29,8 @@ public class TestPlayableSpriteMovement {
                                 this.slopeRunning = 32; // 0.125 * 256
                                 this.friction = 12; // 0.046875 * 256
                                 this.jump = 1664; // 6.5 * 256 (standard Sonic jump force)
+                                this.slopeRollingDown = 80; // Full slope factor when rolling downhill
+                                this.slopeRollingUp = 20; // Reduced factor when rolling uphill
                         }
 
                         @Override

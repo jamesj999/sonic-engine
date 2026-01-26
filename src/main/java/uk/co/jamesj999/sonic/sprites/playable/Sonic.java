@@ -56,8 +56,8 @@ public class Sonic extends AbstractPlayableSprite {
 		jump = 1664;
 		angle = 0;
 		slopeRunning = 32;
-		slopeRollingDown = 20;
-		slopeRollingUp = 80;
+		slopeRollingDown = 80;  // Full slope factor when rolling downhill (with gravity)
+		slopeRollingUp = 20;    // Reduced factor (80 >> 2) when rolling uphill (against gravity)
 		rollDecel = 32;
 		minStartRollSpeed = 128; // SPG: 0.5 pixels (128 subpixels) in S1/S2
 		minRollSpeed = 128;

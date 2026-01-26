@@ -464,11 +464,10 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		if (isOnSteepSurface(hexAngle)) return;
 
-		int slopeEffect = (80 * TrigLookupTable.sinHex(hexAngle)) >> 8;
+		// ROM uses $50 (80) base factor, reduced to $50 >> 2 (20) when going uphill
 		boolean goingDownhill = (gSpeed >= 0) == (TrigLookupTable.sinHex(hexAngle) >= 0);
-		if (!goingDownhill) {
-			slopeEffect >>= 2;
-		}
+		int slopeFactor = goingDownhill ? slopeRollingDown : slopeRollingUp;
+		int slopeEffect = (slopeFactor * TrigLookupTable.sinHex(hexAngle)) >> 8;
 
 		sprite.setGSpeed((short) (gSpeed + slopeEffect));
 	}
@@ -531,24 +530,18 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		short max = sprite.getMax();
 
 		// Air control (skip if rolling jump)
-		// ROM behavior: max speed is a threshold to stop accelerating, NOT a hard cap.
-		// If already moving faster than max (from springs, slopes, rolling), preserve that speed.
+		// ROM behavior (s2.asm:36826-36840): ALWAYS apply acceleration and cap.
+		// Unlike ground movement, air control caps even high speeds from slopes/springs.
 		if (!sprite.getRollingJump()) {
 			if (inputLeft) {
 				sprite.setDirection(Direction.LEFT);
-				// Only accelerate if below max - don't cap existing high speed
-				if (xSpeed > -max) {
-					xSpeed -= (2 * runAccel);
-					if (xSpeed < -max) xSpeed = (short) -max;
-				}
+				xSpeed -= (2 * runAccel);
+				if (xSpeed < -max) xSpeed = (short) -max;
 			}
 			if (inputRight) {
 				sprite.setDirection(Direction.RIGHT);
-				// Only accelerate if below max - don't cap existing high speed
-				if (xSpeed < max) {
-					xSpeed += (2 * runAccel);
-					if (xSpeed > max) xSpeed = max;
-				}
+				xSpeed += (2 * runAccel);
+				if (xSpeed > max) xSpeed = max;
 			}
 		}
 
@@ -875,34 +868,35 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		short xSpeed = sprite.getXSpeed();
 		int angle = sprite.getAngle() & 0xFF;
 
-		if (ySpeed <= 0) {
-			sprite.setGSpeed(xSpeed);
-			sprite.setYSpeed((short) 0);
-			return;
-		}
+		// ROM processes all landings through angle classification, no early return for ySpeed <= 0
+		// Treat negative/zero ySpeed same as positive for angle-based gSpeed conversion
+		short absYSpeed = (short) Math.abs(ySpeed);
 
 		boolean isSteep = isSteepAngle(angle);
 
 		if (isSteep) {
+			// Steep angles: gSpeed from Y velocity magnitude
 			sprite.setXSpeed((short) 0);
-			if (ySpeed > YSPEED_LANDING_CAP) {
-				ySpeed = YSPEED_LANDING_CAP;
-				sprite.setYSpeed(ySpeed);
+			if (absYSpeed > YSPEED_LANDING_CAP) {
+				absYSpeed = YSPEED_LANDING_CAP;
 			}
-			short gSpeed = ySpeed;
+			short gSpeed = absYSpeed;
 			if ((angle & 0x80) != 0) gSpeed = (short) -gSpeed;
 			sprite.setGSpeed(gSpeed);
+			sprite.setYSpeed((short) 0);
 		} else {
 			boolean isFlat = isFlatAngle(angle);
 			if (isFlat) {
+				// Flat angles: gSpeed from X velocity
 				sprite.setGSpeed(xSpeed);
 				sprite.setYSpeed((short) 0);
 			} else {
-				ySpeed = (short) (ySpeed >> 1);
-				sprite.setYSpeed(ySpeed);
-				short gSpeed = ySpeed;
+				// Moderate angles: gSpeed from Y velocity / 2
+				short halfYSpeed = (short) (absYSpeed >> 1);
+				short gSpeed = halfYSpeed;
 				if ((angle & 0x80) != 0) gSpeed = (short) -gSpeed;
 				sprite.setGSpeed(gSpeed);
+				sprite.setYSpeed((short) 0);
 			}
 		}
 	}
