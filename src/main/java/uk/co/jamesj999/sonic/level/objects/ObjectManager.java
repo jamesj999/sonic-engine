@@ -1093,6 +1093,13 @@ public class ObjectManager {
             ridingObject = nextRidingObject;
             ridingX = nextRidingX;
             ridingY = nextRidingY;
+
+            // ROM: bclr #status.player.on_object when not standing on any object
+            // Also clear when player becomes airborne (jumping/falling off) - s2.asm has many instances
+            // of this paired with bset #status.player.in_air
+            if (nextRidingObject == null) {
+                player.setOnObject(false);
+            }
         }
 
         private record MultiPieceContactResult(boolean standing, boolean pushing, int ridingX, int ridingY, int pieceIndex) {}
@@ -1258,6 +1265,8 @@ public class ObjectManager {
                         player.setAngle((byte) 0);
                         player.setGroundMode(GroundMode.GROUND);
                     }
+                    // ROM: bset #status.player.on_object (s2.asm:35739)
+                    player.setOnObject(true);
                 }
                 return new SolidContact(true, false, false, true, false);
             }
@@ -1407,6 +1416,8 @@ public class ObjectManager {
                         player.setAngle((byte) 0);
                         player.setGroundMode(GroundMode.GROUND);
                     }
+                    // ROM: bset #status.player.on_object (s2.asm:35739)
+                    player.setOnObject(true);
                 }
                 return new SolidContact(true, false, false, true, false);
             }

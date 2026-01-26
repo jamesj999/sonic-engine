@@ -809,8 +809,10 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		if (canLand) {
 			moveForSensorResult(lowestResult);
-			if (lowestResult.angle() == (byte) 0xFF) {
-				sprite.setAngle(getCardinalAngleForGroundMode());
+			// ROM checks bit 0 (odd = flagged tile) - use floor cardinal (0x00) for flagged tiles
+			// See s2.asm:43636 - floor check explicitly uses #0
+			if ((lowestResult.angle() & 0x01) != 0) {
+				sprite.setAngle((byte) 0x00);
 			} else {
 				sprite.setAngle(lowestResult.angle());
 			}
@@ -832,7 +834,13 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		boolean canLandOnCeiling = ((ceilingAngle + 0x20) & 0x40) != 0;
 
 		if (canLandOnCeiling) {
-			sprite.setAngle(lowestResult.angle());
+			// ROM checks bit 0 (odd = flagged tile) - use ceiling cardinal (0x80) for flagged tiles
+			// See s2.asm:43928 - ceiling check explicitly uses #$80
+			if ((lowestResult.angle() & 0x01) != 0) {
+				sprite.setAngle((byte) 0x80);
+			} else {
+				sprite.setAngle(lowestResult.angle());
+			}
 			sprite.setAir(false);
 			short gSpeed = sprite.getYSpeed();
 			if ((ceilingAngle & 0x80) != 0) gSpeed = (short) -gSpeed;
