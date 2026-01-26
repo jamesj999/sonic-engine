@@ -949,9 +949,9 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		return selected;
 	}
 
-	/** Apply angle with ROM's snapping logic */
+	/** Apply angle with ROM's snapping logic (s2.asm:42649-42674) */
 	private void applyAngleFromSensor(byte sensorAngle) {
-		// Flagged angles (odd) snap to cardinal
+		// Flagged angles (odd) snap to cardinal using current angle
 		if ((sensorAngle & 0x01) != 0) {
 			sprite.setAngle((byte) ((sprite.getAngle() + 0x20) & 0xC0));
 			return;
@@ -963,7 +963,9 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		if (diff > 0x80) diff = 0x100 - diff;
 
 		if (diff >= 0x20) {
-			sprite.setAngle((byte) ((newAngle + 0x20) & 0xC0));
+			// ROM uses CURRENT angle to determine cardinal snap direction (s2.asm:42670)
+			// This prevents premature ground mode transitions on sharp curves
+			sprite.setAngle((byte) ((currentAngle + 0x20) & 0xC0));
 		} else {
 			sprite.setAngle(sensorAngle);
 		}
@@ -1141,17 +1143,18 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		sprite.setYSpeed((short) ((gSpeed * TrigLookupTable.sinHex(hexAngle)) >> 8));
 	}
 
+	/**
+	 * ROM-accurate speed threshold for ground attachment (s2.asm:42619, 42794, 42861).
+	 * Uses X velocity for GROUND/CEILING modes, Y velocity for wall modes.
+	 * SPG: "minimum(absolute(X Speed) + 4, 14)" for floor/ceiling,
+	 *      "Y Speed instead" for walls.
+	 */
 	private int getSpeedForThreshold() {
 		GroundMode groundMode = sprite.getGroundMode();
-		int speedPixels = (groundMode == GroundMode.LEFTWALL || groundMode == GroundMode.RIGHTWALL)
+		// ROM uses x_vel for GROUND/CEILING, y_vel for walls (mvabs.b instruction)
+		return (groundMode == GroundMode.LEFTWALL || groundMode == GroundMode.RIGHTWALL)
 				? Math.abs(sprite.getYSpeed() >> 8)
 				: Math.abs(sprite.getXSpeed() >> 8);
-
-		if (speedPixels == 0 && sprite.getGSpeed() != 0) {
-			speedPixels = Math.abs(sprite.getGSpeed() >> 8);
-		}
-		int gSpeedPixels = Math.abs(sprite.getGSpeed() >> 8);
-		return Math.max(speedPixels, gSpeedPixels);
 	}
 
 	private boolean hasEnoughHeadroom(int hexAngle) {
