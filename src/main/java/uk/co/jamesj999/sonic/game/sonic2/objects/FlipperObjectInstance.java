@@ -168,10 +168,14 @@ public class FlipperObjectInstance extends BoxObjectInstance
 
         int angle = (adjustedDistance >> 2) + 0x40;
 
+        // Convert Mega Drive angle (0x00-0xFF, where 0x40 = up) to radians
         double radians = (angle & 0xFF) * 2.0 * Math.PI / 256.0;
 
-        int yVel = (int) ((velocityMagnitude * Math.sin(radians)) / 256.0);
-        int xVel = (int) ((velocityMagnitude * Math.cos(radians)) / 256.0);
+        // ROM uses CalcSine which returns sin/cos scaled by ~256, then multiplies
+        // by magnitude and divides by 256 (asr.l #8). Since Math.sin/cos return
+        // -1.0 to 1.0 (not scaled), we just multiply directly without dividing.
+        int yVel = (int) (velocityMagnitude * Math.sin(radians));
+        int xVel = (int) (velocityMagnitude * Math.cos(radians));
 
         if (isFlippedHorizontal()) {
             xVel = -xVel;

@@ -74,9 +74,9 @@ public class PlayableSpriteMovement extends
 
 	@Override
 	public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
-		// Store input state for objects (like flippers, Grabber) to query
-		sprite.setJumpInputPressed(jump);
-		sprite.setDirectionalInputPressed(left, right);
+		// Note: Raw input state for objects is now stored in SpriteManager BEFORE filtering,
+		// so objects can query button state even when control is locked (ROM: obj_control).
+		// The parameters here are already filtered by control lock state.
 
 		// DEBUG MODE: When debug mode is active, use simple directional movement
 		// with no collision, physics, or damage.

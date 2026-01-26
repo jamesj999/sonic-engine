@@ -140,6 +140,12 @@ public class SpriteManager {
 				boolean effectiveJump = !controlLocked && space;
 				boolean effectiveTest = !controlLocked && testButton;
 
+				// Store RAW input state for objects (like flippers) that need to query
+				// button state even when control is locked. This matches ROM behavior
+				// where obj_control locks movement but objects can still read button state.
+				playable.setJumpInputPressed(space);
+				playable.setDirectionalInputPressed(left, right);
+
 				levelManager.applyPlaneSwitchers(playable);
 				playable.getMovementManager().handleMovement(effectiveUp, effectiveDown, effectiveLeft,
 						effectiveRight, effectiveJump, effectiveTest);
