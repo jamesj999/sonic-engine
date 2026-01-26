@@ -298,6 +298,7 @@ public class Sonic2SmpsLoader implements SmpsLoader {
             byte[] raw = rom.readBytes(bankBase, readLength);
 
             Sonic2SfxData sfx = new Sonic2SfxData(raw, Z80_BANK_BASE, 0, headerOffset);
+            sfx.setId(sfxId);  // Set the SFX ID for debugging/identification
             if (isValidSfx(sfx)) {
                 return sfx;
             }

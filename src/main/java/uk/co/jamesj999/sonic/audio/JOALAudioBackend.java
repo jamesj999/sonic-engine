@@ -12,6 +12,7 @@ import uk.co.jamesj999.sonic.audio.smps.AbstractSmpsData;
 import uk.co.jamesj999.sonic.audio.smps.DacData;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencer;
 import uk.co.jamesj999.sonic.audio.smps.SmpsSequencerConfig;
+import uk.co.jamesj999.sonic.audio.synth.Ym2612Chip;
 import uk.co.jamesj999.sonic.configuration.SonicConfiguration;
 import uk.co.jamesj999.sonic.configuration.SonicConfigurationService;
 import uk.co.jamesj999.sonic.game.sonic2.audio.Sonic2SmpsConstants;
@@ -22,6 +23,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
 import java.util.*;
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -42,6 +44,9 @@ public class JOALAudioBackend implements AudioBackend {
     private int[] streamBuffers;
     private static final int STREAM_BUFFER_COUNT = 3;
     private static final int STREAM_BUFFER_SIZE = 1024;
+    // Pre-allocated buffers for fillBuffer() to avoid per-call allocations (~43 times/sec)
+    private final short[] streamData = new short[STREAM_BUFFER_SIZE * 2];
+    private final short[] sfxStreamData = new short[STREAM_BUFFER_SIZE * 2];
     private SmpsSequencer currentSmps;
     private SmpsDriver smpsDriver;
 
@@ -136,7 +141,9 @@ public class JOALAudioBackend implements AudioBackend {
 
     @Override
     public void playMusic(int musicId) {
-        LOGGER.info("Requesting Music ID: " + Integer.toHexString(musicId));
+        if (LOGGER.isLoggable(Level.INFO)) {
+            LOGGER.info("Requesting Music ID: " + Integer.toHexString(musicId));
+        }
         stopStream(); // Stop any running stream
         clearMusicStack();
         currentMusicId = -1;
@@ -186,7 +193,7 @@ public class JOALAudioBackend implements AudioBackend {
             clearMusicStack();
         }
 
-        smpsDriver = new SmpsDriver();
+        smpsDriver = new SmpsDriver(getSmpsOutputRate());
 
         // Configure Region
         String regionStr = SonicConfigurationService.getInstance().getString(SonicConfiguration.REGION);
@@ -198,10 +205,12 @@ public class JOALAudioBackend implements AudioBackend {
 
         boolean dacInterpolate = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DAC_INTERPOLATE);
         smpsDriver.setDacInterpolate(dacInterpolate);
+        smpsDriver.setOutputSampleRate(getSmpsOutputRate());
 
         boolean fm6DacOff = SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.FM6_DAC_OFF);
 
         SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
+        seq.setSampleRate(smpsDriver.getOutputSampleRate());
         seq.setSpeedShoes(speedShoesEnabled);
         seq.setFm6DacOff(fm6DacOff);
         // Music is the primary voice source for SFX fallback
@@ -238,6 +247,7 @@ public class JOALAudioBackend implements AudioBackend {
             // Note: DAC interpolation is global on the driver/synth.
             // FM6 DAC Off is per-sequencer.
             SmpsSequencer seq = new SmpsSequencer(data, dacData, smpsDriver, requireSmpsConfig());
+            seq.setSampleRate(smpsDriver.getOutputSampleRate());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -252,11 +262,13 @@ public class JOALAudioBackend implements AudioBackend {
             if (sfxStream instanceof SmpsDriver) {
                 sfxDriver = (SmpsDriver) sfxStream;
             } else {
-                sfxDriver = new SmpsDriver();
+                sfxDriver = new SmpsDriver(getSmpsOutputRate());
                 sfxDriver.setDacInterpolate(dacInterpolate);
                 sfxStream = sfxDriver;
             }
+            sfxDriver.setOutputSampleRate(getSmpsOutputRate());
             SmpsSequencer seq = new SmpsSequencer(data, dacData, sfxDriver, requireSmpsConfig());
+            seq.setSampleRate(sfxDriver.getOutputSampleRate());
             seq.setFm6DacOff(fm6DacOff);
             seq.setSfxMode(true);
             seq.setPitch(pitch);
@@ -399,24 +411,24 @@ public class JOALAudioBackend implements AudioBackend {
     }
 
     private void fillBuffer(int bufferId) {
-        // Stereo buffer: 2 channels * STREAM_BUFFER_SIZE
-        short[] data = new short[STREAM_BUFFER_SIZE * 2];
+        // Clear and reuse pre-allocated buffer
+        Arrays.fill(streamData, (short) 0);
         if (currentStream != null) {
-            currentStream.read(data);
+            currentStream.read(streamData);
         }
         // If music stream ended or not present, buffer is 0.
 
         if (sfxStream != null) {
-            short[] sfxData = new short[STREAM_BUFFER_SIZE * 2];
-            sfxStream.read(sfxData);
+            Arrays.fill(sfxStreamData, (short) 0);
+            sfxStream.read(sfxStreamData);
 
-            for (int i = 0; i < data.length; i++) {
-                int mixed = data[i] + sfxData[i];
+            for (int i = 0; i < streamData.length; i++) {
+                int mixed = streamData[i] + sfxStreamData[i];
                 if (mixed > 32000)
                     mixed = 32000;
                 if (mixed < -32000)
                     mixed = -32000;
-                data[i] = (short) mixed;
+                streamData[i] = (short) mixed;
             }
 
             if (sfxStream.isComplete()) {
@@ -424,8 +436,33 @@ public class JOALAudioBackend implements AudioBackend {
             }
         }
 
-        ShortBuffer sBuffer = Buffers.newDirectShortBuffer(data);
-        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, data.length * 2, 44100);
+        ShortBuffer sBuffer = Buffers.newDirectShortBuffer(streamData);
+        int sampleRate = (int) Math.round(getStreamSampleRate());
+        al.alBufferData(bufferId, AL.AL_FORMAT_STEREO16, sBuffer, streamData.length * 2, sampleRate);
+    }
+
+    private double getSmpsOutputRate() {
+        boolean internalRate = SonicConfigurationService.getInstance()
+                .getBoolean(SonicConfiguration.AUDIO_INTERNAL_RATE_OUTPUT);
+        return internalRate ? Ym2612Chip.getInternalRate() : Ym2612Chip.getDefaultOutputRate();
+    }
+
+    private double getStreamSampleRate() {
+        double rate = Ym2612Chip.getDefaultOutputRate();
+        SmpsDriver musicDriver = (currentStream instanceof SmpsDriver driver) ? driver : null;
+        SmpsDriver sfxDriver = (sfxStream instanceof SmpsDriver driver) ? driver : null;
+        if (musicDriver != null) {
+            rate = musicDriver.getOutputSampleRate();
+        } else if (sfxDriver != null) {
+            rate = sfxDriver.getOutputSampleRate();
+        }
+        if (musicDriver != null && sfxDriver != null) {
+            double sfxRate = sfxDriver.getOutputSampleRate();
+            if (Math.abs(rate - sfxRate) > 1e-6) {
+                LOGGER.warning("Audio stream sample rate mismatch: music=" + rate + " sfx=" + sfxRate);
+            }
+        }
+        return rate;
     }
 
     /**

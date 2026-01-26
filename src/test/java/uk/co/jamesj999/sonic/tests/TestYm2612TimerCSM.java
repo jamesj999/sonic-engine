@@ -11,6 +11,8 @@ public class TestYm2612TimerCSM {
     @Test
     public void timerAOverflowTriggersKeyOnInCSMMode() {
         Ym2612Chip chip = new Ym2612Chip();
+        // Use integrated chip type to avoid DC offset that discrete type adds
+        chip.setChipType(1); // YM2612_INTEGRATED
 
         // Configure Channel 2 (Port 0, Regs A2, A6, B2, etc.)
         // Note: Channel 2 is at index 2.

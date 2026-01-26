@@ -99,7 +99,7 @@ public class TestSmpsKeyDisplacement {
             }
         }
 
-        // Expect Octave 3 (base note offset + accumulated key offsets)
-        assertEquals("Block should be 3 (Accumulated KeyOffset + base note)", 3, block);
+        // Expect Octave 2 (base note offset of 1 + accumulated key offset of 24 = 25, 25/12 = 2)
+        assertEquals("Block should be 2 (Accumulated KeyOffset + base note)", 2, block);
     }
 }
