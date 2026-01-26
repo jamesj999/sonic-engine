@@ -245,7 +245,10 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	private boolean doUpdateSpindash() {
 		if (!inputDown) {
 			doReleaseSpindash();
-			return false;
+			// Return true to skip the rest of modeNormal().
+			// The release routine handles movement and collision for this frame,
+			// and next frame will properly dispatch to modeRoll().
+			return true;
 		}
 
 		// Decay counter every frame
@@ -284,10 +287,53 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			spindashGSpeed = (short) -spindashGSpeed;
 		}
 		sprite.setGSpeed(spindashGSpeed);
+
+		// Calculate X/Y velocity from gSpeed immediately.
+		// This is critical for the ground attachment threshold in doAnglePos() -
+		// without this, xSpeed would be 0 giving a threshold of only 4 pixels,
+		// causing false airborne detection on release (ROM: s2.asm:42727).
+		int hexAngle = sprite.getAngle() & 0xFF;
+		sprite.setXSpeed((short) ((spindashGSpeed * TrigLookupTable.cosHex(hexAngle)) >> 8));
+		sprite.setYSpeed((short) ((spindashGSpeed * TrigLookupTable.sinHex(hexAngle)) >> 8));
+
 		sprite.setRolling(true);
 
 		audioManager.playSfx(GameSound.SPINDASH_RELEASE);
-		doLevelBoundaryAndAnglePos();
+		doSpindashReleaseCollision();
+	}
+
+	/**
+	 * Handle collision and movement for the spindash release frame.
+	 * ROM processes this as part of the normal rolling mode flow, but since we're
+	 * transitioning mid-frame, we need to apply rolling physics here.
+	 * Mirrors modeRoll() order of operations (ROM: Obj01_MdRoll s2.asm:36180).
+	 */
+	private void doSpindashReleaseCollision() {
+		short originalX = sprite.getX();
+		short originalY = sprite.getY();
+
+		// Apply rolling slope physics (ROM: Sonic_RollRepel)
+		doRollRepel();
+
+		// Recalculate X/Y velocity from gSpeed after slope physics
+		// (doRollRepel may have modified gSpeed on slopes)
+		short gSpeed = sprite.getGSpeed();
+		int hexAngle = sprite.getAngle() & 0xFF;
+		sprite.setXSpeed((short) ((gSpeed * TrigLookupTable.cosHex(hexAngle)) >> 8));
+		sprite.setYSpeed((short) ((gSpeed * TrigLookupTable.sinHex(hexAngle)) >> 8));
+
+		// Level boundary check
+		doLevelBoundary();
+
+		// Move sprite based on velocity
+		sprite.move(sprite.getXSpeed(), sprite.getYSpeed());
+
+		// Update sensors and ground position
+		sprite.updateSensors(originalX, originalY);
+		doAnglePos();
+
+		// Slope slip/fall check (ROM: Sonic_SlopeRepel)
+		doSlopeRepel();
 	}
 
 	// ========================================
@@ -1147,31 +1193,21 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	}
 
 	/**
-	 * ROM-accurate speed threshold for ground attachment (s2.asm:42619, 42794, 42861).
+	 * ROM-accurate speed threshold for ground attachment (s2.asm:42727, 42794, 42861).
 	 * Uses X velocity for GROUND/CEILING modes, Y velocity for wall modes.
-	 * SPG: "minimum(absolute(X Speed) + 4, 14)" for floor/ceiling,
-	 *      "Y Speed instead" for walls.
 	 *
-	 * IMPORTANT: Only fall back to gSpeed when the ROM-style velocity is zero but
-	 * gSpeed is non-zero. This handles loop edge cases where velocity decomposition
-	 * creates zeros at certain angles. Using Math.max() unconditionally breaks slopes.
+	 * ROM uses mvabs.b which takes the HIGH BYTE (integer pixels) of velocity:
+	 *   mvabs.b  x_vel(a0),d0  ; for ceiling
+	 *   mvabs.b  y_vel(a0),d0  ; for walls
+	 *
+	 * No fallback to gSpeed - ROM uses raw velocity bytes directly.
 	 */
 	private int getSpeedForThreshold() {
 		GroundMode groundMode = sprite.getGroundMode();
 		// ROM uses x_vel for GROUND/CEILING, y_vel for walls (mvabs.b instruction)
-		int speedPixels = (groundMode == GroundMode.LEFTWALL || groundMode == GroundMode.RIGHTWALL)
+		return (groundMode == GroundMode.LEFTWALL || groundMode == GroundMode.RIGHTWALL)
 				? Math.abs(sprite.getYSpeed() >> 8)
 				: Math.abs(sprite.getXSpeed() >> 8);
-
-		// Only fall back to gSpeed when decomposed velocity is exactly zero
-		// This preserves ROM behavior on slopes while handling loop edge cases
-		if (speedPixels == 0) {
-			int gSpeedPixels = Math.abs(sprite.getGSpeed() >> 8);
-			if (gSpeedPixels > 0) {
-				return gSpeedPixels;
-			}
-		}
-		return speedPixels;
 	}
 
 	private boolean hasEnoughHeadroom(int hexAngle) {

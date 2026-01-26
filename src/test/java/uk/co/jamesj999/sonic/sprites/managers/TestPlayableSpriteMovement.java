@@ -1278,15 +1278,15 @@ public class TestPlayableSpriteMovement {
          * This is CRITICAL for loop traversal - during loop transitions, xSpeed can be
          * zero due to velocity decomposition even when gSpeed is non-zero.
          *
-         * Without this fallback, the threshold becomes 0+4=4 pixels (too tight),
-         * causing Sonic to become airborne prematurely and fly out of loops.
+         * ROM uses raw velocity bytes directly (s2.asm:42727 mvabs.b instruction).
+         * No fallback to gSpeed - the fix is to ensure xSpeed/ySpeed are always
+         * set correctly when gSpeed is set (e.g., immediately after spindash release).
          */
         @Test
-        public void testSpeedThresholdUsesGSpeedFallbackWhenZero() throws Exception {
-                // Scenario: Running through a loop, xSpeed becomes 0 at certain angles
-                // but gSpeed is still high (e.g., 1536 = 6 pixels/frame)
+        public void testSpeedThresholdUsesRawVelocityNoFallback() throws Exception {
+                // ROM behavior: use xSpeed directly, no fallback to gSpeed
                 mockSprite.setGSpeed((short) 1536);
-                mockSprite.setXSpeed((short) 0);  // Zero due to velocity decomposition
+                mockSprite.setXSpeed((short) 0);  // If this is 0, threshold is 0
                 mockSprite.setYSpeed((short) 0);
                 mockSprite.setGroundMode(GroundMode.GROUND);
 
@@ -1294,13 +1294,13 @@ public class TestPlayableSpriteMovement {
                 method.setAccessible(true);
                 int threshold = (int) method.invoke(manager);
 
-                // Should use gSpeed (1536 >> 8 = 6), not xSpeed (0)
-                assertEquals("Should use gSpeed when xSpeed is 0", 6, threshold);
+                // ROM uses xSpeed directly (0 >> 8 = 0), no gSpeed fallback
+                assertEquals("Should use xSpeed directly per ROM behavior", 0, threshold);
 
-                // Verify this gives a reasonable attachment threshold
-                // positiveThreshold = min(speedPixels + 4, 14) = min(6 + 4, 14) = 10
+                // This gives positiveThreshold = min(0 + 4, 14) = 4
+                // The fix for spindash is to ensure xSpeed is set BEFORE this check
                 int positiveThreshold = Math.min(threshold + 4, 14);
-                assertEquals("Attachment threshold should be 10 pixels", 10, positiveThreshold);
+                assertEquals("Attachment threshold is 4 pixels with zero xSpeed", 4, positiveThreshold);
         }
 
         /**
@@ -1322,11 +1322,11 @@ public class TestPlayableSpriteMovement {
         }
 
         /**
-         * Test speed threshold on wall modes uses ySpeed but falls back to gSpeed if zero.
+         * Test speed threshold on wall modes uses ySpeed directly per ROM (no fallback).
          */
         @Test
         public void testSpeedThresholdOnWallMode() throws Exception {
-                // On LEFTWALL mode, should use ySpeed but fallback to gSpeed if zero
+                // On LEFTWALL mode, ROM uses ySpeed directly (s2.asm:42794 mvabs.b y_vel)
                 mockSprite.setGSpeed((short) 1024);  // 4 pixels/frame
                 mockSprite.setXSpeed((short) 1024);  // Non-zero, but irrelevant for wall mode
                 mockSprite.setYSpeed((short) 0);     // Zero
@@ -1336,8 +1336,13 @@ public class TestPlayableSpriteMovement {
                 method.setAccessible(true);
                 int threshold = (int) method.invoke(manager);
 
-                // ySpeed is 0, so should fallback to gSpeed (1024 >> 8 = 4)
-                assertEquals("Should use gSpeed fallback on wall mode when ySpeed is 0", 4, threshold);
+                // ROM uses ySpeed directly (0 >> 8 = 0), no gSpeed fallback
+                assertEquals("Should use ySpeed directly on wall mode per ROM", 0, threshold);
+
+                // With non-zero ySpeed, threshold reflects actual velocity
+                mockSprite.setYSpeed((short) 1024);  // 4 pixels/frame
+                int threshold2 = (int) method.invoke(manager);
+                assertEquals("Should use ySpeed when non-zero", 4, threshold2);
         }
 
         /**
@@ -1365,14 +1370,13 @@ public class TestPlayableSpriteMovement {
         }
 
         /**
-         * Test that gSpeed fallback only activates when velocity is exactly zero.
+         * Test speed threshold uses high byte of velocity (ROM mvabs.b behavior).
          */
         @Test
-        public void testSpeedThresholdFallbackOnlyWhenExactlyZero() throws Exception {
-                // Even with very small xSpeed (1 subpixel = 0 pixels), should NOT use gSpeed
-                // because the ROM would round this to 0 anyway
+        public void testSpeedThresholdUsesHighByte() throws Exception {
+                // ROM uses mvabs.b which takes high byte of velocity
                 mockSprite.setGSpeed((short) 1536);  // 6 pixels/frame
-                mockSprite.setXSpeed((short) 255);   // Less than 1 pixel, rounds to 0
+                mockSprite.setXSpeed((short) 255);   // Less than 1 pixel, high byte = 0
                 mockSprite.setYSpeed((short) 0);
                 mockSprite.setGroundMode(GroundMode.GROUND);
 
@@ -1380,14 +1384,92 @@ public class TestPlayableSpriteMovement {
                 method.setAccessible(true);
                 int threshold = (int) method.invoke(manager);
 
-                // 255 >> 8 = 0, so speedPixels = 0, should fall back to gSpeed
-                assertEquals("Should fallback to gSpeed when xSpeed rounds to 0", 6, threshold);
+                // 255 >> 8 = 0, ROM uses this directly (no fallback)
+                assertEquals("Should use high byte of xSpeed (0)", 0, threshold);
 
                 // Now test with xSpeed = 256 (exactly 1 pixel)
                 mockSprite.setXSpeed((short) 256);
                 int threshold2 = (int) method.invoke(manager);
 
-                // 256 >> 8 = 1, so speedPixels = 1, should NOT fall back
+                // 256 >> 8 = 1
                 assertEquals("Should use xSpeed when it's 1+ pixels", 1, threshold2);
+
+                // With higher speed
+                mockSprite.setXSpeed((short) 2048);  // 8 pixels/frame
+                int threshold3 = (int) method.invoke(manager);
+                assertEquals("Should use xSpeed high byte", 8, threshold3);
+        }
+
+        /**
+         * Test that spindash velocity calculation sets xSpeed from gSpeed immediately.
+         * This is critical for ground attachment threshold calculation.
+         *
+         * Bug fix: Before this fix, xSpeed was 0 during doAnglePos() after spindash release,
+         * causing threshold to be only 4 pixels (0+4) and Sonic to falsely become airborne.
+         * Now xSpeed is set from gSpeed before any ground checks, giving proper threshold.
+         */
+        @Test
+        public void testSpindashVelocityCalculation() throws Exception {
+                // Test that xSpeed is correctly calculated from gSpeed at angle 0
+                short gSpeed = 0x0900;  // Typical spindash speed (2304 subpixels = 9 pixels/frame)
+                mockSprite.setGSpeed(gSpeed);
+                mockSprite.setAngle((byte) 0);  // Flat ground
+                mockSprite.setGroundMode(GroundMode.GROUND);
+
+                // Simulate the velocity calculation that happens in doReleaseSpindash:
+                // xSpeed = (gSpeed * cos(angle)) >> 8
+                // At angle 0, cos = 256, so xSpeed = gSpeed
+                int hexAngle = mockSprite.getAngle() & 0xFF;
+                short calculatedXSpeed = (short) ((gSpeed * uk.co.jamesj999.sonic.physics.TrigLookupTable.cosHex(hexAngle)) >> 8);
+                mockSprite.setXSpeed(calculatedXSpeed);
+
+                // xSpeed should match gSpeed on flat ground
+                assertEquals("xSpeed should equal gSpeed on flat ground (angle 0)",
+                        gSpeed, mockSprite.getXSpeed());
+
+                // Verify threshold is now correct
+                Method thresholdMethod = PlayableSpriteMovement.class.getDeclaredMethod("getSpeedForThreshold");
+                thresholdMethod.setAccessible(true);
+                int threshold = (int) thresholdMethod.invoke(manager);
+
+                // With xSpeed = 0x0900 = 2304, threshold = 2304 >> 8 = 9
+                assertEquals("Threshold should reflect spindash speed", 9, threshold);
+
+                // positiveThreshold = min(9 + 4, 14) = 13 pixels - ample for ground attachment
+                int positiveThreshold = Math.min(threshold + 4, 14);
+                assertTrue("Ground attachment threshold should be >= 10 pixels", positiveThreshold >= 10);
+        }
+
+        /**
+         * Test velocity calculation on slopes (non-zero angle).
+         */
+        @Test
+        public void testSpindashVelocityOnSlope() throws Exception {
+                // On a 45-degree slope, both xSpeed and ySpeed should be non-zero
+                short gSpeed = 0x0800;  // Spindash speed
+                mockSprite.setGSpeed(gSpeed);
+                mockSprite.setAngle((byte) 0x20);  // ~45 degrees
+                mockSprite.setGroundMode(GroundMode.GROUND);
+
+                // Calculate velocities as done in doReleaseSpindash
+                int hexAngle = mockSprite.getAngle() & 0xFF;
+                short xSpeed = (short) ((gSpeed * uk.co.jamesj999.sonic.physics.TrigLookupTable.cosHex(hexAngle)) >> 8);
+                short ySpeed = (short) ((gSpeed * uk.co.jamesj999.sonic.physics.TrigLookupTable.sinHex(hexAngle)) >> 8);
+
+                mockSprite.setXSpeed(xSpeed);
+                mockSprite.setYSpeed(ySpeed);
+
+                // Both should be non-zero on a slope
+                assertTrue("xSpeed should be non-zero on slope", xSpeed != 0);
+                assertTrue("ySpeed should be non-zero on slope", ySpeed != 0);
+
+                // Verify threshold uses correct velocity
+                Method thresholdMethod = PlayableSpriteMovement.class.getDeclaredMethod("getSpeedForThreshold");
+                thresholdMethod.setAccessible(true);
+                int threshold = (int) thresholdMethod.invoke(manager);
+
+                // Threshold should be based on xSpeed (for GROUND mode)
+                int expectedThreshold = Math.abs(xSpeed >> 8);
+                assertEquals("Threshold should be based on xSpeed", expectedThreshold, threshold);
         }
 }
