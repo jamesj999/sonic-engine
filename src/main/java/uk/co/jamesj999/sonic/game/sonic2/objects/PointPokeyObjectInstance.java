@@ -121,8 +121,6 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
         // Use cyan color for debug box
         super(spawn, name, HALF_WIDTH, GROUND_HALF_HEIGHT, 0.2f, 0.8f, 0.8f, false);
         this.isLinkedMode = (spawn.subtype() & 0xFF) == 0x01;
-        LOGGER.info("PointPokey created: subtype=0x" + Integer.toHexString(spawn.subtype() & 0xFF) +
-                ", isLinkedMode=" + isLinkedMode);
     }
 
     @Override
@@ -184,24 +182,18 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
         if (isLinkedMode) {
             // Linked mode: try to trigger slot machine
             slotMachineManager = getSlotMachineManager();
-            LOGGER.info("PointPokey: isLinkedMode=true, slotMachineManager=" +
-                    (slotMachineManager != null ? "exists" : "NULL") +
-                    ", available=" + (slotMachineManager != null ? slotMachineManager.isAvailable() : "N/A"));
             if (slotMachineManager != null && slotMachineManager.isAvailable()) {
                 slotMachineManager.activate();
                 playerState = STATE_WAITING_SLOT;
-                LOGGER.info("PointPokey: Triggered slot machine, isRunning=" + slotMachineManager.isRunning());
             } else {
                 // Slot machine busy - use simple countdown instead
                 playerState = STATE_OCCUPIED;
                 countdown = COUNTDOWN_FRAMES;
-                LOGGER.info("PointPokey: Slot machine busy or null, using countdown");
             }
         } else {
             // Simple mode: use countdown
             playerState = STATE_OCCUPIED;
             countdown = COUNTDOWN_FRAMES;
-            LOGGER.info("PointPokey: Simple mode (subtype 0x00), using countdown");
         }
 
         // Play casino bonus sound
@@ -214,14 +206,8 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
     private CNZSlotMachineManager getSlotMachineManager() {
         try {
             ZoneFeatureProvider provider = GameModuleRegistry.getCurrent().getZoneFeatureProvider();
-            LOGGER.info("getSlotMachineManager: provider class=" +
-                    (provider != null ? provider.getClass().getSimpleName() : "NULL"));
             if (provider instanceof Sonic2ZoneFeatureProvider sonic2Provider) {
-                CNZSlotMachineManager mgr = sonic2Provider.getSlotMachineManager();
-                LOGGER.info("getSlotMachineManager: manager=" + (mgr != null ? "exists" : "NULL"));
-                return mgr;
-            } else {
-                LOGGER.info("getSlotMachineManager: provider is not Sonic2ZoneFeatureProvider");
+                return sonic2Provider.getSlotMachineManager();
             }
         } catch (Exception e) {
             LOGGER.warning("Failed to get slot machine manager: " + e.getMessage());
@@ -343,7 +329,6 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
         // Check if slot machine is done
         if (slotMachineManager != null && slotMachineManager.isComplete()) {
             slotReward = slotMachineManager.getReward();
-            LOGGER.fine("PointPokey: Slot machine complete, reward=" + slotReward);
 
             if (slotReward == 0) {
                 // No reward - just eject
@@ -357,7 +342,6 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
                 prizeAngle = 0;
                 prizeSpawnTimer = 0;
                 playerState = STATE_SPAWNING_PRIZES;
-                LOGGER.info("PointPokey: Starting prize spawn, prizesToSpawn=" + prizesToSpawn);
             }
         } else {
             // Play sound at 16-frame intervals using global counter (s2.asm: (Vint_runcount+3) & 0x0F == 0)
@@ -400,7 +384,6 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
         // Check if all prizes spawned AND all collected/expired
         // (eject when prizesToSpawn == 0 AND activePrizeCount == 0)
         if (prizesToSpawn <= 0 && activePrizeCount[0] <= 0) {
-            LOGGER.info("PointPokey: All prizes finished, ejecting player");
             ejectPlayer(player);
         }
     }

@@ -123,8 +123,6 @@ public class CNZSlotMachineManager {
         routine = ROUTINE_SETUP_TARGETS;
         rewardDetermined = false;
         reward = 0;
-        debugFrameCount = 0;  // Reset debug counter for fresh logging
-        LOGGER.info("Slot machine activated - logging first 30 updates");
     }
 
     /**
@@ -534,9 +532,6 @@ public class CNZSlotMachineManager {
 
         return barReward;  // 0 if no bars
     }
-
-    // Debug frame counter for slot updates
-    private static int debugFrameCount = 0;
 
     /**
      * Update slot positions based on speed.
