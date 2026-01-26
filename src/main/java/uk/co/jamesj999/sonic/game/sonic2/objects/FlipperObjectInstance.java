@@ -107,11 +107,8 @@ public class FlipperObjectInstance extends BoxObjectInstance
                     // We use pinball_mode to prevent rolling from being cleared
                     player.setPinballMode(true);
                     // setRolling(true) handles radius change and Y adjustment internally
-                    boolean wasRolling = player.getRolling();
+                    // (adjusts Y by (runHeight-rollHeight)/2 = 5 pixels for Sonic)
                     player.setRolling(true);
-                    if (!wasRolling) {
-                        player.setY((short)(player.getY() + 5));
-                    }
                     playerFlipperState = 1;
                 } else {
                     // Already on flipper: check for jump button (loc_2B23C)
@@ -189,6 +186,14 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setControlLocked(false);
         player.setPinballMode(false);
 
+        // Clear solid object riding state to prevent the object system from
+        // continuing to track the player's position relative to the flipper.
+        // This matches the ROM behavior of clearing status.player.on_object (loc_2B2E2).
+        var objectManager = LevelManager.getInstance().getObjectManager();
+        if (objectManager != null) {
+            objectManager.clearRidingObject();
+        }
+
         // Reset flipper state
         playerFlipperState = 0;
 
@@ -198,29 +203,35 @@ public class FlipperObjectInstance extends BoxObjectInstance
     }
 
     private void applyHorizontalLaunch(AbstractPlayableSprite player) {
+        // ROM default: xVel = -0x1000 (LEFT) at loc_2B35C
         int xVel = -0x1000;
 
         int newX = player.getX() + 8;
 
-        boolean launchRight = spawn.x() - player.getCentreX() < 0;
+        // ROM: If player is RIGHT of flipper (flipper.x - player.x < 0), negate velocity
+        // This ensures player is always launched AWAY from the flipper
+        boolean playerIsRightOfFlipper = spawn.x() - player.getCentreX() < 0;
 
-        if (!launchRight) {
+        if (playerIsRightOfFlipper) {
+            // Player is RIGHT of flipper: launch them RIGHT (away)
             newX -= 16;
-            xVel = -xVel;
-            player.setDirection(Direction.LEFT);
-        } else {
+            xVel = -xVel;  // +0x1000 (RIGHT)
             player.setDirection(Direction.RIGHT);
+        } else {
+            // Player is LEFT of flipper: keep xVel = -0x1000 (LEFT, away)
+            player.setDirection(Direction.LEFT);
         }
 
         player.setX((short) newX);
         player.setXSpeed((short) xVel);
         player.setGSpeed((short) xVel);
+        player.setYSpeed((short) 0);  // ROM: clr.w y_vel(a1)
 
         // ROM: move.w #$F,move_lock(a1) - lock player input for 15 frames
         player.setMoveLockTimer(15);
         player.setRolling(true);
 
-        triggerHorizontalAnimation(launchRight);
+        triggerHorizontalAnimation(playerIsRightOfFlipper);
         playFlipperSound();
         launchCooldown = 16;
     }

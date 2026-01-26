@@ -118,6 +118,11 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
     // Reference to level manager (for spawning prizes)
     private LevelManager levelManager;
 
+    // Cached slot display offset (calculated once at first render)
+    private int slotDisplayOffsetX = CNZSlotMachineRenderer.DEFAULT_OFFSET_X;
+    private int slotDisplayOffsetY = CNZSlotMachineRenderer.DEFAULT_OFFSET_Y;
+    private boolean slotDisplayOffsetCalculated = false;
+
     public PointPokeyObjectInstance(ObjectSpawn spawn, String name) {
         // Use cyan color for debug box
         super(spawn, name, HALF_WIDTH, GROUND_HALF_HEIGHT, 0.2f, 0.8f, 0.8f, false);
@@ -494,10 +499,55 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
 
         // Request slot machine display render for linked cages (actual render deferred to after tilemap)
         if (isLinkedMode) {
+            // Calculate slot display offset on first render (varies between CNZ1 and CNZ2)
+            if (!slotDisplayOffsetCalculated) {
+                calculateSlotDisplayOffset();
+            }
+
             ZoneFeatureProvider provider = GameModuleRegistry.getCurrent().getZoneFeatureProvider();
             if (provider instanceof Sonic2ZoneFeatureProvider sonic2Provider) {
-                sonic2Provider.requestSlotRender(spawn.x(), spawn.y());
+                sonic2Provider.requestSlotRender(spawn.x(), spawn.y(), slotDisplayOffsetX, slotDisplayOffsetY);
             }
+        }
+    }
+
+    /**
+     * Calculates the offset from cage center to slot display by scanning nearby chunks
+     * for patterns using the slot machine VRAM tile indices.
+     * <p>
+     * This is necessary because the slot display position varies between CNZ1 (below cage)
+     * and CNZ2 (above cage), and is determined by the level's chunk layout.
+     */
+    private void calculateSlotDisplayOffset() {
+        slotDisplayOffsetCalculated = true;
+
+        LevelManager lm = LevelManager.getInstance();
+        if (lm == null) {
+            return;
+        }
+
+        // Search for slot display patterns (tiles $0550-$057F) within 128 pixels of cage
+        int[] offset = lm.findPatternOffset(
+                spawn.x(),
+                spawn.y(),
+                CNZSlotMachineRenderer.SLOT_TILE_MIN,
+                CNZSlotMachineRenderer.SLOT_TILE_MAX,
+                128
+        );
+
+        if (offset != null) {
+            // Found slot display tiles - the offset points to the first pattern's center
+            // The findPatternOffset returns offset from ref to pattern center (pattern top-left + 4)
+            // We need the offset to the pattern's top-left corner for rendering
+            // Subtract 4 for X to get pattern left edge, subtract 12 for Y (4 for center->top, 8 for one pattern adjustment)
+            slotDisplayOffsetX = offset[0] - 4;  // Pattern center to pattern left edge
+            slotDisplayOffsetY = offset[1] - 12; // Pattern center to pattern top edge, minus one pattern (8px)
+
+            LOGGER.fine("Slot display offset calculated: (" + slotDisplayOffsetX + ", " + slotDisplayOffsetY +
+                    ") for cage at (" + spawn.x() + ", " + spawn.y() + ")");
+        } else {
+            LOGGER.fine("Slot display patterns not found near cage at (" + spawn.x() + ", " + spawn.y() +
+                    "), using defaults");
         }
     }
 
