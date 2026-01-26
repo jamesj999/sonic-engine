@@ -20,6 +20,13 @@ public final class Sonic2ObjectArtKeys {
     public static final String BONUS_BLOCK = "bonus_block";
     public static final String FLIPPER = "flipper";
     public static final String ANIM_FLIPPER = "flipper";
+    public static final String LAUNCHER_SPRING_VERT = "launcher_spring_vert";
+    public static final String LAUNCHER_SPRING_DIAG = "launcher_spring_diag";
+    public static final String CNZ_RECT_BLOCKS = "cnz_rect_blocks";
+    public static final String CNZ_BIG_BLOCK = "cnz_big_block";
+    public static final String CNZ_ELEVATOR = "cnz_elevator";
+    public static final String CNZ_CAGE = "cnz_cage";
+    public static final String CNZ_BONUS_SPIKE = "cnz_bonus_spike";
 
     // CPZ-specific
     public static final String SPEED_BOOSTER = "speed_booster";

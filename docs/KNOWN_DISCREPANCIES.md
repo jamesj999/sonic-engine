@@ -6,6 +6,7 @@ This document tracks intentional deviations from the original Sonic 2 ROM implem
 
 1. [Gloop Sound Toggle](#gloop-sound-toggle)
 2. [Spindash Release Transpose Fix](#spindash-release-transpose-fix)
+3. [Pattern ID Ranges for GUI/Results Screen](#pattern-id-ranges-for-guiresults-screen)
 
 ---
 
@@ -103,3 +104,55 @@ if ((channelId & 0x80) == 0 && transpose == (byte) 0x90) {
 ### Verification
 
 Spindash Release now includes the initial FM5 hit before the delayed PSG noise, matching expected playback.
+
+---
+
+## Pattern ID Ranges for GUI/Results Screen
+
+**Location:** `LevelManager.java`, `ObjectRenderManager.java`, `PatternAtlas.java`
+**ROM Reference:** VDP VRAM tile management
+
+### Original Implementation
+
+The Mega Drive VDP has limited VRAM (~64KB), so the original game dynamically loads and overwrites pattern data. When displaying the results screen after completing an act, the game overwrites level tile patterns that are no longer needed with results screen graphics (score tallies, continue icons, etc.). Pattern indices directly correspond to VRAM tile addresses (0x0000-0x07FF typical range).
+
+From `s2.asm`, results screen art is loaded into VRAM locations previously used by level tiles:
+```asm
+; Load results screen patterns, overwriting level data
+lea     (ArtNem_TitleCard).l,a0
+lea     (vdp_control_port).l,a4
+move.w  #tiles_to_bytes(ArtTile_Title_Card),d0
+```
+
+### Our Implementation
+
+We use **extended pattern ID ranges** that don't overlap with level tile indices:
+
+| Category | Pattern ID Range | Notes |
+|----------|------------------|-------|
+| Level tiles | 0 - ~2047 | Corresponds to VRAM tile indices |
+| Objects, HUD, Results | 0x20000+ | Far above VRAM range, no collision |
+
+```java
+// LevelManager.java
+private static final int OBJECT_PATTERN_BASE = 0x20000;
+
+// ObjectRenderManager caches patterns starting at this base
+int hudBaseIndex = objectRenderManager.ensurePatternsCached(graphicsManager, OBJECT_PATTERN_BASE);
+```
+
+The `PatternAtlas` stores all patterns in a single HashMap keyed by pattern ID. By using IDs starting at `OBJECT_PATTERN_BASE` (0x20000 = 131072), we ensure they never collide with level patterns.
+
+### Rationale
+
+1. **Level patterns remain cached** - No need to reload level tiles after results screen, enabling instant transitions.
+
+2. **Simpler state management** - No need to track which tiles were overwritten or restore them later.
+
+3. **Easier debugging** - Level and UI patterns coexist without interference; inspecting the atlas shows all patterns.
+
+4. **No VRAM constraints** - Modern systems have abundant texture memory; emulating the 64KB limit adds complexity with no benefit.
+
+### Verification
+
+The rendered output is identical to the original - the same graphics appear at the same screen positions. Only the internal storage differs.

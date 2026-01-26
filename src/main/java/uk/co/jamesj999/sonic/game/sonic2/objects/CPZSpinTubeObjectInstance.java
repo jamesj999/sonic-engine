@@ -218,6 +218,12 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
     }
 
     private void updateCharacter(AbstractPlayableSprite player) {
+        // If player entered debug mode while in tube, reset tube state
+        if (player.isDebugMode() && (mainCharState == 2 || mainCharState == 4)) {
+            resetTubeState();
+            return;
+        }
+
         if (mainCharState != 0) {
             LOGGER.fine("updateCharacter: state=" + mainCharState);
         }
@@ -235,6 +241,19 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance {
                 checkExitCollision(player);
                 break;
         }
+    }
+
+    /**
+     * Resets tube internal state without modifying player.
+     * Used when player enters debug mode while traversing the tube.
+     */
+    private void resetTubeState() {
+        mainCharState = 0;
+        mainCharPathIndex = 0;
+        mainCharDuration = 0;
+        mainCharPath = null;
+        completedSegmentCount = 0;
+        expectedSegmentCount = 0;
     }
 
     /**

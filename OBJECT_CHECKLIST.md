@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-25 19:19:54
+Generated: 2026-01-26 21:35:09
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 46 (38.3%)
-- **Unimplemented:** 74 (61.7%)
+- **Implemented:** 54 (45.0%)
+- **Unimplemented:** 66 (55.0%)
 
 ## Implemented Objects
 
@@ -41,12 +41,16 @@ Generated: 2026-01-25 19:19:54
 | 0x4B | Buzzer | 23 | EHZ1, EHZ2 |
 | 0x5C | Masher | 21 | EHZ1, EHZ2 |
 | 0x6B | MTZPlatform | 58 | CPZ1, CPZ2, MTZ1, MTZ2, MTZ3 |
+| 0x72 | CNZConveyorBelt | 15 | CNZ1, CNZ2, MTZ2, MTZ3, WFZ1 |
 | 0x74 | InvisibleBlock | 113 | CPZ1, CPZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MTZ1, MTZ2, MTZ3, WFZ1 |
 | 0x78 | CPZStaircase | 6 | CPZ1, CPZ2 |
 | 0x79 | Checkpoint | 61 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3, WFZ1 |
 | 0x7A | SidewaysPform | 9 | CPZ2, MCZ1, MCZ2 |
 | 0x7B | PipeExitSpring | 9 | CPZ1, CPZ2 |
 | 0x82 | SwingingPform | 15 | ARZ1, ARZ2 |
+| 0x83 | ARZRotPforms | 4 | ARZ1, ARZ2 |
+| 0x84 | ForcedSpin | 42 | CNZ1, CNZ2, HTZ1, HTZ2 |
+| 0x85 | LauncherSpring | 14 | CNZ1, CNZ2 |
 | 0x86 | Flipper | 63 | CNZ1, CNZ2 |
 | 0x8C | Whisp | 25 | ARZ1, ARZ2 |
 | 0x8D | GrounderInWall | 8 | ARZ1, ARZ2 |
@@ -56,6 +60,10 @@ Generated: 2026-01-25 19:19:54
 | 0xA5 | Spiny | 11 | CPZ1, CPZ2 |
 | 0xA6 | SpinyOnWall | 2 | CPZ1, CPZ2 |
 | 0xA7 | Grabber | 5 | CPZ1, CPZ2 |
+| 0xD2 | CNZRectBlocks | 8 | CNZ1, CNZ2 |
+| 0xD4 | CNZBigBlock | 23 | CNZ1, CNZ2 |
+| 0xD5 | Elevator | 16 | CNZ1, CNZ2 |
+| 0xD6 | PointPokey | 29 | CNZ1, CNZ2 |
 | 0xD7 | HexBumper | 18 | CNZ1, CNZ2 |
 | 0xD8 | BonusBlock | 98 | CNZ1, CNZ2 |
 
@@ -68,10 +76,8 @@ Generated: 2026-01-25 19:19:54
 | 0x3F | Object | Fan | 60 | OOZ1, OOZ2 |
 | 0x66 | Object | MTZSpringWall | 60 | MTZ1, MTZ2, MTZ3 |
 | 0x31 | Object | LavaMarker | 50 | HTZ1, HTZ2, MTZ2, MTZ3 |
-| 0x84 | Object | ForcedSpin | 42 | CNZ1, CNZ2, HTZ1, HTZ2 |
 | 0x2F | Object | SmashableGround | 40 | HTZ1, HTZ2 |
 | 0x48 | Object | LauncherBall | 32 | OOZ1, OOZ2 |
-| 0xD6 | Object | PointPokey | 29 | CNZ1, CNZ2 |
 | 0x4A | Badnik | Octus | 28 | OOZ1, OOZ2 |
 | 0x69 | Object | Nut | 28 | MTZ1, MTZ2, MTZ3 |
 | 0x6E | Object | LargeRotPform | 28 | MTZ3 |
@@ -81,21 +87,17 @@ Generated: 2026-01-25 19:19:54
 | 0xA1 | Badnik | Slicer | 24 | MTZ1, MTZ2, MTZ3 |
 | 0x92 | Badnik | Spiker | 23 | HTZ1, HTZ2 |
 | 0x99 | Badnik | Nebula | 23 | SCZ1 |
-| 0xD4 | Object | CNZBigBlock | 23 | CNZ1, CNZ2 |
 | 0x33 | Object | OOZPoppingPform | 22 | OOZ1, OOZ2 |
 | 0x68 | Object | SpikyBlock | 22 | MTZ1, MTZ2, MTZ3 |
 | 0x75 | Object | MCZBrick | 19 | MCZ1, MCZ2 |
 | 0xAC | Badnik | Balkiry | 19 | SCZ1 |
 | 0x42 | Object | SteamSpring | 18 | MTZ1, MTZ2, MTZ3 |
 | 0x50 | Badnik | Aquis | 16 | OOZ1, OOZ2 |
-| 0xD5 | Object | Elevator | 16 | CNZ1, CNZ2 |
 | 0x71 | Object | MTZLavaBubble | 15 | MTZ2, MTZ3 |
-| 0x72 | Object | CNZConveyorBelt | 15 | CNZ1, CNZ2, MTZ2, MTZ3, WFZ1 |
 | 0x16 | Object | HTZLift | 14 | HTZ1, HTZ2 |
 | 0x47 | Object | Button | 14 | MTZ1, MTZ2, MTZ3 |
 | 0x70 | Object | Cog | 14 | MTZ2, MTZ3 |
 | 0x76 | Object | SlidingSpikes | 14 | MCZ1, MCZ2 |
-| 0x85 | Object | LauncherSpring | 14 | CNZ1, CNZ2 |
 | 0x14 | Object | Seesaw | 13 | HTZ1, HTZ2 |
 | 0x2A | Object | Stomper | 13 | MCZ1, MCZ2 |
 | 0xB4 | Object | VPropeller | 13 | SCZ1, WFZ1 |
@@ -112,7 +114,6 @@ Generated: 2026-01-25 19:19:54
 | 0x9F | Badnik | Shellcracker | 9 | MTZ1, MTZ2, MTZ3 |
 | 0xC0 | Object | SpeedLauncher | 8 | WFZ1 |
 | 0xC8 | Badnik | Crawl | 8 | CNZ1, CNZ2 |
-| 0xD2 | Object | CNZRectBlocks | 8 | CNZ1, CNZ2 |
 | 0x30 | Object | RisingLava | 7 | HTZ1, HTZ2 |
 | 0x3E | Object | EggPrison | 7 | EHZ2, CPZ2, ARZ2, CNZ2, HTZ2, MCZ2, MTZ3 |
 | 0x6A | Object | MCZRotPforms | 7 | MCZ1, MCZ2, MTZ3 |
@@ -125,7 +126,6 @@ Generated: 2026-01-25 19:19:54
 | 0xB6 | Object | TiltingPlatform | 5 | WFZ1 |
 | 0xB8 | Object | WallTurret | 5 | WFZ1 |
 | 0xBD | Object | SmallMetalPform | 5 | WFZ1 |
-| 0x83 | Object | ARZRotPforms | 4 | ARZ1, ARZ2 |
 | 0xC1 | Object | BreakablePlating | 4 | WFZ1 |
 | 0x95 | Badnik | Sol | 3 | HTZ1, HTZ2 |
 | 0xB2 | Object | Tornado | 3 | SCZ1, WFZ1 |
@@ -257,7 +257,7 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 
 #### Act 1
 
-Total: 182 objects | Implemented: 19 | Unimplemented: 1
+Total: 182 objects | Implemented: 20 | Unimplemented: 0
 
 **Badniks:**
 - [x] 0x8C Whisp (x6) [0x00]
@@ -281,11 +281,11 @@ Total: 182 objects | Implemented: 19 | Unimplemented: 1
 - [x] 0x41 Spring (x8) [0x10, 0x12]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
 - [x] 0x82 SwingingPform (x2) [0x10]
-- [ ] 0x83 ARZRotPforms (x3) [0x10]
+- [x] 0x83 ARZRotPforms (x3) [0x10]
 
 #### Act 2
 
-Total: 222 objects | Implemented: 18 | Unimplemented: 2
+Total: 222 objects | Implemented: 19 | Unimplemented: 1
 
 **Badniks:**
 - [x] 0x8C Whisp (x19) [0x00]
@@ -312,13 +312,13 @@ Total: 222 objects | Implemented: 18 | Unimplemented: 2
 - [x] 0x41 Spring (x17) [5 subtypes]
 - [x] 0x79 Checkpoint (x4) [4 subtypes]
 - [x] 0x82 SwingingPform (x13) [0x10, 0x11]
-- [ ] 0x83 ARZRotPforms (x1) [0x10]
+- [x] 0x83 ARZRotPforms (x1) [0x10]
 
 ### Casino Night Zone
 
 #### Act 1
 
-Total: 286 objects | Implemented: 11 | Unimplemented: 8
+Total: 286 objects | Implemented: 18 | Unimplemented: 1
 
 **Badniks:**
 - [ ] 0xC8 Crawl (x2) [0xAC]
@@ -330,22 +330,22 @@ Total: 286 objects | Implemented: 11 | Unimplemented: 8
 - [x] 0x36 Spikes (x4) [0x20, 0x10]
 - [x] 0x41 Spring (x5) [0x00, 0x02]
 - [x] 0x44 Bumper (x74) [0x00]
-- [ ] 0x72 CNZConveyorBelt (x4) [0x04, 0x08, 0x09]
+- [x] 0x72 CNZConveyorBelt (x4) [0x04, 0x08, 0x09]
 - [x] 0x74 InvisibleBlock (x17) [0x33, 0x35, 0x17]
 - [x] 0x79 Checkpoint (x2) [0x01, 0x02]
-- [ ] 0x84 ForcedSpin (x18) [5 subtypes]
-- [ ] 0x85 LauncherSpring (x7) [0x00, 0x81]
+- [x] 0x84 ForcedSpin (x18) [5 subtypes]
+- [x] 0x85 LauncherSpring (x7) [0x00, 0x81]
 - [x] 0x86 Flipper (x38) [0x00, 0x01]
-- [ ] 0xD2 CNZRectBlocks (x4) [0x01]
-- [ ] 0xD4 CNZBigBlock (x15) [0x00, 0x02]
-- [ ] 0xD5 Elevator (x5) [0x48, 0x28, 0x38]
-- [ ] 0xD6 PointPokey (x15) [0x00, 0x01]
+- [x] 0xD2 CNZRectBlocks (x4) [0x01]
+- [x] 0xD4 CNZBigBlock (x15) [0x00, 0x02]
+- [x] 0xD5 Elevator (x5) [0x48, 0x28, 0x38]
+- [x] 0xD6 PointPokey (x15) [0x00, 0x01]
 - [x] 0xD7 HexBumper (x12) [0x00, 0x01]
 - [x] 0xD8 BonusBlock (x44) [14 subtypes]
 
 #### Act 2
 
-Total: 254 objects | Implemented: 10 | Unimplemented: 9
+Total: 254 objects | Implemented: 17 | Unimplemented: 2
 
 **Badniks:**
 - [ ] 0xC8 Crawl (x6) [0xAC]
@@ -360,16 +360,16 @@ Total: 254 objects | Implemented: 10 | Unimplemented: 9
 - [ ] 0x3E EggPrison (x1) [0x00]
 - [x] 0x41 Spring (x9) [4 subtypes]
 - [x] 0x44 Bumper (x43) [0x00]
-- [ ] 0x72 CNZConveyorBelt (x4) [0x08, 0x09]
+- [x] 0x72 CNZConveyorBelt (x4) [0x08, 0x09]
 - [x] 0x74 InvisibleBlock (x18) [5 subtypes]
 - [x] 0x79 Checkpoint (x2) [0x01, 0x02]
-- [ ] 0x84 ForcedSpin (x16) [5 subtypes]
-- [ ] 0x85 LauncherSpring (x7) [0x00, 0x81]
+- [x] 0x84 ForcedSpin (x16) [5 subtypes]
+- [x] 0x85 LauncherSpring (x7) [0x00, 0x81]
 - [x] 0x86 Flipper (x25) [0x00, 0x01]
-- [ ] 0xD2 CNZRectBlocks (x4) [0x01]
-- [ ] 0xD4 CNZBigBlock (x8) [0x00, 0x02]
-- [ ] 0xD5 Elevator (x11) [7 subtypes]
-- [ ] 0xD6 PointPokey (x14) [0x00, 0x01]
+- [x] 0xD2 CNZRectBlocks (x4) [0x01]
+- [x] 0xD4 CNZBigBlock (x8) [0x00, 0x02]
+- [x] 0xD5 Elevator (x11) [7 subtypes]
+- [x] 0xD6 PointPokey (x14) [0x00, 0x01]
 - [x] 0xD7 HexBumper (x6) [0x00, 0x01]
 - [x] 0xD8 BonusBlock (x54) [16 subtypes]
 
@@ -377,7 +377,7 @@ Total: 254 objects | Implemented: 10 | Unimplemented: 9
 
 #### Act 1
 
-Total: 144 objects | Implemented: 11 | Unimplemented: 9
+Total: 144 objects | Implemented: 12 | Unimplemented: 8
 
 **Badniks:**
 - [ ] 0x92 Spiker (x6) [0x0A]
@@ -401,11 +401,11 @@ Total: 144 objects | Implemented: 11 | Unimplemented: 9
 - [x] 0x41 Spring (x8) [5 subtypes]
 - [x] 0x74 InvisibleBlock (x11) [5 subtypes]
 - [x] 0x79 Checkpoint (x2) [0x01, 0x02]
-- [ ] 0x84 ForcedSpin (x4) [0x00]
+- [x] 0x84 ForcedSpin (x4) [0x00]
 
 #### Act 2
 
-Total: 259 objects | Implemented: 10 | Unimplemented: 10
+Total: 259 objects | Implemented: 11 | Unimplemented: 9
 
 **Badniks:**
 - [ ] 0x92 Spiker (x17) [0x0A]
@@ -432,7 +432,7 @@ Total: 259 objects | Implemented: 10 | Unimplemented: 10
 - [x] 0x41 Spring (x12) [6 subtypes]
 - [x] 0x74 InvisibleBlock (x8) [5 subtypes]
 - [x] 0x79 Checkpoint (x4) [4 subtypes]
-- [ ] 0x84 ForcedSpin (x4) [0x00]
+- [x] 0x84 ForcedSpin (x4) [0x00]
 
 ### Mystic Cave Zone
 
@@ -577,7 +577,7 @@ Total: 193 objects | Implemented: 10 | Unimplemented: 12
 
 #### Act 2
 
-Total: 220 objects | Implemented: 10 | Unimplemented: 17
+Total: 220 objects | Implemented: 11 | Unimplemented: 16
 
 **Badniks:**
 - [ ] 0x9F Shellcracker (x3) [0x24]
@@ -606,13 +606,13 @@ Total: 220 objects | Implemented: 10 | Unimplemented: 17
 - [ ] 0x6D FloorSpike (x12) [12 subtypes]
 - [ ] 0x70 Cog (x6) [0x00]
 - [ ] 0x71 MTZLavaBubble (x11) [0x22]
-- [ ] 0x72 CNZConveyorBelt (x2) [0x04, 0x09]
+- [x] 0x72 CNZConveyorBelt (x2) [0x04, 0x09]
 - [x] 0x74 InvisibleBlock (x12) [0x71, 0x17]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
 
 #### Act 3
 
-Total: 270 objects | Implemented: 9 | Unimplemented: 20
+Total: 270 objects | Implemented: 10 | Unimplemented: 19
 
 **Badniks:**
 - [ ] 0x9F Shellcracker (x3) [0x24]
@@ -647,7 +647,7 @@ Total: 270 objects | Implemented: 9 | Unimplemented: 20
 - [ ] 0x6E LargeRotPform (x28) [4 subtypes]
 - [ ] 0x70 Cog (x8) [0x00]
 - [ ] 0x71 MTZLavaBubble (x4) [0x22]
-- [ ] 0x72 CNZConveyorBelt (x4) [0x09]
+- [x] 0x72 CNZConveyorBelt (x4) [0x09]
 - [x] 0x74 InvisibleBlock (x11) [0x71]
 - [x] 0x79 Checkpoint (x6) [6 subtypes]
 
@@ -673,7 +673,7 @@ Total: 60 objects | Implemented: 1 | Unimplemented: 7
 
 #### Act 1
 
-Total: 157 objects | Implemented: 5 | Unimplemented: 20
+Total: 157 objects | Implemented: 6 | Unimplemented: 19
 
 **Badniks:**
 - [ ] 0xAD CluckerBase (x10) [0x42]
@@ -686,7 +686,7 @@ Total: 157 objects | Implemented: 5 | Unimplemented: 20
 - [x] 0x19 CPZPlatform (x16) [10 subtypes]
 - [x] 0x26 Monitor (x19) [5 subtypes]
 - [x] 0x2D Barrier (x1) [0x00]
-- [ ] 0x72 CNZConveyorBelt (x1) [0x90]
+- [x] 0x72 CNZConveyorBelt (x1) [0x90]
 - [x] 0x74 InvisibleBlock (x5) [0x03, 0x07, 0x18]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03]
 - [ ] 0x80 MovingVine (x10) [0x00, 0x10, 0x11]

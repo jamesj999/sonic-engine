@@ -557,6 +557,131 @@ public class Sonic2ObjectArt {
         return new ObjectSpriteSheet(patterns, mappings, 3, 1);
     }
 
+    /**
+     * Load CNZ LauncherSpring vertical sprite sheet (Object 0x85 subtype 0x00).
+     * <p>
+     * ROM: ArtNem_CNZVertPlunger at 0x81C96, palette line 0
+     *
+     * @return sprite sheet for vertical launcher spring, or null on failure
+     */
+    public ObjectSpriteSheet loadLauncherSpringVertSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_VERT_PLUNGER_ADDR, "LauncherSpringVert");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createLauncherSpringVertMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load CNZ LauncherSpring diagonal sprite sheet (Object 0x85 subtype 0x81).
+     * <p>
+     * ROM: ArtNem_CNZDiagPlunger at 0x81AB0, palette line 0
+     *
+     * @return sprite sheet for diagonal launcher spring, or null on failure
+     */
+    public ObjectSpriteSheet loadLauncherSpringDiagSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_DIAG_PLUNGER_ADDR, "LauncherSpringDiag");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createLauncherSpringDiagMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load CNZ Rect Blocks sprite sheet (Object 0xD2) - "caterpillar" flashing blocks.
+     * <p>
+     * ROM: ArtNem_CNZSnake at 0x81600, palette line 2
+     * 16 animation frames showing blocks moving around a rectangular path.
+     *
+     * @return sprite sheet for CNZ rect blocks, or null on failure
+     */
+    public ObjectSpriteSheet loadCNZRectBlocksSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_SNAKE_ADDR, "CNZSnake");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCNZRectBlocksMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 2, 1);
+    }
+
+    /**
+     * Load CNZ Big Block sprite sheet (Object 0xD4) - large 64x64 oscillating platform.
+     * <p>
+     * ROM: ArtNem_BigMovingBlock at 0x816C8, palette line 2
+     * Single frame with 4 pieces in 2x2 grid with flip symmetry.
+     *
+     * @return sprite sheet for CNZ big block, or null on failure
+     */
+    public ObjectSpriteSheet loadCNZBigBlockSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_BIG_BLOCK_ADDR, "CNZBigBlock");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCNZBigBlockMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 2, 1);
+    }
+
+    /**
+     * Load CNZ Elevator sprite sheet (Object 0xD5) - vertical platform that moves when stood on.
+     * <p>
+     * ROM: ArtNem_CNZElevator at 0x817B4, palette line 2
+     * Visual: 32x16 pixel platform made of two 2x2 (16x16) pieces
+     *
+     * @return sprite sheet for CNZ elevator, or null on failure
+     */
+    public ObjectSpriteSheet loadCNZElevatorSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_ELEVATOR_ADDR, "CNZElevator");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCNZElevatorMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 2, 1);
+    }
+
+    /**
+     * Load CNZ Cage sprite sheet (Object 0xD6 "PointPokey") - casino cage that captures player.
+     * <p>
+     * ROM: ArtNem_CNZCage at 0x81826, palette line 0 (frame 0) and 1 (frame 1)
+     * Visual: 48x48 pixel cage made of 6 pieces in a 2x3 grid (3 rows, 2 columns)
+     * Frame 0: Idle cage, Frame 1: Active/lit cage with priority
+     *
+     * @return sprite sheet for CNZ cage, or null on failure
+     */
+    public ObjectSpriteSheet loadCNZCageSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_CAGE_ADDR, "CNZCage");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCNZCageMappings();
+        // Frame 0 uses palette 0, frame 1 uses palette 1 (handled in mappings)
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
+    /**
+     * Load CNZ Bonus Spike (ObjD3) sprite sheet - spiked ball from slot machine.
+     * ROM: ArtNem_CNZBonusSpike at 0x81668, palette line 0
+     * <p>
+     * This is a simple 2x2 tile (16x16 pixel) spiked ball sprite used as a
+     * "bad" prize when the slot machine shows Eggman faces.
+     */
+    public ObjectSpriteSheet loadCNZBonusSpikeSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_CNZ_BONUS_SPIKE_ADDR, "CNZBonusSpike");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCNZBonusSpikeMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
     // ========== Badnik Sheet Loaders ==========
     // These are Sonic 2-specific and loaded directly by Sonic2ObjectArtProvider
 
@@ -1943,6 +2068,336 @@ public class Sonic2ObjectArt {
                 SpriteAnimationEndAction.SWITCH, 2));
 
         return set;
+    }
+
+    /**
+     * Creates mappings for CNZ LauncherSpring vertical variant (Obj85 subtype 0x00).
+     * Based on obj85_a.asm mappings.
+     * <p>
+     * Vertical spring has 6 frames representing compression states:
+     * <ul>
+     *   <li>Frame 0: Fully extended (relaxed)</li>
+     *   <li>Frame 1: Main body only (slightly compressed)</li>
+     *   <li>Frame 2: Mid-compression</li>
+     *   <li>Frame 3: More compressed</li>
+     *   <li>Frame 4: Fully compressed</li>
+     *   <li>Frame 5: Same as frame 4 (duplicate)</li>
+     * </ul>
+     */
+    private List<SpriteMappingFrame> createLauncherSpringVertMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Fully extended - 4 pieces (3x2 each)
+        // Based on obj85_a mapping data: offsets at (-12,-56), (-12,-40), (-12,-24), (-12,-8)
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-12, -56, 3, 2, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, -40, 3, 2, 6, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, -24, 3, 2, 12, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Slightly compressed - main body only (1 piece)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Mid-compression - 3 pieces
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-12, -32, 3, 2, 6, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-12, -16, 3, 2, 12, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: More compressed - 2 pieces
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-12, -16, 3, 2, 12, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: Fully compressed - 1 piece (flipped)
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, true, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Same as frame 4 (duplicate in ROM)
+        frames.add(new SpriteMappingFrame(frame4));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CNZ LauncherSpring diagonal variant (Obj85 subtype 0x81).
+     * Based on obj85_b.asm mappings.
+     * <p>
+     * Diagonal spring has 6 frames representing compression states:
+     * <ul>
+     *   <li>Frame 0: Fully extended (2 pieces, 4x4 each)</li>
+     *   <li>Frame 1: Main body only</li>
+     *   <li>Frame 2: Plunger base</li>
+     *   <li>Frame 3: Same as frame 2</li>
+     *   <li>Frame 4: Fully compressed</li>
+     *   <li>Frame 5: Same as frame 4</li>
+     * </ul>
+     */
+    private List<SpriteMappingFrame> createLauncherSpringDiagMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Fully extended - 2 pieces (4x4 each)
+        // Offsets at (-16,-16), (-32,0) relative to object center
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-16, -32, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-32, -16, 4, 4, 16, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: Main body only - 1 piece
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-16, -16, 4, 4, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: Plunger base - 1 piece
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-24, -24, 4, 4, 16, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: Same as frame 2 (duplicate)
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 4: Fully compressed - 1 piece (flipped)
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-16, -16, 4, 4, 0, false, true, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: Same as frame 4 (duplicate)
+        frames.add(new SpriteMappingFrame(frame4));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CNZ Rect Blocks (ObjD2) - "caterpillar" flashing blocks.
+     * Based on objD2.asm mappings.
+     * <p>
+     * 16 frames showing blocks moving around a rectangular path.
+     * Each block is a 2x2 tile (16x16 pixel) piece using tile index 0.
+     * Some frames are reused (8=7, 12=3, 13=2, 14=1, 15=0).
+     */
+    private List<SpriteMappingFrame> createCNZRectBlocksMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: 1 piece (Map_objD2_0020)
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-8, -8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1: 2 pieces (Map_objD2_002A)
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-8, -16, 2, 2, 0, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-8, 0, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2: 3 pieces (Map_objD2_003C)
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-8, -24, 2, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-8, -8, 2, 2, 0, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-8, 8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3: 4 pieces (Map_objD2_0056)
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-8, -32, 2, 2, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-8, -16, 2, 2, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-8, 0, 2, 2, 0, false, false, 0));
+        frame3.add(new SpriteMappingPiece(-8, 16, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4: 5 pieces (Map_objD2_0078)
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(0, -32, 2, 2, 0, false, false, 0));
+        frame4.add(new SpriteMappingPiece(-16, -32, 2, 2, 0, false, false, 0));
+        frame4.add(new SpriteMappingPiece(-16, -16, 2, 2, 0, false, false, 0));
+        frame4.add(new SpriteMappingPiece(-16, 0, 2, 2, 0, false, false, 0));
+        frame4.add(new SpriteMappingPiece(-16, 16, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5: 5 pieces (Map_objD2_00A2)
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(8, -24, 2, 2, 0, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-8, -24, 2, 2, 0, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-24, -24, 2, 2, 0, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-24, -8, 2, 2, 0, false, false, 0));
+        frame5.add(new SpriteMappingPiece(-24, 8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        // Frame 6: 5 pieces (Map_objD2_00CC)
+        List<SpriteMappingPiece> frame6 = new ArrayList<>();
+        frame6.add(new SpriteMappingPiece(16, -16, 2, 2, 0, false, false, 0));
+        frame6.add(new SpriteMappingPiece(0, -16, 2, 2, 0, false, false, 0));
+        frame6.add(new SpriteMappingPiece(-16, -16, 2, 2, 0, false, false, 0));
+        frame6.add(new SpriteMappingPiece(-32, -16, 2, 2, 0, false, false, 0));
+        frame6.add(new SpriteMappingPiece(-32, 0, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame6));
+
+        // Frame 7: 5 pieces (Map_objD2_00F6)
+        List<SpriteMappingPiece> frame7 = new ArrayList<>();
+        frame7.add(new SpriteMappingPiece(24, -8, 2, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(8, -8, 2, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(-8, -8, 2, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(-24, -8, 2, 2, 0, false, false, 0));
+        frame7.add(new SpriteMappingPiece(-40, -8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame7));
+
+        // Frame 8: Same as frame 7 (Map_objD2_00F6)
+        frames.add(new SpriteMappingFrame(frame7));
+
+        // Frame 9: 5 pieces (Map_objD2_0120)
+        List<SpriteMappingPiece> frame9 = new ArrayList<>();
+        frame9.add(new SpriteMappingPiece(16, 0, 2, 2, 0, false, false, 0));
+        frame9.add(new SpriteMappingPiece(16, -16, 2, 2, 0, false, false, 0));
+        frame9.add(new SpriteMappingPiece(0, -16, 2, 2, 0, false, false, 0));
+        frame9.add(new SpriteMappingPiece(-16, -16, 2, 2, 0, false, false, 0));
+        frame9.add(new SpriteMappingPiece(-32, -16, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame9));
+
+        // Frame 10: 5 pieces (Map_objD2_014A)
+        List<SpriteMappingPiece> frame10 = new ArrayList<>();
+        frame10.add(new SpriteMappingPiece(8, 8, 2, 2, 0, false, false, 0));
+        frame10.add(new SpriteMappingPiece(8, -8, 2, 2, 0, false, false, 0));
+        frame10.add(new SpriteMappingPiece(8, -24, 2, 2, 0, false, false, 0));
+        frame10.add(new SpriteMappingPiece(-8, -24, 2, 2, 0, false, false, 0));
+        frame10.add(new SpriteMappingPiece(-24, -24, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame10));
+
+        // Frame 11: 5 pieces (Map_objD2_0174)
+        List<SpriteMappingPiece> frame11 = new ArrayList<>();
+        frame11.add(new SpriteMappingPiece(0, 16, 2, 2, 0, false, false, 0));
+        frame11.add(new SpriteMappingPiece(0, 0, 2, 2, 0, false, false, 0));
+        frame11.add(new SpriteMappingPiece(0, -16, 2, 2, 0, false, false, 0));
+        frame11.add(new SpriteMappingPiece(0, -32, 2, 2, 0, false, false, 0));
+        frame11.add(new SpriteMappingPiece(-16, -32, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame11));
+
+        // Frame 12: Same as frame 3 (Map_objD2_0056)
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 13: Same as frame 2 (Map_objD2_003C)
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 14: Same as frame 1 (Map_objD2_002A)
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 15: Same as frame 0 (Map_objD2_0020)
+        frames.add(new SpriteMappingFrame(frame0));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CNZ Big Block (ObjD4) - large 64x64 oscillating platform.
+     * Based on objD4.asm mappings.
+     * <p>
+     * Single frame with 4 pieces (4x4 tiles each) in a 2x2 grid with flip symmetry:
+     * - Top-left: no flip
+     * - Top-right: H-flip
+     * - Bottom-left: V-flip
+     * - Bottom-right: H-flip + V-flip
+     */
+    private List<SpriteMappingFrame> createCNZBigBlockMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: 64x64 block made of 4 pieces (32x32 each)
+        // spritePiece -$20, -$20, 4, 4, 0, 0, 0, 0, 0  ; top-left, no flip
+        // spritePiece    0, -$20, 4, 4, 0, 1, 0, 0, 0  ; top-right, H-flip
+        // spritePiece -$20,    0, 4, 4, 0, 0, 1, 0, 0  ; bottom-left, V-flip
+        // spritePiece    0,    0, 4, 4, 0, 1, 1, 0, 0  ; bottom-right, H+V flip
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
+        pieces.add(new SpriteMappingPiece(-32, -32, 4, 4, 0, false, false, 0)); // top-left
+        pieces.add(new SpriteMappingPiece(0, -32, 4, 4, 0, true, false, 0));    // top-right, H-flip
+        pieces.add(new SpriteMappingPiece(-32, 0, 4, 4, 0, false, true, 0));    // bottom-left, V-flip
+        pieces.add(new SpriteMappingPiece(0, 0, 4, 4, 0, true, true, 0));       // bottom-right, H+V flip
+        frames.add(new SpriteMappingFrame(pieces));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CNZ Elevator (ObjD5).
+     * Single frame: Two 2x2 pieces (16x16 each) making a 32x16 platform.
+     * From disassembly: d1 = 0x10 (half-width = 16), d3 = 9 (platform height)
+     * Tile index 0x0384 = ArtTile_ArtNem_CNZElevator
+     */
+    private List<SpriteMappingFrame> createCNZElevatorMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: 32x16 platform made of two 2x2 pieces (side by side)
+        // spritePiece -$10, -8, 2, 2, 0  ; Left piece at (-16, -8)
+        // spritePiece    0, -8, 2, 2, 4  ; Right piece at (0, -8), tiles +4
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
+        pieces.add(new SpriteMappingPiece(-16, -8, 2, 2, 0, false, false, 0));  // Left piece
+        pieces.add(new SpriteMappingPiece(0, -8, 2, 2, 4, false, false, 0));    // Right piece
+        frames.add(new SpriteMappingFrame(pieces));
+
+        return frames;
+    }
+
+    /**
+     * Creates mappings for CNZ Cage (ObjD6 "PointPokey").
+     * Based on objD6_b.asm mappings - 2 frames (idle and active/lit).
+     * Each frame has 6 pieces in a 2x3 grid (3 rows, 2 columns).
+     * Left column pieces at x=-24, right column at x=0.
+     * Right column pieces are horizontally flipped copies of left column.
+     * <p>
+     * From disassembly (objD6_b.asm):
+     * Frame 0 (idle): tile offset 0, palette 0
+     * Frame 1 (active): tile offset 6, palette 1, priority
+     * <p>
+     * Piece layout (each piece is 3 tiles wide x 2 tiles tall = 24x16 pixels):
+     * Row 0: y=-20, Row 1: y=-4, Row 2: y=12
+     */
+    private List<SpriteMappingFrame> createCNZCageMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Idle cage (tile offset 0)
+        frames.add(createCageFrame(0, 0, false));
+
+        // Frame 1: Active/lit cage (tile offset 6, palette 1, priority)
+        frames.add(createCageFrame(6, 1, true));
+
+        return frames;
+    }
+
+    /**
+     * Creates a single cage frame with 6 pieces in 2x3 grid.
+     * Right column pieces are H-flipped copies of left column.
+     */
+    private SpriteMappingFrame createCageFrame(int tileOffset, int paletteOffset, boolean priority) {
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
+        // Y positions for the 3 rows (from objD6_b.asm)
+        int[] yPositions = {-20, -4, 12};
+
+        for (int row = 0; row < 3; row++) {
+            int y = yPositions[row];
+            // Left piece (no flip) - 3 tiles wide, 2 tiles tall
+            pieces.add(new SpriteMappingPiece(-24, y, 3, 2, tileOffset, false, false, paletteOffset));
+            // Right piece (H-flipped) - 3 tiles wide, 2 tiles tall
+            pieces.add(new SpriteMappingPiece(0, y, 3, 2, tileOffset, true, false, paletteOffset));
+        }
+        return new SpriteMappingFrame(pieces);
+    }
+
+    /**
+     * Creates mappings for CNZ Bonus Spike.
+     * Simple 2x2 tile (16x16 pixel) spiked ball centered on origin.
+     */
+    private List<SpriteMappingFrame> createCNZBonusSpikeMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0: Single 2x2 tile spiked ball centered
+        List<SpriteMappingPiece> pieces = new ArrayList<>();
+        // 2x2 tiles = 16x16 pixels, centered at -8,-8
+        pieces.add(new SpriteMappingPiece(-8, -8, 2, 2, 0, false, false, 0));
+        frames.add(new SpriteMappingFrame(pieces));
+
+        return frames;
     }
 
     /**

@@ -75,12 +75,23 @@ public interface ZoneFeatureProvider {
 
     /**
      * Renders zone-specific visual features (e.g., water surface sprites).
-     * Called during the draw phase after level rendering.
+     * Called during the draw phase after level rendering and all sprites.
      *
      * @param camera the camera for screen coordinates
      * @param frameCounter current frame number for animation
      */
     void render(Camera camera, int frameCounter);
+
+    /**
+     * Queues render commands for zone features that should appear after foreground tiles
+     * but before sprites (e.g., slot machine display that covers corrupted tiles).
+     * Called after high-priority foreground tilemap pass but before sprite passes.
+     *
+     * @param camera the camera for screen coordinates
+     */
+    default void renderAfterForeground(Camera camera) {
+        // Default implementation does nothing
+    }
 
     /**
      * Ensures zone feature patterns are cached in the graphics manager.

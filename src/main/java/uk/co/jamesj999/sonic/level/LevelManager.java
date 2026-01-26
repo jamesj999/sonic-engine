@@ -604,6 +604,12 @@ public class LevelManager {
 
         profiler.endSection("render.fg");
 
+        // Render zone features that should appear as part of foreground layer (before sprites)
+        // (e.g., CNZ slot machine display that covers corrupted tiles but sprites render on top)
+        if (zoneFeatureProvider != null) {
+            zoneFeatureProvider.renderAfterForeground(camera);
+        }
+
         profiler.beginSection("render.sprites");
         graphicsManager.beginPatternBatch();
         if (ringManager != null) {

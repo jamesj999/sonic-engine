@@ -182,6 +182,20 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
                 (spawn, registry) -> new BonusBlockObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.FLIPPER,
                 (spawn, registry) -> new FlipperObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.FORCED_SPIN,
+                (spawn, registry) -> new ForcedSpinObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.LAUNCHER_SPRING,
+                (spawn, registry) -> new LauncherSpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.CNZ_CONVEYOR_BELT,
+                (spawn, registry) -> new CNZConveyorBeltObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.CNZ_RECT_BLOCKS,
+                (spawn, registry) -> new CNZRectBlocksObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.CNZ_BIG_BLOCK,
+                (spawn, registry) -> new CNZBigBlockObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.CNZ_ELEVATOR,
+                (spawn, registry) -> new ElevatorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.POINT_POKEY,
+                (spawn, registry) -> new PointPokeyObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
         ObjectFactory platformFactory = (spawn, registry) -> new PlatformObjectInstance(spawn,
                 registry.getPrimaryName(spawn.objectId()));
@@ -263,6 +277,11 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         // ARZ Swinging Platform
         registerFactory(Sonic2ObjectIds.SWINGING_PFORM,
                 (spawn, registry) -> new SwingingPformObjectInstance(spawn,
+                        registry.getPrimaryName(spawn.objectId())));
+
+        // ARZ Rotating Platforms
+        registerFactory(Sonic2ObjectIds.ARZ_ROT_PFORMS,
+                (spawn, registry) -> new ARZRotPformsObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
     }
 }

@@ -9,6 +9,9 @@ import uk.co.jamesj999.sonic.level.render.BackgroundRenderer;
 
 import static uk.co.jamesj999.sonic.level.LevelConstants.*;
 
+import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.level.slotmachine.CNZSlotMachineRenderer;
+
 import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.util.GLBuffers;
 
@@ -53,6 +56,7 @@ public class GraphicsManager {
 	private static final String WATER_SHADER_PATH = "shaders/shader_water.glsl";
 	private static final String TILEMAP_SHADER_PATH = "shaders/shader_tilemap.glsl";
 	private static final String INSTANCED_VERTEX_SHADER_PATH = "shaders/shader_instanced.vert";
+	private static final String CNZ_SLOTS_SHADER_PATH = "shaders/shader_cnz_slots.glsl";
 
 	// Background renderer for per-scanline parallax scrolling
 	private BackgroundRenderer backgroundRenderer;
@@ -61,6 +65,10 @@ public class GraphicsManager {
 
 	// Fade manager for screen transitions
 	private FadeManager fadeManager;
+
+	// CNZ slot machine renderer
+	private ShaderProgram cnzSlotsShaderProgram;
+	private CNZSlotMachineRenderer cnzSlotMachineRenderer;
 
 	// Unified UI render pipeline for overlay + fade ordering
 	private UiRenderPipeline uiRenderPipeline;
@@ -118,6 +126,9 @@ public class GraphicsManager {
 		// Initialize fade manager with shader
 		this.fadeManager = FadeManager.getInstance();
 		this.fadeManager.setFadeShader(this.fadeShaderProgram);
+
+		// CNZ slot machine renderer - shader is loaded lazily when needed
+		this.cnzSlotMachineRenderer = new CNZSlotMachineRenderer();
 
 		// Initialize unified UI render pipeline
 		this.uiRenderPipeline = new UiRenderPipeline(this);
@@ -243,6 +254,39 @@ public class GraphicsManager {
 		patternAtlas.updatePattern(graphics, pattern, patternId);
 	}
 
+	/**
+	 * Remove a pattern from the atlas cache.
+	 * This causes the renderer to skip this pattern (getEntry returns null).
+	 * Used by CNZ slot machine to clear the tilemap at VRAM 0x0550-0x057F
+	 * so the shader overlay can render slot faces there.
+	 *
+	 * @param patternId The pattern ID to uncache
+	 * @return true if the pattern was uncached, false if it wasn't in the cache
+	 */
+	public boolean uncachePattern(int patternId) {
+		if (patternAtlas == null) {
+			return false;
+		}
+		return patternAtlas.removeEntry(patternId);
+	}
+
+	/**
+	 * Create an alias so that one pattern ID renders the same as another.
+	 * This is useful for making multiple pattern IDs render as transparent
+	 * by aliasing them to pattern 0 (which is typically all-transparent).
+	 * No additional atlas slots are allocated.
+	 *
+	 * @param aliasId The pattern ID to create as an alias
+	 * @param targetId The existing pattern ID to alias to
+	 * @return true if the alias was created, false if target doesn't exist
+	 */
+	public boolean aliasPattern(int aliasId, int targetId) {
+		if (patternAtlas == null) {
+			return false;
+		}
+		return patternAtlas.aliasEntry(aliasId, targetId);
+	}
+
 	public void cachePaletteTexture(Palette palette, int paletteId) {
 		if (headlessMode) {
 			// In headless mode, just record that the palette was cached
@@ -309,9 +353,12 @@ public class GraphicsManager {
 			paletteTextureId = combinedPaletteTextureId;
 		}
 
-		if (entry == null || paletteTextureId == null) {
-			System.err.println("Pattern or Palette not cached. Pattern: " + patternId + ", Palette: "
-					+ desc.getPaletteIndex());
+		if (entry == null) {
+			// Pattern not in atlas - silently skip (may be intentionally uncached, e.g., CNZ slot display)
+			return;
+		}
+		if (paletteTextureId == null) {
+			System.err.println("Palette not cached for pattern " + patternId);
 			return;
 		}
 
@@ -628,6 +675,12 @@ public class GraphicsManager {
 		if (shadowShaderProgram != null) {
 			shadowShaderProgram.cleanup(graphics);
 		}
+		if (cnzSlotsShaderProgram != null) {
+			cnzSlotsShaderProgram.cleanup(graphics);
+		}
+		if (cnzSlotMachineRenderer != null) {
+			cnzSlotMachineRenderer.cleanup(graphics);
+		}
 		if (tilemapGpuRenderer != null) {
 			tilemapGpuRenderer.cleanup(graphics);
 		}
@@ -760,6 +813,22 @@ public class GraphicsManager {
 
 	public GL2 getGraphics() {
 		return graphics;
+	}
+
+	/**
+	 * Get the CNZ slot machine renderer for visual display.
+	 * Lazily initializes the shader on first access.
+	 */
+	public CNZSlotMachineRenderer getCnzSlotMachineRenderer() {
+		if (cnzSlotMachineRenderer != null && cnzSlotsShaderProgram == null && graphics != null) {
+			try {
+				cnzSlotsShaderProgram = new ShaderProgram(graphics, CNZ_SLOTS_SHADER_PATH);
+				cnzSlotMachineRenderer.setShader(cnzSlotsShaderProgram);
+			} catch (Exception e) {
+				System.err.println("Failed to load CNZ slot shader: " + e.getMessage());
+			}
+		}
+		return cnzSlotMachineRenderer;
 	}
 
 	/**
