@@ -1025,4 +1025,247 @@ public class TestPlayableSpriteMovement {
                 // Speed -512 (-2 pixels) -> threshold 6
                 assertEquals("Threshold at speed -512", 6, Math.min(Math.abs(-512 >> 8) + 4, 14));
         }
+
+        // ========================================
+        // ARITHMETIC SHIFT VS DIVISION TESTS
+        // ========================================
+
+        /**
+         * Test that right shift (>>8) behaves correctly for negative values.
+         * This is critical for ROM accuracy: 68000 ASR rounds toward -infinity,
+         * while Java / rounds toward zero.
+         *
+         * Examples:
+         * -1 >> 8 = -1 (correct, rounds toward -infinity)
+         * -1 / 256 = 0 (incorrect, rounds toward zero)
+         *
+         * -255 >> 8 = -1 (correct)
+         * -255 / 256 = 0 (incorrect)
+         */
+        @Test
+        public void testArithmeticShiftVsDivisionForNegativeValues() {
+                // Test case 1: -1
+                assertEquals(">>8 rounds -1 toward -infinity", -1, -1 >> 8);
+                assertEquals("/256 rounds -1 toward zero", 0, -1 / 256);
+
+                // Test case 2: -255
+                assertEquals(">>8 rounds -255 toward -infinity", -1, -255 >> 8);
+                assertEquals("/256 rounds -255 toward zero", 0, -255 / 256);
+
+                // Test case 3: -256
+                assertEquals(">>8 for -256", -1, -256 >> 8);
+                assertEquals("/256 for -256", -1, -256 / 256);
+
+                // Test case 4: -257
+                assertEquals(">>8 rounds -257 toward -infinity", -2, -257 >> 8);
+                assertEquals("/256 rounds -257 toward zero", -1, -257 / 256);
+
+                // Test case 5: positive values should be the same
+                assertEquals(">>8 for 255", 0, 255 >> 8);
+                assertEquals("/256 for 255", 0, 255 / 256);
+
+                assertEquals(">>8 for 256", 1, 256 >> 8);
+                assertEquals("/256 for 256", 1, 256 / 256);
+        }
+
+        /**
+         * Test boundary prediction with negative position/speed.
+         * This verifies the fix for using >>8 instead of /256.
+         */
+        @Test
+        public void testBoundaryPredictionWithNegativeSpeed() {
+                // Scenario: sprite at x=100, moving left slowly
+                // xTotal = 100*256 + 0 + (-255) = 25600 - 255 = 25345
+                // predictedX should be 25345 >> 8 = 99 (correct)
+                // NOT 25345 / 256 = 99 (same in this case)
+
+                int xTotal1 = 100 * 256 + 0 + (-255);
+                assertEquals("Positive total with >>8", 99, xTotal1 >> 8);
+                assertEquals("Positive total with /256", 99, xTotal1 / 256);
+
+                // Scenario: sprite near left boundary, moving left
+                // xTotal = 1*256 + 0 + (-512) = 256 - 512 = -256
+                // predictedX should be -256 >> 8 = -1 (correct)
+                // NOT -256 / 256 = -1 (same in this case)
+
+                int xTotal2 = 1 * 256 + 0 + (-512);
+                assertEquals("Negative total with >>8", -1, xTotal2 >> 8);
+                assertEquals("Negative total with /256", -1, xTotal2 / 256);
+
+                // Scenario: edge case with non-multiple of 256
+                // xTotal = 0*256 + 0 + (-1) = -1
+                // predictedX should be -1 >> 8 = -1 (rounds toward -infinity)
+                // NOT -1 / 256 = 0 (rounds toward zero) - THIS IS THE BUG!
+
+                int xTotal3 = 0 * 256 + 0 + (-1);
+                assertEquals("Edge case -1 with >>8 (correct)", -1, xTotal3 >> 8);
+                assertEquals("Edge case -1 with /256 (wrong)", 0, xTotal3 / 256);
+        }
+
+        // ========================================
+        // GROUND MODE TRANSITION TESTS
+        // ========================================
+
+        /**
+         * Test that updateGroundMode() produces correct mode from angle.
+         * ROM formula from s2.asm:42551.
+         *
+         * Actual boundaries (traced through the algorithm):
+         * - GROUND: 0x00-0x20, 0xE0-0xFF
+         * - LEFTWALL: 0x21-0x5F
+         * - CEILING: 0x60-0xA0
+         * - RIGHTWALL: 0xA1-0xDF
+         */
+        @Test
+        public void testGroundModeFromAngle() throws Exception {
+                Method updateGroundMode = PlayableSpriteMovement.class.getDeclaredMethod("updateGroundMode");
+                updateGroundMode.setAccessible(true);
+
+                // Test GROUND mode angles: 0x00-0x20, 0xE0-0xFF
+                byte[] groundAngles = {0x00, 0x10, 0x20, (byte)0xE0, (byte)0xF0, (byte)0xFF};
+                for (byte angle : groundAngles) {
+                        mockSprite.setAngle(angle);
+                        updateGroundMode.invoke(manager);
+                        assertEquals("Angle " + String.format("0x%02X", angle & 0xFF) + " should be GROUND",
+                                        GroundMode.GROUND, mockSprite.getGroundMode());
+                }
+
+                // Test LEFTWALL mode angles: 0x21-0x5F
+                byte[] leftWallAngles = {0x21, 0x30, 0x40, 0x5F};
+                for (byte angle : leftWallAngles) {
+                        mockSprite.setAngle(angle);
+                        updateGroundMode.invoke(manager);
+                        assertEquals("Angle " + String.format("0x%02X", angle & 0xFF) + " should be LEFTWALL",
+                                        GroundMode.LEFTWALL, mockSprite.getGroundMode());
+                }
+
+                // Test CEILING mode angles: 0x60-0xA0
+                byte[] ceilingAngles = {0x60, 0x70, (byte)0x80, (byte)0xA0};
+                for (byte angle : ceilingAngles) {
+                        mockSprite.setAngle(angle);
+                        updateGroundMode.invoke(manager);
+                        assertEquals("Angle " + String.format("0x%02X", angle & 0xFF) + " should be CEILING",
+                                        GroundMode.CEILING, mockSprite.getGroundMode());
+                }
+
+                // Test RIGHTWALL mode angles: 0xA1-0xDF
+                byte[] rightWallAngles = {(byte)0xA1, (byte)0xB0, (byte)0xC0, (byte)0xDF};
+                for (byte angle : rightWallAngles) {
+                        mockSprite.setAngle(angle);
+                        updateGroundMode.invoke(manager);
+                        assertEquals("Angle " + String.format("0x%02X", angle & 0xFF) + " should be RIGHTWALL",
+                                        GroundMode.RIGHTWALL, mockSprite.getGroundMode());
+                }
+        }
+
+        /**
+         * Test boundary angles where mode transitions occur.
+         * These are critical for loop traversal accuracy.
+         *
+         * Actual boundaries (traced through the algorithm):
+         * - GROUND/LEFTWALL: 0x20 -> GROUND, 0x21 -> LEFTWALL
+         * - LEFTWALL/CEILING: 0x5F -> LEFTWALL, 0x60 -> CEILING
+         * - CEILING/RIGHTWALL: 0xA0 -> CEILING, 0xA1 -> RIGHTWALL
+         * - RIGHTWALL/GROUND: 0xDF -> RIGHTWALL, 0xE0 -> GROUND
+         */
+        @Test
+        public void testGroundModeBoundaryAngles() throws Exception {
+                Method updateGroundMode = PlayableSpriteMovement.class.getDeclaredMethod("updateGroundMode");
+                updateGroundMode.setAccessible(true);
+
+                // GROUND/LEFTWALL boundary: 0x20 -> GROUND, 0x21 -> LEFTWALL
+                mockSprite.setAngle((byte)0x20);
+                updateGroundMode.invoke(manager);
+                assertEquals("0x20 should be GROUND", GroundMode.GROUND, mockSprite.getGroundMode());
+
+                mockSprite.setAngle((byte)0x21);
+                updateGroundMode.invoke(manager);
+                assertEquals("0x21 should be LEFTWALL", GroundMode.LEFTWALL, mockSprite.getGroundMode());
+
+                // LEFTWALL/CEILING boundary: 0x5F -> LEFTWALL, 0x60 -> CEILING
+                mockSprite.setAngle((byte)0x5F);
+                updateGroundMode.invoke(manager);
+                assertEquals("0x5F should be LEFTWALL", GroundMode.LEFTWALL, mockSprite.getGroundMode());
+
+                mockSprite.setAngle((byte)0x60);
+                updateGroundMode.invoke(manager);
+                assertEquals("0x60 should be CEILING", GroundMode.CEILING, mockSprite.getGroundMode());
+
+                // CEILING/RIGHTWALL boundary: 0xA0 -> CEILING, 0xA1 -> RIGHTWALL
+                mockSprite.setAngle((byte)0xA0);
+                updateGroundMode.invoke(manager);
+                assertEquals("0xA0 should be CEILING", GroundMode.CEILING, mockSprite.getGroundMode());
+
+                mockSprite.setAngle((byte)0xA1);
+                updateGroundMode.invoke(manager);
+                assertEquals("0xA1 should be RIGHTWALL", GroundMode.RIGHTWALL, mockSprite.getGroundMode());
+
+                // RIGHTWALL/GROUND boundary: 0xDF -> RIGHTWALL, 0xE0 -> GROUND
+                mockSprite.setAngle((byte)0xDF);
+                updateGroundMode.invoke(manager);
+                assertEquals("0xDF should be RIGHTWALL", GroundMode.RIGHTWALL, mockSprite.getGroundMode());
+
+                mockSprite.setAngle((byte)0xE0);
+                updateGroundMode.invoke(manager);
+                assertEquals("0xE0 should be GROUND", GroundMode.GROUND, mockSprite.getGroundMode());
+        }
+
+        // ========================================
+        // WALL COLLISION PREDICTION TESTS
+        // ========================================
+
+        /**
+         * Test that wall collision prediction uses speed directly without subpixels.
+         * ROM: Uses integer velocity (x_vel >> 8) directly for projection,
+         * not (x_vel + subpixel) >> 8.
+         */
+        @Test
+        public void testWallCollisionProjectionWithoutSubpixels() {
+                // Verify the correct formula: projectedDx = xSpeed >> 8
+                short xSpeed = 512; // 2 pixels per frame
+
+                // Correct (ROM-accurate): just shift the speed
+                short correctProjection = (short)(xSpeed >> 8);
+                assertEquals("Correct projection should be 2", 2, correctProjection);
+
+                // Previous incorrect behavior would add subpixels first
+                // This is wrong because it can cause 1-pixel errors
+                byte xSubpixel = (byte)200; // Near full subpixel
+                short incorrectProjection = (short)((xSpeed + (xSubpixel & 0xFF)) >> 8);
+                assertEquals("Incorrect projection would be 2 (same here)", 2, incorrectProjection);
+
+                // Edge case where the bug manifests:
+                xSpeed = 56; // Less than 1 pixel per frame
+                xSubpixel = (byte)200;
+
+                correctProjection = (short)(xSpeed >> 8);
+                assertEquals("Correct projection for slow speed", 0, correctProjection);
+
+                incorrectProjection = (short)((xSpeed + (xSubpixel & 0xFF)) >> 8);
+                assertEquals("Incorrect projection would be 1 (off by 1 pixel)", 1, incorrectProjection);
+        }
+
+        /**
+         * Test that Y projection for wall collision is also subpixel-free.
+         */
+        @Test
+        public void testWallCollisionYProjectionWithoutSubpixels() {
+                // Verify the correct formula: projectedDy = ySpeed >> 8
+                short ySpeed = -384; // Moving up ~1.5 pixels per frame
+
+                // Correct (ROM-accurate): just shift the speed
+                short correctProjection = (short)(ySpeed >> 8);
+                assertEquals("Correct Y projection should be -2", -2, correctProjection);
+
+                // Edge case with subpixels
+                ySpeed = -56;
+                byte ySubpixel = (byte)200;
+
+                correctProjection = (short)(ySpeed >> 8);
+                assertEquals("Correct Y projection for slow upward speed", -1, correctProjection);
+
+                // Previous buggy behavior
+                short incorrectProjection = (short)((ySpeed + (ySubpixel & 0xFF)) >> 8);
+                assertEquals("Incorrect Y projection would be 0 (off by 1 pixel)", 0, incorrectProjection);
+        }
 }

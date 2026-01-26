@@ -581,7 +581,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		final int SCREEN_WIDTH = 320, SONIC_WIDTH = 24, LEFT_OFFSET = 16, RIGHT_EXTRA = 64;
 
 		int xTotal = (sprite.getX() * 256) + (sprite.getXSubpixel() & 0xFF) + sprite.getXSpeed();
-		int predictedX = xTotal / 256;
+		int predictedX = xTotal >> 8;
 
 		int leftBoundary = camera.getMinX() + LEFT_OFFSET;
 		int rightBoundary = camera.getMaxX() + SCREEN_WIDTH - SONIC_WIDTH;
@@ -627,7 +627,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		byte distance = selectedResult.distance();
 		if (distance == 0) {
-			updateGroundMode();
+			// ROM: mode is determined ONCE at the start of AnglePos, not updated again
 			return;
 		}
 
@@ -635,7 +635,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			if (distance >= -14) {
 				moveForSensorResult(selectedResult);
 			}
-			updateGroundMode();
+			// ROM: mode is determined ONCE at the start of AnglePos, not updated again
 			return;
 		}
 
@@ -646,7 +646,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		if (distance > positiveThreshold) {
 			if (sprite.isStickToConvex()) {
 				moveForSensorResult(selectedResult);
-				updateGroundMode();
+				// ROM: mode is determined ONCE at the start of AnglePos, not updated again
 				return;
 			}
 			if (!hasObjectSupport()) {
@@ -657,7 +657,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		}
 
 		moveForSensorResult(selectedResult);
-		updateGroundMode();
+		// ROM: mode is determined ONCE at the start of AnglePos, not updated again
 	}
 
 	/** Sonic_SlopeRepel: Slip/fall check (s2.asm:37432) */
@@ -776,8 +776,9 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		int quadrant = (rotatedAngle + 0x20) & 0xC0;
 		int sensorIndex = (quadrant == 0x40 || quadrant == 0x00) ? 0 : 1;
 
-		short projectedDx = (short) ((sprite.getXSpeed() + (sprite.getXSubpixel() & 0xFF)) >> 8);
-		short projectedDy = (short) ((sprite.getYSpeed() + (sprite.getYSubpixel() & 0xFF)) >> 8);
+		// ROM uses integer velocity directly, not including subpixels
+		short projectedDx = (short) (sprite.getXSpeed() >> 8);
+		short projectedDy = (short) (sprite.getYSpeed() >> 8);
 
 		if ((quadrant == 0x40 || quadrant == 0xC0) && (rotatedAngle & 0x38) == 0 && angle != 0) {
 			projectedDy += 8;
