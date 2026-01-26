@@ -124,14 +124,17 @@ public class WaterPhysicsTest {
         short normalAccel = sprite.getRunAccel();
         short normalMax = sprite.getMax();
         short normalJump = sprite.getJump();
-        float normalGravity = sprite.getGravity();
+        // Use getEffectiveGravity() which returns the net gravity accounting for water state
+        // getGravity() returns the BASE gravity used by ObjectMoveAndFall (underwater reduction
+        // is applied separately in modeAirborne())
+        short normalGravity = sprite.getEffectiveGravity();
 
         // In water
         sprite.setInWater(true);
         short waterAccel = sprite.getRunAccel();
         short waterMax = sprite.getMax();
         short waterJump = sprite.getJump();
-        float waterGravity = sprite.getGravity();
+        short waterGravity = sprite.getEffectiveGravity();
 
         // Verify underwater constants are reduced
         assertEquals("Underwater accel should be half", normalAccel / 2, waterAccel);
@@ -202,11 +205,13 @@ public class WaterPhysicsTest {
     public void testHurtGravity_UnderwaterValue() {
         // According to ROM s2.asm: hurt gravity = 0x30, underwater subtracts 0x20
         // So underwater hurt gravity = 0x30 - 0x20 = 0x10 (same as normal underwater)
+        // Use getEffectiveGravity() which returns the net gravity accounting for water state
+        // (getGravity() returns the BASE gravity; underwater reduction is applied in modeAirborne())
         sprite.setInWater(true);
         sprite.setHurt(true);
 
-        float gravity = sprite.getGravity();
-        assertEquals("Underwater hurt gravity should be 0x10", 0x10, gravity, 0.001f);
+        short gravity = sprite.getEffectiveGravity();
+        assertEquals("Underwater hurt gravity should be 0x10", 0x10, gravity);
     }
 
     /**
