@@ -2240,4 +2240,121 @@ public class LevelManager {
         nextZoneRequested = false;
         return requested;
     }
+
+    /**
+     * Finds the offset from a reference position to the first pattern within a tile index range.
+     * Scans the level chunks around the reference position looking for patterns that use
+     * VRAM tile indices within the specified range.
+     * <p>
+     * This is used by CNZ slot machines to find where the slot display tiles are positioned
+     * relative to the cage object, as this varies between CNZ1 (below) and CNZ2 (above).
+     *
+     * @param refX       Reference X position (world coordinates, typically cage center)
+     * @param refY       Reference Y position (world coordinates, typically cage center)
+     * @param minTileIdx Minimum VRAM tile index to search for (inclusive)
+     * @param maxTileIdx Maximum VRAM tile index to search for (inclusive)
+     * @param searchRadius Radius in pixels to search around the reference position
+     * @return int[2] with {offsetX, offsetY} from ref to first matching pattern center,
+     *         or null if no matching pattern found
+     */
+    public int[] findPatternOffset(int refX, int refY, int minTileIdx, int maxTileIdx, int searchRadius) {
+        if (level == null) {
+            return null;
+        }
+
+        Map map = level.getMap();
+        if (map == null) {
+            return null;
+        }
+
+        // Calculate search bounds in world coordinates
+        int startX = refX - searchRadius;
+        int startY = refY - searchRadius;
+        int endX = refX + searchRadius;
+        int endY = refY + searchRadius;
+
+        // Clamp to level bounds
+        startX = Math.max(startX, level.getMinX());
+        startY = Math.max(startY, level.getMinY());
+        endX = Math.min(endX, level.getMaxX());
+        endY = Math.min(endY, level.getMaxY());
+
+        // Scan through patterns (8x8 pixel grid)
+        for (int worldY = startY; worldY < endY; worldY += 8) {
+            for (int worldX = startX; worldX < endX; worldX += 8) {
+                int tileIdx = getPatternIndexAt(worldX, worldY, map);
+                if (tileIdx >= minTileIdx && tileIdx <= maxTileIdx) {
+                    // Found a matching pattern - calculate offset from ref to pattern center
+                    // Pattern center is at worldX+4, worldY+4
+                    int offsetX = (worldX + 4) - refX;
+                    int offsetY = (worldY + 4) - refY;
+                    return new int[]{offsetX, offsetY};
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Gets the VRAM tile index for the pattern at the given world coordinates.
+     * Traverses the map -> block -> chunk -> pattern hierarchy.
+     *
+     * @param worldX World X coordinate
+     * @param worldY World Y coordinate
+     * @param map    The level map
+     * @return The pattern's VRAM tile index, or -1 if out of bounds
+     */
+    private int getPatternIndexAt(int worldX, int worldY, Map map) {
+        try {
+            // Block is 128x128 pixels
+            int blockX = worldX / 128;
+            int blockY = worldY / 128;
+
+            if (blockX < 0 || blockX >= map.getWidth() || blockY < 0 || blockY >= map.getHeight()) {
+                return -1;
+            }
+
+            // Get block index from map (layer 0 = foreground)
+            int blockIdx = map.getValue(0, blockX, blockY) & 0xFF;
+            if (blockIdx == 0 || blockIdx >= level.getBlockCount()) {
+                return -1;
+            }
+
+            Block block = level.getBlock(blockIdx);
+            if (block == null) {
+                return -1;
+            }
+
+            // Chunk within block (16x16 pixels each, 8x8 grid of chunks)
+            int chunkX = (worldX % 128) / 16;
+            int chunkY = (worldY % 128) / 16;
+            ChunkDesc chunkDesc = block.getChunkDesc(chunkX, chunkY);
+            if (chunkDesc == null) {
+                return -1;
+            }
+
+            int chunkIdx = chunkDesc.getChunkIndex();
+            if (chunkIdx == 0 || chunkIdx >= level.getChunkCount()) {
+                return -1;
+            }
+
+            Chunk chunk = level.getChunk(chunkIdx);
+            if (chunk == null) {
+                return -1;
+            }
+
+            // Pattern within chunk (8x8 pixels each, 2x2 grid)
+            int patternX = (worldX % 16) / 8;
+            int patternY = (worldY % 16) / 8;
+            PatternDesc patternDesc = chunk.getPatternDesc(patternX, patternY);
+            if (patternDesc == null) {
+                return -1;
+            }
+
+            return patternDesc.getPatternIndex();
+        } catch (Exception e) {
+            return -1;
+        }
+    }
 }

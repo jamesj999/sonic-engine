@@ -55,6 +55,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     private int currentAct = -1;
 
     // Deferred slot machine renders (queued during object phase, rendered after tilemap)
+    // Each entry: {worldX, worldY, offsetX, offsetY} - offset values are from cage to display
     private final java.util.List<int[]> pendingSlotRenders = new java.util.ArrayList<>();
 
     @Override
@@ -275,9 +276,14 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
      * Request a slot machine display render at the given world position.
      * Called by PointPokey objects during the object render phase.
      * Actual rendering is deferred to render() which runs after the tilemap.
+     *
+     * @param worldX  Cage center X position (world coordinates)
+     * @param worldY  Cage center Y position (world coordinates)
+     * @param offsetX X offset from cage center to slot display center
+     * @param offsetY Y offset from cage center to slot display top-left
      */
-    public void requestSlotRender(int worldX, int worldY) {
-        pendingSlotRenders.add(new int[]{worldX, worldY});
+    public void requestSlotRender(int worldX, int worldY, int offsetX, int offsetY) {
+        pendingSlotRenders.add(new int[]{worldX, worldY, offsetX, offsetY});
     }
 
     @Override
@@ -300,11 +306,15 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
                     for (int[] pos : pendingSlotRenders) {
                         int screenX = pos[0] - camera.getX();
                         int screenY = pos[1] - camera.getY();
+                        int offsetX = pos[2];
+                        int offsetY = pos[3];
                         GLCommand cmd = cnzSlotMachineRenderer.createRenderCommand(
                                 cnzSlotMachineManager,
                                 screenX,
                                 screenY,
-                                paletteTextureId
+                                paletteTextureId,
+                                offsetX,
+                                offsetY
                         );
                         if (cmd != null) {
                             graphicsManager.registerCommand(cmd);

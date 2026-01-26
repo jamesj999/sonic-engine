@@ -49,10 +49,16 @@ public class CNZSlotMachineRenderer {
     private static final int SLOT_HEIGHT = 32;
     private static final int TOTAL_WIDTH = SLOT_WIDTH * 3;
 
-    // Default offset from cage center to slot display
-    // The slot display is positioned below the cage in the level tilemap
-    private static final int DEFAULT_OFFSET_X = -48; // Center the 96-pixel display
-    private static final int DEFAULT_OFFSET_Y = 40;  // Below the cage (was 32, off by 1 pattern)
+    // Default offset from cage center to slot display (used when pattern scan fails)
+    // These center the 96-pixel wide display and position it below the cage
+    public static final int DEFAULT_OFFSET_X = -48; // Center the 96-pixel display
+    public static final int DEFAULT_OFFSET_Y = 40;  // Below the cage (was 32, off by 1 pattern)
+
+    // VRAM tile index range for CNZ slot display patterns
+    // From s2.constants.asm: ArtTile_ArtUnc_CNZSlotPics_1 = $0550 through _3 = $0570
+    // Each slot is 16 tiles (4x4), so range is $0550-$057F
+    public static final int SLOT_TILE_MIN = 0x0550;
+    public static final int SLOT_TILE_MAX = 0x057F;
 
     private ShaderProgram shader;
     private int textureId = 0;
@@ -225,21 +231,27 @@ public class CNZSlotMachineRenderer {
      * The command is queued and executed later during the flush phase,
      * ensuring it renders AFTER the high-priority foreground tiles.
      *
-     * @param manager         The slot machine state manager
-     * @param cageScreenX     Screen X position of the cage center
-     * @param cageScreenY     Screen Y position of the cage center
+     * @param manager          The slot machine state manager
+     * @param cageScreenX      Screen X position of the cage center
+     * @param cageScreenY      Screen Y position of the cage center
      * @param paletteTextureId The combined palette texture ID
+     * @param displayOffsetX   X offset from cage center to slot display (or null for default)
+     * @param displayOffsetY   Y offset from cage center to slot display (or null for default)
      * @return A GLCommand that renders the slot display, or null if not ready
      */
     public GLCommand createRenderCommand(CNZSlotMachineManager manager, int cageScreenX, int cageScreenY,
-                                         int paletteTextureId) {
+                                         int paletteTextureId, Integer displayOffsetX, Integer displayOffsetY) {
         if (!initialized || shader == null) {
             return null;
         }
 
-        // Calculate slot display position (above and centered on cage)
-        int screenX = cageScreenX + DEFAULT_OFFSET_X;
-        int screenY = cageScreenY + DEFAULT_OFFSET_Y;
+        // Use provided offsets or fall back to defaults
+        int offsetX = (displayOffsetX != null) ? displayOffsetX : DEFAULT_OFFSET_X;
+        int offsetY = (displayOffsetY != null) ? displayOffsetY : DEFAULT_OFFSET_Y;
+
+        // Calculate slot display position
+        int screenX = cageScreenX + offsetX;
+        int screenY = cageScreenY + offsetY;
 
         // Capture slot state at queue time (state may change before execution)
         int face0 = manager.getSlotFace(0);

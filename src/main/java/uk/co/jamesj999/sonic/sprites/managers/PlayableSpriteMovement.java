@@ -92,8 +92,9 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 	@Override
 	public void handleMovement(boolean up, boolean down, boolean left, boolean right, boolean jump, boolean testKey) {
-		sprite.setJumpInputPressed(jump);
-		sprite.setDirectionalInputPressed(left, right);
+		// Note: Raw input state for objects is now stored in SpriteManager BEFORE filtering,
+		// so objects can query button state even when control is locked (ROM: obj_control).
+		// The parameters here are already filtered by control lock state.
 
 		if (sprite.isDebugMode()) {
 			handleDebugMovement(up, down, left, right);
