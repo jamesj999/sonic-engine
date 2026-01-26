@@ -34,6 +34,7 @@ import uk.co.jamesj999.sonic.level.objects.TouchResponseTable;
 public class Sonic2GameModule implements GameModule {
     private final GameAudioProfile audioProfile = new Sonic2AudioProfile();
     private Sonic2ObjectArtProvider objectArtProvider;
+    private Sonic2ZoneFeatureProvider zoneFeatureProvider;
 
     @Override
     public String getIdentifier() {
@@ -121,7 +122,10 @@ public class Sonic2GameModule implements GameModule {
 
     @Override
     public ZoneFeatureProvider getZoneFeatureProvider() {
-        return new Sonic2ZoneFeatureProvider();
+        if (zoneFeatureProvider == null) {
+            zoneFeatureProvider = new Sonic2ZoneFeatureProvider();
+        }
+        return zoneFeatureProvider;
     }
 
     @Override

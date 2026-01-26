@@ -1173,9 +1173,15 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         /**
          * Toggles debug movement mode on/off.
+         * Resets interaction states to prevent getting stuck in object-controlled states.
          */
         public void toggleDebugMode() {
                 debugMode = !debugMode;
+                // Reset interaction states when entering or leaving debug mode
+                // This prevents getting stuck on LauncherSprings or in other locked states
+                controlLocked = false;
+                pinballMode = false;
+                objectControlled = false;
         }
 
         /**

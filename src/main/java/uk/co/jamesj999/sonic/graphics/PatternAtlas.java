@@ -107,6 +107,46 @@ public class PatternAtlas {
         return entries.get(patternId);
     }
 
+    /**
+     * Remove a pattern entry from the atlas.
+     * This makes getEntry() return null for this pattern ID, causing
+     * the renderer to skip it. The atlas slot is not reclaimed.
+     *
+     * @param patternId The pattern ID to remove
+     * @return true if the pattern was removed, false if it wasn't cached
+     */
+    public boolean removeEntry(int patternId) {
+        return entries.remove(patternId) != null;
+    }
+
+    /**
+     * Create an alias entry that points to the same atlas slot as another pattern.
+     * This allows multiple pattern IDs to share the same texture data without
+     * allocating additional atlas slots.
+     *
+     * Will NOT overwrite an existing entry - if aliasId already has an entry,
+     * this method returns false and leaves it unchanged.
+     *
+     * @param aliasId The new pattern ID to create
+     * @param targetId The existing pattern ID to alias to
+     * @return true if the alias was created, false if target doesn't exist or aliasId already exists
+     */
+    public boolean aliasEntry(int aliasId, int targetId) {
+        // Don't overwrite existing entries (e.g., ring patterns)
+        if (entries.containsKey(aliasId)) {
+            return false;
+        }
+        Entry target = entries.get(targetId);
+        if (target == null) {
+            return false;
+        }
+        // Create a new entry with the alias ID but same atlas coordinates as target
+        Entry alias = new Entry(aliasId, target.atlasIndex(), target.slot(),
+                target.tileX(), target.tileY(), target.u0(), target.v0(), target.u1(), target.v1());
+        entries.put(aliasId, alias);
+        return true;
+    }
+
     public int getAtlasCount() {
         return pages.size();
     }

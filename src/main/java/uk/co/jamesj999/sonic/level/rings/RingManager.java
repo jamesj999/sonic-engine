@@ -140,6 +140,46 @@ public class RingManager {
         lostRings.draw(frameCounter);
     }
 
+    /**
+     * Draw a ring sprite at a specific position (for prize rings, etc.).
+     * Uses the animated spin frame based on the frame counter.
+     *
+     * @param x            Screen X position (center of ring)
+     * @param y            Screen Y position (center of ring)
+     * @param frameCounter Current frame counter for animation
+     */
+    public void drawRingAt(int x, int y, int frameCounter) {
+        if (renderer == null) {
+            return;
+        }
+        int spinFrameIndex = renderer.getSpinFrameIndex(frameCounter);
+        renderer.drawFrameIndex(spinFrameIndex, x, y);
+    }
+
+    /**
+     * Draw a sparkle animation at a specific position (for collected prize rings, etc.).
+     * Calculates the sparkle frame based on elapsed frames since sparkle started.
+     *
+     * @param x                  Screen X position (center of sparkle)
+     * @param y                  Screen Y position (center of sparkle)
+     * @param sparkleFrameOffset Frame offset into sparkle animation (0 = first sparkle frame)
+     */
+    public void drawSparkleAt(int x, int y, int sparkleFrameOffset) {
+        if (renderer == null || renderer.getSparkleFrameCount() <= 0) {
+            return;
+        }
+        int frameIndex = renderer.getSparkleStartIndex() +
+                (sparkleFrameOffset % renderer.getSparkleFrameCount());
+        renderer.drawFrameIndex(frameIndex, x, y);
+    }
+
+    /**
+     * Check if ring rendering is available.
+     */
+    public boolean canRenderRings() {
+        return renderer != null;
+    }
+
     public void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter) {
         lostRings.spawnLostRings(player, ringCount, frameCounter);
     }

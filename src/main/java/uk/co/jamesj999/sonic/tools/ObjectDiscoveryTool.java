@@ -86,12 +86,16 @@ public class ObjectDiscoveryTool {
             0x4B,  // Buzzer
             0x5C,  // Masher
             0x6B,  // MTZPlatform (multi-purpose platform with 12 movement subtypes)
+            0x72,  // CNZConveyorBelt (invisible velocity zone - CNZ/MTZ/WFZ)
             0x74,  // InvisibleBlock
             0x78,  // CPZStaircase (4-piece triggered elevator platform)
             0x79,  // Checkpoint
             0x7A,  // SidewaysPform (CPZ/MCZ horizontal moving platform)
             0x7B,  // PipeExitSpring (CPZ warp tube exit spring)
             0x82,  // SwingingPform (ARZ swinging vine platform)
+            0x83,  // ARZRotPforms (ARZ rotating platforms with chain links)
+            0x84,  // ForcedSpin (CNZ/HTZ pinball mode trigger)
+            0x85,  // LauncherSpring (CNZ pressure spring)
             0x86,  // CNZFlipper
             0x8C,  // Whisp
             0x8D,  // GrounderInWall (ARZ Grounder hiding behind wall)
@@ -101,6 +105,10 @@ public class ObjectDiscoveryTool {
             0xA5,  // Spiny (CPZ crawling badnik)
             0xA6,  // SpinyOnWall (CPZ wall-climbing badnik)
             0xA7,  // Grabber (CPZ spider badnik)
+            0xD2,  // CNZRectBlocks (CNZ flashing "caterpillar" blocks)
+            0xD4,  // CNZBigBlock (CNZ large 64x64 oscillating platform)
+            0xD5,  // CNZElevator (CNZ vertical platform that moves when stood on)
+            0xD6,  // PointPokey (CNZ cage that captures player and awards points)
             0xD7,  // HexBumper (CNZ hexagonal bumper)
             0xD8   // BonusBlock
     );

@@ -84,6 +84,24 @@ public final class Sonic2ObjectIds {
     // OOZ/MCZ/ARZ Objects
     public static final int COLLAPSING_PLATFORM = 0x1F; // Collapsing Platform (Obj1F) - OOZ/MCZ/ARZ
 
+    // ARZ Rotating Platforms
+    public static final int ARZ_ROT_PFORMS = 0x83; // Rotating Platforms (Obj83) - 3 platforms orbiting center
+
+    // CNZ/HTZ Objects
+    public static final int FORCED_SPIN = 0x84; // ForcedSpin/Pinball Mode (Obj84) - CNZ/HTZ
+    public static final int LAUNCHER_SPRING = 0x85; // LauncherSpring (Obj85) - CNZ pressure spring
+
+    // CNZ/MTZ/WFZ Objects
+    public static final int CNZ_CONVEYOR_BELT = 0x72; // Conveyor Belt (Obj72) - invisible velocity zone
+
+    // CNZ Flashing Blocks
+    public static final int CNZ_RECT_BLOCKS = 0xD2; // CNZ Rect Blocks (ObjD2) - flashing "caterpillar" blocks
+    public static final int CNZ_BIG_BLOCK = 0xD4;   // CNZ Big Block (ObjD4) - large 64x64 oscillating platform
+    public static final int CNZ_ELEVATOR = 0xD5;    // CNZ Elevator (ObjD5) - vertical platform that moves when stood on
+    public static final int POINT_POKEY = 0xD6;     // CNZ Point Pokey (ObjD6) - cage that captures player and awards points
+    public static final int BOMB_PRIZE = 0xD3;     // CNZ Bomb Prize (ObjD3) - bomb/spike prize from slot machine
+    public static final int RING_PRIZE = 0xDC;     // CNZ Ring Prize (ObjDC) - ring prize from slot machine
+
     private Sonic2ObjectIds() {
     }
 

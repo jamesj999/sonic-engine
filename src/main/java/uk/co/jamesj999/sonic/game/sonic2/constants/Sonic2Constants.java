@@ -124,6 +124,9 @@ public class Sonic2Constants {
     // Swinging Platform (Object 0x82) - ARZ swinging vine platform
     public static final int MAP_UNC_OBJ82_ADDR = 0x2A476;  // Obj82_MapUnc_2A476
 
+    // Rotating Platforms (Object 0x83) - ARZ (shared mappings with Obj15 SwingingPlatform)
+    public static final int MAP_UNC_OBJ83_ADDR = 0x1021E;  // Obj15_Obj83_MapUnc_1021E
+
     public static final int ZONE_AQUATIC_RUIN = 2;
 
     // Checkpoint/Starpost (Object $79)
@@ -223,6 +226,32 @@ public class Sonic2Constants {
 
     // CNZ Flipper (Object 0x86)
     public static final int ART_NEM_FLIPPER_ADDR = 0x81EF2; // ArtNem_CNZFlipper
+
+    // CNZ Rect Blocks (Object 0xD2) - "Caterpiller" flashing blocks
+    public static final int ART_NEM_CNZ_SNAKE_ADDR = 0x81600; // ArtNem_CNZSnake
+
+    // CNZ Big Block (Object 0xD4) - Large 64x64 oscillating platform
+    public static final int ART_NEM_CNZ_BIG_BLOCK_ADDR = 0x816C8; // ArtNem_BigMovingBlock
+
+    // CNZ Elevator (Object 0xD5) - Vertical platform that moves when stood on
+    public static final int ART_NEM_CNZ_ELEVATOR_ADDR = 0x817B4; // ArtNem_CNZElevator
+
+    // CNZ Point Pokey Cage (Object 0xD6) - Casino cage that awards points
+    public static final int ART_NEM_CNZ_CAGE_ADDR = 0x81826; // ArtNem_CNZCage (verified)
+
+    // CNZ Bonus Spike (Object 0xD3) - Spiky ball prize from slot machine
+    public static final int ART_NEM_CNZ_BONUS_SPIKE_ADDR = 0x81668; // ArtNem_CNZBonusSpike (verified)
+
+    // CNZ Slot Machine Pictures (uncompressed) - 6 faces × 512 bytes = 3072 bytes
+    // 4×4 tiles (32×32 pixels) per face, 4bpp indexed color
+    public static final int ART_UNC_CNZ_SLOT_PICS_ADDR = 0x4EEFE; // ArtUnc_CNZSlotPics (verified)
+    public static final int ART_UNC_CNZ_SLOT_PICS_SIZE = 3072;    // 6 faces × 16 tiles × 32 bytes
+
+    // CNZ LauncherSpring (Object 0x85) - pressure springs
+    public static final int ART_NEM_CNZ_VERT_PLUNGER_ADDR = 0x81C96;  // Vertical spring art
+    public static final int ART_NEM_CNZ_DIAG_PLUNGER_ADDR = 0x81AB0;  // Diagonal spring art
+    public static final int ART_TILE_CNZ_VERT_PLUNGER = 0x0422;       // VRAM tile offset
+    public static final int ART_TILE_CNZ_DIAG_PLUNGER = 0x0402;       // VRAM tile offset
 
     // Water Surface Art (Object $04 / SurfaceWater)
     // CPZ uses the same water surface art as HPZ (pink/purple chemical water)

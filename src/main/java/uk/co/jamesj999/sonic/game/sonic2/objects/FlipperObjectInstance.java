@@ -83,6 +83,13 @@ public class FlipperObjectInstance extends BoxObjectInstance
             return;
         }
 
+        // If player entered debug mode while on the flipper, reset flipper state
+        if (player.isDebugMode() && playerFlipperState != 0) {
+            playerFlipperState = 0;
+            launchPending = false;
+            return;
+        }
+
         if (isHorizontal()) {
             // Horizontal flipper: launch on push (loc_2B35C)
             if (contact.pushing()) {
@@ -91,9 +98,12 @@ public class FlipperObjectInstance extends BoxObjectInstance
         } else {
             // Vertical flipper state machine (loc_2B20A - loc_2B288)
             if (contact.standing()) {
+                // ROM: move.b #1,obj_control(a1) - locks ALL player input including jumping
+                // This is set every frame while standing on the flipper
+                player.setControlLocked(true);
+
                 if (playerFlipperState == 0) {
                     // First frame standing: enter rolling state (loc_2B20A)
-                    // ROM: move.b #1,obj_control(a1) - locks player movement
                     // We use pinball_mode to prevent rolling from being cleared
                     player.setPinballMode(true);
                     // setRolling(true) handles radius change and Y adjustment internally
@@ -116,6 +126,7 @@ public class FlipperObjectInstance extends BoxObjectInstance
                 // Player left flipper without jumping (loc_2B23C branch to clear)
                 // ROM: move.b #0,obj_control(a1)
                 if (playerFlipperState != 0) {
+                    player.setControlLocked(false);
                     player.setPinballMode(false);
                 }
                 playerFlipperState = 0;
@@ -174,7 +185,8 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setAir(true);
         player.setGSpeed((short) 0);
 
-        // Clear pinball mode when launching (ROM: move.b #0,obj_control(a1) at loc_2B2E2)
+        // ROM: move.b #0,obj_control(a1) at loc_2B2E2 - release control lock
+        player.setControlLocked(false);
         player.setPinballMode(false);
 
         // Reset flipper state
@@ -204,7 +216,8 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setXSpeed((short) xVel);
         player.setGSpeed((short) xVel);
 
-        player.setSpringing(15);
+        // ROM: move.w #$F,move_lock(a1) - lock player input for 15 frames
+        player.setMoveLockTimer(15);
         player.setRolling(true);
 
         triggerHorizontalAnimation(launchRight);

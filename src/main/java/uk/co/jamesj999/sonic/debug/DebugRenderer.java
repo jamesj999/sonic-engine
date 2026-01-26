@@ -464,21 +464,38 @@ public class DebugRenderer {
                 List<String> lines = new ArrayList<>();
                 lines.add("== ART VIEWER ==");
                 lines.add("Target: " + viewer.getTargetLabel());
-                lines.add("Mode: " + viewer.getViewModeLabel());
-                if (viewer.isPatternMode()) {
-                        lines.add(String.format("Tile: %d", viewer.getPatternCursor()));
-                        lines.add(String.format("Page: %d-%d", viewer.getPatternPageStart(),
-                                        viewer.getPatternPageEnd()));
-                        lines.add("Palette: " + viewer.getPaletteLabel());
-                        lines.add("Keys: Arrows, Tab/M, PgUp/PgDn, 0-4");
-                } else {
-                        int maxFrames = viewer.getMaxFrames();
-                        if (maxFrames > 0) {
-                                lines.add(String.format("Frame: %d/%d", viewer.getFrameIndex(), maxFrames - 1));
-                        } else {
-                                lines.add("Frame: --");
+
+                // Special display for CNZ slot faces
+                if (viewer.isCnzSlotsMode()) {
+                        lines.add("Shows all 6 slot faces");
+                        lines.add("Row 1: 0-2 (Sonic,Tails,Eggman)");
+                        lines.add("Row 2: 3-5 (Jackpot,Ring,Bar)");
+                        lines.add("");
+                        lines.add("Expected face order:");
+                        for (int i = 0; i < 6; i++) {
+                                String name = uk.co.jamesj999.sonic.level.slotmachine.CNZSlotMachineRenderer.getFaceName(i);
+                                String reward = uk.co.jamesj999.sonic.level.slotmachine.CNZSlotMachineRenderer.getFaceReward(i);
+                                lines.add(String.format("  %d: %s (%s)", i, name, reward));
                         }
-                        lines.add("Keys: Left/Right, Tab/M, PgUp/PgDn");
+                        lines.add("");
+                        lines.add("Keys: PgUp/PgDn to switch target");
+                } else {
+                        lines.add("Mode: " + viewer.getViewModeLabel());
+                        if (viewer.isPatternMode()) {
+                                lines.add(String.format("Tile: %d", viewer.getPatternCursor()));
+                                lines.add(String.format("Page: %d-%d", viewer.getPatternPageStart(),
+                                                viewer.getPatternPageEnd()));
+                                lines.add("Palette: " + viewer.getPaletteLabel());
+                                lines.add("Keys: Arrows, Tab/M, PgUp/PgDn, 0-4");
+                        } else {
+                                int maxFrames = viewer.getMaxFrames();
+                                if (maxFrames > 0) {
+                                        lines.add(String.format("Frame: %d/%d", viewer.getFrameIndex(), maxFrames - 1));
+                                } else {
+                                        lines.add("Frame: --");
+                                }
+                                lines.add("Keys: Left/Right, Tab/M, PgUp/PgDn");
+                        }
                 }
 
                 int startX = uiX(baseWidth - 160);

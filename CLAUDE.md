@@ -598,6 +598,14 @@ move.w  #$B4,y_pixel(a1)  ; $B4 = 180 in VDP space = 52 in screen space
 
 To convert: **screen_position = vdp_value - 128**
 
+## Intentional Divergences from Original ROM
+
+While the engine strives for pixel-perfect accuracy, some implementation details differ from the original hardware. These are documented in **[docs/KNOWN_DISCREPANCIES.md](docs/KNOWN_DISCREPANCIES.md)**, including:
+
+- **Gloop Sound Toggle** - Moved from Z80 driver to `BlueBallsObjectInstance`
+- **Spindash Release Transpose Fix** - Patches invalid FM transpose value
+- **Pattern ID Ranges** - GUI/Results use extended IDs (0x20000+) instead of overwriting VRAM tiles
+
 ## Sonic 2 Special Stage Implementation
 
 The special stage uses a unique pseudo-3D rendering system. Key files are in `uk.co.jamesj999.sonic.game.sonic2.specialstage`.

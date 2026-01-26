@@ -138,6 +138,13 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         registerSheet(Sonic2ObjectArtKeys.HEX_BUMPER, artData.hexBumperSheet());
         registerSheet(Sonic2ObjectArtKeys.BONUS_BLOCK, artData.bonusBlockSheet());
         registerSheet(Sonic2ObjectArtKeys.FLIPPER, artData.flipperSheet());
+        registerSheet(Sonic2ObjectArtKeys.LAUNCHER_SPRING_VERT, artLoader.loadLauncherSpringVertSheet());
+        registerSheet(Sonic2ObjectArtKeys.LAUNCHER_SPRING_DIAG, artLoader.loadLauncherSpringDiagSheet());
+        registerSheet(Sonic2ObjectArtKeys.CNZ_RECT_BLOCKS, artLoader.loadCNZRectBlocksSheet());
+        registerSheet(Sonic2ObjectArtKeys.CNZ_BIG_BLOCK, artLoader.loadCNZBigBlockSheet());
+        registerSheet(Sonic2ObjectArtKeys.CNZ_ELEVATOR, artLoader.loadCNZElevatorSheet());
+        registerSheet(Sonic2ObjectArtKeys.CNZ_CAGE, artLoader.loadCNZCageSheet());
+        registerSheet(Sonic2ObjectArtKeys.CNZ_BONUS_SPIKE, artLoader.loadCNZBonusSpikeSheet());
 
         // CPZ objects (Sonic 2-specific)
         registerSheet(Sonic2ObjectArtKeys.SPEED_BOOSTER, artData.speedBoosterSheet());

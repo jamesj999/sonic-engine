@@ -243,6 +243,12 @@ public class GrabberBadnikInstance extends AbstractBadnikInstance {
             return;
         }
 
+        // If player entered debug mode while grabbed, release them
+        if (grabbedPlayer.isDebugMode()) {
+            releasePlayerForDebug();
+            return;
+        }
+
         // === Input checking (loc_390BC in disassembly) ===
         // Track directional input changes using bitmask like the disassembly
         // Bit 2 = left ($04), Bit 3 = right ($08), mask = $0C
@@ -346,6 +352,17 @@ public class GrabberBadnikInstance extends AbstractBadnikInstance {
             grabbedPlayer = null;
         }
 
+        state = State.RELEASING;
+        animFrame = 0; // Open claws
+        paletteFlipped = false;  // Reset palette
+    }
+
+    /**
+     * Releases player without modifying their state (for debug mode).
+     * Player's state was already reset by toggleDebugMode().
+     */
+    private void releasePlayerForDebug() {
+        grabbedPlayer = null;
         state = State.RELEASING;
         animFrame = 0; // Open claws
         paletteFlipped = false;  // Reset palette

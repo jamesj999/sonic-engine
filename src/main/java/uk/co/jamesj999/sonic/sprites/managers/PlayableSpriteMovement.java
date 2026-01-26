@@ -132,9 +132,18 @@ public class PlayableSpriteMovement extends
 			sprite.setMoveLockTimer(moveLock - 1);
 		}
 
-		// Control is locked by either the timer system or the moveLockTimer counter
-		boolean controlLocked = GameServices.timers().getTimerForCode("ControlLock-" + sprite.getCode()) != null
+		// ROM has two separate control mechanisms:
+		// 1. move_lock (moveLockTimer) - blocks left/right only, NOT jumping
+		// 2. obj_control bit 0 (controlLocked) - blocks ALL input including jumping
+		//
+		// The ControlLockTimer (slope slip) uses move_lock behavior in the ROM,
+		// so it should only block left/right movement.
+		boolean moveLocked = GameServices.timers().getTimerForCode("ControlLock-" + sprite.getCode()) != null
 				|| sprite.getMoveLockTimer() > 0;
+
+		// obj_control bit 0 - when an object (flipper, etc.) has partial control
+		// This blocks ALL input including jumping
+		boolean objControlLocked = sprite.isControlLocked();
 
 		// SPG: Store raw button state before control lock modifies it.
 		// During control lock, friction is only applied when NO buttons are pressed.
@@ -142,9 +151,16 @@ public class PlayableSpriteMovement extends
 		boolean rawLeft = left;
 		boolean rawRight = right;
 
-		if (controlLocked || sprite.getSpringing()) {
+		// Block left/right when move_lock OR obj_control OR springing
+		if (moveLocked || objControlLocked || sprite.getSpringing()) {
 			left = false;
 			right = false;
+		}
+		// Block jumping ONLY when obj_control is set (not move_lock)
+		// ROM: obj_control bit 0 skips the entire movement routine including Sonic_Jump
+		// ROM: move_lock only blocks Sonic_Move/Sonic_RollSpeed, NOT Sonic_Jump
+		if (objControlLocked) {
+			jump = false;
 		}
 
 		// ROM: Sonic_MoveLeft/Sonic_MoveRight clear pushing when direction flips.
@@ -285,8 +301,9 @@ public class PlayableSpriteMovement extends
 
 		// Sonic_SlopeRepel (s2.asm:37432): Slip/fall check runs AFTER terrain collision
 		// so it uses the NEW angle. In the original, this is called after AnglePos.
-		// Only check if grounded and controls not locked.
-		if (!sprite.getAir() && !controlLocked) {
+		// Only check if grounded and move_lock is not set.
+		// ROM: tst.w move_lock(a0) / bne.s return
+		if (!sprite.getAir() && !moveLocked) {
 			short absGSpeed = (short) Math.abs(sprite.getGSpeed());
 			int angle = sprite.getAngle() & 0xFF;
 

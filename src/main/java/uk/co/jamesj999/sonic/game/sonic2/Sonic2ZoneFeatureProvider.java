@@ -4,6 +4,7 @@ import uk.co.jamesj999.sonic.camera.Camera;
 import uk.co.jamesj999.sonic.data.Rom;
 import uk.co.jamesj999.sonic.data.RomByteReader;
 import uk.co.jamesj999.sonic.game.ZoneFeatureProvider;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2ObjectIds;
 import uk.co.jamesj999.sonic.game.sonic2.objects.CPZPylonObjectInstance;
 import uk.co.jamesj999.sonic.game.sonic2.objects.Sonic2ObjectRegistry;
@@ -14,8 +15,11 @@ import uk.co.jamesj999.sonic.level.Pattern;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperDataLoader;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperManager;
 import uk.co.jamesj999.sonic.level.bumpers.CNZBumperSpawn;
+import uk.co.jamesj999.sonic.graphics.GLCommand;
 import uk.co.jamesj999.sonic.level.objects.ObjectInstance;
 import uk.co.jamesj999.sonic.level.objects.ObjectSpawn;
+import uk.co.jamesj999.sonic.level.slotmachine.CNZSlotMachineManager;
+import uk.co.jamesj999.sonic.level.slotmachine.CNZSlotMachineRenderer;
 import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 
 import java.io.IOException;
@@ -43,10 +47,15 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     private static final Logger LOGGER = Logger.getLogger(Sonic2ZoneFeatureProvider.class.getName());
 
     private CNZBumperManager cnzBumperManager;
+    private CNZSlotMachineManager cnzSlotMachineManager;
+    private CNZSlotMachineRenderer cnzSlotMachineRenderer;
     private ObjectInstance cpzPylon;
     private WaterSurfaceManager waterSurfaceManager;
     private int currentZone = -1;
     private int currentAct = -1;
+
+    // Deferred slot machine renders (queued during object phase, rendered after tilemap)
+    private final java.util.List<int[]> pendingSlotRenders = new java.util.ArrayList<>();
 
     @Override
     public void initZoneFeatures(Rom rom, int zoneIndex, int actIndex, int cameraX) throws IOException {
@@ -59,9 +68,10 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         currentZone = zoneIndex;
         currentAct = actIndex;
 
-        // Initialize CNZ bumpers (ROM zone ID 0x0C)
+        // Initialize CNZ features (ROM zone ID 0x0C)
         if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
             initCNZBumpers(rom, actIndex, cameraX);
+            initCNZSlotMachine(rom);
         }
 
         // Initialize CPZ pylon (ROM zone ID 0x0D)
@@ -94,6 +104,115 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
             LOGGER.log(Level.SEVERE, "Failed to load CNZ bumper data", e);
             cnzBumperManager = null;
         }
+    }
+
+    /**
+     * Initializes the CNZ slot machine manager and renderer.
+     * The slot machine is a zone-level singleton that handles the slot machine state
+     * when linked PointPokey cages (subtype 0x01) are triggered.
+     */
+    private void initCNZSlotMachine(Rom rom) {
+        cnzSlotMachineManager = new CNZSlotMachineManager();
+
+        // Initialize the visual renderer
+        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        cnzSlotMachineRenderer = graphicsManager.getCnzSlotMachineRenderer();
+        if (cnzSlotMachineRenderer != null && !graphicsManager.isHeadlessMode()) {
+            cnzSlotMachineRenderer.init(graphicsManager.getGraphics(), rom);
+        }
+
+        // The slot machine shader renders on top of the tilemap, so we don't need
+        // to modify the underlying tiles at VRAM 0x0550-0x057F. Whatever garbage
+        // or data is there will be covered by the shader when slots are active.
+        LOGGER.info("Initialized CNZ slot machine system");
+    }
+
+    /**
+     * Initialize slot picture pattern indices with actual slot face art.
+     * The original game DMA's slot faces to VRAM at these indices:
+     * - Slot 1: $0550-$055F (tiles 1360-1375)
+     * - Slot 2: $0560-$056F (tiles 1376-1391)
+     * - Slot 3: $0570-$057F (tiles 1392-1407)
+     * We load a default face (Sonic) at each slot location.
+     *
+     * NOTE: We do NOT call ensurePatternCapacity here because that would overwrite
+     * ring patterns that were cached at indices starting from level.getPatternCount().
+     * The tilemap renderer handles out-of-bounds pattern indices gracefully.
+     */
+    private void initSlotPicturePatterns(GraphicsManager graphicsManager, Rom rom) {
+        // VRAM tile indices for slot pictures (from s2.constants.asm)
+        final int SLOT_1_START = 0x0550; // 1360 decimal
+        final int SLOT_2_START = 0x0560; // 1376 decimal
+        final int SLOT_3_START = 0x0570; // 1392 decimal
+        final int TILES_PER_SLOT = 16;   // 4x4 tiles per slot face
+        final int BYTES_PER_TILE = 32;   // 8x8 pixels × 4bpp = 32 bytes
+
+        // Load slot face patterns from ROM
+        byte[] slotData;
+        try {
+            slotData = rom.readBytes(
+                    Sonic2Constants.ART_UNC_CNZ_SLOT_PICS_ADDR,
+                    Sonic2Constants.ART_UNC_CNZ_SLOT_PICS_SIZE
+            );
+        } catch (Exception e) {
+            LOGGER.warning("Failed to load slot picture art: " + e.getMessage());
+            return;
+        }
+
+        // Load face 0 (Sonic) at all three slot locations as default
+        // Face order: 0=Sonic, 1=Tails, 2=Eggman, 3=Jackpot, 4=Ring, 5=Bar
+        int defaultFace = 0; // Sonic face
+        Pattern[] facePatterns = decodeSlotFace(slotData, defaultFace, TILES_PER_SLOT, BYTES_PER_TILE);
+
+        // Cache the patterns at each slot VRAM location in the atlas
+        // These won't be in the level's pattern array, but the atlas can store them
+        for (int i = 0; i < TILES_PER_SLOT; i++) {
+            graphicsManager.cachePatternTexture(facePatterns[i], SLOT_1_START + i);
+            graphicsManager.cachePatternTexture(facePatterns[i], SLOT_2_START + i);
+            graphicsManager.cachePatternTexture(facePatterns[i], SLOT_3_START + i);
+        }
+
+        LOGGER.fine("Initialized " + (TILES_PER_SLOT * 3) + " slot picture patterns with Sonic face");
+    }
+
+    /**
+     * Decode a single slot face (4×4 tiles) from ROM data.
+     * ROM format is 4bpp tiled, column-major order within the 4×4 grid.
+     */
+    private Pattern[] decodeSlotFace(byte[] romData, int faceIndex, int tilesPerFace, int bytesPerTile) {
+        Pattern[] patterns = new Pattern[tilesPerFace];
+        int faceOffset = faceIndex * tilesPerFace * bytesPerTile;
+
+        // Tiles are in column-major order: tile 0,1,2,3 are column 0, tiles 4,5,6,7 are column 1, etc.
+        for (int tileIndex = 0; tileIndex < tilesPerFace; tileIndex++) {
+            int tileOffset = faceOffset + tileIndex * bytesPerTile;
+            patterns[tileIndex] = new Pattern();
+
+            // Extract the 32-byte tile data and use fromSegaFormat
+            byte[] tileData = new byte[bytesPerTile];
+            System.arraycopy(romData, tileOffset, tileData, 0, bytesPerTile);
+            patterns[tileIndex].fromSegaFormat(tileData);
+        }
+
+        return patterns;
+    }
+
+    /**
+     * Gets the CNZ slot machine manager for use by PointPokey objects.
+     *
+     * @return The slot machine manager, or null if not in CNZ
+     */
+    public CNZSlotMachineManager getSlotMachineManager() {
+        return cnzSlotMachineManager;
+    }
+
+    /**
+     * Gets the CNZ slot machine renderer for visual display.
+     *
+     * @return The slot machine renderer, or null if not in CNZ or not initialized
+     */
+    public CNZSlotMachineRenderer getSlotMachineRenderer() {
+        return cnzSlotMachineRenderer;
     }
 
     /**
@@ -152,10 +271,48 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         }
     }
 
+    /**
+     * Request a slot machine display render at the given world position.
+     * Called by PointPokey objects during the object render phase.
+     * Actual rendering is deferred to render() which runs after the tilemap.
+     */
+    public void requestSlotRender(int worldX, int worldY) {
+        pendingSlotRenders.add(new int[]{worldX, worldY});
+    }
+
     @Override
     public void render(Camera camera, int frameCounter) {
         if (waterSurfaceManager != null && waterSurfaceManager.isInitialized()) {
             waterSurfaceManager.render(camera, frameCounter);
+        }
+        // Note: Slot machine rendering moved to renderAfterForeground() so it appears
+        // behind sprites but on top of the corrupted foreground tiles
+    }
+
+    @Override
+    public void renderAfterForeground(Camera camera) {
+        // Queue slot machine display commands (executed during flush, after high-priority foreground but before sprites)
+        if (!pendingSlotRenders.isEmpty() && cnzSlotMachineRenderer != null && cnzSlotMachineRenderer.isInitialized()) {
+            GraphicsManager graphicsManager = GraphicsManager.getInstance();
+            if (!graphicsManager.isHeadlessMode() && cnzSlotMachineManager != null) {
+                Integer paletteTextureId = graphicsManager.getCombinedPaletteTextureId();
+                if (paletteTextureId != null) {
+                    for (int[] pos : pendingSlotRenders) {
+                        int screenX = pos[0] - camera.getX();
+                        int screenY = pos[1] - camera.getY();
+                        GLCommand cmd = cnzSlotMachineRenderer.createRenderCommand(
+                                cnzSlotMachineManager,
+                                screenX,
+                                screenY,
+                                paletteTextureId
+                        );
+                        if (cmd != null) {
+                            graphicsManager.registerCommand(cmd);
+                        }
+                    }
+                }
+            }
+            pendingSlotRenders.clear();
         }
     }
 
@@ -169,14 +326,21 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
 
     @Override
     public void update(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
-        if (cnzBumperManager != null && zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
-            cnzBumperManager.update(player, cameraX, zoneIndex);
+        if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
+            if (cnzBumperManager != null) {
+                cnzBumperManager.update(player, cameraX, zoneIndex);
+            }
+            if (cnzSlotMachineManager != null) {
+                cnzSlotMachineManager.update();
+            }
         }
     }
 
     @Override
     public void reset() {
         cnzBumperManager = null;
+        cnzSlotMachineManager = null;
+        cnzSlotMachineRenderer = null;
         cpzPylon = null;
         waterSurfaceManager = null;
         currentZone = -1;
