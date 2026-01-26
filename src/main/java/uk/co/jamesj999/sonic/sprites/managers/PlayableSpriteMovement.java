@@ -80,9 +80,6 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	private boolean inputRawLeft, inputRawRight;
 	private boolean wasCrouching;
 
-	// Debug flag for loop fall-through investigation
-	private static final boolean loopDebugEnabled = true;
-
 	public PlayableSpriteMovement(AbstractPlayableSprite sprite) {
 		super(sprite);
 		slopeRunning = sprite.getSlopeRunning();
@@ -617,50 +614,13 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		updateGroundMode();
 
-		// Debug: log every frame when in non-GROUND mode to track loop traversal
-		GroundMode currentMode = sprite.getGroundMode();
-		boolean inLoopMode = currentMode != GroundMode.GROUND;
-
 		SensorResult[] groundResult = collisionSystem.terrainProbes(sprite, sprite.getGroundSensors(), "ground");
 		SensorResult leftSensor = groundResult[0];
 		SensorResult rightSensor = groundResult[1];
 		SensorResult selectedResult = selectSensorWithAngle(rightSensor, leftSensor);
 
-		if (loopDebugEnabled && inLoopMode) {
-			var sensors = sprite.getGroundSensors();
-			short[] off0 = sensors[0].getRotatedOffset();
-			short[] off1 = sensors[1].getRotatedOffset();
-			System.out.printf("[LOOP-FRAME] mode=%s angle=0x%02X pos=(%d,%d) centre=(%d,%d)%n",
-					currentMode, sprite.getAngle() & 0xFF,
-					sprite.getX(), sprite.getY(), sprite.getCentreX(), sprite.getCentreY());
-			System.out.printf("  S0: off=(%d,%d) scanPos=(%d,%d) dist=%d angle=0x%02X%n",
-					off0[0], off0[1], sprite.getCentreX() + off0[0], sprite.getCentreY() + off0[1],
-					leftSensor != null ? leftSensor.distance() : -999,
-					leftSensor != null ? leftSensor.angle() & 0xFF : 0);
-			System.out.printf("  S1: off=(%d,%d) scanPos=(%d,%d) dist=%d angle=0x%02X%n",
-					off1[0], off1[1], sprite.getCentreX() + off1[0], sprite.getCentreY() + off1[1],
-					rightSensor != null ? rightSensor.distance() : -999,
-					rightSensor != null ? rightSensor.angle() & 0xFF : 0);
-			System.out.printf("  selected=%s dist=%d topSolidBit=%d%n",
-					selectedResult == leftSensor ? "S0" : (selectedResult == rightSensor ? "S1" : "null"),
-					selectedResult != null ? selectedResult.distance() : -999,
-					sprite.getTopSolidBit());
-		}
-
 		if (selectedResult == null) {
 			if (!hasObjectSupport()) {
-				// Debug: log airborne due to no sensor result
-				if (loopDebugEnabled && sprite.getGroundMode() != GroundMode.GROUND) {
-					System.out.printf("[AIR-NULL] No sensor result | mode=%s angle=0x%02X pos=(%d,%d) gSpeed=%d topSolidBit=%d%n",
-							sprite.getGroundMode(), sprite.getAngle() & 0xFF,
-							sprite.getX(), sprite.getY(), sprite.getGSpeed(), sprite.getTopSolidBit());
-					// If on secondary layer, this is critical - dump terrain info
-					if (sprite.getTopSolidBit() == 14) {
-						System.out.println("[CRITICAL] Airborne on secondary layer - terrain may lack secondary collision");
-						dumpTerrainAroundSprite();
-						dumpPlaneSwitchers();
-					}
-				}
 				sprite.setAir(true);
 				sprite.setPushing(false);
 			}
@@ -692,44 +652,6 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 				return;
 			}
 			if (!hasObjectSupport()) {
-				// Debug: log airborne due to distance > threshold
-				if (loopDebugEnabled && sprite.getGroundMode() != GroundMode.GROUND) {
-					System.out.printf("[AIR-DIST] dist=%d > threshold=%d | mode=%s angle=0x%02X pos=(%d,%d) gSpeed=%d xSpeed=%d ySpeed=%d speedForThreshold=%d%n",
-							distance, positiveThreshold,
-							sprite.getGroundMode(), sprite.getAngle() & 0xFF,
-							sprite.getX(), sprite.getY(),
-							sprite.getGSpeed(), sprite.getXSpeed(), sprite.getYSpeed(),
-							speedPixels);
-					// Extra debug: show both sensor results
-					System.out.printf("  [SENSORS] L: dist=%d angle=0x%02X | R: dist=%d angle=0x%02X | selected=%s%n",
-							leftSensor != null ? leftSensor.distance() : -999,
-							leftSensor != null ? leftSensor.angle() & 0xFF : 0,
-							rightSensor != null ? rightSensor.distance() : -999,
-							rightSensor != null ? rightSensor.angle() & 0xFF : 0,
-							selectedResult == leftSensor ? "L" : "R");
-					// Show sensor positions (center + rotated offset)
-					var sensors = sprite.getGroundSensors();
-					for (int i = 0; i < sensors.length; i++) {
-						short[] offset = sensors[i].getRotatedOffset();
-						System.out.printf("  [SENSOR%d] offset=(%d,%d) -> scanPos=(%d,%d)%n",
-								i, offset[0], offset[1],
-								sprite.getCentreX() + offset[0], sprite.getCentreY() + offset[1]);
-					}
-					// Re-run probes with tile debug to see what's at those positions
-					System.out.printf("  [LAYER] topSolidBit=%d lrbSolidBit=%d (primary=12/13, secondary=14/15)%n",
-							sprite.getTopSolidBit(), sprite.getLrbSolidBit());
-					System.out.printf("  [TILE-DEBUG] Sprite center=(%d,%d), re-scanning:%n",
-							sprite.getCentreX(), sprite.getCentreY());
-					GroundSensor.tileDebugEnabled = true;
-					collisionSystem.terrainProbes(sprite, sprite.getGroundSensors(), "ground-debug");
-					GroundSensor.tileDebugEnabled = false;
-					// If on secondary layer, this is critical
-					if (sprite.getTopSolidBit() == 14) {
-						System.out.println("[CRITICAL] Airborne on secondary layer - terrain may lack secondary collision");
-						dumpTerrainAroundSprite();
-						dumpPlaneSwitchers();
-					}
-				}
 				sprite.setAir(true);
 				sprite.setPushing(false);
 			}
@@ -1070,15 +992,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		};
 
 		if (newMode != sprite.getGroundMode()) {
-			GroundMode oldMode = sprite.getGroundMode();
 			sprite.setGroundMode(newMode);
-			// Debug: log ground mode transitions
-			if (loopDebugEnabled) {
-				System.out.printf("[MODE] %s -> %s | angle=0x%02X pos=(%d,%d) gSpeed=%d xSpeed=%d ySpeed=%d%n",
-						oldMode, newMode, angle,
-						sprite.getX(), sprite.getY(),
-						sprite.getGSpeed(), sprite.getXSpeed(), sprite.getYSpeed());
-			}
 		}
 	}
 
@@ -1342,73 +1256,5 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	private void doAnglePosWithSensorUpdate(short originalX, short originalY) {
 		sprite.updateSensors(originalX, originalY);
 		doAnglePos();
-	}
-
-	/** Debug: dump terrain collision bits around sprite position */
-	private void dumpTerrainAroundSprite() {
-		var levelManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance();
-		int cx = sprite.getCentreX();
-		int cy = sprite.getCentreY();
-		System.out.printf("  [TERRAIN DUMP] around (%d,%d), topSolidBit=%d:%n", cx, cy, sprite.getTopSolidBit());
-		// Check 3x3 grid of chunks around sprite
-		for (int dy = -16; dy <= 16; dy += 16) {
-			StringBuilder row = new StringBuilder("    ");
-			for (int dx = -16; dx <= 16; dx += 16) {
-				var desc = levelManager.getChunkDescAt((byte) 0, cx + dx, cy + dy);
-				if (desc == null) {
-					row.append("[null] ");
-				} else {
-					int rawVal = desc.get();
-					boolean primary = (rawVal & 0x3000) != 0;
-					boolean secondary = (rawVal & 0xC000) != 0;
-					row.append(String.format("[%04X %s%s] ", rawVal, primary ? "P" : "-", secondary ? "S" : "-"));
-				}
-			}
-			System.out.println(row);
-		}
-	}
-
-	/** Debug: dump all active plane switchers near sprite */
-	private void dumpPlaneSwitchers() {
-		var levelManager = uk.co.jamesj999.sonic.level.LevelManager.getInstance();
-		var objectManager = levelManager.getObjectManager();
-		if (objectManager == null) return;
-
-		int cx = sprite.getCentreX();
-		int cy = sprite.getCentreY();
-		System.out.printf("  [PLANE SWITCHERS] near (%d,%d):%n", cx, cy);
-
-		var gameModule = levelManager.getGameModule();
-		if (gameModule == null) return;
-		int planeSwitcherId = gameModule.getPlaneSwitcherObjectId();
-
-		// Get all spawns from placement manager
-		var spawns = objectManager.getActiveSpawns();
-		if (spawns == null || spawns.isEmpty()) {
-			System.out.println("    (no active spawns)");
-			return;
-		}
-
-		int count = 0;
-		for (var spawn : spawns) {
-			if (spawn.objectId() != planeSwitcherId) continue;
-			int dx = spawn.x() - cx;
-			int dy = spawn.y() - cy;
-			int dist = (int) Math.sqrt(dx * dx + dy * dy);
-			if (dist < 300) { // Only show nearby switchers
-				int subtype = spawn.subtype();
-				boolean horizontal = (subtype & 0x04) != 0;
-				boolean groundedOnly = (subtype & 0x80) != 0;
-				int halfSpan = new int[]{0x20, 0x40, 0x80, 0x100}[subtype & 0x03];
-				System.out.printf("    spawn=(%d,%d) subtype=0x%02X %s groundedOnly=%s halfSpan=%d dist=%d%n",
-						spawn.x(), spawn.y(), subtype,
-						horizontal ? "HORIZ" : "VERT",
-						groundedOnly, halfSpan, dist);
-				count++;
-			}
-		}
-		if (count == 0) {
-			System.out.println("    (no plane switchers within 300px)");
-		}
 	}
 }
