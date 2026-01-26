@@ -518,6 +518,11 @@ public class ObjectManager {
                 if (!state.seeded) {
                     state.sideState = (byte) sideNow;
                     state.seeded = true;
+                    // Debug: log plane switcher seeding
+                    System.out.printf("[PLANE-SEED] spawn=(%d,%d) subtype=0x%02X seeded side=%d playerPos=(%d,%d) inSpan=%s%n",
+                            spawn.x(), spawn.y(), subtype, sideNow, playerX, playerY,
+                            (horizontal ? (playerX >= spawn.x() - state.halfSpanPixels && playerX < spawn.x() + state.halfSpanPixels)
+                                       : (playerY >= spawn.y() - state.halfSpanPixels && playerY < spawn.y() + state.halfSpanPixels)));
                 }
 
                 int half = state.halfSpanPixels;
@@ -526,10 +531,22 @@ public class ObjectManager {
                         : (playerY >= spawn.y() - half && playerY < spawn.y() + half);
                 boolean groundedGate = onlySwitchWhenGrounded(subtype) && player.getAir();
 
+                // Debug: log when switch is blocked by grounded gate
+                if (inSpan && sideNow != state.sideState && groundedGate) {
+                    System.out.printf("[PLANE-BLOCKED] spawn=(%d,%d) side %d->%d BLOCKED: player airborne, subtype=0x%02X playerPos=(%d,%d) air=%s%n",
+                            spawn.x(), spawn.y(), state.sideState, sideNow, subtype, playerX, playerY, player.getAir());
+                }
+
                 if (inSpan && !groundedGate && sideNow != state.sideState) {
                     boolean skipCollisionChange = (spawn.renderFlags() & 0x1) != 0;
                     if (!skipCollisionChange) {
                         int path = decodePath(subtype, sideNow);
+                        int pathMask = sideNow == 1 ? MASK_PATH_SIDE1 : MASK_PATH_SIDE0;
+                        // Debug: log layer switch with full decode info
+                        System.out.printf("[PLANE-SWITCH] spawn=(%d,%d) side %d->%d subtype=0x%02X mask=0x%02X path=%d topBit=%d playerPos=(%d,%d) horizontal=%s%n",
+                                spawn.x(), spawn.y(), state.sideState, sideNow, subtype, pathMask, path,
+                                path == 0 ? config.getPath0TopSolidBit() : config.getPath1TopSolidBit(),
+                                playerX, playerY, horizontal);
                         player.setLayer((byte) path);
                         if (path == 0) {
                             player.setTopSolidBit(config.getPath0TopSolidBit());

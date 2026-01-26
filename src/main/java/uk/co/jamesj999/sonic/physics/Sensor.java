@@ -53,7 +53,7 @@ public abstract class Sensor {
             case LEFTWALL -> {
                 short temp = xOffset;
                 xOffset = (short) -yOffset;
-                yOffset = temp;
+                yOffset = (short) -temp;
             }
             default -> { }
         }

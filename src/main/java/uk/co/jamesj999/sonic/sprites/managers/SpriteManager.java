@@ -140,9 +140,11 @@ public class SpriteManager {
 				boolean effectiveJump = !controlLocked && space;
 				boolean effectiveTest = !controlLocked && testButton;
 
-				levelManager.applyPlaneSwitchers(playable);
 				playable.getMovementManager().handleMovement(effectiveUp, effectiveDown, effectiveLeft,
 						effectiveRight, effectiveJump, effectiveTest);
+				/// ROM order: Sonic moves first (Obj01), THEN plane switchers run (Obj03).
+				// This ensures plane switchers check the current frame's position/air state.
+				levelManager.applyPlaneSwitchers(playable);
 				// Update solid object contacts AFTER terrain collision but BEFORE animation.
 				// This ensures pushing flag is set correctly for both terrain and solid objects
 				// before animation resolves which animation to display.
@@ -163,8 +165,9 @@ public class SpriteManager {
 
 		for (Sprite sprite : sprites) {
 			if (sprite instanceof AbstractPlayableSprite playable) {
-				levelManager.applyPlaneSwitchers(playable);
 				playable.getMovementManager().handleMovement(false, false, false, false, false, false);
+				/// ROM order: Sonic moves first (Obj01), THEN plane switchers run (Obj03).
+				levelManager.applyPlaneSwitchers(playable);
 				// Update solid object contacts AFTER terrain collision but BEFORE animation
 				if (levelManager.getObjectManager() != null) {
 					levelManager.getObjectManager().updateSolidContacts(playable);

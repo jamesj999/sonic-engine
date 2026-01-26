@@ -21,6 +21,9 @@ public class GroundSensor extends Sensor {
     // Default flagged angle for missing tiles (ROM: odd angles trigger cardinal snap)
     private static final byte FLAGGED_ANGLE = 0x03;
 
+    // Debug flag for tile-level collision debugging (set from PlayableSpriteMovement)
+    public static boolean tileDebugEnabled = false;
+
     public static void setLevelManager(LevelManager levelManager) {
         GroundSensor.levelManager = levelManager;
     }
@@ -135,6 +138,10 @@ public class GroundSensor extends Sensor {
     // ========================================
 
     private SensorResult scanHorizontal(short x, short y, int solidityBit, Direction direction) {
+        if (tileDebugEnabled) {
+            System.out.printf("  [HORIZ-SCAN] start=(%d,%d) dir=%s%n", x, y, direction);
+        }
+
         WallScanResult result = evaluateWallTile(x, y, solidityBit, direction);
 
         switch (result.state) {
@@ -144,6 +151,7 @@ public class GroundSensor extends Sensor {
             case REGRESS:
                 // Check previous tile (opposite direction)
                 int prevX = x + (direction == Direction.LEFT ? 16 : -16);
+                if (tileDebugEnabled) System.out.printf("    [REGRESS] checking prev tile at x=%d%n", prevX);
                 WallScanResult prev = scanWallTileSimple(prevX, y, solidityBit, direction);
                 return createResultWithDistance(prev.tile, prev.desc, (byte) (prev.distance - 16), direction);
 
@@ -151,6 +159,7 @@ public class GroundSensor extends Sensor {
             default:
                 // Check next tile (same direction)
                 int nextX = x + (direction == Direction.LEFT ? -16 : 16);
+                if (tileDebugEnabled) System.out.printf("    [EXTEND] checking next tile at x=%d%n", nextX);
                 WallScanResult next = scanWallTileSimple(nextX, y, solidityBit, direction);
                 return createResultWithDistance(next.tile, next.desc, (byte) (next.distance + 16), direction);
         }
@@ -159,12 +168,67 @@ public class GroundSensor extends Sensor {
     private WallScanResult evaluateWallTile(int x, int y, int solidityBit, Direction direction) {
         ChunkDesc desc = levelManager.getChunkDescAt((byte) 0, x, y);
         SolidTile tile = getSolidTile(desc, solidityBit);
+
+        if (tileDebugEnabled) {
+            // Calculate block position for debugging
+            int blockX = x / 128;
+            int blockY = y / 128;
+            int chunkXInBlock = (x % 128) / 16;
+            int chunkYInBlock = (y % 128) / 16;
+            System.out.printf("    [WALL-EVAL] pos=(%d,%d) dir=%s solidityBit=%d block=(%d,%d) chunkInBlock=(%d,%d)%n",
+                    x, y, direction, solidityBit, blockX, blockY, chunkXInBlock, chunkYInBlock);
+
+            // Show chunk lookup chain for debugging
+            String chunkInfo = "N/A";
+            if (desc != null) {
+                try {
+                    var level = levelManager.getCurrentLevel();
+                    if (level != null) {
+                        var chunk = level.getChunk(desc.getChunkIndex());
+                        if (chunk != null) {
+                            int primaryColIdx = chunk.getSolidTileIndex();
+                            int altColIdx = chunk.getSolidTileAltIndex();
+                            int usedIdx = (solidityBit < 0x0E) ? primaryColIdx : altColIdx;
+                            chunkInfo = String.format("chunk[%d].solidIdx=%d altIdx=%d (using %s=%d)",
+                                    desc.getChunkIndex(), primaryColIdx, altColIdx,
+                                    solidityBit < 0x0E ? "primary" : "alt", usedIdx);
+                        }
+                    }
+                } catch (Exception e) {
+                    chunkInfo = "error: " + e.getMessage();
+                }
+            }
+
+            System.out.printf("      desc=%s rawVal=0x%04X solidBitSet=%s%n",
+                    desc != null ? String.format("idx=%d hFlip=%s vFlip=%s", desc.getChunkIndex(), desc.getHFlip(), desc.getVFlip()) : "null",
+                    desc != null ? desc.get() : 0,
+                    desc != null ? desc.isSolidityBitSet(solidityBit) : "N/A");
+            System.out.printf("      %s%n", chunkInfo);
+            System.out.printf("      tile=%s%n",
+                    tile != null ? String.format("idx=%d angle=0x%02X", tile.getIndex(), tile.getAngle(false, false) & 0xFF) : "null");
+        }
+
         if (tile == null) {
+            if (tileDebugEnabled) System.out.println("      -> EXTEND (no tile)");
             return WallScanResult.extend();
         }
 
         int metric = getWallMetric(tile, desc, y, direction);
+        if (tileDebugEnabled) {
+            System.out.printf("      metric=%d yInTile=%d%n", metric, y & 0x0F);
+            // Dump tile's width array to see the shape (rows 0-15 correspond to y positions)
+            StringBuilder widthDump = new StringBuilder("      widths[0-15]=[");
+            for (int i = 0; i < 16; i++) {
+                if (i > 0) widthDump.append(",");
+                int w = tile.getWidthAt((byte) i);
+                widthDump.append(w);
+            }
+            widthDump.append("] (row ").append(y & 0x0F).append(" highlighted)");
+            System.out.println(widthDump);
+        }
+
         if (metric == 0) {
+            if (tileDebugEnabled) System.out.println("      -> EXTEND (metric=0)");
             return WallScanResult.extend();
         }
 
@@ -173,13 +237,15 @@ public class GroundSensor extends Sensor {
 
         // Negative metric: partial collision from opposite side
         if (metric < 0) {
-            return (metric + xAdjusted >= 0)
-                    ? WallScanResult.extend()
-                    : WallScanResult.regress();
+            boolean extend = (metric + xAdjusted >= 0);
+            if (tileDebugEnabled) System.out.printf("      -> %s (negative metric, xInTile=%d xAdj=%d)%n",
+                    extend ? "EXTEND" : "REGRESS", xInTile, xAdjusted);
+            return extend ? WallScanResult.extend() : WallScanResult.regress();
         }
 
         // Full-width tile: need to check previous tile
         if (metric == FULL_TILE) {
+            if (tileDebugEnabled) System.out.println("      -> REGRESS (full tile)");
             return WallScanResult.regress();
         }
 
@@ -187,6 +253,7 @@ public class GroundSensor extends Sensor {
         int distance = (direction == Direction.LEFT)
                 ? (xInTile - metric + 1)
                 : (16 - metric - xInTile);
+        if (tileDebugEnabled) System.out.printf("      -> FOUND dist=%d (xInTile=%d)%n", distance, xInTile);
         return WallScanResult.found(distance, tile, desc);
     }
 
@@ -196,25 +263,44 @@ public class GroundSensor extends Sensor {
         int xInTile = x & 0x0F;
         int xAdjusted = (direction == Direction.LEFT) ? (15 - xInTile) : xInTile;
 
+        if (tileDebugEnabled) {
+            System.out.printf("    [WALL-SIMPLE] pos=(%d,%d) dir=%s%n", x, y, direction);
+            System.out.printf("      desc=%s solidBitSet=%s tile=%s%n",
+                    desc != null ? String.format("idx=%d hFlip=%s vFlip=%s", desc.getChunkIndex(), desc.getHFlip(), desc.getVFlip()) : "null",
+                    desc != null ? desc.isSolidityBitSet(solidityBit) : "N/A",
+                    tile != null ? String.format("idx=%d", tile.getIndex()) : "null");
+        }
+
         if (tile == null) {
-            return WallScanResult.found(15 - xAdjusted, null, null);
+            int dist = 15 - xAdjusted;
+            if (tileDebugEnabled) System.out.printf("      -> dist=%d (no tile, xAdj=%d)%n", dist, xAdjusted);
+            return WallScanResult.found(dist, null, null);
         }
 
         int metric = getWallMetric(tile, desc, y, direction);
+        if (tileDebugEnabled) System.out.printf("      metric=%d%n", metric);
+
         if (metric == 0) {
-            return WallScanResult.found(15 - xAdjusted, null, null);
+            int dist = 15 - xAdjusted;
+            if (tileDebugEnabled) System.out.printf("      -> dist=%d (metric=0)%n", dist);
+            return WallScanResult.found(dist, null, null);
         }
 
         if (metric < 0) {
             if (metric + xAdjusted >= 0) {
-                return WallScanResult.found(15 - xAdjusted, null, null);
+                int dist = 15 - xAdjusted;
+                if (tileDebugEnabled) System.out.printf("      -> dist=%d (neg metric, no collision)%n", dist);
+                return WallScanResult.found(dist, null, null);
             }
-            return WallScanResult.found(-1 - xAdjusted, tile, desc);
+            int dist = -1 - xAdjusted;
+            if (tileDebugEnabled) System.out.printf("      -> dist=%d (neg metric collision)%n", dist);
+            return WallScanResult.found(dist, tile, desc);
         }
 
         int distance = (direction == Direction.LEFT)
                 ? (xInTile - metric + 1)
                 : (16 - metric - xInTile);
+        if (tileDebugEnabled) System.out.printf("      -> dist=%d%n", distance);
         return WallScanResult.found(distance, tile, desc);
     }
 
@@ -243,15 +329,26 @@ public class GroundSensor extends Sensor {
     private int getWallMetric(SolidTile tile, ChunkDesc desc, int y, Direction direction) {
         if (tile == null) return 0;
 
-        int index = y & 0x0F;
-        if (desc != null && desc.getVFlip()) {
+        int rawIndex = y & 0x0F;
+        int index = rawIndex;
+        boolean vFlip = desc != null && desc.getVFlip();
+        if (vFlip) {
             index = 15 - index;
         }
 
         int metric = tile.getWidthAt((byte) index);
-        boolean xMirror = (desc != null && desc.getHFlip()) ^ (direction == Direction.LEFT);
+        boolean hFlip = desc != null && desc.getHFlip();
+        boolean xMirror = hFlip ^ (direction == Direction.LEFT);
         if (xMirror) {
             metric = -metric;
+        }
+
+        // Detailed debug when tile debug is enabled
+        if (tileDebugEnabled) {
+            int rawWidthAtRawIndex = tile.getWidthAt((byte) rawIndex);
+            int rawWidthAtIndex = tile.getWidthAt((byte) index);
+            System.out.printf("        [WALL-METRIC] y=%d rawIndex=%d vFlip=%s finalIndex=%d rawWidth@rawIndex=%d rawWidth@finalIndex=%d hFlip=%s dir=%s xMirror=%s metric=%d%n",
+                    y, rawIndex, vFlip, index, rawWidthAtRawIndex, rawWidthAtIndex, hFlip, direction, xMirror, metric);
         }
         return metric;
     }

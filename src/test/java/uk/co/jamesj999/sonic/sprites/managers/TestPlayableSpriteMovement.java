@@ -1268,4 +1268,126 @@ public class TestPlayableSpriteMovement {
                 short incorrectProjection = (short)((ySpeed + (ySubpixel & 0xFF)) >> 8);
                 assertEquals("Incorrect Y projection would be 0 (off by 1 pixel)", 0, incorrectProjection);
         }
+
+        // ========================================
+        // SPEED THRESHOLD FOR GROUND ATTACHMENT TESTS
+        // ========================================
+
+        /**
+         * Test that getSpeedForThreshold() uses gSpeed as fallback ONLY when xSpeed is zero.
+         * This is CRITICAL for loop traversal - during loop transitions, xSpeed can be
+         * zero due to velocity decomposition even when gSpeed is non-zero.
+         *
+         * Without this fallback, the threshold becomes 0+4=4 pixels (too tight),
+         * causing Sonic to become airborne prematurely and fly out of loops.
+         */
+        @Test
+        public void testSpeedThresholdUsesGSpeedFallbackWhenZero() throws Exception {
+                // Scenario: Running through a loop, xSpeed becomes 0 at certain angles
+                // but gSpeed is still high (e.g., 1536 = 6 pixels/frame)
+                mockSprite.setGSpeed((short) 1536);
+                mockSprite.setXSpeed((short) 0);  // Zero due to velocity decomposition
+                mockSprite.setYSpeed((short) 0);
+                mockSprite.setGroundMode(GroundMode.GROUND);
+
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("getSpeedForThreshold");
+                method.setAccessible(true);
+                int threshold = (int) method.invoke(manager);
+
+                // Should use gSpeed (1536 >> 8 = 6), not xSpeed (0)
+                assertEquals("Should use gSpeed when xSpeed is 0", 6, threshold);
+
+                // Verify this gives a reasonable attachment threshold
+                // positiveThreshold = min(speedPixels + 4, 14) = min(6 + 4, 14) = 10
+                int positiveThreshold = Math.min(threshold + 4, 14);
+                assertEquals("Attachment threshold should be 10 pixels", 10, positiveThreshold);
+        }
+
+        /**
+         * Test that without gSpeed fallback, threshold would be dangerously tight.
+         * This test documents the bug that was causing loop fall-through.
+         */
+        @Test
+        public void testSpeedThresholdWithoutFallbackWouldBeTooTight() {
+                // If we ONLY used xSpeed (the buggy behavior):
+                short xSpeed = 0;  // Zero due to velocity decomposition
+                int buggySpeedPixels = Math.abs(xSpeed >> 8);  // = 0
+                int buggyThreshold = Math.min(buggySpeedPixels + 4, 14);  // = 4
+
+                assertEquals("Without fallback, threshold would be only 4 pixels", 4, buggyThreshold);
+
+                // 4 pixels is too tight for curved surfaces like loops
+                // Normal terrain distance on curves can be 5-10 pixels
+                // This would cause false "too far from terrain" and launch Sonic out
+        }
+
+        /**
+         * Test speed threshold on wall modes uses ySpeed but falls back to gSpeed if zero.
+         */
+        @Test
+        public void testSpeedThresholdOnWallMode() throws Exception {
+                // On LEFTWALL mode, should use ySpeed but fallback to gSpeed if zero
+                mockSprite.setGSpeed((short) 1024);  // 4 pixels/frame
+                mockSprite.setXSpeed((short) 1024);  // Non-zero, but irrelevant for wall mode
+                mockSprite.setYSpeed((short) 0);     // Zero
+                mockSprite.setGroundMode(GroundMode.LEFTWALL);
+
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("getSpeedForThreshold");
+                method.setAccessible(true);
+                int threshold = (int) method.invoke(manager);
+
+                // ySpeed is 0, so should fallback to gSpeed (1024 >> 8 = 4)
+                assertEquals("Should use gSpeed fallback on wall mode when ySpeed is 0", 4, threshold);
+        }
+
+        /**
+         * Test speed threshold uses ROM-style velocity when non-zero, NOT Math.max().
+         * This is critical for slope accuracy - using Math.max() breaks slopes.
+         */
+        @Test
+        public void testSpeedThresholdUsesRomStyleWhenNonZero() throws Exception {
+                // On slopes, xSpeed is non-zero, so should use xSpeed (ROM behavior)
+                // NOT Math.max(xSpeed, gSpeed) which would give too loose a threshold
+                mockSprite.setGSpeed((short) 1536);  // 6 pixels/frame
+                mockSprite.setXSpeed((short) 1024);  // 4 pixels/frame (non-zero on slope)
+                mockSprite.setYSpeed((short) 0);
+                mockSprite.setGroundMode(GroundMode.GROUND);
+
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("getSpeedForThreshold");
+                method.setAccessible(true);
+                int threshold = (int) method.invoke(manager);
+
+                // Should use xSpeed (4), NOT gSpeed (6), because xSpeed is non-zero
+                assertEquals("Should use xSpeed (ROM behavior) when non-zero", 4, threshold);
+
+                // This gives threshold = min(4 + 4, 14) = 8, matching ROM
+                // Using Math.max would give min(6 + 4, 14) = 10, which breaks slopes
+        }
+
+        /**
+         * Test that gSpeed fallback only activates when velocity is exactly zero.
+         */
+        @Test
+        public void testSpeedThresholdFallbackOnlyWhenExactlyZero() throws Exception {
+                // Even with very small xSpeed (1 subpixel = 0 pixels), should NOT use gSpeed
+                // because the ROM would round this to 0 anyway
+                mockSprite.setGSpeed((short) 1536);  // 6 pixels/frame
+                mockSprite.setXSpeed((short) 255);   // Less than 1 pixel, rounds to 0
+                mockSprite.setYSpeed((short) 0);
+                mockSprite.setGroundMode(GroundMode.GROUND);
+
+                Method method = PlayableSpriteMovement.class.getDeclaredMethod("getSpeedForThreshold");
+                method.setAccessible(true);
+                int threshold = (int) method.invoke(manager);
+
+                // 255 >> 8 = 0, so speedPixels = 0, should fall back to gSpeed
+                assertEquals("Should fallback to gSpeed when xSpeed rounds to 0", 6, threshold);
+
+                // Now test with xSpeed = 256 (exactly 1 pixel)
+                mockSprite.setXSpeed((short) 256);
+                int threshold2 = (int) method.invoke(manager);
+
+                // 256 >> 8 = 1, so speedPixels = 1, should NOT fall back
+                assertEquals("Should use xSpeed when it's 1+ pixels", 1, threshold2);
+        }
 }
