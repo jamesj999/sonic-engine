@@ -5,424 +5,292 @@ import uk.co.jamesj999.sonic.level.LevelManager;
 import uk.co.jamesj999.sonic.level.SolidTile;
 
 /**
- * Utility class providing terrain collision detection for game objects.
- * <p>
- * This mirrors the ROM's ObjCheckFloorDist subroutine (s2.asm line 43738)
- * which provides floor and ceiling detection for objects like falling pillars,
- * animals, monitors, and other physics-enabled game objects.
- * <p>
- * Unlike player collision (which uses paired sensors), object collision uses
- * a single point check, making this API simpler.
- * <p>
- * <b>Usage example:</b>
- * <pre>{@code
- * // Check floor from bottom of object (y + yRadius)
- * TerrainCheckResult result = ObjectTerrainUtils.checkFloorDist(x, y, yRadius);
- * if (result.hasCollision()) {
- *     // Snap to floor: y = y + result.distance()
- *     y = y + result.distance();
- * }
- * }</pre>
+ * Terrain collision detection for game objects.
+ * Mirrors ROM's ObjCheckFloorDist (s2.asm:43738) for floor/ceiling/wall detection
+ * used by falling objects, animals, monitors, etc.
+ *
+ * Unlike player collision (paired sensors), object collision uses single-point checks.
  */
 public final class ObjectTerrainUtils {
 
-    /**
-     * Solidity bit index for top-solid collision (layer 0).
-     * Objects check this bit to determine if a tile is solid from above.
-     */
+    /** Solidity bit for top-solid collision (walkable from above) */
     private static final int SOLIDITY_TOP = 0x0C;
 
-    /**
-     * Solidity bit index for all-sides-solid collision (layer 0).
-     * Used for ceiling checks.
-     */
+    /** Solidity bit for all-sides-solid collision */
     private static final int SOLIDITY_ALL = 0x0D;
 
-    private ObjectTerrainUtils() {
-        // Utility class - no instantiation
-    }
+    private static final int FULL_TILE = 16;
 
-    /**
-     * Check distance to floor from the bottom of an object.
-     * <p>
-     * This is the primary API for objects with gravity. It checks from
-     * (x, y + yRadius) which represents the bottom center of the object.
-     *
-     * @param x Object center X position
-     * @param y Object center Y position
-     * @param yRadius Object's vertical radius (half-height)
-     * @return TerrainCheckResult with distance to floor (negative = collision)
-     */
+    private ObjectTerrainUtils() {}
+
+    // ========================================
+    // PUBLIC API
+    // ========================================
+
+    /** Check distance to floor from object bottom (x, y + yRadius) */
     public static TerrainCheckResult checkFloorDist(int x, int y, int yRadius) {
         return checkFloorDistAtPoint(x, y + yRadius);
     }
 
-    /**
-     * Check distance to floor from an exact point.
-     * <p>
-     * Use this when you need to check from a specific position rather than
-     * the object's bounding box bottom.
-     *
-     * @param x X position to check from
-     * @param y Y position to check from
-     * @return TerrainCheckResult with distance to floor (negative = collision)
-     */
+    /** Check distance to floor from exact point */
     public static TerrainCheckResult checkFloorDist(int x, int y) {
         return checkFloorDistAtPoint(x, y);
     }
 
-    /**
-     * Check distance to ceiling from the top of an object.
-     * <p>
-     * Checks from (x, y - yRadius) which represents the top center of the object.
-     *
-     * @param x Object center X position
-     * @param y Object center Y position
-     * @param yRadius Object's vertical radius (half-height)
-     * @return TerrainCheckResult with distance to ceiling (negative = collision)
-     */
+    /** Check distance to ceiling from object top (x, y - yRadius) */
     public static TerrainCheckResult checkCeilingDist(int x, int y, int yRadius) {
         return checkCeilingDistAtPoint(x, y - yRadius);
     }
 
-    /**
-     * Check distance to right wall from an object.
-     * <p>
-     * Mirrors ROM's ObjCheckRightWallDist (s2.asm line 43871).
-     * Checks from (x + xOffset, y) for wall collision to the right.
-     *
-     * @param x X position to check from (typically object center + offset)
-     * @param y Y position to check from (typically object center)
-     * @return TerrainCheckResult with distance to wall (negative = collision)
-     */
+    /** Check distance to right wall (ROM: ObjCheckRightWallDist s2.asm:43871) */
     public static TerrainCheckResult checkRightWallDist(int x, int y) {
         return checkWallDistAtPoint(x, y, false);
     }
 
-    /**
-     * Check distance to left wall from an object.
-     * <p>
-     * Mirrors ROM's ObjCheckLeftWallDist (s2.asm line 44063).
-     * Checks from (x - xOffset, y) for wall collision to the left.
-     *
-     * @param x X position to check from (typically object center - offset)
-     * @param y Y position to check from (typically object center)
-     * @return TerrainCheckResult with distance to wall (negative = collision)
-     */
+    /** Check distance to left wall (ROM: ObjCheckLeftWallDist s2.asm:44063) */
     public static TerrainCheckResult checkLeftWallDist(int x, int y) {
         return checkWallDistAtPoint(x, y, true);
     }
 
-    /**
-     * Internal floor distance check at exact position.
-     * Implements the same logic as ringCheckFloorDist in RingManager's lost ring pool.
-     */
+    // ========================================
+    // FLOOR COLLISION
+    // ========================================
+
     private static TerrainCheckResult checkFloorDistAtPoint(int x, int y) {
-        LevelManager levelManager = LevelManager.getInstance();
-        if (levelManager == null) {
-            return TerrainCheckResult.noCollision();
-        }
+        LevelManager lm = LevelManager.getInstance();
+        if (lm == null) return TerrainCheckResult.noCollision();
 
-        ChunkDesc chunkDesc = levelManager.getChunkDescAt((byte) 0, x, y);
-        SolidTile tile = getSolidTile(levelManager, chunkDesc, SOLIDITY_TOP);
-        byte metric = getHeightMetric(tile, chunkDesc, x, y);
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, y);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_TOP);
+        byte metric = getHeightMetric(tile, desc, x);
 
         if (metric == 0) {
-            // No solid surface at this tile - check 16 pixels down (extension)
-            int nextY = y + 16;
-            ChunkDesc nextDesc = levelManager.getChunkDescAt((byte) 0, x, nextY);
-            SolidTile nextTile = getSolidTile(levelManager, nextDesc, SOLIDITY_TOP);
-            byte nextMetric = getHeightMetric(nextTile, nextDesc, x, nextY);
-
-            if (nextMetric > 0) {
-                int dist = calculateDistance(nextMetric, y, nextY);
-                byte angle = nextTile != null ? nextTile.getAngle() : 0;
-                int tileIdx = nextDesc != null ? nextDesc.getChunkIndex() : -1;
-                return new TerrainCheckResult(dist, angle, tileIdx);
-            }
-            return TerrainCheckResult.noCollision();
+            // No surface - extend 16 pixels down
+            return checkFloorExtension(lm, x, y);
         }
 
-        if (metric == 16) {
-            // Full height tile - check previous tile up for edge detection
-            int prevY = y - 16;
-            ChunkDesc prevDesc = levelManager.getChunkDescAt((byte) 0, x, prevY);
-            SolidTile prevTile = getSolidTile(levelManager, prevDesc, SOLIDITY_TOP);
-            byte prevMetric = getHeightMetric(prevTile, prevDesc, x, prevY);
-            if (prevMetric > 0 && prevMetric < 16) {
-                int dist = calculateDistance(prevMetric, y, prevY);
-                byte angle = prevTile != null ? prevTile.getAngle() : 0;
-                int tileIdx = prevDesc != null ? prevDesc.getChunkIndex() : -1;
-                return new TerrainCheckResult(dist, angle, tileIdx);
-            }
+        if (metric == FULL_TILE) {
+            // Full tile - check previous tile up for edge detection
+            TerrainCheckResult edgeResult = checkFloorEdge(lm, x, y);
+            if (edgeResult != null) return edgeResult;
         }
 
-        // Standard case: use current tile's metric
-        int dist = calculateDistance(metric, y, y);
-        byte angle = tile != null ? tile.getAngle() : 0;
-        int tileIdx = chunkDesc != null ? chunkDesc.getChunkIndex() : -1;
-        return new TerrainCheckResult(dist, angle, tileIdx);
+        return createFloorResult(tile, desc, metric, y, y);
     }
 
-    /**
-     * Internal ceiling distance check at exact position.
-     * Mirrors floor check but inverted for ceiling detection.
-     */
+    private static TerrainCheckResult checkFloorExtension(LevelManager lm, int x, int y) {
+        int nextY = y + 16;
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, nextY);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_TOP);
+        byte metric = getHeightMetric(tile, desc, x);
+
+        if (metric > 0) {
+            return createFloorResult(tile, desc, metric, y, nextY);
+        }
+        return TerrainCheckResult.noCollision();
+    }
+
+    private static TerrainCheckResult checkFloorEdge(LevelManager lm, int x, int y) {
+        int prevY = y - 16;
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, prevY);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_TOP);
+        byte metric = getHeightMetric(tile, desc, x);
+
+        if (metric > 0 && metric < FULL_TILE) {
+            return createFloorResult(tile, desc, metric, y, prevY);
+        }
+        return null;
+    }
+
+    private static TerrainCheckResult createFloorResult(SolidTile tile, ChunkDesc desc,
+                                                        byte metric, int checkY, int tileY) {
+        // ROM formula (FindFloor s2.asm:42994-42999):
+        // dist = 15 - (metric + (tileY & 0xF)) + (tileY - checkY)
+        int yInTile = tileY & 0x0F;
+        int dist = 15 - (metric + yInTile) + (tileY - checkY);
+        return new TerrainCheckResult(dist, getAngle(tile), getTileIndex(desc));
+    }
+
+    // ========================================
+    // CEILING COLLISION
+    // ========================================
+
     private static TerrainCheckResult checkCeilingDistAtPoint(int x, int y) {
-        LevelManager levelManager = LevelManager.getInstance();
-        if (levelManager == null) {
-            return TerrainCheckResult.noCollision();
-        }
+        LevelManager lm = LevelManager.getInstance();
+        if (lm == null) return TerrainCheckResult.noCollision();
 
-        ChunkDesc chunkDesc = levelManager.getChunkDescAt((byte) 0, x, y);
-        SolidTile tile = getSolidTile(levelManager, chunkDesc, SOLIDITY_ALL);
-        byte metric = getWidthMetric(tile, chunkDesc, x, y);
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, y);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_ALL);
+        byte metric = getCeilingMetric(tile, desc, y);
 
         if (metric == 0) {
-            // No solid surface - check 16 pixels up
-            int prevY = y - 16;
-            ChunkDesc prevDesc = levelManager.getChunkDescAt((byte) 0, x, prevY);
-            SolidTile prevTile = getSolidTile(levelManager, prevDesc, SOLIDITY_ALL);
-            byte prevMetric = getWidthMetric(prevTile, prevDesc, x, prevY);
-            if (prevMetric > 0) {
-                int dist = calculateCeilingDistance(prevMetric, y, prevY);
-                byte angle = prevTile != null ? prevTile.getAngle() : 0;
-                int tileIdx = prevDesc != null ? prevDesc.getChunkIndex() : -1;
-                return new TerrainCheckResult(dist, angle, tileIdx);
-            }
-            return TerrainCheckResult.noCollision();
+            return checkCeilingExtension(lm, x, y);
         }
 
-        if (metric == 16) {
-            // Full width tile - check next tile down for edge
-            int nextY = y + 16;
-            ChunkDesc nextDesc = levelManager.getChunkDescAt((byte) 0, x, nextY);
-            SolidTile nextTile = getSolidTile(levelManager, nextDesc, SOLIDITY_ALL);
-            byte nextMetric = getWidthMetric(nextTile, nextDesc, x, nextY);
-            if (nextMetric > 0 && nextMetric < 16) {
-                int dist = calculateCeilingDistance(nextMetric, y, nextY);
-                byte angle = nextTile != null ? nextTile.getAngle() : 0;
-                int tileIdx = nextDesc != null ? nextDesc.getChunkIndex() : -1;
-                return new TerrainCheckResult(dist, angle, tileIdx);
-            }
+        if (metric == FULL_TILE) {
+            TerrainCheckResult edgeResult = checkCeilingEdge(lm, x, y);
+            if (edgeResult != null) return edgeResult;
         }
 
-        int dist = calculateCeilingDistance(metric, y, y);
-        byte angle = tile != null ? tile.getAngle() : 0;
-        int tileIdx = chunkDesc != null ? chunkDesc.getChunkIndex() : -1;
-        return new TerrainCheckResult(dist, angle, tileIdx);
+        return createCeilingResult(tile, desc, metric, y, y);
     }
 
-    /**
-     * Internal wall distance check at exact position.
-     * Implements wall collision similar to ROM's FindWall (s2.asm line 43194).
-     * Uses horizontal collision array (width metrics) to detect walls.
-     *
-     * @param x X position to check
-     * @param y Y position to check
-     * @param checkingLeft true if checking left wall, false for right wall
-     */
+    private static TerrainCheckResult checkCeilingExtension(LevelManager lm, int x, int y) {
+        int prevY = y - 16;
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, prevY);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_ALL);
+        byte metric = getCeilingMetric(tile, desc, prevY);
+
+        if (metric > 0) {
+            return createCeilingResult(tile, desc, metric, y, prevY);
+        }
+        return TerrainCheckResult.noCollision();
+    }
+
+    private static TerrainCheckResult checkCeilingEdge(LevelManager lm, int x, int y) {
+        int nextY = y + 16;
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, nextY);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_ALL);
+        byte metric = getCeilingMetric(tile, desc, nextY);
+
+        if (metric > 0 && metric < FULL_TILE) {
+            return createCeilingResult(tile, desc, metric, y, nextY);
+        }
+        return null;
+    }
+
+    private static TerrainCheckResult createCeilingResult(SolidTile tile, ChunkDesc desc,
+                                                          byte metric, int checkY, int tileY) {
+        int tileTop = tileY & ~0x0F;
+        int surfaceY = tileTop + metric - 1;
+        int dist = checkY - surfaceY;
+        return new TerrainCheckResult(dist, getAngle(tile), getTileIndex(desc));
+    }
+
+    // ========================================
+    // WALL COLLISION
+    // ========================================
+
     private static TerrainCheckResult checkWallDistAtPoint(int x, int y, boolean checkingLeft) {
-        LevelManager levelManager = LevelManager.getInstance();
-        if (levelManager == null) {
-            return TerrainCheckResult.noCollision();
-        }
+        LevelManager lm = LevelManager.getInstance();
+        if (lm == null) return TerrainCheckResult.noCollision();
 
-        ChunkDesc chunkDesc = levelManager.getChunkDescAt((byte) 0, x, y);
-        SolidTile tile = getSolidTile(levelManager, chunkDesc, SOLIDITY_ALL);
-        byte metric = getWallMetric(tile, chunkDesc, x, y, checkingLeft);
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, x, y);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_ALL);
+        byte metric = getWallMetric(tile, desc, y, checkingLeft);
 
         if (metric == 0) {
-            // No solid surface at this tile - check 16 pixels in wall direction
-            // ROM: loc_1E9C2 adds a3 to d3 (a3 = +/-16), then adds 16 to result (line 43207)
-            int nextX = checkingLeft ? (x - 16) : (x + 16);
-            ChunkDesc nextDesc = levelManager.getChunkDescAt((byte) 0, nextX, y);
-            SolidTile nextTile = getSolidTile(levelManager, nextDesc, SOLIDITY_ALL);
-            byte nextMetric = getWallMetric(nextTile, nextDesc, nextX, y, checkingLeft);
-            if (nextMetric > 0) {
-                // ROM adds 16 to distance when extending to next tile (line 43207: addi.w #$10,d1)
-                int dist = calculateWallDistance(nextMetric, x, checkingLeft, 16);
-                byte angle = nextTile != null ? nextTile.getAngle() : 0;
-                int tileIdx = nextDesc != null ? nextDesc.getChunkIndex() : -1;
-                return new TerrainCheckResult(dist, angle, tileIdx);
-            }
-            return TerrainCheckResult.noCollision();
+            return checkWallExtension(lm, x, y, checkingLeft);
         }
 
-        if (metric == 16) {
-            // Full width tile - check previous tile for edge detection
-            // ROM: loc_1EA4A subtracts a3 from d3, then subtracts 16 from result (line 43264)
-            int prevX = checkingLeft ? (x + 16) : (x - 16);
-            ChunkDesc prevDesc = levelManager.getChunkDescAt((byte) 0, prevX, y);
-            SolidTile prevTile = getSolidTile(levelManager, prevDesc, SOLIDITY_ALL);
-            byte prevMetric = getWallMetric(prevTile, prevDesc, prevX, y, checkingLeft);
-            if (prevMetric > 0 && prevMetric < 16) {
-                // ROM subtracts 16 from distance when checking previous tile (line 43264: subi.w #$10,d1)
-                int dist = calculateWallDistance(prevMetric, x, checkingLeft, -16);
-                byte angle = prevTile != null ? prevTile.getAngle() : 0;
-                int tileIdx = prevDesc != null ? prevDesc.getChunkIndex() : -1;
-                return new TerrainCheckResult(dist, angle, tileIdx);
-            }
+        if (metric == FULL_TILE) {
+            TerrainCheckResult edgeResult = checkWallEdge(lm, x, y, checkingLeft);
+            if (edgeResult != null) return edgeResult;
         }
 
-        // Standard case: use current tile's metric, no offset
-        int dist = calculateWallDistance(metric, x, checkingLeft, 0);
-        byte angle = tile != null ? tile.getAngle() : 0;
-        int tileIdx = chunkDesc != null ? chunkDesc.getChunkIndex() : -1;
-        return new TerrainCheckResult(dist, angle, tileIdx);
+        return createWallResult(tile, desc, metric, x, checkingLeft, 0);
     }
 
-    /**
-     * Get the SolidTile for a ChunkDesc if it's solid.
-     */
-    private static SolidTile getSolidTile(LevelManager levelManager, ChunkDesc chunkDesc, int solidityBitIndex) {
-        if (chunkDesc == null || !chunkDesc.isSolidityBitSet(solidityBitIndex)) {
+    private static TerrainCheckResult checkWallExtension(LevelManager lm, int x, int y, boolean checkingLeft) {
+        // ROM adds 16 to distance when extending (s2.asm:43207)
+        int nextX = checkingLeft ? (x - 16) : (x + 16);
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, nextX, y);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_ALL);
+        byte metric = getWallMetric(tile, desc, y, checkingLeft);
+
+        if (metric > 0) {
+            return createWallResult(tile, desc, metric, x, checkingLeft, 16);
+        }
+        return TerrainCheckResult.noCollision();
+    }
+
+    private static TerrainCheckResult checkWallEdge(LevelManager lm, int x, int y, boolean checkingLeft) {
+        // ROM subtracts 16 from distance when checking previous (s2.asm:43264)
+        int prevX = checkingLeft ? (x + 16) : (x - 16);
+        ChunkDesc desc = lm.getChunkDescAt((byte) 0, prevX, y);
+        SolidTile tile = getSolidTile(lm, desc, SOLIDITY_ALL);
+        byte metric = getWallMetric(tile, desc, y, checkingLeft);
+
+        if (metric > 0 && metric < FULL_TILE) {
+            return createWallResult(tile, desc, metric, x, checkingLeft, -16);
+        }
+        return null;
+    }
+
+    private static TerrainCheckResult createWallResult(SolidTile tile, ChunkDesc desc,
+                                                       byte metric, int checkX, boolean checkingLeft, int tileOffset) {
+        // ROM formula (FindWall s2.asm:43246-43251)
+        int xInTile = checkX & 0x0F;
+        int dist = checkingLeft
+                ? (xInTile - metric) + tileOffset
+                : (15 - (metric + xInTile)) + tileOffset;
+        return new TerrainCheckResult(dist, getAngle(tile), getTileIndex(desc));
+    }
+
+    // ========================================
+    // METRIC HELPERS
+    // ========================================
+
+    private static SolidTile getSolidTile(LevelManager lm, ChunkDesc desc, int solidityBit) {
+        if (desc == null || !desc.isSolidityBitSet(solidityBit)) {
             return null;
         }
-        return levelManager.getSolidTileForChunkDesc(chunkDesc, solidityBitIndex);
+        return lm.getSolidTileForChunkDesc(desc, solidityBit);
     }
 
-    /**
-     * Get height metric from a solid tile, handling H/V flip.
-     * Used for floor checks.
-     */
-    private static byte getHeightMetric(SolidTile tile, ChunkDesc desc, int x, int y) {
-        if (tile == null) {
-            return 0;
-        }
+    private static byte getHeightMetric(SolidTile tile, ChunkDesc desc, int x) {
+        if (tile == null) return 0;
+
         int index = x & 0x0F;
         if (desc != null && desc.getHFlip()) {
             index = 15 - index;
         }
+
         byte metric = tile.getHeightAt((byte) index);
-        if (metric != 0 && metric != 16 && desc != null && desc.getVFlip()) {
+        if (metric != 0 && metric != FULL_TILE && desc != null && desc.getVFlip()) {
             metric = (byte) (16 - metric);
         }
         return metric;
     }
 
-    /**
-     * Get width metric from a solid tile, handling H/V flip.
-     * Used for ceiling checks (reading from width array).
-     */
-    private static byte getWidthMetric(SolidTile tile, ChunkDesc desc, int x, int y) {
-        if (tile == null) {
-            return 0;
-        }
+    private static byte getCeilingMetric(SolidTile tile, ChunkDesc desc, int y) {
+        if (tile == null) return 0;
+
         int index = y & 0x0F;
         if (desc != null && desc.getVFlip()) {
             index = 15 - index;
         }
+
         byte metric = tile.getWidthAt((byte) index);
-        if (metric != 0 && metric != 16 && desc != null && desc.getHFlip()) {
+        if (metric != 0 && metric != FULL_TILE && desc != null && desc.getHFlip()) {
             metric = (byte) (16 - metric);
         }
         return metric;
     }
 
-    /**
-     * Calculate distance to floor surface.
-     * Returns negative if surface is above checkY (collision).
-     *
-     * ROM formula from FindFloor (s2.asm lines 42994-42999):
-     *   move.w d2,d1        ; d1 = y (the tile lookup position)
-     *   andi.w #$F,d1       ; d1 = y & 0xF
-     *   add.w  d1,d0        ; d0 = height + (y & 0xF)
-     *   move.w #$F,d1       ; d1 = 15
-     *   sub.w  d0,d1        ; d1 = 15 - (height + (y & 0xF))
-     *
-     * For extension tiles (16 down), ROM uses (y+16) & 0xF then adds 16 to result.
-     * For previous tiles (16 up), ROM uses (y-16) & 0xF then subtracts 16 from result.
-     *
-     * @param metric Height metric from collision array (0-16)
-     * @param checkY The original Y position being checked
-     * @param tileY The Y position used for tile lookup (may differ for extension checks)
-     */
-    private static int calculateDistance(byte metric, int checkY, int tileY) {
-        // ROM uses the tile lookup position for yInTile calculation
-        int yInTile = tileY & 0x0F;
-        int baseDist = 15 - (metric + yInTile);
+    private static byte getWallMetric(SolidTile tile, ChunkDesc desc, int y, boolean checkingLeft) {
+        if (tile == null) return 0;
 
-        // Add offset based on which tile we're checking relative to original
-        int tileOffset = tileY - checkY;  // 0 for current, +16 for extension, -16 for previous
-        return baseDist + tileOffset;
-    }
-
-    /**
-     * Calculate distance to ceiling surface.
-     * Returns negative if surface is below checkY (collision).
-     */
-    private static int calculateCeilingDistance(byte metric, int checkY, int tileY) {
-        int tileTop = tileY & ~0x0F;
-        int surfaceY = tileTop + metric - 1;
-        return checkY - surfaceY;
-    }
-
-    /**
-     * Get wall collision metric from a solid tile, handling H/V flip.
-     * Uses the horizontal collision array (width values indexed by Y position).
-     *
-     * @param tile The solid tile to check
-     * @param desc The chunk descriptor (for flip flags)
-     * @param x X position (for flip calculations)
-     * @param y Y position (determines which row of collision data to use)
-     * @param checkingLeft true if checking left wall, false for right wall
-     */
-    private static byte getWallMetric(SolidTile tile, ChunkDesc desc, int x, int y, boolean checkingLeft) {
-        if (tile == null) {
-            return 0;
-        }
-        // Index by Y position within the 16-pixel tile
         int index = y & 0x0F;
         if (desc != null && desc.getVFlip()) {
             index = 15 - index;
         }
-        byte metric = tile.getWidthAt((byte) index);
 
-        // Handle H-flip: negate metric for collision from opposite side
+        byte metric = tile.getWidthAt((byte) index);
         boolean hFlip = desc != null && desc.getHFlip();
-        // When checking left wall on h-flipped tile, or right wall on non-flipped,
-        // the metric interpretation changes
-        if (checkingLeft != hFlip && metric != 0 && metric != 16) {
+
+        // Handle H-flip for opposite side collision
+        if (checkingLeft != hFlip && metric != 0 && metric != FULL_TILE) {
             metric = (byte) (16 - metric);
         }
-
         return metric;
     }
 
-    /**
-     * Calculate distance to wall surface using ROM's FindWall logic.
-     * <p>
-     * ROM logic (s2.asm lines 43246-43251):
-     * <pre>
-     * move.w  d3,d1       ; d1 = x position
-     * andi.w  #$F,d1      ; d1 = xInTile (0-15)
-     * add.w   d1,d0       ; d0 = metric + xInTile
-     * move.w  #$F,d1
-     * sub.w   d0,d1       ; d1 = 15 - (metric + xInTile)
-     * </pre>
-     * Returns negative when (metric + xInTile) > 15, indicating collision.
-     * <p>
-     * For left wall checks, the ROM flips xInTile with eori.w #$F,d3 (line 44070),
-     * effectively making xInTile = 15 - (x & 0x0F).
-     *
-     * @param metric The wall collision metric (0-16)
-     * @param checkX The X position being checked
-     * @param checkingLeft true if checking left wall, false for right wall
-     * @param tileOffset 0 for same tile, +16 for extension tile, -16 for previous tile
-     * @return Distance to wall (negative = collision)
-     */
-    private static int calculateWallDistance(byte metric, int checkX, boolean checkingLeft, int tileOffset) {
-        int xInTile = checkX & 0x0F;
+    private static byte getAngle(SolidTile tile) {
+        return tile != null ? tile.getAngle() : 0;
+    }
 
-        if (checkingLeft) {
-            // For left wall, ROM flips xInTile: eori.w #$F,d3 (line 44070)
-            // This gives: distance = 15 - (metric + (15 - xInTile))
-            //                      = xInTile - metric
-            return (xInTile - metric) + tileOffset;
-        } else {
-            // For right wall: distance = 15 - (metric + xInTile)
-            return (15 - (metric + xInTile)) + tileOffset;
-        }
+    private static int getTileIndex(ChunkDesc desc) {
+        return desc != null ? desc.getChunkIndex() : -1;
     }
 }
