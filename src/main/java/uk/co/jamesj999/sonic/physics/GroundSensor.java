@@ -150,18 +150,26 @@ public class GroundSensor extends Sensor {
 
             case REGRESS:
                 // Check previous tile (opposite direction)
+                // ROM behavior: if adjacent tile has no collision, preserve angle from current tile
                 int prevX = x + (direction == Direction.LEFT ? 16 : -16);
                 if (tileDebugEnabled) System.out.printf("    [REGRESS] checking prev tile at x=%d%n", prevX);
                 WallScanResult prev = scanWallTileSimple(prevX, y, solidityBit, direction);
-                return createResultWithDistance(prev.tile, prev.desc, (byte) (prev.distance - 16), direction);
+                // Use current tile's angle if adjacent tile has no collision (ROM: angle buffer not modified)
+                SolidTile prevTile = prev.tile != null ? prev.tile : result.tile;
+                ChunkDesc prevDesc = prev.tile != null ? prev.desc : result.desc;
+                return createResultWithDistance(prevTile, prevDesc, (byte) (prev.distance - 16), direction);
 
             case EXTEND:
             default:
                 // Check next tile (same direction)
+                // ROM behavior: if adjacent tile has no collision, preserve angle from current tile
                 int nextX = x + (direction == Direction.LEFT ? -16 : 16);
                 if (tileDebugEnabled) System.out.printf("    [EXTEND] checking next tile at x=%d%n", nextX);
                 WallScanResult next = scanWallTileSimple(nextX, y, solidityBit, direction);
-                return createResultWithDistance(next.tile, next.desc, (byte) (next.distance + 16), direction);
+                // Use current tile's angle if adjacent tile has no collision (ROM: angle buffer not modified)
+                SolidTile nextTile = next.tile != null ? next.tile : result.tile;
+                ChunkDesc nextDesc = next.tile != null ? next.desc : result.desc;
+                return createResultWithDistance(nextTile, nextDesc, (byte) (next.distance + 16), direction);
         }
     }
 
@@ -240,19 +248,23 @@ public class GroundSensor extends Sensor {
             boolean extend = (metric + xAdjusted >= 0);
             if (tileDebugEnabled) System.out.printf("      -> %s (negative metric, xInTile=%d xAdj=%d)%n",
                     extend ? "EXTEND" : "REGRESS", xInTile, xAdjusted);
-            return extend ? WallScanResult.extend() : WallScanResult.regress();
+            // Pass tile/desc so angle can be preserved if adjacent tile has no collision
+            return extend ? WallScanResult.extend(tile, desc) : WallScanResult.regress(tile, desc);
         }
 
         // Full-width tile: need to check previous tile
         if (metric == FULL_TILE) {
             if (tileDebugEnabled) System.out.println("      -> REGRESS (full tile)");
-            return WallScanResult.regress();
+            // Pass tile/desc so angle can be preserved if adjacent tile has no collision
+            return WallScanResult.regress(tile, desc);
         }
 
         // Standard case: calculate distance to wall surface
+        // ROM formula (s2.asm:43246-43250): distance = 15 - metric - xInTile
+        // For LEFT scans, xInTile is XORed, so: 15 - metric - (15 - origX) = origX - metric
         int distance = (direction == Direction.LEFT)
-                ? (xInTile - metric + 1)
-                : (16 - metric - xInTile);
+                ? (xInTile - metric)
+                : (15 - metric - xInTile);
         if (tileDebugEnabled) System.out.printf("      -> FOUND dist=%d (xInTile=%d)%n", distance, xInTile);
         return WallScanResult.found(distance, tile, desc);
     }
@@ -297,9 +309,10 @@ public class GroundSensor extends Sensor {
             return WallScanResult.found(dist, tile, desc);
         }
 
+        // ROM formula: distance = 15 - metric - xInTile (or xInTile - metric for LEFT)
         int distance = (direction == Direction.LEFT)
-                ? (xInTile - metric + 1)
-                : (16 - metric - xInTile);
+                ? (xInTile - metric)
+                : (15 - metric - xInTile);
         if (tileDebugEnabled) System.out.printf("      -> dist=%d%n", distance);
         return WallScanResult.found(distance, tile, desc);
     }
@@ -405,8 +418,16 @@ public class GroundSensor extends Sensor {
             return new WallScanResult(WallScanState.EXTEND, 0, null, null);
         }
 
+        static WallScanResult extend(SolidTile tile, ChunkDesc desc) {
+            return new WallScanResult(WallScanState.EXTEND, 0, tile, desc);
+        }
+
         static WallScanResult regress() {
             return new WallScanResult(WallScanState.REGRESS, 0, null, null);
+        }
+
+        static WallScanResult regress(SolidTile tile, ChunkDesc desc) {
+            return new WallScanResult(WallScanState.REGRESS, 0, tile, desc);
         }
     }
 }

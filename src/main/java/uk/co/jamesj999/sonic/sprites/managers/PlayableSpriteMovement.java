@@ -617,10 +617,35 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		updateGroundMode();
 
+		// Debug: log every frame when in non-GROUND mode to track loop traversal
+		GroundMode currentMode = sprite.getGroundMode();
+		boolean inLoopMode = currentMode != GroundMode.GROUND;
+
 		SensorResult[] groundResult = collisionSystem.terrainProbes(sprite, sprite.getGroundSensors(), "ground");
 		SensorResult leftSensor = groundResult[0];
 		SensorResult rightSensor = groundResult[1];
 		SensorResult selectedResult = selectSensorWithAngle(rightSensor, leftSensor);
+
+		if (loopDebugEnabled && inLoopMode) {
+			var sensors = sprite.getGroundSensors();
+			short[] off0 = sensors[0].getRotatedOffset();
+			short[] off1 = sensors[1].getRotatedOffset();
+			System.out.printf("[LOOP-FRAME] mode=%s angle=0x%02X pos=(%d,%d) centre=(%d,%d)%n",
+					currentMode, sprite.getAngle() & 0xFF,
+					sprite.getX(), sprite.getY(), sprite.getCentreX(), sprite.getCentreY());
+			System.out.printf("  S0: off=(%d,%d) scanPos=(%d,%d) dist=%d angle=0x%02X%n",
+					off0[0], off0[1], sprite.getCentreX() + off0[0], sprite.getCentreY() + off0[1],
+					leftSensor != null ? leftSensor.distance() : -999,
+					leftSensor != null ? leftSensor.angle() & 0xFF : 0);
+			System.out.printf("  S1: off=(%d,%d) scanPos=(%d,%d) dist=%d angle=0x%02X%n",
+					off1[0], off1[1], sprite.getCentreX() + off1[0], sprite.getCentreY() + off1[1],
+					rightSensor != null ? rightSensor.distance() : -999,
+					rightSensor != null ? rightSensor.angle() & 0xFF : 0);
+			System.out.printf("  selected=%s dist=%d topSolidBit=%d%n",
+					selectedResult == leftSensor ? "S0" : (selectedResult == rightSensor ? "S1" : "null"),
+					selectedResult != null ? selectedResult.distance() : -999,
+					sprite.getTopSolidBit());
+		}
 
 		if (selectedResult == null) {
 			if (!hasObjectSupport()) {
