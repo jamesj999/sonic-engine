@@ -106,12 +106,34 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		handleTestKey(testKey);
 
-		boolean controlLocked = sprite.getMoveLockTimer() > 0;
+		// ROM has two separate control mechanisms:
+		// 1. move_lock (moveLockTimer) - blocks left/right only, NOT jumping
+		// 2. obj_control bit 0 (controlLocked) - blocks ALL input including jumping
+		//
+		// The ControlLockTimer (slope slip) uses move_lock behavior in the ROM,
+		// so it should only block left/right movement.
+		boolean moveLocked = sprite.getMoveLockTimer() > 0;
+
+		// obj_control bit 0 - when an object (flipper, etc.) has partial control
+		// This blocks ALL input including jumping
+		boolean objControlLocked = sprite.isControlLocked();
+
 		inputRawLeft = left;
 		inputRawRight = right;
 
-		if (controlLocked || sprite.getSpringing() || sprite.isHurt()) {
-			left = right = up = down = false;
+		// Block left/right when move_lock OR obj_control OR springing OR hurt
+		if (moveLocked || objControlLocked || sprite.getSpringing() || sprite.isHurt()) {
+			left = right = false;
+		}
+		// Block up/down when hurt
+		if (sprite.isHurt()) {
+			up = down = false;
+		}
+		// Block jumping ONLY when obj_control is set (not move_lock)
+		// ROM: obj_control bit 0 skips the entire movement routine including Sonic_Jump
+		// ROM: move_lock only blocks Sonic_Move/Sonic_RollSpeed, NOT Sonic_Jump
+		if (objControlLocked) {
+			jump = false;
 		}
 
 		updatePushingOnDirectionChange(left, right);
