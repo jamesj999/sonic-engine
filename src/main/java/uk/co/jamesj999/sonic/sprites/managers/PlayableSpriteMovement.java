@@ -886,9 +886,16 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		int quadrant = (rotatedAngle + 0x20) & 0xC0;
 		int sensorIndex = (quadrant == 0x40 || quadrant == 0x00) ? 0 : 1;
 
-		// ROM uses integer velocity directly, not including subpixels
-		short projectedDx = (short) (sprite.getXSpeed() >> 8);
-		short projectedDy = (short) (sprite.getYSpeed() >> 8);
+		// ROM-accurate projection (CalcRoomInFront, s2.asm:43480-43491):
+		// The ROM adds velocity to the FULL position (including subpixels), then extracts the pixel.
+		// This correctly predicts overflow when subpixels + velocity >= 256.
+		// Old approach (velocity >> 8) lost subpixel precision, causing 1px jitter at walls.
+		int fullX = (sprite.getCentreX() << 8) + (sprite.getXSubpixel() & 0xFF);
+		int fullY = (sprite.getCentreY() << 8) + (sprite.getYSubpixel() & 0xFF);
+		int projectedFullX = fullX + sprite.getXSpeed();
+		int projectedFullY = fullY + sprite.getYSpeed();
+		short projectedDx = (short) ((projectedFullX >> 8) - sprite.getCentreX());
+		short projectedDy = (short) ((projectedFullY >> 8) - sprite.getCentreY());
 
 		if ((quadrant == 0x40 || quadrant == 0xC0) && (rotatedAngle & 0x38) == 0 && angle != 0) {
 			projectedDy += 8;
