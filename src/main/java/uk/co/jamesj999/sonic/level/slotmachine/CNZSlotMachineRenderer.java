@@ -41,13 +41,10 @@ public class CNZSlotMachineRenderer {
     // Face 4: Ring (10 rings)
     // Face 5: Bar (20 rings) - confirmed as Bar at s2.asm:59268
     //
-    // If symbols appear wrong, the ROM art order may differ from expected.
     // Verify by checking art at ROM offset 0x4EEFE (each face is 512 bytes).
 
     // Display dimensions
     private static final int SLOT_WIDTH = 32;
-    private static final int SLOT_HEIGHT = 32;
-    private static final int TOTAL_WIDTH = SLOT_WIDTH * 3;
 
     // Default offset from cage center to slot display (used when pattern scan fails)
     // These center the 96-pixel wide display and position it below the cage
@@ -145,7 +142,6 @@ public class CNZSlotMachineRenderer {
         }
 
         int offset = 0;
-        int size = slotData.length;
 
         // Convert 4bpp tiled data to linear indexed texture
         ByteBuffer textureData = GLBuffers.newDirectByteBuffer(TEXTURE_WIDTH * TEXTURE_HEIGHT);

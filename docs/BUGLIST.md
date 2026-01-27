@@ -5,9 +5,9 @@ Last updated: 2026-01-22
 ## Open Bugs
 
 - [ ] Buzzer badnik shoots projectile from wrong location (under body, instead of tail tip)
-- [ ] Air bubble collection sound is incorrect - appears to be an audio engine bug
-- [ ] ARZ: Sonic can't jump high enough to break rising pillars
-- [ ] CPZ: H-flipped staircase platforms do not activate when Sonic walks on them
+- [x] Air bubble collection sound is incorrect - appears to be an audio engine bug
+- [x] ARZ: Sonic can't jump high enough to break rising pillars
+- [ ] CPZ: H-flipped CPZ staircase platforms do not activate when Sonic walks on them
 - [ ] CPZ: Walking down staircase platforms as they move causes collision issues (Sonic teleports down instead of moving smoothly)
 - [ ] CPZ: Sideways platforms and rotating platforms have incorrect spacing/timing - not spaced out when loaded (likely shared timer issue)
 - [ ] ARZ: Arrows disappear immediately when going off-screen (should persist longer like in ROM)

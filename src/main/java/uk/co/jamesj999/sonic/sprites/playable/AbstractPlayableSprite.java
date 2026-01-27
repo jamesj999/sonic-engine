@@ -576,10 +576,11 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         }
 
         public void setAir(boolean air) {
-                // If landing from hurt state, clear hurt flag
+                // If landing from hurt state, clear hurt flag and high-priority rendering
                 // (invulnerableFrames already set in applyHurt() per ROM behavior)
                 if (!air && this.air && hurt) {
                         hurt = false;
+                        setHighPriority(false);
                 }
                 // Reset rolling jump flag when landing
                 if (!air && this.air) {

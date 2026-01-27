@@ -337,9 +337,10 @@ public class CNZBumperManager {
             return;
         }
 
-        // If player is far below center, bounce down
+        // If player is far below center, bounce RIGHT (not down)
+        // ROM: loc_1777E sets x_vel = $A00
         if (-dy >= NARROW_THRESHOLD) {
-            player.setYSpeed((short) BOUNCE_VELOCITY);
+            player.setXSpeed((short) BOUNCE_VELOCITY);
             return;
         }
 
@@ -359,9 +360,10 @@ public class CNZBumperManager {
         // dx = bumper_x - player_x (positive means player is left of bumper)
         int dx = bumper.x() - playerX;
 
-        // If player is sufficiently left of bumper (hit from left), bounce left
+        // If player is sufficiently left of bumper, bounce RIGHT (not left)
+        // ROM: loc_177A4 sets x_vel = $A00
         if (dx >= NARROW_SMALL_THRESHOLD) {
-            player.setXSpeed((short) -BOUNCE_VELOCITY);
+            player.setXSpeed((short) BOUNCE_VELOCITY);
             return;
         }
 
@@ -374,9 +376,10 @@ public class CNZBumperManager {
             return;
         }
 
-        // If player is far below center, bounce down
+        // If player is far below center, bounce RIGHT (not down)
+        // ROM: loc_177D4 sets x_vel = $A00
         if (-dy >= NARROW_THRESHOLD) {
-            player.setYSpeed((short) BOUNCE_VELOCITY);
+            player.setXSpeed((short) BOUNCE_VELOCITY);
             return;
         }
 

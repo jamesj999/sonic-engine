@@ -553,16 +553,16 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
 
     @Override
     public int getPriorityBucket() {
-        // Use bucket 3 to render after player (bucket 2) in same pass when occupied
-        return playerOccupied ? RenderPriority.clamp(3) : RenderPriority.clamp(4);
+        // Use bucket 3 to render after player (bucket 2) in same pass
+        return RenderPriority.clamp(3);
     }
 
     /**
-     * Make cage high-priority when player is inside (Bug fix #4).
-     * This ensures the cage renders in front of Sonic when he's captured.
+     * Make cage high-priority.
+     * This ensures the cage renders in front of Sonic.
      */
     @Override
     public boolean isHighPriority() {
-        return playerOccupied;
+        return true;
     }
 }

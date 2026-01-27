@@ -352,6 +352,10 @@ public class GameLoop {
                     startNextZoneFade();
                     return;
                 }
+                if (levelManager.consumeZoneActRequest()) {
+                    startZoneActFade(levelManager.getRequestedZone(), levelManager.getRequestedAct());
+                    return;
+                }
             }
 
             boolean freezeForArtViewer = GameServices.debugOverlay()
@@ -993,6 +997,34 @@ public class GameLoop {
         FadeManager.getInstance().startFadeFromBlack(null);
 
         LOGGER.info("Loaded next zone");
+    }
+
+    /**
+     * Starts the fade-to-black transition for a specific zone/act.
+     */
+    private void startZoneActFade(int zone, int act) {
+        LOGGER.info("Starting fade-to-black for zone " + zone + " act " + act);
+
+        AudioManager.getInstance().fadeOutMusic();
+
+        FadeManager.getInstance().startFadeToBlack(() -> {
+            doZoneAct(zone, act);
+        });
+    }
+
+    /**
+     * Actually loads the specified zone/act after fade-to-black completes.
+     */
+    private void doZoneAct(int zone, int act) {
+        try {
+            levelManager.loadZoneAndAct(zone, act);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load zone " + zone + " act " + act, e);
+        }
+
+        FadeManager.getInstance().startFadeFromBlack(null);
+
+        LOGGER.info("Loaded zone " + zone + " act " + act);
     }
 
     /**

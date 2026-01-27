@@ -18,23 +18,29 @@ import java.util.List;
  * A platform that moves vertically when the player stands on it, returning to
  * its original position when the player leaves.
  * <p>
+ * <b>Movement Model:</b>
+ * The elevator always accelerates toward the spawn position (objoff_32 in ROM).
+ * When velocity reaches zero (after overshooting), it snaps to spawn and then
+ * applies a position offset to reach the destination. This creates smooth
+ * deceleration as the platform approaches the spawn point.
+ * <p>
  * <b>Behavior (State Machine):</b>
  * <ul>
  *   <li>State 0: Wait for contact - platform waits for player to stand on it</li>
- *   <li>State 2: Move up - elevator rises toward initial Y position, plays sound</li>
- *   <li>State 4: Player departs - waits for player to leave the platform</li>
- *   <li>State 6: Return - elevator returns down to spawn position</li>
+ *   <li>State 2: Move toward spawn - accelerates toward spawn Y, ends at opposite extreme</li>
+ *   <li>State 4: Player departs - waits for player to leave (no collision in this state)</li>
+ *   <li>State 6: Return - accelerates toward spawn Y, ends at initial position (no collision)</li>
  * </ul>
  * <p>
  * <b>Subtype Encoding:</b>
  * <ul>
  *   <li>subtype * 4 = Y offset from spawn position</li>
  *   <li>Bit 3 of render flags (x_flip) inverts direction:
- *       Clear = platform starts ABOVE spawn, moves DOWN to spawn, then UP;
- *       Set = platform starts BELOW spawn, moves UP to spawn, then DOWN</li>
+ *       Clear (normal) = starts ABOVE spawn, ends BELOW spawn, returns ABOVE;
+ *       Set (inverted) = starts BELOW spawn, ends ABOVE spawn, returns BELOW</li>
  * </ul>
  * <p>
- * <b>Disassembly Reference:</b> s2.asm ObjD5 (CNZ Elevator)
+ * <b>Disassembly Reference:</b> s2.asm ObjD5 (CNZ Elevator), lines 58376-58498
  */
 public class ElevatorObjectInstance extends BoxObjectInstance
         implements SolidObjectProvider, SolidObjectListener {
@@ -45,8 +51,10 @@ public class ElevatorObjectInstance extends BoxObjectInstance
     private static final int STATE_PLAYER_DEPARTS = 4;
     private static final int STATE_RETURN = 6;
 
-    // Movement velocity: 8 pixels per frame (in 16.8 fixed point = 0x800)
-    private static final int VELOCITY_INCREMENT = 0x800;
+    // Movement velocity: ROM uses moveq #8,d1 then add.w d1,y_vel(a0)
+    // ObjectMove shifts velocity left 8 bits when adding to 16.16 position.
+    // Our 16.8 fixed-point needs the raw value (8), not scaled.
+    private static final int VELOCITY_INCREMENT = 8;
 
     // Platform collision dimensions
     // d1 = 0x10 (half-width = 16 pixels)
@@ -60,9 +68,9 @@ public class ElevatorObjectInstance extends BoxObjectInstance
     private int ySub;           // 16.8 fixed-point Y position
     private int yVel;           // Y velocity in 16.8 fixed-point
 
-    // Target positions
-    private int baseY;          // Original spawn Y position
-    private int targetY;        // Target Y position based on subtype
+    // Movement parameters
+    private int baseY;          // Original spawn Y position (objoff_32 in ROM)
+    private int yOffset;        // Movement range: subtype * 4
 
     // State
     private int state;
@@ -84,28 +92,24 @@ public class ElevatorObjectInstance extends BoxObjectInstance
         x = spawn.x();
         baseY = spawn.y();
 
-        // Inverted flag from bit 3 of render flags (status.npc.x_flip)
-        inverted = (spawn.renderFlags() & 0x08) != 0;
+        // Inverted flag from x_flip bit of render flags (bit 0 after extraction from yWord bit 13)
+        // ROM uses status.npc.x_flip (bit 3 of status), but we extract x_flip to bit 0 of renderFlags
+        inverted = (spawn.renderFlags() & 0x01) != 0;
 
-        // Y offset = subtype * 4
-        int yOffset = (spawn.subtype() & 0xFF) * 4;
+        // Y offset = subtype * 4 (stored for use in state transitions)
+        yOffset = (spawn.subtype() & 0xFF) * 4;
 
+        // ROM Init (s2.asm lines 58396-58405):
+        // Normal (x_flip=0): y_pos = spawn - offset (starts ABOVE spawn)
+        // Inverted (x_flip=1): y_pos = spawn + offset (starts BELOW spawn)
         if (inverted) {
-            // Inverted: platform starts BELOW spawn, moves UP to spawn, then DOWN
-            // Initial position is at spawn Y
-            // Target is spawn Y + offset (below spawn)
-            y = baseY;
-            targetY = baseY + yOffset;
+            y = baseY + yOffset;
         } else {
-            // Normal: platform starts ABOVE spawn (at target), moves DOWN to spawn, then UP
-            // Initial position is spawn Y - offset (above spawn)
-            // Target is spawn Y - offset
             y = baseY - yOffset;
-            targetY = baseY - yOffset;
         }
 
-        // Initialize 16.8 fixed-point position (y_sub = 0x8000 equivalent)
-        ySub = y << 8;
+        // Initialize 16.8 fixed-point position (ROM uses 0x8000 = 0.5 fractional)
+        ySub = (y << 8) | 0x80;
         yVel = 0;
         state = STATE_WAIT_FOR_CONTACT;
 
@@ -141,6 +145,11 @@ public class ElevatorObjectInstance extends BoxObjectInstance
 
     @Override
     public boolean isSolidFor(AbstractPlayableSprite player) {
+        // ROM (s2.asm lines 58412-58417): Platform collision only runs in states 0, 2, 4.
+        // State 6 (return) has NO collision - player cannot stand on returning elevator.
+        if (state == STATE_RETURN) {
+            return false;
+        }
         return !isDestroyed();
     }
 
@@ -153,16 +162,28 @@ public class ElevatorObjectInstance extends BoxObjectInstance
 
     @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
+        // Apply velocity FIRST (matches ROM ObjectMove timing)
+        applyVelocity();
+
         boolean standing = (frameCounter - lastContactFrame) <= 1;
 
         switch (state) {
             case STATE_WAIT_FOR_CONTACT -> updateWaitForContact(standing);
-            case STATE_MOVE_UP -> updateMoveUp();
+            case STATE_MOVE_UP -> updateMoveUpAcceleration();
             case STATE_PLAYER_DEPARTS -> updatePlayerDeparts(standing);
-            case STATE_RETURN -> updateReturn();
+            case STATE_RETURN -> updateReturnAcceleration();
         }
 
         refreshDynamicSpawn();
+    }
+
+    /**
+     * Apply velocity to position (matches ROM ObjectMove timing).
+     * Called BEFORE state handlers add acceleration.
+     */
+    private void applyVelocity() {
+        ySub += yVel;
+        y = ySub >> 8;
     }
 
     /**
@@ -177,35 +198,40 @@ public class ElevatorObjectInstance extends BoxObjectInstance
     }
 
     /**
-     * State 2: Move up toward target position.
-     * Velocity accumulates by ±8 per frame (acceleration toward target).
-     * When velocity reaches zero (after overshooting and direction change),
-     * transition to State 4 (player departs).
+     * State 2: Accelerate toward spawn position (baseY).
      * <p>
-     * ROM behavior (s2.asm lines 58438-58448):
-     * - add.w d1,y_vel(a0) - velocity += ±8 (accumulates)
-     * - bne.s + - if velocity != 0, return (only transition when vel == 0)
+     * ROM behavior (s2.asm lines 58438-58457):
+     * - Always accelerates toward objoff_32 (spawn Y), not a fixed target
+     * - When velocity reaches 0, snaps to spawn then applies end position offset
+     * - End position is OPPOSITE of initial position:
+     *   - x_flip=0: End at spawn + offset (BELOW spawn)
+     *   - x_flip=1: End at spawn - offset (ABOVE spawn)
      */
-    private void updateMoveUp() {
-        int target = inverted ? baseY : targetY;
-
-        // Add to velocity based on direction to target (acceleration)
-        // ROM: moveq #8,d1 / moveq #-8,d1 then add.w d1,y_vel(a0)
-        if (y > target) {
-            yVel -= VELOCITY_INCREMENT;  // Accelerate upward
-        } else if (y < target) {
-            yVel += VELOCITY_INCREMENT;  // Accelerate downward
+    private void updateMoveUpAcceleration() {
+        // Accelerate toward spawn (baseY)
+        if (y < baseY) {
+            yVel += VELOCITY_INCREMENT;  // Below spawn, accelerate down
+        } else if (y > baseY) {
+            yVel -= VELOCITY_INCREMENT;  // Above spawn, accelerate up
         }
 
-        // Apply velocity to position
-        ySub += yVel;
-        y = ySub >> 8;
-
         // ROM: bne.s + - transition only when velocity == 0
-        // This naturally occurs when platform overshoots and direction changes
         if (yVel == 0) {
-            y = target;
-            ySub = target << 8;
+            // Snap to spawn
+            y = baseY;
+            ySub = baseY << 8;
+
+            // Apply State 2 end position (opposite of initial position)
+            // ROM (s2.asm lines 58447-58457):
+            // x_flip=0: y_pos = spawn + offset (BELOW spawn)
+            // x_flip=1: y_pos = spawn - offset (ABOVE spawn)
+            if (inverted) {
+                y -= yOffset;  // x_flip=1: end ABOVE spawn
+            } else {
+                y += yOffset;  // x_flip=0: end BELOW spawn
+            }
+            ySub = y << 8;
+
             state = STATE_PLAYER_DEPARTS;
         }
     }
@@ -222,33 +248,40 @@ public class ElevatorObjectInstance extends BoxObjectInstance
     }
 
     /**
-     * State 6: Return to spawn position.
-     * Velocity accumulates by ±8 per frame (acceleration toward target).
-     * When velocity reaches zero (after overshooting and direction change),
-     * transition back to State 0 (wait for contact).
+     * State 6: Return to spawn position (baseY), then back to initial position.
      * <p>
-     * ROM behavior (s2.asm lines 58472-58492):
-     * - add.w d1,y_vel(a0) - velocity += ±8 (accumulates)
-     * - bne.s + - if velocity != 0, return (only transition when vel == 0)
+     * ROM behavior (s2.asm lines 58472-58491):
+     * - Always accelerates toward objoff_32 (spawn Y)
+     * - When velocity reaches 0, snaps to spawn then applies end position offset
+     * - End position is SAME as initial position (back to start):
+     *   - x_flip=0: End at spawn - offset (ABOVE spawn)
+     *   - x_flip=1: End at spawn + offset (BELOW spawn)
      */
-    private void updateReturn() {
-        int target = inverted ? targetY : baseY;
-
-        // Add to velocity based on direction to target (acceleration)
-        if (y > target) {
-            yVel -= VELOCITY_INCREMENT;  // Accelerate upward
-        } else if (y < target) {
-            yVel += VELOCITY_INCREMENT;  // Accelerate downward
+    private void updateReturnAcceleration() {
+        // Accelerate toward spawn (baseY)
+        if (y < baseY) {
+            yVel += VELOCITY_INCREMENT;  // Below spawn, accelerate down
+        } else if (y > baseY) {
+            yVel -= VELOCITY_INCREMENT;  // Above spawn, accelerate up
         }
-
-        // Apply velocity to position
-        ySub += yVel;
-        y = ySub >> 8;
 
         // Transition only when velocity == 0
         if (yVel == 0) {
-            y = target;
-            ySub = target << 8;
+            // Snap to spawn
+            y = baseY;
+            ySub = baseY << 8;
+
+            // Apply State 6 end position (same as initial position)
+            // ROM (s2.asm lines 58481-58491):
+            // x_flip=0: y_pos = spawn - offset (ABOVE spawn) - back to start
+            // x_flip=1: y_pos = spawn + offset (BELOW spawn) - back to start
+            if (inverted) {
+                y += yOffset;  // x_flip=1: end BELOW spawn (initial position)
+            } else {
+                y -= yOffset;  // x_flip=0: end ABOVE spawn (initial position)
+            }
+            ySub = y << 8;
+
             state = STATE_WAIT_FOR_CONTACT;
         }
     }

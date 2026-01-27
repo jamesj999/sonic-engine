@@ -26,6 +26,9 @@ public final class Sonic2ObjectIds {
 
     // ARZ Badniks
     public static final int CHOP_CHOP = 0x91;
+
+    // CNZ Badniks
+    public static final int CRAWL = 0xC8;  // Bouncer badnik from CNZ - bounces player from front
     public static final int WHISP = 0x8C;
     public static final int GROUNDER_IN_WALL = 0x8D;   // Grounder hiding behind wall (spawns walls + rocks)
     public static final int GROUNDER_IN_WALL2 = 0x8E;  // Grounder variant (skips wall setup, walks immediately)
