@@ -13,6 +13,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     private final int roll2AnimId;
     private final int pushAnimId;
     private final int duckAnimId;
+    private final int lookUpAnimId;
     private final int spindashAnimId;
     private final int springAnimId;
     private final int deathAnimId;
@@ -126,6 +127,29 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int walkSpeedThreshold,
             int runSpeedThreshold,
             int fallbackFrame) {
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, duckAnimId, -1,
+                spindashAnimId, springAnimId, deathAnimId, hurtAnimId, skidAnimId, airAnimId,
+                walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
+    }
+
+    public ScriptedVelocityAnimationProfile(
+            int idleAnimId,
+            int walkAnimId,
+            int runAnimId,
+            int rollAnimId,
+            int roll2AnimId,
+            int pushAnimId,
+            int duckAnimId,
+            int lookUpAnimId,
+            int spindashAnimId,
+            int springAnimId,
+            int deathAnimId,
+            int hurtAnimId,
+            int skidAnimId,
+            int airAnimId,
+            int walkSpeedThreshold,
+            int runSpeedThreshold,
+            int fallbackFrame) {
         this.idleAnimId = Math.max(0, idleAnimId);
         this.walkAnimId = Math.max(0, walkAnimId);
         this.runAnimId = Math.max(0, runAnimId);
@@ -133,6 +157,7 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         this.roll2AnimId = Math.max(-1, roll2AnimId);
         this.pushAnimId = Math.max(-1, pushAnimId);
         this.duckAnimId = Math.max(-1, duckAnimId);
+        this.lookUpAnimId = Math.max(-1, lookUpAnimId);
         this.spindashAnimId = Math.max(-1, spindashAnimId);
         this.springAnimId = Math.max(-1, springAnimId);
         this.deathAnimId = Math.max(-1, deathAnimId);
@@ -164,6 +189,9 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         }
         if (sprite.getAir()) {
             return airAnimId;
+        }
+        if (sprite.getLookingUp() && lookUpAnimId >= 0) {
+            return lookUpAnimId;
         }
         if (sprite.getCrouching() && duckAnimId >= 0) {
             return duckAnimId;
@@ -220,6 +248,10 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     public int getDuckAnimId() {
         return duckAnimId;
+    }
+
+    public int getLookUpAnimId() {
+        return lookUpAnimId;
     }
 
     public int getSpindashAnimId() {

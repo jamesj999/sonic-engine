@@ -535,19 +535,70 @@ public class Camera {
 	}
 
 	/**
-	 * Sets the bias for looking up (ROM target: 0xC8 = 200).
-	 * This shifts the camera target up to show more area above Sonic.
-	 * ROM: s2.asm:36406-36408 - gradual shift at 2px/frame up to 0xC8.
+	 * Gradually increases bias toward the look-up target (0xC8 = 200).
+	 * ROM: s2.asm:36406-36408 - adds 2 to bias each frame until reaching 0xC8.
+	 * Call this each frame while looking up AND look delay counter >= 0x78.
 	 */
+	public void incrementLookUpBias() {
+		if (yPosBias < LOOK_UP_BIAS) {
+			yPosBias += 2;
+			if (yPosBias > LOOK_UP_BIAS) {
+				yPosBias = LOOK_UP_BIAS;
+			}
+		}
+	}
+
+	/**
+	 * Gradually decreases bias toward the look-down target (8).
+	 * ROM: s2.asm:36420-36422 - subtracts 2 from bias each frame until reaching 8.
+	 * Call this each frame while looking down AND look delay counter >= 0x78.
+	 */
+	public void decrementLookDownBias() {
+		if (yPosBias > LOOK_DOWN_BIAS) {
+			yPosBias -= 2;
+			if (yPosBias < LOOK_DOWN_BIAS) {
+				yPosBias = LOOK_DOWN_BIAS;
+			}
+		}
+	}
+
+	/**
+	 * Gradually eases bias back toward the default value (96).
+	 * ROM: s2.asm:36431-36438 (Obj01_ResetScr_Part2)
+	 * - If bias < 96: add 4, then subtract 2 (net +2 per frame)
+	 * - If bias > 96: subtract 2
+	 * Call this each frame when not actively panning.
+	 */
+	public void easeYBiasToDefault() {
+		if (yPosBias < DEFAULT_Y_BIAS) {
+			// ROM: addq.w #4, then subq.w #2 = net +2
+			yPosBias += 2;
+			if (yPosBias > DEFAULT_Y_BIAS) {
+				yPosBias = DEFAULT_Y_BIAS;
+			}
+		} else if (yPosBias > DEFAULT_Y_BIAS) {
+			// ROM: subq.w #2
+			yPosBias -= 2;
+			if (yPosBias < DEFAULT_Y_BIAS) {
+				yPosBias = DEFAULT_Y_BIAS;
+			}
+		}
+	}
+
+	/**
+	 * @deprecated Use incrementLookUpBias() for ROM-accurate gradual adjustment.
+	 * Sets the bias instantly for looking up (ROM target: 0xC8 = 200).
+	 */
+	@Deprecated
 	public void setLookUpBias() {
 		this.yPosBias = LOOK_UP_BIAS;
 	}
 
 	/**
-	 * Sets the bias for looking down/crouching (ROM target: 8).
-	 * This shifts the camera target down to show more area below Sonic.
-	 * ROM: s2.asm:36420-36422 - gradual shift at 2px/frame down to 8.
+	 * @deprecated Use decrementLookDownBias() for ROM-accurate gradual adjustment.
+	 * Sets the bias instantly for looking down/crouching (ROM target: 8).
 	 */
+	@Deprecated
 	public void setLookDownBias() {
 		this.yPosBias = LOOK_DOWN_BIAS;
 	}

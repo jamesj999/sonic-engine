@@ -441,7 +441,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		// Move lock - skip input, apply traction
 		if (sprite.getMoveLockTimer() > 0) {
-			if (camera != null) camera.resetYBias();
+			if (camera != null) camera.easeYBiasToDefault();
 			calculateXYFromGSpeed();
 			doWallCollisionGround();
 			return;
@@ -487,16 +487,55 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			sprite.setSkidding(false);
 		}
 
-		// Standing still handling
+		// Standing still handling (ROM: Sonic_Lookup, Sonic_Duck, Obj01_ResetScr)
+		// Camera pan has a 120-frame (2 second) delay before starting (s2.asm:36402-36405)
 		if (isOnFlatGround() && gSpeed == 0) {
 			sprite.setPushing(false);
-			if (camera != null) {
-				if (inputUp) camera.setLookUpBias();
-				else if (inputDown) camera.setLookDownBias();
-				else camera.resetYBias();
+			short lookDelay = sprite.getLookDelayCounter();
+			if (inputUp) {
+				// ROM: Sonic_Lookup (s2.asm:36398-36409)
+				// Animation is set immediately, camera pan has delay
+				sprite.setLookingUp(true);
+				lookDelay++;
+				if (camera != null) {
+					if (lookDelay >= 0x78) {
+						lookDelay = 0x78;  // Cap at 120 frames
+						camera.incrementLookUpBias();
+					} else {
+						// During delay, bias still eases toward default
+						camera.easeYBiasToDefault();
+					}
+				}
+			} else if (inputDown) {
+				// ROM: Sonic_Duck (s2.asm:36412-36423)
+				// Animation (crouching) is handled by updateCrouchState()
+				sprite.setLookingUp(false);
+				lookDelay++;
+				if (camera != null) {
+					if (lookDelay >= 0x78) {
+						lookDelay = 0x78;  // Cap at 120 frames
+						camera.decrementLookDownBias();
+					} else {
+						// During delay, bias still eases toward default
+						camera.easeYBiasToDefault();
+					}
+				}
+			} else {
+				// ROM: Obj01_ResetScr (s2.asm:36428-36429)
+				sprite.setLookingUp(false);
+				lookDelay = 0;
+				if (camera != null) {
+					camera.easeYBiasToDefault();
+				}
 			}
-		} else if (camera != null) {
-			camera.resetYBias();
+			sprite.setLookDelayCounter(lookDelay);
+		} else {
+			// Not standing still - reset state and ease bias to default
+			sprite.setLookingUp(false);
+			sprite.setLookDelayCounter((short) 0);
+			if (camera != null) {
+				camera.easeYBiasToDefault();
+			}
 		}
 
 		// Friction
@@ -545,7 +584,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	/** Sonic_RollSpeed: Roll deceleration and velocity conversion (s2.asm:36666) */
 	private void doRollSpeed() {
 		short gSpeed = sprite.getGSpeed();
-		Camera.getInstance().resetYBias();
+		Camera.getInstance().easeYBiasToDefault();
 
 		boolean inputAllowed = sprite.getMoveLockTimer() == 0;
 
@@ -615,7 +654,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			}
 		}
 
-		Camera.getInstance().resetYBias();
+		Camera.getInstance().easeYBiasToDefault();
 
 		// Air drag near apex (-1024 <= ySpeed < 0)
 		if (ySpeed < 0 && ySpeed >= -1024) {
@@ -938,6 +977,8 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		sprite.setPushing(false);
 		sprite.setRollingJump(false);
 		sprite.setJumping(false);
+		// ROM: s2.asm:37772 - reset look delay counter on landing
+		sprite.setLookDelayCounter((short) 0);
 	}
 
 	/** Landing gSpeed calculation (s2.asm:37584) */

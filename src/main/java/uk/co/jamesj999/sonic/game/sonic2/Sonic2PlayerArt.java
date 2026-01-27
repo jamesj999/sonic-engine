@@ -94,6 +94,7 @@ public class Sonic2PlayerArt {
                 Sonic2AnimationIds.ROLL2,     // roll2AnimId
                 Sonic2AnimationIds.PUSH,      // pushAnimId
                 Sonic2AnimationIds.DUCK,      // duckAnimId
+                Sonic2AnimationIds.LOOK_UP,   // lookUpAnimId
                 Sonic2AnimationIds.SPINDASH,  // spindashAnimId
                 Sonic2AnimationIds.SPRING,    // springAnimId
                 Sonic2AnimationIds.DEATH,     // deathAnimId

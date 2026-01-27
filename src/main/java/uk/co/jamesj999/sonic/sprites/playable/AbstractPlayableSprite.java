@@ -195,11 +195,24 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean crouching = false;
 
         /**
+         * Whether or not this sprite is looking up (holding up while standing still).
+         */
+        protected boolean lookingUp = false;
+
+        /**
          * ROM-accurate spindash counter (spindash_counter).
          * Range: 0x000 to 0x800 (0 to 2048).
          * Speed table is indexed by counter >> 8 (gives 0-8).
          */
         protected short spindashCounter = 0;
+
+        /**
+         * ROM: Sonic_Look_delay_counter / Tails_Look_delay_counter
+         * Counter for look up/down camera pan delay. Increments each frame while
+         * up/down is held. Camera only starts panning after this reaches 0x78 (120 frames).
+         * Reset to 0 when neither up nor down is pressed.
+         */
+        protected short lookDelayCounter = 0;
 
         private PlayerSpriteRenderer spriteRenderer;
         private int mappingFrame = 0;
@@ -341,10 +354,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.rollingJump = false;
                 this.pinballMode = false;
                 this.spindash = false;
+                this.lookDelayCounter = 0;
                 this.pushing = false;
                 this.skidding = false;
                 this.skidDustTimer = 0;
                 this.crouching = false;
+                this.lookingUp = false;
                 this.highPriority = false;
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
@@ -683,6 +698,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.crouching = crouching;
         }
 
+        public boolean getLookingUp() {
+                return lookingUp;
+        }
+
+        public void setLookingUp(boolean lookingUp) {
+                this.lookingUp = lookingUp;
+        }
+
         public boolean getPushing() {
                 return pushing;
         }
@@ -947,6 +970,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          */
         public void setSpindashCounter(short spindashCounter) {
                 this.spindashCounter = spindashCounter;
+        }
+
+        /**
+         * Get the look delay counter (ROM: Sonic_Look_delay_counter).
+         * Camera panning starts when this reaches 0x78 (120 frames).
+         */
+        public short getLookDelayCounter() {
+                return lookDelayCounter;
+        }
+
+        /**
+         * Set the look delay counter (ROM: Sonic_Look_delay_counter).
+         * @param lookDelayCounter Counter value (capped at 0x78)
+         */
+        public void setLookDelayCounter(short lookDelayCounter) {
+                this.lookDelayCounter = lookDelayCounter;
         }
 
         public boolean isForceInputRight() {

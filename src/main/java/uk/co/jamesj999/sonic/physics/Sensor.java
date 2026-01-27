@@ -42,18 +42,22 @@ public abstract class Sensor {
         GroundMode mode = sprite.getGroundMode();
         switch (mode) {
             case RIGHTWALL -> {
+                // ROM: (x, y) -> (y, x) - swap axes, no negation
+                // s2.asm Sonic_WalkVertR: sensors at (x+y_rad, y±x_rad)
                 short temp = xOffset;
                 xOffset = yOffset;
-                yOffset = (short) -temp;
+                yOffset = temp;
             }
             case CEILING -> {
                 xOffset = (short) -xOffset;
                 yOffset = (short) -yOffset;
             }
             case LEFTWALL -> {
+                // ROM: (x, y) -> (-y, x) - negate Y, then swap
+                // s2.asm Sonic_WalkVertL: sensors at (x-y_rad, y±x_rad)
                 short temp = xOffset;
                 xOffset = (short) -yOffset;
-                yOffset = (short) -temp;
+                yOffset = temp;
             }
             default -> { }
         }
