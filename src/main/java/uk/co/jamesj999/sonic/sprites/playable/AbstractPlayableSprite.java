@@ -275,6 +275,14 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
          * Set by movement manager, used by objects (like Grabber) to detect directional input.
          */
         protected boolean rightInputPressed = false;
+        /**
+         * Tracks whether the player is actively pressing a movement direction this frame,
+         * after filtering for control locks and move locks. Used by animation system to
+         * determine walk vs idle animation per ROM behavior (s2.asm:36558, 36619).
+         * ROM: Walking animation is set in Sonic_MoveLeft/MoveRight, which are only called
+         * when directional input passes control lock checks.
+         */
+        protected boolean movementInputActive = false;
         private int spiralActiveFrame = Integer.MIN_VALUE;
         private byte flipAngle = 0;
         private byte flipSpeed = 0;
@@ -367,6 +375,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.moveLockTimer = 0;
                 this.objectControlled = false;
                 this.objectControlReleasedFrame = Integer.MIN_VALUE;
+                this.movementInputActive = false;
                 this.spiralActiveFrame = Integer.MIN_VALUE;
                 this.flipAngle = 0;
                 this.flipSpeed = 0;
@@ -1099,6 +1108,22 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         public void setDirectionalInputPressed(boolean left, boolean right) {
                 this.leftInputPressed = left;
                 this.rightInputPressed = right;
+        }
+
+        /**
+         * Returns whether the player is actively pressing a movement direction this frame,
+         * after all control lock filtering. Used by animation to match ROM behavior.
+         */
+        public boolean isMovementInputActive() {
+                return movementInputActive;
+        }
+
+        /**
+         * Sets whether movement directional input is active this frame.
+         * Called by movement manager after control lock/move lock filtering.
+         */
+        public void setMovementInputActive(boolean active) {
+                this.movementInputActive = active;
         }
 
         public void markSpiralActive(int frameCounter) {

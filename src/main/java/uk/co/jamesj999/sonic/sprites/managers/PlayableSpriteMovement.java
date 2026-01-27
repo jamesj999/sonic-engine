@@ -154,6 +154,11 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		storeInputState(up, down, left, right, jump);
 
+		// ROM-accurate: Track whether effective movement input is active for animation.
+		// This is the input state AFTER control lock/move lock filtering, used to determine
+		// walk vs idle animation (ROM: Sonic_MoveLeft/MoveRight set walk anim when called).
+		sprite.setMovementInputActive(inputLeft || inputRight);
+
 		if (sprite.getSpringing()) {
 			jumpPressed = false;
 		}
