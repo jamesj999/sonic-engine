@@ -105,6 +105,7 @@ public class ObjectDiscoveryTool {
             0xA5,  // Spiny (CPZ crawling badnik)
             0xA6,  // SpinyOnWall (CPZ wall-climbing badnik)
             0xA7,  // Grabber (CPZ spider badnik)
+            0xC8,  // Crawl (CNZ bouncer badnik with shield)
             0xD2,  // CNZRectBlocks (CNZ flashing "caterpillar" blocks)
             0xD4,  // CNZBigBlock (CNZ large 64x64 oscillating platform)
             0xD5,  // CNZElevator (CNZ vertical platform that moves when stood on)

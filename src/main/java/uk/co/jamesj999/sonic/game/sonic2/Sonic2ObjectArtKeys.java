@@ -76,6 +76,9 @@ public final class Sonic2ObjectArtKeys {
     public static final String GROUNDER = "grounder";
     public static final String GROUNDER_ROCK = "grounder_rock";
 
+    // CNZ Badniks
+    public static final String CRAWL = "crawl";
+
     // ARZ Objects
     public static final String ARROW_SHOOTER = "arrow_shooter";
 }

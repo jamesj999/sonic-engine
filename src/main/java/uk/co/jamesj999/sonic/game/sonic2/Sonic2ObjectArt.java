@@ -834,6 +834,20 @@ public class Sonic2ObjectArt {
         return new ObjectSpriteSheet(patterns, mappings, 2, 0);
     }
 
+    /**
+     * Load Crawl (ObjC8) sprite sheet - bouncer badnik from CNZ.
+     * ROM: ArtNem_Crawl at 0x901A4, palette line 0
+     * 4 frames: 2 walking + 2 impact (ground/air)
+     */
+    public ObjectSpriteSheet loadCrawlSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CRAWL_ADDR, "Crawl");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = createCrawlMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
     private AnimalType[] resolveZoneAnimals(int zoneIndex) {
         if (zoneIndex < 0 || zoneIndex >= ZONE_ANIMALS.length) {
             return DEFAULT_ANIMALS;
@@ -1795,6 +1809,50 @@ public class Sonic2ObjectArt {
     }
 
     /**
+     * Creates mappings for Crawl (ObjC8) - bouncer badnik from CNZ.
+     * Based on objC8.asm sprite mappings.
+     * 4 frames: 2 walking poses + 2 impact poses (ground/air)
+     */
+    private List<SpriteMappingFrame> createCrawlMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Walking 1) - 3 pieces
+        // Shield/body with extended shield arm
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(0, -16, 3, 4, 0x10, false, false, 0));    // Shield
+        frame0.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x00, false, false, 0));  // Body
+        frame0.add(new SpriteMappingPiece(-24, 0, 3, 2, 0x24, false, false, 0));    // Feet
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Walking 2) - 3 pieces
+        // Shield/body with slightly different arm position
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(4, -16, 3, 4, 0x10, false, false, 0));    // Shield
+        frame1.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x00, false, false, 0));  // Body
+        frame1.add(new SpriteMappingPiece(-32, 0, 3, 2, 0x24, false, false, 0));    // Feet
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (Impact Ground) - 3 pieces
+        // Crouched impact pose
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-24, -16, 3, 4, 0x10, false, false, 0));  // Shield
+        frame2.add(new SpriteMappingPiece(-16, 0, 3, 2, 0x24, false, false, 0));    // Feet
+        frame2.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x00, false, false, 0));  // Body
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (Impact Air) - 4 pieces
+        // Extended impact pose with spread parts
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-16, -16, 4, 2, 0x1C, false, false, 0));  // Upper body
+        frame3.add(new SpriteMappingPiece(-8, 0, 3, 2, 0x24, false, false, 0));     // Right foot
+        frame3.add(new SpriteMappingPiece(-32, 0, 3, 2, 0x24, true, false, 0));     // Left foot (H-flipped)
+        frame3.add(new SpriteMappingPiece(-16, -16, 4, 4, 0x00, false, false, 0));  // Body
+        frames.add(new SpriteMappingFrame(frame3));
+
+        return frames;
+    }
+
+    /**
      * Creates mappings for Animal (Obj28) - all animal variants.
      * Based on obj28_a-e.asm (S2 disassembly).
      */
@@ -2333,7 +2391,7 @@ public class Sonic2ObjectArt {
         // spritePiece    0, -8, 2, 2, 4  ; Right piece at (0, -8), tiles +4
         List<SpriteMappingPiece> pieces = new ArrayList<>();
         pieces.add(new SpriteMappingPiece(-16, -8, 2, 2, 0, false, false, 0));  // Left piece
-        pieces.add(new SpriteMappingPiece(0, -8, 2, 2, 4, false, false, 0));    // Right piece
+        pieces.add(new SpriteMappingPiece(0, -8, 2, 2, 0, true, false, 0));     // Right piece - tile 0 with H-flip
         frames.add(new SpriteMappingFrame(pieces));
 
         return frames;

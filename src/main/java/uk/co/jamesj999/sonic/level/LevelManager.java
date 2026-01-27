@@ -142,6 +142,9 @@ public class LevelManager {
     private boolean respawnRequested;
     private boolean nextActRequested;
     private boolean nextZoneRequested;
+    private boolean specificZoneActRequested;
+    private int requestedZone = -1;
+    private int requestedAct = -1;
 
     // Background rendering support
     private final ParallaxManager parallaxManager = ParallaxManager.getInstance();
@@ -2239,6 +2242,47 @@ public class LevelManager {
         boolean requested = nextZoneRequested;
         nextZoneRequested = false;
         return requested;
+    }
+
+    /**
+     * Request transition to a specific zone and act. GameLoop will handle the fade transition.
+     *
+     * @param zone the zone index (0-based)
+     * @param act the act index (0-based)
+     */
+    public void requestZoneAndAct(int zone, int act) {
+        this.requestedZone = zone;
+        this.requestedAct = act;
+        this.specificZoneActRequested = true;
+    }
+
+    /**
+     * Check and consume specific zone/act request.
+     *
+     * @return true if a specific zone/act was requested
+     */
+    public boolean consumeZoneActRequest() {
+        boolean requested = specificZoneActRequested;
+        specificZoneActRequested = false;
+        return requested;
+    }
+
+    /**
+     * Get the requested zone index. Only valid after consumeZoneActRequest() returns true.
+     *
+     * @return the requested zone index
+     */
+    public int getRequestedZone() {
+        return requestedZone;
+    }
+
+    /**
+     * Get the requested act index. Only valid after consumeZoneActRequest() returns true.
+     *
+     * @return the requested act index
+     */
+    public int getRequestedAct() {
+        return requestedAct;
     }
 
     /**

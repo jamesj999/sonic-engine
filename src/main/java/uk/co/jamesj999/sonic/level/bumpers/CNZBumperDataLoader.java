@@ -1,6 +1,7 @@
 package uk.co.jamesj999.sonic.level.bumpers;
 
 import uk.co.jamesj999.sonic.data.Rom;
+import uk.co.jamesj999.sonic.game.sonic2.constants.Sonic2Constants;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -33,18 +34,6 @@ public class CNZBumperDataLoader {
     private static final Logger LOGGER = Logger.getLogger(CNZBumperDataLoader.class.getName());
 
     /**
-     * ROM address of CNZ Act 1 bumper data.
-     * This matches SpecialCNZBumpers_Act1 label location.
-     */
-    public static final int CNZ_BUMPERS_ACT1_ADDR = 0x1781A;
-
-    /**
-     * ROM address of CNZ Act 2 bumper data.
-     * This matches SpecialCNZBumpers_Act2 label location.
-     */
-    public static final int CNZ_BUMPERS_ACT2_ADDR = 0x1795E;
-
-    /**
      * Size of each bumper entry in bytes.
      * <ul>
      *   <li>2 bytes: bumper_id (type)</li>
@@ -69,8 +58,8 @@ public class CNZBumperDataLoader {
      * @throws IOException If ROM read fails
      */
     public List<CNZBumperSpawn> load(Rom rom, int act) throws IOException {
-        int baseAddr = (act == 0) ? CNZ_BUMPERS_ACT1_ADDR : CNZ_BUMPERS_ACT2_ADDR;
-        int endAddr = (act == 0) ? CNZ_BUMPERS_ACT2_ADDR : (CNZ_BUMPERS_ACT2_ADDR + 324); // Approx end
+        int baseAddr = (act == 0) ? Sonic2Constants.CNZ_BUMPERS_ACT1_ADDR : Sonic2Constants.CNZ_BUMPERS_ACT2_ADDR;
+        int endAddr = (act == 0) ? Sonic2Constants.CNZ_BUMPERS_ACT2_ADDR : (Sonic2Constants.CNZ_BUMPERS_ACT2_ADDR + 324); // Approx end
 
         List<CNZBumperSpawn> bumpers = new ArrayList<>();
         int index = 0;

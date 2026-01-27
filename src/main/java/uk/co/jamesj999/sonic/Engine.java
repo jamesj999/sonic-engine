@@ -20,7 +20,9 @@ import uk.co.jamesj999.sonic.sprites.playable.AbstractPlayableSprite;
 import uk.co.jamesj999.sonic.sprites.playable.Sonic;
 import uk.co.jamesj999.sonic.sprites.playable.Tails;
 import uk.co.jamesj999.sonic.game.GameMode;
+import uk.co.jamesj999.sonic.game.GameModuleRegistry;
 import uk.co.jamesj999.sonic.game.TitleCardProvider;
+import uk.co.jamesj999.sonic.game.ZoneRegistry;
 import uk.co.jamesj999.sonic.game.sonic2.specialstage.Sonic2SpecialStageManager;
 
 import com.jogamp.opengl.GL2;
@@ -325,6 +327,11 @@ public class Engine extends GLCanvas implements GLEventListener {
 				});
 				fileMenu.add(optionsItem);
 				menuBar.add(fileMenu);
+
+				JMenu loadMenu = new JMenu("Load");
+				populateLoadMenu(loadMenu);
+				menuBar.add(loadMenu);
+
 				frame.setJMenuBar(menuBar);
 				((Engine) canvas).setInputHandler(new InputHandler(canvas));
 				frame.addWindowListener(new WindowAdapter() {
@@ -534,5 +541,48 @@ public class Engine extends GLCanvas implements GLEventListener {
 
 	public static void nextDebugOption() {
 		debugOption = debugOption.next();
+	}
+
+	/**
+	 * Populates the Load menu with zones and acts from the current game module.
+	 */
+	private static void populateLoadMenu(JMenu loadMenu) {
+		try {
+			if (GameModuleRegistry.getCurrent() == null) {
+				JMenuItem placeholder = new JMenuItem("(No ROM loaded)");
+				placeholder.setEnabled(false);
+				loadMenu.add(placeholder);
+				return;
+			}
+
+			ZoneRegistry registry = GameModuleRegistry.getCurrent().getZoneRegistry();
+			LevelManager levelManager = LevelManager.getInstance();
+
+			for (int zoneIdx = 0; zoneIdx < registry.getZoneCount(); zoneIdx++) {
+				String zoneName = registry.getZoneName(zoneIdx);
+				int actCount = registry.getActCount(zoneIdx);
+
+				if (actCount == 1) {
+					JMenuItem zoneItem = new JMenuItem(zoneName);
+					final int zone = zoneIdx;
+					zoneItem.addActionListener(e -> levelManager.requestZoneAndAct(zone, 0));
+					loadMenu.add(zoneItem);
+				} else {
+					JMenu zoneSubmenu = new JMenu(zoneName);
+					for (int actIdx = 0; actIdx < actCount; actIdx++) {
+						JMenuItem actItem = new JMenuItem("Act " + (actIdx + 1));
+						final int zone = zoneIdx;
+						final int act = actIdx;
+						actItem.addActionListener(e -> levelManager.requestZoneAndAct(zone, act));
+						zoneSubmenu.add(actItem);
+					}
+					loadMenu.add(zoneSubmenu);
+				}
+			}
+		} catch (Exception e) {
+			JMenuItem errorItem = new JMenuItem("(Error loading zones)");
+			errorItem.setEnabled(false);
+			loadMenu.add(errorItem);
+		}
 	}
 }
