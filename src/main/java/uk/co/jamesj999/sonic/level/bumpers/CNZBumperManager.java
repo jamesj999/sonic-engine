@@ -166,75 +166,114 @@ public class CNZBumperManager {
     /**
      * Type 0: Diagonal down-right bounce.
      * ROM Reference: loc_17586 at s2.asm line 32386
+     * <p>
+     * This bumper is shaped like: ◢ (solid in bottom-right, slope faces up-left)
+     * Hitting from below bounces down, from right bounces right,
+     * hitting the slope bounces at angle $20 (up-left direction).
      */
     private void applyDiagonalDownRightBounce(AbstractPlayableSprite player, CNZBumperSpawn bumper) {
-        // ROM uses x_pos and y_pos which are center positions
         int playerX = player.getCentreX();
         int playerY = player.getCentreY();
 
-        // dy = player_y - bumper_y (positive means player is below bumper)
+        // ROM: d0 = bumper_y - player_y; neg d0 → d0 = player_y - bumper_y
         int dy = playerY - bumper.y();
 
-        // If player is sufficiently below bumper, simple downward bounce
+        // If player is sufficiently below bumper center, simple downward bounce
+        // ROM: cmpi.w #$20,d0 / blt.s loc_175A0 / move.w #$A00,y_vel
         if (dy >= DIAGONAL_THRESHOLD) {
             player.setYSpeed((short) BOUNCE_VELOCITY);
             return;
         }
 
-        // dx = player_x - bumper_x (positive means player is right of bumper)
+        // ROM: d0 = bumper_x - player_x; neg d0 → d0 = player_x - bumper_x
         int dx = playerX - bumper.x();
 
-        // If player is sufficiently right of bumper, simple rightward bounce
+        // If player is sufficiently right of bumper center, simple rightward bounce
+        // ROM: cmpi.w #$20,d0 / blt.s loc_175BA / move.w #$A00,x_vel
         if (dx >= DIAGONAL_THRESHOLD) {
             player.setXSpeed((short) BOUNCE_VELOCITY);
             return;
         }
 
-        // Calculate diagonal collision point
-        // ROM checks if player is on the diagonal surface
-        int diagonalY = bumper.y() + Math.min(dx, DIAGONAL_THRESHOLD) - 8;
-        int playerBottom = playerY + 14; // Approximate player bottom
+        // Complex diagonal check at loc_175BA:
+        // ROM: d0 = bumper_x - player_x (NO neg this time - different from above!)
+        int diagDx = bumper.x() - playerX;
 
-        if (playerBottom > diagonalY) {
-            // Apply angle bounce toward $20 (down-right diagonal)
-            applyAngleBounce(player, 0x20);
+        // ROM: cmpi.w #$20,d0 / blt.s loc_175CC / move.w #$20,d0 (clamp to $20)
+        if (diagDx >= DIAGONAL_THRESHOLD) {
+            diagDx = DIAGONAL_THRESHOLD;
         }
+
+        // ROM: add.w bumper_y(a1),d0 / subq.w #8,d0
+        // This calculates the Y position of the diagonal line at player's X
+        int diagonalY = diagDx + bumper.y() - 8;
+
+        // ROM: d1 = player_y + $E (player bottom offset)
+        int playerBottom = playerY + 0x0E;
+
+        // ROM: sub.w d1,d0 / bcc.s return_175E8
+        // If diagonalY - playerBottom >= 0 (diagonal above player bottom), no collision
+        if (diagonalY >= playerBottom) {
+            return;
+        }
+
+        // Apply angle bounce toward $20 (up-left direction from down-right surface)
+        applyAngleBounce(player, 0x20);
     }
 
     /**
      * Type 1: Diagonal down-left bounce.
      * ROM Reference: loc_17638 at s2.asm line 32456
+     * <p>
+     * This bumper is shaped like: ◣ (solid in bottom-left, slope faces up-right)
+     * Hitting from below bounces down, from left bounces left,
+     * hitting the slope bounces at angle $60 (up-right direction).
      */
     private void applyDiagonalDownLeftBounce(AbstractPlayableSprite player, CNZBumperSpawn bumper) {
         int playerY = player.getCentreY();
         int playerX = player.getCentreX();
 
-        // dy = player_y - bumper_y
+        // ROM: d0 = bumper_y - player_y; neg d0 → d0 = player_y - bumper_y
         int dy = playerY - bumper.y();
 
-        // If player is sufficiently below bumper, simple downward bounce
+        // If player is sufficiently below bumper center, simple downward bounce
         if (dy >= DIAGONAL_THRESHOLD) {
             player.setYSpeed((short) BOUNCE_VELOCITY);
             return;
         }
 
-        // dx = bumper_x - player_x (positive means player is left of bumper)
+        // ROM at loc_17652: d0 = bumper_x - player_x (NO neg - different from type 0!)
         int dx = bumper.x() - playerX;
 
-        // If player is sufficiently left of bumper, simple leftward bounce
+        // If player is sufficiently left of bumper center, simple leftward bounce
+        // ROM: cmpi.w #$20,d0 / blt.s loc_1766A / move.w #-$A00,x_vel
         if (dx >= DIAGONAL_THRESHOLD) {
             player.setXSpeed((short) -BOUNCE_VELOCITY);
             return;
         }
 
-        // Calculate diagonal collision point (mirrored from type 0)
-        int diagonalY = bumper.y() + Math.min(dx, DIAGONAL_THRESHOLD) - 8;
-        int playerBottom = playerY + 14;
+        // Complex diagonal check at loc_1766A:
+        // ROM: d0 = bumper_x - player_x; neg d0 → d0 = player_x - bumper_x
+        int diagDx = playerX - bumper.x();
 
-        if (playerBottom > diagonalY) {
-            // Apply angle bounce toward $60 (down-left diagonal)
-            applyAngleBounce(player, 0x60);
+        // ROM: cmpi.w #$20,d0 / blt.s loc_1767E / move.w #$20,d0 (clamp to $20)
+        if (diagDx >= DIAGONAL_THRESHOLD) {
+            diagDx = DIAGONAL_THRESHOLD;
         }
+
+        // ROM: add.w bumper_y(a1),d0 / subq.w #8,d0
+        int diagonalY = diagDx + bumper.y() - 8;
+
+        // ROM: d1 = player_y + $E (player bottom offset)
+        int playerBottom = playerY + 0x0E;
+
+        // ROM: sub.w d1,d0 / bcc.s return_1769C
+        if (diagonalY >= playerBottom) {
+            return;
+        }
+
+        // Apply angle bounce toward $60 (up-right direction from down-left surface)
+        applyAngleBounce(player, 0x60);
     }
 
     /**
@@ -444,13 +483,15 @@ public class CNZBumperManager {
         }
 
         // Step 4: Apply velocity using CalcSine
-        // ROM: jsr CalcSine / muls.w #-$A00,d1 / asr.l #8,d1
-        // CalcSine returns sin in d0, cos in d1
+        // ROM: jsr CalcSine returns sin in d0, cos in d1
+        // Then: muls.w #-$A00,d1 / asr.l #8,d1 / move.w d1,x_vel(a0)
+        //       muls.w #-$A00,d0 / asr.l #8,d0 / move.w d0,y_vel(a0)
+        // So: x_vel = -cos(angle) * $A00 >> 8, y_vel = -sin(angle) * $A00 >> 8
         double radians = (outAngle / 256.0) * 2.0 * StrictMath.PI;
 
-        // ROM formula: x_vel = -sin(angle) * $A00 >> 8, y_vel = -cos(angle) * $A00 >> 8
-        int newXVel = (int) (-StrictMath.sin(radians) * BOUNCE_VELOCITY);
-        int newYVel = (int) (-StrictMath.cos(radians) * BOUNCE_VELOCITY);
+        // ROM formula: x_vel = -cos * $A00, y_vel = -sin * $A00
+        int newXVel = (int) (-StrictMath.cos(radians) * BOUNCE_VELOCITY);
+        int newYVel = (int) (-StrictMath.sin(radians) * BOUNCE_VELOCITY);
 
         player.setXSpeed((short) newXVel);
         player.setYSpeed((short) newYVel);
