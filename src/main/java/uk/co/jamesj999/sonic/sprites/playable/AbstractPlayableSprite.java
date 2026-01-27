@@ -383,6 +383,12 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.flipTurned = false;
                 this.inWater = false;
                 this.wasInWater = false;
+                // Reset collision path to Path 0 (primary collision).
+                // Without this, if player was on Path 1 in previous level,
+                // solidity bits would remain 0x0E/0x0F causing collision checks
+                // against the wrong collision map, making player fall through floors.
+                this.topSolidBit = 0x0C;
+                this.lrbSolidBit = 0x0D;
                 defineSpeeds(); // Reset speeds to default
         }
 
