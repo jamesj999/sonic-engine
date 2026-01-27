@@ -155,6 +155,16 @@ public enum SonicConfiguration {
 	/**
 	 * Key to cycle Special Stage plane visibility debug modes.
 	 */
-	SPECIAL_STAGE_PLANE_DEBUG_KEY;
+	SPECIAL_STAGE_PLANE_DEBUG_KEY,
+
+	/**
+	 * Key to toggle pause (default: ENTER).
+	 */
+	PAUSE_KEY,
+
+	/**
+	 * Key to step forward one frame while paused (default: Q).
+	 */
+	FRAME_STEP_KEY;
 
 }

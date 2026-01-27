@@ -99,7 +99,8 @@ public class GameLoop {
         void onGameModeChanged(GameMode oldMode, GameMode newMode);
     }
 
-    private volatile boolean paused = false;
+    private volatile boolean paused = false;      // Window focus pause
+    private volatile boolean userPaused = false;  // Keyboard toggle pause
 
     public GameLoop() {
     }
@@ -138,32 +139,60 @@ public class GameLoop {
     }
 
     /**
-     * Pauses the game loop. When paused, step() does nothing.
+     * Pauses the game loop due to window losing focus.
      * Audio is also paused to prevent music continuing while game is frozen.
      */
     public void pause() {
         if (!paused) {
             paused = true;
-            AudioManager.getInstance().pause();
+            updateAudioPauseState();
         }
     }
 
     /**
-     * Resumes the game loop after being paused.
-     * Audio playback is restored.
+     * Resumes the game loop after window regains focus.
+     * Audio playback is restored only if user hasn't also paused via keyboard.
      */
     public void resume() {
         if (paused) {
             paused = false;
-            AudioManager.getInstance().resume();
+            updateAudioPauseState();
         }
     }
 
     /**
-     * @return true if the game loop is currently paused
+     * Toggles the user-initiated pause state (via keyboard).
+     * This is separate from window focus pause so both can work independently.
+     */
+    public void toggleUserPause() {
+        userPaused = !userPaused;
+        updateAudioPauseState();
+    }
+
+    /**
+     * @return true if the user has paused the game via keyboard
+     */
+    public boolean isUserPaused() {
+        return userPaused;
+    }
+
+    /**
+     * @return true if the game loop is currently paused (either by window or user)
      */
     public boolean isPaused() {
-        return paused;
+        return paused || userPaused;
+    }
+
+    /**
+     * Updates audio pause state based on combined pause flags.
+     * Audio should be paused if either window or user pause is active.
+     */
+    private void updateAudioPauseState() {
+        if (paused || userPaused) {
+            AudioManager.getInstance().pause();
+        } else {
+            AudioManager.getInstance().resume();
+        }
     }
 
     /**
@@ -171,11 +200,26 @@ public class GameLoop {
      * Call this method at your target FPS (typically 60fps).
      */
     public void step() {
-        if (paused) {
-            return;
-        }
         if (inputHandler == null) {
             throw new IllegalStateException("InputHandler must be set before calling step()");
+        }
+
+        // Handle pause toggle first - must work even when paused
+        int pauseKey = configService.getInt(SonicConfiguration.PAUSE_KEY);
+        if (inputHandler.isKeyPressed(pauseKey)) {
+            toggleUserPause();
+        }
+
+        // Handle frame step - only works when paused
+        // isKeyPressed() only returns true on the first frame the key is pressed,
+        // so the key must be released and pressed again to step another frame
+        int frameStepKey = configService.getInt(SonicConfiguration.FRAME_STEP_KEY);
+        boolean doFrameStep = isPaused() && inputHandler.isKeyPressed(frameStepKey);
+
+        // When paused (and not frame stepping), still update input handler so we can detect keys
+        if (isPaused() && !doFrameStep) {
+            inputHandler.update();
+            return;
         }
 
         profiler.beginSection("audio");
