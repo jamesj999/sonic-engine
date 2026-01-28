@@ -883,39 +883,60 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		int angle = sprite.getAngle() & 0xFF;
 		short gSpeed = sprite.getGSpeed();
 
-		if (((angle + ANGLE_WALL_OFFSET) & ANGLE_WALL_MASK) != 0 || gSpeed == 0) {
+		// ROM s2.asm:36487-36492 - Skip if angle is steep or not moving
+		// addi.b #$40,d0 / bmi.s return - skip if (angle + 0x40) as signed byte is negative
+		// ROM uses BYTE arithmetic which wraps at 256, then checks N flag (bit 7 of BYTE result)
+		// tst.w inertia(a0) / beq.s return - skip if gSpeed == 0
+		int angleCheck = (angle + ANGLE_WALL_OFFSET) & 0xFF;  // Byte arithmetic with wrap
+		if ((angleCheck & ANGLE_WALL_MASK) != 0 || gSpeed == 0) {
 			return;
 		}
 
-		int rotatedAngle = gSpeed >= 0 ? (angle - 0x40) & 0xFF : (angle + 0x40) & 0xFF;
-		int quadrant = (rotatedAngle + 0x20) & 0xC0;
-		int sensorIndex = (quadrant == 0x40 || quadrant == 0x00) ? 0 : 1;
+		// ROM: bmi.s Obj01_CheckWallsOnGround_Left - select sensor based on gSpeed direction
+		int sensorIndex = gSpeed >= 0 ? 1 : 0;
 
-		// ROM-accurate projection (CalcRoomInFront, s2.asm:43480-43491):
-		// The ROM adds velocity to the FULL position (including subpixels), then extracts the pixel.
-		// This correctly predicts overflow when subpixels + velocity >= 256.
-		// Old approach (velocity >> 8) lost subpixel precision, causing 1px jitter at walls.
-		int fullX = (sprite.getCentreX() << 8) + (sprite.getXSubpixel() & 0xFF);
-		int fullY = (sprite.getCentreY() << 8) + (sprite.getYSubpixel() & 0xFF);
-		int projectedFullX = fullX + sprite.getXSpeed();
-		int projectedFullY = fullY + sprite.getYSpeed();
-		short projectedDx = (short) ((projectedFullX >> 8) - sprite.getCentreX());
-		short projectedDy = (short) ((projectedFullY >> 8) - sprite.getCentreY());
-
-		if ((quadrant == 0x40 || quadrant == 0xC0) && (rotatedAngle & 0x38) == 0 && angle != 0) {
-			projectedDy += 8;
+		SensorResult result = pushSensors[sensorIndex].scan();
+		if (result == null || result.distance() >= 0) {
+			return;
 		}
 
-		SensorResult result = pushSensors[sensorIndex].scan(projectedDx, projectedDy);
-		if (result == null || result.distance() >= 0) return;
-
-		int delta = result.distance() << 8;
-		switch (quadrant) {
-			case 0x00 -> sprite.setYSpeed((short) (sprite.getYSpeed() + delta));
-			case 0x40 -> { sprite.setXSpeed((short) (sprite.getXSpeed() - delta)); sprite.setPushing(true); sprite.setGSpeed((short) 0); }
-			case 0x80 -> sprite.setYSpeed((short) (sprite.getYSpeed() - delta));
-			default   -> { sprite.setXSpeed((short) (sprite.getXSpeed() + delta)); sprite.setPushing(true); sprite.setGSpeed((short) 0); }
+		// ROM s2.asm:36500 - cmpi.w #-$E,d1 / blt.s return_2AD52
+		// If inside wall too deep (distance < -14), ignore the collision
+		if (result.distance() < -14) {
+			return;
 		}
+
+		// ROM s2.asm:36502-36510:
+		// add.w d1,x_pos(a0)        - Adjust X position by distance
+		// move.w #0,x_vel(a0)       - Clear X velocity
+		// move.w #0,ground_vel(a0)  - Clear ground velocity
+		// NOTE: ROM does NOT set pushing flag in Obj01_CheckWallsOnGround
+		if (sensorIndex == 1) {
+			// Right sensor: negative distance means move left (away from wall)
+			sprite.setX((short) (sprite.getX() + result.distance()));
+		} else {
+			// Left sensor (CalcRoomBehind): ROM uses sub.w d1,x_pos
+			sprite.setX((short) (sprite.getX() - result.distance()));
+		}
+		sprite.setXSpeed((short) 0);
+		sprite.setGSpeed((short) 0);
+	}
+
+	/**
+	 * Calculate ground mode bits from angle using ROM's complex algorithm.
+	 * This is the same calculation used in AnglePos and CalcRoomInFront.
+	 * ROM: s2.asm lines 42551-42570 and 43493-43513
+	 *
+	 * @param angle The angle (0-255)
+	 * @return Mode bits: 0x00=floor, 0x40=leftwall, 0x80=ceiling, 0xC0=rightwall
+	 */
+	private int calculateModeFromAngle(int angle) {
+		angle = angle & 0xFF;
+		boolean angleIsNegative = angle >= 0x80;
+		int sumWith20 = (angle + 0x20) & 0xFF;
+		boolean sumIsNegative = sumWith20 >= 0x80;
+		int result = (angleIsNegative == sumIsNegative) ? (angle + 0x1F) & 0xFF : sumWith20;
+		return result & 0xC0;
 	}
 
 	/** Airborne landing check */

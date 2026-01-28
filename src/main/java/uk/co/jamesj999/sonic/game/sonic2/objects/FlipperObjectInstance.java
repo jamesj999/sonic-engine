@@ -106,9 +106,12 @@ public class FlipperObjectInstance extends BoxObjectInstance
                     // First frame standing: enter rolling state (loc_2B20A)
                     // We use pinball_mode to prevent rolling from being cleared
                     player.setPinballMode(true);
-                    // setRolling(true) handles radius change and Y adjustment internally
-                    // (adjusts Y by (runHeight-rollHeight)/2 = 5 pixels for Sonic)
-                    player.setRolling(true);
+                    // ROM: bset #status.player.rolling / bne.s loc_2B238 / addq.w #5,y_pos
+                    // Only adjust Y if not already rolling (the bne.s skips adjustment if already rolling)
+                    if (!player.getRolling()) {
+                        player.setRolling(true);
+                        player.setY((short) (player.getY() + 5));
+                    }
                     playerFlipperState = 1;
                 } else {
                     // Already on flipper: check for jump button (loc_2B23C)
@@ -184,6 +187,7 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setYSpeed((short) yVel);
         player.setXSpeed((short) xVel);
         player.setAir(true);
+        player.setPushing(false);  // Clear pushing state - matches BumperObjectInstance pattern
         player.setGSpeed((short) 0);
 
         // ROM: move.b #0,obj_control(a1) at loc_2B2E2 - release control lock
@@ -230,10 +234,18 @@ public class FlipperObjectInstance extends BoxObjectInstance
         player.setXSpeed((short) xVel);
         player.setGSpeed((short) xVel);
         player.setYSpeed((short) 0);  // ROM: clr.w y_vel(a1)
+        player.setPushing(false);  // Clear pushing state - matches BumperObjectInstance pattern
 
         // ROM: move.w #$F,move_lock(a1) - lock player input for 15 frames
         player.setMoveLockTimer(15);
-        player.setRolling(true);
+        // ROM: bset #status.player.rolling / bne.s loc_2B3BC / addq.w #5,y_pos
+        // Only adjust Y if not already rolling
+        if (!player.getRolling()) {
+            player.setRolling(true);
+            player.setY((short) (player.getY() + 5));
+        } else {
+            player.setRolling(true);
+        }
 
         triggerHorizontalAnimation(playerIsRightOfFlipper);
         playFlipperSound();
