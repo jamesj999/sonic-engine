@@ -81,6 +81,13 @@ public class MonitorObjectInstance extends BoxObjectInstance implements TouchRes
     }
 
     @Override
+    public boolean shouldStayActiveWhenRemembered() {
+        // Monitor needs to stay active to show icon rising and apply powerup effect
+        // After breaking, it remains as a broken monitor frame (doesn't self-destruct)
+        return true;
+    }
+
+    @Override
     public void update(int frameCounter, AbstractPlayableSprite player) {
         // Handle falling state first (ROM: Obj26_Main routine_secondary check)
         if (falling) {

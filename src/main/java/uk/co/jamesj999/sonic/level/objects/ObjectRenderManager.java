@@ -198,6 +198,14 @@ public class ObjectRenderManager {
         return provider.getAnimations(ObjectArtKeys.ANIM_SIGNPOST);
     }
 
+    public PatternSpriteRenderer getEggPrisonRenderer() {
+        return provider.getRenderer(ObjectArtKeys.EGG_PRISON);
+    }
+
+    public ObjectSpriteSheet getEggPrisonSheet() {
+        return provider.getSheet(ObjectArtKeys.EGG_PRISON);
+    }
+
     public PatternSpriteRenderer getResultsRenderer() {
         return provider.getRenderer(ObjectArtKeys.RESULTS);
     }

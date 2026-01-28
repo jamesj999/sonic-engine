@@ -46,6 +46,7 @@ public final class Sonic2ObjectIds {
 
     // Level completion
     public static final int SIGNPOST = 0x0D; // End of level signpost
+    public static final int EGG_PRISON = 0x3E; // Egg prison / capsule (end of act 2)
     public static final int INVISIBLE_BLOCK = 0x74;
 
     // CPZ Objects

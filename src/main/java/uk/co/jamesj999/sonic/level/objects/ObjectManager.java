@@ -226,7 +226,13 @@ public class ObjectManager {
     }
 
     public void markRemembered(ObjectSpawn spawn) {
-        placement.markRemembered(spawn);
+        // Look up the instance to check if it should stay active
+        ObjectInstance instance = activeObjects.get(spawn);
+        if (instance != null) {
+            placement.markRemembered(spawn, instance);
+        } else {
+            placement.markRemembered(spawn);
+        }
     }
 
     public void clearRemembered() {
@@ -380,7 +386,17 @@ public class ObjectManager {
         }
 
         void markRemembered(ObjectSpawn spawn) {
-            if (spawn.objectId() != 0x26) {
+            int index = getSpawnIndex(spawn);
+            if (index < 0) {
+                return;
+            }
+            remembered.set(index);
+        }
+
+        void markRemembered(ObjectSpawn spawn, ObjectInstance instance) {
+            // Some objects (monitors, capsules) need to stay active to complete their
+            // destruction/animation sequence even after being marked as remembered
+            if (!instance.shouldStayActiveWhenRemembered()) {
                 active.remove(spawn);
             }
 

@@ -243,6 +243,8 @@ public class Sonic2ObjectRegistry implements ObjectRegistry {
         // Level completion objects
         registerFactory(Sonic2ObjectIds.SIGNPOST,
                 (spawn, registry) -> new SignpostObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.EGG_PRISON,
+                (spawn, registry) -> new EggPrisonObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
         registerFactory(Sonic2ObjectIds.SWINGING_PLATFORM, platformFactory);
 

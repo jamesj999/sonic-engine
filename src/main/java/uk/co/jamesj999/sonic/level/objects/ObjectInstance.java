@@ -38,6 +38,22 @@ public interface ObjectInstance {
     }
 
     /**
+     * Returns true if this object should stay in the active spawn set even after being
+     * marked as remembered. Used by objects like monitors and capsules that need to
+     * complete their destruction/animation sequence before being removed.
+     * <p>
+     * Objects that return true will:
+     * - Be marked as remembered (won't respawn after death/restart)
+     * - Stay in the active set to complete their logic
+     * - Self-destruct by calling setDestroyed(true) when done
+     * <p>
+     * Default is false - most objects are removed from active immediately when remembered.
+     */
+    default boolean shouldStayActiveWhenRemembered() {
+        return false;
+    }
+
+    /**
      * Called when this object is being unloaded from the active object list.
      * Override to perform cleanup when the object goes off-screen or is removed.
      * Default implementation does nothing.

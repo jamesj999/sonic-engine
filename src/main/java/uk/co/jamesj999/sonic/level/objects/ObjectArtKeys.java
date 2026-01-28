@@ -34,6 +34,7 @@ public final class ObjectArtKeys {
     public static final String POINTS = "points";
     public static final String BRIDGE = "bridge";
     public static final String RESULTS = "results";
+    public static final String EGG_PRISON = "egg_prison";
 
     // Animation keys (common across games)
     public static final String ANIM_MONITOR = "monitor";

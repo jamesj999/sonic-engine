@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-01-27 09:02:00
+Generated: 2026-01-28 10:17:59
 
 ## Summary
 
 - **Total unique objects found:** 120
-- **Implemented:** 54 (45.0%)
-- **Unimplemented:** 66 (55.0%)
+- **Implemented:** 56 (46.7%)
+- **Unimplemented:** 64 (53.3%)
 
 ## Implemented Objects
 
@@ -34,6 +34,7 @@ Generated: 2026-01-27 09:02:00
 | 0x2D | Barrier | 35 | CPZ1, CPZ2, HTZ1, HTZ2, MTZ1, MTZ2, MTZ3, WFZ1, DEZ1 |
 | 0x32 | BreakableBlock | 28 | CPZ1, CPZ2, HTZ1, HTZ2 |
 | 0x36 | Spikes | 204 | EHZ1, EHZ2, CPZ2, ARZ1, CNZ1, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
+| 0x3E | EggPrison | 7 | EHZ2, CPZ2, ARZ2, CNZ2, HTZ2, MCZ2, MTZ3 |
 | 0x40 | Springboard | 31 | CPZ2, ARZ1, ARZ2, MCZ2 |
 | 0x41 | Spring | 139 | EHZ1, EHZ2, CPZ1, CPZ2, ARZ1, ARZ2, CNZ1, CNZ2, HTZ1, HTZ2, MCZ1, MCZ2, OOZ1, OOZ2, MTZ1, MTZ2, MTZ3 |
 | 0x44 | Bumper | 117 | CNZ1, CNZ2 |
@@ -60,6 +61,7 @@ Generated: 2026-01-27 09:02:00
 | 0xA5 | Spiny | 11 | CPZ1, CPZ2 |
 | 0xA6 | SpinyOnWall | 2 | CPZ1, CPZ2 |
 | 0xA7 | Grabber | 5 | CPZ1, CPZ2 |
+| 0xC8 | Crawl | 8 | CNZ1, CNZ2 |
 | 0xD2 | CNZRectBlocks | 8 | CNZ1, CNZ2 |
 | 0xD4 | CNZBigBlock | 23 | CNZ1, CNZ2 |
 | 0xD5 | Elevator | 16 | CNZ1, CNZ2 |
@@ -113,9 +115,7 @@ Generated: 2026-01-27 09:02:00
 | 0xB5 | Object | HPropeller | 10 | SCZ1, WFZ1 |
 | 0x9F | Badnik | Shellcracker | 9 | MTZ1, MTZ2, MTZ3 |
 | 0xC0 | Object | SpeedLauncher | 8 | WFZ1 |
-| 0xC8 | Badnik | Crawl | 8 | CNZ1, CNZ2 |
 | 0x30 | Object | RisingLava | 7 | HTZ1, HTZ2 |
-| 0x3E | Object | EggPrison | 7 | EHZ2, CPZ2, ARZ2, CNZ2, HTZ2, MCZ2, MTZ3 |
 | 0x6A | Object | MCZRotPforms | 7 | MCZ1, MCZ2, MTZ3 |
 | 0xBE | Object | LateralCannon | 7 | WFZ1 |
 | 0x3D | Object | OOZLauncher | 6 | OOZ1, OOZ2 |
@@ -168,7 +168,7 @@ Total: 135 objects | Implemented: 14 | Unimplemented: 0
 
 #### Act 2
 
-Total: 158 objects | Implemented: 14 | Unimplemented: 1
+Total: 158 objects | Implemented: 15 | Unimplemented: 0
 
 **Badniks:**
 - [x] 0x4B Buzzer (x12) [0x00]
@@ -187,7 +187,7 @@ Total: 158 objects | Implemented: 14 | Unimplemented: 1
 - [x] 0x1C Scenery (x14) [0x02]
 - [x] 0x26 Monitor (x12) [5 subtypes]
 - [x] 0x36 Spikes (x20) [0x00, 0x10, 0x01]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x41 Spring (x12) [7 subtypes]
 - [x] 0x49 EHZWaterfall (x8) [4 subtypes]
 - [x] 0x79 Checkpoint (x5) [5 subtypes]
@@ -223,7 +223,7 @@ Total: 153 objects | Implemented: 19 | Unimplemented: 0
 
 #### Act 2
 
-Total: 202 objects | Implemented: 20 | Unimplemented: 1
+Total: 202 objects | Implemented: 21 | Unimplemented: 0
 
 **Badniks:**
 - [x] 0xA5 Spiny (x1) [0x32]
@@ -243,7 +243,7 @@ Total: 202 objects | Implemented: 20 | Unimplemented: 1
 - [x] 0x2D Barrier (x4) [0x00]
 - [x] 0x32 BreakableBlock (x3) [0x00]
 - [x] 0x36 Spikes (x3) [0x30]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x40 Springboard (x6) [0x03]
 - [x] 0x41 Spring (x3) [0x10, 0x12]
 - [x] 0x6B MTZPlatform (x28) [0x18, 0x19]
@@ -285,7 +285,7 @@ Total: 182 objects | Implemented: 20 | Unimplemented: 0
 
 #### Act 2
 
-Total: 222 objects | Implemented: 19 | Unimplemented: 1
+Total: 222 objects | Implemented: 20 | Unimplemented: 0
 
 **Badniks:**
 - [x] 0x8C Whisp (x19) [0x00]
@@ -307,7 +307,7 @@ Total: 222 objects | Implemented: 19 | Unimplemented: 1
 - [x] 0x26 Monitor (x18) [4 subtypes]
 - [x] 0x2B RisingPillar (x7) [0x00]
 - [x] 0x2C LeavesGenerator (x9) [0x00, 0x01, 0x02]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x40 Springboard (x10) [0x03]
 - [x] 0x41 Spring (x17) [5 subtypes]
 - [x] 0x79 Checkpoint (x4) [4 subtypes]
@@ -318,10 +318,10 @@ Total: 222 objects | Implemented: 19 | Unimplemented: 1
 
 #### Act 1
 
-Total: 286 objects | Implemented: 18 | Unimplemented: 1
+Total: 286 objects | Implemented: 19 | Unimplemented: 0
 
 **Badniks:**
-- [ ] 0xC8 Crawl (x2) [0xAC]
+- [x] 0xC8 Crawl (x2) [0xAC]
 
 **Objects:**
 - [x] 0x03 LayerSwitcher (x6) [0xD0, 0x52]
@@ -345,10 +345,10 @@ Total: 286 objects | Implemented: 18 | Unimplemented: 1
 
 #### Act 2
 
-Total: 254 objects | Implemented: 17 | Unimplemented: 2
+Total: 254 objects | Implemented: 19 | Unimplemented: 0
 
 **Badniks:**
-- [ ] 0xC8 Crawl (x6) [0xAC]
+- [x] 0xC8 Crawl (x6) [0xAC]
 
 **Bosses:**
 - [ ] 0x51 CNZBoss *(dynamic)* - Catcher boss
@@ -357,7 +357,7 @@ Total: 254 objects | Implemented: 17 | Unimplemented: 2
 - [x] 0x03 LayerSwitcher (x9) [0x50, 0xD0, 0x52]
 - [x] 0x0D GoalPlate (x1) [0x00]
 - [x] 0x26 Monitor (x16) [5 subtypes]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x41 Spring (x9) [4 subtypes]
 - [x] 0x44 Bumper (x43) [0x00]
 - [x] 0x72 CNZConveyorBelt (x4) [0x08, 0x09]
@@ -405,7 +405,7 @@ Total: 144 objects | Implemented: 12 | Unimplemented: 8
 
 #### Act 2
 
-Total: 259 objects | Implemented: 11 | Unimplemented: 9
+Total: 259 objects | Implemented: 12 | Unimplemented: 8
 
 **Badniks:**
 - [ ] 0x92 Spiker (x17) [0x0A]
@@ -428,7 +428,7 @@ Total: 259 objects | Implemented: 11 | Unimplemented: 9
 - [ ] 0x31 LavaMarker (x21) [0x00, 0x01, 0x02]
 - [x] 0x32 BreakableBlock (x14) [0x00]
 - [x] 0x36 Spikes (x6) [0x00, 0x01]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x41 Spring (x12) [6 subtypes]
 - [x] 0x74 InvisibleBlock (x8) [5 subtypes]
 - [x] 0x79 Checkpoint (x4) [4 subtypes]
@@ -465,7 +465,7 @@ Total: 130 objects | Implemented: 9 | Unimplemented: 10
 
 #### Act 2
 
-Total: 148 objects | Implemented: 9 | Unimplemented: 11
+Total: 148 objects | Implemented: 10 | Unimplemented: 10
 
 **Badniks:**
 - [ ] 0x9E Crawlton (x6) [0x22]
@@ -481,7 +481,7 @@ Total: 148 objects | Implemented: 9 | Unimplemented: 11
 - [x] 0x26 Monitor (x13) [5 subtypes]
 - [ ] 0x2A Stomper (x5) [0x00]
 - [x] 0x36 Spikes (x21) [6 subtypes]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x40 Springboard (x9) [0x01, 0x03]
 - [x] 0x41 Spring (x12) [5 subtypes]
 - [ ] 0x6A MCZRotPforms (x3) [0x18]
@@ -612,7 +612,7 @@ Total: 220 objects | Implemented: 11 | Unimplemented: 16
 
 #### Act 3
 
-Total: 270 objects | Implemented: 10 | Unimplemented: 19
+Total: 270 objects | Implemented: 11 | Unimplemented: 18
 
 **Badniks:**
 - [ ] 0x9F Shellcracker (x3) [0x24]
@@ -630,7 +630,7 @@ Total: 270 objects | Implemented: 10 | Unimplemented: 19
 - [x] 0x2D Barrier (x4) [0x01]
 - [ ] 0x31 LavaMarker (x8) [0x01, 0x02]
 - [x] 0x36 Spikes (x14) [5 subtypes]
-- [ ] 0x3E EggPrison (x1) [0x00]
+- [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x41 Spring (x9) [0x00, 0x10, 0x02]
 - [ ] 0x42 SteamSpring (x9) [0x01]
 - [ ] 0x47 Button (x1) [0x05]

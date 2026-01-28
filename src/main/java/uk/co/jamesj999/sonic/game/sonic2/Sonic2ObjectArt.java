@@ -2147,34 +2147,38 @@ public class Sonic2ObjectArt {
 
         // Frame 0: Fully extended - 4 pieces (3x2 each)
         // Based on obj85_a mapping data: offsets at (-12,-56), (-12,-40), (-12,-24), (-12,-8)
+        // ROM uses tiles 0, 6, 6, 12 - tile 6 is reused for middle segments
         List<SpriteMappingPiece> frame0 = new ArrayList<>();
         frame0.add(new SpriteMappingPiece(-12, -56, 3, 2, 0, false, false, 0));
         frame0.add(new SpriteMappingPiece(-12, -40, 3, 2, 6, false, false, 0));
-        frame0.add(new SpriteMappingPiece(-12, -24, 3, 2, 12, false, false, 0));
-        frame0.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, -24, 3, 2, 6, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-12, -8, 3, 2, 12, false, false, 0));
         frames.add(new SpriteMappingFrame(frame0));
 
-        // Frame 1: Slightly compressed - main body only (1 piece)
+        // Frame 1: Shows TOP piece only (for animation)
         List<SpriteMappingPiece> frame1 = new ArrayList<>();
-        frame1.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
+        frame1.add(new SpriteMappingPiece(-12, -32, 3, 2, 0, false, false, 0));
         frames.add(new SpriteMappingFrame(frame1));
 
         // Frame 2: Mid-compression - 3 pieces
         List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-12, -48, 3, 2, 6, false, false, 0));
         frame2.add(new SpriteMappingPiece(-12, -32, 3, 2, 6, false, false, 0));
         frame2.add(new SpriteMappingPiece(-12, -16, 3, 2, 12, false, false, 0));
-        frame2.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
         frames.add(new SpriteMappingFrame(frame2));
 
         // Frame 3: More compressed - 2 pieces
         List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-12, -32, 3, 2, 6, false, false, 0));
         frame3.add(new SpriteMappingPiece(-12, -16, 3, 2, 12, false, false, 0));
-        frame3.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, false, 0));
         frames.add(new SpriteMappingFrame(frame3));
 
-        // Frame 4: Fully compressed - 1 piece (flipped)
+        // Frame 4: Head with priority flag (used for vibration toggle)
+        // ROM: spritePiece -$C, -$20, 3, 2, 0, 0, 0, 1, 0
+        // The only difference from frame 1 is priority=1, which we can't represent.
+        // Visually identical to frame 1 (no flip flags).
         List<SpriteMappingPiece> frame4 = new ArrayList<>();
-        frame4.add(new SpriteMappingPiece(-12, -8, 3, 2, 18, false, true, 0));
+        frame4.add(new SpriteMappingPiece(-12, -32, 3, 2, 0, false, false, 0));
         frames.add(new SpriteMappingFrame(frame4));
 
         // Frame 5: Same as frame 4 (duplicate in ROM)
@@ -2203,8 +2207,8 @@ public class Sonic2ObjectArt {
         // Frame 0: Fully extended - 2 pieces (4x4 each)
         // Offsets at (-16,-16), (-32,0) relative to object center
         List<SpriteMappingPiece> frame0 = new ArrayList<>();
-        frame0.add(new SpriteMappingPiece(-16, -32, 4, 4, 0, false, false, 0));
-        frame0.add(new SpriteMappingPiece(-32, -16, 4, 4, 16, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-16, -16, 4, 4, 0, false, false, 0));
+        frame0.add(new SpriteMappingPiece(-32, 0, 4, 4, 16, false, false, 0));
         frames.add(new SpriteMappingFrame(frame0));
 
         // Frame 1: Main body only - 1 piece
@@ -2214,15 +2218,18 @@ public class Sonic2ObjectArt {
 
         // Frame 2: Plunger base - 1 piece
         List<SpriteMappingPiece> frame2 = new ArrayList<>();
-        frame2.add(new SpriteMappingPiece(-24, -24, 4, 4, 16, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-32, 0, 4, 4, 16, false, false, 0));
         frames.add(new SpriteMappingFrame(frame2));
 
         // Frame 3: Same as frame 2 (duplicate)
         frames.add(new SpriteMappingFrame(frame2));
 
-        // Frame 4: Fully compressed - 1 piece (flipped)
+        // Frame 4: Body with priority flag (used for vibration toggle)
+        // ROM: spritePiece -$10, -$10, 4, 4, 0, 0, 0, 1, 0
+        // The only difference from frame 1 is priority=1, which we can't represent.
+        // Visually identical to frame 1 (no flip flags).
         List<SpriteMappingPiece> frame4 = new ArrayList<>();
-        frame4.add(new SpriteMappingPiece(-16, -16, 4, 4, 0, false, true, 0));
+        frame4.add(new SpriteMappingPiece(-16, -16, 4, 4, 0, false, false, 0));
         frames.add(new SpriteMappingFrame(frame4));
 
         // Frame 5: Same as frame 4 (duplicate)
@@ -3187,5 +3194,90 @@ public class Sonic2ObjectArt {
             return null;
         }
         return provider.getObjectArt(objectId, zoneIndex);
+    }
+
+    /**
+     * Loads Egg Prison / Capsule sprite sheet (Object 0x3E).
+     *
+     * @return ObjectSpriteSheet for the Egg Prison, or null on failure
+     */
+    public ObjectSpriteSheet loadEggPrisonSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_EGG_PRISON_ADDR, "EggPrison");
+        if (patterns.length == 0) {
+            return null;
+        }
+
+        List<SpriteMappingFrame> mappings = createEggPrisonMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Creates mapping frames for Egg Prison (Obj3E).
+     * Based on mappings/sprite/obj3E.asm from the disassembly.
+     *
+     * Frames:
+     * - Frame 0 (BODY_CLOSED): Main capsule body (7 pieces, 64x64)
+     * - Frame 1-3 (BODY_OPEN_1-3): Opening animation (7 pieces each)
+     * - Frame 4 (BUTTON): Top button (2 pieces, 32x16)
+     * - Frame 5 (LOCK): Lock/dongle (1 piece, 16x16)
+     */
+    private List<SpriteMappingFrame> createEggPrisonMappings() {
+        List<SpriteMappingFrame> frames = new ArrayList<>();
+
+        // Frame 0 (Map_obj3E_000C): Main capsule body - closed
+        // 7 pieces arranged as top, middle (with center), and bottom
+        List<SpriteMappingPiece> frame0 = new ArrayList<>();
+        frame0.add(new SpriteMappingPiece(-0x20, -0x20, 4, 2, 0x00, false, false, 0));  // Top left
+        frame0.add(new SpriteMappingPiece(0x00, -0x20, 4, 2, 0x00, true, false, 0));    // Top right (H-flip)
+        frame0.add(new SpriteMappingPiece(-0x20, -0x10, 3, 3, 0x08, false, false, 0));  // Middle left
+        frame0.add(new SpriteMappingPiece(-0x08, -0x10, 2, 3, 0x11, false, false, 0));  // Center
+        frame0.add(new SpriteMappingPiece(0x08, -0x10, 3, 3, 0x08, true, false, 0));    // Middle right (H-flip)
+        frame0.add(new SpriteMappingPiece(-0x20, 0x08, 4, 3, 0x17, false, false, 0));   // Bottom left
+        frame0.add(new SpriteMappingPiece(0x00, 0x08, 4, 3, 0x17, true, false, 0));     // Bottom right (H-flip)
+        frames.add(new SpriteMappingFrame(frame0));
+
+        // Frame 1 (Map_obj3E_0046): Opening frame 1 - sides start spreading
+        List<SpriteMappingPiece> frame1 = new ArrayList<>();
+        frame1.add(new SpriteMappingPiece(-0x20, -0x20, 4, 2, 0x00, false, false, 0));  // Top left
+        frame1.add(new SpriteMappingPiece(0x00, -0x20, 4, 2, 0x00, true, false, 0));    // Top right (H-flip)
+        frame1.add(new SpriteMappingPiece(-0x20, 0x08, 4, 3, 0x17, false, false, 0));   // Bottom left
+        frame1.add(new SpriteMappingPiece(0x00, 0x08, 4, 3, 0x17, true, false, 0));     // Bottom right (H-flip)
+        frame1.add(new SpriteMappingPiece(-0x08, -0x18, 2, 3, 0x11, false, false, 0));  // Center raised
+        frame1.add(new SpriteMappingPiece(-0x20, -0x08, 3, 3, 0x08, false, false, 0));  // Sides lowered
+        frame1.add(new SpriteMappingPiece(0x08, -0x08, 3, 3, 0x08, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame1));
+
+        // Frame 2 (Map_obj3E_0088): Opening frame 2 - sides spread more
+        List<SpriteMappingPiece> frame2 = new ArrayList<>();
+        frame2.add(new SpriteMappingPiece(-0x20, -0x20, 4, 2, 0x00, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0x00, -0x20, 4, 2, 0x00, true, false, 0));
+        frame2.add(new SpriteMappingPiece(-0x20, 0x08, 4, 3, 0x17, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0x00, 0x08, 4, 3, 0x17, true, false, 0));
+        frame2.add(new SpriteMappingPiece(-0x08, -0x20, 2, 3, 0x11, false, false, 0));
+        frame2.add(new SpriteMappingPiece(-0x20, 0x00, 3, 3, 0x08, false, false, 0));
+        frame2.add(new SpriteMappingPiece(0x08, 0x00, 3, 3, 0x08, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame2));
+
+        // Frame 3 (Map_obj3E_00CA): Fully open - center visible, sides apart
+        List<SpriteMappingPiece> frame3 = new ArrayList<>();
+        frame3.add(new SpriteMappingPiece(-0x20, -0x20, 4, 2, 0x00, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0x00, -0x20, 4, 2, 0x00, true, false, 0));
+        frame3.add(new SpriteMappingPiece(-0x08, -0x10, 2, 3, 0x23, false, false, 0));  // Open center (different tile)
+        frame3.add(new SpriteMappingPiece(-0x20, 0x08, 4, 3, 0x17, false, false, 0));
+        frame3.add(new SpriteMappingPiece(0x00, 0x08, 4, 3, 0x17, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame3));
+
+        // Frame 4 (Map_obj3E_00F4): Button (top of capsule)
+        List<SpriteMappingPiece> frame4 = new ArrayList<>();
+        frame4.add(new SpriteMappingPiece(-0x10, -0x08, 2, 2, 0x29, false, false, 0));
+        frame4.add(new SpriteMappingPiece(0x00, -0x08, 2, 2, 0x29, true, false, 0));
+        frames.add(new SpriteMappingFrame(frame4));
+
+        // Frame 5 (Map_obj3E_0106): Lock / dongle
+        List<SpriteMappingPiece> frame5 = new ArrayList<>();
+        frame5.add(new SpriteMappingPiece(-0x08, -0x08, 2, 2, 0x2D, false, false, 0));
+        frames.add(new SpriteMappingFrame(frame5));
+
+        return frames;
     }
 }

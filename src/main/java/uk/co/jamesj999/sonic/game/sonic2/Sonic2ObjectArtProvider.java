@@ -134,6 +134,9 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider {
         // Signpost
         registerSheet(ObjectArtKeys.SIGNPOST, artData.signpostSheet());
 
+        // Egg Prison / Capsule (Object 0x3E)
+        registerSheet(ObjectArtKeys.EGG_PRISON, artLoader.loadEggPrisonSheet());
+
         // CNZ objects (Sonic 2-specific)
         registerSheet(Sonic2ObjectArtKeys.BUMPER, artData.bumperSheet());
         registerSheet(Sonic2ObjectArtKeys.HEX_BUMPER, artData.hexBumperSheet());

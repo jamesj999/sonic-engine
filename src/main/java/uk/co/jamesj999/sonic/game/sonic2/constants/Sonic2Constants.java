@@ -140,6 +140,10 @@ public class Sonic2Constants {
 
     // Signpost/Goal Plate (Object 0D)
     public static final int ART_NEM_SIGNPOST_ADDR = 0x79BDE; // Signpost.nem (78 blocks)
+
+    // Egg Prison / Capsule (Object 0x3E)
+    public static final int ART_NEM_EGG_PRISON_ADDR = 0x7BA32; // Egg Prison.nem (verified via RomOffsetFinder)
+    public static final int MAP_UNC_EGG_PRISON_ADDR = 0x1F436;  // Obj3E_MapUnc_3F436 (relative offset in s2.asm)
     public static final int ART_TILE_SIGNPOST = 0x0434;
     public static final int SndID_Signpost = 0xCF;
     public static final int MusID_StageClear = 0x97; // Stage clear / act complete jingle

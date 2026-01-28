@@ -79,6 +79,7 @@ public class ObjectDiscoveryTool {
             0x26,  // Monitor
             0x32,  // BreakableBlock (CPZ metal blocks / HTZ rocks)
             0x36,  // Spikes
+            0x3E,  // EggPrison (end of act capsule)
             0x40,  // Springboard (CPZ/ARZ/MCZ lever spring)
             0x41,  // Spring
             0x44,  // Bumper
