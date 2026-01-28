@@ -1084,13 +1084,30 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	// SENSOR/ANGLE HELPERS
 	// ========================================
 
-	/** Sonic_Angle: Select best ground sensor (s2.asm:42649) */
+	/**
+	 * Sonic_Angle: Select best ground sensor (s2.asm:42649)
+	 *
+	 * ROM logic: Start with secondary sensor, switch to primary only if primary is closer.
+	 * Which sensor is primary/secondary depends on ground mode:
+	 * - GROUND/CEILING: Right=Primary, Left=Secondary
+	 * - RIGHTWALL/LEFTWALL: Left(Top)=Primary, Right(Bottom)=Secondary
+	 */
 	private SensorResult selectSensorWithAngle(SensorResult rightSensor, SensorResult leftSensor) {
 		if (rightSensor == null && leftSensor == null) return null;
 		if (rightSensor == null) { applyAngleFromSensor(leftSensor.angle()); return leftSensor; }
 		if (leftSensor == null) { applyAngleFromSensor(rightSensor.angle()); return rightSensor; }
 
-		SensorResult selected = leftSensor.distance() <= rightSensor.distance() ? leftSensor : rightSensor;
+		// Determine primary/secondary based on ground mode
+		// GROUND/CEILING: Right is Primary (scanned first), Left is Secondary
+		// RIGHTWALL/LEFTWALL: Left (now Top) is Primary, Right (now Bottom) is Secondary
+		GroundMode mode = sprite.getGroundMode();
+		boolean leftIsPrimary = (mode == GroundMode.RIGHTWALL || mode == GroundMode.LEFTWALL);
+
+		SensorResult primary = leftIsPrimary ? leftSensor : rightSensor;
+		SensorResult secondary = leftIsPrimary ? rightSensor : leftSensor;
+
+		// ROM prefers secondary; only use primary if primary distance < secondary distance
+		SensorResult selected = primary.distance() < secondary.distance() ? primary : secondary;
 		applyAngleFromSensor(selected.angle());
 		return selected;
 	}

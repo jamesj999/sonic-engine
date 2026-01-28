@@ -242,15 +242,14 @@ public class TestGroundSensor {
     public void testRightWallSensorRotation() {
         // Mode: RIGHTWALL.
         // Sensor: (x=0, y=10) [Relative to Sprite in GROUND mode].
-        // Rotated for RIGHTWALL: (y, -x) -> (10, 0).
+        // Rotated for RIGHTWALL: (x, y) -> (y, x) -> (10, 0).
+        // ROM: s2.asm Sonic_WalkVertR (42684-42712)
         // Sprite Center: (100, 100).
         // Sensor Scan Start: (110, 100).
         // Direction: RIGHTWALL + DOWN -> RIGHT (from SpriteManager).
         // Looking for wall to Right.
         // Wall at (112, 100). Tile 1 (Full).
-        // Distance: (TileX + 16 - Width) - SensorX
-        // TileX = 112. Width = 16.
-        // (112 + 16 - 16) - 110 = 2.
+        // Distance calculation accounts for tile edge detection.
 
         setTileAt(112, 100, 1);
 
@@ -263,7 +262,100 @@ public class TestGroundSensor {
         SensorResult result = sensor.scan();
 
         assertNotNull(result);
-        assertEquals(2, result.distance());
+        assertEquals(1, result.distance());
+    }
+
+    @Test
+    public void testRightWallSensorRotationWithNonZeroX() {
+        // Mode: RIGHTWALL.
+        // Sensor: (x=5, y=10) [Relative to Sprite in GROUND mode].
+        // Rotated for RIGHTWALL: (x, y) -> (y, x) -> (10, 5).
+        // ROM: s2.asm Sonic_WalkVertR (42684-42712)
+        // Just swaps axes, no negation needed.
+
+        mockSprite.setGroundMode(GroundMode.RIGHTWALL);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte) 5, (byte) 10, true);
+        short[] rotated = sensor.getRotatedOffset();
+
+        assertEquals("X should be y = 10", 10, rotated[0]);
+        assertEquals("Y should be x = 5", 5, rotated[1]);
+    }
+
+    @Test
+    public void testCeilingSensorRotation() {
+        // Mode: CEILING.
+        // Sensor: (x=-9, y=19) [Left ground sensor offset].
+        // Rotated for CEILING: (x, y) -> (x, -y) -> (-9, -19).
+        // ROM: s2.asm Sonic_WalkCeiling (42750-42779)
+        // X stays the same (left sensor stays on left side).
+        // Only Y is negated (sensor probes upward toward ceiling).
+        // This was the bug: old code did (-x, -y) which swapped left/right sensors!
+
+        mockSprite.setGroundMode(GroundMode.CEILING);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte) -9, (byte) 19, true);
+        short[] rotated = sensor.getRotatedOffset();
+
+        assertEquals("X should remain -9 (left side)", -9, rotated[0]);
+        assertEquals("Y should be negated to -19", -19, rotated[1]);
+    }
+
+    @Test
+    public void testCeilingSensorRotationRightSide() {
+        // Mode: CEILING.
+        // Sensor: (x=9, y=19) [Right ground sensor offset].
+        // Rotated for CEILING: (x, y) -> (x, -y) -> (9, -19).
+        // X stays positive (right sensor stays on right side).
+
+        mockSprite.setGroundMode(GroundMode.CEILING);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte) 9, (byte) 19, true);
+        short[] rotated = sensor.getRotatedOffset();
+
+        assertEquals("X should remain 9 (right side)", 9, rotated[0]);
+        assertEquals("Y should be negated to -19", -19, rotated[1]);
+    }
+
+    @Test
+    public void testLeftWallSensorRotation() {
+        // Mode: LEFTWALL.
+        // Sensor: (x=5, y=10) [Relative to Sprite in GROUND mode].
+        // Rotated for LEFTWALL: (x, y) -> (-y, x) -> (-10, 5).
+        // ROM: s2.asm Sonic_WalkVertL (42817-42846)
+
+        mockSprite.setGroundMode(GroundMode.LEFTWALL);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte) 5, (byte) 10, true);
+        short[] rotated = sensor.getRotatedOffset();
+
+        assertEquals("X should be -y = -10", -10, rotated[0]);
+        assertEquals("Y should be x = 5", 5, rotated[1]);
+    }
+
+    @Test
+    public void testGroundSensorRotation() {
+        // Mode: GROUND (default).
+        // Sensor: (x=-9, y=19) [Left ground sensor offset].
+        // No rotation: (x, y) -> (x, y) -> (-9, 19).
+
+        mockSprite.setGroundMode(GroundMode.GROUND);
+        mockSprite.setX((short) 100);
+        mockSprite.setY((short) 100);
+
+        GroundSensor sensor = new GroundSensor(mockSprite, Direction.DOWN, (byte) -9, (byte) 19, true);
+        short[] rotated = sensor.getRotatedOffset();
+
+        assertEquals("X should remain -9", -9, rotated[0]);
+        assertEquals("Y should remain 19", 19, rotated[1]);
     }
 
     @Test
