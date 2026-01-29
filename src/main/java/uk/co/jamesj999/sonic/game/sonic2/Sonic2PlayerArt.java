@@ -101,6 +101,10 @@ public class Sonic2PlayerArt {
                 Sonic2AnimationIds.HURT,      // hurtAnimId
                 Sonic2AnimationIds.SKID,      // skidAnimId
                 Sonic2AnimationIds.WALK,      // airAnimId
+                Sonic2AnimationIds.BALANCE,   // balanceAnimId - facing edge, safe distance
+                Sonic2AnimationIds.BALANCE2,  // balance2AnimId - facing edge, closer to falling
+                Sonic2AnimationIds.BALANCE3,  // balance3AnimId - facing away, safe distance
+                Sonic2AnimationIds.BALANCE4,  // balance4AnimId - facing away, closer to falling
                 0x40,                         // walkSpeedThreshold
                 0x600,                        // runSpeedThreshold
                 0);                           // fallbackFrame

@@ -200,6 +200,17 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
         protected boolean lookingUp = false;
 
         /**
+         * ROM: Balance animation state when standing at a ledge edge.
+         * 0 = not balancing
+         * 1 = BALANCE (0x06) - safe distance, facing toward edge
+         * 2 = BALANCE2 (0x0C) - closer to edge, facing toward edge
+         * 3 = BALANCE3 (0x1D) - safe distance, facing away from edge
+         * 4 = BALANCE4 (0x1E) - closer to edge, facing away from edge
+         * See s2.asm:36246-36373 for the balance detection logic.
+         */
+        protected int balanceState = 0;
+
+        /**
          * ROM-accurate spindash counter (spindash_counter).
          * Range: 0x000 to 0x800 (0 to 2048).
          * Speed table is indexed by counter >> 8 (gives 0-8).
@@ -368,6 +379,7 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 this.skidDustTimer = 0;
                 this.crouching = false;
                 this.lookingUp = false;
+                this.balanceState = 0;
                 this.highPriority = false;
                 this.priorityBucket = RenderPriority.PLAYER_DEFAULT;
                 this.forceInputRight = false;
@@ -720,6 +732,18 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
 
         public void setLookingUp(boolean lookingUp) {
                 this.lookingUp = lookingUp;
+        }
+
+        public int getBalanceState() {
+                return balanceState;
+        }
+
+        public void setBalanceState(int balanceState) {
+                this.balanceState = balanceState;
+        }
+
+        public boolean isBalancing() {
+                return balanceState > 0;
         }
 
         public boolean getPushing() {

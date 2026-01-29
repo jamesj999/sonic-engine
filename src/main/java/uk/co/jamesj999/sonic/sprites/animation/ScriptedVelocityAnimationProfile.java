@@ -20,6 +20,11 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
     private final int hurtAnimId;
     private final int skidAnimId;
     private final int airAnimId;
+    // Balance animations (ROM s2.asm:36246-36373)
+    private final int balanceAnimId;   // 0x06 - facing toward edge, safe distance
+    private final int balance2AnimId;  // 0x0C - facing toward edge, closer to falling
+    private final int balance3AnimId;  // 0x1D - facing away from edge, safe distance
+    private final int balance4AnimId;  // 0x1E - facing away from edge, closer to falling
     private final int runSpeedThreshold;
     private final int walkSpeedThreshold;
     private final int fallbackFrame;
@@ -150,6 +155,38 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
             int walkSpeedThreshold,
             int runSpeedThreshold,
             int fallbackFrame) {
+        this(idleAnimId, walkAnimId, runAnimId, rollAnimId, roll2AnimId, pushAnimId, duckAnimId, lookUpAnimId,
+                spindashAnimId, springAnimId, deathAnimId, hurtAnimId, skidAnimId, airAnimId,
+                -1, -1, -1, -1,  // balance animations disabled by default
+                walkSpeedThreshold, runSpeedThreshold, fallbackFrame);
+    }
+
+    /**
+     * Full constructor with balance animation support.
+     * Balance animations are ROM-accurate (s2.asm:36246-36373).
+     */
+    public ScriptedVelocityAnimationProfile(
+            int idleAnimId,
+            int walkAnimId,
+            int runAnimId,
+            int rollAnimId,
+            int roll2AnimId,
+            int pushAnimId,
+            int duckAnimId,
+            int lookUpAnimId,
+            int spindashAnimId,
+            int springAnimId,
+            int deathAnimId,
+            int hurtAnimId,
+            int skidAnimId,
+            int airAnimId,
+            int balanceAnimId,
+            int balance2AnimId,
+            int balance3AnimId,
+            int balance4AnimId,
+            int walkSpeedThreshold,
+            int runSpeedThreshold,
+            int fallbackFrame) {
         this.idleAnimId = Math.max(0, idleAnimId);
         this.walkAnimId = Math.max(0, walkAnimId);
         this.runAnimId = Math.max(0, runAnimId);
@@ -164,6 +201,10 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         this.hurtAnimId = Math.max(-1, hurtAnimId);
         this.skidAnimId = Math.max(-1, skidAnimId);
         this.airAnimId = Math.max(0, airAnimId);
+        this.balanceAnimId = Math.max(-1, balanceAnimId);
+        this.balance2AnimId = Math.max(-1, balance2AnimId);
+        this.balance3AnimId = Math.max(-1, balance3AnimId);
+        this.balance4AnimId = Math.max(-1, balance4AnimId);
         this.walkSpeedThreshold = Math.max(0, walkSpeedThreshold);
         this.runSpeedThreshold = Math.max(0, runSpeedThreshold);
         this.fallbackFrame = Math.max(0, fallbackFrame);
@@ -222,6 +263,19 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
         // Walk animation when pressing direction OR when still moving (inertia != 0)
         if (pressingDirection || speed > 0) {
             return walkAnimId;
+        }
+
+        // Balance animation when standing at edge of ledge/platform (ROM s2.asm:36246-36373)
+        // Balance state is set by movement code based on terrain/object edge detection
+        int balanceState = sprite.getBalanceState();
+        if (balanceState > 0 && balanceAnimId >= 0) {
+            return switch (balanceState) {
+                case 1 -> balanceAnimId;      // Balance - facing edge, safe distance
+                case 2 -> balance2AnimId >= 0 ? balance2AnimId : balanceAnimId;  // Balance2 - facing edge, closer
+                case 3 -> balance3AnimId >= 0 ? balance3AnimId : balanceAnimId;  // Balance3 - facing away, safe
+                case 4 -> balance4AnimId >= 0 ? balance4AnimId : (balance3AnimId >= 0 ? balance3AnimId : balanceAnimId); // Balance4 - facing away, closer
+                default -> balanceAnimId;
+            };
         }
 
         // Idle only when not pressing direction AND completely stopped (inertia == 0)
@@ -286,6 +340,22 @@ public class ScriptedVelocityAnimationProfile implements SpriteAnimationProfile 
 
     public int getAirAnimId() {
         return airAnimId;
+    }
+
+    public int getBalanceAnimId() {
+        return balanceAnimId;
+    }
+
+    public int getBalance2AnimId() {
+        return balance2AnimId;
+    }
+
+    public int getBalance3AnimId() {
+        return balance3AnimId;
+    }
+
+    public int getBalance4AnimId() {
+        return balance4AnimId;
     }
 
     public int getRunSpeedThreshold() {

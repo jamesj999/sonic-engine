@@ -260,6 +260,16 @@ public class ObjectManager {
         solidContacts.clearRidingObject();
     }
 
+    /**
+     * Get the object that the player is currently standing on (riding).
+     * Used for balance detection at object edges.
+     *
+     * @return The object being ridden, or null if not standing on any object
+     */
+    public ObjectInstance getRidingObject() {
+        return solidContacts.getRidingObject();
+    }
+
     public boolean hasStandingContact(AbstractPlayableSprite player) {
         return solidContacts.hasStandingContact(player);
     }
@@ -823,6 +833,10 @@ public class ObjectManager {
 
         void clearRidingObject() {
             ridingObject = null;
+        }
+
+        ObjectInstance getRidingObject() {
+            return ridingObject;
         }
 
         boolean hasStandingContact(AbstractPlayableSprite player) {
