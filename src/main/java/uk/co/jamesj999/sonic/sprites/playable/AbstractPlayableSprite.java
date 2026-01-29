@@ -1674,49 +1674,53 @@ public abstract class AbstractPlayableSprite extends AbstractSprite {
                 Sensor pushF = pushSensors[1];
 
                 if (getAir()) {
-                        short xSpeedPositive = (short) Math.abs(xSpeed);
-                        short ySpeedPositive = (short) Math.abs(ySpeed);
+                        // Compute motion angle using Sonic's 256-degree system
+                        // 0 = right, 64 = down, 128 = left, 192 = up
+                        double radians = Math.atan2(ySpeed, xSpeed);
+                        int motionAngle = (int) Math.round(radians * 128.0 / Math.PI);
+                        if (motionAngle < 0) {
+                                motionAngle += 256;
+                        }
 
-                        if (xSpeedPositive > ySpeedPositive) {
-                                if (xSpeed > 0) {
-                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD,
-                                                        pushF };
-                                        sensorsToDeactivate = new Sensor[] { pushE };
-                                } else {
-                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD,
-                                                        pushE };
-                                        sensorsToDeactivate = new Sensor[] { pushF };
-                                }
+                        // Select quadrant based on angle ranges
+                        if ((motionAngle >= 224 && motionAngle <= 255) || (motionAngle >= 0 && motionAngle <= 31)) {
+                                // Mostly Right (224-255, 0-31): A, B, C, D, F
+                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
+                                sensorsToDeactivate = new Sensor[] { pushE };
+                        } else if (motionAngle >= 32 && motionAngle <= 95) {
+                                // Mostly Down (32-95): A, B, E, F
+                                sensorsToActivate = new Sensor[] { groundA, groundB, pushE, pushF };
+                                sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD };
+                        } else if (motionAngle >= 96 && motionAngle <= 159) {
+                                // Mostly Left (96-159): A, B, C, D, E
+                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
+                                sensorsToDeactivate = new Sensor[] { pushF };
                         } else {
-                                if (ySpeed > 0) {
-                                        sensorsToActivate = new Sensor[] { groundA, groundB, pushE, pushF };
-                                        sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD };
-                                } else {
-                                        sensorsToActivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
-                                        sensorsToDeactivate = new Sensor[] { groundA, groundB };
-                                }
+                                // Mostly Up (160-223): C, D, E, F
+                                sensorsToActivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
+                                sensorsToDeactivate = new Sensor[] { groundA, groundB };
                         }
                 } else {
                         // Push sensors active on floor/ceiling, disabled on walls
                         boolean pushActive = (runningMode == GroundMode.GROUND || runningMode == GroundMode.CEILING);
                         // Use gSpeed (speed along surface) instead of xSpeed for direction
                         if (gSpeed > 0) {
-                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushF };
-                                sensorsToDeactivate = new Sensor[] { pushE };
+                                sensorsToActivate = new Sensor[] { groundA, groundB, pushF };
+                                sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD, pushE };
                                 if (!pushActive) {
-                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
-                                        sensorsToDeactivate = new Sensor[] { pushE, pushF };
+                                        sensorsToActivate = new Sensor[] { groundA, groundB };
+                                        sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
                                 }
                         } else if (gSpeed < 0) {
-                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD, pushE };
-                                sensorsToDeactivate = new Sensor[] { pushF };
+                                sensorsToActivate = new Sensor[] { groundA, groundB, pushE };
+                                sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD, pushF };
                                 if (!pushActive) {
-                                        sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
-                                        sensorsToDeactivate = new Sensor[] { pushE, pushF };
+                                        sensorsToActivate = new Sensor[] { groundA, groundB };
+                                        sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
                                 }
                         } else {
-                                sensorsToActivate = new Sensor[] { groundA, groundB, ceilingC, ceilingD };
-                                sensorsToDeactivate = new Sensor[] { pushE, pushF };
+                                sensorsToActivate = new Sensor[] { groundA, groundB };
+                                sensorsToDeactivate = new Sensor[] { ceilingC, ceilingD, pushE, pushF };
                         }
                 }
 

@@ -721,7 +721,8 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 	/** AnglePos: Ground terrain collision (s2.asm:42534) */
 	private void doAnglePos() {
 		if (sprite.isOnObject()) {
-			sprite.setAngle((byte) 0);
+			// ROM: AnglePos sets Primary/Secondary_Angle to 0 but does NOT modify angle(a0)
+			// Preserve the player's angle for smooth transitions when stepping off objects
 			return;
 		}
 
@@ -865,13 +866,16 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 	/** Ceiling collision internal - returns whether ceiling was hit */
 	private boolean doCeilingCollisionInternal(SensorResult[] results) {
-		if (sprite.getYSpeed() >= 0) return false;
-
 		SensorResult lowestResult = findLowestSensorResult(results);
 		if (lowestResult == null || lowestResult.distance() >= 0) return false;
 
+		// ROM: Always correct position when penetrating ceiling (distance < 0)
 		moveForSensorResult(lowestResult);
-		sprite.setYSpeed((short) 0);
+
+		// ROM: Only reset velocity when moving upward (ySpeed < 0)
+		if (sprite.getYSpeed() < 0) {
+			sprite.setYSpeed((short) 0);
+		}
 		return true;
 	}
 
@@ -895,7 +899,26 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		// ROM: bmi.s Obj01_CheckWallsOnGround_Left - select sensor based on gSpeed direction
 		int sensorIndex = gSpeed >= 0 ? 1 : 0;
 
-		SensorResult result = pushSensors[sensorIndex].scan();
+		// ROM s2.asm:43480-43491 (CalcRoomInFront): Velocity prediction
+		// The ROM scans at PREDICTED position (current + velocity), not current position.
+		// This is critical for the velocity adjustment to work correctly:
+		//   predicted_pos = current_pos + velocity
+		//   distance = how far predicted_pos is inside wall
+		//   adjusted_velocity = velocity + distance (cancels over-penetration)
+		//   final_pos = current_pos + adjusted_velocity = exactly at wall
+		//
+		// ROM uses the FULL position (including subpixels) for prediction:
+		//   d3 = x_pos (32-bit: pixel.subpixel)
+		//   d1 = x_vel << 8 (shift velocity into position format)
+		//   d3 += d1 (predicted full position)
+		//   swap d3 (get predicted pixel)
+		//
+		// Our 8-bit subpixel equivalent: predicted_pixel_delta = (subpixel + velocity) >> 8
+		// This accounts for accumulated subpixels that may cause a pixel boundary crossing.
+		short predictedDx = (short) (((sprite.getXSubpixel() & 0xFF) + sprite.getXSpeed()) >> 8);
+		short predictedDy = (short) (((sprite.getYSubpixel() & 0xFF) + sprite.getYSpeed()) >> 8);
+
+		SensorResult result = pushSensors[sensorIndex].scan(predictedDx, predictedDy);
 		if (result == null || result.distance() >= 0) {
 			return;
 		}
@@ -906,20 +929,29 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			return;
 		}
 
-		// ROM s2.asm:36502-36510:
-		// add.w d1,x_pos(a0)        - Adjust X position by distance
-		// move.w #0,x_vel(a0)       - Clear X velocity
-		// move.w #0,ground_vel(a0)  - Clear ground velocity
-		// NOTE: ROM does NOT set pushing flag in Obj01_CheckWallsOnGround
+		// ROM s2.asm:36503-36523: Wall collision response
+		// ROM adds distance (in subpixels) to velocity, then ObjectMove applies it.
+		// Since we scanned at predicted position, adding distance to velocity cancels
+		// the over-penetration, and sprite.move() lands us exactly at the wall.
+		int velocityAdjustment = result.distance() << 8;  // asl.w #8,d1
+
 		if (sensorIndex == 1) {
-			// Right sensor: negative distance means move left (away from wall)
-			sprite.setX((short) (sprite.getX() + result.distance()));
+			// Right sensor: ROM does add.w d1,x_vel (line 36511)
+			sprite.setXSpeed((short) (sprite.getXSpeed() + velocityAdjustment));
 		} else {
-			// Left sensor (CalcRoomBehind): ROM uses sub.w d1,x_pos
-			sprite.setX((short) (sprite.getX() - result.distance()));
+			// Left sensor: ROM does sub.w d1,x_vel (line 36521)
+			sprite.setXSpeed((short) (sprite.getXSpeed() - velocityAdjustment));
 		}
-		sprite.setXSpeed((short) 0);
+
 		sprite.setGSpeed((short) 0);
+
+		// ROM s2.asm:36511-36524: Set pushing flag based on mode from angle
+		// Only wall modes (0x40 left wall, 0xC0 right wall) set the pushing flag
+		// Floor mode (0x00) and ceiling mode (0x80) do NOT set pushing
+		int mode = calculateModeFromAngle(angle);
+		if (mode == 0x40 || mode == 0xC0) {
+			sprite.setPushing(true);
+		}
 	}
 
 	/**
@@ -967,11 +999,10 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 	/** Ceiling collision with potential landing */
 	private void doCeilingCollision(SensorResult[] results) {
-		if (sprite.getYSpeed() >= 0) return;
-
 		SensorResult lowestResult = findLowestSensorResult(results);
 		if (lowestResult == null || lowestResult.distance() >= 0) return;
 
+		// ROM: Always correct position when penetrating ceiling (distance < 0)
 		moveForSensorResult(lowestResult);
 
 		int ceilingAngle = lowestResult.angle() & 0xFF;
@@ -991,7 +1022,10 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			sprite.setGSpeed(gSpeed);
 			updateGroundMode();
 		} else {
-			sprite.setYSpeed((short) 0);
+			// ROM: Only reset velocity when moving upward (ySpeed < 0)
+			if (sprite.getYSpeed() < 0) {
+				sprite.setYSpeed((short) 0);
+			}
 		}
 	}
 
@@ -1335,14 +1369,23 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 		int overheadAngle = (hexAngle + 0x80) & 0xFF;
 		int quadrant = (overheadAngle + 0x20) & 0xC0;
 
+		// ROM's CalcRoomOverHead (s2.asm:43537-43553) uses:
+		// - lrb_solid_bit for all headroom checks (NOT top_solid_bit)
+		// - Vertical sensors (FindFloor) for floor/ceiling modes
+		// - Horizontal sensors (FindWall) for wall modes
+		Sensor[] pushSensors = sprite.getPushSensors();
 		Sensor[] sensors = switch (quadrant) {
-			case 0x00, 0x80 -> sprite.getCeilingSensors();
-			case 0x40, 0xC0 -> sprite.getGroundSensors();
+			case 0x00 -> sprite.getCeilingSensors();      // Floor: vertical UP
+			case 0x40 -> pushSensors != null ? new Sensor[] { pushSensors[0] } : sprite.getCeilingSensors();  // Left wall: horizontal LEFT
+			case 0x80 -> sprite.getCeilingSensors();      // Ceiling: vertical UP
+			case 0xC0 -> pushSensors != null ? new Sensor[] { pushSensors[1] } : sprite.getCeilingSensors();  // Right wall: horizontal RIGHT
 			default -> null;
 		};
 
 		if (sensors == null) return Integer.MAX_VALUE;
 
+		// Note: Ceiling sensors (Direction.UP) and push sensors (Direction.LEFT/RIGHT)
+		// already use lrb_solid_bit by default (GroundSensor.java:48-50)
 		int minDistance = Integer.MAX_VALUE;
 		for (Sensor sensor : sensors) {
 			boolean wasActive = sensor.isActive();

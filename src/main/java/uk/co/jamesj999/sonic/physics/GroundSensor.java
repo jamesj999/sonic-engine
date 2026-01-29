@@ -92,6 +92,33 @@ public class GroundSensor extends Sensor {
             return null;
         }
 
+        // Handle negative metrics (ROM: FindFloor loc_1E85E, s2.asm:43006-43013)
+        // Negative metric means collision starts from opposite edge
+        if (metric < 0) {
+            int yInTile = origY & 0x0F;  // Position within tile (0-15)
+            int adjusted = metric + yInTile;
+
+            if (adjusted >= 0) {
+                // Sensor hasn't reached collision zone - extend
+                return null;
+            }
+
+            // Sensor is in collision zone - regress to previous tile
+            short prevCheckY = (short) (checkY + (direction == Direction.DOWN ? -16 : 16));
+            SensorResult prevResult = scanTileVertical(origX, origY, checkX, prevCheckY, solidityBit, direction);
+
+            if (prevResult != null) {
+                // Adjust distance by -16 (ROM: subi.w #$10,d1)
+                return new SensorResult(
+                    prevResult.angle(),
+                    (byte) (prevResult.distance() - 16),
+                    prevResult.tileId(),
+                    prevResult.direction()
+                );
+            }
+            return null;
+        }
+
         // Full-height tile: check previous tile for edge detection
         if (metric == FULL_TILE) {
             short prevY = (short) (checkY + (direction == Direction.DOWN ? -16 : 16));
