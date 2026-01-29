@@ -343,6 +343,7 @@ public class SpringObjectInstance extends BoxObjectInstance
      * ROM collision params vary by type:
      * Up/Down: D1=$1B (27), D2=8, D3=$10 (16)
      * Horizontal: D1=$13 (19), D2=$E (14), D3=$F (15)
+     * Diagonal: D1=$1B (27), D2=$10 (16) - taller to catch player running off terrain
      */
     @Override
     public SolidObjectParams getSolidParams() {
@@ -351,7 +352,12 @@ public class SpringObjectInstance extends BoxObjectInstance
             // Reduce height to 8 (16px total) to avoid blocking player when walking over it
             return new SolidObjectParams(19, 8, 8);
         }
-        // Up, Down, Diagonal use standard vertical params
+        if (type == TYPE_DIAGONAL_UP || type == TYPE_DIAGONAL_DOWN) {
+            // ROM: Diagonal springs use d2=$10 (halfHeight=16), taller collision box
+            // This is critical for catching the player when running off terrain edges
+            return new SolidObjectParams(27, 16, 16);
+        }
+        // Up, Down springs use standard vertical params
         // Fix height: Air=8, Ground=8 (matches 16px visual height, prevents
         // oscillation)
         return new SolidObjectParams(27, 8, 8);
