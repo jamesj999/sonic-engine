@@ -444,9 +444,20 @@ public final class HardwareTimingService
                 snapshot.admissionPolicies(), snapshot.recordedAdmissionActive());
         nextOrdinals.clear();
         nextOrdinals.putAll(snapshot.nextOrdinals());
+        // Keep live jobs whose memoized snapshot is the exact instance being
+        // restored: they are already in that state, so recreating them would
+        // only re-clone payload and preparation bytes. Order follows the snapshot.
+        List<HardwareTimingJob> previous = new ArrayList<>(jobs);
         jobs.clear();
         for (HardwareTimingJob.Snapshot jobSnapshot : snapshot.jobs()) {
-            jobs.add(HardwareTimingJob.restore(jobSnapshot));
+            HardwareTimingJob kept = null;
+            for (HardwareTimingJob candidate : previous) {
+                if (candidate.isUnchangedSince(jobSnapshot)) {
+                    kept = candidate;
+                    break;
+                }
+            }
+            jobs.add(kept != null ? kept : HardwareTimingJob.restore(jobSnapshot));
         }
         admissionPolicies.clear();
         admissionPolicies.putAll(snapshot.admissionPolicies());

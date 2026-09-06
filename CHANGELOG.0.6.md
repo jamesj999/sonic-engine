@@ -1,5 +1,10 @@
 # OpenGGF 0.6 Changelog
 
+- Rewind checkpoints no longer re-clone the payload and preparation bytes of
+  every spent hardware-timing job, and restore keeps unchanged live jobs
+  instead of rebuilding them. In S3K AIZ1 after the intro this cuts a
+  checkpoint capture from about 287KB to 33KB and a restore from 315KB to 30KB.
+
 - Fast FM gives global LFO pitch changes their own operator sampling boundary,
   preventing phase errors when modulation wraps a high F-number. The supported
   178-script corpus now passes unchanged waveform/level bounds without deferrals.
