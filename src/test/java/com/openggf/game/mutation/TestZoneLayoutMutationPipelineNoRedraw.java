@@ -112,7 +112,7 @@ class TestZoneLayoutMutationPipelineNoRedraw {
     @Test
     void withoutRedrawHintsStripsOnlyRedrawFlags() {
         MutationEffects base = new MutationEffects(
-                new java.util.BitSet(), true, true, true, true, true);
+                new java.util.BitSet(), true, true, true, true, true, true);
 
         MutationEffects stripped = base.withoutRedrawHints();
 

@@ -149,6 +149,11 @@ final class LevelActTransitionExecutor {
         if (request.mutationKey() != null && !request.mutationKey().isBlank()) {
             levelManager.applySeamlessMutation(request.mutationKey());
         }
+        // A prepared load built its tilemaps from the post-mutation layout;
+        // swap them in now so the first render does not rebuild both layers.
+        if (levelManager.hasPrebuiltTilemaps()) {
+            levelManager.swapToPrebuiltTilemaps();
+        }
 
         levelManager.initAnimatedContent();
         if (transitionOwnsLoopTail

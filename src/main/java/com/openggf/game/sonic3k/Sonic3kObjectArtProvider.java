@@ -1124,25 +1124,54 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
         // (e.g. AIZ1→AIZ2 seamless reload) where the act changed after initial load.
         currentActIndex = GameServices.level().getCurrentAct();
 
-        RomByteReader reader = null;
-        try {
-            Rom rom = GameServices.rom().getRom();
-            if (rom != null) reader = RomByteReader.fromRom(rom);
-        } catch (IOException e) {
-            LOG.warning("Failed to create RomByteReader for level art: " + e.getMessage());
+        PreparedLevelArt prepared = level instanceof Sonic3kLevel s3kLevel
+                ? s3kLevel.takePreparedLevelArt()
+                : null;
+        if (prepared == null
+                || prepared.zoneIndex() != zoneIndex
+                || prepared.actIndex() != currentActIndex) {
+            RomByteReader reader = null;
+            try {
+                Rom rom = GameServices.rom().getRom();
+                if (rom != null) reader = RomByteReader.fromRom(rom);
+            } catch (IOException e) {
+                LOG.warning("Failed to create RomByteReader for level art: " + e.getMessage());
+            }
+            prepared = buildLevelArtSheets(level, zoneIndex, currentActIndex, reader);
         }
-        Sonic3kObjectArt art = new Sonic3kObjectArt(level, reader);
-
-        Sonic3kPlcArtRegistry.ZoneArtPlan plan =
-                Sonic3kPlcArtRegistry.getPlan(zoneIndex, currentActIndex);
-        loadLevelArtFromRegistry(plan, art);
+        registerPreparedLevelArt(prepared);
 
         LOG.info("Sonic3kObjectArtProvider registered " + rendererKeys.size()
                 + " level-art sheets for zone " + zoneIndex);
     }
 
-    private void loadLevelArtFromRegistry(Sonic3kPlcArtRegistry.ZoneArtPlan plan,
-            Sonic3kObjectArt art) {
+    /** One level-art sheet built ahead of registration, with the level tiles it depends on. */
+    public record PreparedLevelArtSheet(String key,
+                                        ObjectSpriteSheet sheet,
+                                        List<Sonic3kPlcLoader.TileRange> tileRanges) {
+    }
+
+    /**
+     * The registry-driven level-art sheets for one zone/act, built from a
+     * level's pattern data without touching provider state, so a prepared
+     * level load can build them off the frame thread.
+     */
+    public record PreparedLevelArt(int zoneIndex, int actIndex, List<PreparedLevelArtSheet> sheets) {
+    }
+
+    /**
+     * Builds the level-art sheets {@link Sonic3kPlcArtRegistry} lists for
+     * {@code zoneIndex}/{@code actIndex} from {@code level}'s patterns. Pure:
+     * reads the level and the ROM only, so it may run off the frame thread.
+     */
+    public static PreparedLevelArt buildLevelArtSheets(Level level,
+                                                       int zoneIndex,
+                                                       int actIndex,
+                                                       RomByteReader reader) {
+        Sonic3kObjectArt art = new Sonic3kObjectArt(level, reader);
+        Sonic3kPlcArtRegistry.ZoneArtPlan plan =
+                Sonic3kPlcArtRegistry.getPlan(zoneIndex, actIndex);
+        List<PreparedLevelArtSheet> sheets = new ArrayList<>();
         for (Sonic3kPlcArtRegistry.LevelArtEntry entry : plan.levelArt()) {
             ObjectSpriteSheet sheet;
             if (entry.builderName() != null) {
@@ -1159,11 +1188,30 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
                 LOG.warning("LevelArtEntry '" + entry.key() + "' has no builder or mapping addr");
                 continue;
             }
-            registerLevelArtSheet(entry.key(), sheet, art);
+            List<Sonic3kPlcLoader.TileRange> ranges = List.of();
+            if (sheet != null && art.getLastBuildStartTile() >= 0) {
+                ranges = art.getLastBuildTileRanges();
+                if (ranges.isEmpty()) {
+                    ranges = List.of(new Sonic3kPlcLoader.TileRange(
+                            art.getLastBuildStartTile(), art.getLastBuildTileCount()));
+                }
+            }
+            art.clearLastBuildTileRanges();
+            sheets.add(new PreparedLevelArtSheet(entry.key(), sheet, ranges));
+        }
+        return new PreparedLevelArt(zoneIndex, actIndex, List.copyOf(sheets));
+    }
+
+    private void registerPreparedLevelArt(PreparedLevelArt prepared) {
+        for (PreparedLevelArtSheet entry : prepared.sheets()) {
+            registerSheet(entry.key(), entry.sheet());
+            if (entry.sheet() != null && !entry.tileRanges().isEmpty()) {
+                levelArtTileRanges.put(entry.key(), entry.tileRanges());
+            }
         }
     }
 
-    private ObjectSpriteSheet invokeBuilder(Sonic3kObjectArt art, String builderName, int artTileBase) {
+    private static ObjectSpriteSheet invokeBuilder(Sonic3kObjectArt art, String builderName, int artTileBase) {
         return switch (builderName) {
             case "buildSpikesSheet" -> art.buildSpikesSheet(artTileBase);
             case "buildSpringVerticalSheet" -> art.buildSpringVerticalSheet(artTileBase);

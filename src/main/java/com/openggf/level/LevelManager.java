@@ -19,6 +19,8 @@ import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.CrossGameFeatureProvider;
 import com.openggf.game.DynamicStartPositionProvider;
+import com.openggf.game.GameStateManager;
+import com.openggf.game.ZoneFeatureProvider;
 import com.openggf.debug.DebugObjectArtViewer;
 import com.openggf.debug.DebugOverlayManager;
 import com.openggf.debug.PerformanceProfiler;
@@ -68,6 +70,8 @@ import com.openggf.level.rings.RingManager;
 import com.openggf.level.rings.RingSpriteSheet;
 import com.openggf.level.resources.DeferredLevelResourceTracker;
 import com.openggf.level.resources.DeferredLevelResourceLoader;
+import com.openggf.level.resources.PreparableLevelLoader;
+import com.openggf.level.resources.PreparedLevelBuild;
 import com.openggf.level.scroll.BgTilemapUpdateMode;
 import com.openggf.level.animation.AnimatedPaletteManager;
 import com.openggf.level.animation.AnimatedPatternManager;
@@ -525,10 +529,82 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * @return the loaded Level instance (also assigned to {@code this.level})
      */
     public Level loadLevelData(int levelIndex) throws IOException {
-        Level loaded = game.loadLevel(levelIndex);
+        LevelLoadPreparer.Prepared prepared = takePreparedLevelLoad(levelIndex);
+        Level loaded = prepared != null
+                ? ((PreparableLevelLoader) game).installPreparedLevel(prepared.build())
+                : game.loadLevel(levelIndex);
         writeCurrentLevel(loaded);
         rebuildLevelDerivedState();
+        adoptPreparedTilemaps(prepared);
         return loaded;
+    }
+
+    private final LevelLoadPreparer loadPreparer = new LevelLoadPreparer();
+
+    /**
+     * Starts building the level for {@code zone}/{@code act} on the shared
+     * preparer thread so a later seamless transition into it installs the
+     * result instead of constructing it on the transition frame.
+     *
+     * <p>Call this from the transition owner at the point where the ROM itself
+     * starts its own target-level resource work (for example when it queues the
+     * target's Kos jobs), so the host-side build shares that existing wait. The
+     * later install always joins the build; it never moves the install frame.
+     *
+     * @param mutationKey the seamless mutation the transition will apply after
+     *                    the install, so the build can pre-apply its layout part
+     *                    and the prebuilt tilemaps already match it
+     * @return true when a build was started
+     */
+    public boolean prepareActTransitionLevelLoad(int zone, int act, String mutationKey) {
+        if (!(game instanceof PreparableLevelLoader loader)) {
+            return false;
+        }
+        if (zone < 0 || zone >= levels.size() || act < 0 || act >= levels.get(zone).size()) {
+            return false;
+        }
+        int levelIndex = levels.get(zone).get(act).getLevelIndex();
+        ZoneFeatureProvider features = zoneFeatureProvider;
+        ParallaxManager parallax = parallaxManager;
+        boolean verticalWrap = verticalWrapEnabled;
+        GraphicsManager graphics = graphicsManager;
+        GameStateManager state = gameState;
+        loadPreparer.prepare(levelIndex, () -> {
+            PreparedLevelBuild build = loader.prepareLevelBuild(levelIndex, mutationKey);
+            PrebuiltTilemaps tilemaps = LevelTilemapPrebuilder.build(
+                    build.level(), graphics, state, features, zone, parallax, verticalWrap);
+            return new LevelLoadPreparer.Prepared(build, tilemaps);
+        });
+        return true;
+    }
+
+    /** Drops any level build prepared for a transition that will no longer happen. */
+    public void discardPreparedLevelLoad() {
+        loadPreparer.discard();
+    }
+
+    /** Number of level installs served from a prepared build; test observability. */
+    public int preparedLevelInstallCount() {
+        return loadPreparer.installedFromPreparedCount();
+    }
+
+    private LevelLoadPreparer.Prepared takePreparedLevelLoad(int levelIndex) {
+        if (!(game instanceof PreparableLevelLoader)) {
+            return null;
+        }
+        LevelLoadPreparer.Prepared prepared = loadPreparer.take(levelIndex);
+        if (prepared == null) {
+            // Any build pending for another level is stale once this load runs.
+            loadPreparer.discard();
+        }
+        return prepared;
+    }
+
+    private void adoptPreparedTilemaps(LevelLoadPreparer.Prepared prepared) {
+        if (prepared == null || prepared.tilemaps() == null || tilemapManager == null) {
+            return;
+        }
+        tilemapManager.adoptPrebuiltTilemaps(prepared.tilemaps());
     }
 
     public Level loadLevelData(
@@ -540,6 +616,7 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                         ? deferredResources
                         : DeferredLevelResourceTracker.none();
         Level loaded;
+        LevelLoadPreparer.Prepared prepared = null;
         if (activeDeferredResources.hasExplicitPolicy()
                 && game instanceof DeferredLevelResourceLoader loader) {
             loaded = loader.loadLevelWithDeferredResources(
@@ -550,10 +627,14 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                         game.getIdentifier()
                                 + " does not support deferred level resources");
             }
-            loaded = game.loadLevel(levelIndex);
+            prepared = takePreparedLevelLoad(levelIndex);
+            loaded = prepared != null
+                    ? ((PreparableLevelLoader) game).installPreparedLevel(prepared.build())
+                    : game.loadLevel(levelIndex);
         }
         writeCurrentLevel(loaded);
         rebuildLevelDerivedState();
+        adoptPreparedTilemaps(prepared);
         return loaded;
     }
 
@@ -1966,45 +2047,12 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * 6144 mod 1024 = 0 → column 0 (valid).
      */
     private int computeActualBgDataWidthPx() {
-        if (level == null || level.getMap() == null) {
-            return blockPixelSize;
+        int dataWidthPx = LevelGeometry.contiguousBgDataWidthPx(level, blockPixelSize);
+        if (level != null && level.getMap() != null
+                && dataWidthPx < level.getMap().getWidth() * blockPixelSize) {
+            LOGGER.fine("BG contiguous data width: " + dataWidthPx / blockPixelSize + " blocks ("
+                    + dataWidthPx + "px) out of " + level.getMap().getWidth() + " map columns");
         }
-        Map map = level.getMap();
-        int mapWidth = map.getWidth();
-        int mapHeight = map.getHeight();
-
-        // Scan left-to-right to find the first all-zero column.
-        // This gives the contiguous BG data width starting from column 0,
-        // ignoring any stray non-zero blocks at distant columns.
-        int contiguousWidth = 0;
-        for (int col = 0; col < mapWidth; col++) {
-            boolean hasData = false;
-            for (int row = 0; row < mapHeight; row++) {
-                if ((map.getValue(1, col, row) & 0xFF) != 0) {
-                    hasData = true;
-                    break;
-                }
-            }
-            if (hasData) {
-                contiguousWidth = col + 1;
-            } else {
-                // Found first empty column - stop here
-                break;
-            }
-        }
-
-        if (contiguousWidth == 0) {
-            // No BG data at all — use full map width as fallback
-            return mapWidth * blockPixelSize;
-        }
-
-        int dataWidthPx = contiguousWidth * blockPixelSize;
-
-        if (dataWidthPx < mapWidth * blockPixelSize) {
-            LOGGER.fine("BG contiguous data width: " + contiguousWidth + " blocks ("
-                    + dataWidthPx + "px) out of " + mapWidth + " map columns");
-        }
-
         return dataWidthPx;
     }
 
@@ -2250,6 +2298,17 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
     public void invalidateForegroundTilemap() {
         if (tilemapManager != null) {
             tilemapManager.invalidateForegroundTilemap();
+        }
+    }
+
+    /**
+     * Marks only the pattern atlas lookup as dirty. Use this after runtime
+     * writes that replace 8x8 pattern data in place (art overlays, PLC uploads)
+     * without changing the pattern indices the tilemap cells reference.
+     */
+    public void invalidatePatternLookup() {
+        if (tilemapManager != null) {
+            tilemapManager.invalidatePatternLookup();
         }
     }
 

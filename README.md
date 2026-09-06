@@ -702,6 +702,18 @@ holds an unclaimed preparation is always re-captured. Focused rewind, timing
 and S3K suites pass (2,860 tests post-merge); a further verification follows
 the claimed-only correction.
 
+S3K AIZ1 no longer stutters at its two runtime hand-offs. The intro terrain
+swap at camera X $1400 swaps in tilemaps pre-built during level load instead of
+rebuilding both full-level tilemaps on the frame (about 25 ms headless to under
+1 ms), and pattern-only art writes such as the $2E00 fire overlay now refresh
+the pattern atlas lookup rather than rebuilding tilemaps. The fire curtain's
+act 2 reload installs a level built on a preparer thread across the fire
+event's own wait; the reload always joins that build, and a regression test
+confirms the reload frame, positions, tilemap bytes and registered art match a
+synchronous reload (reload frame about 43 ms to 9 ms at 60 fps pacing). Related
+S3K, Kos, level and transition suites pass except two AIZ trace replays that
+fail identically on the pre-merge develop; guards pass (610).
+
 The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
 identified release skip-classification and trace-policy mismatches. The
 [remediation record](docs/architecture/validation/2026-09-06-release-gates.md)

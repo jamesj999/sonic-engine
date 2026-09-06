@@ -37,6 +37,14 @@ public class Sonic3kLevel extends AbstractLevel {
     private byte[] primaryCollisionIndexTable = new byte[0];
     private byte[] secondaryCollisionIndexTable = new byte[0];
     private final Integer minXOverride;
+    /**
+     * False for a level built off the frame thread ahead of its install: the
+     * constructor then skips palette/pattern publication and the installer
+     * calls {@link #publishGraphics} on the frame thread instead.
+     */
+    private final boolean publishGraphicsOnLoad;
+    /** Level-art sheets built alongside a prepared load, consumed once by the art provider. */
+    private Sonic3kObjectArtProvider.PreparedLevelArt preparedLevelArt;
     private int fgLayoutWidthBlocks = Sonic3kConstants.MAP_WIDTH;
     private int fgLayoutHeightBlocks = Sonic3kConstants.MAP_HEIGHT;
     private int bgLayoutWidthBlocks = Sonic3kConstants.MAP_WIDTH;
@@ -75,7 +83,35 @@ public class Sonic3kLevel extends AbstractLevel {
                         List<ObjectSpawn> objects,
                         List<RingSpawn> rings,
                         RingSpriteSheet ringSpriteSheet) throws IOException {
+        this(rom, zoneIndex, resourcePlan, primaryCollisionAddr, secondaryCollisionAddr,
+                interleavedCollision, layoutAddr, levelBoundariesAddr,
+                characterPaletteAddr, levelPaletteAddr, minXOverride,
+                objects, rings, ringSpriteSheet, true);
+    }
+
+    /**
+     * As the main constructor, with {@code publishGraphicsOnLoad} false when the
+     * level is being built off the frame thread (see
+     * {@link com.openggf.level.resources.PreparableLevelLoader}); the installer
+     * then publishes palettes and patterns through {@link #publishGraphics}.
+     */
+    public Sonic3kLevel(Rom rom,
+                        int zoneIndex,
+                        LevelResourcePlan resourcePlan,
+                        int primaryCollisionAddr,
+                        int secondaryCollisionAddr,
+                        boolean interleavedCollision,
+                        int layoutAddr,
+                        int levelBoundariesAddr,
+                        int characterPaletteAddr,
+                        int levelPaletteAddr,
+                        Integer minXOverride,
+                        List<ObjectSpawn> objects,
+                        List<RingSpawn> rings,
+                        RingSpriteSheet ringSpriteSheet,
+                        boolean publishGraphicsOnLoad) throws IOException {
         super(zoneIndex);
+        this.publishGraphicsOnLoad = publishGraphicsOnLoad;
         this.objects = objects != null ? objects : Collections.emptyList();
         this.rings = rings != null ? rings : Collections.emptyList();
         this.ringSpriteSheet = ringSpriteSheet;
@@ -90,6 +126,43 @@ public class Sonic3kLevel extends AbstractLevel {
         loadMap(rom, layoutAddr);
         loadBoundaries(rom, levelBoundariesAddr);
         validateResourceReferences();
+    }
+
+    /**
+     * Publishes this level's palettes and patterns to the graphics manager,
+     * exactly as the constructor does when {@code publishGraphicsOnLoad} is
+     * true, but with the pattern uploads batched into one atlas upload.
+     * No-op without an initialised GL context, matching the constructor.
+     */
+    public synchronized void publishGraphics(GraphicsManager graphics) {
+        if (graphics == null || !graphics.isGlInitialized()) {
+            return;
+        }
+        for (int i = 0; i < palettes.length; i++) {
+            graphics.cachePaletteTexture(palettes[i], i);
+        }
+        graphics.beginPatternAtlasBatch();
+        try {
+            for (int i = 0; i < patternCount; i++) {
+                if (patterns[i] != null) {
+                    graphics.cachePatternTexture(patterns[i], i);
+                }
+            }
+        } finally {
+            graphics.endPatternAtlasBatch();
+        }
+    }
+
+    /** Attaches level-art sheets built alongside a prepared load. */
+    public void attachPreparedLevelArt(Sonic3kObjectArtProvider.PreparedLevelArt art) {
+        this.preparedLevelArt = art;
+    }
+
+    /** Removes and returns prepared level-art sheets, or {@code null} when none were attached. */
+    public Sonic3kObjectArtProvider.PreparedLevelArt takePreparedLevelArt() {
+        Sonic3kObjectArtProvider.PreparedLevelArt art = preparedLevelArt;
+        preparedLevelArt = null;
+        return art;
     }
 
     // ===== Level interface overrides =====
@@ -151,7 +224,7 @@ public class Sonic3kLevel extends AbstractLevel {
             }
         }
 
-        if (graphicsMan.isGlInitialized()) {
+        if (publishGraphicsOnLoad && graphicsMan.isGlInitialized()) {
             for (int i = 0; i < palettes.length; i++) {
                 graphicsMan.cachePaletteTexture(palettes[i], i);
             }
@@ -178,7 +251,7 @@ public class Sonic3kLevel extends AbstractLevel {
             byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
                     (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
-            if (graphicsMan.isGlInitialized()) {
+            if (publishGraphicsOnLoad && graphicsMan.isGlInitialized()) {
                 graphicsMan.cachePatternTexture(patterns[i], i);
             }
         }

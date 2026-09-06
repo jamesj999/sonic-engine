@@ -1,5 +1,25 @@
 # OpenGGF 0.6 Changelog
 
+- S3K AIZ1 no longer hitches when the intro hands over control at camera
+  X $1400 or when the fire-overlay art stages at $2E00. The $1400 terrain swap
+  now swaps in foreground/background tilemaps pre-built during level load
+  (the pre-build had lost its caller in June), and the fire-overlay art, being
+  pattern-only, refreshes the pattern atlas lookup instead of rebuilding both
+  full-level tilemaps. Measured headless, the swap frame drops from about
+  25 ms of tilemap rebuild to under 1 ms; the ROM redraws only Plane A as the
+  camera scrolls, so neither rebuild had a ROM counterpart.
+
+- S3K AIZ1's fire curtain no longer hitches when the level reloads as act 2
+  behind it. The host-side act 2 build (level decode, object art sheets, both
+  tilemaps) now runs on a preparer thread across the fire event's own
+  rise-and-wait, from the frame the fire starts, and the reload installs it;
+  the reload always joins the build, so the reload frame, positions, tilemap
+  bytes and registered art are identical to the synchronous path. Kosinski
+  archive inspections are memoised per ROM and warmed by that build, so the
+  frame that queues the act 2 Kos jobs no longer decodes each stream to learn
+  its lengths. Headless at 60 fps pacing: reload frame about 43 ms to 9 ms,
+  Kos-queue frame 14 ms to 5 ms.
+
 - Rewind checkpoints no longer re-clone the payload and preparation bytes of
   every spent hardware-timing job, and restore keeps unchanged live jobs
   instead of rebuilding them. In S3K AIZ1 after the intro this cuts a

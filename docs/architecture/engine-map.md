@@ -153,6 +153,8 @@ the collaborator that owns it:
 | `LevelWaterCoordinator` | Water provider loading, dynamic water advancement, playable underwater state |
 | `LevelCheckpointCoordinator` | Checkpoint/respawn state, checkpoint restore, rewind checkpoint capture |
 | `LevelActTransitionExecutor` | ROM-aligned in-place act-transition reload choreography |
+| `LevelLoadPreparer` | One level build running ahead of a seamless transition on a daemon thread; the install always joins it, so it changes timing only. Games opt in through `PreparableLevelLoader` (S3K: `Sonic3k.prepareLevelBuild`/`installPreparedLevel`) |
+| `LevelTilemapPrebuilder` | Builds FG/BG tilemaps for a not-yet-installed level over its own `LevelGeometry.forLevel` and `LevelLayoutLookup.blockAt`; the live manager adopts them via `adoptPrebuiltTilemaps` and `swapToPrebuiltTilemaps` |
 | `LevelLostRingSpawnCoordinator` | Lost-ring scattering, the deferred spawn queue, and its dynamic-slot reservations |
 | `LevelTransitionCoordinator` | Transition request/consume state for acts, warps, title cards, respawns |
 | `LevelDebugRenderer` | Debug overlay rendering (collision, chunks, paths) |

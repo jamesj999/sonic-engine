@@ -1179,6 +1179,15 @@ public class LevelTilemapManager {
     }
 
     /**
+     * Marks only the pattern atlas lookup as dirty. Tilemap cell data stays
+     * valid; the next ensure call rebuilds the index-to-atlas-slot table so
+     * patterns cached since the last build resolve to their atlas entries.
+     */
+    public void invalidatePatternLookup() {
+        patternLookupDirty = true;
+    }
+
+    /**
      * Requests a BG tilemap window base-X change driven purely by the wrapped-BG
      * camera window stepping to a new 16px-aligned base. Unlike
      * {@link #setBgTilemapBaseX(int)} + {@link #setBackgroundTilemapDirty(boolean)},
@@ -1670,6 +1679,40 @@ public class LevelTilemapManager {
      */
     public boolean hasPrebuiltTilemaps() {
         return prebuiltFgTilemap != null && prebuiltBgTilemap != null;
+    }
+
+    /**
+     * Adopts tilemap data built elsewhere (typically by
+     * {@link LevelTilemapPrebuilder} before this manager's level was installed)
+     * as this manager's pre-built transition data, for a later
+     * {@link #swapToPrebuiltTilemaps()}.
+     */
+    public void adoptPrebuiltTilemaps(PrebuiltTilemaps prebuilt) {
+        if (prebuilt == null) {
+            return;
+        }
+        prebuiltFgTilemap = prebuilt.foreground();
+        prebuiltFgWidth = prebuilt.foregroundWidthTiles();
+        prebuiltFgHeight = prebuilt.foregroundHeightTiles();
+        prebuiltBgTilemap = prebuilt.background();
+        prebuiltBgWidth = prebuilt.backgroundWidthTiles();
+        prebuiltBgHeight = prebuilt.backgroundHeightTiles();
+    }
+
+    /**
+     * Removes and returns this manager's pre-built transition data, or
+     * {@code null} when none is held.
+     */
+    public PrebuiltTilemaps takePrebuiltTilemaps() {
+        if (!hasPrebuiltTilemaps()) {
+            return null;
+        }
+        PrebuiltTilemaps taken = new PrebuiltTilemaps(
+                prebuiltFgTilemap, prebuiltFgWidth, prebuiltFgHeight,
+                prebuiltBgTilemap, prebuiltBgWidth, prebuiltBgHeight);
+        prebuiltFgTilemap = null;
+        prebuiltBgTilemap = null;
+        return taken;
     }
 
     // -----------------------------------------------------------------------
