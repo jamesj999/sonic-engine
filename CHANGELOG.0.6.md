@@ -4,6 +4,7 @@
   every spent hardware-timing job, and restore keeps unchanged live jobs
   instead of rebuilding them. In S3K AIZ1 after the intro this cuts a
   checkpoint capture from about 287KB to 33KB and a restore from 315KB to 30KB.
+
 - Fast FM renders about 12 % cheaper on real music (S1 GHZ1 0.173 to 0.151 ms
   per frame, S3K AIZ 0.164 to 0.147) and 23 % on a six-voice LFO bench, with
   every oracle output sample unchanged: scheduled writes, key holds, active
