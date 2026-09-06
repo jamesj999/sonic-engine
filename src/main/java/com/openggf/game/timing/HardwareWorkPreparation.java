@@ -6,6 +6,14 @@ package com.openggf.game.timing;
  * <p>One call to {@link #stepOneWorkUnit()} consumes one integer work unit.
  * Implementations define that unit from ROM decoder or queue semantics; elapsed
  * host time is never an input.
+ *
+ * <p>Once {@link #isPrepared()} returns true the preparation is terminal: every
+ * later {@link #stepOneWorkUnit()} and {@link #serviceBoundary} call is a no-op,
+ * {@link #preparedPayload()} and {@link #snapshot()} keep returning equal bytes,
+ * and {@link #restore} is never used on a live instance (hardware timing restores
+ * by recreating preparations from their snapshots). {@code HardwareTimingJob}
+ * relies on this to share one immutable rewind snapshot per prepared job across
+ * checkpoints instead of re-cloning its payload every capture.
  */
 public interface HardwareWorkPreparation {
     boolean stepOneWorkUnit();
