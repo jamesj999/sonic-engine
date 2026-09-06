@@ -23,7 +23,7 @@ public final class SessionSaveRequests {
             return;
         }
         try {
-            worldSession.getSaveSessionContext().requestSave(
+            worldSession.getSaveSessionContext().requestSaveAsync(
                     reason,
                     RuntimeSaveContext.forGameplayMode(
                             SessionManager.getCurrentGameplayMode(),
@@ -33,5 +33,10 @@ public final class SessionSaveRequests {
         } catch (IOException e) {
             LOGGER.warning("Failed to write save: " + e.getMessage());
         }
+    }
+
+    /** Waits for in-game saves still queued on the save-writer thread; for shutdown. */
+    public static void flushPendingSaves() {
+        SAVE_MANAGER.flushPendingWrites();
     }
 }

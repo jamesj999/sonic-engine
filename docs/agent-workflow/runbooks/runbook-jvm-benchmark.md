@@ -41,6 +41,8 @@ Useful flags:
 | `--json` / `--markdown` | — | Report output. |
 | `--track-allocations` | off | Per-section allocation counts. **Skews timings** — see below. |
 | `--no-audio` | audio on | Audio synthesis is real per-frame work and is measured by default. |
+| `--paced` | off | Sleeps each *measured* frame to a 60 Hz cadence. Measures nothing about throughput; use it to give off-frame work (level preparers, save writer) the wall time it has in a real session before judging a frame hitch. |
+| `--frame-log PATH` | off | CSV of every measured frame of iteration 0: trace row, act, frame ms and each profiler section. Percentiles hide a single slow frame; this is how to find and attribute one. |
 
 ## 2. JVM matrix
 

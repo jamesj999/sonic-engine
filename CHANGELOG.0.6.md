@@ -20,6 +20,17 @@
   its lengths. Headless at 60 fps pacing: reload frame about 43 ms to 9 ms,
   Kos-queue frame 14 ms to 5 ms.
 
+- In-game progression saves no longer write to disk on the frame that issues
+  them. The snapshot is still captured and encoded on that frame, so the file
+  reflects the exact state saved, but the temp-file write and atomic rename
+  move to a single save-writer thread; save-slot reads and deletes flush it
+  first, and shutdown drains it. The AIZ1 fire hand-off also pre-decodes the
+  act 2 collision tables off the frame and keeps GPU sprite sheets whose
+  pixels are unchanged across the act reload instead of re-uploading them.
+  Measured through the real renderer at 60 fps pacing (TraceBenchmarkTool,
+  which gained `--paced` and `--frame-log` for this), the reload frame is
+  about 11 ms and no other frame of the fire event exceeds 7 ms.
+
 - Rewind checkpoints no longer re-clone the payload and preparation bytes of
   every spent hardware-timing job, and restore keeps unchanged live jobs
   instead of rebuilding them. In S3K AIZ1 after the intro this cuts a

@@ -397,7 +397,9 @@ presentation-independent state machine; each game implements `DataSelectHostProf
 configs, slot counts, zone labels, restart destinations). S3K renders with
 `S3kDataSelectManager`; S1/S2 route through `CrossGameDataSelectPresentations.donated(...)`
 — there is no simplified fallback presentation. `SaveManager` (`game.save`) persists slots
-as JSON with SHA256 integrity and quarantines corrupt files. Title-screen `ONE_PLAYER`
+as JSON with SHA256 integrity and quarantines corrupt files; in-game progression saves go
+through `writeSlotAsync` (snapshot encoded on the frame, file written by the single
+`save-writer` thread, flushed before any slot read/delete and at shutdown). Title-screen `ONE_PLAYER`
 flows through `StartupRouteResolver` → `TitleActionRoute.DATA_SELECT` → controller →
 `DataSelectAction` → `Engine.launchGameplayFromDataSelect()`.
 

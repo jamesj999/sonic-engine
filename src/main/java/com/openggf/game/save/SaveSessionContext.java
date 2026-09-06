@@ -68,4 +68,19 @@ public final class SaveSessionContext {
         }
         saveManager.writeSlot(gameCode, activeSlot, snapshotProvider.capture(reason, context));
     }
+
+    /**
+     * As {@link #requestSave} but hands the disk write to the save-writer
+     * thread; the snapshot itself is still captured and encoded here, on the
+     * caller's thread. For in-game saves issued from a frame.
+     */
+    public void requestSaveAsync(SaveReason reason,
+                                 RuntimeSaveContext context,
+                                 SaveSnapshotProvider snapshotProvider,
+                                 SaveManager saveManager) throws IOException {
+        if (activeSlot == null) {
+            return;
+        }
+        saveManager.writeSlotAsync(gameCode, activeSlot, snapshotProvider.capture(reason, context));
+    }
 }

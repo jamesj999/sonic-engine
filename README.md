@@ -712,7 +712,12 @@ event's own wait; the reload always joins that build, and a regression test
 confirms the reload frame, positions, tilemap bytes and registered art match a
 synchronous reload (reload frame about 43 ms to 9 ms at 60 fps pacing). Related
 S3K, Kos, level and transition suites pass except two AIZ trace replays that
-fail identically on the pre-merge develop; guards pass (610).
+fail identically on the pre-merge develop; guards pass (610). Measured through
+the real renderer at 60 fps pacing, that reload frame is now about 11 ms:
+in-game progression saves encode their snapshot on the frame but write the file
+on a save-writer thread (flushed before slot reads and at shutdown), the fire
+hand-off decodes its act 2 collision tables off the frame, and GPU sprite sheets
+whose pixels are unchanged across the act reload are kept rather than re-uploaded.
 
 The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
 identified release skip-classification and trace-policy mismatches. The

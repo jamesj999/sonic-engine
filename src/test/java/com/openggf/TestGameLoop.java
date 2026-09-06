@@ -1410,6 +1410,7 @@ public class TestGameLoop {
 
         invokePrivateMethod(gameLoop, "doExitResultsScreen");
 
+        com.openggf.game.save.SessionSaveRequests.flushPendingSaves(); // in-game saves write off-frame
         assertTrue(Files.exists(saveDir.resolve("slot1.json")));
         deleteRecursively(saveDir);
     }
@@ -1493,6 +1494,7 @@ public class TestGameLoop {
 
         gameLoop.step();
 
+        com.openggf.game.save.SessionSaveRequests.flushPendingSaves(); // in-game saves write off-frame
         assertTrue(Files.exists(saveDir.resolve("slot1.json")));
         deleteRecursively(saveDir);
     }

@@ -256,6 +256,21 @@ public class TestSonic3kObjectArtProvider {
         assertEquals(0x26, sheet.getFrame(0).pieces().get(5).tileIndex());
     }
 
+    @Test
+    void sameSheetContent_matchesPixelIdenticalSheetsAndRejectsChangedPixels() {
+        ObjectSpriteSheet original = buildSheet(3);
+        ObjectSpriteSheet identical = buildSheet(3);
+        assertTrue(Sonic3kObjectArtProvider.sameSheetContent(original, identical),
+                "distinct Pattern objects with equal pixels are the same GPU content");
+
+        ObjectSpriteSheet changed = buildSheet(3);
+        changed.getPatterns()[1].setPixel(2, 3, (byte) 7);
+        assertFalse(Sonic3kObjectArtProvider.sameSheetContent(original, changed));
+
+        assertFalse(Sonic3kObjectArtProvider.sameSheetContent(original, buildSheet(4)),
+                "different pattern counts are never equivalent");
+    }
+
     private static ObjectSpriteSheet buildSheet(int patternCount) {
         Pattern[] patterns = new Pattern[patternCount];
         for (int i = 0; i < patternCount; i++) {
