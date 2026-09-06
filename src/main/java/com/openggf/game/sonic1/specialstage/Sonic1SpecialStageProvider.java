@@ -91,24 +91,25 @@ public final class Sonic1SpecialStageProvider implements SpecialStageProvider {
     }
 
     /**
-     * FAST (default gameplay/unit-test path) fast-forwards through the ROM's
-     * observable pre-physics hold via
-     * {@link Sonic1SpecialStageManager#advanceToEntryPresentation()} so the
-     * manager is immediately ready to simulate. TRACE_ACCURATE (used by the
-     * BizHawk trace-replay harness) leaves the hold armed so each frame of
-     * {@code PaletteWhiteOut}/instant-setup/{@code PaletteWhiteIn} is
-     * individually observable through {@link #update()}. See
-     * {@code Sonic2SpecialStageProvider.initializeStage(int, SpecialStageStartupPolicy)}
-     * for the precedent this mirrors.
+     * Both policies leave GM_Special's observable hold armed so each frame of
+     * {@code PaletteWhiteOut}/instant-setup/{@code PaletteWhiteIn} is stepped
+     * through {@link #update()}: the white-out is the visible fade over the
+     * level's last frame and the white-in is the stage reveal, so neither is
+     * hidden startup that FAST could retire. S1 loads the stage inside the
+     * instant setup block without waiting for a V-int, so there is no load
+     * span for FAST to approximate either (contrast
+     * {@code Sonic2SpecialStageProvider.initializeStage(int, SpecialStageStartupPolicy)}).
      */
     @Override
     public void initializeStage(int stageIndex, SpecialStageStartupPolicy policy) throws IOException {
         Objects.requireNonNull(policy, "policy");
         manager.reset();
         manager.initialize(stageIndex);
-        if (policy == SpecialStageStartupPolicy.FAST) {
-            manager.advanceToEntryPresentation();
-        }
+    }
+
+    @Override
+    public boolean isEntryFadeToWhiteActive() {
+        return manager.isEntryFadeToWhiteActive();
     }
 
     @Override

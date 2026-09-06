@@ -96,11 +96,11 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
     /**
      * The ROM opens {@code SpecialStage} with a blocking 22-frame
      * {@code Pal_FadeToWhite} (sonic3k.asm:10591, routine at 5232-5242) before
-     * any special-stage state exists. FAST retires that hold synchronously --
-     * ordinary interactive entry has no external frame source to pace it --
-     * while TRACE_ACCURATE leaves it armed so a BK2-driven caller steps the
-     * ROM's 22 real frames one at a time. Same split
-     * {@code Sonic1SpecialStageProvider} applies to its own pre-physics hold.
+     * any special-stage state exists. That fade is visible (it runs over the
+     * level's last frame), so both policies leave the hold armed and step it
+     * frame by frame; the presentation controller reveals the stage once
+     * {@link #isEntryPresentationReady()} reports the fade has elapsed. The
+     * masked-interrupt load that follows has no live approximation yet.
      */
     @Override
     public void initializeStage(int stageIndex, SpecialStageStartupPolicy policy)
@@ -108,9 +108,16 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
         java.util.Objects.requireNonNull(policy, "policy");
         manager.reset();
         manager.initialize(stageIndex);
-        if (policy == SpecialStageStartupPolicy.FAST) {
-            manager.advanceThroughEntryFade();
-        }
+    }
+
+    @Override
+    public boolean isEntryPresentationReady() {
+        return manager.isEntryPresentationReady();
+    }
+
+    @Override
+    public boolean isEntryFadeToWhiteActive() {
+        return manager.isEntryFadeToWhiteActive();
     }
 
     @Override

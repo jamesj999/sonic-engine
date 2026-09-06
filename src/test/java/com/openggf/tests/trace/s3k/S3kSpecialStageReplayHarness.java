@@ -50,7 +50,8 @@ import java.util.Objects;
  *       route.</li>
  *   <li>{@code provider.initializeStage(index)} -&gt; {@code manager.reset()}
  *       + {@code manager.initialize(index)} (loads the SS layout/art from
- *       ROM).</li>
+ *       ROM), then {@code manager.advanceThroughEntryFade()} because the
+ *       comparator never steps the entry {@code Pal_FadeToWhite} rows.</li>
  * </ol>
  *
  * <h2>Input injection</h2>
@@ -100,6 +101,13 @@ final class S3kSpecialStageReplayHarness {
         this.inputHandler = new InputHandler();
         this.provider = new Sonic3kSpecialStageProvider();
         this.provider.initializeStage(specialStageIndex);
+        // The comparator starts at the first interactive row after the ROM's
+        // masked-interrupt load (AbstractS3kSpecialStageTraceReplayTest#
+        // firstInteractiveFrame), so the entry Pal_FadeToWhite rows that
+        // precede it are never stepped here: retire the manager's hold for
+        // them, which live play and the GameLoop-driven run chains step for
+        // real.
+        this.provider.getManager().advanceThroughEntryFade();
     }
 
     /**

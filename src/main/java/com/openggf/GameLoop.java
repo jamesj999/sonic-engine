@@ -1516,7 +1516,7 @@ public class GameLoop {
                     activePlcLifecycleFrame, ssSession.skippedSpecialStagePlcPhase().orElseThrow());
         }
         specialStageEntryPresentation.update(ssProvider, fadeManager,
-                () -> playSpecialStageStageMusic(ssProvider),
+                () -> revealSpecialStage(ssProvider),
                 gameplayMode.plcFrameLifecycle());
         if (ssSession != null) {
             ssSession.advanceSpecialStageTraceCursorIfActive(inputHandler);
@@ -2238,7 +2238,10 @@ public class GameLoop {
      * white-out that precedes the stage belongs to the special-stage entry
      * itself ({@code GM_Special}'s {@code PaletteWhiteOut}, sonic.asm:3227 /
      * {@code SpecialStage}'s {@code Pal_FadeToWhite}, s2.asm:6546), which
-     * {@link SpecialStageEntryPresentationController} owns. Fading here first
+     * {@link SpecialStageEntryPresentationController} owns: it fades the
+     * level's frozen last frame to white (the Engine keeps drawing the level
+     * while {@link SpecialStageProvider#isEntryFadeToWhiteActive()} holds) and
+     * parks white until the provider's reveal boundary. Fading here first
      * would delay the mode change by the whole fade and run the white-out
      * twice.
      */
@@ -2327,22 +2330,18 @@ public class GameLoop {
     }
 
     /**
-     * FAST ordinarily fast-forwards the ROM's observable pre-physics hold
-     * ({@code Sonic1SpecialStageManager.SS_STARTUP_HOLD_TICKS}-style tick
-     * count) synchronously inside {@code initializeStage}, without stepping
-     * real engine frames. That is correct for ordinary interactive play, but
-     * when a {@link PlaybackDebugManager} BK2 session is actively driving
-     * playback -- the dev movie-playback hotkeys, or a headless multi-stage
-     * trace-run chain drive (see {@code AbstractRunChainTest}) -- the caller
-     * needs the hold itself to be frame-stepped so recorded per-frame input
-     * lines up 1:1 with the special stage's own physics ticks instead of
-     * skewing by the fast-forwarded tick count. {@code TraceSessionLauncher}'s
-     * own dedicated special-stage trace session already calls
-     * {@code TRACE_ACCURATE} directly for the same reason (it owns its
-     * transition trigger); this generalizes the same ROM-state predicate
-     * (a BK2 session is playing) to the organic giant-ring/checkpoint-star
-     * entry path used by ordinary gameplay AND by any other BK2-driven
-     * session that reaches this transition.
+     * FAST skips the ROM's masked-interrupt entry load, which is right for
+     * ordinary interactive play where nothing supplies those frames. When a
+     * {@link PlaybackDebugManager} BK2 session is actively driving playback
+     * -- the dev movie-playback hotkeys, or a headless multi-stage trace-run
+     * chain drive (see {@code AbstractRunChainTest}) -- the recorded lag rows
+     * are admitted by the timing port, so the provider must add nothing or
+     * recorded per-frame input would skew against the stage's own ticks. {@code TraceSessionLauncher}'s own dedicated special-stage trace
+     * session already calls {@code TRACE_ACCURATE} directly for the same
+     * reason (it owns its transition trigger); this generalizes the same
+     * ROM-state predicate (a BK2 session is playing) to the organic
+     * giant-ring/checkpoint-star entry path used by ordinary gameplay AND by
+     * any other BK2-driven session that reaches this transition.
      */
     private SpecialStageStartupPolicy defaultSpecialStageStartupPolicy() {
         return LevelIterationAdmissionController.specialStageStartupPolicy(
@@ -2360,12 +2359,10 @@ public class GameLoop {
                 context.registerSpecialStageAdapter(ssProvider);
             }
 
-            // Set camera to origin for special stage rendering (uses screen coordinates)
-            camera.setX((short) 0);
-            camera.setY((short) 0);
-
+            // The level camera survives the ROM's entry fade-to-white, which
+            // still shows the level's last frame; revealSpecialStage origins it.
             specialStageEntryPresentation.begin(ssProvider, fadeFromBlack, fadeManager,
-                    () -> playSpecialStageStageMusic(ssProvider),
+                    () -> revealSpecialStage(ssProvider),
                     gameplayMode.plcFrameLifecycle());
 
             GameMode oldMode = changeGameModeForBoundary(GameMode.SPECIAL_STAGE);
@@ -4346,7 +4343,13 @@ public class GameLoop {
         }
     }
 
-    private void playSpecialStageStageMusic(SpecialStageProvider ssProvider) {
+    /**
+     * Reveal boundary: the stage owns the frame from here (it draws in screen
+     * coordinates, so the camera goes to the origin) and its music starts.
+     */
+    private void revealSpecialStage(SpecialStageProvider ssProvider) {
+        camera.setX((short) 0);
+        camera.setY((short) 0);
         int musicId = ssProvider.getStageMusicId();
         if (!audioManager.playMusic(ssProvider.getStageMusic()) && musicId >= 0) {
             audioManager.playMusic(musicId);

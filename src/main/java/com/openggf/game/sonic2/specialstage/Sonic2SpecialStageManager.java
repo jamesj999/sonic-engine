@@ -252,6 +252,14 @@ public class Sonic2SpecialStageManager {
     private Boolean fineDiagnosticsOverride;
     private boolean diagnosticEpochActive;
     private boolean liveLagSimulationEnabled = true;
+    /**
+     * Live reproduction of the masked-interrupt entry load
+     * ({@link Sonic2SpecialStageLagModel#ENTRY_LOAD_LAG_FRAMES}). Only
+     * {@link #armLiveEntryLoadHold()} sets it; neither startup policy does,
+     * so ordinary play skips the span and trace replay takes it from the
+     * recorded lag rows.
+     */
+    private int liveEntryLoadHoldFrames;
 
     // Skydome scroll state (accumulated horizontal scroll for background)
     private int skydomeScrollX = 0;
@@ -1133,11 +1141,29 @@ public class Sonic2SpecialStageManager {
 
         frameCounter++;
 
+        Sonic2SpecialStageIntro.Phase entryPhase = intro != null
+                ? intro.getCurrentPhase()
+                : Sonic2SpecialStageIntro.Phase.GAMEPLAY;
+        if (liveEntryLoadHoldFrames > 0
+                && entryPhase == Sonic2SpecialStageIntro.Phase.ROM_STARTUP) {
+            // The masked-interrupt entry load sits between the last
+            // Pal_FadeToWhite wait and the first startup wait (s2.asm:6557-6645):
+            // no V-int runs, so this frame observes nothing, exactly like a
+            // recorded lag row (see ENTRY_LOAD_LAG_FRAMES).
+            liveEntryLoadHoldFrames--;
+            pressedButtons = 0;
+            updateTimingDiagnostics(false, false);
+            return;
+        }
+
         int liveSpeedFactor = trackAnimator != null ? trackAnimator.getSpeedFactor() : 0;
         int liveSegmentType = trackAnimator != null
                 ? trackAnimator.getCurrentSegmentType()
                 : Sonic2SpecialStageConstants.SEGMENT_STRAIGHT;
+        // Pal_FadeToWhite rows run Vint_Fade alone (s2.asm:1068-1070) and never
+        // lag, so the empirical stage-runtime model starts after PRE_ROLL.
         if (liveLagSimulationEnabled
+                && entryPhase != Sonic2SpecialStageIntro.Phase.PRE_ROLL
                 && Sonic2SpecialStageLagModel.shouldSkipLiveUpdate(
                         frameCounter, liveSpeedFactor, liveSegmentType)) {
             // Approximate the retail Vint_Lag outcome for interactive play.
@@ -2646,6 +2672,29 @@ public class Sonic2SpecialStageManager {
         };
     }
 
+    /**
+     * Returns whether the ROM's {@code Pal_FadeToWhite} (the PRE_ROLL window)
+     * is still running, during which the display shows the level's last frame.
+     */
+    public boolean isEntryFadeToWhiteActive() {
+        return initialized && intro != null
+                && intro.getCurrentPhase() == Sonic2SpecialStageIntro.Phase.PRE_ROLL;
+    }
+
+    /**
+     * Arms the live reproduction of the entry load
+     * ({@link Sonic2SpecialStageLagModel#ENTRY_LOAD_LAG_FRAMES}); it elapses
+     * from the first ROM_STARTUP update. Reserved for an accurate
+     * presentation mode: no startup policy arms it today.
+     */
+    public void armLiveEntryLoadHold() {
+        liveEntryLoadHoldFrames = Sonic2SpecialStageLagModel.ENTRY_LOAD_LAG_FRAMES;
+    }
+
+    public int getLiveEntryLoadHoldFrames() {
+        return liveEntryLoadHoldFrames;
+    }
+
     /** Compresses hidden startup while preserving the normal manager update path. */
     public void advanceToEntryPresentation() {
         advanceToEntryPresentation(256);
@@ -2691,6 +2740,11 @@ public class Sonic2SpecialStageManager {
         return players;
     }
 
+    /** {@code SSTrack_drawing_index}, exposed for startup-cadence tests. */
+    int getDrawingIndex() {
+        return drawingIndex;
+    }
+
     int getSwapPositionsFlag() {
         return swapPositionsFlag & 0xFF;
     }
@@ -2707,15 +2761,13 @@ public class Sonic2SpecialStageManager {
      * Resets the Special Stage manager state.
      */
     public void reset() {
-        // Stop any playing music when resetting
-        try {
-            GameServices.audio().stopMusic();
-        } catch (IllegalStateException ignored) {
-            // Plain construction/reset tests run without configured engine services.
-        }
-
+        // Audio is owned by the transition that resets this manager: the entry
+        // has already queued SndID_SpecStageEntry and MusID_FadeOut
+        // (s2.asm:6543-6546) and stopping playback here would cut both, and
+        // the results/level owners start their own music.
         initialized = false;
         liveLagSimulationEnabled = true;
+        liveEntryLoadHoldFrames = 0;
         backgroundStageGeneration++;
         if (renderer != null) {
             renderer.beginStaticBackgroundStage(backgroundStageGeneration);
@@ -2923,6 +2975,7 @@ public class Sonic2SpecialStageManager {
                 alignmentRainbowSpeedAccumulator,
                 alignmentStepByTrackFrame,
                 liveLagSimulationEnabled,
+                liveEntryLoadHoldFrames,
                 diagnosticWallStartTime,
                 diagnosticUpdateCount,
                 diagnosticTrackAdvances,
@@ -3006,6 +3059,7 @@ public class Sonic2SpecialStageManager {
         alignmentRainbowSpeedAccumulator = snapshot.alignmentRainbowSpeedAccumulator;
         alignmentStepByTrackFrame = snapshot.alignmentStepByTrackFrame;
         liveLagSimulationEnabled = snapshot.liveLagSimulationEnabled;
+        liveEntryLoadHoldFrames = snapshot.liveEntryLoadHoldFrames;
         diagnosticWallStartTime = snapshot.diagnosticWallStartTime;
         diagnosticUpdateCount = snapshot.diagnosticUpdateCount;
         diagnosticTrackAdvances = snapshot.diagnosticTrackAdvances;

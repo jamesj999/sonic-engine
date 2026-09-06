@@ -2391,32 +2391,46 @@ public final class Sonic1SpecialStageManager {
     }
 
     /**
-     * Returns whether the ROM's observable pre-physics hold has elapsed (see
-     * {@link #SS_STARTUP_HOLD_TICKS}). Mirrors
-     * {@code Sonic2SpecialStageManager.isEntryPresentationReady()}.
+     * Returns whether GM_Special has reached its reveal boundary: the
+     * {@code PaletteWhiteOut} half of the hold has elapsed, so {@code bgm_SS}
+     * (sonic.asm:3272) and {@code PaletteWhiteIn} may start while the second
+     * half still keeps Obj09 frozen (see {@link #SS_STARTUP_HOLD_TICKS}).
+     * Mirrors {@code Sonic2SpecialStageManager.isEntryPresentationReady()}.
      */
     public boolean isEntryPresentationReady() {
-        return initialized && startupHoldTicksRemaining <= 0;
+        return initialized && startupHoldTicksRemaining <= SS_STARTUP_HOLD_TICKS - SS_WHITEOUT_TICKS;
     }
 
     /**
-     * Compresses the ROM's observable pre-physics hold by stepping
-     * {@link #update()} until it elapses, preserving the normal per-tick
-     * update path (rather than hand-skipping fields) so FAST-policy callers
-     * reach the same state a frame-accurate replay would reach at the reveal
-     * boundary. Mirrors {@code Sonic2SpecialStageManager.advanceToEntryPresentation()}.
+     * Returns whether {@code PaletteWhiteOut} (the first {@link #SS_WHITEOUT_TICKS}
+     * of the hold) is still running: the display shows the level's last frame
+     * until GM_Special's instant setup block replaces it (sonic.asm:3238-3291).
+     */
+    public boolean isEntryFadeToWhiteActive() {
+        return initialized && startupHoldTicksRemaining > SS_STARTUP_HOLD_TICKS - SS_WHITEOUT_TICKS;
+    }
+
+    /**
+     * Compresses the ROM's whole observable pre-physics hold (both fades and
+     * the instant setup block) by stepping {@link #update()} until Obj09's
+     * first real tick is next, preserving the normal per-tick update path
+     * rather than hand-skipping fields. Gameplay no longer uses this -- both
+     * startup policies step the hold frame by frame because its first half
+     * is the visible fade over the level and its second half is the stage
+     * reveal -- so it serves tests that assert on Obj09's first tick. Mirrors
+     * {@code Sonic2SpecialStageManager.advanceToEntryPresentation()}.
      */
     public void advanceToEntryPresentation() {
         advanceToEntryPresentation(SS_STARTUP_HOLD_TICKS + 1);
     }
 
     void advanceToEntryPresentation(int maxUpdates) {
-        for (int i = 0; i < maxUpdates && !isEntryPresentationReady(); i++) {
+        for (int i = 0; i < maxUpdates && startupHoldTicksRemaining > 0; i++) {
             update();
         }
-        if (!isEntryPresentationReady()) {
+        if (startupHoldTicksRemaining > 0) {
             throw new IllegalStateException(
-                    "Special-stage startup did not reach reveal boundary within " + maxUpdates + " updates");
+                    "Special-stage startup did not reach Obj09's first tick within " + maxUpdates + " updates");
         }
     }
 

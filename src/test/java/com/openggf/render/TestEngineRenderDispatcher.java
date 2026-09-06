@@ -111,6 +111,25 @@ class TestEngineRenderDispatcher {
     }
 
     @Test
+    void specialStageEntryFadeShowsTheLevelUntilTheStageOwnsTheFrame() {
+        EngineRenderDispatcher dispatcher = new EngineRenderDispatcher();
+        RecordingClearActions clear = new RecordingClearActions();
+        RecordingDrawActions draw = new RecordingDrawActions();
+
+        dispatcher.applyClearColor(GameMode.SPECIAL_STAGE, true, clear);
+        dispatcher.applyClearColor(GameMode.SPECIAL_STAGE, false, clear);
+        dispatcher.applyClearColor(GameMode.LEVEL, true, clear);
+        dispatcher.draw(GameMode.SPECIAL_STAGE, true, false, DebugState.NONE, draw);
+        dispatcher.draw(GameMode.SPECIAL_STAGE, true, true, DebugState.PATTERNS_VIEW, draw);
+        dispatcher.draw(GameMode.SPECIAL_STAGE, false, false, DebugState.NONE, draw);
+        dispatcher.draw(GameMode.SPECIAL_STAGE_RESULTS, true, false, DebugState.NONE, draw);
+
+        assertEquals(List.of("level", "specialStage", "level"), clear.calls);
+        assertEquals(List.of("level", "debugPatterns", "specialStage", "specialStageResults"),
+                draw.calls);
+    }
+
+    @Test
     void nullModeDrawFallsBackToLevelDraw() {
         EngineRenderDispatcher dispatcher = new EngineRenderDispatcher();
         RecordingDrawActions actions = new RecordingDrawActions();

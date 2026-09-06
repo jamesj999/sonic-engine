@@ -7,6 +7,22 @@ import java.util.Objects;
 
 public final class EngineRenderDispatcher {
 
+    /**
+     * Clear-colour routing with the special-stage entry override: while the
+     * stage is still inside the ROM's entry fade-to-white
+     * ({@code SpecialStageProvider#isEntryFadeToWhiteActive}) the level's last
+     * frame is what the display shows, so the level's clear colour applies.
+     */
+    public void applyClearColor(GameMode mode, boolean specialStageShowsLevel,
+                                ClearActions actions) {
+        Objects.requireNonNull(actions, "actions");
+        if (mode == GameMode.SPECIAL_STAGE && specialStageShowsLevel) {
+            actions.level();
+            return;
+        }
+        applyClearColor(mode, actions);
+    }
+
     public void applyClearColor(GameMode mode, ClearActions actions) {
         Objects.requireNonNull(actions, "actions");
         if (mode == null) {
@@ -24,6 +40,21 @@ public final class EngineRenderDispatcher {
             case TITLE_CARD -> actions.level();
             default -> actions.level();
         }
+    }
+
+    /**
+     * Draw routing with the special-stage entry override: see
+     * {@link #applyClearColor(GameMode, boolean, ClearActions)}. The frozen
+     * level is drawn through the ordinary level path, debug views included.
+     */
+    public void draw(GameMode mode, boolean specialStageShowsLevel, boolean debugViewEnabled,
+                     DebugState debugState, DrawActions actions) {
+        Objects.requireNonNull(actions, "actions");
+        if (mode == GameMode.SPECIAL_STAGE && specialStageShowsLevel) {
+            drawLevel(debugViewEnabled, debugState, actions);
+            return;
+        }
+        draw(mode, debugViewEnabled, debugState, actions);
     }
 
     public void draw(GameMode mode, boolean debugViewEnabled, DebugState debugState, DrawActions actions) {

@@ -604,6 +604,21 @@ public class Sonic3kSpecialStageManager {
     }
 
     /**
+     * Returns whether {@code SpecialStage} has reached its reveal boundary: the
+     * entry {@code Pal_FadeToWhite} has elapsed, so {@code mus_SpecialStage}
+     * (sonic3k.asm:10731) and {@code Pal_FadeFromWhite} may start while the
+     * post-boot hold still keeps the stage frozen.
+     */
+    public boolean isEntryPresentationReady() {
+        return initialized && preBootFadeHoldFrames <= 0;
+    }
+
+    /** Returns whether the entry {@code Pal_FadeToWhite} is still running. */
+    public boolean isEntryFadeToWhiteActive() {
+        return initialized && preBootFadeHoldFrames > 0;
+    }
+
+    /**
      * Update the special stage by one frame.
      * ROM: loc_84C2 (sonic3k.asm:10737) - main loop
      */

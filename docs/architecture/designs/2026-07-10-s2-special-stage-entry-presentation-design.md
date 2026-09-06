@@ -80,3 +80,41 @@ Tests will prove:
 - No changes to S1 or S3K special-stage timing.
 - No trace-state hydration or comparison tolerance.
 - No renderer-local replacement fade.
+
+## Addendum (2026-09-06): the entry sequence runs in normal play
+
+The `FAST` fast-forward above was reversed. Compressing `PRE_ROLL` and
+`ROM_STARTUP` into initialization removed the ROM's visible transition: the
+level's last frame never faded to white, the stage music started on the same
+frame as `SndID_SpecStageEntry`, and the manager's `reset()` stopped playback
+outright, which cut both that sound and `MusID_FadeOut` (s2.asm:6543-6546).
+
+Now every provider steps its ROM entry sequence's V-int waits frame by frame
+under both policies, and `SpecialStageStartupPolicy` only says whether the
+hardware load span is reproduced:
+
+- `SpecialStageProvider#isEntryFadeToWhiteActive()` marks the ROM's
+  `Pal_FadeToWhite` / `PaletteWhiteOut` window. `EngineRenderDispatcher`
+  routes the special-stage draw and clear colour to the level while it holds,
+  `GameLoop` leaves the level camera alone until it ends, and
+  `SpecialStageEntryPresentationController` runs `startFadeToWhite(null,
+  Integer.MAX_VALUE)` deferred to the next V-int instead of `holdWhite()`, so
+  the frozen level fades over 22 frames and parks white until readiness.
+- The ROM's masked-interrupt load (104 lag rows between the fade rows and
+  the first `Vint_S2SS` row in every recorded stage, s2.asm:6557-6645) is
+  reproduced only under `TRACE_ACCURATE`, where the timing port admits the
+  recorded rows; `FAST` skips it so normal play goes straight from the fade
+  to startup. `Sonic2SpecialStageManager.armLiveEntryLoadHold()` can
+  reproduce the span as lag frames (rewind-safe) for a future accurate
+  presentation mode, but nothing arms it yet. The live lag model no longer
+  skips `PRE_ROLL` updates, since `Vint_Fade` rows cannot lag.
+- S1 reports readiness after the `PaletteWhiteOut` half of its hold and S3K
+  after its pre-boot fade, so `bgm_SS` / `mus_SpecialStage` and the fade from
+  white start where the ROM starts them; neither policy retires those holds
+  any more. The S3K standalone replay harness retires the pre-boot hold
+  itself because its comparator begins at the first post-load row.
+- `Sonic2SpecialStageManager.reset()` no longer touches audio; the transition
+  owners start and fade music themselves.
+
+`advanceToEntryPresentation()` and `advanceThroughEntryFade()` remain as test
+helpers only.

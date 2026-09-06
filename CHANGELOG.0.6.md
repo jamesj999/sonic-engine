@@ -1,5 +1,14 @@
 # OpenGGF 0.6 Changelog
 
+- Special-stage entry now plays the ROM's transition in normal play. In
+  Sonic 2 the level freezes and fades to white over 22 frames while the entry
+  sound plays and the music fades out, the screen stays white through the
+  ROM's startup waits, and the stage music starts with the fade from white. Sonic 1 and Sonic 3 & Knuckles keep the
+  level on screen through their own entry fade-to-white and reveal the stage
+  when it ends. Previously the whole entry collapsed into one frame, which cut
+  the entry sound short and skipped both fades. Trace replay still takes its
+  lag rows from the recording.
+
 - Rewind checkpoints no longer re-clone the payload and preparation bytes of
   every spent hardware-timing job, and restore keeps unchanged live jobs
   instead of rebuilding them. In S3K AIZ1 after the intro this cuts a

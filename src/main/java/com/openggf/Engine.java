@@ -1822,7 +1822,8 @@ public class Engine {
 		projectionMatrix.identity().ortho2D(0, (float) projectionWidth, 0, (float) realHeight);
 		projectionMatrix.get(matrixBuffer);
 
-		renderDispatcher.applyClearColor(getCurrentGameMode(), clearActions);
+		renderDispatcher.applyClearColor(getCurrentGameMode(), specialStageEntryShowsLevel(),
+				clearActions);
 		glScissor(viewportX, viewportY, viewportWidth, viewportHeight);
 		glEnable(GL_SCISSOR_TEST);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -2692,7 +2693,22 @@ public class Engine {
 	}
 
 	public void draw() {
-		renderDispatcher.draw(getCurrentGameMode(), debugViewEnabled, debugState, drawActions);
+		renderDispatcher.draw(getCurrentGameMode(), specialStageEntryShowsLevel(), debugViewEnabled, debugState, drawActions);
+	}
+
+	/**
+	 * True while a special stage is still inside the ROM's entry fade-to-white:
+	 * the level's last frame stays on screen under the fade until the stage's
+	 * own reveal boundary ({@link SpecialStageProvider#isEntryFadeToWhiteActive}).
+	 */
+	private boolean specialStageEntryShowsLevel() {
+		if (getCurrentGameMode() != GameMode.SPECIAL_STAGE || levelManager == null) {
+			// Outside SPECIAL_STAGE the accessor resolves the module's provider
+			// through the session, which editor-only draws do not have.
+			return false;
+		}
+		SpecialStageProvider ssProvider = gameLoop.getActiveSpecialStageProvider();
+		return ssProvider != null && ssProvider.isEntryFadeToWhiteActive();
 	}
 
 	private void drawLegalDisclaimer() {
@@ -2724,6 +2740,10 @@ public class Engine {
 	}
 
 	private void drawSpecialStage() {
+		// Special stages draw in screen coordinates. The level camera survives
+		// the entry fade-to-white (the level is still on screen then), so the
+		// stage re-origins the camera itself once it owns the frame.
+		resetCameraForScreenSpace();
 		SpecialStageProvider ssProvider = gameLoop.getActiveSpecialStageProvider();
 		if (SpecialStageDebugCapabilities.orNone(ssProvider.debugCapabilities()).spriteViewer()
 				&& ssProvider.isSpriteDebugMode()) {
