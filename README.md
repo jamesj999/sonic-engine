@@ -693,6 +693,13 @@ and the
 [listening-test plan](docs/architecture/validation/audio/2026-09-06-fast-fm-listening-test.md)
 record it.
 
+Rewind checkpoints no longer re-clone every spent hardware-timing job. In S3K
+AIZ1 after the intro, a checkpoint capture falls from about 287 KB to 33 KB and
+a restore from 315 KB to 30 KB, so the steady rewind allocation and the burst on
+engaging rewind both shrink by roughly an order of magnitude with no timing
+decision changed. Focused rewind, timing and S3K suites pass (2,728 tests);
+post-merge verification follows.
+
 The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
 identified release skip-classification and trace-policy mismatches. The
 [remediation record](docs/architecture/validation/2026-09-06-release-gates.md)

@@ -47,6 +47,11 @@ uncaptured `final` scalar, or an object reference not captured as a rewind id fa
 fails `TestStaticStateRewindCoverageGuard` — fix it with a `RewindSnapshottable` adapter,
 not a baseline entry, unless the gap is genuinely intentional.
 
+**Prepared hardware work is frozen.** `HardwareTimingJob` shares one immutable rewind
+snapshot per prepared job across checkpoints, so a `HardwareWorkPreparation` must not
+change state after `isPrepared()` returns true; every job mutator drops the memo, but a
+preparation that keeps mutating would leak into old snapshots unnoticed.
+
 **Headless tests:** call `GroundSensor.setLevelManager(...)` and
 `Camera.updatePosition(true)` *after* the level load, and prefer
 `@ExtendWith(SingletonResetExtension.class)` over manual teardown. Set
