@@ -224,7 +224,9 @@ public final class S3kSeamlessMutationExecutor {
                     tiles8x8,
                     AIZ_FIRE_OVERLAY_DEST_TILE * Pattern.PATTERN_SIZE_IN_ROM,
                     false);
-            return MutationEffects.redrawAllTilemaps();
+            // Pattern data only: tilemap cells keep their indices, so refresh
+            // the atlas lookup instead of rebuilding both full-level tilemaps.
+            return MutationEffects.patternLookupRefresh();
         });
         return tiles8x8.length / Pattern.PATTERN_SIZE_IN_ROM;
     }

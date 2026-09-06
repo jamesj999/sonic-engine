@@ -677,6 +677,7 @@ public class Sonic3kAIZEvents extends Sonic3kZoneEvents {
             // AIZ dormant marker (sonic3k.asm:8111-8128,26389-26397).
             camera().setLevelStarted(false);
             introSpawned = spawnIntroObject();
+            precomputeIntroTransitionTilemaps();
         } else if (act == 0) {
             // Skip-intro level loading already selected the main AIZ1 terrain
             // profile, so only publish the matching palette/semantic phase.
@@ -888,6 +889,27 @@ public class Sonic3kAIZEvents extends Sonic3kZoneEvents {
         }
 
         updateFireTransition();
+    }
+
+    /**
+     * Builds the post-$1400 foreground/background tilemaps while the level is
+     * still loading so {@link AizIntroTerrainSwap#applyMainLevelBlockOverlay}
+     * can swap them in instead of rebuilding both full-level tilemaps on the
+     * terrain-swap frame. The ROM pays no such cost: {@code Events_fg_5} only
+     * redraws Plane A as the camera scrolls. If the pre-built data is missing
+     * (for example after a rewind past the swap consumed it) the swap frame
+     * still falls back to the full rebuild.
+     */
+    private void precomputeIntroTransitionTilemaps() {
+        LevelManager levelManager = levelManager();
+        if (levelManager == null || levelManager.hasPrebuiltTilemaps()) {
+            return;
+        }
+        try {
+            AizIntroTerrainSwap.precomputeTransitionTilemaps(rom(), levelManager);
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to pre-build AIZ1 intro transition tilemaps", e);
+        }
     }
 
     private void releaseAizIntroSidekickMarker() {
@@ -3083,7 +3105,11 @@ public class Sonic3kAIZEvents extends Sonic3kZoneEvents {
             preparedTransitionArtBridge()
                     .retainAizFireOverlay(fireOverlay8x8);
             applyPlc(FIRE_OVERLAY_PLC);
-            levelManager.invalidateAllTilemaps();
+            // Both writes above replace 8x8 pattern data only; the tilemap cells
+            // still reference the same pattern indices, so only the pattern
+            // atlas lookup needs refreshing (a full FG+BG rebuild here cost a
+            // visible frame hitch at x>=$2E00).
+            levelManager.invalidatePatternLookup();
             fireOverlayTilesLoaded = true;
             LOG.info("AIZ1: loaded fire overlay 8x8 tiles at x>=0x2E00");
         } catch (Exception e) {

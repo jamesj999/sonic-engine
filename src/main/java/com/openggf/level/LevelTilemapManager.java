@@ -1179,6 +1179,15 @@ public class LevelTilemapManager {
     }
 
     /**
+     * Marks only the pattern atlas lookup as dirty. Tilemap cell data stays
+     * valid; the next ensure call rebuilds the index-to-atlas-slot table so
+     * patterns cached since the last build resolve to their atlas entries.
+     */
+    public void invalidatePatternLookup() {
+        patternLookupDirty = true;
+    }
+
+    /**
      * Requests a BG tilemap window base-X change driven purely by the wrapped-BG
      * camera window stepping to a new 16px-aligned base. Unlike
      * {@link #setBgTilemapBaseX(int)} + {@link #setBackgroundTilemapDirty(boolean)},

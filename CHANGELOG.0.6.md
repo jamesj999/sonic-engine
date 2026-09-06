@@ -1,5 +1,14 @@
 # OpenGGF 0.6 Changelog
 
+- S3K AIZ1 no longer hitches when the intro hands over control at camera
+  X $1400 or when the fire-overlay art stages at $2E00. The $1400 terrain swap
+  now swaps in foreground/background tilemaps pre-built during level load
+  (the pre-build had lost its caller in June), and the fire-overlay art, being
+  pattern-only, refreshes the pattern atlas lookup instead of rebuilding both
+  full-level tilemaps. Measured headless, the swap frame drops from about
+  25 ms of tilemap rebuild to under 1 ms; the ROM redraws only Plane A as the
+  camera scrolls, so neither rebuild had a ROM counterpart.
+
 - Rewind checkpoints no longer re-clone the payload and preparation bytes of
   every spent hardware-timing job, and restore keeps unchanged live jobs
   instead of rebuilding them. In S3K AIZ1 after the intro this cuts a

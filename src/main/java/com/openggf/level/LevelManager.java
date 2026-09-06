@@ -2253,6 +2253,17 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         }
     }
 
+    /**
+     * Marks only the pattern atlas lookup as dirty. Use this after runtime
+     * writes that replace 8x8 pattern data in place (art overlays, PLC uploads)
+     * without changing the pattern indices the tilemap cells reference.
+     */
+    public void invalidatePatternLookup() {
+        if (tilemapManager != null) {
+            tilemapManager.invalidatePatternLookup();
+        }
+    }
+
     public void reuploadDirtyPatterns(java.util.BitSet dirtyPatterns) {
         dirtyRegionDispatcher.reuploadDirtyPatterns(dirtyPatterns);
     }
