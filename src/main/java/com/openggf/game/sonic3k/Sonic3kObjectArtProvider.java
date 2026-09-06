@@ -2417,20 +2417,71 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
         if (sheet == null) {
             return;
         }
-        PatternSpriteRenderer renderer = new PatternSpriteRenderer(sheet);
         int existingIndex = rendererKeys.indexOf(key);
         if (existingIndex >= 0) {
+            PatternSpriteRenderer existing = renderers.get(key);
+            ObjectSpriteSheet existingSheet = sheets.get(key);
+            if (existing != null && existing.isReady() && sameSheetContent(existingSheet, sheet)) {
+                // Act transitions re-register every sheet of the new act's plan,
+                // most of them pixel-identical to the ones already on the GPU.
+                // Keep the uploaded renderer and only swap the sheet object so
+                // later in-place pattern refreshes see the new level's patterns.
+                existing.rebindEquivalentSheet(sheet);
+                sheets.put(key, sheet);
+                sheetOrder.set(existingIndex, sheet);
+                return;
+            }
+            PatternSpriteRenderer renderer = new PatternSpriteRenderer(sheet);
             sheets.put(key, sheet);
             renderers.put(key, renderer);
             sheetOrder.set(existingIndex, sheet);
             rendererOrder.set(existingIndex, renderer);
             return;
         }
+        PatternSpriteRenderer renderer = new PatternSpriteRenderer(sheet);
         sheets.put(key, sheet);
         renderers.put(key, renderer);
         rendererKeys.add(key);
         sheetOrder.add(sheet);
         rendererOrder.add(renderer);
+    }
+
+    /** True when both sheets would upload identical GPU patterns and draw identical frames. */
+    static boolean sameSheetContent(ObjectSpriteSheet a, ObjectSpriteSheet b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        if (a.getPaletteIndex() != b.getPaletteIndex()
+                || a.getFrameDelay() != b.getFrameDelay()
+                || a.getFrameCount() != b.getFrameCount()) {
+            return false;
+        }
+        for (int i = 0; i < a.getFrameCount(); i++) {
+            if (!java.util.Objects.equals(a.getFrame(i), b.getFrame(i))) {
+                return false;
+            }
+        }
+        Pattern[] left = a.getPatterns();
+        Pattern[] right = b.getPatterns();
+        if (left.length != right.length) {
+            return false;
+        }
+        byte[] leftPixels = new byte[Pattern.PATTERN_SIZE_IN_MEM];
+        byte[] rightPixels = new byte[Pattern.PATTERN_SIZE_IN_MEM];
+        for (int i = 0; i < left.length; i++) {
+            if (left[i] == right[i]) {
+                continue;
+            }
+            if (left[i] == null || right[i] == null) {
+                return false;
+            }
+            left[i].copyInto(leftPixels, 0);
+            right[i].copyInto(rightPixels, 0);
+            if (!Arrays.equals(leftPixels, rightPixels)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void registerStandaloneAnimations(String key) {

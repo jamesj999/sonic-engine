@@ -2902,6 +2902,7 @@ public class Engine {
 	private void cleanup() {
 		cleanupStep("screenshots", screenshotWriter::close);
 		cleanupStep("live capture", liveCaptureController::close);
+		cleanupStep("pending saves", com.openggf.game.save.SessionSaveRequests::flushPendingSaves);
 		cleanupStep("session state", SessionManager::clear);
 		cleanupStep("donor audio", audioManager::clearDonorAudio);
 		cleanupStep("cross-game features", crossGameFeatureProvider::resetState);

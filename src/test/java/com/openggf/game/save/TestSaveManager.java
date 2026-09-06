@@ -199,4 +199,25 @@ class TestSaveManager {
                     "no temp publish artifacts may remain, found: " + leftovers);
         }
     }
+
+    @Test
+    void writeSlotAsync_landsBeforeTheNextReadAndAfterFlush() throws Exception {
+        SaveManager manager = new SaveManager(root);
+        Path slot = root.resolve("s3k").resolve("slot2.json");
+
+        manager.writeSlotAsync("s3k", 2, Map.of("zone", 0, "act", 1, "lives", 3));
+        // readSlotSummary flushes the writer first, so a read never observes a
+        // save that was issued but not yet on disk.
+        SaveSlotSummary summary = manager.readSlotSummary("s3k", 2);
+        assertEquals(SaveSlotState.VALID, summary.state());
+        assertEquals(1, summary.payload().get("act"));
+        assertTrue(Files.exists(slot));
+
+        manager.writeSlotAsync("s3k", 2, Map.of("zone", 1, "act", 0, "lives", 3));
+        manager.flushPendingWrites();
+        assertEquals(1, manager.readSlotSummary("s3k", 2).payload().get("zone"),
+                "writes for one slot must complete in submission order");
+        assertFalse(Files.list(slot.getParent()).anyMatch(p -> p.toString().endsWith(".tmp")),
+                "no temp file left behind");
+    }
 }

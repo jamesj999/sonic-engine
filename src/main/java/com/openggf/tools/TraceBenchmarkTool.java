@@ -91,7 +91,8 @@ public final class TraceBenchmarkTool {
 
     /** Parsed CLI arguments. */
     record Args(String trace, String mode, int warmupFrames, int measureFrames, int iterations,
-                Path json, Path markdown, String label, boolean trackAllocations, boolean audio, String fmCore) {
+                Path json, Path markdown, String label, boolean trackAllocations, boolean audio, String fmCore,
+                Path frameLog, boolean paced) {
 
         static Args parse(String[] argv) {
             String trace = null;
@@ -105,6 +106,8 @@ public final class TraceBenchmarkTool {
             boolean trackAllocations = false;
             boolean audio = true;
             String fmCore = null;
+            Path frameLog = null;
+            boolean paced = false;
 
             for (int i = 0; i < argv.length; i++) {
                 String arg = argv[i];
@@ -120,6 +123,8 @@ public final class TraceBenchmarkTool {
                     case "--track-allocations" -> trackAllocations = true;
                     case "--fm-core" -> fmCore = CliArguments.requireValue(argv, ++i, arg);
                     case "--no-audio" -> audio = false;
+                    case "--frame-log" -> frameLog = Path.of(CliArguments.requireValue(argv, ++i, arg));
+                    case "--paced" -> paced = true;
                     default -> throw new IllegalArgumentException("Unknown argument: " + arg);
                 }
             }
@@ -134,7 +139,7 @@ public final class TraceBenchmarkTool {
                 throw new IllegalArgumentException("--fm-core must be 'fast' or 'accurate', got: " + fmCore);
             }
             return new Args(trace, mode, warmupFrames, measureFrames, iterations,
-                    json, markdown, label, trackAllocations, audio, fmCore);
+                    json, markdown, label, trackAllocations, audio, fmCore, frameLog, paced);
         }
 
         private static int parseCount(String[] argv, int index, String flag, int minimum) {
@@ -244,6 +249,60 @@ public final class TraceBenchmarkTool {
                 com.openggf.configuration.SonicConfiguration.AUDIO_FM_CORE));
     }
 
+    private static void paceToSixtyHertz(long frameStartNanos) {
+        long deadline = frameStartNanos + 16_666_667L;
+        long now;
+        while ((now = System.nanoTime()) < deadline) {
+            long remaining = deadline - now;
+            if (remaining > 2_000_000L) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            } else {
+                Thread.onSpinWait();
+            }
+        }
+    }
+
+    private static int currentActOrMinusOne() {
+        var levelManager = GameServices.levelOrNull();
+        return levelManager != null ? levelManager.getCurrentAct() : -1;
+    }
+
+    /**
+     * Writes one CSV row per measured frame of the first iteration: the trace
+     * row it drove, the act, the frame total and every profiler section, all in
+     * milliseconds. Percentiles hide a single slow frame; this is how a frame
+     * hitch is located and attributed to a section.
+     */
+    private static void writeFrameLog(Path path, SectionTimeline measured,
+                                      int[] traceIndex, int[] act) throws java.io.IOException {
+        List<String> sections = measured.sectionNames();
+        StringBuilder out = new StringBuilder();
+        out.append("measured_frame,trace_index,act,frame_ms");
+        for (String section : sections) {
+            out.append(',').append(section.replace(',', '_'));
+        }
+        out.append('\n');
+        long[] frames = measured.rawFrameNanos();
+        for (int i = 0; i < measured.frameCount(); i++) {
+            out.append(i).append(',').append(traceIndex[i]).append(',').append(act[i])
+                    .append(',').append(String.format(Locale.ROOT, "%.3f", frames[i] / 1e6));
+            for (String section : sections) {
+                out.append(',').append(String.format(Locale.ROOT, "%.3f",
+                        measured.rawSection(section)[i] / 1e6));
+            }
+            out.append('\n');
+        }
+        if (path.getParent() != null) {
+            java.nio.file.Files.createDirectories(path.getParent());
+        }
+        java.nio.file.Files.writeString(path, out.toString());
+    }
+
     /**
      * Match TraceReplayDriver.startLevel: a real GL boot can queue an initial
      * title card whose PLC wait needs recorded gameplay rows to complete.
@@ -335,6 +394,10 @@ public final class TraceBenchmarkTool {
 
         int steppedFrames = 0;
         int targetFrames = args.warmupFrames() + args.measureFrames();
+        // Per measured frame, for --frame-log: which trace row it drove and the
+        // act it ran in, so spikes can be placed on the run.
+        int[] loggedTraceIndex = new int[args.measureFrames()];
+        int[] loggedAct = new int[args.measureFrames()];
         int[] rowsByPhase = new int[TraceExecutionPhase.values().length];
         int rowsWithoutGameplay = 0;
         try {
@@ -349,6 +412,7 @@ public final class TraceBenchmarkTool {
                 // as a frame would drag every percentile down with samples that
                 // represent no work. beginFrame simply clears and re-arms, so an
                 // unclosed frame leaves nothing behind.
+                long frameStartNanos = System.nanoTime();
                 profiler.beginFrame();
                 TraceReplayDrive.DriveOutcome outcome = TraceReplayDrive.driveOneFrame(
                         trace, frameDriver, replayStart, phase, driveTraceIndex);
@@ -373,6 +437,14 @@ public final class TraceBenchmarkTool {
                     audio.present(profiler);
                     profiler.endFrame();
 
+                    if (args.paced() && steppedFrames >= args.warmupFrames()) {
+                        // Real-time pacing for the measured window only: this
+                        // deliberately measures nothing about throughput and
+                        // exists to give off-frame work (level preparers) the
+                        // wall time it has in a 60 Hz session.
+                        paceToSixtyHertz(frameStartNanos);
+                    }
+
                     steppedFrames++;
                     if (steppedFrames == args.warmupFrames()) {
                         profiler.setSampleSink(measured);
@@ -380,6 +452,11 @@ public final class TraceBenchmarkTool {
                         measureStartNanos = System.nanoTime();
                     } else if (steppedFrames > args.warmupFrames()) {
                         observe(digest, driveFrame);
+                        int measuredIndex = steppedFrames - args.warmupFrames() - 1;
+                        if (measuredIndex < loggedTraceIndex.length) {
+                            loggedTraceIndex[measuredIndex] = driveTraceIndex;
+                            loggedAct[measuredIndex] = currentActOrMinusOne();
+                        }
                     }
                 }
 
@@ -408,6 +485,15 @@ public final class TraceBenchmarkTool {
         int framesToSteadyState = cold
                 ? steadyStateAcrossWarmupAndMeasure(warmupTimeline, measured)
                 : -1;
+
+        if (args.frameLog() != null && index == 0) {
+            try {
+                writeFrameLog(args.frameLog(), measured, loggedTraceIndex, loggedAct);
+                System.out.println("Wrote per-frame log -> " + args.frameLog().toAbsolutePath());
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException("Unable to write --frame-log", e);
+            }
+        }
 
         return new BenchmarkReport.Iteration(index, cold, measured.frameCount(),
                 Math.max(measureEndNanos - measureStartNanos, 0),
