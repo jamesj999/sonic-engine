@@ -252,6 +252,8 @@ public class Sonic2SpecialStageManager {
     private Boolean fineDiagnosticsOverride;
     private boolean diagnosticEpochActive;
     private boolean liveLagSimulationEnabled = true;
+    /** Whether {@code SSInitPalAndData}'s palette upload has happened (see setupPalettes). */
+    private boolean stagePalettesUploaded;
     /**
      * Live reproduction of the masked-interrupt entry load
      * ({@link Sonic2SpecialStageLagModel#ENTRY_LOAD_LAG_FRAMES}). Only
@@ -864,14 +866,23 @@ public class Sonic2SpecialStageManager {
     }
 
     private void setupPalettes() {
-        GraphicsManager graphicsManager = graphicsManager();
         palettes = Sonic2SpecialStagePalette.createPalettes(currentStage);
+        // SSInitPalAndData (s2.asm:10232, called at 6639) runs after
+        // Pal_FadeToWhite and the masked-interrupt load, so the level's
+        // palette stays in the shared lines through the fade over the level;
+        // the upload happens when the intro leaves PRE_ROLL.
+        stagePalettesUploaded = false;
+    }
 
-        for (int i = 0; i < palettes.length; i++) {
-            graphicsManager.cachePaletteTexture(palettes[i], i);
+    /** {@code SSInitPalAndData}: the stage palette replaces the level's. */
+    private void uploadStagePalettes() {
+        GraphicsManager graphicsManager = graphicsManagerOrNull();
+        if (graphicsManager != null && palettes != null) {
+            for (int i = 0; i < palettes.length; i++) {
+                graphicsManager.cachePaletteTexture(palettes[i], i);
+            }
         }
-
-        LOGGER.fine("Special Stage palettes cached");
+        stagePalettesUploaded = true;
     }
 
     private void setupPatterns() throws IOException {
@@ -1144,6 +1155,9 @@ public class Sonic2SpecialStageManager {
         Sonic2SpecialStageIntro.Phase entryPhase = intro != null
                 ? intro.getCurrentPhase()
                 : Sonic2SpecialStageIntro.Phase.GAMEPLAY;
+        if (!stagePalettesUploaded && entryPhase != Sonic2SpecialStageIntro.Phase.PRE_ROLL) {
+            uploadStagePalettes();
+        }
         if (liveEntryLoadHoldFrames > 0
                 && entryPhase == Sonic2SpecialStageIntro.Phase.ROM_STARTUP) {
             // The masked-interrupt entry load sits between the last
@@ -2768,6 +2782,7 @@ public class Sonic2SpecialStageManager {
         initialized = false;
         liveLagSimulationEnabled = true;
         liveEntryLoadHoldFrames = 0;
+        stagePalettesUploaded = false;
         backgroundStageGeneration++;
         if (renderer != null) {
             renderer.beginStaticBackgroundStage(backgroundStageGeneration);
@@ -3132,15 +3147,13 @@ public class Sonic2SpecialStageManager {
     }
 
     private void recacheRestoredPalettes() {
-        GraphicsManager graphics = graphicsManagerOrNull();
-        if (graphics == null || palettes == null) {
+        // A restore into PRE_ROLL lands before SSInitPalAndData: the level's
+        // palette must stay in the shared lines until the intro leaves it.
+        stagePalettesUploaded = false;
+        if (intro != null && intro.getCurrentPhase() == Sonic2SpecialStageIntro.Phase.PRE_ROLL) {
             return;
         }
-        for (int i = 0; i < palettes.length; i++) {
-            if (palettes[i] != null) {
-                graphics.cachePaletteTexture(palettes[i], i);
-            }
-        }
+        uploadStagePalettes();
     }
 
     void restorePlayerTopologyForRewind(

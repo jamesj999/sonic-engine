@@ -238,6 +238,8 @@ public final class Sonic1SpecialStageManager {
     private int bgCloudBase;
     private int bgFishBase;
     private Palette[] ssPalettes;
+    /** Whether GM_Special's setup-block palette load has happened (see loadPalettes). */
+    private boolean stagePalettesUploaded;
     private byte[] ssPaletteCycle1;
     private byte[] ssPaletteCycle2;
 
@@ -387,6 +389,7 @@ public final class Sonic1SpecialStageManager {
                 // the ROM for the rest of the stage, surfacing as a constant
                 // 4-frame-late bg_anim transition (trace frame 137: expected
                 // v_ssbganim=8, engine=0).
+                uploadStagePalettes();
                 updateSpecialStagePaletteCycle();
                 ssAngle = 0;
                 ssRotate = SS_INIT_ROTATION;
@@ -1470,6 +1473,19 @@ public final class Sonic1SpecialStageManager {
                     Math.min(lineData.length, palData.length - srcOffset));
             ssPalettes[line].fromSegaFormat(lineData);
         }
+        // GM_Special loads the palette in its instant setup block
+        // (`moveq #palid_Special,d0` / PalLoad, sonic.asm:3253), after
+        // PaletteWhiteOut has faded the level's last frame; until then the
+        // level's palette stays in the shared lines. See update().
+        stagePalettesUploaded = false;
+    }
+
+    /** {@code palid_Special} load: the stage palette replaces the level's. */
+    private void uploadStagePalettes() {
+        stagePalettesUploaded = true;
+        if (ssPalettes == null || graphicsManager == null) {
+            return;
+        }
         for (int i = 0; i < ssPalettes.length; i++) {
             graphicsManager.cachePaletteTexture(ssPalettes[i], i);
         }
@@ -1938,7 +1954,8 @@ public final class Sonic1SpecialStageManager {
     }
 
     private void recacheTouchedPalettes(boolean[] touchedLines) {
-        if (touchedLines == null || ssPalettes == null || graphicsManager == null) {
+        if (touchedLines == null || ssPalettes == null || graphicsManager == null
+                || !stagePalettesUploaded) {
             return;
         }
         for (int i = 0; i < touchedLines.length && i < ssPalettes.length; i++) {
@@ -2516,6 +2533,13 @@ public final class Sonic1SpecialStageManager {
         emeraldCollected = snapshot.emeraldCollected;
         debugMode = snapshot.debugMode;
         startupHoldTicksRemaining = snapshot.startupHoldTicksRemaining;
+        // The setup-block palette load has happened once the whiteout half of
+        // the hold is behind the restored state.
+        stagePalettesUploaded =
+                startupHoldTicksRemaining < SS_STARTUP_HOLD_TICKS - SS_WHITEOUT_TICKS;
+        if (stagePalettesUploaded) {
+            uploadStagePalettes();
+        }
         objInitPending = snapshot.objInitPending;
         currentStage = snapshot.currentStage;
         ringsCollected = snapshot.ringsCollected;
