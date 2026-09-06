@@ -719,6 +719,19 @@ on a save-writer thread (flushed before slot reads and at shutdown), the fire
 hand-off decodes its act 2 collision tables off the frame, and GPU sprite sheets
 whose pixels are unchanged across the act reload are kept rather than re-uploaded.
 
+Special-stage entry now plays the ROM's transition in normal play: in Sonic 2
+the level freezes and fades to white over 22 frames while the entry sound and
+the music fade run, the screen stays white through the stage's startup waits,
+and the stage music starts with the fade from white; Sonic 1 and Sonic 3 &
+Knuckles keep the level on screen through their own fade-to-white the same way,
+and every stage now loads its palette after that fade rather than during it.
+`gameplay.loadTimeSimulation: FAST` is a real mode and the default, resolving
+to a hand-tunable copy of the measured S3K load-time profile that also paces
+the title screen's Sonic frames 8 to A from the original hardware capture.
+Special-stage unit, headless and replay suites pass across the three games,
+the ordinary suite and guards pass, and every run-chain failure is identical
+to the pre-merge develop.
+
 The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
 identified release skip-classification and trace-policy mismatches. The
 [remediation record](docs/architecture/validation/2026-09-06-release-gates.md)

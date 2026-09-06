@@ -159,6 +159,20 @@ public interface SpecialStageProvider extends MiniGameProvider {
         return true;
     }
 
+    /**
+     * Returns whether the stage is still inside the ROM's entry fade-to-white.
+     * {@code Pal_FadeToWhite} (docs/s2disasm/s2.asm:6547), {@code PaletteWhiteOut}
+     * (docs/s1disasm/sonic.asm:3226) and S3K's {@code Pal_FadeToWhite}
+     * (docs/skdisasm/sonic3k.asm:10591) are synchronous wait loops that run
+     * before the stage is loaded, so the display still shows the level's last
+     * frame while its palette steps to white. The engine keeps rendering the
+     * frozen level under that fade for as long as this is true and only then
+     * hands the frame to the stage's own draw.
+     */
+    default boolean isEntryFadeToWhiteActive() {
+        return false;
+    }
+
     /** Called at the native one-player special-stage results setup boundary. */
     default void onEnterResults() {
     }

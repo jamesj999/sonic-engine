@@ -175,6 +175,31 @@ class TestGameLoopSpecialStageEntryPresentation {
     }
 
     @Test
+    void accurateWhiteEntryFadesLevelToWhiteThenStartsMusicAndRevealExactlyOnce() throws Exception {
+        setActiveTraceSession(mock(TraceSessionLauncher.class));
+        AtomicBoolean ready = new AtomicBoolean(false);
+        SpecialStageProvider provider = providerWithReadiness(ready);
+
+        loop.doEnterSpecialStage(provider, 0, false, SpecialStageStartupPolicy.TRACE_ACCURATE);
+
+        verify(fade).startFadeToWhite(isNull(), eq(Integer.MAX_VALUE));
+        verify(fade).deferFirstStepToNextVint();
+        verify(fade, never()).holdWhite();
+        verify(audio, never()).playMusic(GameMusic.SPECIAL_STAGE);
+        assertEquals(GameMode.SPECIAL_STAGE, loop.getCurrentGameMode());
+
+        ready.set(true);
+        invokeUpdateSpecialStageMode();
+        invokeUpdateSpecialStageMode();
+
+        InOrder order = inOrder(audio, fade);
+        order.verify(audio).playMusic(GameMusic.SPECIAL_STAGE);
+        order.verify(fade).startFadeFromWhite(any());
+        verify(audio, times(1)).playMusic(GameMusic.SPECIAL_STAGE);
+        verify(fade, times(1)).startFadeFromWhite(any());
+    }
+
+    @Test
     void leavingSpecialStageClearsDeferredPresentation() throws Exception {
         setActiveTraceSession(mock(TraceSessionLauncher.class));
         AtomicBoolean ready = new AtomicBoolean(false);

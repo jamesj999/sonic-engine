@@ -238,6 +238,8 @@ public final class Sonic1SpecialStageManager {
     private int bgCloudBase;
     private int bgFishBase;
     private Palette[] ssPalettes;
+    /** Whether GM_Special's setup-block palette load has happened (see loadPalettes). */
+    private boolean stagePalettesUploaded;
     private byte[] ssPaletteCycle1;
     private byte[] ssPaletteCycle2;
 
@@ -387,6 +389,7 @@ public final class Sonic1SpecialStageManager {
                 // the ROM for the rest of the stage, surfacing as a constant
                 // 4-frame-late bg_anim transition (trace frame 137: expected
                 // v_ssbganim=8, engine=0).
+                uploadStagePalettes();
                 updateSpecialStagePaletteCycle();
                 ssAngle = 0;
                 ssRotate = SS_INIT_ROTATION;
@@ -1470,6 +1473,19 @@ public final class Sonic1SpecialStageManager {
                     Math.min(lineData.length, palData.length - srcOffset));
             ssPalettes[line].fromSegaFormat(lineData);
         }
+        // GM_Special loads the palette in its instant setup block
+        // (`moveq #palid_Special,d0` / PalLoad, sonic.asm:3253), after
+        // PaletteWhiteOut has faded the level's last frame; until then the
+        // level's palette stays in the shared lines. See update().
+        stagePalettesUploaded = false;
+    }
+
+    /** {@code palid_Special} load: the stage palette replaces the level's. */
+    private void uploadStagePalettes() {
+        stagePalettesUploaded = true;
+        if (ssPalettes == null || graphicsManager == null) {
+            return;
+        }
         for (int i = 0; i < ssPalettes.length; i++) {
             graphicsManager.cachePaletteTexture(ssPalettes[i], i);
         }
@@ -1938,7 +1954,8 @@ public final class Sonic1SpecialStageManager {
     }
 
     private void recacheTouchedPalettes(boolean[] touchedLines) {
-        if (touchedLines == null || ssPalettes == null || graphicsManager == null) {
+        if (touchedLines == null || ssPalettes == null || graphicsManager == null
+                || !stagePalettesUploaded) {
             return;
         }
         for (int i = 0; i < touchedLines.length && i < ssPalettes.length; i++) {
@@ -2391,32 +2408,46 @@ public final class Sonic1SpecialStageManager {
     }
 
     /**
-     * Returns whether the ROM's observable pre-physics hold has elapsed (see
-     * {@link #SS_STARTUP_HOLD_TICKS}). Mirrors
-     * {@code Sonic2SpecialStageManager.isEntryPresentationReady()}.
+     * Returns whether GM_Special has reached its reveal boundary: the
+     * {@code PaletteWhiteOut} half of the hold has elapsed, so {@code bgm_SS}
+     * (sonic.asm:3272) and {@code PaletteWhiteIn} may start while the second
+     * half still keeps Obj09 frozen (see {@link #SS_STARTUP_HOLD_TICKS}).
+     * Mirrors {@code Sonic2SpecialStageManager.isEntryPresentationReady()}.
      */
     public boolean isEntryPresentationReady() {
-        return initialized && startupHoldTicksRemaining <= 0;
+        return initialized && startupHoldTicksRemaining <= SS_STARTUP_HOLD_TICKS - SS_WHITEOUT_TICKS;
     }
 
     /**
-     * Compresses the ROM's observable pre-physics hold by stepping
-     * {@link #update()} until it elapses, preserving the normal per-tick
-     * update path (rather than hand-skipping fields) so FAST-policy callers
-     * reach the same state a frame-accurate replay would reach at the reveal
-     * boundary. Mirrors {@code Sonic2SpecialStageManager.advanceToEntryPresentation()}.
+     * Returns whether {@code PaletteWhiteOut} (the first {@link #SS_WHITEOUT_TICKS}
+     * of the hold) is still running: the display shows the level's last frame
+     * until GM_Special's instant setup block replaces it (sonic.asm:3238-3291).
+     */
+    public boolean isEntryFadeToWhiteActive() {
+        return initialized && startupHoldTicksRemaining > SS_STARTUP_HOLD_TICKS - SS_WHITEOUT_TICKS;
+    }
+
+    /**
+     * Compresses the ROM's whole observable pre-physics hold (both fades and
+     * the instant setup block) by stepping {@link #update()} until Obj09's
+     * first real tick is next, preserving the normal per-tick update path
+     * rather than hand-skipping fields. Gameplay no longer uses this -- both
+     * startup policies step the hold frame by frame because its first half
+     * is the visible fade over the level and its second half is the stage
+     * reveal -- so it serves tests that assert on Obj09's first tick. Mirrors
+     * {@code Sonic2SpecialStageManager.advanceToEntryPresentation()}.
      */
     public void advanceToEntryPresentation() {
         advanceToEntryPresentation(SS_STARTUP_HOLD_TICKS + 1);
     }
 
     void advanceToEntryPresentation(int maxUpdates) {
-        for (int i = 0; i < maxUpdates && !isEntryPresentationReady(); i++) {
+        for (int i = 0; i < maxUpdates && startupHoldTicksRemaining > 0; i++) {
             update();
         }
-        if (!isEntryPresentationReady()) {
+        if (startupHoldTicksRemaining > 0) {
             throw new IllegalStateException(
-                    "Special-stage startup did not reach reveal boundary within " + maxUpdates + " updates");
+                    "Special-stage startup did not reach Obj09's first tick within " + maxUpdates + " updates");
         }
     }
 
@@ -2502,6 +2533,13 @@ public final class Sonic1SpecialStageManager {
         emeraldCollected = snapshot.emeraldCollected;
         debugMode = snapshot.debugMode;
         startupHoldTicksRemaining = snapshot.startupHoldTicksRemaining;
+        // The setup-block palette load has happened once the whiteout half of
+        // the hold is behind the restored state.
+        stagePalettesUploaded =
+                startupHoldTicksRemaining < SS_STARTUP_HOLD_TICKS - SS_WHITEOUT_TICKS;
+        if (stagePalettesUploaded) {
+            uploadStagePalettes();
+        }
         objInitPending = snapshot.objInitPending;
         currentStage = snapshot.currentStage;
         ringsCollected = snapshot.ringsCollected;

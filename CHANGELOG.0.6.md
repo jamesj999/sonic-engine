@@ -1,5 +1,24 @@
 # OpenGGF 0.6 Changelog
 
+- The Sonic 3 & Knuckles title screen's Sonic animation waits for its frame art
+  again: the ROM decompresses frames 8 to B synchronously inside the title loop
+  and queues frame 7 ahead of it, so those frames overrun on hardware. The
+  decodes now run as Kosinski hardware work, and the new default
+  `gameplay.loadTimeSimulation: FAST` manifest (a hand-tuned copy of the
+  measured S3K profile) carries the frame costs from the original hardware
+  capture: 12 extra frames on frame 7, 8 on frames 8 and 9, 6 on frame A.
+  `FAST` is a real mode now; games without a FAST manifest still fall back to
+  `NONE` with a warning.
+
+- Special-stage entry now plays the ROM's transition in normal play. In
+  Sonic 2 the level freezes and fades to white over 22 frames while the entry
+  sound plays and the music fades out, the screen stays white through the
+  ROM's startup waits, and the stage music starts with the fade from white.
+  Sonic 1 and Sonic 3 & Knuckles keep the level on screen through their own
+  entry fade-to-white and reveal the stage when it ends. Previously the whole entry collapsed into one frame, which cut
+  the entry sound short and skipped both fades. Trace replay still takes its
+  lag rows from the recording.
+
 - S3K AIZ1 no longer hitches when the intro hands over control at camera
   X $1400 or when the fire-overlay art stages at $2E00. The $1400 terrain swap
   now swaps in foreground/background tilemaps pre-built during level load

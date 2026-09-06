@@ -700,7 +700,7 @@ public class SonicConfigurationService {
 		putDefaultKey(SonicConfiguration.NEXT_ZONE, GLFW_KEY_PAGE_DOWN);
 		putDefaultKey(SonicConfiguration.DEBUG_MODE_KEY, GLFW_KEY_D);
 		putDefault(SonicConfiguration.FPS, 60);
-		putDefault(SonicConfiguration.LOAD_TIME_SIMULATION, "NONE");
+		putDefault(SonicConfiguration.LOAD_TIME_SIMULATION, "FAST");
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_KEY, GLFW_KEY_TAB);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY, GLFW_KEY_END);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_FAIL_KEY, GLFW_KEY_DELETE);

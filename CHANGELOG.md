@@ -16,6 +16,10 @@ readable and historical versions can be referenced directly.
 
 ## 0.6 release documentation
 
+The current snapshot plays the ROM special-stage entry transition in normal
+play and makes `FAST` load-time simulation the default; see the
+[0.6 development history](CHANGELOG.0.6.md#06-development-history-mid-july-2026--present-newest-first).
+
 The current snapshot makes rewind checkpoints share spent hardware-timing job
 snapshots instead of re-cloning them; see the
 [0.6 development history](CHANGELOG.0.6.md#06-development-history-mid-july-2026--present-newest-first).

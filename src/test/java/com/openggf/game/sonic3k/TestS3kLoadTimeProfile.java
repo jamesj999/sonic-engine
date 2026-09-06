@@ -37,6 +37,26 @@ class TestS3kLoadTimeProfile {
         assertEquals(List.of(), warnings);
     }
 
+    @Test
+    void fastManifestLoadsWithoutWarningAndKeepsTheCompositeParentRule() {
+        Sonic3kGameModule module = new Sonic3kGameModule();
+        List<String> warnings = new ArrayList<>();
+        var profile = module.createLoadTimeProfile(
+                LoadTimeSimulationMode.FAST, warnings::add);
+        HardwareWorkSubmission submission = new HardwareWorkSubmission(
+                HardwareWorkKind.KOS_MODULE_QUEUE,
+                0x1234, 100, 0x4000, 2048,
+                "kosinski_moduled", 2, false, new NeverPrepared());
+        HardwareWorkHandle handle = new HardwareWorkHandle(
+                HardwareWorkKind.KOS_MODULE_QUEUE, 0, "sha256:parent");
+
+        var decision = profile.assign(submission, handle);
+
+        assertEquals(0, decision.serviceFrames());
+        assertEquals(LoadTimeDecisionSource.IMMEDIATE, decision.source());
+        assertEquals(List.of(), warnings);
+    }
+
     private static final class NeverPrepared implements HardwareWorkPreparation {
         @Override public boolean stepOneWorkUnit() { return false; }
         @Override public boolean isPrepared() { return false; }

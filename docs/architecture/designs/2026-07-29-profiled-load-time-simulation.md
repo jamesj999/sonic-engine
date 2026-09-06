@@ -15,15 +15,32 @@ It preserves production ROM bytes, queue ownership, FIFO contention, service bou
 global-empty predicates, rewind, and trace isolation. It is a pacing simulation, not
 cycle-accurate hardware emulation.
 
-## Current status (2026-08-08)
+## Current status (2026-09-06)
 
 The S3K `PROFILED` implementation is live for the published Kosinski service model.
-`FAST` and `REALISTIC` remain intentionally unfinished and are retained as explicit
-resolver aliases: `FAST` warns and returns the immediate profile, while `REALISTIC`
-warns and returns the supplied profiled profile. The warning is emitted by each
-`LoadTimeProfileFactory.resolve(...)` call; the factory does not maintain a global
-warn-once registry. A normal gameplay context usually resolves once at construction,
-but context reconstruction can resolve again.
+
+`FAST` is a real mode and the repository default since 2026-09-06. A game that ships a
+FAST manifest resolves to it without a warning; S3K's is
+`load-time-profiles/s3k-fast-v1.json`, seeded as a byte-for-byte copy of the measured
+`s3k-v1.json` entries and then hand-tuned. Unlike the PROFILED manifest it may be
+edited by hand, and that is its purpose: it also carries entries the native measurement
+stream never observed, currently the title-screen Sonic frame decodes taken from the
+original hardware capture that the removed `ANIM_FRAME_DURATIONS` table transcribed
+(fixture label `legacy-hardware-capture:...@34482b194`). A game without a FAST manifest
+warns on each `LoadTimeProfileFactory.resolve(...)` call and behaves as `NONE`.
+
+`REALISTIC` remains intentionally unfinished and is retained as an explicit resolver
+alias that warns and returns the supplied profiled profile. The factory does not maintain
+a global warn-once registry. A normal gameplay context usually resolves once at
+construction, but context reconstruction can resolve again.
+
+The S3K title screen runs outside a gameplay session, so `Sonic3kTitleScreenManager`
+owns a `HardwareTimingService` of its own for the title loop's Kosinski work: frame 7's
+art is queued at `loc_4040` as the ROM does, and frames 8 to B are submitted when
+`Iterate_TitleSonicFrame` selects them; a synchronous decode that is not ready stalls
+the loop, one missed V-int per iteration, until the profile admits it. `serviceFrames`
+for that kind count the `PRE_MAIN_LOOP` services from the iteration that starts the
+decode, so a value of N stalls N-1 iterations and `NONE` stalls none.
 
 No authoritative cross-game semantics can be derived from the current owners. The
 `LoadTimeProfile` submission contract and `HardwareWorkKind` registry currently model

@@ -160,30 +160,46 @@ public class Sonic3kGameModule implements GameModule {
         return new S3kRuntimeArtCoordinator(timing);
     }
 
+    /** Generator-owned measured manifest; never hand-edited. */
+    static final String PROFILED_LOAD_TIME_MANIFEST = "/load-time-profiles/s3k-v1.json";
+    /**
+     * Hand-tuned normal-play manifest, seeded as a copy of
+     * {@link #PROFILED_LOAD_TIME_MANIFEST} and extended with entries the
+     * measurement stream does not cover (the title-screen Sonic frames).
+     */
+    static final String FAST_LOAD_TIME_MANIFEST = "/load-time-profiles/s3k-fast-v1.json";
+
     @Override
     public LoadTimeProfile createLoadTimeProfile(
             LoadTimeSimulationMode mode,
             Consumer<String> warningSink) {
-        if (mode == LoadTimeSimulationMode.NONE
-                || mode == LoadTimeSimulationMode.FAST) {
-            return LoadTimeProfileFactory.resolve(
-                    mode, LoadTimeProfile.IMMEDIATE, warningSink);
-        }
-        LoadTimeProfile profiled;
+        return switch (mode) {
+            case NONE -> LoadTimeProfile.IMMEDIATE;
+            case FAST -> LoadTimeProfileFactory.resolve(
+                    mode, LoadTimeProfile.IMMEDIATE,
+                    loadS3kProfile(FAST_LOAD_TIME_MANIFEST, warningSink), warningSink);
+            case PROFILED, REALISTIC -> LoadTimeProfileFactory.resolve(
+                    mode, loadS3kProfile(PROFILED_LOAD_TIME_MANIFEST, warningSink),
+                    null, warningSink);
+        };
+    }
+
+    private static LoadTimeProfile loadS3kProfile(
+            String resourceName, Consumer<String> warningSink) {
+        LoadTimeProfile manifest;
         try {
-            var resource = Sonic3kGameModule.class.getResourceAsStream(
-                    "/load-time-profiles/s3k-v1.json");
+            var resource = Sonic3kGameModule.class.getResourceAsStream(resourceName);
             if (resource == null) {
-                throw new IllegalStateException("missing S3K load-time manifest");
+                throw new IllegalStateException("missing S3K load-time manifest " + resourceName);
             }
             try (resource) {
-                profiled = ProfiledLoadTimeManifest.load(resource, warningSink);
+                manifest = ProfiledLoadTimeManifest.load(resource, warningSink);
             }
         } catch (IOException exception) {
             throw new IllegalStateException(
-                    "failed to load S3K load-time manifest", exception);
+                    "failed to load S3K load-time manifest " + resourceName, exception);
         }
-        LoadTimeProfile s3kProfile = (submission, handle) -> {
+        return (submission, handle) -> {
             if (submission.kind()
                     == com.openggf.game.timing.HardwareWorkKind.KOS_MODULE_QUEUE
                     && "kosinski_moduled".equals(submission.compressionVariant())) {
@@ -193,9 +209,8 @@ public class Sonic3kGameModule implements GameModule {
                         com.openggf.game.timing.LoadTimeDecisionSource.IMMEDIATE,
                         "s3k-kos-v1-composite-parent");
             }
-            return profiled.assign(submission, handle);
+            return manifest.assign(submission, handle);
         };
-        return LoadTimeProfileFactory.resolve(mode, s3kProfile, warningSink);
     }
 
     @Override
