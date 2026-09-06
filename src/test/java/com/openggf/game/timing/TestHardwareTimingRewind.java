@@ -11,6 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class TestHardwareTimingRewind {
 
@@ -239,6 +241,44 @@ class TestHardwareTimingRewind {
                         HardwareWorkKind.KOS_DECOMPRESSION_QUEUE,
                         HardwareReadinessAdmissionPolicy.LIVE),
                 true, false, null));
+    }
+
+    @Test
+    void preparedJobSnapshotsAreSharedUntilTheJobMutatesAndRestoreKeepsUnchangedJobs() {
+        HardwareTimingService service = new HardwareTimingService();
+        HardwareWorkHandle handle = service.submit(submission(2, 11));
+        HardwareTimingJob.Snapshot inFlight = service.capture().jobs().getFirst();
+        assertNotSame(inFlight, service.capture().jobs().getFirst(),
+                "an in-flight preparation must be re-snapshotted every capture");
+
+        service.service(POST_OBJECTS);
+        service.service(POST_OBJECTS);
+        assertTrue(service.isReady(handle));
+        HardwareTimingSnapshot ready = service.capture();
+        HardwareTimingJob.Snapshot readyJob = ready.jobs().getFirst();
+        assertSame(readyJob, service.capture().jobs().getFirst(),
+                "a prepared, unmutated job shares one immutable snapshot across captures");
+        assertArrayEquals(new byte[] {11}, readyJob.preparedPayload());
+
+        assertArrayEquals(new byte[] {11}, service.claim(handle));
+        HardwareTimingSnapshot claimed = service.capture();
+        assertNotSame(readyJob, claimed.jobs().getFirst(),
+                "claiming mutates the job, so the memo must be dropped");
+        assertTrue(claimed.jobs().getFirst().claimed());
+
+        service.restore(ready);
+        assertTrue(service.isReady(handle), "restoring the ready snapshot must un-claim the job");
+        assertSame(readyJob, service.capture().jobs().getFirst(),
+                "a restored job is already in the snapshot's state and memoizes that instance");
+        assertArrayEquals(new byte[] {11}, service.claim(handle));
+
+        service.restore(claimed);
+        assertFalse(service.isReady(handle));
+        assertArrayEquals(new byte[] {11}, service.claimedPayload(readyJob.kind(), handle.ordinal()));
+        service.restore(ready);
+        assertTrue(service.isReady(handle), "A -> B -> A restoration must land on A");
+        assertArrayEquals(new byte[] {11}, readyJob.preparedPayload(),
+                "historical snapshot bytes survive live claims and restores");
     }
 
     private static HardwareWorkSubmission submission(int workUnits, int payloadByte) {

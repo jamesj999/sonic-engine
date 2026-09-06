@@ -214,13 +214,13 @@ public final class HardwareTimingJob {
     }
 
     /**
-     * True when this live job is byte-for-byte the state {@code snapshot}
-     * describes: the snapshot is the very instance memoized from this job and
-     * nothing has mutated since. Restore may then keep the live job instead of
-     * recreating its preparation and re-cloning its payload.
+     * The snapshot memoized from this job's current state, or null when the
+     * job has mutated since its last capture or is not yet prepared. Restore
+     * keeps a live job whose memo is the very instance being restored instead
+     * of recreating its preparation and re-cloning its payload.
      */
-    boolean isUnchangedSince(Snapshot snapshot) {
-        return memoizedSnapshot != null && memoizedSnapshot == snapshot;
+    Snapshot memoizedSnapshotOrNull() {
+        return memoizedSnapshot;
     }
 
     static String describe(HardwareWorkHandle handle) {
