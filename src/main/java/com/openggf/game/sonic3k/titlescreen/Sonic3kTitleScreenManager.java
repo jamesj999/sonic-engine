@@ -250,6 +250,14 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
     private int currentAnimFrame = 1;
 
     /**
+     * The frame whose art and palette are actually in VRAM. While
+     * {@code TitleSonic_LoadFrame} is still decompressing the next frame the
+     * display keeps showing this one: the new mappings, palette and art only
+     * land after the decode (sonic3k.asm:5846-5871), never piecemeal.
+     */
+    private int displayedAnimFrame = 1;
+
+    /**
      * ROM {@code Title_anim_delay} (sonic3k.constants.asm:953). Reloaded by
      * {@code TitleAnim_FlipBuffer} and decremented once per title-loop iteration;
      * {@code Iterate_TitleSonicFrame} advances the frame when it reads 1.
@@ -421,6 +429,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         frameCounter = 0;
         animTableIndex = 0;
         currentAnimFrame = 1;
+        displayedAnimFrame = 1;
         animFrameTimer = 0;
         segaSoundPlayed = false;
         segaChantStopped = false;
@@ -525,7 +534,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         // On the Mega Drive, palette line 0 color 0 is the background color —
         // it fills the screen behind everything. Transparent pixels (color 0)
         // in tile patterns show this background color.
-        byte[] palData = dataLoader.getAnimPaletteData(currentAnimFrame);
+        byte[] palData = dataLoader.getAnimPaletteData(displayedAnimFrame);
         if (palData != null && palData.length >= 2) {
             // Read color 0 from palette line 0 (first 2 bytes, big-endian)
             // Mega Drive format: 0x0BGR where B,G,R are nibbles (0-E, 8 levels)
@@ -663,7 +672,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         state = State.FADE_IN;
 
         // Cache the first animation frame art/palette
-        dataLoader.cacheAnimationFrame(currentAnimFrame);
+        presentAnimationFrame(currentAnimFrame);
         beginTitleLoopKosWork();
 
         // Play title music
@@ -736,7 +745,17 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         if (art != null) {
             titleKosQueue.claim(art);
         }
+        presentAnimationFrame(frame);
+    }
+
+    /** The decoded frame's art, mappings and palette reach VRAM together. */
+    private void presentAnimationFrame(int frame) {
         dataLoader.cacheAnimationFrame(frame);
+        displayedAnimFrame = frame;
+    }
+
+    int displayedAnimFrame() {
+        return displayedAnimFrame;
     }
 
     private void endTitleLoopKosWork() {
@@ -808,7 +827,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
             }
             titleKosQueue.claim(pendingFrameArt);
             pendingFrameArt = null;
-            dataLoader.cacheAnimationFrame(currentAnimFrame);
+            presentAnimationFrame(currentAnimFrame);
         }
         if (checkSkipToInteractive(input)) {
             return;
@@ -989,6 +1008,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
 
         // Load final frame
         currentAnimFrame = FINAL_FRAME_INDEX;
+        displayedAnimFrame = FINAL_FRAME_INDEX;
         dataLoader.cacheFinalScene();
 
         // Play title music if not already playing
@@ -1293,7 +1313,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
      * frame as a full-screen 40x28 nametable.
      */
     private void drawAnimationPhase(GraphicsManager gm) {
-        int[] nametable = dataLoader.getAnimationMapping(currentAnimFrame);
+        int[] nametable = dataLoader.getAnimationMapping(displayedAnimFrame);
         if (nametable == null || nametable.length == 0) {
             return;
         }

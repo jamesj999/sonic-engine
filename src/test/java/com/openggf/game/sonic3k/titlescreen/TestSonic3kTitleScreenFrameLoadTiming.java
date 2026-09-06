@@ -155,9 +155,17 @@ class TestSonic3kTitleScreenFrameLoadTiming {
         while (manager.getState() != com.openggf.game.TitleScreenProvider.State.ACTIVE
                 && updates < 600) {
             int before = manager.currentAnimFrame();
+            int shownBefore = manager.displayedAnimFrame();
             manager.update(input);
             updates++;
             durations.merge(before, 1, Integer::sum);
+            // The display only changes once a frame's art is in VRAM: while a
+            // decode is pending it keeps the previous frame, never a mix.
+            assertTrue(manager.displayedAnimFrame() == manager.currentAnimFrame()
+                            || manager.displayedAnimFrame() == shownBefore,
+                    mode + " update " + updates + " showed frame "
+                            + manager.displayedAnimFrame() + " while loading "
+                            + manager.currentAnimFrame());
             if (manager.currentAnimFrame() == 0xD) {
                 break;
             }
