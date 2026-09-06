@@ -244,7 +244,7 @@ class TestHardwareTimingRewind {
     }
 
     @Test
-    void preparedJobSnapshotsAreSharedUntilTheJobMutatesAndRestoreKeepsUnchangedJobs() {
+    void claimedJobSnapshotsAreSharedUntilTheJobMutatesAndRestoreKeepsUnchangedJobs() {
         HardwareTimingService service = new HardwareTimingService();
         HardwareWorkHandle handle = service.submit(submission(2, 11));
         HardwareTimingJob.Snapshot inFlight = service.capture().jobs().getFirst();
@@ -256,29 +256,58 @@ class TestHardwareTimingRewind {
         assertTrue(service.isReady(handle));
         HardwareTimingSnapshot ready = service.capture();
         HardwareTimingJob.Snapshot readyJob = ready.jobs().getFirst();
-        assertSame(readyJob, service.capture().jobs().getFirst(),
-                "a prepared, unmutated job shares one immutable snapshot across captures");
-        assertArrayEquals(new byte[] {11}, readyJob.preparedPayload());
+        assertNotSame(readyJob, service.capture().jobs().getFirst(),
+                "a ready but unclaimed job is still exposed to its coordinator, so no memo");
 
         assertArrayEquals(new byte[] {11}, service.claim(handle));
         HardwareTimingSnapshot claimed = service.capture();
-        assertNotSame(readyJob, claimed.jobs().getFirst(),
-                "claiming mutates the job, so the memo must be dropped");
-        assertTrue(claimed.jobs().getFirst().claimed());
+        HardwareTimingJob.Snapshot claimedJob = claimed.jobs().getFirst();
+        assertTrue(claimedJob.claimed());
+        assertSame(claimedJob, service.capture().jobs().getFirst(),
+                "a claimed job shares one immutable snapshot across captures");
+        assertArrayEquals(new byte[] {11}, claimedJob.preparedPayload());
 
         service.restore(ready);
         assertTrue(service.isReady(handle), "restoring the ready snapshot must un-claim the job");
-        assertSame(readyJob, service.capture().jobs().getFirst(),
-                "a restored job is already in the snapshot's state and memoizes that instance");
+        assertNotSame(claimedJob, service.capture().jobs().getFirst(),
+                "an un-claimed job drops the memo");
         assertArrayEquals(new byte[] {11}, service.claim(handle));
 
         service.restore(claimed);
         assertFalse(service.isReady(handle));
-        assertArrayEquals(new byte[] {11}, service.claimedPayload(readyJob.kind(), handle.ordinal()));
+        assertSame(claimedJob, service.capture().jobs().getFirst(),
+                "a restored claimed job is already in the snapshot's state and memoizes that instance");
+        assertArrayEquals(new byte[] {11}, service.claimedPayload(claimedJob.kind(), handle.ordinal()));
         service.restore(ready);
         assertTrue(service.isReady(handle), "A -> B -> A restoration must land on A");
-        assertArrayEquals(new byte[] {11}, readyJob.preparedPayload(),
+        assertArrayEquals(new byte[] {11}, claimedJob.preparedPayload(),
                 "historical snapshot bytes survive live claims and restores");
+    }
+
+    @Test
+    void coordinatorRestoringAnUnclaimedPreparationIsSeenByTheNextCapture() {
+        // CS356/CS358 regression: the coordinator alias may rewind a live,
+        // unclaimed preparation between captures; the next capture must
+        // reflect that, not a memo taken while it was prepared.
+        HardwareTimingService service = new HardwareTimingService();
+        HardwareWorkHandle handle = service.submit(submission(2, 11));
+        HardwareTimingSnapshot pending = service.capture();
+        service.service(POST_OBJECTS);
+        service.service(POST_OBJECTS);
+        assertTrue(service.isReady(handle));
+        HardwareTimingSnapshot ready = service.capture();
+        assertTrue(ready.jobs().getFirst().preparationSnapshot()
+                .recreatePreparation().isPrepared());
+
+        service.coordinatorPreparation(handle)
+                .restore(pending.jobs().getFirst().preparationSnapshot());
+        assertFalse(service.coordinatorPreparation(handle).isPrepared());
+        HardwareTimingSnapshot after = service.capture();
+        assertNotSame(ready.jobs().getFirst(), after.jobs().getFirst(),
+                "a mutated unclaimed preparation must not reuse the ready snapshot");
+        assertFalse(after.jobs().getFirst().preparationSnapshot()
+                .recreatePreparation().isPrepared(),
+                "capture must see the preparation the coordinator rewound");
     }
 
     private static HardwareWorkSubmission submission(int workUnits, int payloadByte) {

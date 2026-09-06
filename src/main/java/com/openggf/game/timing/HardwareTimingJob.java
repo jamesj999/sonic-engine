@@ -18,11 +18,14 @@ public final class HardwareTimingJob {
     private LoadTimeDecisionSource decisionSource = LoadTimeDecisionSource.IMMEDIATE;
     private String serviceModel = "unassigned";
     /**
-     * Snapshot memoized while this job is fully prepared and no field has
-     * changed since it was taken. Every mutator clears it. A spent ledger
-     * entry (claimed and retired) is immutable for the rest of the session, so
-     * successive rewind captures share one immutable snapshot instead of
-     * re-cloning its payload and preparation bytes each checkpoint.
+     * Snapshot memoized while this job is claimed and no field has changed
+     * since it was taken. Every mutator clears it. Only claimed jobs qualify:
+     * their preparation is no longer reachable through
+     * {@code HardwareTimingService.coordinatorPreparation}, so nothing outside
+     * this class can mutate it behind the memo, and a spent ledger entry stays
+     * in the job list for the rest of the act. Successive rewind captures then
+     * share one immutable snapshot instead of re-cloning its payload and
+     * preparation bytes each checkpoint.
      */
     private Snapshot memoizedSnapshot;
 
@@ -57,7 +60,7 @@ public final class HardwareTimingJob {
         this.eligibleBoundaries = snapshot.eligibleBoundaries();
         this.decisionSource = snapshot.decisionSource();
         this.serviceModel = snapshot.serviceModel();
-        this.memoizedSnapshot = preparation.isPrepared() ? snapshot : null;
+        this.memoizedSnapshot = snapshot.claimed() ? snapshot : null;
     }
 
     HardwareWorkPreparation preparation() {
@@ -201,9 +204,10 @@ public final class HardwareTimingJob {
                 eligibleBoundaries,
                 decisionSource,
                 serviceModel);
-        // Only memoize once preparation is complete: an in-flight decoder
-        // mutates outside this class between captures.
-        if (preparedPayload != null && preparation().isPrepared()) {
+        // Only memoize a claimed job. Until claim, the live preparation is
+        // still handed out by coordinatorPreparation and a caller may step or
+        // restore it between captures without this class seeing it.
+        if (claimed && preparedPayload != null) {
             memoizedSnapshot = fresh;
         }
         return fresh;
@@ -215,7 +219,7 @@ public final class HardwareTimingJob {
 
     /**
      * The snapshot memoized from this job's current state, or null when the
-     * job has mutated since its last capture or is not yet prepared. Restore
+     * job has mutated since its last capture or is not yet claimed. Restore
      * keeps a live job whose memo is the very instance being restored instead
      * of recreating its preparation and re-cloning its payload.
      */
