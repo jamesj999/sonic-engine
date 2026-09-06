@@ -47,10 +47,11 @@ public final class SharedLevel {
     private final boolean skipIntros;
     private final String mainCharCode;
     private final String sidekickCharCode;
+    private final String loadTimeSimulation;
 
     private SharedLevel(Level level, SonicGame game, int zone, int act,
                         boolean skipIntros, String mainCharCode,
-                        String sidekickCharCode) {
+                        String sidekickCharCode, String loadTimeSimulation) {
         this.level = level;
         this.game = game;
         this.zone = zone;
@@ -58,6 +59,7 @@ public final class SharedLevel {
         this.skipIntros = skipIntros;
         this.mainCharCode = mainCharCode;
         this.sidekickCharCode = sidekickCharCode;
+        this.loadTimeSimulation = loadTimeSimulation;
     }
 
     /**
@@ -88,6 +90,7 @@ public final class SharedLevel {
         boolean skipIntros = cs.getBoolean(SonicConfiguration.S3K_SKIP_INTROS);
         String mainCharCode = cs.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
         String sidekickCharCode = cs.getString(SonicConfiguration.SIDEKICK_CHARACTER_CODE);
+        String loadTimeSimulation = cs.getString(SonicConfiguration.LOAD_TIME_SIMULATION);
 
         AbstractPlayableSprite player = GameplayTeamBootstrap.registerActiveTeam(
                 GameServices.module(), GameServices.sprites(), cs).mainSprite();
@@ -104,7 +107,7 @@ public final class SharedLevel {
 
         return new SharedLevel(
                 lm.getCurrentLevel(), game, zone, act,
-                skipIntros, mainCharCode, sidekickCharCode);
+                skipIntros, mainCharCode, sidekickCharCode, loadTimeSimulation);
     }
 
     private static void bootstrapRuntimeForSharedLevel(SonicGame game) throws IOException {
@@ -174,6 +177,11 @@ public final class SharedLevel {
     }
 
     /** Returns the sidekick character configuration captured at load time. */
+    /** The normal-play load-time mode the level was loaded under; re-applied per test. */
+    public String loadTimeSimulation() {
+        return loadTimeSimulation;
+    }
+
     public String sidekickCharCode() {
         return sidekickCharCode;
     }

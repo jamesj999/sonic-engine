@@ -56,16 +56,29 @@ public class TestS3kAiz1FireCurtainHeadless {
     private static Object oldSkipIntros;
     private static SharedLevel sharedLevel;
 
+    private static Object oldLoadTimeSimulation;
+
     @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, true);
+        // The finish-queue tests hand-drive the fire transition: they queue
+        // the act-2 batch through reflection, stage the overlay tiles and then
+        // let the owner queue again, an order the ROM never produces. That only
+        // fits the four-entry KosM FIFO when work is released immediately, so
+        // pin the immediate load-time mode for this class; measured pacing is
+        // covered by the trace-backed acceptance runs.
+        oldLoadTimeSimulation = config.getConfigValue(SonicConfiguration.LOAD_TIME_SIMULATION);
+        config.setConfigValue(SonicConfiguration.LOAD_TIME_SIMULATION, "NONE");
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_1);
     }
 
     @AfterAll
     public static void cleanup() {
+        SonicConfigurationService.getInstance().setConfigValue(
+                SonicConfiguration.LOAD_TIME_SIMULATION,
+                oldLoadTimeSimulation != null ? oldLoadTimeSimulation : "FAST");
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
                 oldSkipIntros != null ? oldSkipIntros : false);
