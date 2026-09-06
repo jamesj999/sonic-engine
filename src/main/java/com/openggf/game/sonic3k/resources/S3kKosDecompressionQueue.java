@@ -12,6 +12,7 @@ import com.openggf.game.timing.HardwareWorkPreparationSnapshot;
 import com.openggf.game.timing.HardwareWorkSubmission;
 import com.openggf.game.resources.QueueDiagnosticSnapshot;
 import com.openggf.game.resources.QueueServiceObservation;
+import com.openggf.data.compression.KosinskiInspectionCache;
 import com.openggf.data.compression.KosinskiReader;
 import com.openggf.data.compression.ResumableKosinskiDecoder;
 
@@ -55,19 +56,11 @@ public final class S3kKosDecompressionQueue
         if (physicalEntries.size() >= MAX_QUEUE_DEPTH) {
             throw new IllegalStateException("S3K Kosinski decompression FIFO is full");
         }
-        long remaining = rom.getSize() - sourceAddress;
-        if (sourceAddress < 0 || remaining < 2) {
-            throw new IOException("Kosinski source is outside ROM: 0x"
-                    + Integer.toHexString(sourceAddress));
-        }
-        if (remaining > Integer.MAX_VALUE) {
-            throw new IOException("Kosinski stream exceeds Java inspection limit");
-        }
-        int inspectionLength = (int) remaining;
-        byte[] inspection = rom.readBytes(sourceAddress, inspectionLength);
-        KosinskiReader.StandardArchiveInfo info = KosinskiReader.inspectStandard(inspection, 0);
-        byte[] compressed = info.compressedLength() == inspection.length
-                ? inspection : rom.readBytes(sourceAddress, info.compressedLength());
+        // The archive lengths are a pure function of the ROM; a warmed cache
+        // spares the submitting frame the full inspection decode.
+        KosinskiReader.StandardArchiveInfo info =
+                KosinskiInspectionCache.inspectStandard(rom, sourceAddress);
+        byte[] compressed = rom.readBytes(sourceAddress, info.compressedLength());
         return queueInspected(
                 compressed, sourceAddress, destinationAddress, info, 0);
     }

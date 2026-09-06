@@ -1681,6 +1681,40 @@ public class LevelTilemapManager {
         return prebuiltFgTilemap != null && prebuiltBgTilemap != null;
     }
 
+    /**
+     * Adopts tilemap data built elsewhere (typically by
+     * {@link LevelTilemapPrebuilder} before this manager's level was installed)
+     * as this manager's pre-built transition data, for a later
+     * {@link #swapToPrebuiltTilemaps()}.
+     */
+    public void adoptPrebuiltTilemaps(PrebuiltTilemaps prebuilt) {
+        if (prebuilt == null) {
+            return;
+        }
+        prebuiltFgTilemap = prebuilt.foreground();
+        prebuiltFgWidth = prebuilt.foregroundWidthTiles();
+        prebuiltFgHeight = prebuilt.foregroundHeightTiles();
+        prebuiltBgTilemap = prebuilt.background();
+        prebuiltBgWidth = prebuilt.backgroundWidthTiles();
+        prebuiltBgHeight = prebuilt.backgroundHeightTiles();
+    }
+
+    /**
+     * Removes and returns this manager's pre-built transition data, or
+     * {@code null} when none is held.
+     */
+    public PrebuiltTilemaps takePrebuiltTilemaps() {
+        if (!hasPrebuiltTilemaps()) {
+            return null;
+        }
+        PrebuiltTilemaps taken = new PrebuiltTilemaps(
+                prebuiltFgTilemap, prebuiltFgWidth, prebuiltFgHeight,
+                prebuiltBgTilemap, prebuiltBgWidth, prebuiltBgHeight);
+        prebuiltFgTilemap = null;
+        prebuiltBgTilemap = null;
+        return taken;
+    }
+
     // -----------------------------------------------------------------------
     // State reset
     // -----------------------------------------------------------------------

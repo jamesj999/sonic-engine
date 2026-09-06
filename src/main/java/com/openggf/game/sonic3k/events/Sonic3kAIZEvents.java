@@ -2746,6 +2746,16 @@ public class Sonic3kAIZEvents extends Sonic3kZoneEvents {
         fireTerrainTablesLoaded = false;
         act2TransitionRequested = false;
         postFireHazeActive = false;
+        // The fire event ends in AIZ1BGE_Finish's Load_Level of act 2 after
+        // AIZ1BGE_FireTransition has queued the act 2 Kos work and waited on
+        // Kos_modules_left (sonic3k.asm:104664-104746). The host-side act 2
+        // level build (decode, art sheets, tilemaps) has no ROM counterpart,
+        // so it runs across this event's own rise-and-wait instead of on the
+        // reload frame; the reload joins the build and never waits for it.
+        LevelManager fireLevelManager = levelManager();
+        fireLevelManager.prepareActTransitionLevelLoad(
+                fireLevelManager.getCurrentZone(), 1,
+                S3kSeamlessMutationExecutor.MUTATION_AIZ1_POST_RELOAD_ACT2);
         // ROM: AIZ1/AIZ2 background fire routines do not write Ctrl_1_locked;
         // player physics keeps running behind the fire curtain.
         // ROM: AIZ1_AIZ2_Transition writes 6 fire words to Normal_palette_line_4+$2
