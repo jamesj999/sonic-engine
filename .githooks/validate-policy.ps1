@@ -824,9 +824,10 @@ function Validate-MergeIntoDevelop() {
         return
     }
 
-    if (-not (Test-HasExact (Get-StagedFiles) "README.md")) {
-        Fail "merging a non-master branch into develop requires a staged README.md update summarizing the branch change."
-    }
+    # The README release section is a handful of version themes, not a change
+    # log. A merge touches it only when it adds or changes a theme, which is a
+    # review judgement rather than a staged-file check, so no file is required.
+    return
 }
 
 function Prepare-CommitMessage([string]$MessageFile, [string]$Source) {
@@ -1003,10 +1004,8 @@ function Validate-CiPr([string]$BaseSha, [string]$HeadSha, [string]$BaseRef, [st
     $rangeFiles = Invoke-GitLines @("diff", "--name-only", "--diff-filter=ACMR", "$effectiveBaseSha...$HeadSha")
 
     if ($BaseRef -ceq "develop") {
-        if ($HeadRef -cne "master" -and -not (Test-HasExact $rangeFiles "README.md")) {
-            Fail "PRs from non-master branches into develop must update README.md with a brief branch summary."
-        }
-
+        # No README.md requirement: the release section changes only when a
+        # version theme does, and that is judged in review, not by file presence.
         if ($HeadRef -ceq "master") {
             Validate-ContentRange $effectiveBaseSha $HeadSha
             return

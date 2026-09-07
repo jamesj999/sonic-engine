@@ -131,8 +131,9 @@ non-merge commits need all seven trailers (`Changelog`, `Guide`,
 `Known-Discrepancies`, `S3K-Known-Discrepancies`, `Agent-Docs`,
 `Configuration-Docs`, `Skills`), each beginning `updated` or `n/a`.
 Mapped files and trailers must agree. A source `feat`/`fix`/`perf` needs a
-changelog update or an inline reason for skipping it. Merging a non-master branch into `develop`
-requires a staged README release-section summary.
+changelog update or an inline reason for skipping it. A merge into `develop`
+touches the README release section only when it adds or changes a version
+theme; most merges leave it alone, and no hook requires it.
 
 Use the [documentation obligation checklist](docs/agent-workflow/documentation-obligation-checklist.md)
 when staging. `pom.xml`'s `<version>` names the version `develop` carries and

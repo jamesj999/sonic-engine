@@ -66,9 +66,10 @@ A fix to a feature introduced in the same unreleased version is **not** a
 separate item anywhere user-facing: that feature never shipped broken, so a
 reader of the release notes learns nothing from the fix. Fold it into the
 existing entry so the entry describes the corrected end state. In the README
-this usually means editing a word or two of an existing theme — which also
-satisfies the develop-merge staged-README gate — never appending a "fixed X"
-line beside the theme that introduced X. A fix earns its own entry only when it
+this usually means no change at all: the theme already covers the feature.
+Edit a theme only when the fix changes what the theme says; never append a
+"fixed X" line or paragraph beside the theme that introduced X. No hook
+requires a README change on a develop merge. A fix earns its own entry only when it
 repairs behavior that shipped in a **previous** release; say which release
 regressed.
 

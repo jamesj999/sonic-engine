@@ -310,11 +310,6 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
 still required before release sign-off.
 
-The Sonic 1 and Sonic 2 extra-life jingle now hands back cleanly: the level
-music returns on its own instruments rather than the jingle's, and sound
-effects stay refused through the jingle and the fade back in, as in the
-original drivers. Both fixes are pinned by live-path tests under each ROM.
-
 Level loads no longer intermittently fail or detect the wrong game. The ROM is
 read from two threads during a load, and the header readers and the Sonic 3 &
 Knuckles art loaders were seeking the shared file handle without the lock every

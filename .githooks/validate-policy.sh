@@ -835,10 +835,10 @@ validate_merge_into_develop() {
         return 0
     fi
 
-    files=$(staged_files)
-    if ! has_exact "$files" "README.md"; then
-        die "merging a non-master branch into develop requires a staged README.md update summarizing the branch change."
-    fi
+    # The README release section is a handful of version themes, not a change
+    # log. A merge touches it only when it adds or changes a theme, which is a
+    # review judgement rather than a staged-file check, so no file is required.
+    return 0
 }
 
 prepare_commit_message() {
@@ -1052,10 +1052,8 @@ validate_ci_pr() {
     range_files=$(git diff --name-only --diff-filter=ACMR "$effective_base...$head_sha")
 
     if [ "$base_ref" = "develop" ]; then
-        if [ "$head_ref" != "master" ] && ! has_exact "$range_files" "README.md"; then
-            die "PRs from non-master branches into develop must update README.md with a brief branch summary."
-        fi
-
+        # No README.md requirement: the release section changes only when a
+        # version theme does, and that is judged in review, not by file presence.
         if [ "$head_ref" = "master" ]; then
             validate_content_range "$effective_base" "$head_sha"
             return 0
