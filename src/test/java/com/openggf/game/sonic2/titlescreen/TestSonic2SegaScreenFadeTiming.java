@@ -12,10 +12,13 @@ import java.lang.reflect.Method;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
 
 class TestSonic2SegaScreenFadeTiming {
     private static final int SEGA_ACTIVE_FRAMES = 106 + 180;
     private static final int FADE_FRAMES = 22;
+    private static final int INTRO_TEXT_FADE_FRAMES = 22;
+    private static final int INTRO_TEXT_HOLD_FRAMES = 96;
 
     @Test
     void segaLogoTimerWaitsUntilFadeFromBlackCompletes() throws Exception {
@@ -75,6 +78,62 @@ class TestSonic2SegaScreenFadeTiming {
         assertEquals(328, pose.centerX(),
                 "first active frame has already applied the ROM -$20 leftward step from screen_width+$28");
         assertEquals(true, pose.hFlip());
+    }
+
+    /**
+     * ROM: TitleScreen fades the "SONIC AND MILES 'TAILS' PROWER IN" text in
+     * and out silently, then spawns the intro object and runs it for one frame
+     * before Pal_FadeFromBlack; Obj0E_Sonic_Init plays SndID_Sparkle on that
+     * frame. The twinkle therefore lands on the first title fade-in frame.
+     */
+    @Test
+    void sparkleWaitsForTitleFadeInNotIntroText() throws Exception {
+        TitleScreenManager manager = managerInSegaState();
+        setIntField(manager, "segaLogoTimer", FADE_FRAMES - 1);
+        setBooleanField(manager, "segaPcmStarted", true);
+        setEnumField(manager, "segaLogoFadePhase", "FADING_OUT");
+        InputHandler input = new InputHandler();
+
+        for (int i = 0; i < FADE_FRAMES && manager.getState() == TitleScreenProvider.State.SEGA_LOGO; i++) {
+            manager.update(input);
+        }
+        assertEquals(TitleScreenProvider.State.INTRO_TEXT_FADE_IN, manager.getState());
+        assertEquals(false, sparklePlayed(manager, 0),
+                "no twinkle when the intro text screen begins");
+
+        int introTextFrames = INTRO_TEXT_FADE_FRAMES + INTRO_TEXT_HOLD_FRAMES + INTRO_TEXT_FADE_FRAMES;
+        for (int i = 0; i < introTextFrames - 1; i++) {
+            manager.update(input);
+            assertEquals(false, sparklePlayed(manager, 0),
+                    "no twinkle while the intro text is on screen (frame " + i + ")");
+        }
+        assertEquals(TitleScreenProvider.State.INTRO_TEXT_FADE_OUT, manager.getState());
+
+        manager.update(input);
+
+        assertEquals(TitleScreenProvider.State.FADE_IN, manager.getState());
+        assertEquals(true, sparklePlayed(manager, 0),
+                "Obj0E_Sonic_Init twinkle fires as the title starts fading from black");
+    }
+
+    @Test
+    void skippingIntroTextStillPlaysTheInitSparkleOnce() throws Exception {
+        TitleScreenManager manager = managerInSegaState();
+        setField(manager, "state", TitleScreenProvider.State.INTRO_TEXT_HOLD);
+        InputHandler input = new InputHandler();
+        input.handleKeyEvent(SonicConfigurationService.getInstance().getInt(SonicConfiguration.JUMP), GLFW_PRESS);
+
+        manager.update(input);
+
+        assertEquals(TitleScreenProvider.State.FADE_IN, manager.getState());
+        assertEquals(true, sparklePlayed(manager, 0),
+                "skipping the intro text enters the same Obj0E_Sonic_Init frame");
+    }
+
+    private static boolean sparklePlayed(TitleScreenManager manager, int index) throws Exception {
+        Field field = TitleScreenManager.class.getDeclaredField("sparklePlayedAt");
+        field.setAccessible(true);
+        return ((boolean[]) field.get(manager))[index];
     }
 
     @Test
