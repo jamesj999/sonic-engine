@@ -1,5 +1,6 @@
 package com.openggf.audio.synth;
 
+import org.junit.jupiter.api.Tag;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.openggf.audio.synth.fast.FastYm2612Dsp;
@@ -30,6 +31,9 @@ import org.junit.jupiter.api.TestFactory;
  * {@code -Dopenggf.fastfm.minCorrelation=0 -Dopenggf.fastfm.maxLevelRatio=1e9};
  * every script's metrics are printed either way.
  */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestFastFmCoreTolerance {
     private static final int LAG_SEARCH = 64;
 

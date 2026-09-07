@@ -60,6 +60,7 @@ import com.openggf.trace.timing.HardwareTimingSchedule;
 import com.openggf.tests.trace.TraceV5RunFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -95,6 +96,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * for {@link RunSegmentAdvancer}. Synthetic fixtures exercise level, bonus,
  * and special-stage segment plans without requiring a ROM.
  */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestTraceSessionLauncherRunBranch {
 
     private static final Path S1_EMERALD_RUN_DIR = Path.of(

@@ -10,6 +10,7 @@ import com.openggf.game.sonic2.audio.Sonic2SoundRequestService;
 import com.openggf.tests.SessionInvocationExtension;
 import com.openggf.tools.audio.completerun.s2.S2ProductionRequestProjector;
 import com.openggf.tests.trace.runs.S2RequestProjectionBk2TestBridge;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,6 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** Contract tests for the strictly unbound request-aware raw-v2 reader. */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestS2RequestAwareOracleRawStream {
     private static final ObjectMapper JSON = new ObjectMapper();
 

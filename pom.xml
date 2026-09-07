@@ -147,6 +147,31 @@
              not accumulate behind the ordinary suite's reused fork.
              Keeping one fork also avoids native-library races between test JVMs.
         -->
+        <!--
+             The fast lane every branch push runs. Ten test classes are 93 percent
+             of the default suite's wall clock (about 23 of 25 minutes on a CI
+             runner): the S2 audio request-window oracles, the complete-run audio
+             comparator, the Nuked OPN2 bit-exact scripts, the trace session
+             launcher run branch, the modifier documentation sweep and the fast FM
+             tolerance sweeps. They are exhaustive oracles rather than regression
+             signal, so excluding them leaves roughly two minutes of tests that
+             still cover every other class in the tree.
+
+             This is a subset, never a replacement. The full default suite still
+             selects the tagged classes and is what release validation, pull
+             requests and a manually dispatched CI run execute. Tag a class @Tag("slow-suite")
+             only when it is minutes long AND a wider fixture sweep of behaviour
+             some other test already covers.
+
+             Run with: mvn -Psmoke test
+        -->
+        <profile>
+            <id>smoke</id>
+            <properties>
+                <surefire.excludedGroups>tracechaser-integration,performance-measurement,slow-suite</surefire.excludedGroups>
+            </properties>
+        </profile>
+
         <profile>
             <id>ci</id>
             <activation>
