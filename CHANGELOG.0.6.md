@@ -1,5 +1,12 @@
 # OpenGGF 0.6 Changelog
 
+- Sonic's torso no longer shows below the bottom edge of the Sonic 1 title logo.
+  The ROM hides it with object `0F` frame 2, thirty blank sprites that exhaust
+  the VDP's 320-pixel-per-line budget from screen row 104 down, so the lower
+  priority title Sonic is dropped on those lines. The engine only layered the
+  logo's tiles in front of him, which left him visible wherever the logo has no
+  opaque tiles; his sprite is now cut at row 104 as on hardware.
+
 - `config.yaml` now holds only the settings you changed. Defaults live in the
   program and are documented by `config.yaml.example`, so a default that
   changes in a later build reaches every install that never set the key. A

@@ -162,6 +162,14 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     // to Plane A tile row 9: (104 - startPixelY) / 8 = (104 - 32) / 8 = 9.
     private static final int PLANE_A_SPLIT_ROW = 9;
 
+    // Top screen row of the M_PSB_Limiter band. Obj0F frame 2 (v_ttlsonichide) sits
+    // at obScreenY = $80+$B0 (screen Y 176) and its first row of ten 4x4 pieces is at
+    // piece offset -$48, i.e. screen Y 176-72 = 104. Ten 32px-wide sprites exhaust the
+    // VDP's 320-pixel-per-line budget, so every sprite after it in the SAT is dropped
+    // on those lines. TitleSonic has obPriority 1 and therefore loses; the "TM" object
+    // shares priority 0 but occupies an earlier slot, so it still draws.
+    private static final int SPRITE_LIMITER_TOP_Y = 104;
+
     // Background scroll using GHZ parallax scroll handler
     private int bgCameraX = 0;
     private SwScrlGhz scrollHandler;
@@ -698,7 +706,13 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         if (sonicRoutine >= 4 && sonicSpriteRenderer != null && sonicSpriteRenderer.isReady()) {
             int screenX = xOffset() + SONIC_X - 128; // VDP to screen coords, centred in viewport
             int screenY = sonicScreenY - 128;
+            enableSpriteLimiterScissor(gm);
             sonicSpriteRenderer.drawFrameIndex(sonicAnimFrame, screenX, screenY);
+            // Pattern draws are queued commands: they only reach GL in
+            // flushScreenSpace(), so the scissor must still be active here.
+            gm.flushPatternBatch();
+            gm.flushScreenSpace();
+            gm.disableScissor();
         }
 
         gm.flushPatternBatch();
@@ -843,6 +857,25 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
                     0, 0, viewportWidth(), SCREEN_HEIGHT
             ));
         }
+    }
+
+    /**
+     * Restricts subsequent drawing to the screen rows above the M_PSB_Limiter band,
+     * modelling the VDP per-scanline sprite budget that erases TitleSonic from
+     * screen Y {@value #SPRITE_LIMITER_TOP_Y} downwards. Without this, Sonic's torso
+     * shows below the bottom edge of the logo, where Plane A has no opaque tiles to
+     * hide it.
+     */
+    private void enableSpriteLimiterScissor(GraphicsManager gm) {
+        int vpX = gm.getViewportX();
+        int vpY = gm.getViewportY();
+        int vpW = gm.getViewportWidth();
+        int vpH = gm.getViewportHeight();
+        float scaleY = (float) vpH / SCREEN_HEIGHT;
+        // Game Y is top-down; GL scissor Y is bottom-up.
+        int scissorY = vpY + (int) Math.floor((SCREEN_HEIGHT - SPRITE_LIMITER_TOP_Y) * scaleY);
+        int scissorH = Math.max(1, (int) Math.ceil(SPRITE_LIMITER_TOP_Y * scaleY));
+        gm.enableScissor(vpX, scissorY, vpW, scissorH);
     }
 
     /**
@@ -1147,7 +1180,13 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
             // xOffset() == 0 at native 320 — byte-identical at native width.
             int screenX = xOffset() + SONIC_X - 128;
             int screenY = sonicScreenY - 128;
+            enableSpriteLimiterScissor(gm);
             sonicSpriteRenderer.drawFrameIndex(sonicAnimFrame, screenX, screenY);
+            // Pattern draws are queued commands: they only reach GL in
+            // flushScreenSpace(), so the scissor must still be active here.
+            gm.flushPatternBatch();
+            gm.flushScreenSpace();
+            gm.disableScissor();
         }
         gm.flushPatternBatch();
 
