@@ -1,5 +1,11 @@
 # OpenGGF 0.6 Changelog
 
+- Robotnik can no longer regain touch collision while hidden behind the AIZ2
+  boss waterfall after Sonic damages him. The submerge transition now clears
+  the active hit-flash timer and invulnerable state together, matching the
+  ROM's `sub_69C94`, so the timer cannot expire underwater and make the hidden
+  boss interactive.
+
 - Sonic's torso no longer shows below the bottom edge of the Sonic 1 title logo.
   The ROM hides it with object `0F` frame 2, thirty blank sprites that exhaust
   the VDP's 320-pixel-per-line budget from screen row 104 down, so the lower
