@@ -41,10 +41,11 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
   `target/test-tmp`. Concurrent Maven runs need separate worktrees.
 - Use JUnit 5/Jupiter. `-Dmse=off` exposes full Maven logs. PowerShell quotes
   `-D...` arguments and uses `tools/testing/install-hooks.ps1`.
-- `-Psmoke` is the default suite minus the `slow-suite`-tagged oracle sweeps.
-  It is the branch-push gate in CI, not release evidence; the full suite runs
-  on pull requests, on a manually dispatched CI run, and in release validation.
-  Nothing runs the full suite unattended, so run it locally before delivery.
+- CI runs only `-Psmoke` on pushes. The full suite and `-Pguards` run on pull
+  requests, on a manually dispatched CI run, and in release validation; nothing
+  runs them unattended. `smoke` does not select the structural guards, so run
+  both the full suite and `-Pguards` locally before delivery -- a red guard on
+  develop will not surface on its own.
 - Match focused checks to the change and complete required integration
   checks. Release evidence includes ordinary tests and `-Pguards` separately.
 - Before reporting suite results, read the measurement-hazard table in

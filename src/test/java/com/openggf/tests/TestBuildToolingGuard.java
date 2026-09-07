@@ -850,6 +850,39 @@ class TestBuildToolingGuard {
     }
 
     /**
+     * Proves the two push-reachability predicates actually disagree, so a job
+     * condition cannot satisfy both and slip past every branch of
+     * {@link #allBranchPushPolicyShouldRemainLightweight()}.
+     *
+     * <p>They could: {@code conditionExcludesPush} read
+     * {@code github.event_name != 'push'} as a substring, so the
+     * integration-branch pin -- which contains that substring and then adds
+     * {@code || github.ref == 'refs/heads/develop'} -- was reported as
+     * excluding pushes. Moving a nine-minute job back onto develop pushes
+     * passed both guards silently.
+     */
+    @Test
+    void pushReachabilityPredicatesMustDisagree() {
+        String pinned = "github.event_name != 'push' || github.ref == 'refs/heads/develop'"
+                + " || github.ref == 'refs/heads/master'";
+        assertTrue(conditionPinsPushToIntegrationBranches(pinned));
+        assertFalse(conditionExcludesPush(pinned),
+                "a condition that still runs on develop pushes must not read as push-free");
+
+        String excluded = "github.event_name != 'push'";
+        assertTrue(conditionExcludesPush(excluded));
+        assertFalse(conditionPinsPushToIntegrationBranches(excluded));
+
+        String dispatchOnly = "github.event_name == 'workflow_dispatch'";
+        assertTrue(conditionExcludesPush(dispatchOnly));
+        assertFalse(conditionPinsPushToIntegrationBranches(dispatchOnly));
+
+        String reachable = "github.event_name == 'pull_request' || github.event_name == 'push'";
+        assertFalse(conditionExcludesPush(reachable));
+        assertFalse(conditionPinsPushToIntegrationBranches(reachable));
+    }
+
+    /**
      * Proves the pattern matcher above can actually reject, so the coverage
      * check cannot pass by matching everything. A guard named outside the
      * convention, or parked under a path the profile does not reach, must be
@@ -869,13 +902,31 @@ class TestBuildToolingGuard {
     }
 
     /**
-     * The default {@code test} job is skipped on push, and work lands on
-     * develop by direct push, so a guard that only the default profile selects
-     * is effectively ungated. The guards profile is source-only and ROM-free,
-     * so it can and must run on every push.
+     * The guards profile must exist as its own blocking CI job that invokes
+     * Maven directly.
+     *
+     * <p>This once required the job to be reachable from a develop push,
+     * because work lands on develop by direct push and
+     * {@code TestS1S2PlcComparisonOnlyGuard} had sat red there for weeks with
+     * nothing selecting it. That requirement was removed deliberately: nine
+     * minutes of guards on every merge to develop was mail nobody read, and an
+     * unread gate is not a gate either.
+     *
+     * <p>What is still pinned here is everything that made the job trustworthy
+     * once it does run -- it exists, it runs {@code -Pguards} directly rather
+     * than through a wrapper, and it is blocking. The reachability half now
+     * lives on the pull request path, and
+     * {@link #allBranchPushPolicyShouldRemainLightweight()} pins the other
+     * side: {@code guards} must stay off the push path so it cannot creep back
+     * onto every merge.
+     *
+     * <p>The exposure this leaves is real and unguarded by CI: a structural
+     * guard can go red on develop and stay red until a pull request or a manual
+     * dispatch runs it. {@code smoke} will not catch it, because the default
+     * Surefire execution excludes the guard classes by name convention.
      */
     @Test
-    void ciShouldRunTheGuardsProfileOnPushes() throws Exception {
+    void ciShouldRunTheGuardsProfileAsABlockingJob() throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/ci.yml"));
         List<String> violations = new ArrayList<>();
 
@@ -893,18 +944,18 @@ class TestBuildToolingGuard {
             if (guardJob.contains("test-session.sh")) {
                 violations.add(".github/workflows/ci.yml guards job still invokes the retired wrapper");
             }
-            if (!conditionPinsPushToIntegrationBranches(yamlJobCondition(guardJob))) {
-                violations.add(".github/workflows/ci.yml guards job is not reachable from a develop"
-                        + " push, which is how work lands");
-            }
             if (guardJob.contains("continue-on-error: true")) {
                 violations.add(".github/workflows/ci.yml guards job is non-blocking, so a red guard"
                         + " reports green");
             }
+            if (!conditionExcludesPush(yamlJobCondition(guardJob))) {
+                violations.add(".github/workflows/ci.yml guards job is reachable from a push;"
+                        + " it was taken off the push path deliberately and must stay off");
+            }
         }
 
         if (!violations.isEmpty()) {
-            fail("structural guards must be gated by CI on every push:\n  "
+            fail("the structural guard job must stay direct and blocking:\n  "
                     + String.join("\n  ", new TreeSet<>(violations)));
         }
     }
@@ -1963,9 +2014,9 @@ class TestBuildToolingGuard {
      * dispatch.
      *
      * <p>The lever this protects is the same one as before -- a push must not
-     * silently acquire another long Maven job. {@code guards} stays pinned to
-     * the integration branches, {@code test} stays off the push path entirely,
-     * and any new Maven-bearing job has to declare which of those it is.
+     * silently acquire another long Maven job. {@code guards} and {@code test}
+     * both stay off the push path entirely, and any new Maven-bearing job has
+     * to be push-excluded or pinned to the integration branches.
      *
      * <p>Branch policy validation is no longer part of the push path: the
      * {@code .githooks} enforce it at commit time on every branch, and master
@@ -3591,11 +3642,13 @@ class TestBuildToolingGuard {
 
     /**
      * True when a job runs on pushes, but only to the integration branches.
-     * Feature-branch pushes stay policy-only and Maven-free (see
-     * {@link #allBranchPushPolicyShouldRemainLightweight()}); develop and
-     * master are where work actually lands, so a source-only gate there costs
-     * one short job per merge and is the only thing standing between a red
-     * structural guard and nobody noticing.
+     *
+     * <p>No job is shaped this way at present: {@code smoke} runs on every
+     * push and everything heavier is off the push path entirely. It stays
+     * because {@link #allBranchPushPolicyShouldRemainLightweight()} accepts
+     * this shape as the one alternative to full push exclusion, so a future
+     * job that wants a develop-and-master-only gate has a spelling that is
+     * recognised rather than reported as reachable from a feature branch.
      */
     private static boolean conditionPinsPushToIntegrationBranches(String condition) {
         if (condition == null || condition.isBlank()) {
@@ -3749,7 +3802,14 @@ class TestBuildToolingGuard {
 
     private static boolean conditionExcludesPush(String condition) {
         if (condition.contains("github.event_name != 'push'")) {
-            return true;
+            // Only when nothing lets a push back in. `github.event_name !=
+            // 'push' || github.ref == 'refs/heads/develop'` contains the
+            // exclusion but still runs on develop pushes, and reading the
+            // substring alone reported that as push-free -- which is how a
+            // job could be moved back onto the push path without any guard
+            // noticing. A ref test in the condition means
+            // conditionPinsPushToIntegrationBranches owns it instead.
+            return !condition.contains("github.ref");
         }
         var eventMatches = Pattern.compile("github\\.event_name == '([^']+)'").matcher(condition);
         boolean constrainsEvent = false;

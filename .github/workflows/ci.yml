@@ -88,16 +88,19 @@ jobs:
           print(f"Smoke coverage: executed={executed} total={total} skipped={skipped}")
           PY
 
-  # Structural guards are source-only and ROM-free, so unlike the default
-  # `test` job below they can run on every push - which is how work actually
-  # lands on develop. TestS1S2PlcComparisonOnlyGuard sat red on develop for
-  # weeks because the only profile selecting it was one no push ever ran.
+  # Structural guards: the invariants no trace fixture can prove. About nine
+  # minutes, so like the full `test` job they are off the push path -- pull
+  # requests and manual dispatch only.
   #
-  # Pinned to the integration branches so all-branch pushes stay policy-only
-  # and free of Maven, which is what allBranchPushPolicyShouldRemainLightweight
-  # in TestBuildToolingGuard requires.
+  # They were pinned to develop and master pushes because work lands there by
+  # direct push and TestS1S2PlcComparisonOnlyGuard had sat red for weeks with
+  # nothing selecting it. That is a real risk being reaccepted here: a guard can
+  # now go red on develop and stay red until someone opens a pull request or
+  # dispatches a run. `smoke` does not select the guard classes -- the default
+  # Surefire execution excludes them by name convention -- so it will not catch
+  # this for you. Run `mvn -Dmse=off -Pguards test -B` locally before delivery.
   guards:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master'
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     env:
       LUA_BIN: lua5.4
