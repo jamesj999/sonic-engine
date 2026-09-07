@@ -110,7 +110,11 @@ supporting artifacts with the task. Do not create loose planning documents.
 ### 3. Changelog — `CHANGELOG.md`  →  trailer `Changelog`
 
 - **REQUIRED** for release-worthy engine changes: record 0.6 prose in
-  `CHANGELOG.0.6.md`. The root `CHANGELOG.md` is the release index; update it
+  `CHANGELOG.0.6.md`. That file is thematic, shaped like `CHANGELOG.0.5.md`:
+  add a `- **Lead:** ...` bullet under the matching `###`/`####` area section
+  (merge into an existing bullet when the change refines one), not a dated
+  entry at the top. Keep bullets free of commit hashes, frame numbers, and
+  test tallies. The root `CHANGELOG.md` is the release index; update it
   only when the index changes. Its exact path owns the hook trailer: if only
   the 0.6 file changes, use `Changelog: n/a: release note recorded in CHANGELOG.0.6.md`.
 - **JUSTIFIED SKIP** — special rule: on a `feat`/`fix`/`perf` commit that touches

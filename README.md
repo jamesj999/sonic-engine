@@ -444,6 +444,7 @@ outside the primary release slice or are still under active development.
 - [0.6 changelog](CHANGELOG.0.6.md)
 - [Release Summary for website and GitHub](docs/changelog/v0.6-release-summary.md)
 - [Detailed development ledger](docs/changelog/v0.6-prerelease-detailed.md)
+- [Archived entry-by-entry 0.6 ledger](docs/changelog/v0.6-development-ledger.md)
 - [Trace scope and release evidence](docs/status/trace-scope-release-6.md)
 - [Known discrepancies](docs/status/known-discrepancies.md)
 - [Release-readiness roadmap](docs/project/release-readiness-roadmap.md)
