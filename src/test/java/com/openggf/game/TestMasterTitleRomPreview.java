@@ -270,6 +270,49 @@ class TestMasterTitleRomPreview {
     }
 
     @Test
+    void sonic2PreviewStampsCopyrightTextIntoLogoMap() {
+        int[] logo = new int[40 * 28];
+        int[] words = new int[11];
+        for (int i = 0; i < words.length; i++) {
+            words[i] = 0x680 + i;
+        }
+        int[] stamped = MasterTitleRomPreview.withSonic2CopyrightText(logo, words);
+        assertEquals(0, logo[26 * 40 + 28], "input map is not mutated");
+        assertEquals(0x680, stamped[26 * 40 + 28]);
+        assertEquals(0x680 + 10, stamped[26 * 40 + 38]);
+        assertEquals(0, stamped[26 * 40 + 27]);
+    }
+
+    @Test
+    void sonic2PreviewRendersCopyrightRow() {
+        MasterTitleScreen.GameEntry entry = MasterTitleScreen.GameEntry.SONIC_2;
+        Path path = Path.of(MasterTitleScreen.expectedRomFilename(entry));
+        assumeTrue(path.toFile().isFile(), "ROM not present: " + path);
+
+        MasterTitleRomPreview.Image image = MasterTitleRomPreview.loadFor(entry, path).orElseThrow();
+
+        // Copyright line "@ 1992 SEGA" sits on tile row 26, columns 28-38 (x 224-311, y 208-215).
+        int visible = 0;
+        for (int y = 208; y < 216; y++) {
+            for (int x = 224; x < 312; x++) {
+                if ((image.rgba()[(y * image.width() + x) * 4 + 3] & 0xFF) != 0) {
+                    visible++;
+                }
+            }
+        }
+        assertTrue(visible > 40, "copyright glyph pixels should render, got " + visible);
+        int columnsLeft = 0;
+        for (int y = 208; y < 216; y++) {
+            for (int x = 0; x < 224; x++) {
+                if ((image.rgba()[(y * image.width() + x) * 4 + 3] & 0xFF) != 0) {
+                    columnsLeft++;
+                }
+            }
+        }
+        assertEquals(0, columnsLeft, "nothing else is drawn on the copyright row left of column 28");
+    }
+
+    @Test
     void loadFor_decodesRealRomPreviewWhenSuppliedRomExists() {
         for (MasterTitleScreen.GameEntry entry : MasterTitleScreen.GameEntry.values()) {
             Path path = Path.of(MasterTitleScreen.expectedRomFilename(entry));

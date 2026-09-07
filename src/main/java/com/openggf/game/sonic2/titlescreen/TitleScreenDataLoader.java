@@ -81,6 +81,9 @@ public class TitleScreenDataLoader {
 
     // Credit text patterns (intro "SONIC AND MILES 'TAILS' PROWER IN" screen)
     private Pattern[] creditTextPatterns;
+    // Standard menu font (ArtNem_FontStuff) uploaded to ArtTile_ArtNem_FontStuff_TtlScr
+    // during TitleScreen setup; only the "@ 1992 SEGA" copyright line reads it.
+    private Pattern[] fontPatterns;
     private Pattern[] segaLogoPatterns;
     private Pattern[] segaGiantSonicPatterns;
     private SpriteMappingFrame[] segaGiantSonicMappingFrames;
@@ -171,6 +174,11 @@ public class TitleScreenDataLoader {
             creditTextPatterns = PatternDecompressor.nemesis(rom, Sonic2Constants.ART_NEM_CREDIT_TEXT_ADDR, 4096, "CreditText");
             LOGGER.info("Loaded credit text patterns: " + (creditTextPatterns != null ? creditTextPatterns.length : 0));
 
+            // Load the standard font (ArtNem_FontStuff → ArtTile_ArtNem_FontStuff_TtlScr) that
+            // the Plane A copyright line "@ 1992 SEGA" indexes (s2.asm TitleScreen setup).
+            fontPatterns = PatternDecompressor.nemesis(rom, Sonic2Constants.ART_NEM_FONT_STUFF_ADDR, 4096, "TitleFontStuff");
+            LOGGER.info("Loaded title font patterns: " + (fontPatterns != null ? fontPatterns.length : 0));
+
             // Load intro palette (Sonic/Tails palette used as text color on the intro screen)
             loadIntroPalette(rom);
 
@@ -212,6 +220,16 @@ public class TitleScreenDataLoader {
         int[] titleBack = loadEnigmaMap(rom, Sonic2Constants.MAP_ENI_TITLE_BACK_ADDR, 0x4000, "TitleBack");
         // Plane A logo (40x28)
         planeAMap = loadEnigmaMap(rom, Sonic2Constants.MAP_ENI_TITLE_LOGO_ADDR, 0xE000, "TitleLogo");
+        // TitleScreen stamps CopyrightText ("@ 1992 SEGA") into the decoded logo map at
+        // planeLoc(40,28,26) before sending it to VRAM_TtlScr_Plane_A_Name_Table.
+        if (planeAMap != null && planeAMap.length >= PLANE_A_WIDTH * PLANE_A_HEIGHT) {
+            try {
+                TitleScreenCopyrightText.writeInto(planeAMap, PLANE_A_WIDTH,
+                        TitleScreenCopyrightText.readWords(rom));
+            } catch (IOException e) {
+                LOGGER.warning("Failed to read title copyright text: " + e.getMessage());
+            }
+        }
 
         // Compose Plane B: 64-tile wide plane
         // Cols 0-39 from TitleScreen, cols 40-63 from TitleBack
@@ -563,6 +581,17 @@ public class TitleScreenDataLoader {
             if (titlePatterns[i] != null) {
                 graphicsManager.cachePatternTexture(titlePatterns[i], PATTERN_BASE + i);
                 cachedCount++;
+            }
+        }
+
+        // Cache the standard font at its title-screen VRAM slot so the Plane A
+        // copyright words (ArtTile_ArtNem_FontStuff_TtlScr + chr) resolve.
+        if (fontPatterns != null) {
+            for (int i = 0; i < fontPatterns.length; i++) {
+                if (fontPatterns[i] != null) {
+                    graphicsManager.cachePatternTexture(fontPatterns[i],
+                            PATTERN_BASE + Sonic2Constants.ART_TILE_FONT_STUFF_TITLE_SCREEN + i);
+                }
             }
         }
 
