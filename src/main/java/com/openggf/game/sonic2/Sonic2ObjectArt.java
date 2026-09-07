@@ -609,6 +609,9 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.ART_NEM_BUBBLE_GENERATOR_ADDR, "BigBubbles");
         Pattern[] standardBubblePatterns = safeLoadNemesisPatterns(
                 Sonic2Constants.ART_NEM_BUBBLES_ADDR, "Bubbles");
+        Pattern[] countdownPatterns = safeLoadUncompressedPatterns(
+                Sonic2Constants.ART_UNC_COUNTDOWN_ADDR,
+                6 * 6 * Pattern.PATTERN_SIZE_IN_ROM, "DrowningCountdown");
         if (bigBubblePatterns.length == 0 && standardBubblePatterns.length == 0) {
             return null;
         }
@@ -617,15 +620,33 @@ public class Sonic2ObjectArt {
                 - Sonic2Constants.ART_TILE_BUBBLES;
         int requiredSize = Math.max(bigBubblePatterns.length,
                 standardBubbleOffset + standardBubblePatterns.length);
-        Pattern[] patterns = createBlankPatterns(requiredSize);
+        int countdownOffset = requiredSize;
+        Pattern[] patterns = createBlankPatterns(requiredSize + countdownPatterns.length);
         System.arraycopy(bigBubblePatterns, 0, patterns, 0,
                 Math.min(bigBubblePatterns.length, patterns.length));
         if (standardBubbleOffset >= 0 && standardBubbleOffset < patterns.length) {
             System.arraycopy(standardBubblePatterns, 0, patterns, standardBubbleOffset,
                     Math.min(standardBubblePatterns.length, patterns.length - standardBubbleOffset));
         }
+        System.arraycopy(countdownPatterns, 0, patterns, countdownOffset, countdownPatterns.length);
 
         List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_SMALL_BUBBLES_ADDR);
+        // Obj0A frames 8-$D all map the same six-tile VRAM window. The ROM's
+        // Obj0A_LoadCountdownArt replaces that window with one of six blocks
+        // from ArtUnc_Countdown. Keep the blocks side-by-side in this immutable
+        // sheet and redirect each mapping frame to its matching block. Adding
+        // art_tile $855B to mapping word $1F41 wraps the tile index to $49C,
+        // clears both flip bits through carry, and selects palette line 1.
+        for (int frame = 8; frame <= 13 && frame < mappings.size(); frame++) {
+            SpriteMappingPiece romPiece = mappings.get(frame).pieces().getFirst();
+            SpriteMappingPiece atlasPiece = new SpriteMappingPiece(
+                    romPiece.xOffset(), romPiece.yOffset(),
+                    romPiece.widthTiles(), romPiece.heightTiles(),
+                    countdownOffset + (frame - 8) * 6,
+                    false, false,
+                    1, romPiece.priority());
+            mappings.set(frame, new SpriteMappingFrame(List.of(atlasPiece)));
+        }
         return new ObjectSpriteSheet(patterns, mappings, 0, 1);
     }
 

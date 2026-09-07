@@ -689,10 +689,10 @@ public class Sonic2Constants {
     // Bubbles Art (Object $0A Small Bubbles, Object $24 Bubble Generator)
     // ArtNem_Bubbles: 0x7AEE2 (10 tiles) - standard-water bubble art at VRAM tile 0x05E8
     // ArtNem_BigBubbles: 0x7AD16 (37 tiles) - Obj0A/Obj24 base art at VRAM tile 0x055B
-    // Countdown numbers: 0x7AF82 (uncompressed)
+    // Countdown numbers: 0x7AF80 (uncompressed)
     public static final int ART_NEM_BUBBLES_ADDR = 0x7AEE2;  // ArtNem_Bubbles
     public static final int ART_NEM_BUBBLE_GENERATOR_ADDR = 0x7AD16;  // ArtNem_BigBubbles
-    public static final int ART_UNC_COUNTDOWN_ADDR = 0x7AF82;  // Countdown numbers for drowning (uncompressed)
+    public static final int ART_UNC_COUNTDOWN_ADDR = 0x7AF80;  // Countdown numbers for drowning (uncompressed)
     public static final int MAP_UNC_SMALL_BUBBLES_ADDR = 0x1FBF6;  // Obj24_MapUnc_1FBF6 - Sonic breathing bubbles (shared with Obj24)
     public static final int MAP_UNC_BUBBLES_ADDR = 0x1FCA2;  // Obj24_MapUnc - bubble generator / countdown bubbles
     public static final int ART_TILE_BUBBLES = 0x055B;  // ArtTile_ArtNem_BigBubbles - VRAM tile base (original)
