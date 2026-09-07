@@ -78,6 +78,16 @@
   instead of rebuilding them. In S3K AIZ1 after the intro this cuts a
   checkpoint capture from about 287KB to 33KB and a restore from 315KB to 30KB.
 
+- Audio playback allocates about half as much per frame on either FM core
+  (S3K AIZ, JFR-weighted: audio-stack garbage 21.5 to 10.7 KB per frame, whole
+  update 40.8 to 29.8 KB), with the trajectory digest, the Nuked parity vectors
+  and every fast FM oracle sample unchanged. The session queues committed
+  chip-write diagnostics as packed primitives instead of a record and a lambda
+  per write (the DAC stream reported one per sample byte), both FM facades
+  resolve their DAC sample once per bank and id instead of boxing the id per
+  byte, and the fast DSP builds its state-array list once per instance instead
+  of on every snapshot copy or comparison.
+
 - Fast FM renders about 12 % cheaper on real music (S1 GHZ1 0.173 to 0.151 ms
   per frame, S3K AIZ 0.164 to 0.147) and 23 % on a six-voice LFO bench, with
   every oracle output sample unchanged: scheduled writes, key holds, active

@@ -167,50 +167,6 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
     }
 
-    private sealed interface ChipDiagnostic {
-        void publish(ChipWriteObserver observer);
-
-        record Ym(int port, int register, int value)
-                implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onYm2612Write(port, register, value);
-            }
-        }
-
-        record Psg(int value) implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onPsgWrite(value);
-            }
-        }
-
-        record YmBus(long cycle, int busPort, int value,
-                ChipWriteObserver.PhysicalWriteOrigin origin)
-                implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onYm2612BusWrite(cycle, busPort, value, origin);
-            }
-        }
-
-        record PsgBus(long tick, int value) implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onPsgBusWrite(tick, value);
-            }
-        }
-
-        record PhysicalBoundary(ChipWriteObserver.ChipClockDomain domain,
-                long clock, ChipWriteObserver.PhysicalTimelineBoundary boundary)
-                implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onPhysicalTimelineBoundary(domain, clock, boundary);
-            }
-        }
-    }
-
     private SavedOverride[] mutationOverrides;
 
     private final class SessionLiveMutation implements LiveMutationToken {
@@ -558,7 +514,7 @@ public final class SmpsDriverSession implements AutoCloseable {
     private final SmpsSessionProfileFingerprint profile;
     private final SmpsDriverSessionConfiguration configuration;
     private ChipWriteObserver chipWriteObserver;
-    private final List<Runnable> diagnostics = new ArrayList<>();
+    private final SmpsDiagnosticQueue diagnostics = new SmpsDiagnosticQueue();
     private final SavedOverride[] overrideStack =
             new SavedOverride[MAX_OVERRIDES];
     private final SmpsDriverServiceObserver.DriverIdentity driverIdentity =
@@ -628,14 +584,28 @@ public final class SmpsDriverSession implements AutoCloseable {
                     @Override
                     public void onYm2612Write(
                             int port, int register, int value) {
-                        emitChipDiagnostic(
-                                new ChipDiagnostic.Ym(
-                                        port, register, value));
+                        if (transactionOpen) {
+                            diagnostics.addYm(port, register, value);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onYm2612Write(port, register, value);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
 
                     @Override
                     public void onPsgWrite(int value) {
-                        emitChipDiagnostic(new ChipDiagnostic.Psg(value));
+                        if (transactionOpen) {
+                            diagnostics.addPsg(value);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onPsgWrite(value);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
 
                     @Override
@@ -647,14 +617,28 @@ public final class SmpsDriverSession implements AutoCloseable {
                     public void onYm2612BusWrite(long cycle, int busPort,
                             int value,
                             ChipWriteObserver.PhysicalWriteOrigin origin) {
-                        emitChipDiagnostic(new ChipDiagnostic.YmBus(cycle,
-                                busPort, value, origin));
+                        if (transactionOpen) {
+                            diagnostics.addYmBus(cycle, busPort, value, origin);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onYm2612BusWrite(cycle, busPort, value, origin);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
 
                     @Override
                     public void onPsgBusWrite(long tick, int value) {
-                        emitChipDiagnostic(new ChipDiagnostic.PsgBus(tick,
-                                value));
+                        if (transactionOpen) {
+                            diagnostics.addPsgBus(tick, value);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onPsgBusWrite(tick, value);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
 
                     @Override
@@ -662,8 +646,15 @@ public final class SmpsDriverSession implements AutoCloseable {
                             ChipWriteObserver.ChipClockDomain domain,
                             long clock,
                             ChipWriteObserver.PhysicalTimelineBoundary boundary) {
-                        emitChipDiagnostic(new ChipDiagnostic.PhysicalBoundary(
-                                domain, clock, boundary));
+                        if (transactionOpen) {
+                            diagnostics.addBoundary(domain, clock, boundary);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onPhysicalTimelineBoundary(domain, clock, boundary);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
                 });
         directRenderer = (buffer, frameOffset, frames) -> {
@@ -1369,11 +1360,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         if (diagnostics.isEmpty()) {
             return;
         }
-        List<Runnable> committed = List.copyOf(diagnostics);
-        diagnostics.clear();
-        for (Runnable diagnostic : committed) {
-            publishDiagnostic(diagnostic);
-        }
+        diagnostics.publishAll(chipWriteObserver, diagnosticErrorSink);
     }
 
     public void applyChannelMasks(int fmMask, int psgMask) {
@@ -1910,31 +1897,27 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
     }
 
-    private void emitChipDiagnostic(ChipDiagnostic event) {
-        emitDiagnostic(() -> event.publish(chipWriteObserver));
-    }
-
     private void beforePhysicalWrite(SmpsChipWrite write) {
         physicalWriteInterceptorForTesting.accept(write);
     }
 
     private void emitDiagnostic(Runnable diagnostic) {
         if (transactionOpen) {
-            diagnostics.add(diagnostic);
-        } else {
-            publishDiagnostic(diagnostic);
+            diagnostics.addRunnable(diagnostic);
+            return;
         }
-    }
-
-    private void publishDiagnostic(Runnable diagnostic) {
         try {
             diagnostic.run();
         } catch (RuntimeException failure) {
-            try {
-                diagnosticErrorSink.accept(failure);
-            } catch (RuntimeException ignored) {
-                // Diagnostic failures cannot influence committed audio state.
-            }
+            reportDiagnosticFailure(failure);
+        }
+    }
+
+    private void reportDiagnosticFailure(RuntimeException failure) {
+        try {
+            diagnosticErrorSink.accept(failure);
+        } catch (RuntimeException ignored) {
+            // Diagnostic failures cannot influence committed audio state.
         }
     }
 
@@ -2184,9 +2167,7 @@ public final class SmpsDriverSession implements AutoCloseable {
     }
 
     private void truncateDiagnostics(int size) {
-        while (diagnostics.size() > size) {
-            diagnostics.removeLast();
-        }
+        diagnostics.truncate(size);
     }
 
     private void requireOpen(PortCapability capability) {
