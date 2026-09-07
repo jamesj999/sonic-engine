@@ -124,7 +124,7 @@ sound driver.
 |------|--------|
 | Sonic the Hedgehog (S1) | Broadest end-to-end coverage: all zones, bosses, special stages, title screen, ending, credits, and demo playback. |
 | Sonic the Hedgehog 2 (S2) | Most complete module by object coverage (122/122 checklist objects) and trace parity. Includes all zones, bosses, special stages, Tails AI, ending, and credits. |
-| Sonic 3 & Knuckles (S3K) | Work in progress. AIZ through LBZ have substantial route coverage, but this is not full parity: the AIZ miniboss napalm FallingShot and AIZ2 end-boss splash children now have native implementations with route/trace validation still outstanding, while Knuckles' LBZ Big Arm handoff remains inert. |
+| Sonic 3 & Knuckles (S3K) | Work in progress. AIZ through LBZ have substantial route coverage, including shipped-ROM collision handling for the AIZ2 end boss, but this is not full parity: route/trace validation remains outstanding for the AIZ miniboss napalm FallingShot and AIZ2 end-boss splash children, while Knuckles' LBZ Big Arm handoff remains inert. |
 
 Work is ongoing across all three games. See `CHANGELOG.md` for detailed, per-merge history.
 
