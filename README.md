@@ -182,7 +182,9 @@ intellectual property.
 
 Anywhere Java 21 and LWJGL run: Windows, macOS, and Linux. The engine uses OpenGL 4.1 core profile
 (chosen for macOS compatibility). A GraalVM native image build is also supported for ahead-of-time compiled
-binaries.
+binaries. Third-party libraries (LWJGL, and Jackson for `config.yaml` and save files) are kept on
+advisory-free versions: a Dependabot advisory against `master` is replicated onto `develop` and
+`next` as an aligned bump rather than merged into the released line.
 
 ### Did you use AI to write this? / This is AI slop!
 
