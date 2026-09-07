@@ -4545,7 +4545,7 @@ public class GameLoop {
                 levelManager.updateObjectPositionsWithoutTouches();
                 levelManager.updateEndingDemoScene();
             }
-            spriteManager.primePlayableVisualState();
+            // Level_Delay / PalFadeIn_Alt do not dispatch Sonic_Animate.
 
             if (endingProvider.hasTextReturnRequest()) {
                 endingProvider.consumeTextReturnRequest();
@@ -4582,6 +4582,7 @@ public class GameLoop {
         boolean scrollFrozen = endingProvider.isScrollFrozen();
         if (!scrollFrozen) {
             camera.updatePosition();
+            camera.captureRenderCopy();
         }
         LevelEventProvider levelEvents = GameServices.module().getLevelEventProvider();
         if (levelEvents != null) {
@@ -4711,20 +4712,8 @@ public class GameLoop {
             camera.updatePosition(true);
         }
 
-        // Credits demos can override the load-time camera/player position after the level
-        // systems have already seeded object/ring windows. Re-seed them now so the hidden
-        // preroll and fade-in use the correct stream window immediately.
-        if (levelManager.getObjectManager() != null) {
-            levelManager.getObjectManager().reset(camera.getX());
-        }
-        if (levelManager.getRingManager() != null) {
-            levelManager.getRingManager().reset(camera.getX());
-        }
-
-        // Object/ring resets above already seed the visible stream window.
-        // Keep the demo scene static until gameplay begins, but prime the
-        // player's render state so Sonic appears with the other sprites.
-        spriteManager.primePlayableVisualState();
+        // Prepare the viewport and native player initialization before the fade.
+        levelManager.prepareEndingDemoScene();
 
         // Suppress player keyboard input — demo input comes from forcedInputMask only
         spriteManager.setInputSuppressed(true);

@@ -34,7 +34,7 @@ final class LevelFrameRuntimeUpdater {
         }
     }
 
-    void recomputeParallaxAfterRewindRestore() {
+    void refreshParallaxState() {
         if (levelManager.parallaxManager == null || levelManager.camera == null) {
             return;
         }

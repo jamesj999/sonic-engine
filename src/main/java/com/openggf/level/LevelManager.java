@@ -470,6 +470,13 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * Phase C/F: Configure audio manager and play level music.
      */
     public void initAudio(int levelIndex) throws IOException {
+        // S1 EndingDemoLoad enters Level: with the credits track already playing;
+        // that path contains no PlaySound command (sonic.asm:3823-3935). Rebuilding
+        // the ROM/profile source would invalidate the active track even though the
+        // following playlist request is suppressed.
+        if (transitions.isSuppressNextMusicChange()) {
+            return;
+        }
         configureAudio();
         playLevelMusic(levelIndex);
     }
@@ -1818,7 +1825,31 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
     }
 
     public void recomputeParallaxAfterRewindRestore() {
-        frameRuntimeUpdater.recomputeParallaxAfterRewindRestore();
+        frameRuntimeUpdater.refreshParallaxState();
+    }
+
+    /** Prepares the demo scene before Level_Delay / PalFadeIn_Alt. */
+    public void prepareEndingDemoScene() {
+        // S1 Level_SkipTtlCard calls DeformLayers before LoadTilesFromStart.
+        // DeformLayers writes v_scrposy_vdp as well as the background scroll
+        // table. The foreground renderer reads that separate VSRAM value,
+        // so snapping Camera alone leaves the fade showing the old terrain.
+        frameRuntimeUpdater.refreshParallaxState();
+        camera.captureRenderCopy();
+        // The demo position overrides the ordinary act start after load, so
+        // reseed placement from that same final viewport before the hidden delay.
+        if (objectManager != null) {
+            objectManager.reset(camera.getX());
+        }
+        if (ringManager != null) {
+            ringManager.reset(camera.getX());
+        }
+        // Level_LoadObj executes the fresh Sonic slot once before BuildSprites.
+        // Sonic_Move selects Wait and refreshes the movement-animation latches;
+        // merely clearing obAnim leaves the preceding demo's speed latch alive.
+        spriteManager.warmUpFreshMainPlayableOnly(
+                activeGameModule().getLevelInitProfile().freshMainPlayablePreludeFrames(),
+                this, mainPlayableSprite());
     }
 
     /**

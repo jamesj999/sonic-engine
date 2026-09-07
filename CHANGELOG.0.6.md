@@ -1171,6 +1171,9 @@ and special-stage transitions that gate a full route.
   the ground behind the already-far camera. In the credits demos the vertical-interrupt counter runs
   free from the recording's own starting value, including on lag frames, instead of from a constant
   measured off an older capture, fixing Labyrinth Zone's wind-tunnel sound and pull-down phase.
+  Credits music continues across demo loads, and each demo prepares its camera and foreground/background
+  scroll before fading in. Sonic runs his native initialization update and holds the standing pose
+  through the fade, eliminating the wrong terrain view and inherited running animation.
 - **Window and display transitions:** the title screen and gameplay transitions re-read the
   framebuffer size and reshape the viewport from framebuffer pixels, and no longer resize or move
   the host window when a launch profile changes display aspect, fixing scaled and high-DPI windows
