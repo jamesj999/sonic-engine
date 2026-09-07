@@ -220,6 +220,135 @@ abstract class OneUpRestoreLivePathSupport {
                 "the attenuation must be gone once the fade in completes");
     }
 
+    /**
+     * {@code Sound_PlaySFX} / {@code zPlaySound_CheckRing} refuse every SFX
+     * while the 1-up flag or the fade-in flag is set (s1.sounddriver.asm:978-982,
+     * s2.sounddriver.asm:2118-2120). The 1-up branch raises the first
+     * (s1:784, s2:1712); {@code cfFadeInToPrevious} trades it for the second
+     * (s1:2220-2222, s2:3150-3155); the fade-in stepper clears that one only
+     * when its counter has run down (s1:1650, s2:2740). S1's branch also stops
+     * every SFX track before it backs the driver up (s1:769-774); S2's
+     * {@code zPlayMusic} stops them for every song (s2:1667-1672).
+     */
+    @Test
+    void sfxAreStoppedAndRefusedWhileTheJingleAndItsFadeInRun() {
+        AudioManager audio = install();
+        audio.playMusic(levelMusicId());
+        for (int frame = 0; frame < 60; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        audio.playSfx(JUMP_SFX);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(1, sfxSequencerCount(audio), "the jump must play before the 1-up");
+
+        audio.playMusic(extraLifeMusicId());
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(extraLifeMusicId(), playingMusicId(audio));
+        assertEquals(0, sfxSequencerCount(audio),
+                "the 1-up stops the SFX already playing");
+        assertTrue(sfxBlocked(audio), "the 1-up flag blocks new SFX");
+        for (int frame = 0; frame < 5; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        audio.playSfx(JUMP_SFX);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(0, sfxSequencerCount(audio),
+                "an SFX requested during the jingle is refused");
+
+        assertTrue(runUntilRestored(audio, new ArrayList<>()),
+                "the level music must come back when the jingle ends");
+        assertTrue(musicSnapshot(audio).fade().active(),
+                "the restore arms the fade in");
+        assertTrue(sfxBlocked(audio),
+                "the fade-in flag keeps SFX blocked after the restore");
+        audio.playSfx(JUMP_SFX);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(0, sfxSequencerCount(audio),
+                "an SFX requested during the fade in is refused");
+
+        int frames = 0;
+        while (musicSnapshot(audio).fade().active() && frames < 400) {
+            audio.presentFrame(PresentationMode.FORWARD);
+            frames++;
+        }
+        assertFalse(musicSnapshot(audio).fade().active(), "the fade in must complete");
+        // The ROM clears the flag at the top of the next service, ahead of
+        // that service's request cycle, so a request made now is admitted.
+        audio.playSfx(JUMP_SFX);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(1, sfxSequencerCount(audio),
+                "SFX play again once the fade in has completed");
+        assertFalse(sfxBlocked(audio),
+                "the fade-in stepper releases SFX when its counter reaches zero");
+    }
+
+    @Test
+    void aSnapshotRoundTripDuringTheFadeInStillReleasesSfxWhenItEnds() {
+        AudioManager audio = install();
+        audio.playMusic(levelMusicId());
+        for (int frame = 0; frame < 60; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        audio.playMusic(extraLifeMusicId());
+        assertTrue(runUntilRestored(audio, new ArrayList<>()));
+        for (int frame = 0; frame < 20; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertTrue(sfxBlocked(audio), "still blocked mid fade");
+        audio.restoreLogicalSnapshot(audio.captureLogicalSnapshot());
+        assertTrue(sfxBlocked(audio), "the block survives the round trip");
+        for (int frame = 0; frame < 400; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertFalse(sfxBlocked(audio),
+                "the restored fade must still release SFX when it completes");
+        audio.playSfx(JUMP_SFX);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(1, sfxSequencerCount(audio));
+    }
+
+    /**
+     * An ordinary song load clears both flags: {@code .bgmnot1up} clears the
+     * 1-up flag (s1.sounddriver.asm:790, s2.sounddriver.asm:1730) and
+     * {@code InitMusicPlayback} / {@code zInitMusicPlayback} wipe the fade-in
+     * flag with the rest of the variables (s1:1498-1510, s2:2597-2623).
+     */
+    @Test
+    void anOrdinarySongDuringTheJingleReleasesSfx() {
+        AudioManager audio = install();
+        audio.playMusic(levelMusicId());
+        for (int frame = 0; frame < 60; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        audio.playMusic(extraLifeMusicId());
+        for (int frame = 0; frame < 30; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertTrue(sfxBlocked(audio));
+        audio.playMusic(levelMusicId());
+        for (int frame = 0; frame < 60
+                && playingMusicId(audio) != levelMusicId(); frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertEquals(levelMusicId(), playingMusicId(audio));
+        assertFalse(sfxBlocked(audio), "an ordinary song load lifts the block");
+        audio.playSfx(JUMP_SFX);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(1, sfxSequencerCount(audio));
+    }
+
+    /** Jump is {@code A0h} in both games and takes the ordinary, non-ring path. */
+    private static final int JUMP_SFX = 0xA0;
+
+    private static boolean sfxBlocked(AudioManager audio) {
+        return audio.captureLogicalSnapshot().presentation().sfxBlocked();
+    }
+
+    private static int sfxSequencerCount(AudioManager audio) {
+        return (int) audio.shadowSmpsDriverSnapshotForTesting().sequencers()
+                .stream().filter(SmpsDriverSnapshot.SequencerEntry::sfx).count();
+    }
+
     private boolean runUntilRestored(AudioManager audio, List<String> writes) {
         for (int frame = 0; frame < 900; frame++) {
             writes.clear();

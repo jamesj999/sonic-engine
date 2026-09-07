@@ -466,6 +466,16 @@ This file contains the complete 0.6 development snapshot history carried forward
   an extra life collected while a previous restore is still fading in no longer
   stacks a second attenuation on top of the first.
 
+- **Sound effects stay quiet through a Sonic 1 or Sonic 2 extra life:** the
+  original refuses every new sound effect while the 1-up jingle plays and while
+  the level music fades back in afterwards, and Sonic 1 also silences the
+  effects already playing when the jingle starts. The engine applied that only
+  to Sonic 3 & Knuckles, so in the other two games rings, jumps and the rest
+  played over the jingle and over the fade. Both games now block them for the
+  same span the original does, release them when the fade in completes or
+  when an ordinary song replaces the jingle, and the block survives a rewind
+  and restore in the middle of the fade.
+
 - **Speed shoes now slow the music down on the same frame they take your speed
   back:** the original does both in one step at the end of a frame, restoring the
   boosted running values and asking the sound program to drop the tempo together.

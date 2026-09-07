@@ -4137,6 +4137,11 @@ public class SmpsSequencer implements CoordFlagContext {
         speedShoes = false;
     }
 
+    /** Whether a fade in armed by {@link #triggerFadeIn} is still running. */
+    public boolean isFadingIn() {
+        return fadeState.active && !fadeState.fadeOut;
+    }
+
     public void triggerFadeIn(int steps, int delay) {
         boolean restTracks = config.getFadeInRestore()
                 == SmpsSequencerConfig.FadeInRestore.REST_TRACKS;

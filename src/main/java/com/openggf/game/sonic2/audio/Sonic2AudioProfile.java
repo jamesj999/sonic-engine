@@ -8,6 +8,7 @@ import com.openggf.game.audio.SegaPcmRomReader;
 import com.openggf.audio.smps.SmpsLoader;
 import com.openggf.audio.smps.SmpsSequencerConfig;
 import com.openggf.audio.session.SmpsPhysicalPolicy;
+import com.openggf.audio.session.SmpsStatefulCommandPolicy;
 import com.openggf.audio.presentation.AudioRequestService;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsLoader;
@@ -21,6 +22,11 @@ import java.util.function.Consumer;
 public class Sonic2AudioProfile extends AbstractAudioProfile {
 
     private final Consumer<Sonic2SoundRequestService.Event> requestObserver;
+
+    @Override
+    public SmpsStatefulCommandPolicy smpsStatefulCommandPolicy() {
+        return Sonic2StatefulCommandPolicy.INSTANCE;
+    }
 
     @Override
     public AudioRequestService createAudioRequestService() {
