@@ -306,6 +306,12 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
 still required before release sign-off.
 
+Level loads no longer intermittently fail or detect the wrong game. The ROM is
+read from two threads during a load, and the header readers and the Sonic 3 &
+Knuckles art loaders were seeking the shared file handle without the lock every
+other reader holds, so a background read could move the position out from under
+them.
+
 Angel Island Act 1 no longer fails to load when its intro tilemap pre-build
 cannot read the ROM; the pre-build is a cache warm the terrain-swap frame
 already knows how to do without.
