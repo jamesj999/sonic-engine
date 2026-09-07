@@ -16,24 +16,15 @@ readable and historical versions can be referenced directly.
 
 ## 0.6 release documentation
 
-The current snapshot persists only changed settings in `config.yaml`, so new
-defaults reach existing installs; see the
-[0.6 development history](CHANGELOG.0.6.md#06-development-history-mid-july-2026--present-newest-first).
-
-The current snapshot plays the ROM special-stage entry transition in normal
-play and makes `FAST` load-time simulation the default; see the
-[0.6 development history](CHANGELOG.0.6.md#06-development-history-mid-july-2026--present-newest-first).
-
-The current snapshot makes rewind checkpoints share spent hardware-timing job
-snapshots instead of re-cloning them; see the
-[0.6 development history](CHANGELOG.0.6.md#06-development-history-mid-july-2026--present-newest-first).
-
-The current snapshot includes the three games' ROM-backed Continue screens;
-see the [0.6 development history](CHANGELOG.0.6.md#06-development-history-mid-july-2026--present-newest-first).
+[CHANGELOG.0.6.md](CHANGELOG.0.6.md) is the thematic 0.6 changelog, organised by
+area in the same shape as the 0.5 file. Newest changes are folded into their
+area rather than listed at the top.
 
 - [Release Summary](docs/changelog/v0.6-release-summary.md) — polished copy for
   the website and GitHub release page, including the measured validation status
   and known limitations. `RELEASE_NOTES_v0.6.prerelease.md` is a pointer to it.
+- [Archived 0.6 development ledger](docs/changelog/v0.6-development-ledger.md) —
+  the unedited entry-by-entry history the changelog was condensed from.
 - [Detailed 0.6 development ledger](docs/changelog/v0.6-prerelease-detailed.md) —
   engineering notes and trace-frontier history.
 - [Trace frontier log](docs/status/trace-frontier-log.md) — current replay

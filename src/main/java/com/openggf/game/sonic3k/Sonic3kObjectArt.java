@@ -1342,8 +1342,13 @@ public class Sonic3kObjectArt {
     private void loadNemesisArtInto(Rom rom, int romAddr, Pattern[] dest, int destIndex, int maxTiles)
             throws IOException {
         FileChannel channel = rom.getFileChannel();
-        channel.position(romAddr);
-        byte[] data = NemesisReader.decompress(channel);
+        // Rom exposes a shared FileChannel; lock around seek+decode so concurrent
+        // readers cannot move the channel position mid-stream.
+        byte[] data;
+        synchronized (rom) {
+            channel.position(romAddr);
+            data = NemesisReader.decompress(channel);
+        }
         int tileCount = data.length / Pattern.PATTERN_SIZE_IN_ROM;
         if (maxTiles >= 0) tileCount = Math.min(tileCount, maxTiles);
         for (int i = 0; i < tileCount; i++) {

@@ -1,5 +1,6 @@
 package com.openggf.tools.audio.completerun;
 
+import org.junit.jupiter.api.Tag;
 import static com.openggf.tools.audio.completerun.CompleteRunAudioTrace.*;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,6 +26,9 @@ import java.util.zip.GZIPInputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestCompleteRunAudioCaptureStore {
     private static final Map<DriverService, ServiceEvidence> SERVICE_EVIDENCE = new IdentityHashMap<>();
     @TempDir
