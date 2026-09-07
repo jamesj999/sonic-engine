@@ -457,7 +457,14 @@ This file contains the complete 0.6 development snapshot history carried forward
   game's sound program actually does it, so the music returns cleanly. Sonic 1
   and Sonic 2 rest the channels; Sonic 3 & Knuckles mutes its PSG channels a
   different way and leaves their volume alone, which the engine now follows
-  too rather than treating all three the same.
+  too rather than treating all three the same. In Sonic 1 and Sonic 2 the
+  original also reloads every FM channel's instrument as part of the same
+  restore, because the jingle left its own instruments on the chip. The engine
+  did that only on a code path the game no longer uses, so in play the level
+  music came back on the jingle's instruments until each channel next changed
+  instrument by itself. The instruments are now reloaded at the restore, and
+  an extra life collected while a previous restore is still fading in no longer
+  stacks a second attenuation on top of the first.
 
 - **Speed shoes now slow the music down on the same frame they take your speed
   back:** the original does both in one step at the end of a frame, restoring the
