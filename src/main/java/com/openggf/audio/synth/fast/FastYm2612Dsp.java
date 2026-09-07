@@ -1190,13 +1190,16 @@ public final class FastYm2612Dsp implements FmDsp {
 
     // ---------------------------------------------------------- snapshots
 
-    private int[][] arrays() {
-        return new int[][] {amHistory, scheduledIncrements, scheduledLevels, scheduledKeys, scheduledMask, requestedKeyOn, keyedThisFrame, dacOutputSlots, sampledEg, delayedOutput, olderOp1, registers, phase, phaseIncrement, attenuation, egState, keyOn, ssgInvert, ssgHeld, ssgPendingRestart, output,
+    /** Every mutable state array in a fixed order shared by copy, equality and hashing; built once per instance. */
+    private final int[][] state = {amHistory, scheduledIncrements, scheduledLevels, scheduledKeys, scheduledMask, requestedKeyOn, keyedThisFrame, dacOutputSlots, sampledEg, delayedOutput, olderOp1, registers, phase, phaseIncrement, attenuation, egState, keyOn, ssgInvert, ssgHeld, ssgPendingRestart, output,
                 detune, multiple, totalLevel, rateScaling, attackRate, decayRate, sustainRate, releaseRate,
                 sustainLevel, amEnabled, ssgMode, keyCode, rateAttack, rateDecay, rateSustain, rateRelease,
                 operatorFnum, operatorBlock, channelFnum,
                 channelBlock, latchedFnumHigh, latchedCh3FnumHigh, ch3Fnum, ch3Block, feedback, algorithm,
                 amSensitivity, pmSensitivity, feedbackHistory, operatorOut, csmKeyed, scalar};
+
+    private int[][] arrays() {
+        return state;
     }
 
     @Override

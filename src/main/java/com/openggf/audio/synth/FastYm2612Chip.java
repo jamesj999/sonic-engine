@@ -82,6 +82,10 @@ public final class FastYm2612Chip implements FmChip {
     private int queuedAddress;
 
     private int dacSampleId = NO_DAC_VALUE;
+    /** Resolved {@link #dacSampleId} in {@link #dacData}; derived, never snapshotted. */
+    private DacData.Sample dacSample;
+    private DacData dacSampleData;
+    private int dacSampleDataId = NO_DAC_VALUE;
     private int dacPeriod;
     private int dacIndex;
     private int dacAccumulator;
@@ -256,7 +260,7 @@ public final class FastYm2612Chip implements FmChip {
     public void setMute(int ch, boolean mute) {
         if (ch >= 0 && ch < 6) {
             mutes[ch] = mute;
-            emitBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
+                emitBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
         }
     }
 
@@ -327,7 +331,15 @@ public final class FastYm2612Chip implements FmChip {
         if (dacData == null) {
             return NO_DAC_VALUE;
         }
-        DacData.Sample sample = dacData.sample(dacSampleId);
+        // The bank's lookup boxes the id; resolve it once per (bank, id) pair
+        // instead of once per streamed byte. The cache is derived state, not
+        // snapshot state: any restore that changes either key re-resolves.
+        if (dacSample == null || dacSampleData != dacData || dacSampleDataId != dacSampleId) {
+            dacSample = dacData.sample(dacSampleId);
+            dacSampleData = dacData;
+            dacSampleDataId = dacSampleId;
+        }
+        DacData.Sample sample = dacSample;
         if (sample == null || index >= sample.length()) {
             return NO_DAC_VALUE;
         }
@@ -428,7 +440,7 @@ public final class FastYm2612Chip implements FmChip {
         latchedRegister[port] = register;
         if (register >= 0xB4 && register <= 0xB6) {
             pan[port * 3 + (register - 0xB4)] = ((value >> 7) & 1) | ((value >> 5) & 2);
-        }
+            }
         // Status-read flushing has no paced frame position; keep its immediate
         // semantics. Ordinary bus writes retain their data-strobe offset.
         if (frameCycle < 0) dsp.writeRegister(port, register, value);

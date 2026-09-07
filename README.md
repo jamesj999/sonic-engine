@@ -269,7 +269,9 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 
 - **Faster FM core:** new configurations select a register-level FM core that
   passes all 178 supported chip scripts; `audio.fmCore=accurate` still selects
-  Java Nuked. Full-game listening sign-off remains open. See the
+  Java Nuked. Audio playback now allocates about an eighth of what it did per
+  frame on either core, with every oracle sample unchanged. Full-game
+  listening sign-off remains open. See the
   [fast FM validation record](docs/architecture/validation/audio/2026-09-06-fast-fm-release.md).
 
 - **Runtime performance:** capture, rewind, art decoding, animated-art uploads

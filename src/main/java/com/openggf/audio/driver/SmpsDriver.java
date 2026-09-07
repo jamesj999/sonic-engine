@@ -672,6 +672,9 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                 }
                 throw failure;
             }
+            if (rollbackState != null) {
+                releaseSfxAdmissionMutation(rollbackState);
+            }
         }
     }
 
@@ -1471,6 +1474,19 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         }
     }
 
+    /** Returns a committed admission's per-sequencer backups to their pools. */
+    void releaseSfxAdmissionMutation(SfxAdmissionMutationState state) {
+        if (state.continuousOnly) {
+            return;
+        }
+        synchronized (sequencersLock) {
+            for (int index = 0; index < state.affected.length; index++) {
+                state.affected[index].releaseLiveCommandMutation(
+                        state.sequencerStates[index]);
+            }
+        }
+    }
+
     void restoreSfxAdmissionMutation(SfxAdmissionMutationState state) {
         synchronized (sequencersLock) {
             if (state.continuousOnly) {
@@ -1658,6 +1674,21 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                     contSfxLoopCnt,
                     palUpdateCounter,
                     s1SpecialVoicePointer);
+        }
+    }
+
+    /** Returns a committed token's per-sequencer backups to their pools. */
+    public void releaseLiveCommandMutation(LiveCommandMutationToken token) {
+        Objects.requireNonNull(token, "token");
+        if (token.owner != this) {
+            throw new IllegalArgumentException(
+                    "live command token belongs to another SMPS driver");
+        }
+        synchronized (sequencersLock) {
+            for (int index = 0; index < token.sequencers.length; index++) {
+                token.sequencers[index].releaseLiveCommandMutation(
+                        token.sequencerStates[index]);
+            }
         }
     }
 

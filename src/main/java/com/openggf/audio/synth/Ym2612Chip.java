@@ -237,6 +237,10 @@ public class Ym2612Chip implements FmChip {
 
     /* DAC streaming. */
     private int dacSampleId = NO_DAC_VALUE;
+    /** Resolved {@link #dacSampleId} in {@link #dacData}; derived, never snapshotted. */
+    private DacData.Sample dacSample;
+    private DacData dacSampleData;
+    private int dacSampleDataId = NO_DAC_VALUE;
     private int dacPeriod;
     private int dacIndex;
     private int dacAccumulator;
@@ -681,7 +685,15 @@ public class Ym2612Chip implements FmChip {
         if (dacData == null) {
             return NO_DAC_VALUE;
         }
-        DacData.Sample sample = dacData.sample(dacSampleId);
+        // The bank's lookup boxes the id; resolve it once per (bank, id) pair
+        // instead of once per streamed byte. The cache is derived state, not
+        // snapshot state: any restore that changes either key re-resolves.
+        if (dacSample == null || dacSampleData != dacData || dacSampleDataId != dacSampleId) {
+            dacSample = dacData.sample(dacSampleId);
+            dacSampleData = dacData;
+            dacSampleDataId = dacSampleId;
+        }
+        DacData.Sample sample = dacSample;
         if (sample == null || index >= sample.length()) {
             return NO_DAC_VALUE;
         }

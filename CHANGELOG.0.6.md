@@ -378,6 +378,15 @@ object family now restores through shared machinery, and the remaining coverage 
   deterministic timeline commands are consumed in place from a sorted pending suffix without
   per-frame allocation, and rewind history rings allocate lazily only while a backend owns them,
   removing an unused multi-megabyte default allocation.
+- **Audio playback garbage cut to about an eighth per frame on either FM core** (S3K AIZ,
+  JFR-weighted: audio-stack 21.5 to 2.8 KB per frame, whole update 40.8 to 23.8 KB), with the
+  trajectory digest, the Nuked parity vectors and every fast FM oracle sample unchanged. The
+  session queues committed chip-write diagnostics as packed primitives instead of a record and a
+  lambda per write (the DAC stream reported one per sample byte), both FM facades resolve their
+  DAC sample once per bank and id instead of boxing the id per byte, the fast DSP builds its
+  state-array list once per instance, and the per-frame live mutation capture reuses pooled
+  per-sequencer backups that session commit and rollback return to the pool instead of building
+  an immutable snapshot of every track each frame.
 - **Repeated sound effects and music starts consult a generation-aware asset catalog** before
   invoking a loader, avoiding a reload and recopy of asset-sized data per trigger, and prepared
   admission bypasses the whole-driver rollback capture on ordinary paths. Driver snapshots also
