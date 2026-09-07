@@ -8,8 +8,6 @@ on:
     branches:
       - '**'
   workflow_dispatch:
-  schedule:
-    - cron: '30 5 * * *'
 
 jobs:
   # Pull requests only. Branch/trailer/changelog policy is enforced locally by
@@ -40,7 +38,8 @@ jobs:
   # a few minutes instead of half an hour.
   #
   # It is a subset, not a replacement: the full `test` job below still runs the
-  # tagged classes on pull requests, on the nightly schedule, and in release.yml.
+  # tagged classes on pull requests and manual dispatch, and release.yml runs
+  # the whole suite before a release.
   smoke:
     runs-on: ubuntu-latest
     steps:
@@ -133,16 +132,15 @@ jobs:
         run: mvn -Dmse=off -Pguards test -B
 
   # The complete suite, including the @Tag("slow-suite") classes `smoke` drops.
-  # About 26 minutes, so it is off the push path: pull requests, the nightly
-  # schedule, and manual dispatch.
+  # About 26 minutes, so it is off the push path: pull requests and manual
+  # dispatch (Actions -> CI -> Run workflow).
   #
   # It did run on develop pushes for a while, after develop carried a
-  # deterministic red test and an order-dependent one unnoticed. The nightly
-  # schedule is what catches those now -- a slower net, deliberately, because
-  # half an hour of mail on every merge to develop was not being read. `smoke`
-  # keeps the per-push signal and `guards` still runs on integration pushes, so
-  # a push-path regression outside the tagged oracle sweeps still goes red
-  # immediately.
+  # deterministic red test and an order-dependent one unnoticed. Nothing runs
+  # it unattended now -- there is no schedule -- so a regression confined to
+  # the tagged oracle sweeps waits for a pull request or for someone to
+  # dispatch a run. `smoke` keeps the per-push signal for everything else and
+  # `guards` still runs on integration pushes.
   #
   # ROM-free either way: ROM-gated classes error only when a path is supplied.
   test:
@@ -195,7 +193,7 @@ jobs:
           PY
 
   develop-trace-replay:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, release-fixtures]
     env:
       SONIC1_ROM_PATH: ${{ vars.SONIC1_ROM_PATH }}

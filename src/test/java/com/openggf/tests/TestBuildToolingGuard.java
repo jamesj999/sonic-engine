@@ -1959,8 +1959,8 @@ class TestBuildToolingGuard {
      * instead -- twenty-six minutes of mail per merge, which stopped being read.
      * The replacement splits the difference: {@code smoke} runs everywhere and
      * finishes in minutes because it drops the {@code slow-suite} oracle sweeps,
-     * and the full {@code test} job moved to pull requests and the nightly
-     * schedule.
+     * and the full {@code test} job moved to pull requests and manual
+     * dispatch.
      *
      * <p>The lever this protects is the same one as before -- a push must not
      * silently acquire another long Maven job. {@code guards} stays pinned to

@@ -159,7 +159,7 @@
 
              This is a subset, never a replacement. The full default suite still
              selects the tagged classes and is what release validation, pull
-             requests and the nightly schedule run. Tag a class @Tag("slow-suite")
+             requests and a manually dispatched CI run execute. Tag a class @Tag("slow-suite")
              only when it is minutes long AND a wider fixture sweep of behaviour
              some other test already covers.
 

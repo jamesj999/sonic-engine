@@ -43,7 +43,8 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
   `-D...` arguments and uses `tools/testing/install-hooks.ps1`.
 - `-Psmoke` is the default suite minus the `slow-suite`-tagged oracle sweeps.
   It is the branch-push gate in CI, not release evidence; the full suite runs
-  on pull requests, the nightly schedule, and release validation.
+  on pull requests, on a manually dispatched CI run, and in release validation.
+  Nothing runs the full suite unattended, so run it locally before delivery.
 - Match focused checks to the change and complete required integration
   checks. Release evidence includes ordinary tests and `-Pguards` separately.
 - Before reporting suite results, read the measurement-hazard table in
