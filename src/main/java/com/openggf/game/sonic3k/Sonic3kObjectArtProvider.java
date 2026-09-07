@@ -329,8 +329,13 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
      */
     private Pattern[] loadHudTextFromNemesis(Rom rom) throws IOException {
         FileChannel channel = rom.getFileChannel();
-        channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
-        byte[] data = NemesisReader.decompress(channel);
+        // Rom exposes a shared FileChannel; lock around seek+decode so concurrent
+        // readers cannot move the channel position mid-stream.
+        byte[] data;
+        synchronized (rom) {
+            channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
+            data = NemesisReader.decompress(channel);
+        }
 
         int totalTiles = data.length / Pattern.PATTERN_SIZE_IN_ROM;
         int ringTiles = 14; // First 14 tiles are ring sprite data

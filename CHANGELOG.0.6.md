@@ -1,5 +1,14 @@
 # OpenGGF 0.6 Changelog
 
+- Loading a level no longer intermittently fails or loads as the wrong game.
+  The ROM is read from two threads during a level load, and every reader is
+  supposed to hold a lock while it seeks the shared file handle and then reads
+  from it. The ROM header readers and the Sonic 3 & Knuckles art loaders did
+  not, so a background read could move the file position out from under them:
+  a header returned four bytes late matched no game, leaving the engine on its
+  Sonic 2 fallback and reading a Sonic 3 & Knuckles ROM at Sonic 2 offsets, and
+  a compressed art stream could end early mid-decode.
+
 - Angel Island Act 1 no longer fails to load when its ROM file cannot be
   reopened. The act pre-builds the tilemaps used by the $1400 terrain swap
   while the level is still loading; that is a cache warm the swap frame
