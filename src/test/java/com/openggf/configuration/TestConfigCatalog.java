@@ -150,6 +150,11 @@ class TestConfigCatalog {
     @Test
     void launchProfileYamlEmitsAfterCrossGameAndBeforeDebug(@TempDir Path tempDir) throws Exception {
         SonicConfigurationService cfg = SonicConfigurationService.createStandalone(tempDir);
+        // The file lists only changed settings, so give each section one.
+        cfg.setConfigValue(SonicConfiguration.CROSS_GAME_FEATURES_ENABLED, true);
+        cfg.setConfigValue(SonicConfiguration.LAUNCH_S1_REWIND,
+                cfg.getDefaultValue(SonicConfiguration.LAUNCH_S1_REWIND));
+        cfg.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, true);
         cfg.saveConfig();
 
         String yaml = Files.readString(tempDir.resolve("config.yaml"));

@@ -113,6 +113,74 @@ public class ConfigMigrationService {
      * @param config The config map to migrate (modified in place)
      * @return true if any binding was copied
      */
+    /**
+     * Converts a legacy config.yaml that materialised every default into the
+     * sparse user-settings format, once.
+     *
+     * <p>Older builds copied the bundled template into the player's file and
+     * back-filled every registered default, so a value equal to the default
+     * cannot be told from a choice. Such keys are dropped: reads fall through
+     * to the same default, and a default that changes later then applies. The
+     * only defaults that changed before this format existed are listed in
+     * {@link #FORMER_DEFAULTS}; a key still holding its former default is
+     * dropped the same way. The caller stamps the file with
+     * {@link ConfigYamlWriter#FORMAT_KEY} so none of this runs again, which is
+     * what lets a player set a former default deliberately afterwards.
+     *
+     * @return true if any key was dropped
+     */
+    public boolean convertMaterialisedDefaults(
+            Map<String, Object> config, Map<String, Object> defaults) {
+        if (config == null) {
+            return false;
+        }
+        int dropped = 0;
+        for (SonicConfiguration key : ConfigCatalog.emitOrder()) {
+            Object value = config.get(key.name());
+            if (value == null) {
+                continue;
+            }
+            Object current = defaults.get(key.name());
+            String former = FORMER_DEFAULTS.get(key);
+            if ((current != null && sameValue(key, value, current))
+                    || (former != null && sameValue(key, value, former))) {
+                config.remove(key.name());
+                dropped++;
+            }
+        }
+        LOGGER.info("[ConfigMigration] Converted config.yaml to the sparse format; dropped "
+                + dropped + " materialised default(s)");
+        return dropped > 0;
+    }
+
+    /**
+     * Defaults that changed while config.yaml still materialised every value,
+     * keyed by the value the old template wrote. Closed: defaults that change
+     * after the sparse format need no entry here, because absent keys follow
+     * the code default on their own.
+     */
+    static final Map<SonicConfiguration, String> FORMER_DEFAULTS = Map.of(
+            SonicConfiguration.LOAD_TIME_SIMULATION, "NONE");
+
+    /** Compares a persisted value with a default in the key's own type. */
+    static boolean sameValue(SonicConfiguration key, Object value, Object reference) {
+        ConfigKeyMeta meta = ConfigCatalog.meta(key);
+        String a = String.valueOf(value).trim();
+        String b = String.valueOf(reference).trim();
+        return switch (meta.type()) {
+            case BOOL -> Boolean.parseBoolean(a) == Boolean.parseBoolean(b);
+            case INT, DOUBLE -> {
+                try {
+                    yield Double.parseDouble(a) == Double.parseDouble(b);
+                } catch (NumberFormatException e) {
+                    yield a.equals(b);
+                }
+            }
+            case KEY -> KeyChord.parse(value).equals(KeyChord.parse(reference));
+            case STRING, ENUM -> a.equals(b);
+        };
+    }
+
     public boolean migrateDeprecatedJumpBindings(Map<String, Object> config) {
         if (config == null) {
             return false;

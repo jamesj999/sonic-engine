@@ -1,5 +1,7 @@
-# OpenGGF configuration — grouped and documented.
-# Indentation is significant (YAML). This file is rewritten cleanly on save.
+# OpenGGF configuration — every setting with its default, grouped and documented.
+# This is the reference copy published as config.yaml.example. Your own
+# config.yaml holds only the settings you change; copy a line into it to set
+# one. Indentation is significant (YAML).
 
 # ── Display ──
 display:

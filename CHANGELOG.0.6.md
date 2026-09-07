@@ -1,5 +1,15 @@
 # OpenGGF 0.6 Changelog
 
+- `config.yaml` now holds only the settings you changed. Defaults live in the
+  program and are documented by `config.yaml.example`, so a default that
+  changes in a later build reaches every install that never set the key. A
+  file written by an older build, which copied every default into it, is
+  converted once on first load: values still at their default are dropped,
+  your changes are kept, and the file gains a `configFormat: 2` marker. The
+  `gameplay.loadTimeSimulation: NONE` those files carried was the old default
+  and is dropped too, so existing installs get the `FAST` pacing; set `NONE`
+  again afterwards and it stays.
+
 - The Sonic 3 & Knuckles title screen's Sonic animation waits for its frame art
   again: the ROM decompresses frames 8 to B synchronously inside the title loop
   and queues frame 7 ahead of it, so those frames overrun on hardware. The

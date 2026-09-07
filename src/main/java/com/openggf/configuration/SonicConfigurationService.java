@@ -33,6 +33,8 @@ public class SonicConfigurationService {
 	private boolean loadedFromExistingFile;
 	private boolean migratedFromLegacyJson;
 	private boolean defaultInsertedSinceLastApply;
+	/** Whether the loaded file already declared the sparse user-settings format. */
+	private boolean sparseFormatDeclared;
 	private final Path configDirectoryOverride;
 	private final ConfigFileReader yamlReader;
 	private final Map<String, Object> sessionOverrides = new HashMap<>();
@@ -99,19 +101,13 @@ public class SonicConfigurationService {
 			}
 		}
 
+		boolean legacyMaterialisedFile = loadedFromExistingFile && !sparseFormatDeclared;
 		if (config == null) {
-			try (InputStream is = getClass().getResourceAsStream("/config.yaml")) {
-				if (is != null) {
-					Map<String, Object> nested = new YAMLMapper().readValue(is, MAP_TYPE);
-					config = flattenAndWarn(nested);
-				} else {
-					LOGGER.log(Level.WARNING, "Could not find config.yaml, using defaults.");
-					config = new HashMap<>();
-				}
-			} catch (IOException e) {
-				LOGGER.log(Level.WARNING, "Failed to load config.yaml from classpath", e);
-				config = new HashMap<>();
-			}
+			// A fresh install starts with no user settings at all: every read
+			// falls through to the registered default, and the bundled
+			// template is published beside the file as config.yaml.example
+			// for reference rather than copied into it.
+			config = new HashMap<>();
 		}
 
 		applySessionOutputOverrides();
@@ -141,10 +137,14 @@ public class SonicConfigurationService {
 			configChanged = true;
 		}
 
-		boolean defaultsInserted = applyDefaults();
+		boolean renamedKeys = applyDefaults();
 		validateEnumeratedValues();
+		if (legacyMaterialisedFile
+				&& migrationService.convertMaterialisedDefaults(config, defaults)) {
+			configChanged = true;
+		}
 
-		if (configChanged || migratedFromLegacyJson || (loadedFromExistingFile && defaultsInserted)) {
+		if (configChanged || renamedKeys || migratedFromLegacyJson || legacyMaterialisedFile) {
 			saveConfig();
 		}
 		if (migratedFromLegacyJson) {
@@ -389,7 +389,7 @@ public class SonicConfigurationService {
 		if (config != null && config.containsKey(sonicConfiguration.name())) {
 			return config.get(sonicConfiguration.name());
 		}
-		return null;
+		return defaults.get(sonicConfiguration.name());
 	}
 
 	private boolean hasExplicitValue(SonicConfiguration sonicConfiguration) {
@@ -463,6 +463,9 @@ public class SonicConfigurationService {
 	/** Reads an int from the persisted {@code config} map only, bypassing the transient overlay. */
 	private int persistedInt(SonicConfiguration key, int fallback) {
 		Object v = (config != null) ? config.get(key.name()) : null;
+		if (v == null) {
+			v = defaults.get(key.name());
+		}
 		if (v instanceof Number n) {
 			return n.intValue();
 		}
@@ -620,10 +623,8 @@ public class SonicConfigurationService {
 				Object fallback = defaults.get(key.name());
 				LOGGER.warning("Invalid value '" + value + "' for " + meta.path()
 						+ "; allowed " + meta.allowedValues() + ". Defaulting to '" + fallback + "'.");
-				if (fallback != null) {
-					config.put(key.name(), fallback);
-					invalidateResolvedCaches();
-				}
+				config.remove(key.name());
+				invalidateResolvedCaches();
 			}
 		}
 	}
@@ -828,14 +829,12 @@ public class SonicConfigurationService {
 		}
 	}
 
+	/**
+	 * Registers a default. Defaults are never copied into the user map: the
+	 * file only ever holds settings the player set, so a default that changes
+	 * in a later build applies to every install that never touched the key.
+	 */
 	private void putDefault(SonicConfiguration key, Object value) {
-		if (config == null) {
-			config = new HashMap<>();
-		}
-		if (!config.containsKey(key.name())) {
-			config.put(key.name(), value);
-			defaultInsertedSinceLastApply = true;
-		}
 		defaults.put(key.name(), value);
 	}
 
@@ -845,6 +844,9 @@ public class SonicConfigurationService {
 
 	private Map<String, Object> readYamlFlat(File file) throws IOException {
 		Map<String, Object> nested = new YAMLMapper().readValue(file, MAP_TYPE);
+		Object format = nested.remove(ConfigYamlWriter.FORMAT_KEY);
+		sparseFormatDeclared = format != null
+				&& String.valueOf(format).trim().equals(String.valueOf(ConfigYamlWriter.SPARSE_FORMAT));
 		return flattenAndWarn(nested);
 	}
 

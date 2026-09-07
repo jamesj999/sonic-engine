@@ -1,15 +1,27 @@
 # Configuration Reference
 
-All settings live in `config.yaml` in the working directory (next to the JAR). The bundled
-`src/main/resources/config.yaml` is written to **`config.yaml.example`** alongside it on
-every run, so the fully commented current template — including the worked ffmpeg recipes —
-is always there to read or copy values from. Your own `config.yaml` is never overwritten by
-it; once written it holds your values and does not regain later comments or new keys.
+Settings live in `config.yaml` in the working directory (next to the JAR), and that file
+holds **only the settings you have changed**. Every other setting reads its built-in
+default, so a default that changes in a later build applies to every install that never
+touched the key. The bundled `src/main/resources/config.yaml` documents every setting with
+its default and is written to **`config.yaml.example`** alongside your file on every run;
+copy a line from it into `config.yaml` to change that setting. Your own `config.yaml` is
+never overwritten by the example.
 
-`src/main/resources/config.yaml` is used as the default template. On first run, a legacy
-`config.json` is automatically migrated to `config.yaml` and the original is backed up to
-`config.json.bak`. Keys are now grouped into nested YAML sections rather than being flat
-enum names.
+The file opens with `configFormat: 2`, which marks this sparse format. A `config.yaml`
+written by an older build (one that copied every default into it) is converted once on
+first load: keys still at their default are dropped, keys you changed are kept, and the
+marker is written. One default changed before this format existed —
+`gameplay.loadTimeSimulation` moved from `NONE` to `FAST` — so that value is treated as
+the former default during the conversion; set `NONE` again afterwards if you want it and
+it stays. On first run, a legacy `config.json` is migrated to `config.yaml` and backed up
+to `config.json.bak`. Keys are grouped into nested YAML sections rather than flat enum
+names.
+
+**Changing a default** (maintainers): change the `putDefault` line in
+`SonicConfigurationService`, the value in `src/main/resources/config.yaml`, and the row in
+this file. Nothing else: no migration, no version bump. `TestSparseUserConfig` fails if the
+bundled template and the registered default disagree.
 
 Key bindings accept either **GLFW key codes** (integers) or human-readable key names such as
 `"SPACE"`, `"Q"`, and `"GLFW_KEY_F9"`. See the

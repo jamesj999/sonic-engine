@@ -732,6 +732,14 @@ Special-stage unit, headless and replay suites pass across the three games,
 the ordinary suite and guards pass, and every run-chain failure is identical
 to the pre-merge develop.
 
+`config.yaml` now holds only the settings you changed. Defaults live in the
+program and are documented by `config.yaml.example`, so a default that changes
+in a later build reaches every install that never set the key, with no
+migration or version bump; changing one is three edits and a guard test keeps
+the example honest. Files written by older builds are converted once on load,
+keeping your changes and dropping materialised defaults, including the former
+`loadTimeSimulation: NONE`. The ordinary suite (16994) and guards (610) pass.
+
 The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
 identified release skip-classification and trace-policy mismatches. The
 [remediation record](docs/architecture/validation/2026-09-06-release-gates.md)
