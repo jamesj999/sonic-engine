@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSLASH;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_BRACKET;
@@ -46,6 +47,7 @@ class TestPlaybackKeyDefaultsUnbound {
         SonicConfigurationService config = SonicConfigurationService.createStandalone(tempDir);
 
         assertEquals("OFF", config.getString(SonicConfiguration.DISPLAY_SHADER_SELECTION));
-        assertTrue(Files.readString(configYaml).contains("shaderSelection: \"OFF\""));
+        // Normalised to the default, the key leaves the sparse file altogether.
+        assertFalse(Files.readString(configYaml).contains("shaderSelection"));
     }
 }

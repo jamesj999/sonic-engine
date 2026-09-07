@@ -17,11 +17,14 @@ class TestConfigServiceYamlRoundTrip {
     void saveWritesGroupedYaml() throws Exception {
         Path yaml = tempDir.resolve("config.yaml");
         SonicConfigurationService svc = SonicConfigurationService.createStandalone(tempDir);
+        svc.setConfigValue(SonicConfiguration.FPS, 50);
+        svc.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, true);
         svc.saveConfig();
         assertTrue(Files.exists(yaml), "saveConfig must write config.yaml");
         String text = Files.readString(yaml);
         assertTrue(text.contains("display:"), text);
         assertTrue(text.contains("debug:"), text);
+        assertFalse(text.contains("audio:"), "sections without a user setting are not written");
         assertFalse(text.contains("SCREEN_WIDTH_PIXELS"), "derived keys must not be persisted");
     }
 

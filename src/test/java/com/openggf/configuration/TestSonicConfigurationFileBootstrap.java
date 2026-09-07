@@ -32,7 +32,7 @@ class TestSonicConfigurationFileBootstrap {
     }
 
     @Test
-    void getInstance_backfillsMissingDefaultsIntoExistingFile() throws IOException {
+    void existingValuesAreKeptAndDefaultsAreNeverBackfilled() throws IOException {
         Path configPath = tempDir.resolve("config.yaml");
 
         // Write a minimal nested YAML: UP lives at input.player1.up
@@ -49,14 +49,18 @@ class TestSonicConfigurationFileBootstrap {
         Map<String, Object> persisted = readFlatYaml(configPath);
         assertEquals("W", persisted.get(SonicConfiguration.UP.name()),
                 "Existing value should be preserved");
-        assertEquals(640, ((Number) persisted.get(SonicConfiguration.SCREEN_WIDTH.name())).intValue(),
-                "Missing default should be backfilled into the file");
-        assertEquals("DOWN", persisted.get(SonicConfiguration.DOWN.name()),
-                "Missing key binding default should be backfilled into the file");
-        assertTrue(persisted.containsKey(SonicConfiguration.DEFAULT_ROM.name()),
-                "Missing string default should be backfilled into the file");
-        assertEquals(service.getInt(SonicConfiguration.SCREEN_WIDTH),
-                ((Number) persisted.get(SonicConfiguration.SCREEN_WIDTH.name())).intValue());
+        assertFalse(persisted.containsKey(SonicConfiguration.SCREEN_WIDTH.name()),
+                "defaults are never written into the player's file");
+        assertFalse(persisted.containsKey(SonicConfiguration.DOWN.name()),
+                "key binding defaults are never written into the player's file");
+        assertFalse(persisted.containsKey(SonicConfiguration.DEFAULT_ROM.name()),
+                "string defaults are never written into the player's file");
+        assertEquals(640, service.getInt(SonicConfiguration.SCREEN_WIDTH),
+                "an absent key reads its registered default");
+        assertEquals("DOWN", service.getString(SonicConfiguration.DOWN));
+        assertTrue(Files.readString(configPath).contains(
+                ConfigYamlWriter.FORMAT_KEY + ": " + ConfigYamlWriter.SPARSE_FORMAT),
+                "the converted file declares the sparse format");
     }
 
     @Test
@@ -72,24 +76,23 @@ class TestSonicConfigurationFileBootstrap {
         assertTrue(Files.exists(configPath), "First startup should materialize config.yaml");
 
         Map<String, Object> savedConfig = readFlatYaml(configPath);
-        assertEquals(640, ((Number) savedConfig.get(SonicConfiguration.SCREEN_WIDTH.name())).intValue());
-        // SCREEN_WIDTH_PIXELS is DERIVED — ConfigYamlWriter never persists it
-        assertFalse(savedConfig.containsKey(SonicConfiguration.SCREEN_WIDTH_PIXELS.name()),
-                "SCREEN_WIDTH_PIXELS is derived and must not be persisted");
-        assertEquals(service.getString(SonicConfiguration.DEFAULT_ROM),
-                savedConfig.get(SonicConfiguration.DEFAULT_ROM.name()));
-        assertEquals("Q", savedConfig.get(SonicConfiguration.FRAME_STEP_KEY.name()));
-        assertEquals("", savedConfig.get(SonicConfiguration.PLAYBACK_MOVIE_PATH.name()));
-        assertEquals(Boolean.FALSE, savedConfig.get(SonicConfiguration.LIVE_REWIND_ENABLED.name()));
-        assertEquals(Boolean.FALSE, savedConfig.get(SonicConfiguration.LIVE_REWIND_DETERMINISM_AUDIT.name()));
-        assertEquals("R", savedConfig.get(SonicConfiguration.LIVE_REWIND_KEY.name()));
-        assertEquals(Boolean.TRUE, savedConfig.get(SonicConfiguration.TITLE_SCREEN_ON_STARTUP.name()));
-        assertEquals(Boolean.FALSE, savedConfig.get(SonicConfiguration.LEVEL_SELECT_ON_STARTUP.name()));
-        assertEquals(Boolean.TRUE, savedConfig.get(SonicConfiguration.MASTER_TITLE_SCREEN_ON_STARTUP.name()));
-        assertTrue(savedConfig.containsKey(SonicConfiguration.DEBUG_VIEW_ENABLED.name()));
-        assertEquals(Boolean.FALSE, savedConfig.get(SonicConfiguration.DISCORD_RICH_PRESENCE_ENABLED.name()));
-        assertEquals(Boolean.TRUE, savedConfig.get(SonicConfiguration.DISCORD_RICH_PRESENCE_SHOW_TIMER.name()));
-        assertEquals(Boolean.TRUE, savedConfig.get(SonicConfiguration.DISCORD_RICH_PRESENCE_SHOW_ZONE.name()));
+        assertTrue(savedConfig.isEmpty(),
+                "a fresh install writes no settings: every key reads its default");
+        assertEquals(640, service.getInt(SonicConfiguration.SCREEN_WIDTH));
+        assertFalse(service.getString(SonicConfiguration.DEFAULT_ROM).isEmpty());
+        assertTrue(Files.readString(configPath).contains(ConfigYamlWriter.FORMAT_KEY));
+        // The registered defaults are what every unset key reads.
+        assertEquals("Q", service.getString(SonicConfiguration.FRAME_STEP_KEY));
+        assertEquals("", service.getString(SonicConfiguration.PLAYBACK_MOVIE_PATH));
+        assertFalse(service.getBoolean(SonicConfiguration.LIVE_REWIND_ENABLED));
+        assertFalse(service.getBoolean(SonicConfiguration.LIVE_REWIND_DETERMINISM_AUDIT));
+        assertEquals("R", service.getString(SonicConfiguration.LIVE_REWIND_KEY));
+        assertTrue(service.getBoolean(SonicConfiguration.TITLE_SCREEN_ON_STARTUP));
+        assertFalse(service.getBoolean(SonicConfiguration.LEVEL_SELECT_ON_STARTUP));
+        assertTrue(service.getBoolean(SonicConfiguration.MASTER_TITLE_SCREEN_ON_STARTUP));
+        assertFalse(service.getBoolean(SonicConfiguration.DISCORD_RICH_PRESENCE_ENABLED));
+        assertTrue(service.getBoolean(SonicConfiguration.DISCORD_RICH_PRESENCE_SHOW_TIMER));
+        assertTrue(service.getBoolean(SonicConfiguration.DISCORD_RICH_PRESENCE_SHOW_ZONE));
     }
 
     @Test
@@ -107,8 +110,8 @@ class TestSonicConfigurationFileBootstrap {
         assertEquals(malformed, Files.readString(corruptPath),
                 "quarantine copy must preserve the unreadable config bytes");
         assertTrue(Files.exists(configPath), "saving should create a fresh config.yaml");
-        Map<String, Object> savedConfig = readFlatYaml(configPath);
-        assertEquals("s2", savedConfig.get(SonicConfiguration.DEFAULT_ROM.name()));
+        assertTrue(readFlatYaml(configPath).isEmpty(), "a fresh file carries no settings");
+        assertEquals("s2", service.getString(SonicConfiguration.DEFAULT_ROM));
     }
 
     @Test

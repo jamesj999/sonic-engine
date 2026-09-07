@@ -102,6 +102,11 @@ supporting artifacts with the task. Do not create loose planning documents.
 
 ### 6. Configuration — `CONFIGURATION.md`  →  trailer `Configuration-Docs`
 
+- **Changing a default** needs exactly three edits: `putDefault` in
+  `SonicConfigurationService`, the value in `src/main/resources/config.yaml`, and the
+  row here. Player files hold only changed settings, so no migration or version bump
+  exists; `TestSparseUserConfig` fails when the template and the default disagree.
+
 - **REQUIRED** if configuration behavior changed: new/changed `config.yaml` flag,
   key binding, or feature toggle. Update the file, set
   `Configuration-Docs: updated`, and stage it.
