@@ -1085,6 +1085,30 @@ public final class SmpsDriverSession implements AutoCloseable {
         return configuration.statefulCommandPolicy().suppressesSfxDuringOverride();
     }
 
+    /** See {@link SmpsStatefulCommandPolicy#releasesSfxSuppressionAtRestore()}. */
+    public boolean releasesSfxSuppressionAtRestore() {
+        requireInstalled();
+        return configuration.statefulCommandPolicy()
+                .releasesSfxSuppressionAtRestore();
+    }
+
+    /** See {@link SmpsStatefulCommandPolicy#stopsSfxWhenOverrideStarts()}. */
+    public boolean stopsSfxWhenOverrideStarts() {
+        requireInstalled();
+        return configuration.statefulCommandPolicy().stopsSfxWhenOverrideStarts();
+    }
+
+    /**
+     * Whether the music song is fading in: the engine's {@code f_fadein_flag}
+     * / {@code FadeInFlag}, which lives on the song's own fade state in the
+     * S1 and S2 drivers.
+     */
+    public boolean isMusicFadingIn() {
+        requireInstalled();
+        SmpsSequencer music = driver.firstMusicSequencer();
+        return music != null && music.isFadingIn();
+    }
+
     /**
      * Applies the host policy's complete global stop and clears the matching
      * logical save area at the same physical ownership boundary. Package

@@ -1616,7 +1616,11 @@ request scheduling. Full parity and human listening sign-off remain open.
   timing keeps ticking once a song's tracks finish, and a tied note continues stepping its volume
   envelope instead of freezing a PSG channel's shimmer. Returning from a 1-up or similar jingle now
   silences and rests channels the way each game's sound program does before fading music back in,
-  removing several seconds of distorted music.
+  removing several seconds of distorted music. In Sonic 1 and Sonic 2 the same restore also reloads
+  every FM channel's instrument, as the original does, because the jingle left its own instruments
+  on the chip; the engine had done that only on a path the game no longer uses, so the level music
+  came back on the jingle's instruments until each channel next changed by itself. A second extra
+  life during a restore's fade in no longer stacks a second attenuation on the first.
 - **Speed shoes tempo:** the tempo speed-up works again in all three games after immutable
   presentation assets started retaining driver cadence mode, and the tempo drop on expiry happens on
   the same frame as the speed restoration rather than one driver update late.
@@ -1706,6 +1710,12 @@ request scheduling. Full parity and human listening sign-off remain open.
   effect's first update, fixing a buzzing spindash release.
 - **S3K 1-up effect suppression:** new effects are discarded during the 1-up jingle without
   advancing ring stereo alternation, and are admitted again once music restoration begins.
+- **Sonic 1 and Sonic 2 1-up effect suppression:** new effects are refused for the same span the
+  original refuses them, through the jingle and the level music's fade back in, and Sonic 1 also
+  silences the effects already playing when the jingle starts. The block lifts when the fade in
+  completes or when an ordinary song replaces the jingle, and it survives a rewind and restore mid
+  fade. Previously only Sonic 3 & Knuckles suppressed them, so rings and jumps played over the
+  jingle and the fade.
 - **Special-stage rings alternate speakers in S3K:** raw ring effect ids sent directly by the Blue
   Sphere stage and by the Mega Chopper receive the same left and right alternation the driver
   applies. A blue-sphere contact no longer loses its request when the animation queue is full, and

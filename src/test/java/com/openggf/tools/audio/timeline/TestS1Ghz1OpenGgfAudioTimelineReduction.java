@@ -321,7 +321,7 @@ class TestS1Ghz1OpenGgfAudioTimelineReduction {
         return new AudioPresentationSnapshot(voiceId + 1, List.of(),
                 new AudioPresentationSnapshot.MusicSlotSnapshot(
                         musicId, AudioSourceDescriptor.baseMusic(musicId), voiceId),
-                overrideStack, null, 0, 0, 0, 0, false, false,
+                overrideStack, null, 0, 0, 0, 0, false, false, false,
                 false, 1, true,
                 new com.openggf.audio.smps.SmpsCoordFlagRuntimeState.Snapshot(0),
                 null, null);

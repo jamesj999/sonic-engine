@@ -136,6 +136,8 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
                 AudioVoiceRegistry.this.rendering;
         private final boolean sfxBlocked =
                 AudioVoiceRegistry.this.sfxBlocked;
+        private final boolean sfxBlockHeldThroughFadeIn =
+                AudioVoiceRegistry.this.sfxBlockHeldThroughFadeIn;
         private final boolean pendingRestore =
                 AudioVoiceRegistry.this.pendingRestore;
         private final boolean speedShoesEnabled =
@@ -240,6 +242,12 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     private boolean rendering;
     private boolean completionSweepRequired;
     private boolean sfxBlocked;
+    /**
+     * The S1/S2 {@code f_fadein_flag} half of the SFX block: the 1-up has
+     * handed back and the block now lasts only until the restored song's fade
+     * in completes. False while the jingle itself plays.
+     */
+    private boolean sfxBlockHeldThroughFadeIn;
     private boolean pendingRestore;
     private boolean speedShoesEnabled;
     private int speedMultiplier = 1;
@@ -316,6 +324,9 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         if (command instanceof ReplaceMusic replace) {
             replaceMusic(replace.music());
         } else if (command instanceof PushMusicOverride push) {
+            if (smpsSession != null && smpsSession.stopsSfxWhenOverrideStarts()) {
+                stopAllSfx();
+            }
             pushMusicOverride(push.music());
             blockOverrideSfx();
             sfxInstantiation.observeLifecycle(
@@ -415,6 +426,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
                     "SMPS SFX policy rejected " + source.assetKey());
             return null;
         }
+        releaseSfxBlockWhenFadeInEnds();
         if (sfxBlocked) {
             observeAdmissionQuarantined(
                     sfxInstantiation.rejectedAdmission(admission,
@@ -713,6 +725,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         completionSweepRequired = state.completionSweepRequired;
         rendering = state.rendering;
         sfxBlocked = state.sfxBlocked;
+        sfxBlockHeldThroughFadeIn = state.sfxBlockHeldThroughFadeIn;
         pendingRestore = state.pendingRestore;
         speedShoesEnabled = state.speedShoesEnabled;
         speedMultiplier = state.speedMultiplier;
@@ -788,6 +801,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     }
 
     public void beginRendering() {
+        releaseSfxBlockWhenFadeInEnds();
         assertOwnerThread();
         if (rendering) {
             throw new IllegalStateException("audio voice traversal already active");
@@ -795,6 +809,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         rendering = true;
         deferredRemovalCount = 0;
         completionSweepRequired = false;
+        releaseSfxBlockWhenFadeInEnds();
     }
 
     /** Services every live SMPS driver once at the outer-frame boundary. */
@@ -895,6 +910,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
                 psgMuteMask,
                 psgSoloMask,
                 sfxBlocked,
+                sfxBlockHeldThroughFadeIn,
                 pendingRestore,
                 speedShoesEnabled,
                 speedMultiplier,
@@ -997,6 +1013,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
             psgMuteMask = snapshot.psgMuteMask();
             psgSoloMask = snapshot.psgSoloMask();
             sfxBlocked = snapshot.sfxBlocked();
+            sfxBlockHeldThroughFadeIn = snapshot.sfxBlockHeldThroughFadeIn();
             pendingRestore = snapshot.pendingRestore();
             speedShoesEnabled = snapshot.speedShoesEnabled();
             speedMultiplier = snapshot.speedMultiplier();
@@ -1145,6 +1162,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         psgMuteMask = 0;
         psgSoloMask = 0;
         sfxBlocked = false;
+        sfxBlockHeldThroughFadeIn = false;
         pendingRestore = false;
         speedShoesEnabled = false;
         speedMultiplier = 1;
@@ -1162,22 +1180,63 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     public void setSfxBlocked(boolean blocked) {
         assertOwnerBoundary();
         sfxBlocked = blocked;
+        if (!blocked) {
+            sfxBlockHeldThroughFadeIn = false;
+        }
     }
 
     boolean areSfxRequestsBlocked() {
         assertOwnerBoundary();
+        releaseSfxBlockWhenFadeInEnds();
         return sfxBlocked;
     }
 
     private void blockOverrideSfx() {
         if (smpsSession != null && smpsSession.suppressesSfxDuringOverride()) {
             sfxBlocked = true;
+            sfxBlockHeldThroughFadeIn = false;
         }
     }
 
     private void releaseOverrideSfx() {
         if (smpsSession != null && smpsSession.suppressesSfxDuringOverride()) {
             sfxBlocked = false;
+            sfxBlockHeldThroughFadeIn = false;
+        }
+    }
+
+    /**
+     * The restore has brought the saved song back. S3K lifts the block here;
+     * S1 and S2 keep it until that song's fade in completes
+     * (see {@code SmpsStatefulCommandPolicy.releasesSfxSuppressionAtRestore}).
+     */
+    private void releaseOrHoldOverrideSfxAtRestore() {
+        if (smpsSession == null || !smpsSession.suppressesSfxDuringOverride()) {
+            return;
+        }
+        if (smpsSession.releasesSfxSuppressionAtRestore()) {
+            releaseOverrideSfx();
+        } else if (sfxBlocked) {
+            sfxBlockHeldThroughFadeIn = true;
+        }
+    }
+
+    /**
+     * Models S1's {@code DoFadeIn} and S2's {@code zUpdateFadeIn} clearing the
+     * fade-in flag once the counter has run down (s1.sounddriver.asm:1650,
+     * s2.sounddriver.asm:2740). The ROM clears it at the top of the service
+     * that follows the last step, ahead of that service's request cycle, so
+     * the engine evaluates it at each frame boundary and again at every SFX
+     * admission: a request that arrives after the fade has completed is
+     * admitted, whatever the flag said a frame earlier.
+     */
+    private void releaseSfxBlockWhenFadeInEnds() {
+        if (!sfxBlocked || !sfxBlockHeldThroughFadeIn || smpsSession == null) {
+            return;
+        }
+        if (!smpsSession.isMusicFadingIn()) {
+            sfxBlocked = false;
+            sfxBlockHeldThroughFadeIn = false;
         }
     }
 
@@ -1307,7 +1366,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         if (smpsSession != null) {
             smpsSession.fadeInRestoredMusic();
         }
-        releaseOverrideSfx();
+        releaseOrHoldOverrideSfxAtRestore();
         return true;
     }
 
@@ -1440,6 +1499,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     }
 
     private void admitSampleSfx(SampleVoiceDescriptor descriptor) {
+        releaseSfxBlockWhenFadeInEnds();
         if (sfxBlocked) {
             warnRejected(descriptor.voiceId(),
                     "sample SFX blocked at presentation boundary");

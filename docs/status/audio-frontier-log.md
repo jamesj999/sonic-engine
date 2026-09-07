@@ -27,6 +27,106 @@ defined by `com.openggf.tools.audio.parity`.
 
 <!-- entries are prepended below, newest first -->
 
+## 2026-09-07 - S1/S2: SFX are refused through the 1-up jingle and its fade in
+
+- **Worktree/branch:** `.worktrees/s1s2-1up-restore`,
+  `bugfix/ai-s1s2-1up-restore`, following the FM voice resend fix
+  (`212a71ec1`). Closes the gap that entry left open.
+- **What the ROM does.** `Sound_PlaySFX` / `Sound_PlaySpecial` and
+  `zPlaySound_CheckRing` refuse every SFX while the 1-up flag or the fade-in
+  flag is set (s1.sounddriver.asm:978-982, :1118-1122;
+  s2.sounddriver.asm:2118-2120). The extra-life load raises the first
+  (s1:784, s2:1712); `cfFadeInToPrevious` clears it and raises the second
+  (s1:2220-2222, s2:3150-3155); the fade-in stepper clears that one when the
+  counter reaches zero (s1:1650, s2:2740). An ordinary song load clears both
+  (`.bgmnot1up` s1:790, s2:1730; the RAM clear in `InitMusicPlayback` /
+  `zInitMusicPlayback`, s1:1498-1510, s2:2597-2623). S1's extra-life branch
+  also clears the playing bit on all six SFX tracks before the backup
+  (s1:769-774); S2 stops them through `zStopSoundEffects` on every song
+  (s2:1667-1672), which the request path already issued.
+- **What the engine did.** Only `Sonic3kStatefulCommandPolicy` suppressed
+  SFX during an override, and the registry lifted the block at the restore.
+  S2 had no stateful policy at all. Measured headlessly through
+  `presentFrame` before the fix: a jump requested five frames into the jingle
+  was admitted in both games, and again ten frames into the fade in; in S1 the
+  jump playing before the 1-up carried on under the jingle.
+- **The fix.** `SmpsStatefulCommandPolicy` gains
+  `releasesSfxSuppressionAtRestore` (S3K true, S1/S2 false) and
+  `stopsSfxWhenOverrideStarts` (S1 true). New `Sonic2StatefulCommandPolicy`
+  (`sonic2-commands-v1`). The registry keeps a second bit,
+  `sfxBlockHeldThroughFadeIn`, in the presentation snapshot: set at the
+  restore when the policy holds, cleared when the restored song's fade in is
+  no longer running. The clear is evaluated at each frame boundary and at
+  every SFX admission, because the ROM clears its flag at the top of the
+  service after the last step, ahead of that service's request cycle, and the
+  engine's sequencer fade completion lands after the registry's end-of-frame
+  hook.
+- **Tests.** Three cases added to `OneUpRestoreLivePathSupport`, run under
+  both ROMs: the pre-jingle SFX is stopped and requests during the jingle and
+  the fade in are refused, then admitted once the fade completes; a snapshot
+  round trip mid fade still releases at the end; an ordinary song during the
+  jingle releases at once. Ablating `suppressesSfxDuringOverride` in both
+  policies fails all three per game on the first block assertion.
+  `TestS3kOneUpRestoreRom` (release at restore) unchanged and green.
+- **Not modelled, recorded in known-discrepancies.md.** The refused request's
+  priority-latch clear (`zKillSFXPrio`, `.clear_sndprio`); the fade-in hold
+  over a jingle that had no song to save; S1 `StopAllSound` preserving
+  `f_1up_playing` across its RAM clear.
+
+
+## 2026-09-07 - S1/S2: the live 1-up restore never re-sent the FM voices
+
+- **Worktree/branch:** `.worktrees/s1s2-1up-restore`,
+  `bugfix/ai-s1s2-1up-restore`, from `develop` at `77c244548`. Reported in
+  game on both Sonic 1 and Sonic 2: the music does not come back properly
+  after an extra life.
+- **What was actually wrong.** `cfFadeInToPrevious` restores the backed-up
+  driver RAM and then, per playing FM track that no SFX owns, re-sends the
+  whole voice with the attenuated volume in its TL bytes: `SetVoice`
+  (s1.sounddriver.asm:2196-2200) and `zSetVoiceMusic`
+  (s2.sounddriver.asm:3111-3118). The chip is still holding the jingle's
+  instrument on every FM channel at that point. The engine's `REST_TRACKS`
+  branch of `SmpsSequencer.triggerFadeIn` rested and attenuated the tracks
+  but wrote only TL; the voice reload it relied on was
+  `refreshAllVoices` in `AbstractSmpsAudioBackend.doRestoreMusic`, which the
+  live path does not reach (`AudioManager.sendLiveBackendCommands` is false).
+  The S3K branch already resent its voices from the 2026-09-04 fix, which is
+  why S3K was not reported.
+- **Measured before the fix, headlessly through `presentFrame`.** The level
+  music came back with its positions and tempo intact, rested, attenuated by
+  28h, and faded in over 120 frames, so the restore itself was sound. The
+  chip writes on the restore frame were TL and PSG note-off only: no 30h-3Fh,
+  50h-9Fh or B0h-B2h register for any channel. The song resumed on the
+  jingle's algorithms, multipliers and envelopes with the level music's TLs
+  laid over them, until each track's own next voice change.
+- **The fix.** The `REST_TRACKS` branch now follows the routine's own order:
+  playing tracks only, rest, add the fade depth, then `refreshInstrument` on
+  FM tracks that are not overridden and a note-off on PSG tracks, with no
+  separate TL write. The depth is `28h` less the fade-in counter the restored
+  copy carries (s1:2186, s2:3099), so a second extra life during a running
+  restore fade no longer stacks a full attenuation on the first.
+- **Tests.** New `TestS1OneUpRestoreRom` and `TestS2OneUpRestoreRom` drive
+  the live path and assert the song resumes rather than restarts, that the
+  restore frame carries a B0h+ch write for every playing FM track and a
+  note-off for every PSG track, and that the fade runs back to the song's
+  own volume. Ablating the resend (TL write in its place) fails both on
+  "the restore must re-send FM0's voice". `TestS3kOneUpRestoreRom` and
+  `TestSmpsFadeInRestoreDriverModes` stay green.
+- **Oracle unchanged.** `TestS2OneUpRestoreDriverStateOracle` still reports
+  the window measurement-only at the same points as when it was committed:
+  state at tick 2880 (`PSG1.volFlutter`), writes at tick 0. The 1-up in that
+  window is at 2875, so neither frontier reaches the restore; it cannot see
+  this fix either way, and the harness behind it runs the legacy backend.
+- **Still open, deliberately not done here.** On the live path S1 and S2
+  admit new SFX during the jingle and during the fade in. The ROM refuses
+  them and clears the priority latch while `f_1up_playing` or
+  `f_fadein_flag` is set (`Sound_PlaySFX`, s1.sounddriver.asm:978-982;
+  `zPlaySound_CheckRing`, s2.sounddriver.asm:2118-2120). Only the S3K
+  session policy suppresses SFX during an override, and nothing on the live
+  path releases a block at fade completion. That is a separate gap from the
+  reported one and needs its own release hook.
+
+
 ## 2026-09-05 - S3K diagnostic ring dispatch advances service 2357 to 2409
 
 - **Before:** service 2357, `MUS_FM4.overridden`, reference `false`, engine

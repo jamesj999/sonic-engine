@@ -806,6 +806,8 @@ class TestAudioPresentationSnapshotParity {
         assertEquals(expected.psgMuteMask(), actual.psgMuteMask());
         assertEquals(expected.psgSoloMask(), actual.psgSoloMask());
         assertEquals(expected.sfxBlocked(), actual.sfxBlocked());
+        assertEquals(expected.sfxBlockHeldThroughFadeIn(),
+                actual.sfxBlockHeldThroughFadeIn());
         assertEquals(expected.pendingRestore(), actual.pendingRestore());
         assertEquals(expected.speedShoesEnabled(),
                 actual.speedShoesEnabled());
