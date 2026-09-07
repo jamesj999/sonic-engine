@@ -8,6 +8,7 @@ import com.openggf.audio.rewind.SmpsSequencerSnapshot;
 import com.openggf.audio.rewind.SmpsTrackSnapshot;
 import com.openggf.game.GameServices;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -160,36 +161,126 @@ public class SmpsSequencer implements CoordFlagContext {
      */
     public static final class LiveCommandMutationToken {
         private final SmpsSequencer owner;
-        private final SmpsSequencerSnapshot snapshot;
-        private final Track[] tracks;
-        private final AbstractSmpsData fallbackVoiceData;
-        private final SmpsSourceDescriptor sourceDescriptor;
-        private final SourceDescriptorTrust sourceDescriptorTrust;
-        private final Runnable onFadeComplete;
+        /** The live {@link Track} objects at capture, restored in place on rollback. */
+        private Track[] identities = new Track[10];
+        /** Pooled storage tracks holding each identity's captured state. */
+        private Track[] storage = new Track[10];
+        private int trackCount;
+        private boolean inUse;
+        private Region region;
+        private boolean speedShoes;
+        private boolean sfxMode;
+        private int normalTempo;
+        private int commData;
+        private boolean fm6DacOff;
+        private int maxTicks;
+        private float pitch;
+        private int sfxPriority;
+        private boolean specialSfx;
+        private boolean isSfx;
+        private int psgLatchChannel;
+        private int speedMultiplier;
+        private int speedupTimeout;
+        private int fadeSteps;
+        private int fadeDelayInit;
+        private int fadeDelayCounter;
+        private int fadeAddFm;
+        private int fadeAddPsg;
+        private boolean fadeActive;
+        private boolean fadeOut;
+        private double sampleRate;
+        private double samplesPerFrame;
+        private double sampleCounter;
+        private int tempoWeight;
+        private int tempoAccumulator;
+        private int dividingTiming;
+        private boolean primed;
+        private AbstractSmpsData fallbackVoiceData;
+        private SmpsSourceDescriptor sourceDescriptor;
+        private SourceDescriptorTrust sourceDescriptorTrust;
+        private Runnable onFadeComplete;
 
-        private LiveCommandMutationToken(
-                SmpsSequencer owner,
-                SmpsSequencerSnapshot snapshot,
-                Track[] tracks,
-                AbstractSmpsData fallbackVoiceData,
-                SmpsSourceDescriptor sourceDescriptor,
-                SourceDescriptorTrust sourceDescriptorTrust,
-                Runnable onFadeComplete) {
+        private LiveCommandMutationToken(SmpsSequencer owner) {
             this.owner = owner;
-            this.snapshot = snapshot;
-            this.tracks = tracks;
-            this.fallbackVoiceData = fallbackVoiceData;
-            this.sourceDescriptor = sourceDescriptor;
-            this.sourceDescriptorTrust = sourceDescriptorTrust;
-            this.onFadeComplete = onFadeComplete;
+        }
+
+        private void ensureCapacity(int count) {
+            if (identities.length < count) {
+                int grown = Math.max(count, identities.length * 2);
+                identities = Arrays.copyOf(identities, grown);
+                storage = Arrays.copyOf(storage, grown);
+            }
         }
     }
 
+    /**
+     * Free tokens for {@link #captureLiveCommandMutation()}. A token returns
+     * here from {@link #rollbackLiveCommandMutation} or
+     * {@link #releaseLiveCommandMutation}; one that is dropped without either
+     * is simply not reused, so pooling never affects correctness, only
+     * allocation. Callers capture one token per outstanding mutation, so a
+     * token is never shared between two live mutations.
+     */
+    private final ArrayDeque<LiveCommandMutationToken> liveTokenPool = new ArrayDeque<>();
+
+    /**
+     * Captures the state {@link #rollbackLiveCommandMutation} restores. The
+     * token and its per-track storage are pooled and refilled in place: the
+     * session captures one per frame, and a fresh immutable snapshot per
+     * capture was the largest steady-state garbage source on the audio path.
+     */
     public LiveCommandMutationToken captureLiveCommandMutation() {
-        return new LiveCommandMutationToken(
-                this, captureSnapshot(), tracks.toArray(Track[]::new),
-                fallbackVoiceData,
-                sourceDescriptor, sourceDescriptorTrust, onFadeComplete);
+        LiveCommandMutationToken token = liveTokenPool.pollFirst();
+        if (token == null) {
+            token = new LiveCommandMutationToken(this);
+        }
+        token.inUse = true;
+        token.region = region;
+        token.speedShoes = speedShoes;
+        token.sfxMode = sfxMode;
+        token.normalTempo = normalTempo;
+        token.commData = commData;
+        token.fm6DacOff = fm6DacOff;
+        token.maxTicks = maxTicks;
+        token.pitch = pitch;
+        token.sfxPriority = sfxPriority;
+        token.specialSfx = specialSfx;
+        token.isSfx = isSfx;
+        token.psgLatchChannel = psgLatchChannel;
+        token.speedMultiplier = speedMultiplier;
+        token.speedupTimeout = speedupTimeout;
+        token.fadeSteps = fadeState.steps;
+        token.fadeDelayInit = fadeState.delayInit;
+        token.fadeDelayCounter = fadeState.delayCounter;
+        token.fadeAddFm = fadeState.addFm;
+        token.fadeAddPsg = fadeState.addPsg;
+        token.fadeActive = fadeState.active;
+        token.fadeOut = fadeState.fadeOut;
+        token.sampleRate = sampleRate;
+        token.samplesPerFrame = samplesPerFrame;
+        token.sampleCounter = sampleCounter;
+        token.tempoWeight = tempoWeight;
+        token.tempoAccumulator = tempoAccumulator;
+        token.dividingTiming = dividingTiming;
+        token.primed = primed;
+        token.fallbackVoiceData = fallbackVoiceData;
+        token.sourceDescriptor = sourceDescriptor;
+        token.sourceDescriptorTrust = sourceDescriptorTrust;
+        token.onFadeComplete = onFadeComplete;
+        int count = tracks.size();
+        token.ensureCapacity(count);
+        for (int index = 0; index < count; index++) {
+            Track track = tracks.get(index);
+            Track backup = token.storage[index];
+            if (backup == null) {
+                backup = new Track(0, track.type, 0);
+                token.storage[index] = backup;
+            }
+            copyTrack(track, backup);
+            token.identities[index] = track;
+        }
+        token.trackCount = count;
+        return token;
     }
 
     public void rollbackLiveCommandMutation(
@@ -199,15 +290,42 @@ public class SmpsSequencer implements CoordFlagContext {
             throw new IllegalArgumentException(
                     "live command token belongs to another sequencer");
         }
-        restoreSnapshot(token.snapshot);
-        if (token.tracks.length != token.snapshot.tracks().size()) {
+        if (!token.inUse) {
             throw new IllegalStateException(
-                    "live rollback track count changed");
+                    "live command token was already rolled back or released");
         }
+        region = token.region;
+        speedShoes = token.speedShoes;
+        sfxMode = token.sfxMode;
+        normalTempo = token.normalTempo;
+        commData = token.commData;
+        fm6DacOff = token.fm6DacOff;
+        maxTicks = token.maxTicks;
+        pitch = token.pitch;
+        sfxPriority = token.sfxPriority;
+        specialSfx = token.specialSfx;
+        isSfx = token.isSfx;
+        psgLatchChannel = token.psgLatchChannel;
+        speedMultiplier = token.speedMultiplier;
+        speedupTimeout = token.speedupTimeout;
+        fadeState.steps = token.fadeSteps;
+        fadeState.delayInit = token.fadeDelayInit;
+        fadeState.delayCounter = token.fadeDelayCounter;
+        fadeState.addFm = token.fadeAddFm;
+        fadeState.addPsg = token.fadeAddPsg;
+        fadeState.active = token.fadeActive;
+        fadeState.fadeOut = token.fadeOut;
+        sampleRate = token.sampleRate;
+        samplesPerFrame = token.samplesPerFrame;
+        sampleCounter = token.sampleCounter;
+        tempoWeight = token.tempoWeight;
+        tempoAccumulator = token.tempoAccumulator;
+        dividingTiming = token.dividingTiming;
+        primed = token.primed;
         tracks.clear();
-        for (int index = 0; index < token.tracks.length; index++) {
-            Track track = token.tracks[index];
-            restoreTrack(track, token.snapshot.tracks().get(index));
+        for (int index = 0; index < token.trackCount; index++) {
+            Track track = token.identities[index];
+            copyTrack(token.storage[index], track);
             tracks.add(track);
         }
         fallbackVoiceData = token.fallbackVoiceData;
@@ -215,6 +333,124 @@ public class SmpsSequencer implements CoordFlagContext {
         sourceDescriptor = token.sourceDescriptor;
         sourceDescriptorTrust = token.sourceDescriptorTrust;
         onFadeComplete = token.onFadeComplete;
+        releaseLiveCommandMutation(token);
+    }
+
+    /** Returns a committed token to the pool; no-op for one already rolled back or released. */
+    public void releaseLiveCommandMutation(LiveCommandMutationToken token) {
+        Objects.requireNonNull(token, "token");
+        if (token.owner != this) {
+            throw new IllegalArgumentException(
+                    "live command token belongs to another sequencer");
+        }
+        if (!token.inUse) {
+            return;
+        }
+        token.inUse = false;
+        Arrays.fill(token.identities, 0, token.trackCount, null);
+        token.fallbackVoiceData = null;
+        token.sourceDescriptor = null;
+        token.onFadeComplete = null;
+        token.trackCount = 0;
+        liveTokenPool.addFirst(token);
+    }
+
+    /**
+     * Copies the state {@link SmpsTrackSnapshot} carries from one track to
+     * another. Program data references ({@code voiceData}, {@code envData},
+     * {@code modEnvData}, {@code fmVolEnvData}) are shared: they are replaced
+     * as whole arrays and never written in place, so a live rollback restores
+     * the same content by restoring the reference. The scratch, stack and
+     * counter arrays are copied by content.
+     */
+    private static void copyTrack(Track from, Track to) {
+        to.pos = from.pos;
+        to.type = from.type;
+        to.channelId = from.channelId;
+        to.duration = from.duration;
+        to.note = from.note;
+        to.active = from.active;
+        to.overridden = from.overridden;
+        to.rawDuration = from.rawDuration;
+        to.scaledDuration = from.scaledDuration;
+        to.fill = from.fill;
+        to.fillCounter = from.fillCounter;
+        to.resting = from.resting;
+        to.keyOffset = from.keyOffset;
+        to.volumeOffset = from.volumeOffset;
+        to.tieNext = from.tieNext;
+        to.pan = from.pan;
+        to.ams = from.ams;
+        to.fms = from.fms;
+        to.voiceData = from.voiceData;
+        System.arraycopy(from.voiceScratch, 0, to.voiceScratch, 0, to.voiceScratch.length);
+        to.voiceId = from.voiceId;
+        to.baseFnum = from.baseFnum;
+        to.baseBlock = from.baseBlock;
+        if (to.loopCounters.length != from.loopCounters.length) {
+            to.loopCounters = new int[from.loopCounters.length];
+        }
+        System.arraycopy(from.loopCounters, 0, to.loopCounters, 0, from.loopCounters.length);
+        to.loopTarget = from.loopTarget;
+        System.arraycopy(from.returnStack, 0, to.returnStack, 0, to.returnStack.length);
+        to.returnSp = from.returnSp;
+        to.dividingTiming = from.dividingTiming;
+        to.modDelay = from.modDelay;
+        to.modDelayInit = from.modDelayInit;
+        to.modRate = from.modRate;
+        to.modDelta = from.modDelta;
+        to.modSteps = from.modSteps;
+        to.modStepsFull = from.modStepsFull;
+        to.modPendingDelayInit = from.modPendingDelayInit;
+        to.modPendingRate = from.modPendingRate;
+        to.modPendingDelta = from.modPendingDelta;
+        to.modPendingSteps = from.modPendingSteps;
+        to.modPendingStepsFull = from.modPendingStepsFull;
+        to.modRateCounter = from.modRateCounter;
+        to.modStepCounter = from.modStepCounter;
+        to.modAccumulator = from.modAccumulator;
+        to.modCurrentDelta = from.modCurrentDelta;
+        to.modEnabled = from.modEnabled;
+        to.customModEnabled = from.customModEnabled;
+        to.detune = from.detune;
+        to.modEnvId = from.modEnvId;
+        to.modEnvData = from.modEnvData;
+        to.modEnvPos = from.modEnvPos;
+        to.modEnvMult = from.modEnvMult;
+        to.modEnvCache = from.modEnvCache;
+        to.modEnvHold = from.modEnvHold;
+        to.rawFreqMode = from.rawFreqMode;
+        to.rawFrequency = from.rawFrequency;
+        to.instrumentId = from.instrumentId;
+        to.noiseMode = from.noiseMode;
+        to.psgNoiseParam = from.psgNoiseParam;
+        to.decayOffset = from.decayOffset;
+        to.decayTimer = from.decayTimer;
+        to.envData = from.envData;
+        to.envPos = from.envPos;
+        to.envValue = from.envValue;
+        to.envHold = from.envHold;
+        to.envAtRest = from.envAtRest;
+        to.fmVolEnvData = from.fmVolEnvData;
+        to.fmVolEnvPos = from.fmVolEnvPos;
+        to.fmVolEnvValue = from.fmVolEnvValue;
+        to.fmVolEnvHold = from.fmVolEnvHold;
+        to.fmVolEnvOpMask = from.fmVolEnvOpMask;
+        to.forceRefresh = from.forceRefresh;
+        System.arraycopy(from.ssgEg, 0, to.ssgEg, 0, to.ssgEg.length);
+        to.dacMuted = from.dacMuted;
+        to.modStepInEffect = from.modStepInEffect;
+        to.modStepChanged = from.modStepChanged;
+        to.modStepDelta = from.modStepDelta;
+        to.modEnvStepInEffect = from.modEnvStepInEffect;
+        to.modEnvStepChanged = from.modEnvStepChanged;
+        to.modEnvStepDelta = from.modEnvStepDelta;
+        to.fm3SpecialMode = from.fm3SpecialMode;
+        to.customSsgEgPresent = from.customSsgEgPresent;
+        System.arraycopy(from.customSsgEgPayload, 0, to.customSsgEgPayload, 0, to.customSsgEgPayload.length);
+        to.customSsgEgPayloadKnown = from.customSsgEgPayloadKnown;
+        to.rawPsgNoise = from.rawPsgNoise;
+        to.rawPsgNoiseKnown = from.rawPsgNoiseKnown;
     }
 
     private static class FadeState {

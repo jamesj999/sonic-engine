@@ -1275,6 +1275,9 @@ public final class SmpsDriverSession implements AutoCloseable {
         state.consumed = true;
         transactionOpen = false;
         Arrays.fill(mutationOverrides, null);
+        if (state.logical != null && driver == state.driverIdentity) {
+            driver.releaseLiveCommandMutation(state.logical);
+        }
     }
 
     /** Validates commit while the composite owner can still roll back. */
