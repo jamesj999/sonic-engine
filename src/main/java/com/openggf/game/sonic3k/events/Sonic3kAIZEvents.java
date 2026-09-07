@@ -899,6 +899,18 @@ public class Sonic3kAIZEvents extends Sonic3kZoneEvents {
      * redraws Plane A as the camera scrolls. If the pre-built data is missing
      * (for example after a rewind past the swap consumed it) the swap frame
      * still falls back to the full rebuild.
+     *
+     * <p>An unavailable ROM is one more way for the pre-built data to be
+     * missing, so it takes the same fallback rather than failing the level
+     * load. This used to throw, which turned a skipped optimisation into a
+     * dead AIZ1 init wherever RomManager had nothing to open. The sibling
+     * entry point {@link AizIntroTerrainSwap#precomputeTransitionTilemaps(
+     * com.openggf.level.objects.ObjectServices)} already logs and returns on
+     * the same IOException; the two call paths now agree.
+     *
+     * <p>No ROM read is lost by skipping: the $1400 swap frame reads the same
+     * bytes itself through {@link AizIntroTerrainSwap#applyMainLevelBlockOverlay},
+     * and a genuinely broken ROM still fails there.
      */
     private void precomputeIntroTransitionTilemaps() {
         LevelManager levelManager = levelManager();
@@ -908,7 +920,7 @@ public class Sonic3kAIZEvents extends Sonic3kZoneEvents {
         try {
             AizIntroTerrainSwap.precomputeTransitionTilemaps(rom(), levelManager);
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to pre-build AIZ1 intro transition tilemaps", e);
+            LOG.warning("AIZ intro transition tilemap pre-build skipped: " + e.getMessage());
         }
     }
 

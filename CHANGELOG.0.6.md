@@ -1,5 +1,12 @@
 # OpenGGF 0.6 Changelog
 
+- Angel Island Act 1 no longer fails to load when its ROM file cannot be
+  reopened. The act pre-builds the tilemaps used by the $1400 terrain swap
+  while the level is still loading; that is a cache warm the swap frame
+  already knows how to do without, but an unreadable ROM was rethrown as a
+  fatal error instead of skipping the pre-build. It now skips and logs, and
+  the swap frame reads the same bytes itself as it always did.
+
 - Robotnik can no longer regain touch collision while hidden behind the AIZ2
   boss waterfall after Sonic damages him. The submerge transition now clears
   the active hit-flash timer and invulnerable state together, matching the

@@ -306,6 +306,10 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
 still required before release sign-off.
 
+Angel Island Act 1 no longer fails to load when its intro tilemap pre-build
+cannot read the ROM; the pre-build is a cache warm the terrain-swap frame
+already knows how to do without.
+
 Continuous integration has been cut back to a fast per-push check. A push runs
 only the `smoke` profile -- the ordinary suite minus ten exhaustive oracle
 sweeps that were most of its runtime -- so it finishes in minutes instead of
