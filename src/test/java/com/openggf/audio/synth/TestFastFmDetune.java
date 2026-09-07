@@ -1,6 +1,7 @@
 package com.openggf.audio.synth;
 
 import com.openggf.audio.synth.fast.FastYm2612Dsp;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -8,6 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Public-facade pitch measurements; no dependency on either DSP's tables or state. */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestFastFmDetune {
     private static final double RATE = Ym2612Chip.getInternalRate();
     private static final int FRAMES = 160_000;

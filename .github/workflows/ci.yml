@@ -12,8 +12,12 @@ on:
     - cron: '30 5 * * *'
 
 jobs:
+  # Pull requests only. Branch/trailer/changelog policy is enforced locally by
+  # .githooks on every commit, and on master by release.yml's own ci-push step;
+  # running it again on every branch push only produced failure mail for upkeep
+  # that had not been staged yet, on branches nobody was proposing to merge.
   policy:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,9 +29,65 @@ jobs:
         if: github.event_name == 'pull_request'
         run: bash .githooks/validate-policy.sh ci-pr "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" "${{ github.base_ref }}" "${{ github.head_ref }}"
 
-      - name: Validate pushed branch resource policy
-        if: github.event_name == 'push' && github.event.deleted == false
-        run: bash .githooks/validate-policy.sh ci-push "${{ github.event.before }}" "${{ github.sha }}" "${{ github.ref_name }}"
+  # The fast lane. This is the only Maven job an ordinary branch push reaches,
+  # and allBranchPushPolicyShouldRemainLightweight in TestBuildToolingGuard pins
+  # it that way, so it has to stay bounded.
+  #
+  # `-Psmoke` is the default suite minus ten @Tag("slow-suite") classes that were
+  # 93 percent of its wall clock (about 23 of 25 minutes); see the profile comment
+  # in pom.xml. What remains still executes every other test class in the tree, so
+  # this is a real regression check rather than a token compile, and it finishes in
+  # a few minutes instead of half an hour.
+  #
+  # It is a subset, not a replacement: the full `test` job below still runs the
+  # tagged classes on pull requests, on the nightly schedule, and in release.yml.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run smoke suite
+        shell: bash
+        run: mvn -Dmse=off -Psmoke test -B
+
+      - name: Assert smoke coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          reports = sorted(Path("target/surefire-reports").glob("TEST-*.xml"))
+          total = 0
+          skipped = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              total += int(root.attrib.get("tests", "0"))
+              skipped += int(root.attrib.get("skipped", "0"))
+
+          executed = total - skipped
+          # The full suite executes about 14,300. A smoke run that drops below
+          # this is excluding far more than the tagged oracle sweeps -- most
+          # likely a profile or tag typo that quietly selected almost nothing.
+          minimum = 10000
+          if executed < minimum:
+              print(
+                  f"Smoke CI executed too few tests: executed={executed} "
+                  f"total={total} skipped={skipped} minimum={minimum}",
+                  file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Smoke coverage: executed={executed} total={total} skipped={skipped}")
+          PY
 
   # Structural guards are source-only and ROM-free, so unlike the default
   # `test` job below they can run on every push - which is how work actually
@@ -72,16 +132,21 @@ jobs:
       - name: Run structural guards
         run: mvn -Dmse=off -Pguards test -B
 
-  # The ordinary suite is ROM-free too (ROM-gated classes error only when a
-  # path is supplied), so it runs on the same integration-branch pushes as the
-  # guards job. It used to run only on PRs and schedules, which let develop
-  # carry a deterministic red test and an order-dependent one unnoticed
-  # because nothing on the push path executed them.
+  # The complete suite, including the @Tag("slow-suite") classes `smoke` drops.
+  # About 26 minutes, so it is off the push path: pull requests, the nightly
+  # schedule, and manual dispatch.
   #
-  # Same pin as `guards`: all-branch pushes stay policy-only and Maven-free
-  # (allBranchPushPolicyShouldRemainLightweight in TestBuildToolingGuard).
+  # It did run on develop pushes for a while, after develop carried a
+  # deterministic red test and an order-dependent one unnoticed. The nightly
+  # schedule is what catches those now -- a slower net, deliberately, because
+  # half an hour of mail on every merge to develop was not being read. `smoke`
+  # keeps the per-push signal and `guards` still runs on integration pushes, so
+  # a push-path regression outside the tagged oracle sweeps still goes red
+  # immediately.
+  #
+  # ROM-free either way: ROM-gated classes error only when a path is supplied.
   test:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master'
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

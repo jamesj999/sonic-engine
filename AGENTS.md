@@ -30,6 +30,7 @@ tools/testing/install-hooks.sh     # once per worktree
 mvn package
 mvn test
 mvn "-Dtest=TestCollisionLogic" test
+mvn -Dmse=off -Psmoke test -B         # what every branch push runs in CI
 mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
 ```
 
@@ -40,6 +41,9 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
   `target/test-tmp`. Concurrent Maven runs need separate worktrees.
 - Use JUnit 5/Jupiter. `-Dmse=off` exposes full Maven logs. PowerShell quotes
   `-D...` arguments and uses `tools/testing/install-hooks.ps1`.
+- `-Psmoke` is the default suite minus the `slow-suite`-tagged oracle sweeps.
+  It is the branch-push gate in CI, not release evidence; the full suite runs
+  on pull requests, the nightly schedule, and release validation.
 - Match focused checks to the change and complete required integration
   checks. Release evidence includes ordinary tests and `-Pguards` separately.
 - Before reporting suite results, read the measurement-hazard table in

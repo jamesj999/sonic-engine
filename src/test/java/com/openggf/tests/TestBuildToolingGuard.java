@@ -1949,6 +1949,29 @@ class TestBuildToolingGuard {
         }
     }
 
+    /**
+     * An ordinary branch push must reach exactly one Maven job, and that job
+     * must be the bounded {@code smoke} suite.
+     *
+     * <p>This used to require that a branch push run <em>no</em> Maven at all.
+     * That kept pushes cheap but gave a feature branch no regression signal
+     * whatsoever, so the full suite was pinned onto develop and master pushes
+     * instead -- twenty-six minutes of mail per merge, which stopped being read.
+     * The replacement splits the difference: {@code smoke} runs everywhere and
+     * finishes in minutes because it drops the {@code slow-suite} oracle sweeps,
+     * and the full {@code test} job moved to pull requests and the nightly
+     * schedule.
+     *
+     * <p>The lever this protects is the same one as before -- a push must not
+     * silently acquire another long Maven job. {@code guards} stays pinned to
+     * the integration branches, {@code test} stays off the push path entirely,
+     * and any new Maven-bearing job has to declare which of those it is.
+     *
+     * <p>Branch policy validation is no longer part of the push path: the
+     * {@code .githooks} enforce it at commit time on every branch, and master
+     * pushes are still validated by release.yml's own {@code ci-push} step,
+     * which {@link #releaseWorkflowShouldRunBranchPolicyOnMasterPullRequests()} pins.
+     */
     @Test
     void allBranchPushPolicyShouldRemainLightweight() throws Exception {
         String workflow = normalizeLineEndings(Files.readString(Path.of(".github/workflows/ci.yml")));
@@ -1961,38 +1984,57 @@ class TestBuildToolingGuard {
         if (pushTrigger.contains("tags:")) {
             violations.add(".github/workflows/ci.yml branch policy push trigger also declares tag reachability");
         }
+
         String policyJob = yamlIndentedBlock(workflow, "  policy:", 2);
-        if (!policyJob.contains("if: github.event_name == 'pull_request' || github.event_name == 'push'")) {
-            violations.add(".github/workflows/ci.yml policy job is not limited to PR and push events");
+        if (!policyJob.contains("if: github.event_name == 'pull_request'")) {
+            violations.add(".github/workflows/ci.yml policy job is not limited to pull requests");
         }
         if (!policyJob.contains("fetch-depth: 0")) {
             violations.add(".github/workflows/ci.yml policy checkout does not fetch full cutover history");
         }
-        if (!policyJob.contains("Validate pushed branch resource policy")) {
-            violations.add(".github/workflows/ci.yml does not define a push-range policy step");
-        }
-        if (!policyJob.contains(".githooks/validate-policy.sh ci-push")) {
-            violations.add(".github/workflows/ci.yml does not invoke ci-push policy");
+        if (!policyJob.contains(".githooks/validate-policy.sh ci-pr")) {
+            violations.add(".github/workflows/ci.yml does not invoke ci-pr policy");
         }
         if (policyJob.contains("\"refs/remotes/origin/${{ github.ref_name }}\"")
                 || policyJob.contains("+refs/heads/*:refs/remotes/origin/*")) {
             violations.add(".github/workflows/ci.yml still lets fetched peer refs influence new-branch selection");
         }
 
-        for (Map.Entry<String, String> job : yamlJobBlocks(workflow).entrySet()) {
-            if (!job.getValue().contains("mvn ")) {
+        Map<String, String> jobs = yamlJobBlocks(workflow);
+        String smokeJob = jobs.get("smoke");
+        if (smokeJob == null) {
+            violations.add(".github/workflows/ci.yml does not define the smoke job, so a branch push"
+                    + " runs no tests at all");
+        } else {
+            if (!smokeJob.contains("run: mvn -Dmse=off -Psmoke test -B")) {
+                violations.add(".github/workflows/ci.yml smoke job does not run the smoke profile directly");
+            }
+            String smokeCondition = yamlJobCondition(smokeJob);
+            if (conditionExcludesPush(smokeCondition)
+                    || conditionPinsPushToIntegrationBranches(smokeCondition)) {
+                violations.add(".github/workflows/ci.yml smoke job is not reachable from an ordinary"
+                        + " branch push, which leaves branch pushes with no test signal");
+            }
+            if (smokeJob.contains("continue-on-error: true")) {
+                violations.add(".github/workflows/ci.yml smoke job is non-blocking, so a red smoke"
+                        + " suite reports green");
+            }
+        }
+
+        for (Map.Entry<String, String> job : jobs.entrySet()) {
+            if (!job.getValue().contains("mvn ") || "smoke".equals(job.getKey())) {
                 continue;
             }
             String jobCondition = yamlJobCondition(job.getValue());
             if (!conditionExcludesPush(jobCondition)
                     && !conditionPinsPushToIntegrationBranches(jobCondition)) {
                 violations.add(".github/workflows/ci.yml Maven-bearing job " + job.getKey()
-                        + " is reachable from a branch push");
+                        + " is reachable from a branch push; only smoke may be");
             }
         }
 
         if (!violations.isEmpty()) {
-            fail("all-branch pushes need a lightweight policy-only CI path with fetched remote context:\n  "
+            fail("all-branch pushes need exactly one bounded Maven job:\n  "
                     + String.join("\n  ", new TreeSet<>(violations)));
         }
     }

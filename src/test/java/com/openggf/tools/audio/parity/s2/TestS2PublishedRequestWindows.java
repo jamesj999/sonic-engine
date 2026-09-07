@@ -1,5 +1,6 @@
 package com.openggf.tools.audio.parity.s2;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * drifts in any byte, or a window claimed for the wrong interval, fails here
  * before any comparison can silently change meaning.
  */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestS2PublishedRequestWindows {
 
     @TempDir

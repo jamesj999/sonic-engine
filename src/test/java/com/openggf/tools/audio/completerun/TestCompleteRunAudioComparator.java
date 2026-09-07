@@ -1,5 +1,6 @@
 package com.openggf.tools.audio.completerun;
 
+import org.junit.jupiter.api.Tag;
 import static com.openggf.tools.audio.completerun.CompleteRunAudioTrace.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,6 +31,9 @@ import java.util.function.IntFunction;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestCompleteRunAudioComparator {
     private static final AtomicInteger PROFILE_SEQUENCE = new AtomicInteger();
     private static final int FIRST_FRAME = 860;
