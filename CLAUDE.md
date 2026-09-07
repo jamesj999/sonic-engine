@@ -129,8 +129,15 @@ changelog update or an inline reason for skipping it. Merging a non-master branc
 requires a staged README release-section summary.
 
 Use the [documentation obligation checklist](docs/agent-workflow/documentation-obligation-checklist.md)
-when staging: 0.6 release prose goes in `CHANGELOG.0.6.md`; root
-`CHANGELOG.md` is the index (its exact path owns the hook trailer).
+when staging. `pom.xml`'s `<version>` names the version `develop` carries and
+so the `CHANGELOG.<version>.md` that receives release prose (`master` is the
+last released version and `next` the one after `develop`; today that is master
+0.5.20260411, develop 0.6.prerelease, next 0.7.prerelease; promoting them at
+release time follows [release rollover](docs/project/release-rollover.md)). Root `CHANGELOG.md` is the index (its exact
+path owns the hook trailer). The README release section is only a very
+high-level summary of the version's themes, not a change log; a fix to a
+feature introduced in that same unreleased version folds into the existing
+entry rather than earning one of its own.
 Update guides/config/discrepancies when their behavior changes. Update
 `docs/status/trace-frontier-log.md` when a frontier moves, a trace fix lands,
 a passing trace regresses, or a sweep selects the next target; include

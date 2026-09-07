@@ -34,13 +34,46 @@ it must say `n/a`. So "lying" in either direction fails the hook.
 
 ## Release and artifact destinations
 
-The active release is 0.6. Add release-worthy prose to `CHANGELOG.0.6.md`;
-historical release files change only for factual corrections. `CHANGELOG.md`
-is the release index. Update the README release section for current summary,
-status, scope, or release-link changes (and the required develop merge summary).
-Update `docs/changelog/v0.6-release-summary.md` when public release messaging,
-validation results, or blockers change; substantial investigations/workstreams
-and gate decisions belong in `docs/changelog/v0.6-prerelease-detailed.md`.
+### Which version am I writing for?
+
+`pom.xml`'s `<version>` is the authority: it names the version `develop`
+carries, and therefore the `CHANGELOG.<version>.md` that receives new prose.
+Each branch declares its own version this way: **master 0.5.20260411, develop
+0.6.prerelease, next 0.7.prerelease.** Nothing on `develop` is written up under
+`next`'s version; unreleased `next` prose accumulates in `CHANGELOG.md`'s
+"Unreleased" section until that release file is cut. Do not hardcode these
+numbers into new guidance — re-read `pom.xml` instead. Promoting all three at
+release time follows [the release rollover process](../project/release-rollover.md).
+
+### Where each kind of prose goes
+
+- **`CHANGELOG.<develop version>.md`** — every change, at the detail a user or
+  maintainer would want. This is the per-version record and the default
+  destination. Historical changelog files change only for factual corrections.
+- **`CHANGELOG.md`** — the release index only.
+- **`README.md` release section** — a **very high-level summary** of the
+  version: a handful of themes a reader skims to learn what this version is
+  about. It is not a change log, and there is no expectation that a given
+  commit earns a README line.
+- **`docs/changelog/v<version>-release-summary.md`** — public release
+  messaging, validation results, blockers.
+- **`docs/changelog/v<version>-prerelease-detailed.md`** — investigations,
+  workstreams, superseded approaches, gate decisions.
+
+### Fixes to unreleased work
+
+A fix to a feature introduced in the same unreleased version is **not** a
+separate item anywhere user-facing: that feature never shipped broken, so a
+reader of the release notes learns nothing from the fix. Fold it into the
+existing entry so the entry describes the corrected end state. In the README
+this usually means editing a word or two of an existing theme — which also
+satisfies the develop-merge staged-README gate — never appending a "fixed X"
+line beside the theme that introduced X. A fix earns its own entry only when it
+repairs behavior that shipped in a **previous** release; say which release
+regressed.
+
+### Engineering artifacts
+
 Engineering designs, plans, research, audits, and validation belong under the
 matching `docs/architecture/` subdirectory from `docs/README.md`; stage their
 supporting artifacts with the task. Do not create loose planning documents.
