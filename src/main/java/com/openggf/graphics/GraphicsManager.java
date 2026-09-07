@@ -82,6 +82,10 @@ public class GraphicsManager {
 	private final Queue<PendingRenderThreadTask<?>> pendingRenderThreadTasks = new ConcurrentLinkedQueue<>();
 
 	private final Map<String, Integer> paletteTextureMap = new HashMap<>(); // Map for palette textures
+	// Last palette handed to cachePaletteTexture per line, so a palette fade change
+	// can re-upload the affected lines without asking their owners to write again.
+	private PaletteView[] lastCachedPaletteLines = new PaletteView[0];
+	private final PaletteFadePresentation paletteFadePresentation = new PaletteFadePresentation();
 	private Integer combinedPaletteTextureId;
 	private int currentPaletteTextureHeight = 0;
 	private DisplayColorProfile displayColorProfile = DisplayColorProfile.RAW_RGB;
@@ -703,6 +707,11 @@ public class GraphicsManager {
 	}
 
 	public void cachePaletteTexture(Palette palette, int paletteId) {
+		rememberCachedPaletteLine(palette, paletteId);
+		uploadPaletteLine(palette, paletteId);
+	}
+
+	private void uploadPaletteLine(PaletteView palette, int paletteId) {
 		if (headlessMode) {
 			// In headless mode, just record that the palette was cached
 			paletteTextureMap.put("palette_" + paletteId, -1);
@@ -752,13 +761,20 @@ public class GraphicsManager {
 
 		ByteBuffer paletteBuffer = ensurePaletteUploadBuffer();
 		paletteBuffer.clear();
+		// An active palette fade owns what CRAM receives for its lines (PalFadeIn_Alt
+		// rebuilds v_palette from v_palette_fading); the owner's palette is untouched.
+		boolean fadeLine = paletteFadePresentation.affects(paletteId);
 		for (int i = 0; i < COLORS_PER_PALETTE; i++) {
-			Palette.Color color = palette.getColor(i);
-			writePaletteColor(paletteBuffer,
-					Byte.toUnsignedInt(color.r),
-					Byte.toUnsignedInt(color.g),
-					Byte.toUnsignedInt(color.b),
-					i);
+			int r = Byte.toUnsignedInt(palette.red(i));
+			int g = Byte.toUnsignedInt(palette.green(i));
+			int b = Byte.toUnsignedInt(palette.blue(i));
+			if (fadeLine) {
+				int faded = paletteFadePresentation.fadeRgb(r, g, b);
+				r = (faded >>> 16) & 0xFF;
+				g = (faded >>> 8) & 0xFF;
+				b = faded & 0xFF;
+			}
+			writePaletteColor(paletteBuffer, r, g, b, i);
 		}
 		paletteBuffer.flip();
 
@@ -766,6 +782,51 @@ public class GraphicsManager {
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, paletteId, 16, 1, GL_RGBA, GL_UNSIGNED_BYTE, paletteBuffer);
 
 		paletteTextureMap.put("palette_" + paletteId, combinedPaletteTextureId);
+	}
+
+	private void rememberCachedPaletteLine(PaletteView palette, int paletteId) {
+		if (paletteId < 0 || paletteId >= 64) {
+			return;
+		}
+		if (paletteId >= lastCachedPaletteLines.length) {
+			lastCachedPaletteLines = java.util.Arrays.copyOf(lastCachedPaletteLines, paletteId + 1);
+		}
+		lastCachedPaletteLines[paletteId] = palette;
+	}
+
+	/** The palette fade currently applied to CRAM uploads; see {@link PaletteFadePresentation}. */
+	public PaletteFadePresentation getPaletteFadePresentation() {
+		return paletteFadePresentation;
+	}
+
+	/**
+	 * Applies a Mega Drive palette fade step to every later upload of the masked
+	 * lines and immediately re-uploads the lines already cached, so the change is
+	 * visible on the frame that requests it regardless of whether their owners
+	 * write again. {@code steps} counts the FadeIn_AddColor / FadeOut_DecColor
+	 * passes applied so far.
+	 */
+	public void setPaletteFadePresentation(PaletteFadePresentation.Mode mode, int steps, int lineMask) {
+		int previousMask = paletteFadePresentation.lineMask();
+		if (paletteFadePresentation.set(mode, steps, lineMask)) {
+			reuploadPaletteFadeLines(previousMask | paletteFadePresentation.lineMask());
+		}
+	}
+
+	/** Ends the palette fade and re-uploads the lines it was transforming from their owners' palettes. */
+	public void clearPaletteFadePresentation() {
+		int previousMask = paletteFadePresentation.lineMask();
+		if (paletteFadePresentation.clear()) {
+			reuploadPaletteFadeLines(previousMask);
+		}
+	}
+
+	private void reuploadPaletteFadeLines(int lineMask) {
+		for (int line = 0; line < lastCachedPaletteLines.length; line++) {
+			if ((lineMask & (1 << line)) != 0 && lastCachedPaletteLines[line] != null) {
+				uploadPaletteLine(lastCachedPaletteLines[line], line);
+			}
+		}
 	}
 
 	/**
@@ -1345,10 +1406,21 @@ public class GraphicsManager {
 				continue;
 			}
 			int rgbOffset = sourceIndex * 16 * 3;
+			// Rows below totalLines are effective palette lines; a fade on one of them
+			// (FadeIn_FromBlack also walks v_palette_water) transforms the composed
+			// bytes, and the content key built from them changes with each fade step.
+			boolean fadeRow = sourceIndex < totalLines && paletteFadePresentation.affects(sourceIndex);
 			for (int colorIndex = 0; colorIndex < 16; colorIndex++) {
 				byte r = source.red(colorIndex);
 				byte g = source.green(colorIndex);
 				byte b = source.blue(colorIndex);
+				if (fadeRow) {
+					int faded = paletteFadePresentation.fadeRgb(
+							Byte.toUnsignedInt(r), Byte.toUnsignedInt(g), Byte.toUnsignedInt(b));
+					r = (byte) (faded >>> 16);
+					g = (byte) (faded >>> 8);
+					b = (byte) faded;
+				}
 				underwaterPaletteSourceRgb[rgbOffset++] = r;
 				underwaterPaletteSourceRgb[rgbOffset++] = g;
 				underwaterPaletteSourceRgb[rgbOffset++] = b;

@@ -55,6 +55,7 @@ import com.openggf.graphics.PatternAtlas;
 import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.audio.AudioManager;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PaletteFadePresentation;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.render.BackgroundRenderer;
 import com.openggf.level.objects.DefaultObjectServices;
@@ -103,6 +104,8 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
     /** Base for extra sidekick-style DPLC banks — above water (0x30000) and below title cards (0x40000). */
     public static final int SIDEKICK_PATTERN_BASE = PatternAtlasRange.SIDEKICK_BANKS.base();
     private static final Palette.Color BLACK_BACKDROP = new Palette.Color((byte) 0, (byte) 0, (byte) 0);
+    /** Scratch for {@link #resolveLevelBackdropColor()} while a palette fade covers the backdrop line. */
+    private final Palette.Color fadedBackdrop = new Palette.Color();
     // Local mirror of the loaded Level owned by WorldSession. Reads use this
     // field directly for speed; writes go through writeCurrentLevel() to keep
     // the world session in sync.
@@ -4318,6 +4321,12 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         glClearColor(backdrop.rFloat(), backdrop.gFloat(), backdrop.bFloat(), 1.0f);
     }
 
+    /**
+     * The backdrop colour as CRAM presents it: line 2 colour 0 ({@code $8720}),
+     * which a palette fade covering that line (S1 PalFadeIn_Alt on lines 1-3)
+     * fades with the planes. Both the clear colour and the parallax shader's
+     * transparent-pixel fill read this, so the fade is applied here once.
+     */
     Palette.Color resolveLevelBackdropColor() {
         if (level == null) {
             return BLACK_BACKDROP;
@@ -4325,7 +4334,22 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         if (isForceBlackBackdrop()) {
             return BLACK_BACKDROP;
         }
-        return level.getBackdropColor();
+        Palette.Color backdrop = level.getBackdropColor();
+        if (graphicsManager == null) {
+            return backdrop;
+        }
+        PaletteFadePresentation fade = graphicsManager.getPaletteFadePresentation();
+        if (!fade.affects(level.getBackdropPaletteLine())) {
+            return backdrop;
+        }
+        int rgb = fade.fadeRgb(
+                Byte.toUnsignedInt(backdrop.r),
+                Byte.toUnsignedInt(backdrop.g),
+                Byte.toUnsignedInt(backdrop.b));
+        fadedBackdrop.r = (byte) (rgb >>> 16);
+        fadedBackdrop.g = (byte) (rgb >>> 8);
+        fadedBackdrop.b = (byte) rgb;
+        return fadedBackdrop;
     }
 
     private boolean isForceBlackBackdrop() {

@@ -251,6 +251,12 @@ disassemblies. Entries below apply to every game unless a game is named.
   (blue, green, then red on the way in) over 22 frames, including the backdrop colour, instead of a
   16-frame black overlay. Objects, background scroll, and the water palette cycle stay frozen during
   the fade as they do in `GM_Title`, so Sonic rises 29 frames after the fade completes.
+- **Sonic 1 level fade-in is a palette fade:** the title card reveals the level with the ROM's
+  `PalFadeIn_Alt` on palette lines 1-3 (blue, green, then red over 22 frames, underwater lines and
+  the line 2 backdrop colour included) while line 0 keeps Sonic, the HUD, and the title card at
+  full colour, replacing the blended black overlay. Palette fades now apply where CRAM uploads
+  happen, so palette cycles and other writes made during a fade stay faded. The card's black
+  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame.
 
 ### Gameplay-Scoped Rewind
 
