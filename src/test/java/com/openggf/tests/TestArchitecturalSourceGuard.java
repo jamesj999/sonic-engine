@@ -40,6 +40,33 @@ class TestArchitecturalSourceGuard {
         assertOrdered(source, "display();", "glfwSwapBuffers(window);");
     }
 
+    @Test
+    void suppressedLevelMusicPreservesTheActiveAudioSource() throws IOException {
+        SourceFile source = SourceFile.read(SRC_MAIN.resolve("com/openggf/level/LevelManager.java"));
+        MethodSpan span = source.methodNamed("initAudio");
+        assertTrue(span != null, "LevelManager must retain the level audio initializer");
+        String method = String.join("\n",
+                source.lines().subList(span.startLine() - 1, span.endLine()));
+
+        assertOrdered(method, "transitions.isSuppressNextMusicChange()", "configureAudio();");
+    }
+
+    @Test
+    void levelStartClearsReusedPlayableAnimationState() throws IOException {
+        SourceFile source = SourceFile.read(SRC_MAIN.resolve(
+                "com/openggf/sprites/playable/AbstractPlayableSprite.java"));
+        MethodSpan span = source.methodNamed("resetState");
+        assertTrue(span != null, "Playable sprites must retain the level-start reset owner");
+        String method = String.join("\n",
+                source.lines().subList(span.startLine() - 1, span.endLine()));
+
+        assertTrue(method.contains("this.animationId = 0;"));
+        assertTrue(method.contains("this.mappingFrame = 0;"));
+        assertTrue(method.contains("this.animationFrameIndex = 0;"));
+        assertTrue(method.contains("this.animationTick = 0;"));
+        assertTrue(method.contains("forceAnimationRestart();"));
+    }
+
     private static void assertOrdered(String source, String first, String second) {
         int firstIndex = source.indexOf(first);
         int secondIndex = source.indexOf(second, firstIndex + first.length());
