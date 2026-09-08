@@ -38,7 +38,7 @@ The coordinator independently compared each final worker XML identity set, full 
 
 Combined source `d1f64e1ee` completed the ordinary suite (17,074 console tests, 0 failures/errors, 44 skips; 5m15) and fresh-JVM guards (613 tests, 0 failures/errors/skips; 2m19). Every baseline identity remains, with 25 intended new ordinary regressions. All 44 skips match explicit rules, with zero unclassified, required-skipped, undeclared-input or stale entries. Packaging completed in 18.907s; the generated manifest names `OpenGGF-0.6.prerelease`, and that exact dependency jar exists. No source changed after these runs.
 
-Main integration and post-merge verification remain pending at this record's first verification checkpoint. The final publication and cleanup state is reported separately after execution.
+Main integration commit `0674eda49` completed ordinary tests (17,074; 0 failures/errors; 44 skips; 4m33) and fresh-JVM guards (613; 0 failures/errors/skips; 2m25). All baseline identities, all 25 added regressions and the exact combined-tree skip identities/messages remain present. The four required S3K stability checks passed without skips. Original dirty disassembly submodule state was preserved exactly. The only subsequent change is this documentation record; the executable source is identical to the tested integration commit. Publication and task-worktree cleanup receipts are recorded in the external evidence directory and final delivery message.
 
 ## Commands and retained evidence
 
@@ -46,17 +46,17 @@ Each combined Maven run used Java 21 and this command, with `-Pguards` added for
 
 ```bash
 LUA_BIN=lua5.4 mvn -Dmse=off \
-  -Dsonic1.rom.path=$PROJECT_ROOT/s1.gen \
-  -Dsonic2.rom.path=$PROJECT_ROOT/s2.gen \
-  -Ds3k.rom.path=$PROJECT_ROOT/s3k.gen \
+  -Dsonic1.rom.path="$PROJECT_ROOT/s1.gen" \
+  -Dsonic2.rom.path="$PROJECT_ROOT/s2.gen" \
+  -Ds3k.rom.path="$PROJECT_ROOT/s3k.gen" \
   -Dopenggf.surefire.reports="$WORKTREE/target/$RUN/reports" \
   -Dopenggf.trace.reports="$WORKTREE/target/$RUN/trace-reports" \
   -Dopenggf.test.diagnostics="$WORKTREE/target/$RUN/diagnostics" test -B
 ```
 
-Set `PROJECT_ROOT` to the absolute main checkout path and `WORKTREE` to its `.worktrees/ai-audit-remediation` checkout; both must resolve to absolute paths. Package: `LUA_BIN=lua5.4 mvn -Dmse=off -DskipTests package -B`. Tooling: `python3 -m unittest discover -s tools/testing -p 'test_*.py'` (71 tests, one absent historical-fixture skip). Skip classification: `python3 tools/testing/classify_surefire_skips.py --reports target/audit-combined-ordinary/reports --policy tools/testing/release-skip-policy.json --capabilities gl=false,s2_bk2=false,s3k_observations=false,s1_bizhawk_reference=false,audio_reference_files=false --check-evidence`. All 31 tracked Bash scripts passed `bash -n`; agent instructions and skill mirrors match; all 19 local links in the 11 task/validation documents resolve; branch policy checks passed.
+Set `PROJECT_ROOT` to the absolute main checkout path and `WORKTREE` to its `.worktrees/ai-audit-remediation` checkout; both must resolve to absolute paths. Post-merge runs use `WORKTREE=$PROJECT_ROOT` and `RUN=audit-remediation-postmerge-ordinary` / `audit-remediation-postmerge-guards`, with the same arguments and fresh report directories. Package: `LUA_BIN=lua5.4 mvn -Dmse=off -DskipTests package -B`. Tooling: `python3 -m unittest discover -s tools/testing -p 'test_*.py'` (71 tests, one absent historical-fixture skip). Skip classification: `python3 tools/testing/classify_surefire_skips.py --reports target/audit-combined-ordinary/reports --policy tools/testing/release-skip-policy.json --capabilities gl=false,s2_bk2=false,s3k_observations=false,s1_bizhawk_reference=false,audio_reference_files=false --check-evidence`. All 31 tracked Bash scripts passed `bash -n`; agent instructions and skill mirrors match; all 19 local links in the 11 task/validation documents resolve; branch policy checks passed.
 
-`AUDIT_EVIDENCE` denotes the external task evidence directory recorded in the final delivery message. It contains per-worker report archives, command receipts, original/fixed probe logs, and coordinator JSON identity comparisons. Combined `receipt.json` files record exact argv, source commit, timestamps and exit status beside saved logs. This directory is outside Git and must be preserved when task worktrees are removed. These checks do not establish live GL/OpenAL, Windows execution or a live Discord endpoint; the latter uses production client code with injected blocked transports.
+`AUDIT_EVIDENCE` denotes the external task evidence directory recorded in the final delivery message. It contains per-worker report archives, command receipts, original/fixed probe logs, and coordinator JSON identity comparisons. Combined and post-merge `receipt.json` files record exact argv, source commit, timestamps and exit status beside saved logs. This directory is outside Git and must be preserved when task worktrees are removed. These checks do not establish live GL/OpenAL, Windows execution or a live Discord endpoint; the latter uses production client code with injected blocked transports.
 
 ## Verification investigations
 
