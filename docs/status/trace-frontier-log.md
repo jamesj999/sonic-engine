@@ -109392,3 +109392,38 @@ The other three death arms remain coordinates only.
   -Ds3k.rom.path=<absolute-locked-on-ROM> test`.
 - The hard oracle advances to service 2357, `MUS_FM4.overridden`, reference
   `false`, engine `true`. Full-game audio parity and authenticity remain open.
+
+## 2026-09-08 - Next CI CPZ capture repair, established frontier unchanged
+
+- Source investigation: `.worktrees/next-core-ci` over `004b978d7`. Four
+  completed runs used uncommitted source variants; the retained gameplay logic
+  was subsequently committed as `fd22b4b0f` and integrated in `110d7597b`.
+  These are not executions of those later commits. ROM `loc_225FC` reads live
+  player coordinates in object-slot order; `loc_22688` writes the waypoint and
+  velocity without an extra `Obj1E_MoveCharacter` call. The existing native
+  capture regression test exposes the lost integration correction.
+- Command for each `ARM` (`baseline`, `fixed`, `cpzonly`, `objectonly`):
+  `mvn -Dmse=off -Ptrace-replay-r7 -Dsurefire.forkCount=1
+  -Dtest=TestS2Cpz2Seg9CompleteEmeraldsSegmentTraceReplay
+  "-Dsonic2.rom.path=${OPENGGF_ROOT}/Sonic The Hedgehog 2 (W) (REV01) [!].gen"
+  -Dopenggf.surefire.reports=target/core-trace-ARM-reports test -B`.
+  The verified S2 SHA-1 was `8bca5dcef1af3e00098666fd892dc1c2a76333f9`.
+- All four replays remain **FAIL**: 5,837 compared rows, zero bootstrap errors,
+  zero warnings, zero skips. Baseline and initial-placement-only variants have
+  18,686 error spans and identical error arrays. CPZ-only and combined variants
+  have 19,347 spans and identical error arrays. Thus the changed downstream
+  output comes from the capture correction, not initial placement.
+- The first error remains frame **6**, `dynamic_art.outstanding_transfer_ids`,
+  expected `[2]`, actual `[]`. The first gameplay x divergence remains frame
+  **4859**, expected `04DB`, actual `04DC`. Variant differences begin at frame
+  5054, after that already-divergent prefix. Gameplay mismatched row-fields fall
+  from 13,023 to 8,009, while dynamic-art row-fields rise from 44,270 to 47,870.
+  Some later art ordinals and camera-x fields worsen; this is mixed downstream
+  evidence, not a green replay or proof that all fields improved. No trace data,
+  timing authority, assertion or fixture was changed to accommodate it.
+- Independent CPZ1/CPZ2 level-select checks remain red at frame 6, with 15,056
+  and 33,032 error spans. They do not establish independent green coverage.
+  Durable logs, owner-keyed JSON reports and per-field deltas are preserved at
+  `${CI_REPAIR_EVIDENCE}/core-ci/`.
+  The [CI repair evidence](../architecture/validation/2026-09-08-next-ci-repair.md)
+  separates ordinary suite/guard validation from these trace limitations.
