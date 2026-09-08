@@ -227,28 +227,40 @@ class TestSoundTestPresentationHost {
     void closeDeadlineLeavesOwnerCleanupAliveForASecondAttempt() throws Exception {
         ExecutorService ownerExecutor = Executors.newSingleThreadExecutor();
         BlockingSink sink = new BlockingSink();
-        Future<StandaloneAudioPresentationHost> created = ownerExecutor.submit(() -> {
-            AudioManager manager = AudioManager.createStandalonePresentation(
-                    "s3k", new Sonic3kAudioProfile(),
-                    SonicConfigurationService.createStandalone(), null,
-                    sink, new SmpsCoordFlagHandlerOwner(
-                            new SmpsCoordFlagRuntimeState()));
-            return StandaloneAudioPresentationHost.fromManagerForTesting(
-                    "s3k", manager, ownerExecutor);
-        });
-        StandaloneAudioPresentationHost host = created.get(5, TimeUnit.SECONDS);
+        try {
+            Future<StandaloneAudioPresentationHost> created = ownerExecutor.submit(() -> {
+                AudioManager manager = AudioManager.createStandalonePresentation(
+                        "s3k", new Sonic3kAudioProfile(),
+                        SonicConfigurationService.createStandalone(), null,
+                        sink, new SmpsCoordFlagHandlerOwner(
+                                new SmpsCoordFlagRuntimeState()));
+                return StandaloneAudioPresentationHost.fromManagerForTesting(
+                        "s3k", manager, ownerExecutor);
+            });
+            StandaloneAudioPresentationHost host = created.get(5, TimeUnit.SECONDS);
 
-        assertThrows(IllegalStateException.class, host::close,
-                "the caller deadline must remain bounded while owner cleanup continues");
-        assertTrue(sink.closeStarted.await(1, TimeUnit.SECONDS),
-                "owner cleanup must have reached the sink before the deadline");
+            assertThrows(IllegalStateException.class, host::close,
+                    "the caller deadline must remain bounded while owner cleanup continues");
+            assertTrue(sink.closeStarted.await(1, TimeUnit.SECONDS),
+                    "owner cleanup must have reached the sink before the deadline");
 
-        sink.release.countDown();
-        assertDoesNotThrow(() -> host.close(),
-                "a later close must observe the original cleanup completion");
-        assertEquals(1, sink.closeCount.get());
-        assertTrue(ownerExecutor.awaitTermination(1, TimeUnit.SECONDS),
-                "successful cleanup must release its private owner executor");
+            sink.release.countDown();
+            assertDoesNotThrow(() -> host.close(),
+                    "a later close must observe the original cleanup completion");
+            assertEquals(1, sink.closeCount.get());
+            assertTrue(ownerExecutor.awaitTermination(1, TimeUnit.SECONDS),
+                    "successful cleanup must release its private owner executor");
+        } finally {
+            // Keep a failed assertion from stranding this deliberately
+            // blocked non-production executor in the Surefire fork.
+            sink.release.countDown();
+            ownerExecutor.shutdownNow();
+            try {
+                ownerExecutor.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     @Test
