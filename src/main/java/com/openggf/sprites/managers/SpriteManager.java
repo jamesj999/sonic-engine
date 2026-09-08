@@ -1765,6 +1765,13 @@ public class SpriteManager implements PlayableSstDispatcher {
 		// frame after that move. Skipping the water update on the hurt-landing frame keeps
 		// the engine's waterPhysicsActive flag from being set one frame early.
 		boolean hurtAtTickStart = playable.isHurt();
+		// The routine dispatcher likewise selects Obj01_Dead / Obj02_Dead before
+		// movement. Those routines perform ObjectMoveAndFall and never call
+		// Sonic_Water / Tails_Water (S2 s2.asm:38255-38267, :41131-41137).
+		// Snapshot this rather than testing after movement: a control-routine frame
+		// that enters death during its own boundary checks still finishes the
+		// already-selected control routine in the ROM.
+		boolean deadAtTickStart = playable.getDead();
 		// For S1 UNIFIED: skip pre-movement solid pass. ROM processes all solid
 		// objects AFTER Sonic's movement (his slot runs first in ExecuteObjects),
 		// so only the post-movement pass is ROM-accurate. Running both creates
@@ -1813,7 +1820,7 @@ public class SpriteManager implements PlayableSstDispatcher {
 			playable.getTailsCarryController().updateAfterTailsCollision(mainCarryInput);
 		}
 		playable.recordFollowerHistoryForTick();
-		if (usesInlineSolidResolution && !hurtAtTickStart) {
+		if (usesInlineSolidResolution && !hurtAtTickStart && !deadAtTickStart) {
 			// S2/S3K run Sonic_Water/Tails_Water after movement and the
 			// position-history write, but before animation and TouchResponse
 			// (sonic3k.asm:21995-22022). Object launchers touched on a water-entry

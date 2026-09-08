@@ -183,7 +183,8 @@ disassemblies. Entries below apply to every game unless a game is named.
 - **Sonic 1 and Sonic 2 advance the dynamic water level before player physics,** matching the ROM's
   object-update order, so a player crossing a rising surface no longer reads a stale water base.
   S3K was already correct, and Sonic 2's water-exit boost now uses its own character routines
-  rather than reusing S3K's fast upward exit gate.
+  rather than reusing S3K's fast upward exit gate. Water interaction is restricted to the normal
+  control routine, so a dying Sonic crossing the surface no longer receives the exit boost.
 
 #### Checkpoints, Death, and Transitions
 
