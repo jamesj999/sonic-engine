@@ -19,20 +19,6 @@
 # mid-play, so it is outside the rewind window entirely.
 com.openggf.game.GameModuleRegistry#missingRewindAdapter
 
-# --- Item K (wave 5, 2026-07-06): newly-visible per-GameModule service gaps ---
-# StaticStateRewindCoverageAnalyzer was extended to also scan classes
-# registered via GameModule#getGameService(Class) (the shape that missed
-# Sonic1ConveyorState -- an instance reset() service, not the older static-
-# field managers this guard originally targeted). Each entry below is a
-# newly-visible pre-existing gap, NOT fixed this wave -- see the S1 bug-
-# batch ledger's "Notes for the next session" for the named follow-up.
-
-# Real candidate rewind-desync risk, same "level trigger" shape as
-# ButtonVineTriggerManager/Sonic3kLevelTriggerManager: f_switch is read by
-# Chained Stompers/Glass Blocks/Platforms across frames with no rewind
-# adapter. Needs a RewindSnapshottable adapter (follow-up, not this wave).
-com.openggf.game.sonic1.Sonic1SwitchManager#missingRewindAdapter
-
 # Scoped to the Special Stage sub-mode, not the ordinary GameMode.LEVEL
 # window LiveRewindManager/TraceSessionLauncher gate held-rewind on --
 # plausibly lower risk, but unconfirmed; needs verification before this can

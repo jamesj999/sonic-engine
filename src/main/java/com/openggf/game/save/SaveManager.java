@@ -13,14 +13,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -48,7 +49,10 @@ public final class SaveManager {
     public void writeSlot(String game, int slot, Map<String, Object> payload) throws IOException {
         Path file = slotPath(game, slot);
         byte[] envelope = encodeEnvelope(game, slot, payload);
-        writeAtomically(file, envelope);
+        submitAndWait(() -> {
+            writeAtomically(file, envelope);
+            return null;
+        });
     }
 
     /**
@@ -58,43 +62,33 @@ public final class SaveManager {
      * same frame as an act transition; the temp-file write and atomic rename
      * cost several milliseconds there and have no place in a frame budget.
      *
-     * <p>Writes for one manager complete in submission order. {@link #readSlotSummary}
-     * and {@link #deleteSlot} flush pending writes first, and
-     * {@link #flushPendingWrites()} is available for shutdown.
+     * <p>Every save operation shares the writer's submission order. Reads,
+     * deletes, synchronous writes, and {@link #flushPendingWrites()} are
+     * barriers in that same order, even when their callers use different
+     * {@code SaveManager} instances for the same root.
      */
     public void writeSlotAsync(String game, int slot, Map<String, Object> payload) throws IOException {
         Path file = slotPath(game, slot);
         byte[] envelope = encodeEnvelope(game, slot, payload);
-        synchronized (pendingWrites) {
-            pendingWrites.add(WRITER.submit(() -> {
+        try {
+            WRITER.execute(() -> {
                 try {
                     writeAtomically(file, envelope);
-                } catch (IOException e) {
+                } catch (IOException | RuntimeException e) {
                     LOG.log(Level.WARNING, "Failed to write save " + file + ": " + e.getMessage(), e);
                 }
-                return null;
-            }));
+            });
+        } catch (RejectedExecutionException e) {
+            throw new IOException("Save writer is unavailable", e);
         }
     }
 
-    /** Blocks until every write queued through {@link #writeSlotAsync} has finished. */
+    /** Blocks until every save operation queued before this call has finished. */
     public void flushPendingWrites() {
-        while (true) {
-            Future<?> next;
-            synchronized (pendingWrites) {
-                next = pendingWrites.poll();
-            }
-            if (next == null) {
-                return;
-            }
-            try {
-                next.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            } catch (ExecutionException e) {
-                LOG.log(Level.WARNING, "Save writer task failed: " + e.getCause(), e.getCause());
-            }
+        try {
+            submitAndWait(() -> null);
+        } catch (IOException e) {
+            LOG.log(Level.WARNING, "Could not drain the save writer: " + e.getMessage(), e);
         }
     }
 
@@ -119,14 +113,18 @@ public final class SaveManager {
         }
     }
 
-    private final Deque<Future<?>> pendingWrites = new ArrayDeque<>();
-
-    /** One writer for every manager: saves are rare and ordering per file matters more than parallelism. */
-    private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "save-writer");
-        thread.setDaemon(true);
-        return thread;
-    });
+    /** One process-wide writer: saves are rare and submission order is part of persistence semantics. */
+    private static final ThreadPoolExecutor WRITER = new ThreadPoolExecutor(
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(),
+            runnable -> {
+                Thread thread = new Thread(runnable, "save-writer");
+                thread.setDaemon(true);
+                return thread;
+            });
 
     static {
         // A daemon writer would otherwise be abandoned by an exiting JVM with a
@@ -146,7 +144,11 @@ public final class SaveManager {
     }
 
     public SaveSlotSummary readSlotSummary(String game, int slot, DataSelectGameProfile profile) throws IOException {
-        flushPendingWrites();
+        return submitAndWait(() -> readSlotSummaryNow(game, slot, profile));
+    }
+
+    private SaveSlotSummary readSlotSummaryNow(String game, int slot, DataSelectGameProfile profile)
+            throws IOException {
         Path file = slotPath(game, slot);
         if (!Files.exists(file)) {
             return SaveSlotSummary.empty(slot);
@@ -196,10 +198,12 @@ public final class SaveManager {
     }
 
     public void deleteSlot(String game, int slot) {
-        flushPendingWrites();
         Path file = slotPath(game, slot);
         try {
-            Files.deleteIfExists(file);
+            submitAndWait(() -> {
+                Files.deleteIfExists(file);
+                return null;
+            });
         } catch (IOException e) {
             LOG.warning("Failed to delete save " + file + ": " + e.getMessage());
         }
@@ -215,6 +219,37 @@ public final class SaveManager {
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    private static <T> T submitAndWait(Callable<T> operation) throws IOException {
+        Future<T> future;
+        try {
+            future = WRITER.submit(operation);
+        } catch (RejectedExecutionException e) {
+            throw new IOException("Save writer is unavailable", e);
+        }
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            // Do not fall through to an unprotected filesystem operation: the
+            // queued operation is cancelled when it has not started, and the
+            // caller keeps the interrupt signal for its own shutdown policy.
+            future.cancel(false);
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for the save writer", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException("Save writer task failed", cause);
         }
     }
 

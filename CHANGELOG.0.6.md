@@ -54,6 +54,10 @@ Maven after an experiment with managed test sessions was withdrawn.
   fail-without-active-runtime contract.
 - **Object priority rendering reuses one palette-mask transition path,** keeping the Angel Island
   act 2 bridge layering fix out of the already-large object manager facade.
+- **Discord Rich Presence leaves the gameplay frame free of IPC:** enabled presence captures an
+  immutable status on the game thread, coalesces the latest payload on a bounded worker, and
+  bounds shutdown waiting for a stalled local client while retaining its privacy and timer
+  controls.
 
 #### ROM Pipeline
 
@@ -78,7 +82,9 @@ Maven after an experiment with managed test sessions was withdrawn.
   coordinator, its wrappers, and scratch-storage enforcement were removed after causing unbounded
   storage growth.
   Each checkout owns one reusable `target/` tree that also holds per-fork native extraction, and
-  release jobs use static target-local paths.
+  release jobs use static target-local paths. The local package launchers select the current Maven
+  artifact from a target-local manifest and fail clearly when that manifest or its expected fat jar
+  is missing instead of launching a stale version.
 - **The build fails fast off JDK 21:** Maven validates its own JVM at the validate phase, with an
   escape hatch. Test forks inherit Maven's JVM rather than the one on `PATH`, so a mismatched JDK
   can no longer turn hundreds of phantom failures into apparent regressions.
@@ -91,7 +97,8 @@ Maven after an experiment with managed test sessions was withdrawn.
   bundles derive their icon file from the packaged PNG.
 - **Release and architecture guards tightened** across branch and release policy, trace and rewind
   invariants, ROM-only runtime asset rules, and singleton lifecycle, replacing diagnostic-only or
-  tautological checks with behavioral oracles.
+  tautological checks with behavioral oracles. The opt-in S3K rewind allocation measurement is
+  explicitly classified while unknown skips continue to fail closed.
 - **Dead code removed** in an evidence-tiered sweep that checked callers, registries, reflection,
   resources, and service loading first. Casualties included unreferenced special-stage scalars,
   boss animation tables, debug primitive rendering, a superseded PSG chip class, an unreachable
@@ -261,7 +268,9 @@ disassemblies. Entries below apply to every game unless a game is named.
   the line 2 backdrop colour included) while line 0 keeps Sonic, the HUD, and the title card at
   full colour, replacing the blended black overlay. Palette fades now apply where CRAM uploads
   happen, so palette cycles and other writes made during a fade stay faded. The card's black
-  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame.
+  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame. A complete
+  palette teardown also clears the active fade and its cached palette owners, so an interrupted
+  title-card session cannot tint the next session.
 
 ### Gameplay-Scoped Rewind
 
@@ -272,7 +281,9 @@ object family now restores through shared machinery, and the remaining coverage 
   covering bosses, badniks, mechanisms, debris and particles, cutscene controllers, and HUD and
   utility objects, moved from bespoke or missing restore paths onto shared spawn-based or
   graph-based generic recreate. Parent, child, and player references relink through the rewind
-  identity table and constructor-derived scalars restore compactly.
+  identity table and constructor-derived scalars restore compactly. Sonic 1's sixteen switch bytes
+  are captured too, and its SBZ3 door singleton rebinds from restored live slots, preserving the
+  first-loaded-slot rule across absent, reconstructed, and reused objects.
 - **Bespoke dynamic child codecs were deleted as they migrated:** lost rings, shields, boss and
   badnik children, seesaw balls, checkpoint children, Sonic 1 effects, S3K cutscene and miniboss
   children across six zones, signposts, entry flashes, and shared helper dynamics.
@@ -332,7 +343,8 @@ object family now restores through shared machinery, and the remaining coverage 
 
 - **Override-only `config.yaml`:** defaults live in code and the example file, and an older
   file with every default written in converts once to format 2, dropping values still at default
-  while keeping real changes.
+  while keeping real changes. A failed YAML replacement leaves the legacy JSON source available
+  for the next startup instead of claiming a completed migration.
 - **`gameplay.loadTimeSimulation: FAST`:** now a real mode and the new default. A hand-tuned
   manifest carries measured ROM hardware-load costs, and games without a FAST manifest fall back
   to `NONE` with a warning. The old default is dropped on conversion, so existing installs pick the
@@ -375,9 +387,10 @@ object family now restores through shared machinery, and the remaining coverage 
   always joins the build so state stays identical to a synchronous load. Kosinski archive
   inspections are memoized per ROM.
 - **Save writes and GPU uploads moved off the gameplay frame:** progression saves encode on the
-  issuing frame but write on a dedicated writer thread flushed by slot reads, deletes, and
-  shutdown, and the act hand-off pre-decodes collision tables off the frame and keeps unchanged
-  sprite sheets across the reload instead of re-uploading them.
+  issuing frame but write on a dedicated writer thread, with reads, deletes, synchronous writes,
+  and shutdown sharing its submission boundary so independent save managers cannot reorder a slot;
+  the act hand-off pre-decodes collision tables off the frame and keeps unchanged sprite sheets
+  across the reload instead of re-uploading them.
 - **Palette-cycling zones no longer accumulate unbounded palette writes in the headless frame
   path.** The per-frame drain was owned only by the windowed game loop, which headless replay and
   benchmark paths bypass, making the cost grow quadratically. Moving the drain into the shared
@@ -1771,7 +1784,9 @@ request scheduling. Full parity and human listening sign-off remain open.
 - **Unified presentation audio:** SMPS, WAV and PCM effects, and raw SEGA PCM commands all resolve
   through one composite, allocation-free presentation voice with unified voice snapshots,
   deterministic command ordering, phase-exact non-consuming capture taps, and full rewind and
-  reverse-playback support. Live recording and offline trace capture take the same packets.
+  reverse-playback support. Live recording and offline trace capture take the same packets. The
+  standalone sound test marshals interactive commands and cleanup to its producer owner executor.
+  Shutdown waits are bounded while pending cleanup remains queued.
 - **Presentation rebuilds no longer silence the game:** the title-to-gameplay mode reset recreates
   the backend-owned presentation sink instead of letting enabled audio drop after the first reset,
   and the pre-game master title emits its own navigate, confirm and error cues independently of the

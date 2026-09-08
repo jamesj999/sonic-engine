@@ -9,6 +9,11 @@ import java.io.IOException;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Discord IPC client owned by one {@link com.openggf.integration.presence.PresenceManager}
+ * worker: that worker serializes connect and activity writes. {@link #close()} may run from the
+ * lifecycle cancellation thread and closes the current transport to release a blocked write.
+ */
 public final class DiscordIpcPresenceClient implements PresenceClient {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int OPCODE_HANDSHAKE = 0;
@@ -16,7 +21,9 @@ public final class DiscordIpcPresenceClient implements PresenceClient {
 
     private final DiscordIpcTransportFactory transportFactory;
     private final long activityStartEpochSeconds;
-    private DiscordIpcTransport transport;
+    private final Object transportLock = new Object();
+    private volatile DiscordIpcTransport transport;
+    private boolean closed;
 
     public DiscordIpcPresenceClient(DiscordIpcTransportFactory transportFactory) {
         this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
@@ -25,40 +32,94 @@ public final class DiscordIpcPresenceClient implements PresenceClient {
 
     @Override
     public void connect() throws IOException {
-        if (transport != null) {
+        synchronized (transportLock) {
+            if (closed) {
+                throw new IOException("Discord IPC client is closed.");
+            }
+            if (transport != null) {
+                return;
+            }
+        }
+        DiscordIpcTransport opened = transportFactory.open();
+        boolean discard;
+        boolean rejectBecauseClosed;
+        synchronized (transportLock) {
+            rejectBecauseClosed = closed;
+            discard = rejectBecauseClosed || transport != null;
+            if (!discard) {
+                transport = opened;
+            }
+        }
+        if (discard) {
+            closeQuietly(opened);
+            if (rejectBecauseClosed) {
+                throw new IOException("Discord IPC client is closed.");
+            }
             return;
         }
-        transport = transportFactory.open();
         ObjectNode handshake = MAPPER.createObjectNode();
         handshake.put("v", 1);
         handshake.put("client_id", DiscordPresenceConstants.APPLICATION_ID);
-        transport.send(OPCODE_HANDSHAKE, MAPPER.writeValueAsString(handshake));
+        try {
+            opened.send(OPCODE_HANDSHAKE, MAPPER.writeValueAsString(handshake));
+        } catch (IOException failure) {
+            boolean ownedTransport;
+            synchronized (transportLock) {
+                ownedTransport = transport == opened;
+                if (ownedTransport) {
+                    transport = null;
+                }
+            }
+            if (ownedTransport) {
+                closeQuietly(opened);
+            }
+            throw failure;
+        }
     }
 
     @Override
     public void update(PresencePayload payload) throws IOException {
-        ensureConnected();
-        transport.send(OPCODE_FRAME, MAPPER.writeValueAsString(setActivity(payload)));
+        DiscordIpcTransport current = ensureConnected();
+        current.send(OPCODE_FRAME, MAPPER.writeValueAsString(setActivity(payload)));
     }
 
     @Override
     public void clear() throws IOException {
-        ensureConnected();
-        transport.send(OPCODE_FRAME, MAPPER.writeValueAsString(setActivity(null)));
+        DiscordIpcTransport current = ensureConnected();
+        current.send(OPCODE_FRAME, MAPPER.writeValueAsString(setActivity(null)));
     }
 
     @Override
     public void close() throws IOException {
-        if (transport != null) {
-            transport.close();
+        DiscordIpcTransport current;
+        synchronized (transportLock) {
+            closed = true;
+            current = transport;
             transport = null;
+        }
+        if (current != null) {
+            current.close();
         }
     }
 
-    private void ensureConnected() throws IOException {
-        if (transport == null) {
-            connect();
+    private static void closeQuietly(DiscordIpcTransport transport) {
+        try {
+            transport.close();
+        } catch (IOException ignored) {
+            // The original connect failure is the useful diagnostic.
         }
+    }
+
+    private DiscordIpcTransport ensureConnected() throws IOException {
+        DiscordIpcTransport current = transport;
+        if (current == null) {
+            connect();
+            current = transport;
+        }
+        if (current == null) {
+            throw new IOException("Discord IPC client is not connected.");
+        }
+        return current;
     }
 
     private ObjectNode setActivity(PresencePayload payload) {
