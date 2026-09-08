@@ -1,6 +1,7 @@
 package com.openggf.game;
 
 import com.openggf.level.Palette;
+import com.openggf.game.sonic3k.titlescreen.Sonic3kTitleScreenMappings;
 import com.openggf.level.Pattern;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
@@ -277,8 +278,31 @@ class TestMasterTitleRomPreview {
     }
 
     @Test
-    void sonic3kPreviewSuppressesCopyrightInMasterComposition() {
-        assertFalse(MasterTitleRomPreview.sonic3kPreviewDrawsCopyright());
+    void sonic3kPreviewIncludesCopyrightInMasterComposition() {
+        assertTrue(MasterTitleRomPreview.sonic3kPreviewDrawsCopyright());
+    }
+
+    @Test
+    void sonic3kPreviewComposesTrademarkAndCopyrightPixels() throws Exception {
+        Pattern[] patterns = new Pattern[0x800];
+        Pattern ink = new Pattern();
+        ink.setPixel(0, 0, (byte) 1);
+        var trademark = Sonic3kTitleScreenMappings.createBannerFrames().get(1).pieces().get(0);
+        var copyright = Sonic3kTitleScreenMappings.createCopyrightFrame().get(0).pieces().get(0);
+        patterns[trademark.tileIndex()] = ink;
+        patterns[copyright.tileIndex()] = ink;
+        Palette[] palettes = { palette(0), palette(0), palette(0), palette(0, 0xFF_FF_FF) };
+        Method compose = MasterTitleRomPreview.class.getDeclaredMethod("composeSonic3kFinalPreview",
+                MasterTitleRomPreview.Image.class, Pattern[].class, Palette[].class, int.class, int.class);
+        compose.setAccessible(true);
+        MasterTitleRomPreview.Image blank = new MasterTitleRomPreview.Image(320, 224, new byte[320 * 224 * 4]);
+
+        MasterTitleRomPreview.Image image = (MasterTitleRomPreview.Image) compose.invoke(
+                null, blank, patterns, palettes, -1, -1);
+
+        assertPixel(image, 252, 104, 255, 255, 255, 255);
+        // Copyright fits between the game selector and navigation hints without covering the logo.
+        assertPixel(image, 216, 200, 255, 255, 255, 255);
     }
 
     @Test

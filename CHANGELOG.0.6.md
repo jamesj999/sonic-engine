@@ -361,7 +361,8 @@ object family now restores through shared machinery, and the remaining coverage 
 - **Prerelease build titles resolve correctly when run from an IDE,** falling back to the commit
   and dirty state when build placeholders are unresolved.
 - **A legal-disclaimer startup flow, ROM-derived master-title previews, display shader support, and
-  pause and HUD presentation fixes** round out the user-facing surface.
+  pause and HUD presentation fixes** round out the user-facing surface. The Sonic 3 & Knuckles
+  master-title preview includes its ROM-derived TM and copyright graphics.
 
 ### Performance
 
