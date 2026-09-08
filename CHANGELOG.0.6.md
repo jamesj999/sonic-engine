@@ -79,6 +79,10 @@ Maven after an experiment with managed test sessions was withdrawn.
   storage growth.
   Each checkout owns one reusable `target/` tree that also holds per-fork native extraction, and
   release jobs use static target-local paths.
+- **Local package launchers select the current Maven artifact deterministically:** packaging writes
+  the effective `project.build.finalName` to a target-local manifest, and `run.sh` and `run.cmd`
+  fail clearly when that manifest or its expected fat jar is missing instead of launching a stale
+  version.
 - **The build fails fast off JDK 21:** Maven validates its own JVM at the validate phase, with an
   escape hatch. Test forks inherit Maven's JVM rather than the one on `PATH`, so a mismatched JDK
   can no longer turn hundreds of phantom failures into apparent regressions.
@@ -92,6 +96,9 @@ Maven after an experiment with managed test sessions was withdrawn.
 - **Release and architecture guards tightened** across branch and release policy, trace and rewind
   invariants, ROM-only runtime asset rules, and singleton lifecycle, replacing diagnostic-only or
   tautological checks with behavioral oracles.
+- **Release skip classification covers the S3K rewind allocation probe explicitly:** the opt-in
+  measurement remains excluded from ordinary release runs while unknown skips continue to fail
+  closed.
 - **Dead code removed** in an evidence-tiered sweep that checked callers, registries, reflection,
   resources, and service loading first. Casualties included unreferenced special-stage scalars,
   boss animation tables, debug primitive rendering, a superseded PSG chip class, an unreachable

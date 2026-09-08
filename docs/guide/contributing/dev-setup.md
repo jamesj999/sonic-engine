@@ -97,8 +97,12 @@ run.cmd
 ```
 
 The normal launchers build into the current worktree's `target/` directory and
-launch from there. Run Maven from the worktree root so its repository-local JVM
-configuration also keeps Maven-side temporary files inside `target/`.
+launch the exact fat jar produced by that package, even when an older jar is
+still present. They resolve their own script directory, so they can be invoked
+from outside the worktree; the generated artifact manifest keeps the Maven
+`project.build.finalName` setting authoritative. Run Maven from the worktree
+root when invoking it directly so its repository-local JVM configuration also
+keeps Maven-side temporary files inside `target/`.
 
 For faster iteration, `dev.sh` (Linux) and `dev.cmd` (Windows) compile only
 changed sources and run directly from `target/classes`. The first offline
