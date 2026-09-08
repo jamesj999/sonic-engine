@@ -91,9 +91,10 @@ final class MasterTitleRomPreview {
     private static final int S3K_PREVIEW_WINK_Y = 0xC8 - S3K_PREVIEW_VSCROLL - 128;
     private static final int S3K_PREVIEW_SCALE_NUMERATOR = 1;
     private static final int S3K_PREVIEW_SCALE_DENOMINATOR = 1;
-    private static final int S3K_PREVIEW_COPYRIGHT_X = 8;
-    private static final int S3K_PREVIEW_COPYRIGHT_Y = 8;
-    private static final boolean S3K_PREVIEW_DRAWS_COPYRIGHT = false;
+    private static final int S3K_PREVIEW_COPYRIGHT_X = 0x158 - 128;
+    // Raise the title's y=204 copyright by four pixels to clear the master navigation hints.
+    private static final int S3K_PREVIEW_COPYRIGHT_Y = 200;
+    private static final boolean S3K_PREVIEW_DRAWS_COPYRIGHT = true;
     private static final boolean S3K_PREVIEW_DRAWS_MENU_SELECTION = false;
     private static final int[] S3K_PREVIEW_FINGER_WAG_FRAMES = {
             4, 4, 4, 4, 4, 4, 0, 4, 1, 4, 0, 4, 1, 4, 0, 4, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
@@ -657,6 +658,9 @@ final class MasterTitleRomPreview {
         int bannerY = sonic3kPreviewBannerY();
         overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createBannerFrames().get(0),
                 0x120 - 128, bannerY, 0);
+        // Settled title TM uses fixed VDP coordinates, as in the title-screen manager.
+        overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createBannerFrames().get(1),
+                0x188 - 128, 0xEC - 128, 0);
         overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createAndKnucklesFrames().get(0),
                 0x120 - 128, bannerY + 0x5C, 0);
         if (sonic3kPreviewDrawsMenuSelection()) {
