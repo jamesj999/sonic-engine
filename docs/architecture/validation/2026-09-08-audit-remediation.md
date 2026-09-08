@@ -17,14 +17,46 @@ All baseline failures/errors are empty. Forty-three ordinary skips are allowed f
 | 03 Switch RAM rewind | S1 rewind | Accepted; full/guards identity checks passed | `75c9a243d`: production registry restores all 16 bytes; repeated restore, defensive accessor, missing-snapshot reset and consumer-facing pressed gates. Only obsolete switch baseline entry removed |
 | 04 Release skip policy | Delivery | Accepted; full/guards identity checks passed | `f9d054f64`: exact opt-in rule inspected; coordinator classifier allows all 44 baseline skips with zero unknown/required/undeclared/stale; policy unit suite 20 tests, one absent historical-report skip |
 | 05 Config migration | Persistence | Accepted; full/guards identity checks passed | `0855fdd94`: coordinator reran the original failed-YAML/restart probe; legacy JSON remains, no backup is created, both startups retain `s1`. Public save API remains compatible |
-| 06 Discord presence | Presence | Source accepted; final worker full/guards pending | `87b06bf5f`: coordinator and independent Luna reviewer verified coalescing, caller-thread snapshots, nanosecond shutdown deadline and production client lifecycle with injected blocked open/send transports |
+| 06 Discord presence | Presence | Accepted; full/guards identity checks passed | `87b06bf5f`: coordinator and independent Luna reviewer verified coalescing, caller-thread snapshots, nanosecond shutdown deadline and production client lifecycle with injected blocked open/send transports |
 | 07 Current artifact launch | Delivery | Accepted; full/guards/classifier passed | `7dbc6af7e`: coordinator launcher tests 9 passed; manifest selection, stale-only failure, custom names, spaces, missing/invalid metadata and exit codes. Windows contract is statically inspected, not executed |
-| 08 Palette teardown | Presentation | Source accepted; final worker full/guards pending | `d36375987`: coordinator original probe now reports inactive fade, mask zero and white unchanged after teardown; headless regression also checks cached palette owners |
-| 09 Sound-test ownership | Presentation | Source accepted; final worker full/guards pending | `2d2062b59`: coordinator original interactive probe now succeeds; tests cover concurrent close, retained cleanup after timeout, direct-owner retry and daemon owner policy. Strict producer ownership assertion is unchanged |
+| 08 Palette teardown | Presentation | Accepted; full/guards identity checks passed | `d36375987`: coordinator original probe now reports inactive fade, mask zero and white unchanged after teardown; headless regression also checks cached palette owners |
+| 09 Sound-test ownership | Presentation | Accepted; full/guards identity checks passed | `2d2062b59`: coordinator original interactive probe now succeeds; tests cover concurrent close, retained cleanup after timeout, direct-owner retry and daemon owner policy. Strict producer ownership assertion is unchanged |
 
-## Integration
+## Integration and completed verification
 
-The reviewed persistence commit `0855fdd94` has been merged into the isolated coordination branch; main remains unchanged. Persistence absolute-path full XML has no missing baseline identities, six intended new test identities, no failures/errors and 44 skips; guards have all 613 baseline identities and no failures/errors/skips. Completed-run command receipts remain to be consolidated. Delivery `8c7c14913` and S1 rewind `75c9a243d` are also merged into coordination. S1 ordinary completed 17,056 console tests with 0 failures/errors and 44 skips; all baseline identities remain and seven intended new identities were added. S1 guards completed 613 tests with no failures/errors/skips. Neither main integration nor push has occurred. Presence `87b06bf5f` and presentation `2d2062b59` are combined in the isolated coordination tree after source review, while final worker verification continues in parallel. Main integration is gated on both worker and combined-tree results. Post-merge verification, policy checks, push and task-worktree cleanup remain pending.
+All nine tasks are accepted. Worker source commits were merged into the isolated coordination tree without conflicts; overlapping release notes were reconciled into their existing themes, with shutdown wording limited to the actual bounded-wait guarantee.
+
+| Final worker tree | Tested source | Ordinary result | Guards result | Baseline identity comparison |
+|---|---|---|---|---|
+| Persistence | `0855fdd94` | 17,055 XML nodes; 0 failures/errors; 44 skips | 613; 0 failures/errors/skips | All retained; six added |
+| S1 rewind | `75c9a243d` | 17,056 console tests; 0 failures/errors; 44 skips | 613; 0 failures/errors/skips | All retained; seven added |
+| Delivery | `8c7c14913` | 17,049 console tests; 0 failures/errors; 44 skips | 613; 0 failures/errors/skips | All retained; none added |
+| Presence | `87b06bf5f` | 17,056 XML nodes; 0 failures/errors; 44 skips | 613; 0 failures/errors/skips | All retained; seven added |
+| Presentation | `2d2062b59` | 17,054 console tests; 0 failures/errors; 44 skips | 613; 0 failures/errors/skips | All retained; five added |
+
+The coordinator independently compared each final worker XML identity set, full failure/error messages and skips with baseline. Persistence/presence completed console output was retained in the implementing agent's tool session, not saved to a log file; the durable artifacts are their XML archives and agent-attested exact command receipts. The other worker and combined runs have saved completed logs. Do not interpret XML-node counts as console totals.
+
+Combined source `d1f64e1ee` completed the ordinary suite (17,074 console tests, 0 failures/errors, 44 skips; 5m15) and fresh-JVM guards (613 tests, 0 failures/errors/skips; 2m19). Every baseline identity remains, with 25 intended new ordinary regressions. All 44 skips match explicit rules, with zero unclassified, required-skipped, undeclared-input or stale entries. Packaging completed in 18.907s; the generated manifest names `OpenGGF-0.6.prerelease`, and that exact dependency jar exists. No source changed after these runs.
+
+Main integration and post-merge verification remain pending at this record's first verification checkpoint. The final publication and cleanup state is reported separately after execution.
+
+## Commands and retained evidence
+
+Each combined Maven run used Java 21 and this command, with `-Pguards` added for guards and distinct `RUN` values `audit-combined-ordinary` / `audit-combined-guards`:
+
+```bash
+LUA_BIN=lua5.4 mvn -Dmse=off \
+  -Dsonic1.rom.path=$PROJECT_ROOT/s1.gen \
+  -Dsonic2.rom.path=$PROJECT_ROOT/s2.gen \
+  -Ds3k.rom.path=$PROJECT_ROOT/s3k.gen \
+  -Dopenggf.surefire.reports="$WORKTREE/target/$RUN/reports" \
+  -Dopenggf.trace.reports="$WORKTREE/target/$RUN/trace-reports" \
+  -Dopenggf.test.diagnostics="$WORKTREE/target/$RUN/diagnostics" test -B
+```
+
+Set `PROJECT_ROOT` to the absolute main checkout path and `WORKTREE` to its `.worktrees/ai-audit-remediation` checkout; both must resolve to absolute paths. Package: `LUA_BIN=lua5.4 mvn -Dmse=off -DskipTests package -B`. Tooling: `python3 -m unittest discover -s tools/testing -p 'test_*.py'` (71 tests, one absent historical-fixture skip). Skip classification: `python3 tools/testing/classify_surefire_skips.py --reports target/audit-combined-ordinary/reports --policy tools/testing/release-skip-policy.json --capabilities gl=false,s2_bk2=false,s3k_observations=false,s1_bizhawk_reference=false,audio_reference_files=false --check-evidence`. All 31 tracked Bash scripts passed `bash -n`; agent instructions and skill mirrors match; all 19 local links in the 11 task/validation documents resolve; branch policy checks passed.
+
+`AUDIT_EVIDENCE` denotes the external task evidence directory recorded in the final delivery message. It contains per-worker report archives, command receipts, original/fixed probe logs, and coordinator JSON identity comparisons. Combined `receipt.json` files record exact argv, source commit, timestamps and exit status beside saved logs. This directory is outside Git and must be preserved when task worktrees are removed. These checks do not establish live GL/OpenAL, Windows execution or a live Discord endpoint; the latter uses production client code with injected blocked transports.
 
 ## Verification investigations
 
