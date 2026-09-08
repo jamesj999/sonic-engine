@@ -245,51 +245,58 @@ avoid starting wide new zone work unless it directly advances a route slice or r
 - Trace replay meets the no-regression contract: every green trace stays green and no known-red
   trace worsens on the candidate. Clearing the frontier itself is not a 0.6 exit criterion.
 
-## v0.7 Theme: Completion, Polish, and Parity Closure
+## v0.7 Theme: Complete Stock Campaigns
 
-This release should focus on reducing obvious gaps rather than introducing new strategic directions.
+The [detailed 0.7 roadmap](docs/project/v0.7-roadmap.md) owns the current
+post-0.6 release sequence and supersedes older scope suggestions here. Finish and
+validate the three stock-game flows first; S3K's late zones, character routes,
+finales, outros and four continuous terminal replay chains are the main remaining
+implementation work. S1/S2 full-game flows and all delivered added features stay
+under regression coverage. Group each route's content, transitions, saves/rewind,
+audio handoffs, ending and chain evidence so lifecycle defects surface early.
 
-### Primary Goals
+Continue screens, fast/accurate FM selection, AIZ2 background level/art/tilemap
+preparation, native packaging and direct Maven already landed through 0.6.
+Retain them; do not schedule their invention again. Widescreen, modding, racing,
+editor and team work also have substantial implementations on `next`, with
+candidate/experimental boundaries and remaining release validation.
 
-- Close high-visibility gameplay gaps across all three games.
-- Improve end-to-end reliability of title, data select, save, special-stage, ending, and transition flows.
-- Convert lingering TODO/FIXME areas into tested behavior or explicit deferrals.
+0.7 does not require a public Mod API freeze or broad new optimization work.
+Make narrow shared-policy, loading and audio fixes where campaign evidence
+requires them, and keep performance and audio-parity claims tied to measurements.
+The [delivered inventory](docs/project/v0.7-roadmap.md#delivered-baseline-and-remaining-work)
+distinguishes inherited work, next additions and outstanding scope.
 
-### Priority Areas
+## v0.8 Theme: Graduate Added Features on the Campaign Baseline
 
-- Prepare ROM-backed art asynchronously during existing PLC/decompression waits
-  and loading transitions, preserving service timing, partial uploads, and rewind.
-  Planned for 0.7; see the [async-loading item](docs/project/v0.7-roadmap.md#planned-performance-work--asynchronous-rom-loading).
-- Live switching between the accurate and fast FM cores with one core running at a
-  time: the standby core is rebuilt from the live register image, warmed up for a
-  fraction of a second and crossfaded in. Planned for 0.7; see the
-  [FM core live switch item](docs/project/v0.7-roadmap.md#planned-audio-work--live-fm-core-switching).
+The [detailed 0.8 roadmap](docs/project/v0.8-roadmap.md) owns these workstreams:
 
-- Game Over / Continue screens landed in 0.6; retain their input, save and restart coverage.
-- Complete SMPS and chip-level audio parity and listening validation beyond the
-  corrections and comparison tooling landed in 0.6. The September 4 audio
-  handover supersedes the earlier withdrawal; retain its measured boundaries.
-- Remaining high-value S3K gameplay gaps (additional zones, bosses, special stage polish),
-  including moving the `-Ptrace-replay-r7` zones and Knuckles routes into scope.
-- Special stage polish where current support exists but parity is incomplete.
-- Final parity passes on transitions, boss sequences, and edge-case object behavior.
-- Native **Knuckles in Sonic 2** support without S3K donation. Treat Sonic & Knuckles
-  lock-on to Sonic 2 as an official patch target rather than a generic cross-game
-  character option: check out the s2disasm Knuckles-in-Sonic-2 branch, document the
-  branch-vs-stock Sonic 2 code/data differences, and implement Knuckles from those
-  differences so physics, objects, monitors/life icons, title/level-select flow, and
-  trace behavior are faithful to the lock-on game. Do not infer this behavior from
-  S3K donation alone.
-- Documentation cleanup around what is complete, partial, or intentionally deferred.
+- Finalize typed policies and extract Time Attack/multiplayer into a bundled mod
+  together with generic menu, lifecycle, overlay and recording hooks. Resolve
+  native code-mod packaging and validate samples/SDK before publishing the API.
+- [Extend asynchronous ROM loading](docs/project/v0.8-roadmap.md#milestone-3--extend-asynchronous-rom-loading)
+  at measured remaining art/queue bottlenecks, reusing delivered preparation and
+  ROM-readiness owners; preserve partial uploads, cancellation and rewind.
+- [Live FM switching](docs/project/v0.8-roadmap.md#milestone-4--live-fm-core-switching)
+  uses the completed campaign audio lifecycle corpus. Crossfade transparency and
+  register-history reconstruction remain hypotheses to validate, not guarantees.
+- Qualify delivered modding, editor, widescreen, team and racing support against
+  completed routes and declared native/JVM/service boundaries.
+- Preserve scheduled base-game streamed SFX and S1 mod-zone commitments; the
+  bounded S3K format-v2 adapter is already delivered. Native Knuckles-in-Sonic-2
+  remains a separate ROM lock-on follow-on, not implied by S3K character donation.
+- Continue observed SMPS/chip-parity and listening work with explicit scope and
+  evidence. Optional creator/editor expansion remains demand-driven.
 
-## v0.8 Tooling Ask: Actworks
+## v0.8 Tooling Ask: Actworks (historical, outside OpenGGF releases)
 
 Agent worktree and scratch-lifecycle research continues in the public
 [`OpenGGF/Actworks`](https://github.com/OpenGGF/Actworks) project. Slipmat and
 the lifecycle tools live there; [cowtree](https://github.com/raiscan/cowtree)
-remains its own repository. OpenGGF has no runtime, build, test, or contributor
-workflow dependency on Actworks. Any future reintroduction must prove bounded
-storage, explicit lifecycle closure, and material benefit before adoption.
+remains its own repository. Neither is an OpenGGF 0.8 release workstream or a
+runtime, build, test or contributor-workflow dependency. Any future
+reintroduction must prove bounded storage, explicit lifecycle closure and
+material benefit before adoption.
 
 ## 1.0 Criteria
 
@@ -314,9 +321,9 @@ These are all valid ideas, but they should not outrank the current roadmap theme
 
 ## Short Version
 
-`v0.5.20260411` establishes the S3K AIZ-to-HCZ baseline and shared architecture hardening.
-`v0.6` turns that baseline into release-hardened playable S3K route slices, with complete-run trace
-frontiers as the main parity ledger under a no-regression policy. Data select/save is done, live
-rewind is a real feature, the editor is dormant, the SMPS parity programme is deferred, and the
-remaining work is to stabilize opened routes without hiding known failures. `v0.7` focuses on completion and parity closure; reusable agent
-lifecycle research is a separate v0.8 Actworks ask.
+0.6 establishes the playable-slice and shared-runtime baseline. 0.7 completes
+and validates the stock campaigns while preserving existing additions. 0.8
+qualifies and publishes those additions against the stable campaign baseline,
+with final Mod API design, bundled racing, measured loading extensions and live
+FM switching explicitly sequenced. The versioned roadmaps own current scope;
+older retrospective measurements above describe their recorded commits only.

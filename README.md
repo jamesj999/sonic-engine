@@ -454,19 +454,23 @@ outside the primary release slice or are still under active development.
 - [Known discrepancies](docs/status/known-discrepancies.md)
 - [Release-readiness roadmap](docs/project/release-readiness-roadmap.md)
 
-### v0.7 / next roadmap
+### v0.7 / next and v0.8 roadmaps
 
 The `next` branch stages post-0.6 work without changing the current 0.6
-release scope. Its [0.7 roadmap](docs/project/v0.7-roadmap.md) carries the
-creator-facing Mod API and streamed audio, mod-zone descriptors, arbitrary-team
-support, Time Attack and multiplayer work, Super Emerald and nonlinear-route
-support, native/universal packaging, editor capabilities, widescreen work, and
-compatibility hardening. It targets complete locked-on Sonic, Tails, and
-Knuckles routes through their ROM-authored finales and outros, with end-to-end
-complete-chain trace replay as a release gate, and treats the typed game-policy
-hierarchy as a pre-publication Mod API gate. Those capabilities remain follow-up
-release work until they graduate from `next`; the 0.6 snapshot and its release
-evidence stay authoritative below.
+release scope. The [0.7 roadmap](docs/project/v0.7-roadmap.md) completes and
+validates the stock games, with locked-on Sonic, Tails and Knuckles campaigns,
+ROM-authored finales/outros and continuous terminal replay chains as the main
+remaining S3K gates. Existing modding, racing, editor and widescreen work stays
+under regression coverage while those campaign owners settle.
+
+The [0.8 roadmap](docs/project/v0.8-roadmap.md) then graduates those additions:
+final policy/API design, Time Attack and multiplayer extraction into a bundled
+mod, measured extensions to the already-delivered background loading, live FM
+switching, and feature/platform qualification. API publication follows those
+consumers; the current Mod API remains an unpublished candidate. Native builds
+currently reject code mods, so bundled racing's native availability needs an
+explicit packaging decision. These roadmaps describe future release gates;
+the 0.6 snapshot and its release evidence remain authoritative for 0.6.
 
 ### Previous releases
 

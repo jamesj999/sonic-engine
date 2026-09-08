@@ -1,14 +1,20 @@
 # Mod Support Original-Scope Follow-ons
 
-**Status:** Scheduled after Phase 4; not part of Phase 4 implementation.
+**Status:** Historical implementation plan, with release disposition refreshed
+2026-09-08. Workstreams A (base-game SFX overrides) and B (S1 adapter) remain
+scheduled under the [0.8 roadmap](../../project/v0.8-roadmap.md). Workstream C's
+bounded S3K format-v2 adapter is delivered; see the
+[current contract](../../modding/formats/level-definition.md). Its broader runtime
+expansion is not implied by this delivered status. The old branch basis below
+records the original audit, not current implementation.
 
 **Branch/status basis:** `next` at `5e0c714e8`. This schedule does not assume that
 anything exists on `develop`, and each workstream must rebase its design evidence on
 the then-current `next` before implementation.
 
-**Source commitments:** the [root design](../specs/2026-07-09-mod-support-design.md)
-§1 and §8, [Phase 1 Non-goals](../specs/2026-07-09-mod-support-phase1-design.md#non-goals),
-and the [Phase 2 S2-flagship narrowing](../specs/2026-07-09-mod-support-phase2-design.md#goal).
+**Source commitments:** the [root design](../designs/2026-07-09-mod-support-design.md)
+§1 and §8, [Phase 1 Non-goals](../designs/2026-07-09-mod-support-phase1-design.md#non-goals),
+and the [Phase 2 S2-flagship narrowing](../designs/2026-07-09-mod-support-phase2-design.md#goal).
 
 This plan owns the three original-scope commitments that Phase 4 may not silently
 park or drop. Each workstream gets its own implementation design and delivery branch

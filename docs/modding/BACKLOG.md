@@ -11,14 +11,29 @@ case-insensitively for `defer`, `out-of-scope`, `parked`, `follow-on`, `future`,
 `revisit`, `when-demanded`, `later`, `optional`, `narrowing`, `non-goal`,
 `unsupported`, and `TODO`.
 
+## Current release disposition (2026-09-08)
+
+The [0.7 roadmap](../project/v0.7-roadmap.md) closes stock campaigns while
+retaining feature regression coverage. The [0.8 roadmap](../project/v0.8-roadmap.md)
+then owns feature qualification and API publication. The audit below is historical
+unless a row records a later disposition; current implementation takes precedence.
+
+S3K's bounded format-v2 host adapter has since landed (including object-set and
+palette ownership, tagged saves, and a deliberately empty/flat-scroll runtime).
+That delivers the bounded adapter commitment, not arbitrary stock zone events or
+editor live re-apply. Base-game streamed SFX overrides and the S1 zone adapter
+remain scheduled 0.8 follow-ons. Their public additions must be reviewed before
+API publication; the roadmap alone changes no API version or compatibility rule.
+
 ## Audit basis and sweep inventory
 
 This review was run on branch **`next` at `5e0c714e8`** after the Phase 4 sample
 gallery landed. It did not compare against, or infer status from, `develop`. Landed
-status was checked in this `next` tree; for example, dependency resource lookup still
-returns no resources, additive `ModZoneLoader` remains Sonic-2-specific, the manifest
-contains music-only `audioOverrides`, standalone manifests cannot register patches,
-and S3K editor runtime re-apply remains gated.
+status was checked in that historical `next` tree: dependency resource lookup
+returned no resources, additive `ModZoneLoader` was Sonic-2-specific, the manifest
+contained music-only `audioOverrides`, standalone manifests could not register
+patches, and S3K editor runtime re-apply was gated. Later dispositions are recorded
+above and in the affected rows.
 
 The exact corpus was the [root design](../architecture/designs/2026-07-09-mod-support-design.md),
 all five sibling designs ([Phase 0](../architecture/designs/2026-07-09-mod-support-phase0-design.md),
@@ -80,7 +95,7 @@ spec commitments.
 |---|---|---|---|---|
 | Base-game streamed SFX overrides | Root design §1 manifest override maps and §4 audio; Phase 1 non-goals; shared contract §1 audio manifest | Audio/mod runtime | The standalone sample proves bounded WAV one-shot decode/mix, reducing implementation risk, but base-game identity, manifest vocabulary, conflict reporting, and SMPS fallback remain unsolved. | **Schedule**. [Workstream A](../architecture/plans/2026-07-13-mod-support-original-scope-follow-ons.md#workstream-a--base-game-streamed-sfx-overrides). |
 | Sonic 1 new-zone adapter | Root design §8 Phase 2; Phase 0 §B; Phase 2 goal/out-of-scope | S1 level loading/mod zones | Original scope explicitly retained it. S1 bypasses the S2 plan seam, so a safe adapter needs dedicated architecture and parity gates. | **Schedule**. [Workstream B](../architecture/plans/2026-07-13-mod-support-original-scope-follow-ons.md#workstream-b--sonic-1-mod-zone-adapter). |
-| Sonic 3&K new-zone adapter | Root design §8 Phase 2; Phase 2 goal/§D | S3K level/runtime frameworks | Original scope explicitly retained it. S3K zone sets and runtime registries make a mechanical S2 port unsafe. | **Schedule**. [Workstream C](../architecture/plans/2026-07-13-mod-support-original-scope-follow-ons.md#workstream-c--sonic-3knuckles-mod-zone-adapter). |
+| Sonic 3&K new-zone adapter | Root design §8 Phase 2; Phase 2 goal/§D | S3K level/runtime frameworks | Bounded format-v2 adapter landed after the audit: selected object set, host palette ownership, tagged save identity and flat-scroll/no-stock-events runtime. | **Delivered** in the inspected `next` tree (`ed652eefa`); see the [current contract](formats/level-definition.md) and `Sonic3kModZoneAdapter`. The original [Workstream C](../architecture/plans/2026-07-13-mod-support-original-scope-follow-ons.md#workstream-c--sonic-3k-mod-zone-adapter) remains scope provenance, not a second adapter to build. |
 
 The schedule above is the required disposition; none of these commitments is silently
 reclassified as optional.
@@ -165,4 +180,5 @@ owned by the [GUI tooling evaluation](GUI_TOOLING_EVALUATION.md), not silently o
 from this triage. The KiS2
 content follow-on belongs to its own feature roadmap rather than mod support. Phase 0
 blank-slate/new-zone authoring was superseded by the Phase 2 mod-zone/scaffold path;
-only the explicit S1/S3K adapter commitments remain scheduled above.
+the S1 adapter remains scheduled, while the bounded S3K adapter is delivered as
+recorded above.
