@@ -128,7 +128,10 @@ abstract sealed class AbstractModAssetRoot implements ModAssetRoot
         closed = true;
     }
 
-    final byte[] readFullyBounded(InputStream input, long declaredSize, long cap) throws IOException {
+    // Reservations and rollback form one per-root transaction. Interleaving
+    // partial reservations can reject every competing reader even when complete
+    // reads fit, or reject readers using bytes an unsuccessful read will release.
+    final synchronized byte[] readFullyBounded(InputStream input, long declaredSize, long cap) throws IOException {
         if (declaredSize > cap) {
             throw new IOException("Asset declared size " + declaredSize + " exceeds limit " + cap);
         }
