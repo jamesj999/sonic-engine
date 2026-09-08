@@ -1154,6 +1154,9 @@ and special-stage transitions that gate a full route.
 - **Title screen:** Sonic's torso no longer shows below the title logo's bottom edge. Object `0F`
   frame 2's thirty blank sprites exhaust the VDP's per-line sprite budget from row 104 down and drop
   the lower-priority title Sonic, which the engine models by cutting his sprite at row 104.
+- **Title screen twinkle:** the first sparkle sound now plays as the title fades from black, the
+  frame `Obj0E_Sonic_Init` runs, instead of when the "SONIC AND MILES 'TAILS' PROWER IN" text
+  appears; the ROM shows that text silently and only spawns the intro object after it has faded out.
 - **Title cards:** the release gate no longer holds for an invented minimum of 60 frames; the real
   gate is every element at target with the PLC queue empty. The card's explosion and animal art is
   re-queued from its fixed object slot rather than the renderer's slide-out predicate, so it is
