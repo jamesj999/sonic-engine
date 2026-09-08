@@ -54,6 +54,10 @@ Maven after an experiment with managed test sessions was withdrawn.
   fail-without-active-runtime contract.
 - **Object priority rendering reuses one palette-mask transition path,** keeping the Angel Island
   act 2 bridge layering fix out of the already-large object manager facade.
+- **Discord Rich Presence leaves the gameplay frame free of IPC:** enabled presence captures an
+  immutable status on the game thread, coalesces the latest payload on a bounded worker, and
+  closes a stalled local client within a bounded shutdown window while retaining its privacy and
+  timer controls.
 
 #### ROM Pipeline
 
