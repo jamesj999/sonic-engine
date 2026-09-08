@@ -8,7 +8,7 @@ SoundTestApp installs host.close on a shutdown-hook thread. AudioPresentationPro
 
 ## Owners and evidence
 
-Owners: `audio/debug/SoundTestApp.java`, `StandaloneAudioPresentationHost.java`, audio host tests and owner-thread contracts. Root audit reproduced exception on worker close then owner retry returning with producer still open.
+Owners: `audio/debug/SoundTestApp.java`, `StandaloneAudioPresentationHost.java`, audio host tests and owner-thread contracts. Root audit reproduced exception on worker close then owner retry returning with producer still open. Coordinator source review also found interactive playback creates the host on the main thread but calls presentFrame and commands on a separate scheduled executor; AudioPresentationProducer captures its owner in its constructor. Validate this related ownership path as part of the same lifecycle correction.
 
 ## Implementation steps
 
@@ -16,7 +16,7 @@ Owners: `audio/debug/SoundTestApp.java`, `StandaloneAudioPresentationHost.java`,
 2. Design a narrow shutdown path that executes audio destruction on its owning thread or a properly owned executor. Preserve strict AudioPresentationProducer thread confinement; do not disable its assertion.
 3. Mark host cleanup complete only when ownership rejection cannot leave a live producer permanently inaccessible. Preserve idempotency and aggregate cleanup failures appropriately.
 4. Handle normal exit, JVM shutdown request, partial initialization and repeated close without deadlock or unbounded process-exit waits. Avoid moving unrelated engine audio work to new threads.
-5. Verify sound-test command/presentation behavior with no-device tests; do not claim OpenAL/device coverage from them.
+5. Verify sound-test command/presentation behavior with no-device tests, including interactive executor commands against the actual producer. Replace affected source-string wiring assertions with behavior checks where practical; creating a host on one thread and merely checking that executor code mentions it does not prove valid ownership. Do not claim OpenAL/device coverage from no-device tests.
 
 ## Acceptance
 
