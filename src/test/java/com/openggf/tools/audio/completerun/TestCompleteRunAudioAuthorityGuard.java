@@ -54,6 +54,7 @@ class TestCompleteRunAudioAuthorityGuard {
     private static final Set<Path> ESTABLISHED_NON_AUTHENTICATED_SOURCES = Set.of(
             completeRunSource("CompleteRunAudioCaptureStore.java"),
             completeRunSource("CompleteRunAudioComparator.java"),
+            completeRunSource("CompleteRunAudioCoverageSummary.java"),
             completeRunSource("CompleteRunAudioJson.java"),
             completeRunSource("CompleteRunAudioProducer.java"),
             completeRunSource("CompleteRunAudioProducerRegistry.java"),
@@ -109,6 +110,8 @@ class TestCompleteRunAudioAuthorityGuard {
                             + "[A-Za-z0-9_]*\\b"),
             forbidden("oracle-authority",
                     "(?i)\\b[a-z0-9_]*(?:oracle|audio_?parity)[a-z0-9_]*\\b"),
+            forbidden("coverage-summary-authority",
+                    "\\bCompleteRunAudioCoverageSummary\\b"),
             forbidden("reference-authority",
                     "(?:(?i:\\b(?:reference|expected|sidecar)[a-z0-9_]*\\b)|"
                             + "\\b[A-Za-z0-9_]*(?:Reference|Expected|Sidecar)"
@@ -446,6 +449,9 @@ class TestCompleteRunAudioAuthorityGuard {
                 new AuthorityMutation(
                         "AudioParityComparator owner;", "oracle-authority"),
                 new AuthorityMutation(
+                        "CompleteRunAudioCoverageSummary owner;",
+                        "coverage-summary-authority"),
+                new AuthorityMutation(
                         "S2CompleteRunReferenceProjector owner;",
                         "reference-authority"),
                 new AuthorityMutation(
@@ -775,7 +781,8 @@ class TestCompleteRunAudioAuthorityGuard {
             boolean authenticatedSource,
             List<String> violations) {
         for (ForbiddenAuthority authority : AUTHORITY_CATEGORIES) {
-            if (authority.label().equals("reference-authority")
+            if ((authority.label().equals("reference-authority")
+                    || authority.label().equals("coverage-summary-authority"))
                     && !authenticatedSource) {
                 continue;
             }

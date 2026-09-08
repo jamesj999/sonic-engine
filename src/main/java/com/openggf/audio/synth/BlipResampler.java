@@ -123,6 +123,51 @@ public class BlipResampler {
         reset();
     }
 
+    /** Mutable owner-private transaction storage; never used by durable snapshots. */
+    static final class MutationBackup {
+        private double ratio;
+        private int head;
+        private long inputIndex;
+        private double outputPos;
+        private int[] left = new int[0], right = new int[0];
+        private int count;
+    }
+
+    void captureMutation(MutationBackup backup) {
+        backup.ratio = ratio;
+        backup.head = head;
+        backup.inputIndex = inputIndex;
+        backup.outputPos = outputPos;
+        long first = Math.max(inputIndex - BUFFER_SIZE,
+                (long) outputPos - (FILTER_TAPS / 2 - 1));
+        first = Math.min(inputIndex, Math.max(0, first));
+        backup.count = (int) (inputIndex - first);
+        if (backup.left.length < backup.count) {
+            backup.left = new int[backup.count];
+            backup.right = new int[backup.count];
+        }
+        for (int i = 0; i < backup.count; i++) {
+            int pos = (head - backup.count + i) & BUFFER_MASK;
+            backup.left[i] = historyL[pos];
+            backup.right[i] = historyR[pos];
+        }
+    }
+
+    void restoreMutation(MutationBackup backup) {
+        ratio = backup.ratio;
+        head = backup.head;
+        inputIndex = backup.inputIndex;
+        outputPos = backup.outputPos;
+        Arrays.fill(historyL, 0);
+        Arrays.fill(historyR, 0);
+        for (int i = 0; i < backup.count; i++) {
+            int pos = (head - backup.count + i) & BUFFER_MASK;
+            historyL[pos] = backup.left[i];
+            historyR[pos] = backup.right[i];
+        }
+        cachedPhaseOutputPos = Double.NaN;
+    }
+
     /**
      * Captures only the history tail that interpolation can still read after a
      * restore. {@link #interpolate(int[])} reads taps in

@@ -56,9 +56,9 @@ public class DrowningController {
 
     /**
      * Sonic 2 countdown frame mapping: countdownNumber (0-5) -> art frame index.
-     * S2 bubble art: frames 6-11 are countdown numbers (6="5", 7="4", ..., 11="0").
+     * S2 Ani_obj0A selects mapping frames 8-13 for numbers 0-5.
      */
-    private static final int[] S2_COUNTDOWN_FRAMES = {11, 10, 9, 8, 7, 6};
+    private static final int[] S2_COUNTDOWN_FRAMES = {8, 9, 10, 11, 12, 13};
 
     /**
      * Sonic 1 countdown frame mapping: countdownNumber (0-5) -> art frame index.

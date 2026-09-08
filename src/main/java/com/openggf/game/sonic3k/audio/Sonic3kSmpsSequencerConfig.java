@@ -57,6 +57,10 @@ public final class Sonic3kSmpsSequencerConfig {
                 .halveModSteps(true)        // Z80 driver halves mod steps (srl a)
                 .relativePointers(false)    // PtrFmt = Z80 (absolute addresses)
                 .tempoOnFirstTick(true)     // Tempo1Tick = DOTEMPO
+                // Retail fix_sndbugs=0: ordinary zPlayMusic_DoFade calls
+                // zStopAllSound, which clears zTempoSpeedup (driver:1786,
+                // 2459-2473). The one-up save/load bypasses this boundary.
+                .resetTempoOnMusicLoad(true)
                 // Preserve the existing S3K Z80 rest path; the S2 oracle's
                 // post-rest envelope step is selected independently.
                 .advancePsgEnvelopeOnRest(false)
@@ -125,29 +129,44 @@ public final class Sonic3kSmpsSequencerConfig {
                 // (Sound/Z80 Sound Driver.asm:650-701), so an SFX admitted in
                 // a service first updates in the next one.
                 .sfxWalkPrecedesRequest(true)
+                // zUpdateSFXTracks walks the fixed zTracksSFXStart RAM block:
+                // FM3..FM6, then PSG1..PSG3, regardless of which sound header
+                // supplied each occupied slot (Sound/Z80 Sound Driver.asm:727-759).
+                .sfxTrackWalkMode(
+                        SmpsSequencerConfig.SfxTrackWalkMode.CHANNEL_RAM_ORDER)
                 // zSFXTrackInitLoop keys each SFX channel off and clears its
                 // SSG-EG operators while loading (Sound/Z80 Sound
                 // Driver.asm:2092-2103, :2528-2536).
                 .sfxAdmissionKeyOffAndClearsSsgEg(true)
+                // fix_sndbugs=0: zGetSFXChannelPointers.is_psg unconditionally
+                // writes FF after its stale-IX silence call (:2131-2136).
+                // The fixed branch relies on corrected channel silence instead.
+                .psgSfxAdmissionSilencesNoise(true)
+                // Retail fix_sndbugs=0 owns silence at admission above;
+                // cfSetPSGNoise then writes DF and its operand consecutively
+                // (:3562-3572). Acquiring noise ownership must not inject FF.
+                // The fixed branch changes the command's guards and zero
+                // handling, not the need for a synthetic first-write silence.
+                .psgSfxTakeoverMode(
+                        SmpsSequencerConfig.PsgSfxTakeoverMode.REGISTER_SEQUENCE)
                 // cfStopTrack keys the channel off exactly once as it clears
                 // the playing bit (Sound/Z80 Sound Driver.asm:3040-3046).
                 .trackEndFlagOwnsTheStop(true)
-                // zSFXTrackInitLoop's only chip writes are that key-off and
+                // zSFXTrackInitLoop's FM chip writes are that key-off and
                 // SSG-EG clear (Sound/Z80 Sound Driver.asm:2092-2103); the
                 // SFX's own bytecode then loads its voice. The engine's
                 // legacy takeover additionally forced RR = 0FFh and TL = 07Fh
                 // on the channel, which the ROM never writes.
                 .fmSfxTakeoverMode(
                         SmpsSequencerConfig.FmSfxTakeoverMode.REGISTER_SEQUENCE)
-                // cfStopTrack releases an FM channel by keying it off,
-                // clearing the music track's override bit and restoring its
-                // voice (Sound/Z80 Sound Driver.asm:3040-3070). It does not
-                // force RR = 0FFh and TL = 07Fh: zFMSilenceChannel is reached
-                // only from zInitAudioDriver's boot loop (:2475-2495) and
-                // from the track's own 0F2h flag, cfSilenceStopTrack
-                // (:3082-3096).
+                // Retail fix_sndbugs=0 cfStopTrack keys off the SFX, clears
+                // music override bit 2 and uploads the voice without synthetic
+                // RR/TL silence or changing rest bit 4 (driver:3443-3518).
+                // The fixed branch changes key-off/FM3 bookkeeping, not rest.
                 .fmSfxReleaseMode(
-                        SmpsSequencerConfig.FmSfxReleaseMode.ROM_VOICE_RESTORE)
+                        SmpsSequencerConfig.FmSfxReleaseMode.ROM_VOICE_RESTORE_PRESERVE_REST)
+                .psgSfxReleaseMode(SmpsSequencerConfig.PsgSfxReleaseMode
+                        .ROM_NOISE_RESTORE_PRESERVE_REST)
                 // zSFXTrackInitLoop sets bit 2 on the overridden music track
                 // while the SFX is still being loaded (Sound/Z80 Sound
                 // Driver.asm:1997-2003), so ownership exists from the

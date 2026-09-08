@@ -166,7 +166,9 @@ public final class ScreenshotCapture {
      * @param path  The file path to save to
      * @throws IOException If the file cannot be written
      */
-    public static void savePNG(RgbaImage image, Path path) throws IOException {
+    // STB's flip-on-write setting is process-global. Serialize every PNG write
+    // through this entry point, including asynchronous interactive screenshots.
+    public static synchronized void savePNG(RgbaImage image, Path path) throws IOException {
         ByteBuffer rgba = toRgbaByteBuffer(image);
         try {
             STBImageWrite.stbi_flip_vertically_on_write(false);

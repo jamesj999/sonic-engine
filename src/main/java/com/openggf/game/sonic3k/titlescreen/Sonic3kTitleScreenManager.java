@@ -9,6 +9,16 @@ import com.openggf.game.sonic3k.S3kFrontendPaletteUploader;
 import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.audio.Sonic3kSmpsConstants;
+import com.openggf.game.sonic3k.constants.Sonic3kConstants;
+import com.openggf.game.sonic3k.resources.S3kKosDecompressionQueue;
+import com.openggf.game.sonic3k.resources.S3kKosRamDestinations;
+import com.openggf.game.timing.HardwareServiceBoundary;
+import com.openggf.game.timing.HardwareTimingService;
+import com.openggf.game.timing.HardwareWorkHandle;
+import com.openggf.game.timing.LoadTimeProfile;
+import com.openggf.game.timing.LoadTimeSimulationMode;
+import com.openggf.game.timing.RomWorkBudgetScheduler;
+import java.io.IOException;
 import com.openggf.audio.AudioManager;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
@@ -183,6 +193,49 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
     /** Frame index representing the final static scene (frame D = 0xD = 13). */
     private static final int FINAL_FRAME_INDEX = 0xD;
 
+    /**
+     * The one frame whose art the title loop queues ahead of time:
+     * {@code loc_4040} runs {@code Queue_Kos} on {@code ArtKos_S3TitleSonic8}
+     * into {@code RAM_start} before {@code Wait_TitleS3K} starts
+     * (sonic3k.asm:5525-5528), and {@code TitleSonic_LoadFrame} takes the
+     * {@code loc_4446} DMA path for it instead of decompressing
+     * ({@code cmpi.w #7,d7 / beq.s loc_4446}, sonic3k.asm:5832-5833).
+     * {@code Process_Kos_Queue} is resumable across V-ints, so the ROM never
+     * stalls on it; the engine only requires it to be ready when frame 7 loads.
+     */
+    private static final int QUEUED_ART_FRAME = 7;
+
+    /**
+     * Frames 8 to B are the only ones {@code TitleSonic_LoadFrame} decompresses
+     * synchronously ({@code bcs.s loc_4466} skips frames below 7, whose
+     * {@code ArtKos_S3TitleSonic1} art is already in VRAM). The art each frame
+     * decodes is the {@code TitleSonic_Frames} entry indexed by the frame
+     * number (sonic3k.asm:5823-5827): entry 8 is {@code ArtKos_S3TitleSonic9},
+     * 9 is {@code SonicA}, A is {@code SonicB}, B is {@code SonicC}.
+     */
+    private static final int LAST_SYNCHRONOUS_DECODE_FRAME = 0xB;
+
+    private static int romFrameArtAddress(int frame) {
+        return switch (frame) {
+            case 7 -> Sonic3kConstants.ART_KOS_TITLE_SONIC8_ADDR;
+            case 8 -> Sonic3kConstants.ART_KOS_TITLE_SONIC9_ADDR;
+            case 9 -> Sonic3kConstants.ART_KOS_TITLE_SONIC_A_ADDR;
+            case 0xA -> Sonic3kConstants.ART_KOS_TITLE_SONIC_B_ADDR;
+            case 0xB -> Sonic3kConstants.ART_KOS_TITLE_SONIC_C_ADDR;
+            default -> throw new IllegalArgumentException("frame " + frame + " loads no Kosinski art");
+        };
+    }
+
+    // Kosinski work the ROM title loop performs (Wait_TitleS3K / TitleSonic_LoadFrame).
+    private HardwareTimingService titleTiming;
+    private S3kKosDecompressionQueue titleKosQueue;
+    /** The frame-7 art queued at {@code loc_4040}, until frame 7 consumes it. */
+    private HardwareWorkHandle queuedFrameArt;
+    /** The synchronous decode of the frame being loaded, while the loop is stalled on it. */
+    private HardwareWorkHandle pendingFrameArt;
+    /** Title-loop iterations spent inside a synchronous decode (missed V-ints). */
+    private int stalledFrames;
+
     // -----------------------------------------------------------------------
     // Phase timers and animation state
     // -----------------------------------------------------------------------
@@ -195,6 +248,14 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
 
     /** Current animation frame index (1-based, 1 through 0xD). */
     private int currentAnimFrame = 1;
+
+    /**
+     * The frame whose art and palette are actually in VRAM. While
+     * {@code TitleSonic_LoadFrame} is still decompressing the next frame the
+     * display keeps showing this one: the new mappings, palette and art only
+     * land after the decode (sonic3k.asm:5846-5871), never piecemeal.
+     */
+    private int displayedAnimFrame = 1;
 
     /**
      * ROM {@code Title_anim_delay} (sonic3k.constants.asm:953). Reloaded by
@@ -368,6 +429,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         frameCounter = 0;
         animTableIndex = 0;
         currentAnimFrame = 1;
+        displayedAnimFrame = 1;
         animFrameTimer = 0;
         segaSoundPlayed = false;
         segaChantStopped = false;
@@ -472,7 +534,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         // On the Mega Drive, palette line 0 color 0 is the background color —
         // it fills the screen behind everything. Transparent pixels (color 0)
         // in tile patterns show this background color.
-        byte[] palData = dataLoader.getAnimPaletteData(currentAnimFrame);
+        byte[] palData = dataLoader.getAnimPaletteData(displayedAnimFrame);
         if (palData != null && palData.length >= 2) {
             // Read color 0 from palette line 0 (first 2 bytes, big-endian)
             // Mega Drive format: 0x0BGR where B,G,R are nibbles (0-E, 8 levels)
@@ -489,6 +551,8 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
     @Override
     public void reset() {
         GameServices.audio().stopSegaPcm();
+        endTitleLoopKosWork();
+        stalledFrames = 0;
         state = State.INACTIVE;
         phase = Phase.SEGA_FADE_IN;
         phaseTimer = 0;
@@ -594,25 +658,124 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
         }
 
         if (palTransitionStep >= PAL_TRANSITION_STEPS) {
-            // Transition complete — background is now black
-            phase = Phase.SONIC_ANIMATION;
-            phaseTimer = 0;
-            animTableIndex = 0;
-            currentAnimFrame = SONIC_FRAME_INDEX_TABLE[0];
-            animFrameTimer = 0;
-            state = State.FADE_IN;
-
-            // Cache the first animation frame art/palette
-            dataLoader.cacheAnimationFrame(currentAnimFrame);
-
-            // Play title music
-            if (!musicPlaying) {
-                musicPlaying = true;
-                GameServices.audio().playMusic(Sonic3kMusic.TITLE.id);
-            }
-
-            LOGGER.fine("S3K title screen entered SONIC_ANIMATION phase");
+            enterSonicAnimation();
         }
+    }
+
+    /** Transition complete (background now black): loc_4040, sonic3k.asm:5520-5529. */
+    private void enterSonicAnimation() {
+        phase = Phase.SONIC_ANIMATION;
+        phaseTimer = 0;
+        animTableIndex = 0;
+        currentAnimFrame = SONIC_FRAME_INDEX_TABLE[0];
+        animFrameTimer = 0;
+        state = State.FADE_IN;
+
+        // Cache the first animation frame art/palette
+        presentAnimationFrame(currentAnimFrame);
+        beginTitleLoopKosWork();
+
+        // Play title music
+        if (!musicPlaying) {
+            musicPlaying = true;
+            GameServices.audio().playMusic(Sonic3kMusic.TITLE.id);
+        }
+
+        LOGGER.fine("S3K title screen entered SONIC_ANIMATION phase");
+    }
+
+    /**
+     * Opens the title loop's own Kosinski work: the title screen runs outside a
+     * gameplay session, so it owns a timing service of its own, paced by the
+     * configured normal-play load-time profile, and queues frame 7's art as
+     * {@code loc_4040} does.
+     */
+    private void beginTitleLoopKosWork() {
+        titleTiming = new HardwareTimingService(
+                RomWorkBudgetScheduler.oneWorkUnitAt(HardwareServiceBoundary.POST_OBJECTS),
+                resolveLoadTimeProfile());
+        titleKosQueue = new S3kKosDecompressionQueue(titleTiming);
+        pendingFrameArt = null;
+        stalledFrames = 0;
+        queuedFrameArt = queueTitleFrameArt(QUEUED_ART_FRAME);
+    }
+
+    /** Normal-play load-time profile for the title loop's Kosinski work. */
+    protected LoadTimeProfile resolveLoadTimeProfile() {
+        LoadTimeSimulationMode mode = LoadTimeSimulationMode.parse(
+                configService.getString(SonicConfiguration.LOAD_TIME_SIMULATION));
+        return GameServices.module().createLoadTimeProfile(mode, LOGGER::warning);
+    }
+
+    private HardwareWorkHandle queueTitleFrameArt(int frame) {
+        try {
+            return titleKosQueue.queueStandardKos(
+                    GameServices.rom().getRom(), romFrameArtAddress(frame),
+                    S3kKosRamDestinations.RAM_START);
+        } catch (IOException exception) {
+            throw new IllegalStateException(
+                    "Unable to queue title Sonic frame " + frame + " art", exception);
+        }
+    }
+
+    /** One title-loop service: {@code Process_Kos_Queue} before {@code Wait_VSync} (sonic3k.asm:5531-5533). */
+    private void serviceTitleLoopKosWork() {
+        titleTiming.service(HardwareServiceBoundary.PRE_MAIN_LOOP);
+        titleKosQueue.afterTimingService(HardwareServiceBoundary.PRE_MAIN_LOOP);
+    }
+
+    /**
+     * {@code TitleSonic_LoadFrame} (sonic3k.asm:5822-5871) for the frame just
+     * selected by {@code Iterate_TitleSonicFrame}. Frames with Kosinski work
+     * present their art only once it is ready; a synchronous decode that is
+     * not ready stalls the loop (see {@link #updateSonicAnimation}).
+     */
+    private void loadTitleSonicFrame(int frame) {
+        HardwareWorkHandle art = null;
+        if (frame == QUEUED_ART_FRAME) {
+            art = queuedFrameArt;
+            queuedFrameArt = null;
+        } else if (frame > QUEUED_ART_FRAME && frame <= LAST_SYNCHRONOUS_DECODE_FRAME) {
+            art = queueTitleFrameArt(frame);
+        }
+        if (art != null && !titleKosQueue.isReady(art)) {
+            pendingFrameArt = art;
+            return;
+        }
+        if (art != null) {
+            titleKosQueue.claim(art);
+        }
+        presentAnimationFrame(frame);
+    }
+
+    /** The decoded frame's art, mappings and palette reach VRAM together. */
+    private void presentAnimationFrame(int frame) {
+        dataLoader.cacheAnimationFrame(frame);
+        displayedAnimFrame = frame;
+    }
+
+    int displayedAnimFrame() {
+        return displayedAnimFrame;
+    }
+
+    private void endTitleLoopKosWork() {
+        titleTiming = null;
+        titleKosQueue = null;
+        queuedFrameArt = null;
+        pendingFrameArt = null;
+    }
+
+    int currentAnimFrame() {
+        return currentAnimFrame;
+    }
+
+    int stalledFrames() {
+        return stalledFrames;
+    }
+
+    /** Skips the SEGA and palette phases so a test can step the Sonic animation directly. */
+    void enterSonicAnimationForTest() {
+        enterSonicAnimation();
     }
 
     /**
@@ -647,6 +810,25 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
     }
 
     private void updateSonicAnimation(InputHandler input) {
+        // Process_Kos_Queue at the top of every Wait_TitleS3K iteration
+        // (sonic3k.asm:5531): the one service point of the title loop.
+        serviceTitleLoopKosWork();
+        if (pendingFrameArt != null) {
+            // TitleSonic_LoadFrame's Kos_Decomp (sonic3k.asm:5834) is a
+            // synchronous 68000 call: until it returns no V-int is serviced,
+            // so no input is polled and nothing in the title loop advances.
+            // Each stalled iteration is one missed V-int. The profile's
+            // serviceFrames count the services from the iteration that started
+            // the decode, so a job costing N services stalls N-1 iterations and
+            // an IMMEDIATE job (NONE) stalls none.
+            if (!titleKosQueue.isReady(pendingFrameArt)) {
+                stalledFrames++;
+                return;
+            }
+            titleKosQueue.claim(pendingFrameArt);
+            pendingFrameArt = null;
+            presentAnimationFrame(currentAnimFrame);
+        }
         if (checkSkipToInteractive(input)) {
             return;
         }
@@ -681,8 +863,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
             }
 
             currentAnimFrame = nextFrame;
-            // Cache new frame art and palette
-            dataLoader.cacheAnimationFrame(currentAnimFrame);
+            loadTitleSonicFrame(nextFrame);
         }
     }
 
@@ -809,6 +990,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
     }
 
     private void transitionToWhiteFlash() {
+        endTitleLoopKosWork();
         // ROM: Wait_SegaS3K's Start press and its timeout share the one
         // cmd_StopSEGA at sonic3k.asm:5498-5500, so this stop belongs only to a
         // skip taken while the chant is still playing. A skip taken later is a
@@ -826,6 +1008,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
 
         // Load final frame
         currentAnimFrame = FINAL_FRAME_INDEX;
+        displayedAnimFrame = FINAL_FRAME_INDEX;
         dataLoader.cacheFinalScene();
 
         // Play title music if not already playing
@@ -1130,7 +1313,7 @@ public class Sonic3kTitleScreenManager implements TitleScreenProvider {
      * frame as a full-screen 40x28 nametable.
      */
     private void drawAnimationPhase(GraphicsManager gm) {
-        int[] nametable = dataLoader.getAnimationMapping(currentAnimFrame);
+        int[] nametable = dataLoader.getAnimationMapping(displayedAnimFrame);
         if (nametable == null || nametable.length == 0) {
             return;
         }

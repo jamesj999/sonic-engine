@@ -1378,11 +1378,33 @@ public final class AudioPresentationSourceFactory
                                 observer.onPsgWrite(value)));
             }
 
+            @Override
+            public boolean observesPhysicalWrites() {
+                return observer.observesPhysicalWrites();
+            }
 
+            @Override
+            public void onYm2612BusWrite(long cycle, int busPort, int value,
+                    ChipWriteObserver.PhysicalWriteOrigin origin) {
+                diagnostics.emit(() -> AudioDiagnosticObserverException.invoke(
+                        () -> observer.onYm2612BusWrite(
+                                cycle, busPort, value, origin)));
+            }
 
+            @Override
+            public void onPsgBusWrite(long tick, int value) {
+                diagnostics.emit(() -> AudioDiagnosticObserverException.invoke(
+                        () -> observer.onPsgBusWrite(tick, value)));
+            }
 
-
-
+            @Override
+            public void onPhysicalTimelineBoundary(
+                    ChipWriteObserver.ChipClockDomain domain, long clock,
+                    ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+                diagnostics.emit(() -> AudioDiagnosticObserverException.invoke(
+                        () -> observer.onPhysicalTimelineBoundary(
+                                domain, clock, boundary)));
+            }
         };
     }
 

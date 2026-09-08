@@ -191,9 +191,11 @@ public final class S3kAudioParityComparator {
         List<Integer> current = new ArrayList<>();
         boolean enabled = false;
         int bytesWhileDisabled = 0;
+        int firstByteService = -1;
         for (S3kAudioTick tick : ticks) {
             for (AudioParityChipWrite write : tick.writes()) {
                 if (isDacSampleByte(write)) {
+                    if (current.isEmpty()) firstByteService = tick.ordinal();
                     if (!enabled) {
                         bytesWhileDisabled++;
                     }
@@ -202,7 +204,7 @@ public final class S3kAudioParityComparator {
                     boolean disable = write.value() == 0;
                     if (!current.isEmpty()) {
                         runs.add(new DacRun(toArray(current),
-                                disable ? 1 : 0, bytesWhileDisabled));
+                                disable ? 1 : 0, bytesWhileDisabled, firstByteService));
                         current = new ArrayList<>();
                         bytesWhileDisabled = 0;
                     } else if (disable && !runs.isEmpty()) {
@@ -212,14 +214,14 @@ public final class S3kAudioParityComparator {
                         DacRun last = runs.remove(runs.size() - 1);
                         runs.add(new DacRun(last.bytes(),
                                 last.trailingDisables() + 1,
-                                last.bytesWhileDisabled()));
+                                last.bytesWhileDisabled(), last.firstByteService()));
                     }
                     enabled = !disable;
                 }
             }
         }
         if (!current.isEmpty()) {
-            runs.add(new DacRun(toArray(current), 0, bytesWhileDisabled));
+            runs.add(new DacRun(toArray(current), 0, bytesWhileDisabled, firstByteService));
         }
         return runs;
     }
@@ -236,8 +238,11 @@ public final class S3kAudioParityComparator {
      * @param bytesWhileDisabled how many of this run's bytes arrived while
      *     the last {@code 2Bh} write had left the DAC disabled. Always zero
      *     in the ROM, since the idle loop streams nothing.
+     * @param firstByteService service containing the first sample byte, retained
+     *     as provenance only; service drift never realigns the compared runs
      */
-    record DacRun(int[] bytes, int trailingDisables, int bytesWhileDisabled) {
+    record DacRun(int[] bytes, int trailingDisables, int bytesWhileDisabled,
+            int firstByteService) {
     }
 
     private static int[] toArray(List<Integer> values) {
@@ -305,7 +310,8 @@ public final class S3kAudioParityComparator {
                             DacStreamReport.Kind.BYTE_DIFFERENT,
                             referenceRuns.size(), bytes, truncationDelta,
                             sampleEndDelta, idleByteDelta, run, index,
-                            hex(expected[index]), hex(actual[index]));
+                            hex(expected[index]), hex(actual[index]),
+                            expectedRun.firstByteService(), actualRun.firstByteService());
                 }
             }
             bytes += shared;
@@ -318,11 +324,13 @@ public final class S3kAudioParityComparator {
                     referenceRuns.size(), bytes, truncationDelta,
                     sampleEndDelta, idleByteDelta, common, 0,
                     Integer.toString(referenceRuns.size()),
-                    Integer.toString(openGgfRuns.size()));
+                    Integer.toString(openGgfRuns.size()),
+                    common < referenceRuns.size() ? referenceRuns.get(common).firstByteService() : null,
+                    common < openGgfRuns.size() ? openGgfRuns.get(common).firstByteService() : null);
         }
         return new DacStreamReport(DacStreamReport.Kind.MATCH,
                 referenceRuns.size(), bytes, truncationDelta, sampleEndDelta,
-                idleByteDelta, null, null, null, null);
+                idleByteDelta, null, null, null, null, null, null);
     }
 
     /** Total bytes that streamed while the DAC's last {@code 2Bh} left it off. */
@@ -341,10 +349,16 @@ public final class S3kAudioParityComparator {
     /**
      * The result of the unpartitioned DAC byte-stream comparison, reported
      * beside the per-tick service-write result.
+     *
+     * <p>Run-start services identify each run's first sample byte, not its
+     * enable or the mismatching byte. An earlier service mismatch can leave
+     * the two run ordinals referring to different plays; these coordinates
+     * expose that distinction without realigning or excusing any byte.</p>
      */
     public record DacStreamReport(Kind kind, int runs, int bytesCompared,
             int truncationDelta, int sampleEndDelta, int idleByteDelta,
-            Integer run, Integer byteOffset, String reference, String openggf) {
+            Integer run, Integer byteOffset, String reference, String openggf,
+            Integer referenceRunStartService, Integer openggfRunStartService) {
         public enum Kind {
             MATCH, RUN_COUNT_DIFFERENT, BYTE_DIFFERENT
         }
@@ -365,7 +379,9 @@ public final class S3kAudioParityComparator {
                     + "\nrun: " + run
                     + "\nbyte: " + byteOffset
                     + "\nreference: " + reference
-                    + "\nopenggf: " + openggf;
+                    + "\nopenggf: " + openggf
+                    + "\nreference run start service: " + referenceRunStartService
+                    + "\nopenggf run start service: " + openggfRunStartService;
         }
 
         public String toMachineText() {
@@ -379,7 +395,9 @@ public final class S3kAudioParityComparator {
                     + ",\"run\":" + (run == null ? "null" : run)
                     + ",\"byte\":" + (byteOffset == null ? "null" : byteOffset)
                     + ",\"reference\":" + Report.jsonString(reference)
-                    + ",\"openggf\":" + Report.jsonString(openggf) + "}";
+                    + ",\"openggf\":" + Report.jsonString(openggf)
+                    + ",\"reference_run_start_service\":" + Report.jsonNumber(referenceRunStartService)
+                    + ",\"openggf_run_start_service\":" + Report.jsonNumber(openggfRunStartService) + "}";
         }
     }
 
@@ -394,11 +412,17 @@ public final class S3kAudioParityComparator {
         result = globalField(ordinal, "tempoSpeedup", reference.tempoSpeedup(),
                 openGgf.tempoSpeedup());
         if (result != null) return result;
+        result = globalField(ordinal, "fadeOutTimeout", reference.fadeOutTimeout(),
+                openGgf.fadeOutTimeout());
+        if (result != null) return result;
         result = globalField(ordinal, "fadeDelay", reference.fadeDelay(),
                 openGgf.fadeDelay());
         if (result != null) return result;
         result = globalField(ordinal, "fadeDelayTimeout", reference.fadeDelayTimeout(),
                 openGgf.fadeDelayTimeout());
+        if (result != null) return result;
+        result = globalField(ordinal, "fadeInTimeout", reference.fadeInTimeout(),
+                openGgf.fadeInTimeout());
         if (result != null) return result;
         result = globalField(ordinal, "palDoubleUpdateCounter",
                 reference.palDoubleUpdateCounter(), openGgf.palDoubleUpdateCounter());

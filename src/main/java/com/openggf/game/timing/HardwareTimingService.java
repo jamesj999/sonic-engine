@@ -4,6 +4,7 @@ import com.openggf.game.rewind.RewindSnapshottable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -444,9 +445,20 @@ public final class HardwareTimingService
                 snapshot.admissionPolicies(), snapshot.recordedAdmissionActive());
         nextOrdinals.clear();
         nextOrdinals.putAll(snapshot.nextOrdinals());
+        // Keep live jobs whose memoized snapshot is the exact instance being
+        // restored: they are already in that state, so recreating them would
+        // only re-clone payload and preparation bytes. Order follows the snapshot.
+        Map<HardwareTimingJob.Snapshot, HardwareTimingJob> unchanged = new IdentityHashMap<>();
+        for (HardwareTimingJob job : jobs) {
+            HardwareTimingJob.Snapshot memo = job.memoizedSnapshotOrNull();
+            if (memo != null) {
+                unchanged.put(memo, job);
+            }
+        }
         jobs.clear();
         for (HardwareTimingJob.Snapshot jobSnapshot : snapshot.jobs()) {
-            jobs.add(HardwareTimingJob.restore(jobSnapshot));
+            HardwareTimingJob kept = unchanged.get(jobSnapshot);
+            jobs.add(kept != null ? kept : HardwareTimingJob.restore(jobSnapshot));
         }
         admissionPolicies.clear();
         admissionPolicies.putAll(snapshot.admissionPolicies());

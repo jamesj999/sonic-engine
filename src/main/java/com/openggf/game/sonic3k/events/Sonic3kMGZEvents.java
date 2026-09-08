@@ -2067,6 +2067,7 @@ public class Sonic3kMGZEvents extends Sonic3kZoneEvents {
         boolean dirtyRegions = false;
         boolean redraw = false;
         boolean redrawAll = false;
+        boolean patternLookupRefresh = false;
         boolean objectResync = false;
         boolean ringResync = false;
         if (effects != null) {
@@ -2078,11 +2079,13 @@ public class Sonic3kMGZEvents extends Sonic3kZoneEvents {
                 dirtyRegions |= effect.dirtyRegionProcessingRequired();
                 redraw |= effect.foregroundRedrawRequired();
                 redrawAll |= effect.allTilemapsRedrawRequired();
+                patternLookupRefresh |= effect.patternLookupRefreshRequired();
                 objectResync |= effect.objectResyncRequired();
                 ringResync |= effect.ringResyncRequired();
             }
         }
-        return new MutationEffects(dirtyPatterns, dirtyRegions, redraw, redrawAll, objectResync, ringResync);
+        return new MutationEffects(dirtyPatterns, dirtyRegions, redraw, redrawAll,
+                patternLookupRefresh, objectResync, ringResync);
     }
 
     private void updateAct2Collapse(int frameCounter) {

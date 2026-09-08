@@ -1,7 +1,5 @@
 package com.openggf.debug;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Singleton performance profiler that tracks timing for named sections of each frame.
@@ -22,11 +20,7 @@ public class PerformanceProfiler implements SectionProfiler {
     /** Number of frames to keep in the history buffer */
     private static final int HISTORY_SIZE = 120;
 
-    /** Current frame's section timings (name -> accumulated nanos) */
-    private final Map<String, Long> currentFrameSections = new LinkedHashMap<>();
-
-    /** Rolling sum of section timings over AVERAGING_FRAMES (name -> nanos sum) */
-    private final Map<String, Long> rollingSums = new LinkedHashMap<>();
+    private final SectionMeasurements sections = new SectionMeasurements(AVERAGING_FRAMES);
 
     /** Circular buffer of frame timings for history graph */
     private final float[] frameHistory = new float[HISTORY_SIZE];
@@ -61,9 +55,6 @@ public class PerformanceProfiler implements SectionProfiler {
     /** Thread allowed to mutate/read profiler frame state. Claimed lazily. */
     private long ownerThreadId;
 
-    /** Circular buffer of per-section timing per frame (for rolling average) */
-    private final Map<String, long[]> sectionHistories = new LinkedHashMap<>();
-
     /** Reusable snapshot — populated in-place each frame to avoid allocation */
     private final ProfileSnapshot reusableSnapshot = new ProfileSnapshot();
     private final MemoryStats memoryStats = new MemoryStats();
@@ -88,7 +79,7 @@ public class PerformanceProfiler implements SectionProfiler {
     public void beginFrame() {
         assertOwnerThread();
         if (!enabled) {
-            currentFrameSections.clear();
+            sections.clearFrame();
             activeSection = null;
             return;
         }
@@ -106,7 +97,7 @@ public class PerformanceProfiler implements SectionProfiler {
         previousFrameStartNanos = now;
 
         frameStartNanos = now;
-        currentFrameSections.clear();
+        sections.clearFrame();
         activeSection = null;
     }
 
@@ -126,9 +117,7 @@ public class PerformanceProfiler implements SectionProfiler {
         // Hand the raw samples to any offline consumer before they are folded
         // into the rolling means below — the means are lossy by design.
         if (sampleSink != null) {
-            for (Map.Entry<String, Long> entry : currentFrameSections.entrySet()) {
-                sampleSink.frameSample(entry.getKey(), entry.getValue());
-            }
+            sections.emit(sampleSink);
             sampleSink.frameComplete(frameDurationNanos);
         }
 
@@ -143,29 +132,7 @@ public class PerformanceProfiler implements SectionProfiler {
         // Update rolling sums for each section
         int historySlot = frameCount % AVERAGING_FRAMES;
 
-        for (Map.Entry<String, Long> entry : currentFrameSections.entrySet()) {
-            String name = entry.getKey();
-            long nanos = entry.getValue();
-
-            // Ensure history array exists for this section
-            long[] history = sectionHistories.computeIfAbsent(name, k -> new long[AVERAGING_FRAMES]);
-
-            // Subtract old value, add new value
-            long oldValue = history[historySlot];
-            rollingSums.merge(name, nanos - oldValue, Long::sum);
-            history[historySlot] = nanos;
-        }
-
-        // Handle sections that weren't recorded this frame (set to 0)
-        for (Map.Entry<String, long[]> entry : sectionHistories.entrySet()) {
-            String name = entry.getKey();
-            if (!currentFrameSections.containsKey(name)) {
-                long[] history = entry.getValue();
-                long oldValue = history[historySlot];
-                rollingSums.merge(name, -oldValue, Long::sum);
-                history[historySlot] = 0;
-            }
-        }
+        sections.finishFrame(historySlot);
 
         frameCount++;
     }
@@ -208,7 +175,7 @@ public class PerformanceProfiler implements SectionProfiler {
         }
         long endNanos = System.nanoTime();
         long duration = endNanos - sectionStartNanos;
-        currentFrameSections.merge(name, duration, Long::sum);
+        sections.add(name, duration);
         activeSection = null;
         memoryStats.endSection(name);
     }
@@ -235,14 +202,14 @@ public class PerformanceProfiler implements SectionProfiler {
         if (!enabled || elapsedNanos <= 0) {
             return;
         }
-        currentFrameSections.merge(name, elapsedNanos, Long::sum);
+        sections.add(name, elapsedNanos);
         if (activeSection != null) {
             sectionStartNanos += elapsedNanos;
         }
     }
 
     /**
-     * Returns an immutable snapshot of the current profiling data.
+     * Returns a reusable snapshot of the current profiling data.
      * Safe to call from rendering code.
      *
      * @return ProfileSnapshot containing averaged timing data
@@ -254,7 +221,7 @@ public class PerformanceProfiler implements SectionProfiler {
             return reusableSnapshot;
         }
 
-        reusableSnapshot.populate(rollingSums, effectiveFrames,
+        reusableSnapshot.populate(sections, effectiveFrames,
                 frameHistory, historyIndex, frameCount, actualFrameTimeSum);
         return reusableSnapshot;
     }
@@ -307,7 +274,7 @@ public class PerformanceProfiler implements SectionProfiler {
         this.enabled = enabled;
         memoryStats.setEnabled(enabled);
         if (!enabled) {
-            currentFrameSections.clear();
+            sections.clearFrame();
             activeSection = null;
             frameStartNanos = 0;
             previousFrameStartNanos = 0;
@@ -320,9 +287,9 @@ public class PerformanceProfiler implements SectionProfiler {
      */
     public void reset() {
         assertOwnerThread();
-        currentFrameSections.clear();
-        rollingSums.clear();
-        sectionHistories.clear();
+        sections.clearFrame();
+        sections.reset();
+        reusableSnapshot.clear();
         frameCount = 0;
         historyIndex = 0;
         previousFrameStartNanos = 0;

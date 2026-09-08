@@ -44,9 +44,11 @@ class TestAudioParityComparator {
 
         assertTrue(report.matches());
         assertEquals(AudioParityReport.Kind.MATCH, report.kind());
-        assertEquals("S1 audio parity: MATCH (3 ticks)", report.toHumanText());
-        assertEquals("{\"result\":\"match\",\"kind\":\"match\",\"ticksCompared\":3}",
-                report.toJsonSummary());
+        assertTrue(report.toHumanText().contains("MATCH (3 ticks)"));
+        assertTrue(report.toHumanText().contains("production song startup is not validated"));
+        JsonNode summary = JSON.readTree(report.toJsonSummary());
+        assertFalse(summary.required("productionStartupValidated").booleanValue());
+        assertEquals("driver-after-harness-initialization", summary.required("coverage").textValue());
         assertEquals(report.toJsonSummary(), report.toJsonSummary());
     }
 

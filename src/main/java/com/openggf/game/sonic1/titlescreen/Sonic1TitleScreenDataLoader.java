@@ -230,12 +230,25 @@ public class Sonic1TitleScreenDataLoader {
      * is required by GraphicsManager.renderPatternWithId().
      */
     public void cachePalettesToGpu(GraphicsManager gm) {
+        cachePalettesToGpu(gm, SegaPaletteFade.Mode.NONE, 0);
+    }
+
+    /**
+     * Uploads all 4 palette lines to the GPU through a Sonic 1 {@code PaletteFadeIn} /
+     * {@code PaletteFadeOut} step. The ROM keeps the target colours in
+     * {@code v_palette_fading} and rebuilds {@code v_palette} one channel step per
+     * frame; here the stored lines stay untouched and the faded copy is what reaches
+     * the GPU. {@code fadeSteps} is the number of {@code FadeIn_AddColor} /
+     * {@code FadeOut_DecColor} passes already applied (0 = black for a fade-in, 0 =
+     * full palette for a fade-out).
+     */
+    public void cachePalettesToGpu(GraphicsManager gm, SegaPaletteFade.Mode fadeMode, int fadeSteps) {
         if (titlePaletteLines == null) {
             return;
         }
         boolean uploadedAny = false;
         for (int line = 0; line < titlePaletteLines.length; line++) {
-            Palette palette = titlePaletteLines[line];
+            Palette palette = resolveTitlePaletteLine(line, fadeMode, fadeSteps);
             if (palette == null) {
                 continue;
             }
@@ -293,6 +306,13 @@ public class Sonic1TitleScreenDataLoader {
             }
             segaLogoCached = true;
         }
+    }
+
+    Palette resolveTitlePaletteLine(int line, SegaPaletteFade.Mode fadeMode, int fadeSteps) {
+        if (titlePaletteLines == null || line < 0 || line >= titlePaletteLines.length) {
+            return null;
+        }
+        return SegaPaletteFade.apply(titlePaletteLines[line], fadeMode, fadeSteps);
     }
 
     Palette resolveSegaLogoPaletteLine(int line, SegaPaletteFade.Mode fadeMode, int fadeSteps) {

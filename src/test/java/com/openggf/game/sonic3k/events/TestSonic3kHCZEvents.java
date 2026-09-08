@@ -139,6 +139,8 @@ class TestSonic3kHCZEvents {
                 "Process_Kos_Module_Queue (sonic3k.asm:7908) runs after ScreenEvents "
                         + "(7898), so the retiring iteration's own dispatch cannot see "
                         + "the retirement — the next one is the first that may consume it");
+        // In-game saves encode on the frame but write on the save-writer thread.
+        com.openggf.game.save.SessionSaveRequests.flushPendingSaves();
         assertTrue(Files.exists(saveDir.resolve("slot1.json")));
     }
 

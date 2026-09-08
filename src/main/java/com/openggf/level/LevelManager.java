@@ -18,6 +18,8 @@ import com.openggf.data.Rom;
 import com.openggf.game.CrossGameFeatureProvider;
 import com.openggf.game.resources.DynamicArtDecisionOwner;
 import com.openggf.game.DynamicStartPositionProvider;
+import com.openggf.game.GameStateManager;
+import com.openggf.game.ZoneFeatureProvider;
 import com.openggf.debug.DebugObjectArtViewer;
 import com.openggf.debug.DebugOverlayManager;
 import com.openggf.debug.PerformanceProfiler;
@@ -62,6 +64,7 @@ import com.openggf.graphics.PatternAtlas;
 import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.audio.AudioManager;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PaletteFadePresentation;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.render.BackgroundRenderer;
 import com.openggf.level.objects.DefaultObjectServices;
@@ -79,6 +82,8 @@ import com.openggf.level.rings.RingManager;
 import com.openggf.level.rings.RingSpriteSheet;
 import com.openggf.level.resources.DeferredLevelResourceTracker;
 import com.openggf.level.resources.DeferredLevelResourceLoader;
+import com.openggf.level.resources.PreparableLevelLoader;
+import com.openggf.level.resources.PreparedLevelBuild;
 import com.openggf.level.scroll.BgTilemapUpdateMode;
 import com.openggf.level.animation.AnimatedPaletteManager;
 import com.openggf.level.animation.AnimatedPatternManager;
@@ -126,6 +131,8 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
     /** Base for extra sidekick-style DPLC banks — above water (0x30000) and below title cards (0x40000). */
     public static final int SIDEKICK_PATTERN_BASE = PatternAtlasRange.SIDEKICK_BANKS.base();
     private static final Palette.Color BLACK_BACKDROP = new Palette.Color((byte) 0, (byte) 0, (byte) 0);
+    /** Scratch for {@link #resolveLevelBackdropColor()} while a palette fade covers the backdrop line. */
+    private final Palette.Color fadedBackdrop = new Palette.Color();
     // Local mirror of the loaded Level owned by WorldSession. Reads use this
     // field directly for speed; writes go through writeCurrentLevel() to keep
     // the world session in sync.
@@ -527,14 +534,22 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * Phase C/F: Configure audio manager and play level music.
      */
     public void initAudio(int levelIndex) throws IOException {
+        // S1 EndingDemoLoad enters Level: with the credits track already playing;
+        // that path contains no PlaySound command (sonic.asm:3823-3935). Rebuilding
+        // the ROM/profile source would invalidate the active track even though the
+        // following playlist request is suppressed.
+        if (transitions.isSuppressNextMusicChange()) {
+            return;
+        }
         configureAudio();
         playLevelMusic(levelIndex);
     }
 
     /** Establishes the current game's production audio/request service. */
     public void configureAudio() throws IOException {
-        audioManager.setAudioProfile(gameModule.getAudioProfile());
+        // Installing the profile builds its loader immediately; bind the current data source first.
         audioManager.setRom(worldSession.getDataSource().rom().orElse(null));
+        audioManager.setAudioProfile(gameModule.getAudioProfile());
         audioManager.setSoundMap(game.getSoundMap());
         audioManager.resetRingSound();
     }
@@ -599,11 +614,92 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                 ? activeModZoneRuntimeContribution.runtimeProfile() : null;
         activeCustomZonePaletteBridge = null;
         Level loaded = gameModule != null ? gameModule.loadLevelOverride(levelIndex) : null;
-        if (loaded == null) loaded = game.loadLevel(levelIndex);
+        LevelLoadPreparer.Prepared prepared = null;
+        if (loaded == null) {
+            prepared = takePreparedLevelLoad(levelIndex);
+            loaded = prepared != null
+                    ? ((PreparableLevelLoader) game).installPreparedLevel(prepared.build())
+                    : game.loadLevel(levelIndex);
+        } else {
+            discardPreparedLevelLoad();
+        }
         writeCurrentLevel(loaded);
         installHudProfile();
         rebuildLevelDerivedState();
+        adoptPreparedTilemaps(prepared);
         return loaded;
+    }
+
+    private final LevelLoadPreparer loadPreparer = new LevelLoadPreparer();
+
+    /**
+     * Starts building the level for {@code zone}/{@code act} on the shared
+     * preparer thread so a later seamless transition into it installs the
+     * result instead of constructing it on the transition frame.
+     *
+     * <p>Call this from the transition owner at the point where the ROM itself
+     * starts its own target-level resource work (for example when it queues the
+     * target's Kos jobs), so the host-side build shares that existing wait. The
+     * later install always joins the build; it never moves the install frame.
+     *
+     * @param mutationKey the seamless mutation the transition will apply after
+     *                    the install, so the build can pre-apply its layout part
+     *                    and the prebuilt tilemaps already match it
+     * @return true when a build was started
+     */
+    public boolean prepareActTransitionLevelLoad(int zone, int act, String mutationKey) {
+        if (!(game instanceof PreparableLevelLoader loader)) {
+            return false;
+        }
+        if (zone < 0 || zone >= levels.size() || act < 0 || act >= levels.get(zone).size()) {
+            return false;
+        }
+        // Additive levels belong to the module override loader, not the stock ROM preparer.
+        if (gameModule != null && gameModule.getZoneRegistry().zoneKey(zone) instanceof ZoneKey.Mod) {
+            return false;
+        }
+        int levelIndex = levels.get(zone).get(act).levelIndex();
+        ZoneFeatureProvider features = zoneFeatureProvider;
+        ParallaxManager parallax = parallaxManager;
+        boolean verticalWrap = verticalWrapEnabled;
+        GraphicsManager graphics = graphicsManager;
+        GameStateManager state = gameState;
+        loadPreparer.prepare(levelIndex, () -> {
+            PreparedLevelBuild build = loader.prepareLevelBuild(levelIndex, mutationKey);
+            PrebuiltTilemaps tilemaps = LevelTilemapPrebuilder.build(
+                    build.level(), graphics, state, features, zone, parallax, verticalWrap);
+            return new LevelLoadPreparer.Prepared(build, tilemaps);
+        });
+        return true;
+    }
+
+    /** Drops any level build prepared for a transition that will no longer happen. */
+    public void discardPreparedLevelLoad() {
+        loadPreparer.discard();
+    }
+
+    /** Number of level installs served from a prepared build; test observability. */
+    public int preparedLevelInstallCount() {
+        return loadPreparer.installedFromPreparedCount();
+    }
+
+    private LevelLoadPreparer.Prepared takePreparedLevelLoad(int levelIndex) {
+        if (!(game instanceof PreparableLevelLoader)) {
+            return null;
+        }
+        LevelLoadPreparer.Prepared prepared = loadPreparer.take(levelIndex);
+        if (prepared == null) {
+            // Any build pending for another level is stale once this load runs.
+            loadPreparer.discard();
+        }
+        return prepared;
+    }
+
+    private void adoptPreparedTilemaps(LevelLoadPreparer.Prepared prepared) {
+        if (prepared == null || prepared.tilemaps() == null || tilemapManager == null) {
+            return;
+        }
+        tilemapManager.adoptPrebuiltTilemaps(prepared.tilemaps());
     }
 
     public Level loadLevelData(
@@ -620,6 +716,10 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                 ? deferredResources
                 : com.openggf.level.resources.DeferredLevelResourceTracker.none();
         Level loaded = gameModule != null ? gameModule.loadLevelOverride(levelIndex) : null;
+        LevelLoadPreparer.Prepared prepared = null;
+        if (loaded != null || activeDeferredResources.hasExplicitPolicy()) {
+            discardPreparedLevelLoad();
+        }
         if (loaded == null) {
             if (activeDeferredResources.hasExplicitPolicy()
                     && game instanceof com.openggf.level.resources.DeferredLevelResourceLoader loader) {
@@ -629,12 +729,16 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                     throw new IllegalStateException(
                             game.getIdentifier() + " does not support deferred level resources");
                 }
-                loaded = game.loadLevel(levelIndex);
+                prepared = takePreparedLevelLoad(levelIndex);
+                loaded = prepared != null
+                        ? ((PreparableLevelLoader) game).installPreparedLevel(prepared.build())
+                        : game.loadLevel(levelIndex);
             }
         }
         writeCurrentLevel(loaded);
         installHudProfile();
         rebuildLevelDerivedState();
+        adoptPreparedTilemaps(prepared);
         return loaded;
     }
 
@@ -1860,7 +1964,31 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
     }
 
     public void recomputeParallaxAfterRewindRestore() {
-        frameRuntimeUpdater.recomputeParallaxAfterRewindRestore();
+        frameRuntimeUpdater.refreshParallaxState();
+    }
+
+    /** Prepares the demo scene before Level_Delay / PalFadeIn_Alt. */
+    public void prepareEndingDemoScene() {
+        // S1 Level_SkipTtlCard calls DeformLayers before LoadTilesFromStart.
+        // DeformLayers writes v_scrposy_vdp as well as the background scroll
+        // table. The foreground renderer reads that separate VSRAM value,
+        // so snapping Camera alone leaves the fade showing the old terrain.
+        frameRuntimeUpdater.refreshParallaxState();
+        camera.captureRenderCopy();
+        // The demo position overrides the ordinary act start after load, so
+        // reseed placement from that same final viewport before the hidden delay.
+        if (objectManager != null) {
+            objectManager.reset(camera.getX());
+        }
+        if (ringManager != null) {
+            ringManager.reset(camera.getX());
+        }
+        // Level_LoadObj executes the fresh Sonic slot once before BuildSprites.
+        // Sonic_Move selects Wait and refreshes the movement-animation latches;
+        // merely clearing obAnim leaves the preceding demo's speed latch alive.
+        spriteManager.warmUpFreshMainPlayableOnly(
+                activeGameModule().getLevelInitProfile().freshMainPlayablePreludeFrames(),
+                this, mainPlayableSprite());
     }
 
     /**
@@ -2128,45 +2256,12 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * 6144 mod 1024 = 0 → column 0 (valid).
      */
     private int computeActualBgDataWidthPx() {
-        if (level == null || level.getMap() == null) {
-            return blockPixelSize;
+        int dataWidthPx = LevelGeometry.contiguousBgDataWidthPx(level, blockPixelSize);
+        if (level != null && level.getMap() != null
+                && dataWidthPx < level.getMap().getWidth() * blockPixelSize) {
+            LOGGER.fine("BG contiguous data width: " + dataWidthPx / blockPixelSize + " blocks ("
+                    + dataWidthPx + "px) out of " + level.getMap().getWidth() + " map columns");
         }
-        Map map = level.getMap();
-        int mapWidth = map.getWidth();
-        int mapHeight = map.getHeight();
-
-        // Scan left-to-right to find the first all-zero column.
-        // This gives the contiguous BG data width starting from column 0,
-        // ignoring any stray non-zero blocks at distant columns.
-        int contiguousWidth = 0;
-        for (int col = 0; col < mapWidth; col++) {
-            boolean hasData = false;
-            for (int row = 0; row < mapHeight; row++) {
-                if ((map.getValue(1, col, row) & 0xFF) != 0) {
-                    hasData = true;
-                    break;
-                }
-            }
-            if (hasData) {
-                contiguousWidth = col + 1;
-            } else {
-                // Found first empty column - stop here
-                break;
-            }
-        }
-
-        if (contiguousWidth == 0) {
-            // No BG data at all — use full map width as fallback
-            return mapWidth * blockPixelSize;
-        }
-
-        int dataWidthPx = contiguousWidth * blockPixelSize;
-
-        if (dataWidthPx < mapWidth * blockPixelSize) {
-            LOGGER.fine("BG contiguous data width: " + contiguousWidth + " blocks ("
-                    + dataWidthPx + "px) out of " + mapWidth + " map columns");
-        }
-
         return dataWidthPx;
     }
 
@@ -2401,6 +2496,17 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
     public void invalidateForegroundTilemap() {
         if (tilemapManager != null) {
             tilemapManager.invalidateForegroundTilemap();
+        }
+    }
+
+    /**
+     * Marks only the pattern atlas lookup as dirty. Use this after runtime
+     * writes that replace 8x8 pattern data in place (art overlays, PLC uploads)
+     * without changing the pattern indices the tilemap cells reference.
+     */
+    public void invalidatePatternLookup() {
+        if (tilemapManager != null) {
+            tilemapManager.invalidatePatternLookup();
         }
     }
 
@@ -4460,6 +4566,12 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         glClearColor(backdrop.rFloat(), backdrop.gFloat(), backdrop.bFloat(), 1.0f);
     }
 
+    /**
+     * The backdrop colour as CRAM presents it: line 2 colour 0 ({@code $8720}),
+     * which a palette fade covering that line (S1 PalFadeIn_Alt on lines 1-3)
+     * fades with the planes. Both the clear colour and the parallax shader's
+     * transparent-pixel fill read this, so the fade is applied here once.
+     */
     Palette.Color resolveLevelBackdropColor() {
         if (level == null) {
             return BLACK_BACKDROP;
@@ -4467,7 +4579,22 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         if (isForceBlackBackdrop()) {
             return BLACK_BACKDROP;
         }
-        return level.getBackdropColor();
+        Palette.Color backdrop = level.getBackdropColor();
+        if (graphicsManager == null) {
+            return backdrop;
+        }
+        PaletteFadePresentation fade = graphicsManager.getPaletteFadePresentation();
+        if (!fade.affects(level.getBackdropPaletteLine())) {
+            return backdrop;
+        }
+        int rgb = fade.fadeRgb(
+                Byte.toUnsignedInt(backdrop.r),
+                Byte.toUnsignedInt(backdrop.g),
+                Byte.toUnsignedInt(backdrop.b));
+        fadedBackdrop.r = (byte) (rgb >>> 16);
+        fadedBackdrop.g = (byte) (rgb >>> 8);
+        fadedBackdrop.b = (byte) rgb;
+        return fadedBackdrop;
     }
 
     private boolean isForceBlackBackdrop() {

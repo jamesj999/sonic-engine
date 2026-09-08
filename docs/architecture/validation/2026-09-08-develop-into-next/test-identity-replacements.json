@@ -1,0 +1,147 @@
+{
+  "baseline_commit": "ai-next-merge-base-20260908 at 988b5d73a",
+  "candidate_evidence": "first completed merge full run, before integration fixes",
+  "missing_identities": [
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#s1AndS2KeepTheirOwnSegaMechanism",
+    "com.openggf.configuration.TestLoadTimeSimulationConfiguration#defaultsToNone",
+    "com.openggf.configuration.TestSonicConfigurationFileBootstrap#getInstance_backfillsMissingDefaultsIntoExistingFile",
+    "com.openggf.game.TestMasterTitleRomPreview#sonic2PreviewClearsLogoChromaGreen",
+    "com.openggf.game.TestMasterTitleRomPreview#sonic3kPreviewSuppressesCopyrightInMasterComposition",
+    "com.openggf.game.TestSpecialStageEntryPresentationController#deferredWhiteEntryUsesWhiteHold",
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#accurateInitializationCannotLeakIntoLaterDefaultInitialization",
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#defaultInitializationFastForwardsToRevealRegardlessOfLag(double)[1]",
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#defaultInitializationFastForwardsToRevealRegardlessOfLag(double)[2]",
+    "com.openggf.game.timing.TestLoadTimeProfileContract#reservedModesWarnOnEveryResolutionAndExposeScopedFallbacks",
+    "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#applyRestoresCallerGlStateAfterSuccess",
+    "com.openggf.tools.audio.parity.TestS1OverrideResumeAudioOracle#exactFirstServiceAndNextPcmMatch",
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theDacByteStreamAgreesUntilTheServiceStreamDiverges",
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theOracleReachesTheTitleMusicLoadsTrackCadence"
+  ],
+  "replacement_and_added_identities": {
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#allGamesUseTheSameChipGainForTheSameDacCode": [
+      "passed"
+    ],
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#allShippedGamesOwnTheDacTransport": [
+      "passed"
+    ],
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#everyTransportRestoresAudioAndIsIndependentOfRenderBatchSize": [
+      "passed"
+    ],
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#exitPreservesEachDriversDacDisposition": [
+      "passed"
+    ],
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#s2RequestsInterruptTheChantWithoutChangingS3kStopSemantics": [
+      "passed"
+    ],
+    "com.openggf.configuration.TestLoadTimeSimulationConfiguration#defaultsToFast(Path)": [
+      "passed"
+    ],
+    "com.openggf.configuration.TestSonicConfigurationFileBootstrap#existingValuesAreKeptAndDefaultsAreNeverBackfilled": [
+      "passed"
+    ],
+    "com.openggf.game.TestMasterTitleRomPreview#sonic2PreviewPreservesOpaqueEmblemInteriorBehindCharacters": [
+      "passed"
+    ],
+    "com.openggf.game.TestMasterTitleRomPreview#sonic2PreviewRendersCopyrightRow": [
+      "passed"
+    ],
+    "com.openggf.game.TestMasterTitleRomPreview#sonic2PreviewStampsCopyrightTextIntoLogoMap": [
+      "passed"
+    ],
+    "com.openggf.game.TestMasterTitleRomPreview#sonic3kPreviewComposesTrademarkAndCopyrightPixels": [
+      "passed"
+    ],
+    "com.openggf.game.TestMasterTitleRomPreview#sonic3kPreviewIncludesCopyrightInMasterComposition": [
+      "passed"
+    ],
+    "com.openggf.game.TestSpecialStageEntryPresentationController#deferredWhiteEntryFadesToWhiteFromTheNextVintAndParks": [
+      "passed"
+    ],
+    "com.openggf.game.TestSpecialStageEntryPresentationController#deferredWhiteEntryRevealsExactlyOnceWhenReady": [
+      "passed"
+    ],
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#armedHoldAndStartupProgressCannotLeakAcrossReinitialization": [
+      "passed"
+    ],
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#armedLiveEntryLoadHoldSpendsTheRecordedLagSpanAfterPreRoll": [
+      "passed"
+    ],
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#defaultInitializationStepsPalFadeToWhiteThenStartsUpWithoutALoadHold(double)[1]": [
+      "passed"
+    ],
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#defaultInitializationStepsPalFadeToWhiteThenStartsUpWithoutALoadHold(double)[2]": [
+      "passed"
+    ],
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#liveEntryLoadHoldSurvivesRewindSnapshotRoundTrip": [
+      "passed"
+    ],
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#neitherPolicyArmsTheLiveEntryLoadHold": [
+      "passed"
+    ],
+    "com.openggf.game.timing.TestLoadTimeProfileContract#fastUsesTheGamesFastManifestWithoutWarning": [
+      "passed"
+    ],
+    "com.openggf.game.timing.TestLoadTimeProfileContract#reservedModesWarnAndUseTheirSpecifiedFallbacks": [
+      "passed"
+    ],
+    "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#applyRestoresCallerGlStateAfterSuccess(int)[1]": [
+      "passed"
+    ],
+    "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#applyRestoresCallerGlStateAfterSuccess(int)[2]": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.TestS1OverrideResumeAudioOracle#authenticatedOverrideResumeReferenceIsUnavailable": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#collapseFirstWalkMatchesItsFirst48OrderedServiceWrites": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#firstRawRingSelectsFm5WithExactReferenceWrites": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#newlyAdmittedFlyingFm4WalksBeforeOlderCollapsePsgAtService1652": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theDacByteMismatchRetainsItsDifferentRunStartServices": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theFullOraclePinsTheNextSfxWriteFrontier": [
+      "passed"
+    ],
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theServiceStreamMatchesThroughCollapseAdmission": [
+      "passed"
+    ]
+  },
+  "final_missing_identity_count": 16,
+  "final_missing_identities": [
+    "com.openggf.audio.session.TestSmpsSegaPcmTransport#s1AndS2KeepTheirOwnSegaMechanism",
+    "com.openggf.configuration.TestLoadTimeSimulationConfiguration#defaultsToNone",
+    "com.openggf.configuration.TestSonicConfigurationFileBootstrap#getInstance_backfillsMissingDefaultsIntoExistingFile",
+    "com.openggf.game.TestMasterTitleRomPreview#sonic2PreviewClearsLogoChromaGreen",
+    "com.openggf.game.TestMasterTitleRomPreview#sonic3kPreviewSuppressesCopyrightInMasterComposition",
+    "com.openggf.game.TestSpecialStageEntryPresentationController#deferredWhiteEntryUsesWhiteHold",
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#accurateInitializationCannotLeakIntoLaterDefaultInitialization",
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#defaultInitializationFastForwardsToRevealRegardlessOfLag(double)[1]",
+    "com.openggf.game.sonic2.specialstage.Sonic2SpecialStageStartupPolicyTest#defaultInitializationFastForwardsToRevealRegardlessOfLag(double)[2]",
+    "com.openggf.game.timing.TestLoadTimeProfileContract#reservedModesWarnOnEveryResolutionAndExposeScopedFallbacks",
+    "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#applyRestoresCallerGlStateAfterSuccess",
+    "com.openggf.level.TestGameDataSourceSharedFetches#sourceDefaultsRequireRomCapabilityButPreserveStockRomBytes",
+    "com.openggf.mods.code.TestModZoneAdapterRouting#sonic2AdapterBuildsThroughTheImmutableDefinitionLoader",
+    "com.openggf.tools.audio.parity.TestS1OverrideResumeAudioOracle#exactFirstServiceAndNextPcmMatch",
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theDacByteStreamAgreesUntilTheServiceStreamDiverges",
+    "com.openggf.tools.audio.parity.s3k.TestS3kOracleRequestSidecarWiring#theOracleReachesTheTitleMusicLoadsTrackCadence"
+  ],
+  "final_integration_signature_replacements": {
+    "com.openggf.level.TestGameDataSourceSharedFetches#sourceDefaultsRequireRomCapabilityButPreserveStockRomBytes": {
+      "replacement": "com.openggf.level.TestGameDataSourceSharedFetches#sourceDefaultsRequireRomCapabilityButPreserveStockRomBytes(Path)",
+      "status": "passed",
+      "reason": "@TempDir Path isolates save-root test state without changing the asserted contract"
+    },
+    "com.openggf.mods.code.TestModZoneAdapterRouting#sonic2AdapterBuildsThroughTheImmutableDefinitionLoader": {
+      "replacement": "com.openggf.mods.code.TestModZoneAdapterRouting#sonic2AdapterBuildsThroughTheImmutableDefinitionLoader(Path)",
+      "status": "passed",
+      "reason": "@TempDir Path isolates save-root test state without changing the asserted contract"
+    }
+  },
+  "upstream_audit_note": "Original14 missing identities and31 passing replacement/addition identities above remain the first-run upstream audit; final adds2 test isolation signature replacements."
+}

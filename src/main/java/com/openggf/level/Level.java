@@ -123,10 +123,19 @@ public interface Level {
      * S2/S1 default: $8720 = palette line 2, color 0.
      */
     default Palette.Color getBackdropColor() {
-        if (getPaletteCount() > 2) {
-            return getPalette(2).getColor(0);
+        if (getPaletteCount() > getBackdropPaletteLine()) {
+            return getPalette(getBackdropPaletteLine()).getColor(0);
         }
         return new Palette.Color((byte) 0, (byte) 0, (byte) 0);
+    }
+
+    /**
+     * CRAM line the VDP backdrop register names ({@code $8720}: line 2, colour 0).
+     * The backdrop is an ordinary CRAM entry, so a palette fade that covers this
+     * line fades it too.
+     */
+    default int getBackdropPaletteLine() {
+        return 2;
     }
 
     /**

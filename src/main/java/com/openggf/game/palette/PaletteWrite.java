@@ -1,5 +1,7 @@
 package com.openggf.game.palette;
 
+import com.openggf.level.Palette;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -48,8 +50,28 @@ public final class PaletteWrite {
         return new PaletteWrite(PaletteSurface.UNDERWATER, ownerId, priority, lineIndex, startColor, segaData, false);
     }
 
+    private PaletteWrite(PaletteWrite source) {
+        this.surface = source.surface;
+        this.ownerId = source.ownerId;
+        this.priority = source.priority;
+        this.lineIndex = source.lineIndex;
+        this.startColor = source.startColor;
+        // Both writes are immutable; the public accessor still returns a copy.
+        this.segaData = source.segaData;
+        this.mirrorToUnderwater = true;
+    }
+
     public PaletteWrite mirrorToUnderwater() {
-        return new PaletteWrite(surface, ownerId, priority, lineIndex, startColor, segaData, true);
+        return new PaletteWrite(this);
+    }
+
+    /** Applies owned bytes without exposing them to registry callers. */
+    void applyTo(Palette palette) {
+        for (int i = 0; i < colorCount(); i++) {
+            int offset = i * 2;
+            int word = ((segaData[offset] & 0xFF) << 8) | (segaData[offset + 1] & 0xFF);
+            palette.getColor(startColor + i).fromSegaFormat(word);
+        }
     }
 
     public PaletteSurface surface() { return surface; }

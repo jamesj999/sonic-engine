@@ -23,6 +23,9 @@ import com.openggf.level.objects.ObjectRegistry;
 import com.openggf.level.objects.TouchResponseTable;
 import com.openggf.level.rings.RingSpriteSheet;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import java.util.List;
 import java.util.Set;
@@ -31,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -62,7 +66,7 @@ class TestModZoneAdapterRouting {
     }
 
     @Test
-    void sonic2AdapterBuildsThroughTheImmutableDefinitionLoader() throws Exception {
+    void sonic2AdapterBuildsThroughTheImmutableDefinitionLoader(@TempDir Path directory) throws Exception {
         RingSpriteSheet ringSheet = new RingSpriteSheet(
                 new Pattern[0], List.of(), 1, 8, 0, 0);
         Sonic2GameModule module = new Sonic2GameModule() {
@@ -75,28 +79,31 @@ class TestModZoneAdapterRouting {
                 + Palette.PALETTE_SIZE_IN_ROM];
         romBytes[Sonic2Constants.SONIC_TAILS_PALETTE_ADDR + 2] = 0x0E;
         romBytes[Sonic2Constants.SONIC_TAILS_PALETTE_ADDR + 3] = (byte) 0xEE;
-        Rom rom = mock(Rom.class);
-        when(rom.readAllBytes()).thenReturn(romBytes);
-        module.createGame(rom);
-        ModLevelDefinition definition = levelDefinition();
+        Path path = directory.resolve("palette-source.gen");
+        Files.write(path, romBytes);
+        try (Rom rom = new Rom()) {
+            assertTrue(rom.open(path.toString()));
+            module.createGame(rom);
+            ModLevelDefinition definition = levelDefinition();
 
-        Level adapted = module.getModZoneAdapter().load("alpha",
-                TestS3kModZoneAdapter.hostData(definition));
-        Level direct = ModZoneLoader.load(definition, ringSheet);
+            Level adapted = module.getModZoneAdapter().load("alpha",
+                    TestS3kModZoneAdapter.hostData(definition));
+            Level direct = ModZoneLoader.load(definition, ringSheet);
 
-        assertEquals(direct.getClass(), adapted.getClass());
-        assertEquals(direct.getZoneIndex(), adapted.getZoneIndex());
-        assertEquals(direct.getMinX(), adapted.getMinX());
-        assertEquals(direct.getMaxX(), adapted.getMaxX());
-        assertEquals(direct.getMinY(), adapted.getMinY());
-        assertEquals(direct.getMaxY(), adapted.getMaxY());
-        assertEquals(direct.getMap().getWidth(), adapted.getMap().getWidth());
-        assertEquals(direct.getMap().getHeight(), adapted.getMap().getHeight());
-        assertSame(ringSheet, adapted.getRingSpriteSheet());
-        Palette.Color hostColor = adapted.getPalette(0).getColor(1);
-        assertEquals(255, Byte.toUnsignedInt(hostColor.r));
-        assertEquals(255, Byte.toUnsignedInt(hostColor.g));
-        assertEquals(255, Byte.toUnsignedInt(hostColor.b));
+            assertEquals(direct.getClass(), adapted.getClass());
+            assertEquals(direct.getZoneIndex(), adapted.getZoneIndex());
+            assertEquals(direct.getMinX(), adapted.getMinX());
+            assertEquals(direct.getMaxX(), adapted.getMaxX());
+            assertEquals(direct.getMinY(), adapted.getMinY());
+            assertEquals(direct.getMaxY(), adapted.getMaxY());
+            assertEquals(direct.getMap().getWidth(), adapted.getMap().getWidth());
+            assertEquals(direct.getMap().getHeight(), adapted.getMap().getHeight());
+            assertSame(ringSheet, adapted.getRingSpriteSheet());
+            Palette.Color hostColor = adapted.getPalette(0).getColor(1);
+            assertEquals(255, Byte.toUnsignedInt(hostColor.r));
+            assertEquals(255, Byte.toUnsignedInt(hostColor.g));
+            assertEquals(255, Byte.toUnsignedInt(hostColor.b));
+        }
     }
 
     @Test

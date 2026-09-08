@@ -810,8 +810,6 @@ public abstract class AbstractPlayableSprite extends AbstractSprite implements c
                 currentTimerManager().removeTimerForCode("SpeedShoes-" + getCode());
                 this.invincibleFrames = 0;
                 this.invulnerableFrames = 0;
-                this.invincibleFrames = 0;
-                this.invulnerableFrames = 0;
                 // Ring count is managed by LevelGamestate and reset by LevelManager
                 this.dead = false;
                 this.drowningDeath = false;
@@ -825,7 +823,16 @@ public abstract class AbstractPlayableSprite extends AbstractSprite implements c
                 this.doubleJumpFlag = 0;
                 this.doubleJumpProperty = 0;
                 this.objectMappingFrameControl = false;
-                this.forcedAnimationId = -1;
+                // Level clears Object_RAM before Obj01_Main creates Sonic. In
+                // particular obAnim, obFrame, obAniFrame and obTimeFrame all
+                // begin at zero before the pre-fade BuildSprites pass
+                // (sonic.asm Level / Sonic_Main). OpenGGF reuses this object,
+                // so explicitly discard the previous scene's running frame.
+                this.animationId = 0;
+                this.mappingFrame = 0;
+                this.animationFrameIndex = 0;
+                this.animationTick = 0;
+                forceAnimationRestart();
                 this.onObject = false;
                 this.latchedSolidObjectId = 0;
                 this.sliding = false;

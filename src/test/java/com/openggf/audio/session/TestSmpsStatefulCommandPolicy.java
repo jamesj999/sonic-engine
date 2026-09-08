@@ -77,7 +77,7 @@ class TestSmpsStatefulCommandPolicy {
                 new SmpsSessionProfileFingerprint("test", 7,
                         physical.identity(), settings, second.identity()),
                 captured.selectedDacSource(), captured.speedShoesEnabled(),
-                captured.speedMultiplier(), captured.ringLeft(),
+                captured.speedMultiplier(), captured.ringLeft(), captured.musicFmDacTrackCount(),
                 captured.segaPcmTransport(), captured.physical());
 
         assertThrows(IllegalArgumentException.class,

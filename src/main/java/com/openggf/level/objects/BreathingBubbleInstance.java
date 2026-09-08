@@ -51,7 +51,7 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
     private static final int ART_PROFILE_S2 = 0;
     private static final int ART_PROFILE_S1 = 1;
 
-    private static final int[] S2_COUNTDOWN_FRAMES = {11, 10, 9, 8, 7, 6};
+    private static final int[] S2_COUNTDOWN_FRAMES = {8, 9, 10, 11, 12, 13};
     private static final int[] S1_COUNTDOWN_FRAMES = {13, 18, 17, 16, 15, 14};
 
     /** Total frames for countdown bubble animation before number forms. */

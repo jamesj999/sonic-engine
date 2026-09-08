@@ -100,6 +100,77 @@ class TestPaletteOwnershipRegistry {
         assertEquals("none", registry.ownerAt(PaletteSurface.NORMAL, 1, 0));
     }
 
+    @Test
+    void reusedWritesAndMirrorsRemainImmutableAfterSourceAndGetterMutation() {
+        byte[] source = {0x00, 0x22, 0x00, 0x44};
+        PaletteWrite original = PaletteWrite.normal("immutable", 100, 1, 5, source);
+        PaletteWrite mirrored = original.mirrorToUnderwater();
+        source[1] = 0x66;
+        original.segaData()[1] = 0x66;
+        mirrored.segaData()[3] = 0x66;
+        PaletteOwnershipRegistry registry = new PaletteOwnershipRegistry();
+        Palette[] normal = blankPalettes();
+        Palette[] underwater = blankPalettes();
+
+        for (int frame = 0; frame < 3; frame++) {
+            registry.beginFrame();
+            registry.submit(mirrored);
+            registry.resolveInto(normal, underwater, null, null);
+            assertColorWord(normal[1], 5, 0x0022);
+            assertColorWord(normal[1], 6, 0x0044);
+            assertColorWord(underwater[1], 5, 0x0022);
+            assertColorWord(underwater[1], 6, 0x0044);
+            // Mutating the destination must not affect a reusable write either.
+            normal[1].getColor(5).r = 0;
+            underwater[1].getColor(6).g = 0;
+        }
+        assertEquals(false, original.mirrorToUnderwaterEnabled());
+        assertEquals(true, mirrored.mirrorToUnderwaterEnabled());
+    }
+
+    @Test
+    void applyingWriteDoesNotExposeOwnedBytesToPaletteSubclass() {
+        Palette[] normal = blankPalettes();
+        normal[1].colors[5] = new Palette.Color() {
+            @Override
+            public void fromSegaFormat(byte[] bytes, int offset) {
+                throw new AssertionError("Private write bytes must not escape to palette callbacks");
+            }
+        };
+        PaletteOwnershipRegistry registry = new PaletteOwnershipRegistry();
+        registry.submit(PaletteWrite.normal("immutable", 100, 1, 5, new byte[] {0, 0x22}));
+        registry.resolveInto(normal, null, null, null);
+        assertColorWord(normal[1], 5, 0x0022);
+    }
+
+    @Test
+    void packedColorConversionPreservesAllComponentLevelsAndIgnoresUnusedBits() {
+        Palette.Color color = new Palette.Color();
+        for (int word = 0; word <= 0xFFFF; word++) {
+            color.fromSegaFormat(word);
+            assertEquals((((word >>> 1) & 7) * 255 + 3) / 7, color.r & 0xFF);
+            assertEquals((((word >>> 5) & 7) * 255 + 3) / 7, color.g & 0xFF);
+            assertEquals((((word >>> 9) & 7) * 255 + 3) / 7, color.b & 0xFF);
+        }
+    }
+
+    @Test
+    void reusedEqualPriorityWritesPreserveSubmissionOrder() {
+        PaletteOwnershipRegistry registry = new PaletteOwnershipRegistry();
+        Palette[] normal = blankPalettes();
+        PaletteWrite first = PaletteWrite.normal("first", 100, 2, 9, new byte[] {0, 0x22});
+        PaletteWrite second = PaletteWrite.normal("second", 100, 2, 9, new byte[] {0, 0x44});
+        for (int frame = 0; frame < 2; frame++) {
+            registry.beginFrame();
+            registry.submit(frame == 0 ? first : second);
+            registry.submit(frame == 0 ? second : first);
+            registry.resolveInto(normal, null, null, null);
+            assertColorWord(normal[2], 9, frame == 0 ? 0x0044 : 0x0022);
+            assertEquals(frame == 0 ? "second" : "first",
+                    registry.ownerAt(PaletteSurface.NORMAL, 2, 9));
+        }
+    }
+
     private static Palette[] blankPalettes() {
         Palette[] palettes = new Palette[4];
         for (int i = 0; i < palettes.length; i++) {

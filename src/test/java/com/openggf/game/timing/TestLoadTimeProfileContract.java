@@ -44,7 +44,26 @@ class TestLoadTimeProfileContract {
     }
 
     @Test
-    void reservedModesWarnOnEveryResolutionAndExposeScopedFallbacks() {
+    void fastUsesTheGamesFastManifestWithoutWarning() {
+        LoadTimeProfile profiled = (submission, handle) -> new LoadTimeDecision(
+                2, Set.of(HardwareServiceBoundary.PRE_MAIN_LOOP),
+                LoadTimeDecisionSource.MEASURED, "test-v1");
+        LoadTimeProfile fast = (submission, handle) -> new LoadTimeDecision(
+                1, Set.of(HardwareServiceBoundary.PRE_MAIN_LOOP),
+                LoadTimeDecisionSource.MEASURED, "test-fast-v1");
+        List<String> warnings = new ArrayList<>();
+
+        assertSame(fast, LoadTimeProfileFactory.resolve(
+                LoadTimeSimulationMode.FAST, profiled, fast, warnings::add));
+        assertSame(profiled, LoadTimeProfileFactory.resolve(
+                LoadTimeSimulationMode.PROFILED, profiled, fast, warnings::add));
+        assertSame(LoadTimeProfile.IMMEDIATE, LoadTimeProfileFactory.resolve(
+                LoadTimeSimulationMode.NONE, profiled, fast, warnings::add));
+        assertEquals(List.of(), warnings);
+    }
+
+    @Test
+    void reservedModesWarnAndUseTheirSpecifiedFallbacks() {
         LoadTimeProfile profiled = (submission, handle) -> new LoadTimeDecision(
                 2,
                 Set.of(HardwareServiceBoundary.PRE_MAIN_LOOP),
@@ -65,10 +84,8 @@ class TestLoadTimeProfileContract {
                 LoadTimeProfileFactory.resolve(
                         LoadTimeSimulationMode.REALISTIC, profiled, warnings::add));
         assertEquals(List.of(
-                "FAST load-time simulation is reserved; no independent FAST "
-                        + "hardware-admission profile exists, using NONE",
-                "FAST load-time simulation is reserved; no independent FAST "
-                        + "hardware-admission profile exists, using NONE",
+                "FAST load-time simulation has no manifest for this game; using NONE",
+                "FAST load-time simulation has no manifest for this game; using NONE",
                 "REALISTIC load-time simulation is reserved; no independent REALISTIC "
                         + "hardware-admission profile exists, using PROFILED",
                 "REALISTIC load-time simulation is reserved; no independent REALISTIC "

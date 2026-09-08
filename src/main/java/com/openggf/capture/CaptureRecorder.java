@@ -17,6 +17,9 @@ public class CaptureRecorder {
     private final EncoderSink sink;
     private final Path outputFile;
     private boolean aborted;
+    private final int maxPixelBuffers;
+    private final java.util.ArrayDeque<byte[]> pixelBuffers = new java.util.ArrayDeque<>();
+    private int allocatedPixelBuffers;
 
     public CaptureRecorder(CaptureEncoder encoder, BackpressurePolicy policy, int queueCapacity,
                            Path outputDir, String label, String timestamp) {
@@ -32,6 +35,7 @@ public class CaptureRecorder {
      */
     public CaptureRecorder(CaptureEncoder encoder, BackpressurePolicy policy, int queueCapacity,
                            Path outputDir, String label, String timestamp, String container) {
+        this.maxPixelBuffers = Math.addExact(queueCapacity, 2);
         this.sink = new EncoderSink(encoder, policy, queueCapacity);
         this.outputFile = outputDir.resolve(
                 "capture-" + label + "-" + timestamp + "." + normalizeContainer(container));
@@ -63,6 +67,35 @@ public class CaptureRecorder {
 
     public void submit(CapturedFrame frame) throws CaptureException {
         sink.submit(frame);
+    }
+
+    /** Capture directly into bounded storage owned until the encoder finishes the frame. */
+    CapturedFrame grabFrame(VideoFrameGrabber grabber, short[] pcm, int samples, long index) {
+        int size = GlReadPixelsGrabber.frameByteSize(grabber.width(), grabber.height());
+        byte[] pixels;
+        synchronized (pixelBuffers) {
+            pixels = pixelBuffers.pollFirst();
+            if (pixels == null) {
+                if (allocatedPixelBuffers >= maxPixelBuffers) {
+                    throw new IllegalStateException("capture pixel pool exhausted");
+                }
+                pixels = new byte[size];
+                allocatedPixelBuffers++;
+            }
+        }
+        byte[] owned = pixels;
+        try {
+            grabber.grabInto(owned);
+            return CapturedFrame.ownedPixels(owned, grabber.width(), grabber.height(),
+                    pcm, samples, index, () -> recycle(owned));
+        } catch (Throwable failure) {
+            recycle(owned);
+            throw failure;
+        }
+    }
+
+    private void recycle(byte[] pixels) {
+        synchronized (pixelBuffers) { pixelBuffers.addLast(pixels); }
     }
 
     /** Drains and finalizes; returns the encoder's written file. */

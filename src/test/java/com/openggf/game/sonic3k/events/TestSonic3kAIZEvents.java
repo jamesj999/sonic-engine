@@ -901,6 +901,7 @@ public class TestSonic3kAIZEvents {
         }
 
         assertTrue(events.isAct2TransitionRequested());
+        com.openggf.game.save.SessionSaveRequests.flushPendingSaves(); // in-game saves write off-frame
         assertTrue(Files.exists(saveDir.resolve("slot1.json")));
         deleteRecursively(saveDir);
     }

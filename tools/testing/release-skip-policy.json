@@ -1,0 +1,326 @@
+{
+  "version": 1,
+  "description": "Release skip classification. Every skipped surefire identity must match exactly one rule. allowed_when_absent names an input the runner may declare absent (--capabilities name=false); null means the test is opt-in and its skip is always optional. Categories gl-context and optional-fixture are REQUIRED whenever the runner declares that input present. See tools/testing/classify_surefire_skips.py.",
+  "inputs": {
+    "gl": "an OpenGL 4.1 offscreen context via GLFW (release runner: required, Xvfb or real display)",
+    "s2_bk2": "-Ds2.request.bk2.path Sonic 2 BizHawk recording (optional measurement input)",
+    "s3k_observations": "S3K request observations sidecar property (optional measurement input)",
+    "s1_bizhawk_reference": "local deterministic Sonic 1 BizHawk reference capture (optional measurement input)",
+    "audio_reference_files": "AudioReferenceGenerator output for AudioRegressionTest (optional measurement input)"
+  },
+  "rules": [
+    {
+      "match": "com.openggf.game.rewind.TestRewindTorture#tortureProgressiveLongRewinds",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/game/rewind/TestRewindTorture.java:99",
+      "allowed_when_absent": null,
+      "note": "rewind.soak property"
+    },
+    {
+      "match": "com.openggf.level.objects.TestObjectRewindTypeSafetyDispatchPerformance#measureMixedRouteDispatchAllocationAndTime",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/level/objects/TestObjectRewindTypeSafetyDispatchPerformance.java:121",
+      "allowed_when_absent": null,
+      "note": "@EnabledIfSystemProperty"
+    },
+    {
+      "match": "com.openggf.level.TestLevelRendererBackgroundSamplingPerformance#captureLiveBackgroundSamplingScenes",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/level/TestLevelRendererBackgroundSamplingPerformance.java:156",
+      "allowed_when_absent": null,
+      "note": "LIVE_CAPTURE_PROPERTY"
+    },
+    {
+      "match": "com.openggf.level.TestLevelRendererBackgroundSamplingPerformance#postWarmupRenderSamplingAllocationProbe",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/level/TestLevelRendererBackgroundSamplingPerformance.java:121",
+      "allowed_when_absent": null,
+      "note": "MEASUREMENT_PROPERTY"
+    },
+    {
+      "match": "com.openggf.tests.TestCPZObjectBugs#testSpinTubeForcesRolling",
+      "category": "scenario-assumption",
+      "evidence": "src/test/java/com/openggf/tests/TestCPZObjectBugs.java:134",
+      "allowed_when_absent": null,
+      "note": "documented prior scenario limitation (tube capture/release assumption at :134); carried unchanged from the release allowlist \u2014 gameplay and assertions are not altered by this gate"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.TestS1OpenGgfAudioCapture#capturesTheCompleteReferenceControlledInterval",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/TestS1OpenGgfAudioCapture.java:152",
+      "allowed_when_absent": "s1_bizhawk_reference",
+      "note": "local deterministic BizHawk reference"
+    },
+    {
+      "match": "com.openggf.tools.audio.completerun.s2.TestS2CompleteRunRealRow769DecodeGate#capturesAndDecodesTheExactRealRow769Boundary",
+      "category": "opt-in-gate",
+      "evidence": "src/test/java/com/openggf/tools/audio/completerun/s2/TestS2CompleteRunRealRow769DecodeGate.java:27",
+      "allowed_when_absent": null,
+      "note": "OPENGGF_S2_COMPLETE_AUDIO_DECODE_GATE=1"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPackDiagnostics#writeCompatibilityReportForLocalShaderPack",
+      "category": "opt-in-diagnostic",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPackDiagnostics.java:26",
+      "allowed_when_absent": null,
+      "note": "ENABLED_PROPERTY"
+    },
+    {
+      "match": "com.openggf.tools.audio.timeline.TestS1Ghz1OpenGgfAudioTimelineCapture#captureRequestedOutput",
+      "category": "opt-in-capture",
+      "evidence": "src/test/java/com/openggf/tools/audio/timeline/TestS1Ghz1OpenGgfAudioTimelineCapture.java:24",
+      "allowed_when_absent": null,
+      "note": "RUN_PROPERTY/OUTPUT_PROPERTY"
+    },
+    {
+      "match": "com.openggf.tools.audio.completerun.s3k.TestS3kCompleteRunRealRow810DecodeGate#capturesAndDecodesTheExactRealRow810Boundary",
+      "category": "opt-in-gate",
+      "evidence": "src/test/java/com/openggf/tools/audio/completerun/s3k/TestS3kCompleteRunRealRow810DecodeGate.java:23",
+      "allowed_when_absent": null,
+      "note": "OPENGGF_S3K_COMPLETE_AUDIO_DECODE_GATE=1"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testMusicEhzMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testMusicCpzMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testMusicHtzMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testSfxRingMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testSfxJumpMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testSfxSpringMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.AudioRegressionTest#testMixedMusicSfxMatchesReference",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/audio/AudioRegressionTest.java:110",
+      "allowed_when_absent": "audio_reference_files",
+      "note": "generated by AudioReferenceGenerator"
+    },
+    {
+      "match": "com.openggf.audio.TestSmpsRepeatedPlaybackBenchmark#repeatedPublicMusicAndSfxPlaybackEmitsStableRawSamples",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/audio/TestSmpsRepeatedPlaybackBenchmark.java:53",
+      "allowed_when_absent": null,
+      "note": "@EnabledIfSystemProperty"
+    },
+    {
+      "match": "com.openggf.capture.GlReadPixelsGrabberTest#grabsOnlyNonZeroOriginViewportFromOffscreenBackBuffer",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/capture/GlReadPixelsGrabberTest.java:140",
+      "allowed_when_absent": "gl"
+    },
+    {
+      "match": "com.openggf.capture.GlReadPixelsGrabberTest#pboReadbackPreservesBothFramesAndExternalPackBinding",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/capture/GlReadPixelsGrabberTest.java:140",
+      "allowed_when_absent": "gl"
+    },
+    {
+      "match": "com.openggf.game.rewind.TestLiveRewindCheckpointCost#compareCheckpointCadencesOnTheSameRecordedRoute",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/game/rewind/TestLiveRewindCheckpointCost.java:22",
+      "allowed_when_absent": null,
+      "note": "openggf.checkpoint.measure=true"
+    },
+    {
+      "match": "com.openggf.game.sonic3k.TestS3kCnzVisualCapture#captureCnzReferenceFrames",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/game/sonic3k/TestS3kCnzVisualCapture.java:206",
+      "allowed_when_absent": "gl",
+      "note": "visual capture environment (GLFW)"
+    },
+    {
+      "match": "com.openggf.game.sonic3k.TestS3kCnzVisualCapture#captureTraversalObjectReferenceFrames",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/game/sonic3k/TestS3kCnzVisualCapture.java:223",
+      "allowed_when_absent": "gl",
+      "note": "visual capture environment (GLFW)"
+    },
+    {
+      "match": "com.openggf.game.sonic3k.dataselect.TestS3kDataSelectPresentation#visualCapture_selectedSaveSlotShowsRightBodyRail",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/game/sonic3k/dataselect/TestS3kDataSelectPresentation.java:2563",
+      "allowed_when_absent": "gl",
+      "note": "glfwAvailable()"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#applyRestoresCallerGlStateAfterSuccess(int)[1]",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#applyRestoresCallerGlStateAfterSuccess(int)[2]",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#brokenShaderActivationReturnsFalseAndInactive",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#combinedRetroArchStyleSourceCompilesAndActivates",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#combinedTextureCoordinatesPreserveXAxisAndYAxis",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#dynamicUniformOverloadBindsPerFrameValues",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#existingFragmentOutputWithLegacyFragColorWriteLinks",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#failedActivationKeepsPreviousShaderActive",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#firstPassUsesLogicalSourceSizeUniformsWhenViewportDiffers",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#fragmentOnlyPassthroughActivatesAndApplies",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#passPrevTextureSamplerBindsEarlierPassOutput",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#retroArchParameterUniformSourceActivatesAndBindsPresetValue",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#rewindVhsEffectPassPrewarmsAppliesAndStaysHealthy",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#sourceScaleTargetsCascadeFromPreviousPassOutput",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.graphics.shaderlib.TestDisplayShaderPipelineSmoke#vhsRewindBuiltInPresetActivatesAndApplies",
+      "category": "gl-context",
+      "evidence": "src/test/java/com/openggf/graphics/shaderlib/TestDisplayShaderPipelineSmoke.java:630",
+      "allowed_when_absent": "gl",
+      "note": "GlContext.open() assumptions :630/:642/:651"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.s2.TestS2DriverStateOracle#driverStateComparesAcrossTheWidenedSpan",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/s2/TestS2DriverStateOracle.java:58",
+      "allowed_when_absent": "s2_bk2",
+      "note": "s2.request.bk2.path"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.s2.TestS2RequestAwareOracleRawStream#levelPlayBgmPublishesEmeraldHillOnceAtTheNativeLoadBoundary",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/s2/TestS2RequestAwareOracleRawStream.java:92",
+      "allowed_when_absent": "s2_bk2",
+      "note": "s2.request.bk2.path"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.s2.TestS2RequestAwareOracleRawStream#realCandidateAndBk2DrivenDriverStateCompare",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/s2/TestS2RequestAwareOracleRawStream.java:92",
+      "allowed_when_absent": "s2_bk2",
+      "note": "s2.request.bk2.path"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.s2.TestS2RequestAwareOracleRawStream#realCandidateComparesAgainstIndependentProductionBk2Run",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/s2/TestS2RequestAwareOracleRawStream.java:92",
+      "allowed_when_absent": "s2_bk2",
+      "note": "s2.request.bk2.path"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.s2.TestS2WidenedRequestOracle#everyReplayableWindowComparesAgainstTheEnginesOwnRequests",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/s2/TestS2WidenedRequestOracle.java:107",
+      "allowed_when_absent": "s2_bk2",
+      "note": "s2.request.bk2.path"
+    },
+    {
+      "match": "com.openggf.tools.audio.parity.s3k.TestS3kRequestObservationSidecar#supplyingTheObservedRequestRemovesTheProducerInputLimitation",
+      "category": "optional-fixture",
+      "evidence": "src/test/java/com/openggf/tools/audio/parity/s3k/TestS3kRequestObservationSidecar.java:141",
+      "allowed_when_absent": "s3k_observations",
+      "note": "observations sidecar property"
+    }
+  ]
+}

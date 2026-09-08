@@ -26,11 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Sonic 3&amp;K SFX lifecycle through the runtime request path.
  *
- * <p>The AIZ1 intro driver oracle compares a music-only capture, so none of
- * the conditions here - one SFX taking a channel from another, a wholesale
- * teardown, a multi-track SFX whose tracks end at different times - appear in
- * it. Each test below names the ROM routine that owns the behaviour it
- * asserts.
+ * <p>The AIZ1 intro driver oracle covers Collapse admission. These runtime
+ * tests additionally exercise one SFX taking a channel from another, a
+ * wholesale teardown, and multi-track SFX whose tracks end at different
+ * times. Each test names the ROM routine owning the asserted behavior.
  *
  * <p>Channel numbering: {@code FM4} is linear channel 4, so its key on/off
  * selector on register 28h is {@code (4 % 3) + 4 = 5}, and its per-operator
@@ -49,6 +48,51 @@ class TestS3kSfxLifecycleRom {
 
     private final List<String> writes = new ArrayList<>();
     private Rom rom;
+
+    /**
+     * Collapse declares FM3, FM4, FM5, then PSG3. The retail
+     * zGetSFXChannelPointers PSG branch writes FF even though the preceding
+     * stale-IX silence sees FM5 and writes nothing (driver:2131-2136).
+     */
+    @Test
+    void collapseAdmissionSilencesNoiseAfterTheThreeFmInitializations() {
+        AudioManager audio = install();
+        audio.playMusic(Sonic3kMusic.AIZ1.id);
+        for (int warm = 0; warm < 4; warm++) {
+            service(audio);
+        }
+        observe(audio);
+        assertTrue(audio.playSfx(Sonic3kSfx.COLLAPSE.id));
+        service(audio);
+
+        List<String> admission = List.of(
+                "ym0[28]=02", "ym0[92]=00", "ym0[96]=00", "ym0[9A]=00", "ym0[9E]=00",
+                "ym0[28]=04", "ym1[90]=00", "ym1[94]=00", "ym1[98]=00", "ym1[9C]=00",
+                "ym0[28]=05", "ym1[91]=00", "ym1[95]=00", "ym1[99]=00", "ym1[9D]=00",
+                "psg[FF]");
+        assertTrue(writes.size() >= admission.size(), () -> "admission writes: " + writes);
+        assertEquals(admission, writes.subList(0, admission.size()),
+                "noise silence belongs after the preceding FM headers and before the music walk");
+    }
+
+    /**
+     * Skid's shipped headers are PSG2 then PSG1. On the second pass IX still
+     * names the initialized PSG2 header, so zGetSFXChannelPointers emits BF
+     * before its unconditional FF (Sound/Z80 Sound Driver.asm:1997-2103,
+     * 2109-2165; shipped fix_sndbugs=0).
+     */
+    @Test
+    void skidAdmissionUsesThePreviousRomHeaderBeforeCurrentPsgSilence() {
+        AudioManager audio = install();
+        observe(audio);
+
+        assertTrue(audio.playSfx(Sonic3kSfx.SKID.id));
+        service(audio);
+
+        assertTrue(writes.size() >= 3, () -> "Skid admission writes: " + writes);
+        assertEquals(List.of("psg[FF]", "psg[BF]", "psg[FF]"),
+                writes.subList(0, 3));
+    }
 
     @AfterEach
     void tearDown() {
@@ -179,9 +223,9 @@ class TestS3kSfxLifecycleRom {
                 "the admitted SFX must survive the service that admitted it");
         assertTrue(sfxTrackActive(audio, SmpsSequencer.TrackType.PSG, 2),
                 "its PSG2 track must still be live before its first walk");
-        assertTrue(writes.isEmpty(),
-                "the SFX walk precedes the queue fill, so the admitting "
-                        + "service reaches the chip with nothing: " + writes);
+        assertEquals(List.of("psg[FF]"), writes,
+                "the admitting service emits only its noise silence; "
+                        + "the SFX walk precedes the queue fill");
 
         service(audio);
         assertTrue(writes.stream().anyMatch(write -> write.startsWith("psg[")),

@@ -32,6 +32,43 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TestSmpsPhysicalPolicy {
+    @Test
+    void s2LoadDispositionAndClosingNoteOffsFollowLiteralRomSlotOrder() {
+        var policy = Sonic2SmpsCompatibilityPolicy.INSTANCE;
+        var source = SmpsSourceDescriptor.baseMusic(new AudioTestFixtures.StubSmpsData("load"));
+        // DAC + FM1 + FM2 and PSG1: uninitialised slots retain VoiceControl=0.
+        assertEquals(List.of(
+                new SmpsChipWrite.Ym2612(0, 0x28, 6),
+                new SmpsChipWrite.Ym2612(1, 0x42, 0xFF),
+                new SmpsChipWrite.Ym2612(1, 0x46, 0xFF),
+                new SmpsChipWrite.Ym2612(1, 0x4A, 0xFF),
+                new SmpsChipWrite.Ym2612(1, 0x4E, 0xFF),
+                new SmpsChipWrite.Ym2612(1, 0xB6, 0xC0),
+                new SmpsChipWrite.Ym2612(0, 0x2B, 0x80),
+                new SmpsChipWrite.Ym2612(0, 0x28, 0),
+                new SmpsChipWrite.Ym2612(0, 0x28, 1),
+                new SmpsChipWrite.Ym2612(0, 0x28, 0),
+                new SmpsChipWrite.Ym2612(0, 0x28, 0),
+                new SmpsChipWrite.Ym2612(0, 0x28, 0),
+                new SmpsChipWrite.Ym2612(0, 0x28, 0),
+                new SmpsChipWrite.Psg(0x9F),
+                new SmpsChipWrite.Psg(0x1F),
+                new SmpsChipWrite.Psg(0x1F)),
+                policy.activateMusic(new SmpsMusicActivation(source, 3, 1)).writes());
+        assertEquals(List.of(
+                new SmpsChipWrite.Ym2612(0, 0x2B, 0),
+                new SmpsChipWrite.Ym2612(0, 0x28, 0),
+                new SmpsChipWrite.Ym2612(0, 0x28, 1),
+                new SmpsChipWrite.Ym2612(0, 0x28, 2),
+                new SmpsChipWrite.Ym2612(0, 0x28, 4),
+                new SmpsChipWrite.Ym2612(0, 0x28, 5),
+                new SmpsChipWrite.Ym2612(0, 0x28, 6),
+                new SmpsChipWrite.Psg(0x9F),
+                new SmpsChipWrite.Psg(0xBF),
+                new SmpsChipWrite.Psg(0xDF)),
+                policy.activateMusic(new SmpsMusicActivation(source, 7, 3)).writes());
+    }
+
     private static final String FIXTURE =
             "audio/parity/s3k/s3k-stop-all-write-program.v1.json";
 

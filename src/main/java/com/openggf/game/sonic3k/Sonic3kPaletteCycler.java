@@ -839,11 +839,11 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
     //   AnPal_PalCNZ_5 → Normal_palette_line_3+$0E → palette[2] colors 7-8
     //   counter4 (Palette_cycle_counters+$04) step +4, wrap at 0x40 (16 frames)
     private static class CnzCycle extends PaletteCycle {
-        private final byte[] bumperData;      // AnPal_PalCNZ_1: 96 bytes (16 frames x 6 bytes)
-        private final byte[] bumperWaterData; // AnPal_PalCNZ_2: 96 bytes (16 frames x 6 bytes)
-        private final byte[] bgData;          // AnPal_PalCNZ_3: 180 bytes (30 frames x 6 bytes)
-        private final byte[] bgWaterData;     // AnPal_PalCNZ_4: 180 bytes (30 frames x 6 bytes)
-        private final byte[] tertiaryData;    // AnPal_PalCNZ_5: 64 bytes (16 frames x 4 bytes)
+        // Immutable ROM-derived resources, like the other cycles' final data tables.
+        // Rewind captures only the mutable timer/counter fields below.
+        private final List<PaletteWrite> bumperPatches;
+        private final List<PaletteWrite> backgroundPatches;
+        private final List<PaletteWrite> tertiaryPatches;
 
         // Channel 1 timer (Palette_cycle_counter1): period 3 → fires every 4 frames
         private int timer1;
@@ -858,11 +858,9 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
 
         CnzCycle(byte[] bumperData, byte[] bumperWaterData,
                  byte[] bgData, byte[] bgWaterData, byte[] tertiaryData) {
-            this.bumperData = bumperData;
-            this.bumperWaterData = bumperWaterData;
-            this.bgData = bgData;
-            this.bgWaterData = bgWaterData;
-            this.tertiaryData = tertiaryData;
+            bumperPatches = pairedPatches(3, 9, bumperData, bumperWaterData, 6);
+            backgroundPatches = pairedPatches(2, 9, bgData, bgWaterData, 6);
+            tertiaryPatches = pairedPatches(2, 7, tertiaryData, tertiaryData, 4);
         }
 
         @Override
@@ -877,7 +875,7 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter0 >= 0x60) {
                     counter0 = 0;
                 }
-                submitPairedPatch(registry, 3, 9, bumperData, bumperWaterData, d0, 6);
+                submitPairedPatch(registry, bumperPatches, d0 / 6);
             }
 
             // Channel 2 (background) — always runs every frame
@@ -886,7 +884,7 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             if (counter2 >= 0xB4) {
                 counter2 = 0;
             }
-            submitPairedPatch(registry, 2, 9, bgData, bgWaterData, d0, 6);
+            submitPairedPatch(registry, backgroundPatches, d0 / 6);
 
             // Channel 3 (tertiary) — gated by timer3
             if (timer3 > 0) {
@@ -898,7 +896,7 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter4 >= 0x40) {
                     counter4 = 0;
                 }
-                submitPairedPatch(registry, 2, 7, tertiaryData, tertiaryData, d1, 4);
+                submitPairedPatch(registry, tertiaryPatches, d1 / 4);
             }
         }
 
@@ -909,29 +907,27 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
          * sits above baseline zone cycling and below object-driven overrides,
          * matching the Task 5 ownership contract for CNZ.
          */
-        private void submitPairedPatch(PaletteOwnershipRegistry registry,
-                                       int paletteIndex,
-                                       int startColor,
-                                       byte[] normalSource,
-                                       byte[] waterSource,
-                                       int sourceOffset,
-                                       int byteCount) {
-            byte[] normalData = new byte[byteCount];
-            byte[] waterData = new byte[byteCount];
-            System.arraycopy(normalSource, sourceOffset, normalData, 0, byteCount);
-            System.arraycopy(waterSource, sourceOffset, waterData, 0, byteCount);
-            registry.submit(PaletteWrite.normal(
-                    S3kPaletteOwners.CNZ_ANPAL,
-                    S3kPaletteOwners.PRIORITY_ZONE_EVENT,
-                    paletteIndex,
-                    startColor,
-                    normalData));
-            registry.submit(PaletteWrite.underwater(
-                    S3kPaletteOwners.CNZ_ANPAL,
-                    S3kPaletteOwners.PRIORITY_ZONE_EVENT,
-                    paletteIndex,
-                    startColor,
-                    waterData));
+        private static void submitPairedPatch(PaletteOwnershipRegistry registry,
+                                              List<PaletteWrite> patches, int frame) {
+            registry.submit(patches.get(frame * 2));
+            registry.submit(patches.get(frame * 2 + 1));
+        }
+
+        private static List<PaletteWrite> pairedPatches(int paletteIndex, int startColor,
+                                                       byte[] normalSource, byte[] waterSource,
+                                                       int byteCount) {
+            List<PaletteWrite> patches = new ArrayList<>();
+            for (int offset = 0; offset < normalSource.length; offset += byteCount) {
+                patches.add(PaletteWrite.normal(
+                        S3kPaletteOwners.CNZ_ANPAL,
+                        S3kPaletteOwners.PRIORITY_ZONE_EVENT,
+                        paletteIndex, startColor, slice(normalSource, offset, byteCount)));
+                patches.add(PaletteWrite.underwater(
+                        S3kPaletteOwners.CNZ_ANPAL,
+                        S3kPaletteOwners.PRIORITY_ZONE_EVENT,
+                        paletteIndex, startColor, slice(waterSource, offset, byteCount)));
+            }
+            return List.copyOf(patches);
         }
     }
 

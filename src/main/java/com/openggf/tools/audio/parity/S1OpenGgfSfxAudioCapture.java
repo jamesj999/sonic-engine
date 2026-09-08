@@ -4,6 +4,7 @@ import com.openggf.audio.driver.SmpsDriver;
 import com.openggf.audio.session.LegacyCompatibilitySmpsPhysicalPolicy;
 import com.openggf.audio.session.OwnedSmpsAudioStream;
 import com.openggf.audio.session.SmpsPhysicalDevice;
+import com.openggf.audio.session.SmpsDriverSessionConfiguration;
 import com.openggf.audio.rewind.SmpsSequencerSnapshot;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.DacData;
@@ -138,7 +139,8 @@ public final class S1OpenGgfSfxAudioCapture {
                     new SmpsPhysicalDevice.Settings(
                             SAMPLE_RATE, false),
                     LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE,
-                    ChipWriteObserver.NONE);
+                    ChipWriteObserver.NONE,
+                    new SmpsDriverSessionConfiguration(profile.smpsStatefulCommandPolicy()));
             driver = stream.logicalDriver();
             musicSequencer = new SmpsSequencer(song, dacData, driver, () -> { },
                     Sonic1SmpsSequencerConfig.CONFIG);
@@ -197,8 +199,7 @@ public final class S1OpenGgfSfxAudioCapture {
             if (soundId != 0xE0) {
                 return;
             }
-            driver.stopAllSfx();
-            musicSequencer.setSpeedShoes(false);
+            stream.prepareFadeOut();
         }
 
         private void submitFlagCommand(int soundId) {
@@ -219,7 +220,7 @@ public final class S1OpenGgfSfxAudioCapture {
             }
             // The stops already ran before the service; only the arming, which
             // is what the fade step's position actually decides, belongs here.
-            musicSequencer.triggerFadeOut(S1_FADE_OUT_STEPS, S1_FADE_OUT_DELAY);
+            stream.armFadeOut(S1_FADE_OUT_STEPS, S1_FADE_OUT_DELAY);
         }
 
         /**

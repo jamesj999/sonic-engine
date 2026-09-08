@@ -1453,8 +1453,13 @@ public class S3kResultsScreenObjectInstance extends AbstractResultsScreen implem
     private void loadHudTextIntoPatterns(Rom rom, Pattern[] patterns) {
         try {
             FileChannel channel = rom.getFileChannel();
-            channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
-            byte[] data = NemesisReader.decompress(channel);
+            // Rom exposes a shared FileChannel; lock around seek+decode so concurrent
+            // readers cannot move the channel position mid-stream.
+            byte[] data;
+            synchronized (rom) {
+                channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
+                data = NemesisReader.decompress(channel);
+            }
 
             int totalTiles = data.length / Pattern.PATTERN_SIZE_IN_ROM;
             // ArtTile_Ring = $6BC. Place ALL tiles starting at array index $6BC - $520 = $19C

@@ -54,6 +54,8 @@ public class DisplayShaderPipeline {
     private int fragmentOnlyVao;
     private int combinedVao;
     private int combinedVbo;
+    // Context capability, captured with the resources owned by that context.
+    private int maxTextureUnits;
     private int sourceWidth = 1;
     private int sourceHeight = 1;
     private int viewportWidth = 1;
@@ -98,6 +100,7 @@ public class DisplayShaderPipeline {
             fragmentOnlyVao = newFragmentOnlyVao;
             combinedVao = newCombinedVao;
             combinedVbo = newCombinedVbo;
+            maxTextureUnits = glGetInteger(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS);
             phase = requestedPhase;
             active = true;
             lastActivationFailure = "";
@@ -262,7 +265,6 @@ public class DisplayShaderPipeline {
     }
 
     private void bindPassHistoryTextures(int programId, int passIndex, CompiledPass pass) {
-        int maxTextureUnits = glGetInteger(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS);
         int maxHistory = Math.min(passIndex, Math.max(0, maxTextureUnits - 1));
         for (int historyIndex = 1; historyIndex <= maxHistory; historyIndex++) {
             PassTarget previous = passTargets.get(passIndex - historyIndex);
@@ -647,9 +649,12 @@ public class DisplayShaderPipeline {
         private void capture() {
             int activeTexture = glGetInteger(GL_ACTIVE_TEXTURE);
             int activeTextureBinding = glGetInteger(GL_TEXTURE_BINDING_2D);
-            glActiveTexture(GL_TEXTURE0);
-            int texture0Binding = glGetInteger(GL_TEXTURE_BINDING_2D);
-            glActiveTexture(activeTexture);
+            int texture0Binding = activeTextureBinding;
+            if (activeTexture != GL_TEXTURE0) {
+                glActiveTexture(GL_TEXTURE0);
+                texture0Binding = glGetInteger(GL_TEXTURE_BINDING_2D);
+                glActiveTexture(activeTexture);
+            }
 
             glGetIntegerv(GL_VIEWPORT, viewport);
             readFramebuffer = glGetInteger(GL_READ_FRAMEBUFFER_BINDING);
@@ -670,13 +675,11 @@ public class DisplayShaderPipeline {
             glUseProgram(program);
             glBindVertexArray(vertexArray);
 
-            int previousActiveTexture = glGetInteger(GL_ACTIVE_TEXTURE);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, texture0Binding);
-            glActiveTexture(activeTexture);
-            glBindTexture(GL_TEXTURE_2D, activeTextureBinding);
-            if (previousActiveTexture != activeTexture) {
+            if (activeTexture != GL_TEXTURE0) {
                 glActiveTexture(activeTexture);
+                glBindTexture(GL_TEXTURE_2D, activeTextureBinding);
             }
 
             setCapability(GL_BLEND, blendEnabled);

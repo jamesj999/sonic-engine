@@ -91,9 +91,10 @@ final class MasterTitleRomPreview {
     private static final int S3K_PREVIEW_WINK_Y = 0xC8 - S3K_PREVIEW_VSCROLL - 128;
     private static final int S3K_PREVIEW_SCALE_NUMERATOR = 1;
     private static final int S3K_PREVIEW_SCALE_DENOMINATOR = 1;
-    private static final int S3K_PREVIEW_COPYRIGHT_X = 8;
-    private static final int S3K_PREVIEW_COPYRIGHT_Y = 8;
-    private static final boolean S3K_PREVIEW_DRAWS_COPYRIGHT = false;
+    private static final int S3K_PREVIEW_COPYRIGHT_X = 0x158 - 128;
+    // Raise the title's y=204 copyright by four pixels to clear the master navigation hints.
+    private static final int S3K_PREVIEW_COPYRIGHT_Y = 200;
+    private static final boolean S3K_PREVIEW_DRAWS_COPYRIGHT = true;
     private static final boolean S3K_PREVIEW_DRAWS_MENU_SELECTION = false;
     private static final int[] S3K_PREVIEW_FINGER_WAG_FRAMES = {
             4, 4, 4, 4, 4, 4, 0, 4, 1, 4, 0, 4, 1, 4, 0, 4, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
@@ -548,12 +549,18 @@ final class MasterTitleRomPreview {
         Pattern[] menuJunkPatterns = PatternDecompressor.nemesis(
                 rom, Sonic2Constants.ART_NEM_MENU_JUNK_ADDR, 1024, "MasterPreviewS2MenuJunk");
         Pattern[] combinedSpritePatterns = appendPatternsAt(spritePatterns, menuJunkPatterns, 0x2A2);
+        // TitleScreen uploads the standard font to ArtTile_ArtNem_FontStuff_TtlScr and copies
+        // the CopyrightText words ("@ 1992 SEGA", word_3E82) into the logo map at
+        // planeLoc(40,28,26) before it reaches Plane A.
+        Pattern[] fontPatterns = PatternDecompressor.nemesis(
+                rom, Sonic2Constants.ART_NEM_FONT_STUFF_ADDR, 4096, "MasterPreviewS2FontStuff");
+        patterns = appendPatternsAt(patterns, fontPatterns, Sonic2Constants.ART_TILE_FONT_STUFF_TITLE_SCREEN);
         int[] map = loadEnigmaMap(rom, Sonic2Constants.MAP_ENI_TITLE_LOGO_ADDR, 0xE000, 1024);
+        map = withSonic2CopyrightText(map, readWords(rom,
+                Sonic2Constants.TITLE_COPYRIGHT_TEXT_ADDR, Sonic2Constants.TITLE_COPYRIGHT_TEXT_WORDS));
         Palette[] palettes = loadSonic2TitlePalettes(rom);
         Image image = composeTilemapImage(patterns, palettes, map, S2_TITLE_WIDTH_TILES, S2_TITLE_HEIGHT_TILES);
         Image logo = composeTilemapImage(patterns, palettes, map, S2_TITLE_WIDTH_TILES, S2_TITLE_HEIGHT_TILES);
-        clearSonic2LogoChromaGreen(image);
-        clearSonic2LogoChromaGreen(logo);
         int stillTick = S2_SETTLED_TICK;
         return new GeneratedPreviewSequence(image.width(), image.height(), stillTick,
                 MasterTitleRomPreview::sonic2PreviewTokenAt,
@@ -595,6 +602,25 @@ final class MasterTitleRomPreview {
         return image;
     }
 
+    static int[] withSonic2CopyrightText(int[] logoMap, int[] copyrightWords) {
+        int[] map = logoMap.clone();
+        int base = Sonic2Constants.TITLE_COPYRIGHT_PLANE_ROW * S2_TITLE_WIDTH_TILES
+                + Sonic2Constants.TITLE_COPYRIGHT_PLANE_COLUMN;
+        for (int i = 0; i < copyrightWords.length && base + i < map.length; i++) {
+            map[base + i] = copyrightWords[i];
+        }
+        return map;
+    }
+
+    private static int[] readWords(Rom rom, int address, int count) throws IOException {
+        byte[] bytes = rom.readBytes(address, count * 2);
+        int[] words = new int[count];
+        for (int i = 0; i < count; i++) {
+            words[i] = ((bytes[i * 2] & 0xFF) << 8) | (bytes[i * 2 + 1] & 0xFF);
+        }
+        return words;
+    }
+
     private static PreviewSequence loadSonic3kSequence(Rom rom) throws IOException {
         Pattern[] patterns = PatternDecompressor.kosinski(rom, Sonic3kConstants.ART_KOS_TITLE_SONIC_D_ADDR);
         Pattern[] spritePatterns = loadSonic3kSpritePatterns(rom);
@@ -630,8 +656,12 @@ final class MasterTitleRomPreview {
                     S3K_PREVIEW_FINGER_X, S3K_PREVIEW_FINGER_Y, 0);
         }
         int bannerY = sonic3kPreviewBannerY();
-        overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createBannerFrames().get(0),
+        var bannerFrames = Sonic3kTitleScreenMappings.createBannerFrames();
+        overlaySpriteFrame(image, spritePatterns, palettes, bannerFrames.get(0),
                 0x120 - 128, bannerY, 0);
+        // Settled title TM uses fixed VDP coordinates, as in the title-screen manager.
+        overlaySpriteFrame(image, spritePatterns, palettes, bannerFrames.get(1),
+                0x188 - 128, 0xEC - 128, 0);
         overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createAndKnucklesFrames().get(0),
                 0x120 - 128, bannerY + 0x5C, 0);
         if (sonic3kPreviewDrawsMenuSelection()) {
@@ -1040,23 +1070,6 @@ final class MasterTitleRomPreview {
                 image.rgba[offset + 1] = logo.rgba[offset + 1];
                 image.rgba[offset + 2] = logo.rgba[offset + 2];
                 image.rgba[offset + 3] = logo.rgba[offset + 3];
-            }
-        }
-    }
-
-    static void clearSonic2LogoChromaGreen(Image image) {
-        if (image == null) {
-            return;
-        }
-        for (int offset = 0; offset < image.rgba.length; offset += 4) {
-            int r = image.rgba[offset] & 0xFF;
-            int g = image.rgba[offset + 1] & 0xFF;
-            int b = image.rgba[offset + 2] & 0xFF;
-            if (r == 0x92 && g == 0xFF && b == 0x00) {
-                image.rgba[offset] = 0;
-                image.rgba[offset + 1] = 0;
-                image.rgba[offset + 2] = 0;
-                image.rgba[offset + 3] = 0;
             }
         }
     }

@@ -156,7 +156,8 @@ public interface AudioBackend {
     /**
      * Fade out the currently playing music over time.
      * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
-     * Does not affect SFX - only music channels fade.
+     * Host policy owns the command's pre-fade effects; Sonic 1 stops its
+     * normal and special SFX tracks before fading the music channels.
      *
      * @param steps total number of volume steps (ROM default: 0x28 = 40)
      * @param delay frames between each volume step (ROM default: 3)

@@ -1,0 +1,6 @@
+{"type":"header","format":"openggf-physical-chip-bus-v1","initial_state":"constructor_reset","ym_core":"nuked-opn2","ym_core_mode":3,"ym_chip_type":"YM2612","ym_domain":"YM2612_INTERNAL_CYCLE","capture_capacity":8,"events":5,"overflow":false,"dropped":0,"rendered_output_frames":1,"ym_replay_start_ordinal":1,"terminal_ym_cycle":72}
+{"type":"boundary","ordinal":0,"domain":"YM2612_INTERNAL_CYCLE","clock":0,"boundary":"RESET"}
+{"type":"ym","ordinal":1,"cycle":0,"bus_port":0,"value":34,"origin":"EXTERNAL_BUS"}
+{"type":"ym","ordinal":2,"cycle":24,"bus_port":1,"value":8,"origin":"EXTERNAL_BUS"}
+{"type":"boundary","ordinal":3,"domain":"YM2612_INTERNAL_CYCLE","clock":48,"boundary":"OUTPUT_GATE_CHANGE"}
+{"type":"psg","ordinal":4,"tick":3,"value":144}

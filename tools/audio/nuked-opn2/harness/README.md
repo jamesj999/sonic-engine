@@ -54,3 +54,25 @@ record with the full per-script results is
 ```bash
 tools/audio/nuked-opn2/harness/regenerate-bitexact-expectations.sh /abs/path/to/nuked-src
 ```
+
+## Isolated phase arithmetic matrix
+
+`phase-matrix-harness.c` includes the same verified upstream source and calls
+its actual static `OPN2_PhaseCalcIncrement` function. It emits three FNV-1a
+fingerprints over little-endian 32-bit phase increments for
+`TestNukedOpn2PhaseMatrix`: every 11-bit frequency / LFO phase at zero PMS,
+every signed detune / keycode pair, and an active-PMS boundary matrix.
+This supplements, rather than replaces, the cycle-level scripts above.
+
+```bash
+tools/audio/nuked-opn2/fetch-source.sh --output /abs/path/to/nuked-src
+mkdir -p target/nuked-phase
+cc -O2 -I /abs/path/to/nuked-src tools/audio/nuked-opn2/harness/phase-matrix-harness.c -o target/nuked-phase/phase-matrix
+target/nuked-phase/phase-matrix
+mvn -Dtest=TestNukedOpn2PhaseMatrix test
+```
+
+Expected outputs: `zero-pms 65536 88bfe960c6f67325`,
+`signed-detune 256 59778aea1488df65`, and
+`active-pms 1032192 ea93f3fc6c934311`. Do not regenerate expectations to
+accommodate an optimization; unchanged reference behavior is the acceptance gate.

@@ -271,6 +271,11 @@ public class DelegatingGameModule implements GameModule {
     }
 
     @Override
+    public ContinueScreenProvider createContinueScreenProvider() {
+        return base.createContinueScreenProvider();
+    }
+
+    @Override
     public TitleScreenProvider getTitleScreenProvider() {
         return base.getTitleScreenProvider();
     }

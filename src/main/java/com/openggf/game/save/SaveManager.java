@@ -13,8 +13,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static java.security.MessageDigest.getInstance;
@@ -41,12 +48,68 @@ public final class SaveManager {
 
     public void writeSlot(String game, int slot, Map<String, Object> payload) throws IOException {
         Path file = slotPath(game, slot);
-        Files.createDirectories(file.getParent());
+        byte[] envelope = encodeEnvelope(game, slot, payload);
+        writeAtomically(file, envelope);
+    }
+
+    /**
+     * Frame-thread half of a save: encodes the envelope now, so the file
+     * reflects the payload exactly as captured, and hands the disk write to
+     * the single save-writer thread. In-game progression saves land on the
+     * same frame as an act transition; the temp-file write and atomic rename
+     * cost several milliseconds there and have no place in a frame budget.
+     *
+     * <p>Writes for one manager complete in submission order. {@link #readSlotSummary}
+     * and {@link #deleteSlot} flush pending writes first, and
+     * {@link #flushPendingWrites()} is available for shutdown.
+     */
+    public void writeSlotAsync(String game, int slot, Map<String, Object> payload) throws IOException {
+        Path file = slotPath(game, slot);
+        byte[] envelope = encodeEnvelope(game, slot, payload);
+        synchronized (pendingWrites) {
+            pendingWrites.add(WRITER.submit(() -> {
+                try {
+                    writeAtomically(file, envelope);
+                } catch (IOException e) {
+                    LOG.log(Level.WARNING, "Failed to write save " + file + ": " + e.getMessage(), e);
+                }
+                return null;
+            }));
+        }
+    }
+
+    /** Blocks until every write queued through {@link #writeSlotAsync} has finished. */
+    public void flushPendingWrites() {
+        while (true) {
+            Future<?> next;
+            synchronized (pendingWrites) {
+                next = pendingWrites.poll();
+            }
+            if (next == null) {
+                return;
+            }
+            try {
+                next.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (ExecutionException e) {
+                LOG.log(Level.WARNING, "Save writer task failed: " + e.getCause(), e.getCause());
+            }
+        }
+    }
+
+    private byte[] encodeEnvelope(String game, int slot, Map<String, Object> payload) throws IOException {
         String payloadJson = mapper.writeValueAsString(payload);
         SaveEnvelope env = new SaveEnvelope(1, game, slot, payload, sha256(payloadJson));
+        return mapper.writeValueAsBytes(env);
+    }
+
+    private static void writeAtomically(Path file, byte[] envelope) throws IOException {
+        Files.createDirectories(file.getParent());
         Path temp = Files.createTempFile(file.getParent(), file.getFileName().toString(), ".tmp");
         try {
-            mapper.writeValue(temp.toFile(), env);
+            Files.write(temp, envelope);
             try {
                 Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException ex) {
@@ -57,11 +120,34 @@ public final class SaveManager {
         }
     }
 
+    private final Deque<Future<?>> pendingWrites = new ArrayDeque<>();
+
+    /** One writer for every manager: saves are rare and ordering per file matters more than parallelism. */
+    private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "save-writer");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    static {
+        // A daemon writer would otherwise be abandoned by an exiting JVM with a
+        // save still queued; drain it before the process goes.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            WRITER.shutdown();
+            try {
+                WRITER.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "save-writer-drain"));
+    }
+
     public SaveSlotSummary readSlotSummary(String game, int slot) throws IOException {
         return readSlotSummary(game, slot, null);
     }
 
     public SaveSlotSummary readSlotSummary(String game, int slot, DataSelectGameProfile profile) throws IOException {
+        flushPendingWrites();
         Path file = slotPath(game, slot);
         if (!Files.exists(file)) {
             return SaveSlotSummary.empty(slot);
@@ -111,6 +197,7 @@ public final class SaveManager {
     }
 
     public void deleteSlot(String game, int slot) {
+        flushPendingWrites();
         Path file = slotPath(game, slot);
         try {
             Files.deleteIfExists(file);

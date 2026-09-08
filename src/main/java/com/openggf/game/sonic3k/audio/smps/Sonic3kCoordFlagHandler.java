@@ -194,14 +194,15 @@ public class Sonic3kCoordFlagHandler implements CoordFlagHandler {
                         }
                         t.volumeOffset = updated;
                         t.envAtRest = false;
-                        // cfChangePSGVolume opens with res 4, clearing the rest
-                        // bit before it touches the volume at all
-                        // (Sound/Z80 Sound Driver.asm:3186-3190).
+                        // Retail cfChangePSGVolume clears rest, then DEC wraps
+                        // VolEnv from 00h to FFh before the signed add and
+                        // unsigned CP 0Fh clamp.
+                        // (Sound/Z80 Sound Driver.asm:3263-3285).
                         t.resting = false;
-                        if (t.envPos > 0) t.envPos--; // SMPSPlay smps_commands.c:1890 VolEnvIdx--
+                        t.envPos = (t.envPos - 1) & 0xFF;
                         // Like cfSetVolume's PSG branch, this ends at
                         // zStoreTrackVolume, which stores the byte and returns
-                        // without touching the chip (:3191-3199). The track's
+                        // without touching the chip (:3273-3285). The track's
                         // own zUpdatePSGTrack tail sends it.
                     }
                 }
@@ -300,12 +301,22 @@ public class Sonic3kCoordFlagHandler implements CoordFlagHandler {
 
             case 0xF2: // TRK_END (TEND_STD) - standard track end
                 t.active = false;
-                ctx.stopNote(t);
+                if (t.type == SmpsSequencer.TrackType.PSG) {
+                    // Retail fix_sndbugs=0 zGetSFXChannelPointers calls
+                    // zSilencePSGChannel, then unconditionally writes FF to
+                    // compensate for that routine's broken noise test. This
+                    // happens before zUpdatingSFX is tested and before music
+                    // ownership is restored (Sound/Z80 Sound Driver.asm:
+                    // 2115-2142, 3443-3469, 4226-4249).
+                    ctx.stopPsgNoteWithDriverSilence(t);
+                } else {
+                    ctx.stopNote(t);
+                }
                 // cfStopTrack does not stop at the key-off: it clears the
                 // overridden music track's bit and sends that track's FM
                 // instrument, inline, before the music update of the same
                 // service (Sound/Z80 Sound Driver.asm:3059-3086).
-                ctx.releaseChannelToMusic(t.type, t.channelId);
+                ctx.releaseChannelToMusic(t);
                 return true;
 
             case 0xF3: // PSG_NOISE (PNOIS_SRES) - set + reset

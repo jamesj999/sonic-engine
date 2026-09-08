@@ -400,6 +400,21 @@ public final class HeadlessTestFixture implements TraceReplayFixture {
                 config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, sharedLevel.skipIntros());
                 config.setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, sharedLevel.mainCharCode());
                 config.setConfigValue(SonicConfiguration.SIDEKICK_CHARACTER_CODE, sharedLevel.sidekickCharCode());
+                config.setConfigValue(SonicConfiguration.LOAD_TIME_SIMULATION, sharedLevel.loadTimeSimulation());
+                // WorldSession caches its load-time mode when it opens, and the
+                // per-test runtime rebuild opened this one under default config
+                // before the snapshot above was re-applied. Reopen it so the
+                // mode the level was loaded under governs hardware pacing too;
+                // the shared-level reload below re-attaches the level.
+                GameplayModeContext current = SessionManager.getCurrentGameplayMode();
+                if (hardwareAdmissionPolicy != HardwareReadinessAdmissionPolicy.RECORDED
+                        && current != null
+                        && current.getWorldSession().loadTimeSimulationMode()
+                        != com.openggf.game.timing.LoadTimeSimulationMode.parse(
+                                sharedLevel.loadTimeSimulation())) {
+                    SessionManager.clear();
+                    TestEnvironment.activeGameplayMode();
+                }
             }
 
             // 3. Register the active gameplay team before any load path that

@@ -22,7 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Pins the music fade window to the sample-accurate reference path. Fade volume
+ * Compares the engine's hybrid and sample-accurate rendering paths. This is
+ * a batching-equivalence test, not a ROM oracle or a test of host fade-command
+ * side effects. Fade volume
  * steps only mutate driver state inside {@code processTempoFrame()}, and hybrid
  * chunks never cross a tempo-frame boundary, so hybrid reads must stay
  * PCM-identical to per-sample rendering for the entire fade-out/fade-in window

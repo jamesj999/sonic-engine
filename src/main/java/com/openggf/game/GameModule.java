@@ -360,6 +360,11 @@ public interface GameModule {
      */
     ObjectArtProvider getObjectArtProvider();
 
+    /** Construct a fresh ROM-owned Continue screen for this session transition. */
+    default ContinueScreenProvider createContinueScreenProvider() {
+        return null;
+    }
+
     /**
      * Returns the title screen provider for this game.
      * Provides the game-specific title screen with ROM-accurate

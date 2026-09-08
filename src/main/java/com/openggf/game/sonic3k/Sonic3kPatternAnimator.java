@@ -204,6 +204,8 @@ class Sonic3kPatternAnimator implements AnimatedPatternManager,
     private final byte[] rawTileScratchBytes = new byte[Pattern.PATTERN_SIZE_IN_ROM];
     private final byte[] hcz1StripComposeScratch = new byte[0x300];
     private final byte[] lbz2WaterlineComposeScratch = new byte[0x200];
+    // Derived deformation values only; excluded from rewind state just like tile scratch.
+    private final int[] hcz2HScrollScratch = new int[24];
 
     private int lastHcz1WaterlineDelta = Integer.MIN_VALUE;
     private int lastHcz2SmallBgLineValue = Integer.MIN_VALUE;
@@ -1829,7 +1831,7 @@ class Sonic3kPatternAnimator implements AnimatedPatternManager,
     }
 
     private int[] buildHcz2HScrollValues(int cameraX) {
-        int[] hScroll = new int[24];
+        int[] hScroll = hcz2HScrollScratch;
         int d0 = ((short) cameraX) << 16;
         d0 >>= 1;
         int d1 = d0 >> 3;
@@ -1892,27 +1894,32 @@ class Sonic3kPatternAnimator implements AnimatedPatternManager,
         // wrapping on overflow so the tile pattern loops.
         int sourceByteOffset = index * 4;
 
-        // Copy 8 tiles from source offset to level patterns at tile 0x40, wrapping the
+        // Copy 4 tiles from source offset to level patterns at tile 0x54, wrapping the
         // source data on overflow.
         level.ensurePatternCapacity(GUMBALL_DEST_TILE + GUMBALL_TILE_COUNT);
         GraphicsManager graphicsManager = GameServices.graphics();
         boolean canUpdateTextures = graphicsManager.isGlInitialized();
-        byte[] tileData = new byte[Pattern.PATTERN_SIZE_IN_ROM];
-        for (int i = 0; i < GUMBALL_TILE_COUNT; i++) {
-            int baseOffset = (sourceByteOffset + i * Pattern.PATTERN_SIZE_IN_ROM) % GUMBALL_SOURCE_SIZE;
-            int destIndex = GUMBALL_DEST_TILE + i;
-            if (destIndex >= level.getPatternCount()) {
-                break;
+        byte[] tileData = rawTileScratchBytes;
+        graphicsManager.beginPatternAtlasBatch();
+        try {
+            for (int i = 0; i < GUMBALL_TILE_COUNT; i++) {
+                int baseOffset = (sourceByteOffset + i * Pattern.PATTERN_SIZE_IN_ROM) % GUMBALL_SOURCE_SIZE;
+                int destIndex = GUMBALL_DEST_TILE + i;
+                if (destIndex >= level.getPatternCount()) {
+                    break;
+                }
+                // Read one tile worth of bytes with wrap-around on source data.
+                for (int b = 0; b < Pattern.PATTERN_SIZE_IN_ROM; b++) {
+                    tileData[b] = gumballAniData[(baseOffset + b) % GUMBALL_SOURCE_SIZE];
+                }
+                Pattern dest = level.getPattern(destIndex);
+                dest.fromSegaFormat(tileData);
+                if (canUpdateTextures) {
+                    graphicsManager.updatePatternTexture(dest, destIndex);
+                }
             }
-            // Read one tile worth of bytes with wrap-around on source data.
-            for (int b = 0; b < Pattern.PATTERN_SIZE_IN_ROM; b++) {
-                tileData[b] = gumballAniData[(baseOffset + b) % GUMBALL_SOURCE_SIZE];
-            }
-            Pattern dest = level.getPattern(destIndex);
-            dest.fromSegaFormat(tileData);
-            if (canUpdateTextures) {
-                graphicsManager.updatePatternTexture(dest, destIndex);
-            }
+        } finally {
+            graphicsManager.endPatternAtlasBatch();
         }
     }
 

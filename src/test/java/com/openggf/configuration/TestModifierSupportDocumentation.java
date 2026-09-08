@@ -1,6 +1,7 @@
 package com.openggf.configuration;
 
 import com.openggf.debug.DebugOverlayToggle;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -33,6 +34,9 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_P;
  *
  * <p>The row is therefore checked against the call sites rather than trusted.
  */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestModifierSupportDocumentation {
 
     private static final Path CONFIGURATION_DOC = Path.of("CONFIGURATION.md");

@@ -57,6 +57,191 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestSmpsDriverSession {
     @Test
+    void resettingTempoDoesNotChangeTheSourcesSfxPreservationPolicy() {
+        var session = SmpsSessionTestFixtures.session(new SmpsSessionTestFixtures.RecordingObserver());
+        session.install();
+        session.queueActivation(activationWithFmTrack(1));
+        session.applyCommand(new SmpsSessionCommand.AdmitSfx(continuousSfx(0x65, 4)));
+        var directWithReset = new SmpsSequencerConfig.Builder()
+                .direct68kDriver(true).resetTempoOnMusicLoad(true).build();
+        session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(8));
+        session.queueActivation(activation(2, false, false, true, 0, directWithReset));
+        assertEquals(1, session.captureSnapshot().speedMultiplier());
+        assertTrue(session.captureLogicalSnapshot().sequencers().stream()
+                .anyMatch(entry -> entry.sfx() && entry.source().id() == 0x65),
+                "a tempo reset must not discard the direct driver's continuing SFX");
+    }
+
+    @Test
+    void ordinaryS3kMusicLoadsClearTheOutgoingTempoInSessionAndMetadata() {
+        SmpsDriverSession session = SmpsSessionTestFixtures.session(
+                new SmpsSessionTestFixtures.RecordingObserver());
+        session.install();
+        var handlers = new SmpsCoordFlagHandlerOwner(new SmpsCoordFlagRuntimeState());
+        var factory = sessionFactory(session, handlers);
+        var registry = new AudioVoiceRegistry(factory, factory, handlers, ignored -> { }, session);
+        // Both mus_SpecialStage (1C) and an ordinary zone song must take
+        // zPlayMusic_DoFade -> zStopAllSound, which clears zTempoSpeedup.
+        for (int incomingId : new int[] {0x1C, 3}) {
+            session.queueActivation(activationWithFmTrack(1));
+            apply(session, registry, new AudioPresentationCommand.SetSpeedMultiplier(8));
+            var prepared = activation(incomingId, false, false, true, 0,
+                    com.openggf.game.sonic3k.audio.Sonic3kSmpsSequencerConfig.CONFIG);
+            apply(session, registry, replacement(prepared));
+            assertEquals(1, session.captureSnapshot().speedMultiplier());
+            assertEquals(1, registry.snapshot().speedMultiplier());
+            assertEquals(1, session.captureLogicalSnapshot().sequencers().getFirst()
+                    .snapshot().speedMultiplier());
+            session.serviceForward();
+            assertEquals(1, session.captureSnapshot().speedMultiplier());
+        }
+    }
+
+    @Test
+    void ordinaryS3kLoadDuringAnOverrideCannotRestoreTheAbandonedSong() {
+        var session = SmpsSessionTestFixtures.session(new SmpsSessionTestFixtures.RecordingObserver());
+        session.install();
+        var handlers = new SmpsCoordFlagHandlerOwner(new SmpsCoordFlagRuntimeState());
+        var factory = sessionFactory(session, handlers);
+        var registry = new AudioVoiceRegistry(factory, factory, handlers, ignored -> { }, session);
+        apply(session, registry, replacement(s3kActivation(1)));
+        apply(session, registry, new AudioPresentationCommand.SetSpeedMultiplier(8));
+        var oneUp = new AudioPresentationCommand.PushMusicOverride(
+                replacement(s3kActivation(0x2A)).music());
+        apply(session, registry, oneUp);
+        assertEquals(8, session.captureSnapshot().speedMultiplier(),
+                "the ordinary-load fix must not change existing override speed semantics");
+        apply(session, registry, new AudioPresentationCommand.RestoreMusicOverride());
+        assertEquals(8, session.captureSnapshot().speedMultiplier());
+        apply(session, registry, oneUp);
+        apply(session, registry, replacement(s3kActivation(0x1C)));
+        apply(session, registry, new AudioPresentationCommand.RestoreMusicOverride());
+        assertEquals(0x1C, session.captureLogicalSnapshot().sequencers().getFirst().source().id());
+        assertEquals(1, session.captureSnapshot().speedMultiplier());
+        assertEquals(1, registry.snapshot().speedMultiplier());
+    }
+
+    @Test
+    void s1AndS2OrdinaryLoadsKeepTheirExistingSpeedControls() {
+        for (var config : List.of(
+                com.openggf.game.sonic1.audio.Sonic1SmpsSequencerConfig.CONFIG,
+                com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig.CONFIG)) {
+            var session = SmpsSessionTestFixtures.session(new SmpsSessionTestFixtures.RecordingObserver());
+            session.install();
+            session.applyCommand(new SmpsSessionCommand.SetSpeedShoes(true));
+            session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(8));
+            session.queueActivation(activation(3, false, false, true, 0, config));
+            assertTrue(session.captureSnapshot().speedShoesEnabled());
+            assertEquals(8, session.captureLogicalSnapshot().sequencers().getFirst()
+                    .snapshot().speedMultiplier());
+        }
+    }
+
+    @Test
+    void restoredS3kLoadDoesNotReapplyThePreLoadTempo() {
+        var session = SmpsSessionTestFixtures.session(new SmpsSessionTestFixtures.RecordingObserver());
+        session.install();
+        session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(8));
+        session.queueActivation(s3kActivation(9));
+        var savedSession = session.captureSnapshot();
+        var savedLogical = session.captureLogicalSnapshot();
+        session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(4));
+        session.commitRestore(session.prepareRestore(savedSession, savedLogical,
+                ignored -> SmpsSessionTestFixtures.dac()));
+        assertEquals(1, session.captureSnapshot().speedMultiplier());
+        assertEquals(1, session.captureLogicalSnapshot().sequencers().getFirst()
+                .snapshot().speedMultiplier());
+        session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(40));
+        assertEquals(40, session.captureLogicalSnapshot().sequencers().getFirst()
+                .snapshot().speedMultiplier(), "stage acceleration remains a live tempo write");
+    }
+
+    private static PreparedSmpsMusicActivation s3kActivation(int id) {
+        return activation(id, false, false, true, 0,
+                com.openggf.game.sonic3k.audio.Sonic3kSmpsSequencerConfig.CONFIG);
+    }
+
+    @Test
+    void deferredS3kActivationKeepsTheResetWhenItsLogicalSongIsMaterialized() {
+        var session = SmpsSessionTestFixtures.session(new SmpsSessionTestFixtures.RecordingObserver());
+        session.install();
+        session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(8));
+        var prepared = s3kActivation(9);
+        // A ready-but-deferred plan exercises the production deferred logical
+        // materialization seam without imposing a fabricated ROM load duration.
+        var readiness = new com.openggf.audio.smps.SmpsLoadReadiness() {
+            public boolean immediate() { return false; }
+            public int compressedByteCount() { return 0; }
+            public int workUnitCount() { return 0; }
+            public long minimumTStates(Context context) { return 0; }
+            public Work begin(Context context) { return IMMEDIATE.begin(context); }
+            public String provenance() { return "test-deferred-ready"; }
+        };
+        session.queueActivation(new PreparedSmpsMusicActivation(
+                prepared.activation(), prepared.incomingMusic(), prepared.logicalPolicy(),
+                prepared.selectedDac(), readiness));
+        assertTrue(session.captureLogicalSnapshot().sequencers().isEmpty());
+        assertEquals(1, session.captureSnapshot().speedMultiplier());
+        var savedSession = session.captureSnapshot();
+        var savedLogical = session.captureLogicalSnapshot();
+        session.applyCommand(new SmpsSessionCommand.SetSpeedMultiplier(8));
+        session.commitRestore(session.prepareRestore(savedSession, savedLogical,
+                new SmpsDriverSession.DacDependencyResolver() {
+                    public com.openggf.audio.smps.DacData resolve(SmpsSourceDescriptor source) {
+                        return SmpsSessionTestFixtures.dac();
+                    }
+                    public com.openggf.audio.smps.SmpsLoadReadiness resolveReadiness(
+                            SmpsSourceDescriptor source) {
+                        return readiness;
+                    }
+                }));
+        session.serviceForward();
+        assertEquals(1, session.captureSnapshot().speedMultiplier());
+        assertFalse(session.hasPendingActivation());
+    }
+
+    private static void apply(SmpsDriverSession session, AudioVoiceRegistry registry,
+                              AudioPresentationCommand command) {
+        com.openggf.audio.presentation.AudioPresentationSessionCommandApplier.apply(
+                session, registry, command);
+    }
+
+    private static AudioPresentationCommand.ReplaceMusic replacement(
+            PreparedSmpsMusicActivation prepared) {
+        int id = prepared.activation().source().id();
+        var source = AudioSourceDescriptor.baseMusic(id);
+        return new AudioPresentationCommand.ReplaceMusic(
+                new AudioPresentationCommand.MusicVoiceEntry(id, source,
+                        new AudioPresentationCommand.SmpsVoiceDescriptor(
+                                id, 0, id, source, 735, prepared)));
+    }
+
+    @Test
+    void completedSessionTransactionsReleaseOverrideBackupWithoutAnotherCapture() throws Exception {
+        for (boolean rollback : new boolean[] {false, true}) {
+            SmpsDriverSession session = SmpsSessionTestFixtures.session(
+                    new SmpsSessionTestFixtures.RecordingObserver());
+            session.install();
+            session.queueActivation(activationWithFmTrack(1));
+            session.serviceForward();
+            session.applyCommand(new SmpsSessionCommand.PushOverride(activationWithFmTrack(2)));
+            session.serviceForward();
+            var token = session.captureLiveMutation();
+            Field field = SmpsDriverSession.class.getDeclaredField("mutationOverrides");
+            field.setAccessible(true);
+            Object[] backup = (Object[]) field.get(session);
+            assertTrue(Arrays.stream(backup).anyMatch(java.util.Objects::nonNull));
+            session.applyCommand(new SmpsSessionCommand.HardReset());
+            if (rollback) session.rollbackLiveMutation(token);
+            else session.commitLiveMutation(token);
+            assertTrue(Arrays.stream(backup).allMatch(java.util.Objects::isNull),
+                    "override backup retained references after " + (rollback ? "rollback" : "commit"));
+            assertEquals(rollback ? 1 : 0, session.captureLogicalSnapshot().savedOverrides().size());
+            assertThrows(IllegalStateException.class, () -> session.rollbackLiveMutation(token));
+        }
+    }
+
+    @Test
     void onePhysicalAndLogicalIdentitySurviveAllTransitions() {
         SmpsDriverSession session = SmpsSessionTestFixtures.session(
                 new SmpsSessionTestFixtures.RecordingObserver());
@@ -1556,6 +1741,13 @@ class TestSmpsDriverSession {
     private static PreparedSmpsMusicActivation activation(
             int id, boolean donor, boolean withDacTrack,
             boolean withFmTrack, int fmChannel) {
+        return activation(id, donor, withDacTrack, withFmTrack, fmChannel,
+                new SmpsSequencerConfig.Builder().build());
+    }
+
+    private static PreparedSmpsMusicActivation activation(
+            int id, boolean donor, boolean withDacTrack,
+            boolean withFmTrack, int fmChannel, SmpsSequencerConfig config) {
         AudioTestFixtures.StubSmpsData data =
                 new AudioTestFixtures.StubSmpsData("music-" + id);
         data.setId(id);
@@ -1565,7 +1757,6 @@ class TestSmpsDriverSession {
                 id, null, donor ? "donor" : null,
                 data.getZ80StartAddress(), data.getData().length,
                 Arrays.hashCode(data.getData()), false, 7);
-        SmpsSequencerConfig config = new SmpsSequencerConfig.Builder().build();
         SmpsDriver detached = new SmpsDriver();
         SmpsSequencer sequencer = new SmpsSequencer(
                 data, SmpsSessionTestFixtures.dac(), detached, detached,
@@ -1591,38 +1782,9 @@ class TestSmpsDriverSession {
                         null, data, SmpsSessionTestFixtures.dac(),
                         AudioManager.getInstance(), config,
                         sequencer.captureSnapshot());
-        SmpsLogicalTransitionPolicy transition =
-                new SmpsLogicalTransitionPolicy() {
-                    @Override
-                    public Result prepareMusicStart(
-                            SmpsDriverSnapshot current,
-                            SmpsDriverSnapshot.SequencerEntry incoming) {
-                        return replacement(current, incoming);
-                    }
-
-                    @Override
-                    public Result prepareOverrideRestore(
-                            SmpsDriverSnapshot current,
-                            SmpsDriverSnapshot saved) {
-                        return new Result(saved, SmpsWriteProgram.EMPTY);
-                    }
-
-                    private Result replacement(
-                            SmpsDriverSnapshot current,
-                            SmpsDriverSnapshot.SequencerEntry incoming) {
-                        return new Result(
-                                new SmpsDriverSnapshot(
-                                        current.region(), current.readMode(),
-                                        0, false, 0,
-                                        current.palUpdateCounter(),
-                                        List.of(incoming),
-                                        new int[] {-1, -1, -1, -1, -1, -1},
-                                        new int[] {-1, -1, -1, -1}),
-                                SmpsWriteProgram.EMPTY);
-                    }
-                };
         return new PreparedSmpsMusicActivation(
-                new SmpsMusicActivation(source, 0), entry, transition,
+                new SmpsMusicActivation(source, 0), entry,
+                SmpsLogicalTransitionPolicies.forConfig(config),
                 new SmpsDacSelection(source,
                         SmpsSessionTestFixtures.dac()));
     }

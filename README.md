@@ -14,8 +14,9 @@ disassemblies of titles in the Sonic the Hedgehog series. No copyrighted assets 
 this repository; a legally obtained ROM is required to run the engine.
 
 The engine also aims to provide modern tooling such as a level editor and an open framework for
-modding and customisation. Neither is delivered yet: the editor is an experimental, config-gated
-prototype and the modding framework is planned but not implemented.
+modding and customisation. The editor is an experimental, config-gated prototype. The `next`
+branch implements an unpublished Mod API candidate, documented in the
+[creator handbook](docs/modding/index.md); it is outside the 0.6 release scope.
 
 > **Disclaimer:** OpenGGF is a community-made fan project. It is not affiliated with, sponsored by,
 > approved by, or endorsed by Sega. Sonic the Hedgehog and all related characters, names, and
@@ -124,7 +125,7 @@ sound driver.
 |------|--------|
 | Sonic the Hedgehog (S1) | Broadest end-to-end coverage: all zones, bosses, special stages, title screen, ending, credits, and demo playback. |
 | Sonic the Hedgehog 2 (S2) | Most complete module by object coverage (122/122 checklist objects) and trace parity. Includes all zones, bosses, special stages, Tails AI, ending, and credits. |
-| Sonic 3 & Knuckles (S3K) | Work in progress. AIZ through LBZ have substantial route coverage, but this is not full parity: the AIZ miniboss napalm FallingShot and AIZ2 end-boss splash children now have native implementations with route/trace validation still outstanding, while Knuckles' LBZ Big Arm handoff remains inert. |
+| Sonic 3 & Knuckles (S3K) | Work in progress. AIZ through LBZ have substantial route coverage, including shipped-ROM collision handling for the AIZ2 end boss, but this is not full parity: route/trace validation remains outstanding for the AIZ miniboss napalm FallingShot and AIZ2 end-boss splash children, while Knuckles' LBZ Big Arm handoff remains inert. |
 
 Work is ongoing across all three games. See `CHANGELOG.md` for detailed, per-merge history.
 
@@ -242,364 +243,179 @@ traces.
 
 #### 0.6 highlights
 
-- **Code and test maintenance:** removed unused helpers and duplicate test setup;
-  rewind-boundary, snapshot-immutability, and mode-listener tests now check the
-  production behavior they describe.
-- **Three-game engine:** Sonic 1, Sonic 2, and Sonic 3 & Knuckles each have
-  game-specific providers for level loading, physics, objects, bosses, audio,
-  rendering, and special stages.
-- **Playable game functionality:** Sonic 1 has broad end-to-end coverage;
-  Sonic 2 has extensive zone, boss, title, ending, and special-stage support;
-  Sonic 3 & Knuckles has a growing playable vertical slice centered on
-  Angel Island and Hydrocity, with substantial work across later zones and
-  bonus stages.
-- **Sonic 2 Tornado parity:** Wing Fortress now preserves ObjB2's retail
-  standing, initialization, and reused leader-wait/jump-countdown state across
-  every trace row where the parent Tornado can be identified unambiguously.
-- **Sonic 2 CNZ slot-machine parity:** Casino Night now runs its zone-global
-  slot routine in the retail post-object order with ROM-accurate word
-  arithmetic; both release traces match every compared row exactly.
-- **Sonic 2 water-palette alignment:** sprite-priority shaders now resolve
-  logical scanlines after removing viewport letterboxing, keeping characters,
-  objects, terrain, and backgrounds aligned at dynamic waterlines such as CPZ2.
-- **Stable object-priority layering:** priority buckets now share one
-  palette-mask transition path, preserving slot draw order and water/bridge
-  occlusion while keeping the rendering facade within its structural budget.
-- **Sonic 2 special-stage timing authority:** recorded `VBlank_Lag` rows remain
-  scheduling-only replay inputs, while ordinary play retains its existing
-  stateless slowdown approximation until causal hardware timing can replace it.
-- **Overridden S3K PSG tracks no longer advance their envelope:** the ROM's PSG
-  update returns on the overriding bit before the frequency latch and envelope
-  read, so a channel taken by an SFX resumes where it left off; intro oracle at
-  the 1569 write difference.
-- **S3K 1-up fade-in completes correctly and survives rewind:** PSG tracks are
-  released at fade completion with their volumes untouched (`zDoMusicFadeIn`
-  loops FM only), and the session snapshot copy now carries the driver fade
-  state, guarded so no snapshot component can be dropped by the copy again.
-- **S3K 1-up resume fades in with its instruments restored:** the fade-in-to-previous
-  body (FM override clear, 40h attenuation, instrument resend, fade of 40h steps at
-  delay 2) now runs on the live restore path; fade delay pair and fade-out
-  machine are driver state; four more oracle fields gated.
-- **S3K music returns after a 1-up:** the coord-flag handler now restores through
-  the sequencer's injected sink (drained after the presentation batch) instead of
-  the global AudioManager, whose command was refused inside the batch; S3K intro
-  oracle at service 760 with requests consumed at the ROM's point in the service.
-- **Second S2 recording green on state and writes:** the CPZ level-select window
-  matches all 719 services once TraceChaser's request observer records the music
-  mailbox (ring milestone, song loads); request windows compare per site and
-  every published S2 window is regenerated under the v4 payload contract.
-- **Music after drowning and S3K fades follow the ROM:** surfacing restores the
-  invincibility, Super or boss theme per each game's own routine (a per-game
-  audio-profile rule), and S3K object fades use the driver's delay 6 / 40 steps
-  instead of the S1/S2 values.
-- **S1 per-song oracle windows cover every song in a complete run:** 20 windows
-  from the complete-run movie, all 15 songs, eight matching end to end across six
-  songs (Green Hill, Labyrinth, Spring Yard, title, special stage, credits); the
-  rest carry pinned frontiers.
-- **S2 music restores cleanly after a 1-up:** the driver rests every music
-  track on the fade-in-to-previous as the ROM does (S3K instead keeps its PSG
-  overridden), so the level song no longer resumes on the notes the jingle cut
-  into; pinned by a new 1-up driver-state window.
-- **S3K title theme no longer dies on a late intro skip:** the SEGA chant stop is
-  issued once, as the ROM does at `loc_3FE4`, so pressing Start during the Sonic
-  animation keeps the title music; pinned by a headless request-order test.
-- **S3K spindash release and collapsing-bridge sounds restored:** a PSG3 noise
-  track now owns the noise channel, the PSG volume tail is sent every pass as the
-  ROM does, the fabricated spindash pitch multiplier is gone, and sequencer config
-  fields reach live playback (five were silently dropped); guarded by runtime-path
-  tests with AIZ1 music and a config-copy guard.
-- **S1 audio oracles cover whole complete runs per song:** windows tile each
-  movie by `Sound_PlayBGM` and 1-up restore epochs; the title-screen song matches
-  end to end (72 ticks), tied PSG notes step their envelope, a finished song keeps
-  its tempo, and fade commands dispatch at the ROM's point in `UpdateMusic`.
-- **`audio.psgNoiseShiftEveryToggle` removed:** the PSG noise LFSR now always
-  clocks once per rising edge, the hardware rate; the every-toggle mode from the
-  old PSG core is gone and an old config key is ignored with a warning.
-- **S2 CPZ2 boss segment green:** the boss spawns its children from its own
-  first update in ROM slot order, the container rewrites itself into the gunk
-  in place, and `Obj6B` platforms gate solidity on the previous frame's on-screen
-  bit; trace sweep 8 to 7 failing classes.
-- **S1 sound-test oracles run in JUnit:** the GHZ music (14,690 ticks) and SFX
-  (1,967 ticks) references are now ROM-gated assertions in the committed suite.
-- **Matching audio oracles are pinned as assertions:** S2 v1 (698), S2 v2 state and
-  writes (2,198), the three S2 request windows (25/52/27), S1 run 2 (5,257) and
-  S2 CPZ state-only (720) now fail the build on regression.
-- **First duration timeout seeds at 1 in all three drivers:** cited per ROM; two
-  S1 unit fixtures that could never advance (tempo 1) corrected. S3K oracle at
-  the first write of service 565.
-- **S2 run-chain segment 15 diagnosed:** the CPZ2 boss gunk falls a frame early
-  because the ROM rewrites the container in place (`Obj5D_Container_Extend`)
-  while the engine respawns it; recorded, not yet closed.
-- **S2 CPZ tick-237 is the ring speaker flag:** the driver alternates left/right
-  ring variants on a flag outside the song-load clear, so a capture starting at
-  the load inherits its phase; recorded as a capture-start limitation.
-- **Note fill runs only on the unexpired-timer branch:** all three drivers reach
-  the note-fill routine from the not-expired branch of the duration decrement;
-  the engine now matches, cited per driver.
-- **S2 CPZ oracle music id cited from the driver playlist:** request `8Eh` indexes
-  the master playlist to Chemical Plant; the tick-237 write difference is a whole
-  voice load one FM channel across, not a slot-search rule.
-- **S3K SFX admission follows the ROM service order:** a newly requested SFX is
-  walked from the next service while the music-track override bit is set on the
-  admitting one; S3K oracle at the duration-timeout seed in service 565.
-- **Second S2 driver-state recording (CPZ, rows 2700-3450):** captured from a
-  different movie, zone and song; state matches all 720 ticks, writes diverge at
-  tick 237 on a second overlapping SFX FM slot.
-- **Level frame counter advances where the ROM does:** all three loops increment
-  `Level_frame_counter` before the object pass; about two dozen per-reader `+1`
-  compensations and the speed-shoes phase offset are deleted.
-- **S3K duration-only units neither silence nor retune:** a positive stream byte
-  only stores the duration, keeping the existing frequency and rest state; PSG
-  volume silence keys on the rest bit. S3K oracle at service 565.
-- **S2 DAC runs are bounded by the ROM sample length:** runs end at the
-  `zDACLenTbl` length, a silent service, or a selector change; the residual
-  byte difference is a supersession join and is reported as such.
-- **S3K duration-only notes keep the rest state the ROM left:** the note-start path
-  no longer recomputes the rest bit from a stale note byte; S3K oracle at a write
-  difference inside service 551.
-- **S2 DAC stream reports where the reference resyncs:** the byte-709 difference is
-  a merged-play sample join, not decode or selection; the driver-state oracle now
-  matches all 2,198 services for state and writes.
-- **S3K resting a PSG track silences it:** `zRestTrack` runs straight into the
-  PSG channel silence when the driver still owns the track, so a parked envelope
-  rest silences every pass; S3K oracle at service 551.
-- **Speed shoes expire on the ROM's frame in all three games:** the countdown
-  is driven at the display step where `Obj01_ChkShoes` runs, restoring physics
-  and issuing the slow-down command together, and the compensation constant
-  is gone; the S2 driver-state oracle is a full MATCH over 2,198 services.
-- **S3K per-track PSG silence writes tone then noise:** a noise PSG3 track
-  silences its own channel before the noise channel as the driver does; S3K
-  oracle at service 502.
-- **Sonic 2 write stream matches through 1,789 services:** SFX tracks walk in
-  RAM slot order, PSG takeover claims a channel with one bit and no write, and
-  a PSG3 noise SFX re-latches its noise byte on release; every remaining
-  divergence on the v2 fixture is the speed-shoes timer phase.
-- **S3K music fade is driver-owned:** E1/E5 arm the fade counters and halt
-  the DAC and PSG tracks per the S3K driver, the fade handler and tempo step run
-  before the mailbox is read, and the capture reports no unsupported requests;
-  S3K oracle at service 495.
-- **Sonic 2 driver-state oracle: DAC stream and PSG note-on:** the v2 comparator
-  now compares the DAC sample bytes as a whole-window stream (92 runs, delta 0)
-  and a note-on PSG frequency is sent once as the driver does; service writes
-  reach tick 228, and the speed-shoes timer compensation is recorded as the
-  cause of the tempo phase.
-- **S3K modulation state is compared and matches:** the six modulation bytes
-  joined the compared track state, `zFinishTrackUpdate`'s clears and the 8-bit
-  speed decrement are modelled, a resting FM track advances nothing, and
-  `zSendTL` writes all four operators; S3K oracle reaches service 421.
-- **S3K note attack, envelope rest and PSG volume flags follow the driver:**
-  the do-not-attack bit clears at the top of the next note fetch, a parked
-  envelope rest re-rests only under that bit, and the PSG volume coordination
-  flags store without writing the chip; S3K oracle 180 to 331.
-- **Sonic 2 music load writes match `zBGMLoad`:** activation keys FM6 off and
-  silences it before the DAC enable per the song's channel count, and the load's
-  two note-off loops send each slot's own voice-control byte; all 145 load
-  writes agree in order.
-- **S3K rest bits and sample-end follow the driver:** DAC tracks never rest,
-  S3K's PSG envelope rests a track without silencing it, only S2 skips
-  modulation at rest, and the sample-end DAC disable joins the excused byte
-  stream; S3K oracle 143 to 180.
-- **Sonic 2 driver-state reference v2:** driver RAM is now sampled by the
-  observer core at both `zVInt` returns over rows 10150 to 12400 (2,243
-  services, two byte-identical captures); the driver state agrees for 1,789
-  consecutive services and first diverges on tempo at movie row 11,991.
-- **S3K note cadence follows its own driver:** S3K resends a note's frequency
-  on every pass because its modulation routine returns to the fall-through,
-  and its PSG update latches frequency before volume even at rest; both are
-  per-driver sequencer modes, S1 and S2 unchanged. S3K oracle 139 to 143.
-- **Every Sonic 2 request window reproduces from the command:** the
-  special-stage transition and Chemical Plant windows were recaptured through
-  the TraceChaser command and match their published digests, so no fixture
-  depends on the retired candidate core.
-- **S2 request capture is reproducible end to end:** the observer core now
-  carries the S2 request marker (ABI 5, plain build), the TraceChaser command
-  reproduces a published window's raw and payload digests, and the gitlink
-  descends from a CI-green TraceChaser main.
-- **S3K music DAC on the observed bus:** every sample write the chip performs
-  now reaches the write observer, a sample-end edge emits the ROM's DAC
-  disable, and the oracle compares the DAC byte stream whole-window while
-  excusing only the per-service split that Z80 service duration decides.
-- **Sonic 2 monitor sounds match the ROM:** ring and shield monitors send
-  their sound through the music mailbox as `super_ring` does, and a monitor's
-  explosion makes its request from its own slot a pass later when allocated
-  below the monitor; the request oracle matches every replayable window.
-- **S3K DAC enable follows the idle loop:** the driver records the sample-index
-  store and the DAC enable is emitted by the idle loop at the next service
-  boundary, as `zPlayDigitalAudio` does; the oracle now stops on the music DAC
-  byte pump, which the engine renders inside the chip rather than on the bus.
-- **ROM-less CI green again:** the complete-run producer tests and two Sonic 2
-  level-init tests now skip without a ROM instead of failing.
-- **Sonic 2 request-window producer is a command:** TraceChaser now captures
-  and extracts request windows from arguments (movie, hash, row interval,
-  manifests, installation, output), the raw sink records the recording it
-  actually opened, and every published S2 window cites that command.
-- **S3K first music update matches the driver:** the post-load DAC pass keys
-  off FM6 and restores FM3 mode, `cfSetVoice` writes the release-rate reset,
-  notes send the frequency once without a pan write, and PSG frequencies keep
-  their full width; the S3K oracle clears tick 138 write for write.
-- **Sonic 2 request oracle widened:** four new duplicate-captured request
-  windows (EHZ1 continuation, the special-stage transition, and a Chemical
-  Plant level-select route) are committed; the oracle matches all 52 transfers
-  of the next 750 rows and pins a new first divergence at movie row 12,132.
-- **Second Sonic 1 gameplay oracle is a full match:** the shipped
-  `Sound_PlaySpecial` silence tail, which writes two stale data bytes instead
-  of the intended PSG3 latch pair when a normal PSG3 effect is playing, is now
-  emitted as the ROM does; both S1 gameplay recordings match end to end.
-- **S3K request sidecar published and wired:** the fourteen source-observed
-  mailbox writes are a committed comparison-only fixture the v2 oracle resolves
-  against completed services; PSG tracks keep the ROM's AMS/FMS default and
-  music activation emits `zBGMLoad`'s single register write, moving the S3K
-  oracle from tick 128 to 138.
-- **Sonic 1 gameplay oracle widened and doubled:** the GHZ1 window now runs
-  to its real boundary (2,562 updates, MATCH), ending where the invincibility
-  theme replaces the song, and a second recording from a different complete
-  run (5,257 updates) pins a new first divergence at update 1,906.
-- **S3K SEGA chant is played by the driver:** the Sonic 3 & Knuckles session
-  now runs `zPlaySEGAPCM`'s blocking DAC transport itself (one byte per 248 Z80
-  cycles, interrupts held), replacing the presentation-layer sample for that
-  game; the S3K oracle moves from tick 50 to 128.
-- **Sonic 1 gameplay driver oracle is a full match:** normal sound effects now
-  read the special-effect voice bank the shipped driver's `SendVoiceTL` bug
-  points them at, closing the last divergence; the engine matches the
-  recorded driver over all 2,343 updates of the Green Hill gameplay window.
-- **S3K driver init ends where the ROM's does:** the DAC idle loop's entry
-  write now opens the first interrupt window instead of the init service,
-  moving the S3K oracle from tick 0 to tick 50, the SEGA chant, whose PCM
-  transport the driver does not yet own.
-- **Sonic 1 special sound effects follow the driver:** the Green Hill waterfall
-  now waits for a busy channel, restores its own voice on release, is walked
-  after the normal effect slots, and survives a normal effect taking its channel,
-  moving the gameplay oracle from update 618 to 1,759.
-- **S3K driver oracle reference v2:** the AIZ1 reference is now sampled by
-  the observer core at the driver's `zVInt` return, one tick per completed
-  service (5,263 ticks over 5,400 frames, 725,898 writes), from two byte-identical
-  captures, with the frame shape recorded and the frame field proven
-  provenance-only; the first divergence is a single init write at tick 0.
-- **S3K oracle reference sampling diagnosed:** the AIZ1 v1 reference samples
-  driver RAM mid-invocation on music-load frames, so its tick-138 state is a
-  truncated update rather than an engine divergence; the next S3K reference
-  must be sampled at the driver's return from the vertical interrupt.
-- **Sonic 1 gameplay oracle records special sound effects:** the gameplay
-  probe now captures `Sound_PlaySpecial` dispatches alongside normal SFX, and
-  the v2 reference (81 live dispatches) exercises the engine's special-SFX
-  driver path for the first time, pinning its first divergence at update 618.
-- **Sonic 3 & Knuckles music requests observed at the source:** the pinned
-  TraceChaser observer now reads the `Play_Music` mailbox while the Z80 is
-  stopped, supplying the request the AIZ1 oracle was missing; the driver
-  comparison moves from an unobservable input at service 128 to a real
-  divergence at update 138. The native observer build is a plain script with
-  recorded provenance, no longer gated on host toolchain hashes.
-- **Sonic 1 SFX channel ownership follows the driver:** sound effects claim
-  their music channels at admission and the driver walks its fixed SFX slots in
-  channel-RAM order, moving the gameplay oracle from update 302 to 629, where
-  the reference's special-SFX dispatches are not yet captured.
-- **Second Sonic 1 audio oracle from real gameplay:** a duplicate-captured
-  reference from the complete-run movie (power-on through early Green Hill,
-  2,343 driver updates, 70 live sound effects) now sits beside the sound-test
-  oracles, with its first divergence pinned at update 302.
-- **Committed Sonic 2 request-window fixture:** the driver-oracle gate now
-  runs from a published, duplicate-captured reference in the repository rather
-  than a scratch capture, and the next audio roadmap (S3K request authority,
-  wider windows, two recordings per game) is recorded under the audio plans.
-- **Sonic 2 sound driver parity:** the engine's SMPS driver now matches the
-  recorded hardware driver over the full EHZ reference window (698 updates)
-  with every sound request transfer agreeing, driven from the same BK2 movie.
-  Level music starts on the shipped level-entry cadence, SFX release and PSG
-  override semantics follow the Z80 driver, and Sonic 2 requests travel the
-  ROM's mailbox and queue order.
-- **DAC sample pitch:** optional DAC interpolation no longer stalls the
-  sample clock (it played drums about 9.5 semitones flat when enabled), and
-  the option now defaults to off.
-- **S3K temporary-music restoration:** extra-life completion now preserves its
-  fade-to-previous request through the presentation boundary, while the AIZ1
-  miniboss escape restores the current level track directly.
-- **AIZ presentation continuity:** the Angel Island fire curtain now remains
-  continuous across exact art-loading seams and completes its ROM-shaped
-  release tail in normal play and trace renders, while level music restoration
-  follows the ROM escape timer across the AIZ1-to-AIZ2 reload.
-- **ROM-accurate gameplay systems:** physics, subpixel movement, sensors,
-  collision, solid objects, water, camera behavior, title cards, level events,
-  bosses, badniks, sidekicks, Super Sonic, and cross-game feature donation are
-  implemented through ROM-owned rules and data. S3K data-select launches retain
-  their retail entry cue, music-fade cadence, and destination reveal timing,
-  including host-native equivalents when that presentation is donated to S1 or
-  S2.
-- **MGZ2 boss handoff physics:** jumping out of Tails's carry clears stale
-  physical-object support, while the transition camera remains owned by MGZ2's
-  native resize event.
-- **ICZ multi-sidekick freezer support:** boss frost puffs and placed freezer
-  clouds preserve native Player 1/Player 2 ordering while freezing every
-  additional configured sidekick into a rescuable ice block, even when the
-  native object pool is full.
-- **Audio and video hardware modeling:** YM2612 FM, PSG, DAC/PCM, SMPS
-  sequencing, priority rendering, tilemaps, shaders, sprite batching, and staged
-  art loading have received substantial accuracy and stability work. Audio
-  output runs through the unified presentation pipeline, which live recording,
-  offline trace capture, and the standalone ROM-backed sound-test launcher all
-  share. A further SMPS and chip-level parity programme built during the 0.6
-  cycle is deferred to 0.7 and is not part of this release; see the release
-  summary for what was withdrawn and why.
-- **Sound-driver reverse-engineering groundwork:** disassembly-cited routine
-  maps and behaviour specs for all three games' SMPS drivers, an engine gap
-  analysis, and committed driver-parity oracles (S1 GHZ music and sound-test
-  SFX, an S2 EHZ windowed driver capture, and the S3K AIZ1 intro) with a new
-  `docs/status/audio-frontier-log.md` recording every comparison; all
-  artifacts are indexed from
-  `docs/architecture/designs/audio/2026-08-30-sound-driver-re-index.md`. The
-  first source-backed corrections now lock live sequencing to one V-blank
-  service per outer frame and reproduce S2/S3K PAL repeat cadence and S3K's
-  shared speed-up tail. Sonic 1's committed sound-test SFX oracle now matches
-  all 1,967 ticks while its protected GHZ music oracle remains matched across
-  14,690 ticks; the current S2 and S3K frontiers stop where their first-version
-  captures cannot observe a request before the retail driver consumes it.
-- **Resolve-ready capture:** live and trace recording can select DNxHR SQ video
-  with lossless 24-bit PCM audio in a MOV container for DaVinci Resolve on Linux.
-- **Gameplay-scoped rewind:** dynamic objects, child graphs, rider state,
-  level events, audio history, and relevant static state are captured and
-  restored with explicit ownership rules. Completed in-frame act reloads such
-  as the AIZ fire-curtain transition now re-root history at the destination
-  frame, preventing incompatible cross-act restores while preserving rewind
-  within the new act. Sonic 2 special stages also preserve their first
-  pre-start object-pass deferral across fade-from-white restores.
-- **Modern development and validation tools:** level-editor foundations,
-  ROM offset and compression tools, headless gameplay tests, trace replay,
-  visual/audio regression checks, and release/architecture guards. Trace
-  recording, probing, and publication utilities live in
-  [`OpenGGF/TraceChaser`](https://github.com/OpenGGF/TraceChaser), pinned here
-  as an optional submodule. They are not required to build, test, package, or
-  run the engine; trace contributors can initialize them with
-  `git submodule update --init --recursive tools/tracechaser`. TraceChaser uses
-  a verified official BizHawk 2.11 installation rather than vendoring the
-  emulator.
-  Maven build and test output stays below the current worktree’s `target/` tree.
-- **Agent-friendly workflows:** Codex and Claude workflows include ROM
-  cross-referencing, object/boss/zone implementation guidance, trace diagnosis,
-  and worktree-local direct-Maven procedures. The canonical Sonic 1, Sonic 2,
-  and Sonic 3 & Knuckles disassemblies are pinned as optional Sonic Retro Git
-  submodules, so GitHub preserves the exact reference revisions without making
-  them part of the engine's build, test, or runtime dependency graph.
-- **Normal local launchers:** `run.sh`, `run.cmd`, `dev.sh`, and `dev.cmd` keep
-  the direct package-and-launch workflow for interactive development; builds,
-  tests, guards, and trace evidence use the same direct Maven boundary.
+A high-level summary of what 0.6 is about. Every individual change is recorded
+in [the 0.6 changelog](CHANGELOG.0.6.md).
+
+- **Three-game engine:** Sonic 1, Sonic 2, and Sonic 3 & Knuckles each run from
+  their own ROM through shared, rule-driven systems — physics, subpixel
+  movement, sensors, collision, solid objects, water, camera, title cards,
+  level events, bosses, badniks, sidekicks, Super Sonic, and cross-game feature
+  donation are implemented from ROM-owned rules and data rather than per-game
+  special cases.
+
+- **Playable routes:** Sonic 1 has broad end-to-end coverage, Sonic 2 covers
+  most zones, and Sonic 3 & Knuckles is playable through the Angel Island to
+  Hydrocity slice with later zones in progress. 0.6 extends zone-specific
+  behaviour across Wing Fortress, Casino Night, Marble Garden, Icecap and
+  Angel Island, including multi-sidekick support and act-transition continuity.
+
+- **Sound driver accuracy:** the largest single area of 0.6. The engine's SMPS
+  driver, YM2612 FM, PSG and DAC/PCM paths were reverse-engineered against the
+  three ROMs' drivers and are now checked by committed driver-parity oracles
+  covering music, sound effects, fades, extra-life restoration and request
+  scheduling. Full parity and listening validation remain open; the measured
+  boundaries are recorded in
+  [`docs/status/audio-frontier-log.md`](docs/status/audio-frontier-log.md) and
+  the [audio handover](docs/architecture/plans/audio/2026-09-04-audio-parity-handover.md).
+
+- **Faster FM core:** new configurations select a register-level FM core that
+  passes all 178 supported chip scripts; `audio.fmCore=accurate` still selects
+  Java Nuked. Audio playback now allocates about an eighth of what it did per
+  frame on either core, with every oracle sample unchanged. Full-game
+  listening sign-off remains open. See the
+  [fast FM validation record](docs/architecture/validation/audio/2026-09-06-fast-fm-release.md).
+
+- **Runtime performance:** capture, rewind, art decoding, animated-art uploads
+  and shader state handling all do less redundant work per frame. See the
+  [initial measurements](docs/architecture/validation/2026-09-05-runtime-performance.md)
+  and [follow-up evidence](docs/architecture/validation/performance/2026-09-05-followup.md).
+
+- **Continue screens:** ROM-backed countdowns and character sequences follow
+  Game Over when continues remain, with per-game restart behaviour.
+
+- **Gameplay-scoped rewind:** dynamic objects, child graphs, rider state, level
+  events, audio history, and relevant static state are captured and restored
+  under explicit ownership rules, including across in-frame act reloads.
+
+- **Recording and capture:** live and offline trace recording share the
+  presentation pipeline and can emit DNxHR SQ video with lossless 24-bit PCM
+  for DaVinci Resolve on Linux.
+
+- **Development and validation tools:** level-editor foundations, ROM offset
+  and compression tools, headless gameplay tests, trace replay, visual/audio
+  regression checks, and release/architecture guards. Trace recording, probing
+  and publication live in [`OpenGGF/TraceChaser`](https://github.com/OpenGGF/TraceChaser),
+  pinned as an optional submodule that is not needed to build, test, package or
+  run the engine.
+
+- **Agent-friendly workflows:** ROM cross-referencing, object/boss/zone
+  implementation guidance, trace diagnosis and worktree-local Maven procedures,
+  with the three canonical disassemblies pinned as optional submodules outside
+  the build and runtime dependency graph.
+
+- **Normal local launchers:** `run.sh`, `run.cmd`, `dev.sh` and `dev.cmd` keep
+  the direct package-and-launch workflow for interactive development.
 
 #### Current release status
 
-0.6 is not a final release yet. Automated build, test, guard, and trace
-no-regression gates remain active, and human end-to-end gameplay and audio QA
-are still required before release sign-off. Known-red Sonic 2 CPZ2 and
+0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
+still required before release sign-off.
+
+Level loads no longer intermittently fail or detect the wrong game. The ROM is
+read from two threads during a load, and the header readers and the Sonic 3 &
+Knuckles art loaders were seeking the shared file handle without the lock every
+other reader holds, so a background read could move the position out from under
+them.
+
+Angel Island Act 1 no longer fails to load when its intro tilemap pre-build
+cannot read the ROM; the pre-build is a cache warm the terrain-swap frame
+already knows how to do without.
+
+Continuous integration has been cut back to a fast per-push check. A push runs
+only the `smoke` profile -- the ordinary suite minus ten exhaustive oracle
+sweeps that were most of its runtime -- so it finishes in minutes instead of
+half an hour. The full suite, the structural guards and the trace replay
+fixtures now run on pull requests and on demand, with no scheduled run, so a
+regression in the guards or the excluded sweeps is caught by a contributor
+running them locally rather than by CI. Release validation is unchanged and
+still runs everything. Known-red Sonic 2 CPZ2 and
 Sonic 3 & Knuckles trace/run-chain frontiers are documented 0.6 limitations;
 finishing those parity campaigns is deferred to the next release. A frontier
 still returns to the 0.6 fix queue when it exposes a confirmed release-impacting
 gameplay defect.
 
-Known limitations: the Game Over / Continue flow is missing in all three games
-(`docs/status/known-bugs.md`), there is no modding framework, the level editor
-is a dormant prototype, and the SMPS audio parity programme is deferred to 0.7.
-Release documentation was reconciled with these facts on 2026-08-28: the
-release summary now carries the commit-stamped validation numbers, the guard
-and trace policy statements match `docs/status/trace-scope-release-6.md`, and
+Fast FM is now integrated for 0.6. New configurations select `fast`, while
+explicit `accurate` choices and physical-reference captures retain the accurate
+core. All 178 supported chip scripts pass. Post-merge verification passes
+16,970 ordinary tests and 610 guards, with unchanged pinned trace evidence
+and successful universal-JAR smoke checks. Candidate benchmarks retain matching
+gameplay digests; native-platform execution and full-game listening sign-off
+remain release tasks. See the
+[FM delivery record](docs/architecture/validation/audio/2026-09-06-fast-fm-release.md).
+A follow-up performance pass makes the fast core about 12 % cheaper on real
+music (S1 GHZ1 0.173 to 0.151 ms per frame, S3K AIZ 0.164 to 0.147) with every
+oracle output sample and gameplay digest unchanged; the
+[performance review](docs/architecture/validation/performance/2026-09-06-fast-fm-perf-review.md)
+and the
+[listening-test plan](docs/architecture/validation/audio/2026-09-06-fast-fm-listening-test.md)
+record it.
+
+Rewind checkpoints no longer re-clone every spent hardware-timing job. In S3K
+AIZ1 after the intro, a checkpoint capture falls from about 287 KB to 33 KB and
+a restore from 315 KB to 30 KB, so the steady rewind allocation and the burst on
+engaging rewind both shrink by roughly an order of magnitude with no timing
+decision changed. Only claimed jobs are memoized, so a coordinator that still
+holds an unclaimed preparation is always re-captured. Focused rewind, timing
+and S3K suites pass (2,860 tests post-merge); a further verification follows
+the claimed-only correction.
+
+S3K AIZ1 no longer stutters at its two runtime hand-offs. The intro terrain
+swap at camera X $1400 swaps in tilemaps pre-built during level load instead of
+rebuilding both full-level tilemaps on the frame (about 25 ms headless to under
+1 ms), and pattern-only art writes such as the $2E00 fire overlay now refresh
+the pattern atlas lookup rather than rebuilding tilemaps. The fire curtain's
+act 2 reload installs a level built on a preparer thread across the fire
+event's own wait; the reload always joins that build, and a regression test
+confirms the reload frame, positions, tilemap bytes and registered art match a
+synchronous reload (reload frame about 43 ms to 9 ms at 60 fps pacing). Related
+S3K, Kos, level and transition suites pass except two AIZ trace replays that
+fail identically on the pre-merge develop; guards pass (610). Measured through
+the real renderer at 60 fps pacing, that reload frame is now about 11 ms:
+in-game progression saves encode their snapshot on the frame but write the file
+on a save-writer thread (flushed before slot reads and at shutdown), the fire
+hand-off decodes its act 2 collision tables off the frame, and GPU sprite sheets
+whose pixels are unchanged across the act reload are kept rather than re-uploaded.
+
+Special-stage entry now plays the ROM's transition in normal play: in Sonic 2
+the level freezes and fades to white over 22 frames while the entry sound and
+the music fade run, the screen stays white through the stage's startup waits,
+and the stage music starts with the fade from white; Sonic 1 and Sonic 3 &
+Knuckles keep the level on screen through their own fade-to-white the same way,
+and every stage now loads its palette after that fade rather than during it.
+`gameplay.loadTimeSimulation: FAST` is a real mode and the default, resolving
+to a hand-tunable copy of the measured S3K load-time profile that also paces
+the title screen's Sonic frames 8 to A from the original hardware capture.
+Special-stage unit, headless and replay suites pass across the three games,
+the ordinary suite and guards pass, and every run-chain failure is identical
+to the pre-merge develop.
+
+`config.yaml` now holds only the settings you changed. Defaults live in the
+program and are documented by `config.yaml.example`, so a default that changes
+in a later build reaches every install that never set the key, with no
+migration or version bump; changing one is three edits and a guard test keeps
+the example honest. Files written by older builds are converted once on load,
+keeping your changes and dropping materialised defaults, including the former
+`loadTimeSimulation: NONE`. The ordinary suite (16994) and guards (610) pass.
+
+The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
+identified release skip-classification and trace-policy mismatches. The
+[remediation record](docs/architecture/validation/2026-09-06-release-gates.md)
+tracks their replacement with explicit capability checks and a fresh, pinned
+trace comparison. A frozen candidate still needs complete platform evidence and
+human gameplay/listening sign-off. Post-integration verification passed 16,687 ordinary
+tests and 610 guards, with its known trace failures and reports unchanged against
+a fresh baseline. Its universal JAR passed packaging smoke checks. Hosted validation also requires a configured `release-fixtures` runner.
+
+Known limitations: some Game Over timing details remain documented in
+`docs/status/known-bugs.md`; the Mod API remains outside the 0.6 release scope,
+the level editor is a dormant prototype, and complete SMPS audio parity remains unfinished.
+The September 4 audio handover supersedes the August 28 withdrawal statement:
+audio corrections and comparison tooling have landed, not complete parity or
+release listening approval. The release summary carries commit-stamped
+validation numbers, the guard and trace policy statements match
+`docs/status/trace-scope-release-6.md`, and
 `RELEASE_NOTES_v0.6.prerelease.md` is a pointer to the summary.
-Contributor and player guides were corrected the same day (hook installation,
+Contributor and player guides were corrected on August 28 (hook installation,
 config defaults, player-2 bindings, dead links), and the skill mirrors were
 resynchronised.
 Repository hygiene followed: IDE/scratch files and two native libraries were
@@ -615,7 +431,7 @@ power-up visuals now come from per-game `GameModule` factories instead of a
 shared spawner naming S3K classes, and four unreferenced classes were removed.
 The GAME OVER / TIME OVER card now runs in all three games from ROM art and
 mappings: a time over restarts the act, a game over fades to the title screen;
-continue screens are still absent (`docs/status/known-bugs.md`).
+ROM-backed Continue screens now follow Game Over when continues remain.
 The SN76489 PSG core was rewritten clean-room from public hardware documentation
 (`docs/architecture/research/audio/2026-08-29-sn76489-clean-room-spec.md`), removing
 the Genesis Plus GX-derived `psg.c` code; behaviour was verified against a pinned GPGX
@@ -633,6 +449,7 @@ outside the primary release slice or are still under active development.
 - [0.6 changelog](CHANGELOG.0.6.md)
 - [Release Summary for website and GitHub](docs/changelog/v0.6-release-summary.md)
 - [Detailed development ledger](docs/changelog/v0.6-prerelease-detailed.md)
+- [Archived entry-by-entry 0.6 ledger](docs/changelog/v0.6-development-ledger.md)
 - [Trace scope and release evidence](docs/status/trace-scope-release-6.md)
 - [Known discrepancies](docs/status/known-discrepancies.md)
 - [Release-readiness roadmap](docs/project/release-readiness-roadmap.md)

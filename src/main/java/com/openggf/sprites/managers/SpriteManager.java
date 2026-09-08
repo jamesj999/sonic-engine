@@ -1295,23 +1295,6 @@ public class SpriteManager implements PlayableSstDispatcher {
 		}
 	}
 
-	/**
-	 * Refreshes playable sprite render state without advancing movement/gameplay.
-	 * Used by ending-demo preroll phases so the player sprite is visible as soon
-	 * as the fade begins, while physics remain frozen.
-	 */
-	public void primePlayableVisualState() {
-		Collection<Sprite> sprites = getAllSprites();
-		for (Sprite sprite : sprites) {
-			if (sprite instanceof AbstractPlayableSprite playable) {
-				if (playable.isCpuControlled() && isCpuSidekickSuppressed()) {
-					continue;
-				}
-				playable.getAnimationManager().update(frameCounter);
-			}
-		}
-	}
-
 	public void refreshPlayableRenderFlags(Camera camera) {
 		if (camera == null) {
 			return;

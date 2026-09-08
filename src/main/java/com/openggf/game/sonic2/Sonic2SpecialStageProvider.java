@@ -146,14 +146,27 @@ public class Sonic2SpecialStageProvider implements SpecialStageProvider {
         initializeStage(stageIndex, SpecialStageStartupPolicy.FAST);
     }
 
+    /**
+     * Sonic 2's entry ({@code SpecialStage}, docs/s2disasm/s2.asm:6538-6672) is
+     * a fixed sequence of blocking waits: 22 {@code Pal_FadeToWhite} V-ints,
+     * the masked-interrupt load, the two startup loops and one
+     * {@code VintID_CtrlDMA} wait before {@code MusID_SpecStage} and
+     * {@code Pal_FadeFromWhite}. The manager steps every V-int wait through
+     * its ordinary update path under both policies. The load itself (104
+     * lag rows in every recorded stage, s2.asm:6557-6645) is only reproduced
+     * under TRACE_ACCURATE, where the timing port admits the recorded rows;
+     * FAST skips it, so normal play goes straight from the fade to startup.
+     */
     @Override
     public void initializeStage(int stageIndex, SpecialStageStartupPolicy policy) throws IOException {
         Objects.requireNonNull(policy, "policy");
         manager.reset();
         manager.initialize(stageIndex);
-        if (policy == SpecialStageStartupPolicy.FAST) {
-            manager.advanceToEntryPresentation();
-        }
+    }
+
+    @Override
+    public boolean isEntryFadeToWhiteActive() {
+        return manager.isEntryFadeToWhiteActive();
     }
 
     @Override

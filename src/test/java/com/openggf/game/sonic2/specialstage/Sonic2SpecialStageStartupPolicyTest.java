@@ -18,6 +18,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -51,15 +52,110 @@ class Sonic2SpecialStageStartupPolicyTest {
 
     @ParameterizedTest
     @ValueSource(doubles = {0.0, 1.0})
-    void defaultInitializationFastForwardsToRevealRegardlessOfLag(double lagFactor) throws Exception {
+    void defaultInitializationStepsPalFadeToWhiteThenStartsUpWithoutALoadHold(double lagFactor)
+            throws Exception {
         Sonic2SpecialStageProvider provider = new Sonic2SpecialStageProvider();
         provider.setLagCompensation(lagFactor);
 
         provider.initializeStage(0);
+        Sonic2SpecialStageManager manager = provider.getManager();
 
-        assertEquals(Sonic2SpecialStageIntro.Phase.FADE_FROM_WHITE,
-                provider.getManager().getIntro().getCurrentPhase());
+        assertEquals(Sonic2SpecialStageIntro.Phase.PRE_ROLL, manager.getIntro().getCurrentPhase());
+        assertFalse(provider.isEntryPresentationReady());
+        assertTrue(provider.isEntryFadeToWhiteActive());
+        assertEquals(0, manager.getLiveEntryLoadHoldFrames());
+
+        // Pal_FadeToWhite rows never lag: exactly 22 updates leave PRE_ROLL
+        // even with the live lag model armed.
+        for (int update = 0; update < Sonic2SpecialStageIntro.PRE_ROLL_FRAMES - 1; update++) {
+            manager.update();
+            assertTrue(provider.isEntryFadeToWhiteActive(), "update " + update);
+        }
+        manager.update();
+        assertFalse(provider.isEntryFadeToWhiteActive());
+        assertEquals(Sonic2SpecialStageIntro.Phase.ROM_STARTUP,
+                manager.getIntro().getCurrentPhase());
+
+        // The masked-interrupt load is not reproduced in normal play: startup
+        // proceeds at once through the ordinary update path to the reveal.
+        int updates = 0;
+        while (!provider.isEntryPresentationReady() && updates < 256) {
+            manager.update();
+            updates++;
+        }
         assertTrue(provider.isEntryPresentationReady());
+        assertEquals(Sonic2SpecialStageIntro.Phase.FADE_FROM_WHITE,
+                manager.getIntro().getCurrentPhase());
+    }
+
+    @Test
+    void neitherPolicyArmsTheLiveEntryLoadHold() throws Exception {
+        for (SpecialStageStartupPolicy policy : SpecialStageStartupPolicy.values()) {
+            Sonic2SpecialStageProvider provider = new Sonic2SpecialStageProvider();
+            provider.initializeStage(0, policy);
+            provider.setLagCompensation(0);
+            Sonic2SpecialStageManager manager = provider.getManager();
+
+            assertEquals(0, manager.getLiveEntryLoadHoldFrames(), policy.name());
+            for (int update = 0; update < Sonic2SpecialStageIntro.PRE_ROLL_FRAMES; update++) {
+                manager.update();
+            }
+            assertEquals(Sonic2SpecialStageIntro.Phase.ROM_STARTUP,
+                    manager.getIntro().getCurrentPhase(), policy.name());
+            int drawingIndexAtStartup = manager.getDrawingIndex();
+            manager.update();
+            assertNotEquals(drawingIndexAtStartup, manager.getDrawingIndex(),
+                    policy + " startup must not insert a load hold");
+            provider.reset();
+        }
+    }
+
+    @Test
+    void armedLiveEntryLoadHoldSpendsTheRecordedLagSpanAfterPreRoll() throws Exception {
+        Sonic2SpecialStageProvider provider = new Sonic2SpecialStageProvider();
+        provider.initializeStage(0);
+        provider.setLagCompensation(0);
+        Sonic2SpecialStageManager manager = provider.getManager();
+        manager.armLiveEntryLoadHold();
+
+        for (int update = 0; update < Sonic2SpecialStageIntro.PRE_ROLL_FRAMES; update++) {
+            manager.update();
+        }
+        assertEquals(Sonic2SpecialStageIntro.Phase.ROM_STARTUP,
+                manager.getIntro().getCurrentPhase());
+        assertEquals(Sonic2SpecialStageLagModel.ENTRY_LOAD_LAG_FRAMES,
+                manager.getLiveEntryLoadHoldFrames(), "PRE_ROLL must not spend the hold");
+
+        int drawingIndexAtLoad = manager.getDrawingIndex();
+        for (int update = 0; update < Sonic2SpecialStageLagModel.ENTRY_LOAD_LAG_FRAMES; update++) {
+            manager.update();
+            assertEquals(Sonic2SpecialStageIntro.Phase.ROM_STARTUP,
+                    manager.getIntro().getCurrentPhase(), "update " + update);
+            assertEquals(drawingIndexAtLoad, manager.getDrawingIndex(), "update " + update);
+        }
+        assertEquals(0, manager.getLiveEntryLoadHoldFrames());
+        manager.update();
+        assertNotEquals(drawingIndexAtLoad, manager.getDrawingIndex());
+    }
+
+    @Test
+    void liveEntryLoadHoldSurvivesRewindSnapshotRoundTrip() throws Exception {
+        Sonic2SpecialStageProvider provider = new Sonic2SpecialStageProvider();
+        provider.initializeStage(0);
+        Sonic2SpecialStageManager manager = provider.getManager();
+        manager.armLiveEntryLoadHold();
+        for (int update = 0; update < Sonic2SpecialStageIntro.PRE_ROLL_FRAMES + 5; update++) {
+            manager.update();
+        }
+        int expected = manager.getLiveEntryLoadHoldFrames();
+        assertEquals(Sonic2SpecialStageLagModel.ENTRY_LOAD_LAG_FRAMES - 5, expected);
+
+        Sonic2SpecialStageSnapshot snapshot = manager.captureRewindSnapshot();
+        manager.update();
+        manager.update();
+        manager.restoreRewindSnapshot(snapshot);
+
+        assertEquals(expected, manager.getLiveEntryLoadHoldFrames());
     }
 
     @ParameterizedTest
@@ -76,14 +172,17 @@ class Sonic2SpecialStageStartupPolicyTest {
     }
 
     @Test
-    void accurateInitializationCannotLeakIntoLaterDefaultInitialization() throws Exception {
+    void armedHoldAndStartupProgressCannotLeakAcrossReinitialization() throws Exception {
         Sonic2SpecialStageProvider provider = new Sonic2SpecialStageProvider();
         provider.initializeStage(0, SpecialStageStartupPolicy.TRACE_ACCURATE);
+        provider.getManager().armLiveEntryLoadHold();
+        provider.getManager().advanceToEntryPresentation();
         provider.reset();
 
         provider.initializeStage(0);
 
-        assertEquals(Sonic2SpecialStageIntro.Phase.FADE_FROM_WHITE,
+        assertEquals(0, provider.getManager().getLiveEntryLoadHoldFrames());
+        assertEquals(Sonic2SpecialStageIntro.Phase.PRE_ROLL,
                 provider.getManager().getIntro().getCurrentPhase());
     }
 
@@ -108,6 +207,9 @@ class Sonic2SpecialStageStartupPolicyTest {
     void fastForwardAfterRevealBoundaryIsRejected() throws Exception {
         Sonic2SpecialStageProvider provider = new Sonic2SpecialStageProvider();
         provider.initializeStage(0);
+        provider.getManager().advanceToEntryPresentation();
+        assertEquals(Sonic2SpecialStageIntro.Phase.FADE_FROM_WHITE,
+                provider.getManager().getIntro().getCurrentPhase());
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> provider.getManager().advanceToEntryPresentation());

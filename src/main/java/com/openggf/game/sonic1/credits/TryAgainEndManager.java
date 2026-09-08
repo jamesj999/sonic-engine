@@ -197,7 +197,7 @@ public class TryAgainEndManager {
     private void loadArt() {
         try {
             Rom rom = GameServices.rom().getRom();
-            RomByteReader reader = new RomByteReader(rom.readAllBytes());
+            RomByteReader reader = RomByteReader.fromRom(rom);
             Sonic1ObjectArt art = new Sonic1ObjectArt(rom, reader);
             GraphicsManager gm = GameServices.graphics();
 

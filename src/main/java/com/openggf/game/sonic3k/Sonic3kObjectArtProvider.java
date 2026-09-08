@@ -337,8 +337,13 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
      */
     private Pattern[] loadHudTextFromNemesis(Rom rom) throws IOException {
         FileChannel channel = rom.getFileChannel();
-        channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
-        byte[] data = NemesisReader.decompress(channel);
+        // Rom exposes a shared FileChannel; lock around seek+decode so concurrent
+        // readers cannot move the channel position mid-stream.
+        byte[] data;
+        synchronized (rom) {
+            channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
+            data = NemesisReader.decompress(channel);
+        }
 
         int totalTiles = data.length / Pattern.PATTERN_SIZE_IN_ROM;
         int ringTiles = 14; // First 14 tiles are ring sprite data
@@ -1132,18 +1137,22 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
         // (e.g. AIZ1→AIZ2 seamless reload) where the act changed after initial load.
         currentActIndex = GameServices.level().getCurrentAct();
 
-        RomByteReader reader = null;
-        try {
-            Rom rom = GameServices.rom().getRom();
-            if (rom != null) reader = RomByteReader.fromRom(rom);
-        } catch (IOException e) {
-            LOG.warning("Failed to create RomByteReader for level art: " + e.getMessage());
+        PreparedLevelArt prepared = level instanceof Sonic3kLevel s3kLevel
+                ? s3kLevel.takePreparedLevelArt()
+                : null;
+        if (prepared == null
+                || prepared.zoneIndex() != zoneIndex
+                || prepared.actIndex() != currentActIndex) {
+            RomByteReader reader = null;
+            try {
+                Rom rom = GameServices.rom().getRom();
+                if (rom != null) reader = RomByteReader.fromRom(rom);
+            } catch (IOException e) {
+                LOG.warning("Failed to create RomByteReader for level art: " + e.getMessage());
+            }
+            prepared = buildLevelArtSheets(level, zoneIndex, currentActIndex, reader);
         }
-        Sonic3kObjectArt art = new Sonic3kObjectArt(level, reader);
-
-        Sonic3kPlcArtRegistry.ZoneArtPlan plan =
-                Sonic3kPlcArtRegistry.getPlan(zoneIndex, currentActIndex);
-        loadLevelArtFromRegistry(plan, art);
+        registerPreparedLevelArt(prepared);
 
         LOG.info("Sonic3kObjectArtProvider registered " + rendererKeys.size()
                 + " level-art sheets for zone " + zoneIndex);
@@ -1153,19 +1162,45 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
     public void registerFbzExitArtSheets(Level level, Rom rom) throws IOException {
         if (level == null || rom == null) return;
         Sonic3kObjectArt art = new Sonic3kObjectArt(level, RomByteReader.fromRom(rom));
-        loadLevelArtEntries(Sonic3kPlcArtRegistry.fbzExitLevelArtEntries(), art);
+        registerPreparedLevelArt(new PreparedLevelArt(currentZoneIndex, currentActIndex,
+                buildLevelArtEntries(Sonic3kPlcArtRegistry.fbzExitLevelArtEntries(), art)));
         for (String key : FBZ_EXIT_ART_KEYS) {
             if (renderers.containsKey(key)) runtimePublishedLevelArtKeys.add(key);
         }
     }
 
-    private void loadLevelArtFromRegistry(Sonic3kPlcArtRegistry.ZoneArtPlan plan,
-            Sonic3kObjectArt art) {
-        loadLevelArtEntries(plan.levelArt(), art);
+    /** One level-art sheet built ahead of registration, with the level tiles it depends on. */
+    public record PreparedLevelArtSheet(String key,
+                                        ObjectSpriteSheet sheet,
+                                        List<Sonic3kPlcLoader.TileRange> tileRanges) {
     }
 
-    private void loadLevelArtEntries(List<Sonic3kPlcArtRegistry.LevelArtEntry> entries,
-            Sonic3kObjectArt art) {
+    /**
+     * The registry-driven level-art sheets for one zone/act, built from a
+     * level's pattern data without touching provider state, so a prepared
+     * level load can build them off the frame thread.
+     */
+    public record PreparedLevelArt(int zoneIndex, int actIndex, List<PreparedLevelArtSheet> sheets) {
+    }
+
+    /**
+     * Builds the level-art sheets {@link Sonic3kPlcArtRegistry} lists for
+     * {@code zoneIndex}/{@code actIndex} from {@code level}'s patterns. Pure:
+     * reads the level and the ROM only, so it may run off the frame thread.
+     */
+    public static PreparedLevelArt buildLevelArtSheets(Level level,
+                                                       int zoneIndex,
+                                                       int actIndex,
+                                                       RomByteReader reader) {
+        Sonic3kObjectArt art = new Sonic3kObjectArt(level, reader);
+        Sonic3kPlcArtRegistry.ZoneArtPlan plan =
+                Sonic3kPlcArtRegistry.getPlan(zoneIndex, actIndex);
+        return new PreparedLevelArt(zoneIndex, actIndex, buildLevelArtEntries(plan.levelArt(), art));
+    }
+
+    private static List<PreparedLevelArtSheet> buildLevelArtEntries(
+            List<Sonic3kPlcArtRegistry.LevelArtEntry> entries, Sonic3kObjectArt art) {
+        List<PreparedLevelArtSheet> sheets = new ArrayList<>();
         for (Sonic3kPlcArtRegistry.LevelArtEntry entry : entries) {
             ObjectSpriteSheet sheet;
             if (entry.builderName() != null) {
@@ -1182,7 +1217,26 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
                 LOG.warning("LevelArtEntry '" + entry.key() + "' has no builder or mapping addr");
                 continue;
             }
-            registerLevelArtSheet(entry.key(), sheet, art);
+            List<Sonic3kPlcLoader.TileRange> ranges = List.of();
+            if (sheet != null && art.getLastBuildStartTile() >= 0) {
+                ranges = art.getLastBuildTileRanges();
+                if (ranges.isEmpty()) {
+                    ranges = List.of(new Sonic3kPlcLoader.TileRange(
+                            art.getLastBuildStartTile(), art.getLastBuildTileCount()));
+                }
+            }
+            art.clearLastBuildTileRanges();
+            sheets.add(new PreparedLevelArtSheet(entry.key(), sheet, ranges));
+        }
+        return List.copyOf(sheets);
+    }
+
+    private void registerPreparedLevelArt(PreparedLevelArt prepared) {
+        for (PreparedLevelArtSheet entry : prepared.sheets()) {
+            registerSheet(entry.key(), entry.sheet());
+            if (entry.sheet() != null && !entry.tileRanges().isEmpty()) {
+                levelArtTileRanges.put(entry.key(), entry.tileRanges());
+            }
         }
     }
 
@@ -1199,7 +1253,7 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
         levelArtTileRanges.remove(key);
     }
 
-    private ObjectSpriteSheet invokeBuilder(Sonic3kObjectArt art, String builderName, int artTileBase) {
+    private static ObjectSpriteSheet invokeBuilder(Sonic3kObjectArt art, String builderName, int artTileBase) {
         return switch (builderName) {
             case "buildSpikesSheet" -> art.buildSpikesSheet(artTileBase);
             case "buildSpringVerticalSheet" -> art.buildSpringVerticalSheet(artTileBase);
@@ -2409,20 +2463,71 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
         if (sheet == null) {
             return;
         }
-        PatternSpriteRenderer renderer = new PatternSpriteRenderer(sheet);
         int existingIndex = rendererKeys.indexOf(key);
         if (existingIndex >= 0) {
+            PatternSpriteRenderer existing = renderers.get(key);
+            ObjectSpriteSheet existingSheet = sheets.get(key);
+            if (existing != null && existing.isReady() && sameSheetContent(existingSheet, sheet)) {
+                // Act transitions re-register every sheet of the new act's plan,
+                // most of them pixel-identical to the ones already on the GPU.
+                // Keep the uploaded renderer and only swap the sheet object so
+                // later in-place pattern refreshes see the new level's patterns.
+                existing.rebindEquivalentSheet(sheet);
+                sheets.put(key, sheet);
+                sheetOrder.set(existingIndex, sheet);
+                return;
+            }
+            PatternSpriteRenderer renderer = new PatternSpriteRenderer(sheet);
             sheets.put(key, sheet);
             renderers.put(key, renderer);
             sheetOrder.set(existingIndex, sheet);
             rendererOrder.set(existingIndex, renderer);
             return;
         }
+        PatternSpriteRenderer renderer = new PatternSpriteRenderer(sheet);
         sheets.put(key, sheet);
         renderers.put(key, renderer);
         rendererKeys.add(key);
         sheetOrder.add(sheet);
         rendererOrder.add(renderer);
+    }
+
+    /** True when both sheets would upload identical GPU patterns and draw identical frames. */
+    static boolean sameSheetContent(ObjectSpriteSheet a, ObjectSpriteSheet b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        if (a.getPaletteIndex() != b.getPaletteIndex()
+                || a.getFrameDelay() != b.getFrameDelay()
+                || a.getFrameCount() != b.getFrameCount()) {
+            return false;
+        }
+        for (int i = 0; i < a.getFrameCount(); i++) {
+            if (!java.util.Objects.equals(a.getFrame(i), b.getFrame(i))) {
+                return false;
+            }
+        }
+        Pattern[] left = a.getPatterns();
+        Pattern[] right = b.getPatterns();
+        if (left.length != right.length) {
+            return false;
+        }
+        byte[] leftPixels = new byte[Pattern.PATTERN_SIZE_IN_MEM];
+        byte[] rightPixels = new byte[Pattern.PATTERN_SIZE_IN_MEM];
+        for (int i = 0; i < left.length; i++) {
+            if (left[i] == right[i]) {
+                continue;
+            }
+            if (left[i] == null || right[i] == null) {
+                return false;
+            }
+            left[i].copyInto(leftPixels, 0);
+            right[i].copyInto(rightPixels, 0);
+            if (!Arrays.equals(leftPixels, rightPixels)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void registerStandaloneAnimations(String key) {

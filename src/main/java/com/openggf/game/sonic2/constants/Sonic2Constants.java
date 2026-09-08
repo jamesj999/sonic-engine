@@ -449,6 +449,14 @@ public class Sonic2Constants {
     public static final int MAP_ENI_TITLE_SCREEN_ADDR = 0x74DC6;   // Plane B background (40x28)
     public static final int MAP_ENI_TITLE_BACK_ADDR = 0x74E3A;     // Plane B water/horizon (24x28, col 40+)
     public static final int MAP_ENI_TITLE_LOGO_ADDR = 0x74E86;     // Plane A logo/emblem (40x28)
+    // CopyrightText (word_3E82): "@ 1992 SEGA" as 11 plane-map words that TitleScreen copies
+    // into the decoded logo map at planeLoc(40,28,26) before it is sent to Plane A.
+    public static final int TITLE_COPYRIGHT_TEXT_ADDR = 0x3E82;
+    public static final int TITLE_COPYRIGHT_TEXT_WORDS = 11;
+    public static final int TITLE_COPYRIGHT_PLANE_COLUMN = 28;
+    public static final int TITLE_COPYRIGHT_PLANE_ROW = 26;
+    // ArtTile_ArtNem_FontStuff_TtlScr: the standard font's VRAM tile on the title screen
+    public static final int ART_TILE_FONT_STUFF_TITLE_SCREEN = 0x680;
     public static final int MAP_ENI_SEGA_LOGO_ADDR = 0x74D0E;      // MapEng_SEGA (40x28, verified)
     public static final int MAP_UNC_SEGA_GIANT_SONIC_ADDR = 0x3A5A6; // ObjB1_MapUnc_3A5A6
 
@@ -689,10 +697,10 @@ public class Sonic2Constants {
     // Bubbles Art (Object $0A Small Bubbles, Object $24 Bubble Generator)
     // ArtNem_Bubbles: 0x7AEE2 (10 tiles) - standard-water bubble art at VRAM tile 0x05E8
     // ArtNem_BigBubbles: 0x7AD16 (37 tiles) - Obj0A/Obj24 base art at VRAM tile 0x055B
-    // Countdown numbers: 0x7AF82 (uncompressed)
+    // Countdown numbers: 0x7AF80 (uncompressed)
     public static final int ART_NEM_BUBBLES_ADDR = 0x7AEE2;  // ArtNem_Bubbles
     public static final int ART_NEM_BUBBLE_GENERATOR_ADDR = 0x7AD16;  // ArtNem_BigBubbles
-    public static final int ART_UNC_COUNTDOWN_ADDR = 0x7AF82;  // Countdown numbers for drowning (uncompressed)
+    public static final int ART_UNC_COUNTDOWN_ADDR = 0x7AF80;  // Countdown numbers for drowning (uncompressed)
     public static final int MAP_UNC_SMALL_BUBBLES_ADDR = 0x1FBF6;  // Obj24_MapUnc_1FBF6 - Sonic breathing bubbles (shared with Obj24)
     public static final int MAP_UNC_BUBBLES_ADDR = 0x1FCA2;  // Obj24_MapUnc - bubble generator / countdown bubbles
     public static final int ART_TILE_BUBBLES = 0x055B;  // ArtTile_ArtNem_BigBubbles - VRAM tile base (original)
@@ -1206,6 +1214,7 @@ public class Sonic2Constants {
         offsets.put("MAP_ENI_TITLE_SCREEN_ADDR", MAP_ENI_TITLE_SCREEN_ADDR);
         offsets.put("MAP_ENI_TITLE_BACK_ADDR", MAP_ENI_TITLE_BACK_ADDR);
         offsets.put("MAP_ENI_TITLE_LOGO_ADDR", MAP_ENI_TITLE_LOGO_ADDR);
+        offsets.put("TITLE_COPYRIGHT_TEXT_ADDR", TITLE_COPYRIGHT_TEXT_ADDR);
         offsets.put("PAL_TITLE_ADDR", PAL_TITLE_ADDR);
         offsets.put("ART_NEM_INVINCIBILITY_STARS_ADDR", ART_NEM_INVINCIBILITY_STARS_ADDR);
         offsets.put("MAP_UNC_INVINCIBILITY_STARS_ADDR", MAP_UNC_INVINCIBILITY_STARS_ADDR);

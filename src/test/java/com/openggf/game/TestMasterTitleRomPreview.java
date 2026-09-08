@@ -1,6 +1,7 @@
 package com.openggf.game;
 
 import com.openggf.level.Palette;
+import com.openggf.game.sonic3k.titlescreen.Sonic3kTitleScreenMappings;
 import com.openggf.level.Pattern;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
@@ -242,16 +243,28 @@ class TestMasterTitleRomPreview {
     }
 
     @Test
-    void sonic2PreviewClearsLogoChromaGreen() {
-        MasterTitleRomPreview.Image image = new MasterTitleRomPreview.Image(2, 1, new byte[] {
-                (byte) 0x92, (byte) 0xFF, 0x00, (byte) 0xFF,
-                (byte) 0xFF, 0x00, 0x00, (byte) 0xFF
-        });
+    void sonic2PreviewPreservesOpaqueEmblemInteriorBehindCharacters() {
+        MasterTitleScreen.GameEntry entry = MasterTitleScreen.GameEntry.SONIC_2;
+        Path path = Path.of(MasterTitleScreen.expectedRomFilename(entry));
+        assumeTrue(path.toFile().isFile(), "ROM not present: " + path);
 
-        MasterTitleRomPreview.clearSonic2LogoChromaGreen(image);
+        MasterTitleRomPreview.Image image = MasterTitleRomPreview.loadFor(entry, path).orElseThrow();
 
-        assertPixel(image, 0, 0, 0x00, 0x00, 0x00, 0x00);
-        assertPixel(image, 1, 0, 0xFF, 0x00, 0x00, 0xFF);
+        int opaqueGreenPixels = 0;
+        for (int y = 32; y < 104; y++) {
+            for (int x = 72; x < 248; x++) {
+                int offset = ((y * image.width()) + x) * 4;
+                byte[] rgba = image.rgba();
+                if ((rgba[offset] & 0xFF) == 0x92
+                        && (rgba[offset + 1] & 0xFF) == 0xFF
+                        && (rgba[offset + 2] & 0xFF) == 0x00
+                        && (rgba[offset + 3] & 0xFF) == 0xFF) {
+                    opaqueGreenPixels++;
+                }
+            }
+        }
+        assertTrue(opaqueGreenPixels > 500,
+                "the emblem interior should remain opaque behind Sonic and Tails, got " + opaqueGreenPixels);
     }
 
     @Test
@@ -265,8 +278,74 @@ class TestMasterTitleRomPreview {
     }
 
     @Test
-    void sonic3kPreviewSuppressesCopyrightInMasterComposition() {
-        assertFalse(MasterTitleRomPreview.sonic3kPreviewDrawsCopyright());
+    void sonic3kPreviewIncludesCopyrightInMasterComposition() {
+        assertTrue(MasterTitleRomPreview.sonic3kPreviewDrawsCopyright());
+    }
+
+    @Test
+    void sonic3kPreviewComposesTrademarkAndCopyrightPixels() throws Exception {
+        Pattern[] patterns = new Pattern[0x800];
+        Pattern ink = new Pattern();
+        ink.setPixel(0, 0, (byte) 1);
+        var trademark = Sonic3kTitleScreenMappings.createBannerFrames().get(1).pieces().get(0);
+        var copyright = Sonic3kTitleScreenMappings.createCopyrightFrame().get(0).pieces().get(0);
+        patterns[trademark.tileIndex()] = ink;
+        patterns[copyright.tileIndex()] = ink;
+        Palette[] palettes = { palette(0), palette(0), palette(0), palette(0, 0xFF_FF_FF) };
+        Method compose = MasterTitleRomPreview.class.getDeclaredMethod("composeSonic3kFinalPreview",
+                MasterTitleRomPreview.Image.class, Pattern[].class, Palette[].class, int.class, int.class);
+        compose.setAccessible(true);
+        MasterTitleRomPreview.Image blank = new MasterTitleRomPreview.Image(320, 224, new byte[320 * 224 * 4]);
+
+        MasterTitleRomPreview.Image image = (MasterTitleRomPreview.Image) compose.invoke(
+                null, blank, patterns, palettes, -1, -1);
+
+        assertPixel(image, 252, 104, 255, 255, 255, 255);
+        // Copyright fits between the game selector and navigation hints without covering the logo.
+        assertPixel(image, 216, 200, 255, 255, 255, 255);
+    }
+
+    @Test
+    void sonic2PreviewStampsCopyrightTextIntoLogoMap() {
+        int[] logo = new int[40 * 28];
+        int[] words = new int[11];
+        for (int i = 0; i < words.length; i++) {
+            words[i] = 0x680 + i;
+        }
+        int[] stamped = MasterTitleRomPreview.withSonic2CopyrightText(logo, words);
+        assertEquals(0, logo[26 * 40 + 28], "input map is not mutated");
+        assertEquals(0x680, stamped[26 * 40 + 28]);
+        assertEquals(0x680 + 10, stamped[26 * 40 + 38]);
+        assertEquals(0, stamped[26 * 40 + 27]);
+    }
+
+    @Test
+    void sonic2PreviewRendersCopyrightRow() {
+        MasterTitleScreen.GameEntry entry = MasterTitleScreen.GameEntry.SONIC_2;
+        Path path = Path.of(MasterTitleScreen.expectedRomFilename(entry));
+        assumeTrue(path.toFile().isFile(), "ROM not present: " + path);
+
+        MasterTitleRomPreview.Image image = MasterTitleRomPreview.loadFor(entry, path).orElseThrow();
+
+        // Copyright line "@ 1992 SEGA" sits on tile row 26, columns 28-38 (x 224-311, y 208-215).
+        int visible = 0;
+        for (int y = 208; y < 216; y++) {
+            for (int x = 224; x < 312; x++) {
+                if ((image.rgba()[(y * image.width() + x) * 4 + 3] & 0xFF) != 0) {
+                    visible++;
+                }
+            }
+        }
+        assertTrue(visible > 40, "copyright glyph pixels should render, got " + visible);
+        int columnsLeft = 0;
+        for (int y = 208; y < 216; y++) {
+            for (int x = 0; x < 224; x++) {
+                if ((image.rgba()[(y * image.width() + x) * 4 + 3] & 0xFF) != 0) {
+                    columnsLeft++;
+                }
+            }
+        }
+        assertEquals(0, columnsLeft, "nothing else is drawn on the copyright row left of column 28");
     }
 
     @Test

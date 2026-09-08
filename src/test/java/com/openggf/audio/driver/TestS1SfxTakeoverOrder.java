@@ -1,6 +1,7 @@
 package com.openggf.audio.driver;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.openggf.audio.AudioTestFixtures;
 import com.openggf.audio.smps.AbstractSmpsData;
@@ -9,6 +10,7 @@ import com.openggf.audio.smps.SmpsSequencerConfig;
 import com.openggf.audio.smps.SmpsSfxData;
 import com.openggf.audio.synth.ChipWriteObserver;
 import com.openggf.game.sonic1.audio.Sonic1SmpsSequencerConfig;
+import com.openggf.game.sonic3k.audio.Sonic3kSmpsSequencerConfig;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -124,6 +126,103 @@ class TestS1SfxTakeoverOrder {
         sfx.writePsg(0x80);
 
         assertEquals(List.of("PSG:9F", "PSG:80"), observer.events);
+    }
+
+    @Test
+    void frequencyPairUsesItsSourceTrackGateButKeepsPhysicalLatchSemantics() {
+        SmpsDriver driver = SmpsDriverTestAccess.create(48_000);
+        RecordingObserver observer = new RecordingObserver();
+        SmpsDriverTestAccess.setChipWriteObserver(driver, observer);
+        SmpsSequencer noiseOwner = sequencer(
+                driver, Sonic3kSmpsSequencerConfig.CONFIG, 0xC0, 0xC1);
+        SmpsSequencer toneOwner = sequencer(
+                driver, Sonic3kSmpsSequencerConfig.CONFIG, 0xA0, 0xC2);
+        driver.addSequencer(noiseOwner, true);
+        driver.writePsg(noiseOwner, 0xF0);
+        driver.addSequencer(toneOwner, true);
+        observer.events.clear();
+
+        driver.writePsgFrequencyPair(toneOwner, 0xAF, 0xFF);
+
+        assertEquals(List.of("PSG:AF", "PSG:FF"), observer.events,
+                "the ROM-gated pair remains adjacent despite separate noise ownership");
+        var psg = SmpsDriverTestAccess.captureSynthSnapshot(driver).psg();
+        assertEquals(7, psg.latch(),
+                "FF remains a physical PSG3-volume latch, not tone data");
+        assertEquals(15, psg.attenuations()[3],
+                "the physical FF must silence noise exactly as the chip decodes it");
+        assertEquals(3, toneOwner.getPsgLatchChannel(),
+                "later ordinary source writes must see the physical FF latch");
+    }
+
+    @Test
+    void deniedFrequencyPairChangesNeitherBusNorPhysicalLatch() {
+        SmpsDriver driver = SmpsDriverTestAccess.create(48_000);
+        RecordingObserver observer = new RecordingObserver();
+        SmpsDriverTestAccess.setChipWriteObserver(driver, observer);
+        SmpsSequencer toneOwner = sequencer(
+                driver, Sonic3kSmpsSequencerConfig.CONFIG, 0xA0, 0xC1);
+        driver.addSequencer(toneOwner, true);
+        driver.writePsg(toneOwner, 0xAF);
+        int latchBefore = SmpsDriverTestAccess.captureSynthSnapshot(driver)
+                .psg().latch();
+        SmpsSequencer music = sequencer(
+                driver, Sonic3kSmpsSequencerConfig.CONFIG, 0xA0, 0x81);
+        int sourceLatchBefore = music.getPsgLatchChannel();
+        observer.events.clear();
+
+        driver.writePsgFrequencyPair(music, 0xAF, 0xFF);
+
+        assertEquals(List.of(), observer.events,
+                "a denied source gate must reject the complete transaction");
+        assertEquals(latchBefore, SmpsDriverTestAccess.captureSynthSnapshot(driver)
+                .psg().latch(), "a denied pair must not mutate physical latch state");
+        assertEquals(sourceLatchBefore, music.getPsgLatchChannel(),
+                "a denied pair must not mutate source-local latch state");
+    }
+
+    @Test
+    void frequencyTransactionDoesNotBypassUnrelatedSingleLatchOwnership() {
+        SmpsDriver driver = SmpsDriverTestAccess.create(48_000);
+        RecordingObserver observer = new RecordingObserver();
+        SmpsDriverTestAccess.setChipWriteObserver(driver, observer);
+        SmpsSequencer noiseOwner = sequencer(
+                driver, Sonic3kSmpsSequencerConfig.CONFIG, 0xC0, 0xC1);
+        driver.addSequencer(noiseOwner, true);
+        driver.writePsg(noiseOwner, 0xFF);
+        observer.events.clear();
+        SmpsSequencer music = sequencer(
+                driver, Sonic3kSmpsSequencerConfig.CONFIG, 0xA0, 0x81);
+
+        driver.writePsg(music, 0xFF);
+
+        assertEquals(List.of(), observer.events,
+                "ordinary latches retain their own per-channel ownership gate");
+    }
+
+    @Test
+    void frequencyTransactionRejectsANonToneFirstByteWithoutWriting() {
+        SmpsDriver driver = SmpsDriverTestAccess.create(48_000);
+        RecordingObserver observer = new RecordingObserver();
+        SmpsDriverTestAccess.setChipWriteObserver(driver, observer);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> driver.writePsgFrequencyPair(driver, 0xBF, 0x12));
+        assertEquals(List.of(), observer.events);
+    }
+
+    @Test
+    void driverOwnedFrequencyTransactionPreservesStandaloneBusSemantics() {
+        SmpsDriver driver = SmpsDriverTestAccess.create(48_000);
+        RecordingObserver observer = new RecordingObserver();
+        SmpsDriverTestAccess.setChipWriteObserver(driver, observer);
+
+        driver.writePsgFrequencyPair(null, 0x84, 0x12);
+
+        assertEquals(List.of("PSG:84", "PSG:12"), observer.events);
+        var psg = SmpsDriverTestAccess.captureSynthSnapshot(driver).psg();
+        assertEquals(0, psg.latch());
+        assertEquals(0x124, psg.tonePeriods()[0]);
     }
 
     private static SmpsSequencer sequencer(SmpsDriver driver, SmpsSequencerConfig config) {

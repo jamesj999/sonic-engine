@@ -52,7 +52,10 @@ public final class LiveCaptureController implements AutoCloseable {
     private CaptureRecorder recorder;
     private short[] pcm;
     private long frameIndex;
+    private short[] pendingPcm;
+    private int pendingSamples;
     private Future<?> finalization;
+    private CapturedFrame finalizerFrame;
     private boolean audioWarningLogged;
     private Interruption pendingInterruption;
     private AudioFrameClock.Snapshot nextAudioPhase;
@@ -97,10 +100,18 @@ public final class LiveCaptureController implements AutoCloseable {
             return;
         }
         try {
-            byte[] rgba = grabber.grab();
             int samples = drainAudioOrSilence();
-            recorder.submit(new CapturedFrame(rgba, viewport.width(), viewport.height(),
-                    pcm, samples, frameIndex++));
+            if (grabber.deferredReadback()) {
+                grabber.beginReadback();
+                if (pendingPcm != null) submitPixels(pendingPcm, pendingSamples);
+                if (pendingPcm == null || pendingPcm.length < samples * 2) {
+                    pendingPcm = new short[pcm.length];
+                }
+                System.arraycopy(pcm, 0, pendingPcm, 0, samples * 2);
+                pendingSamples = samples;
+            } else {
+                submitPixels(pcm, samples);
+            }
         } catch (Throwable failure) {
             failAndAbort(failure);
         }
@@ -114,37 +125,71 @@ public final class LiveCaptureController implements AutoCloseable {
             case CAPTURE_ERROR -> Interruption.CAPTURE_ERROR;
             case USER, SHUTDOWN -> null;
         });
+        // GL readback and deletion must finish on the presentation thread before
+        // handing only encoder finalization to the background executor.
+        CapturedFrame closingFrame;
+        try {
+            closingFrame = pendingPcm == null ? null
+                    : recorder.grabFrame(grabber, pendingPcm, pendingSamples, frameIndex++);
+            pendingPcm = null;
+            closeGrabber();
+        } catch (Throwable failure) {
+            failAndAbort(failure);
+            return;
+        }
         Throwable audioCloseFailure = closeAudioOnCaller();
         if (audioCloseFailure != null) {
             warnAudioOnce(audioCloseFailure);
         }
         CaptureRecorder stoppingRecorder = recorder;
-        // Reported at the end of the recording as well as during it: the
-        // periodic warnings are rate-limited, so this is the only place the
-        // full cost of a struggling encoder is stated once, in one line.
-        String exhaustion = stoppingRecorder.exhaustionSummary();
-        if (exhaustion != null) {
-            LOGGER.warning("Live viewport recording: " + exhaustion);
-        }
-        finalization = deps.finalizer.submit(() -> {
-            try {
-                stoppingRecorder.stop();
+        finalizerFrame = closingFrame;
+        try {
+            finalization = deps.finalizer.submit(() -> {
+                CapturedFrame lastFrame;
                 synchronized (LiveCaptureController.this) {
-                    if (state == State.STOPPING) state = State.INACTIVE;
-                    clearResources();
+                    lastFrame = finalizerFrame;
+                    finalizerFrame = null;
                 }
-            } catch (Throwable failure) {
-                stoppingRecorder.abort();
-                synchronized (LiveCaptureController.this) {
-                    if (state == State.STOPPING) {
-                        lastFailure = failure;
-                        state = State.FAILED;
-                        recordInterruption(Interruption.CAPTURE_ERROR);
+                boolean submitted = false;
+                try {
+                    // Readback already completed on the GL thread. A full encoder
+                    // queue must not trap shutdown in the caller before its timeout.
+                    if (lastFrame != null) stoppingRecorder.submit(lastFrame);
+                    submitted = true;
+                    String exhaustion = stoppingRecorder.exhaustionSummary();
+                    if (exhaustion != null) LOGGER.warning("Live viewport recording: " + exhaustion);
+                    stoppingRecorder.stop();
+                    synchronized (LiveCaptureController.this) {
+                        if (state == State.STOPPING) state = State.INACTIVE;
+                        clearResources();
                     }
-                    clearResources();
+                } catch (Throwable failure) {
+                    if (!submitted && lastFrame != null) lastFrame.release();
+                    stoppingRecorder.abort();
+                    synchronized (LiveCaptureController.this) {
+                        if (state == State.STOPPING) {
+                            lastFailure = failure;
+                            state = State.FAILED;
+                            recordInterruption(Interruption.CAPTURE_ERROR);
+                        }
+                        clearResources();
+                    }
                 }
-            }
-        });
+            });
+        } catch (RuntimeException failure) {
+            if (closingFrame != null) closingFrame.release();
+            failAndAbort(failure);
+        }
+    }
+
+    private void submitPixels(short[] samples, int count) throws CaptureException {
+        CapturedFrame frame = recorder.grabFrame(grabber, samples, count, frameIndex++);
+        try {
+            recorder.submit(frame);
+        } catch (Throwable failure) {
+            frame.release();
+            throw failure;
+        }
     }
 
     public State state() { return state; }
@@ -295,6 +340,17 @@ public final class LiveCaptureController implements AutoCloseable {
 
     private void clearResources() {
         viewport = null;
+        if (finalizerFrame != null) finalizerFrame.release();
+        finalizerFrame = null;
+        closeGrabber();
+        recorder = null;
+        pcm = null;
+        pendingPcm = null;
+        nextAudioPhase = null;
+        captureSampleRate = 0;
+    }
+
+    private void closeGrabber() {
         // The grabber owns a viewport-sized native read buffer for its lifetime
         // now that it reuses one instead of allocating per frame, so dropping
         // the reference is no longer enough to release it.
@@ -308,9 +364,5 @@ public final class LiveCaptureController implements AutoCloseable {
             }
         }
         grabber = null;
-        recorder = null;
-        pcm = null;
-        nextAudioPhase = null;
-        captureSampleRate = 0;
     }
 }

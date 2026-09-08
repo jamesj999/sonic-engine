@@ -121,9 +121,11 @@ from source code.
 
 ## Merge Policy
 
-When maintainers merge a non-`master` branch into `develop`, the merge must include a
-`README.md` release/change-log summary for the branch. Merge commits skip the trailer validation
-above, but this README rule still applies.
+Merge commits skip the trailer validation above. The `README.md` release section is a
+handful of version themes, not a change log: a merge into `develop` edits it only when it adds
+or changes a theme, and most merges leave it alone. A fix to work that has not yet shipped folds
+into the existing changelog entry and earns no README text. No hook or CI check requires a
+README change on a merge.
 
 ## Example Trailer Blocks
 

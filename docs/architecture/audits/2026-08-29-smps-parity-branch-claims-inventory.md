@@ -263,7 +263,7 @@ SEGA PCM (S3K)
 - [ ] PCM delivery: unsigned bytes written to `$2A` with `$2B` enabled, and the Z80-cycle pacing of the loop (`zPlaySEGAPCM` `:4372`) — `4e5e2def3`
 
 DAC timing
-- [ ] S2 `fixBugs=0` `zWriteToDAC` cycle budget per two decoded samples (295 vs 288) (S2 `zWriteToDAC` / `.dac_playback_loop`) — `0b269a9be`
+- [x] S2 `fixBugs=0` `zWriteToDAC` cycle budget per two decoded samples (295) (S2 `zWriteToDAC` / `.dac_playback_loop`) — covered by `TestSonic2DacCadence`
 - [ ] S1 (301) and S3K (297) DAC base cycles, currently unverified engine constants (S1 DAC loop; S3K DAC loop near `zPlaySEGAPCM`) — `0b269a9be` (by implication)
 
 Data framing

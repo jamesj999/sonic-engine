@@ -72,6 +72,37 @@ public final class S3kSeamlessMutationExecutor {
         LOG.info("Applied FBZ2 PalPointers #$13 after the in-frame act reload");
     }
 
+    /**
+     * Applies the layout portion of {@code mutationKey} to a level being built
+     * ahead of its install (see
+     * {@link com.openggf.level.resources.PreparableLevelLoader}), so tilemaps
+     * built from that level already match what {@link #apply} leaves behind
+     * after the install. The install still runs the full mutation: its layout
+     * writes copy from source cells the mutation never changes, so re-applying
+     * them is a no-op.
+     */
+    public static void prepareLayoutForMutation(Level level, String mutationKey) {
+        if (level == null || mutationKey == null || level.getMap() == null) {
+            return;
+        }
+        if (MUTATION_AIZ1_POST_RELOAD_ACT2.equals(mutationKey)) {
+            LayoutMutationContext context = new LayoutMutationContext(
+                    LevelMutationSurface.forLevel(level), effects -> { });
+            AizAct2LayoutAdjuster.apply(context, level.getMap());
+            // The same continuation applies MUTATION_AIZ1_FIRE_TERRAIN_READY to
+            // the outgoing level first; decode its tables here, off the frame,
+            // so that step only copies them in.
+            try {
+                Rom rom = rom();
+                if (rom != null) {
+                    loadAizFireTerrainData(rom);
+                }
+            } catch (IOException e) {
+                LOG.fine("AIZ fire terrain pre-decode skipped: " + e.getMessage());
+            }
+        }
+    }
+
     private static void applyAiz1FireTerrainReady(LevelManager levelManager) {
         Level level = levelManager.getCurrentLevel();
         if (!(level instanceof Sonic3kLevel sonic3kLevel)) {
@@ -234,7 +265,9 @@ public final class S3kSeamlessMutationExecutor {
                     tiles8x8,
                     AIZ_FIRE_OVERLAY_DEST_TILE * Pattern.PATTERN_SIZE_IN_ROM,
                     false);
-            return MutationEffects.redrawAllTilemaps();
+            // Pattern data only: tilemap cells keep their indices, so refresh
+            // the atlas lookup instead of rebuilding both full-level tilemaps.
+            return MutationEffects.patternLookupRefresh();
         });
         return tiles8x8.length / Pattern.PATTERN_SIZE_IN_ROM;
     }

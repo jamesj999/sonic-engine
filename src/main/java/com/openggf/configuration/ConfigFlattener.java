@@ -31,6 +31,10 @@ public final class ConfigFlattener {
     private static void walk(String prefix, Map<String, Object> node,
                              Map<String, Object> flat, List<String> unknown) {
         for (Map.Entry<String, Object> e : node.entrySet()) {
+            if (prefix.isEmpty() && ConfigYamlWriter.FORMAT_KEY.equals(e.getKey())) {
+                // The file-format marker is metadata, not a setting.
+                continue;
+            }
             String path = prefix.isEmpty() ? e.getKey() : prefix + "." + e.getKey();
             Object value = e.getValue();
             if (value instanceof Map<?, ?> child) {

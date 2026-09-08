@@ -221,6 +221,26 @@ class TestS3kAudioParityComparator {
         return AudioParityChipWrite.ym2612(0, 0x2B, 0x80);
     }
 
+    @Test
+    void byteMismatchReportsBothRunStartServicesWithoutRealigningRuns() {
+        List<S3kAudioTick> reference = List.of(
+                withWrites(tick(12, 0x40, 0xB4), enable(), byte7F()),
+                withWrites(tick(13, 0x40, 0xB4),
+                        AudioParityChipWrite.ym2612(0, 0x2A, 0x88)));
+        List<S3kAudioTick> engine = List.of(
+                withWrites(tick(20, 0x40, 0xB4), enable(), byte7F()),
+                withWrites(tick(21, 0x40, 0xB4),
+                        AudioParityChipWrite.ym2612(0, 0x2A, 0x99)));
+
+        var report = S3kAudioParityComparator.compareDacStream(reference, engine);
+        assertEquals(S3kAudioParityComparator.DacStreamReport.Kind.BYTE_DIFFERENT, report.kind());
+        assertEquals(1, report.byteOffset());
+        assertTrue(report.toHumanText().contains("reference run start service: 12"), report::toHumanText);
+        assertTrue(report.toHumanText().contains("openggf run start service: 20"), report::toHumanText);
+        assertTrue(report.toMachineText().contains("\"reference_run_start_service\":12"), report::toMachineText);
+        assertTrue(report.toMachineText().contains("\"openggf_run_start_service\":20"), report::toMachineText);
+    }
+
     private static AudioParityChipWrite disable() {
         return AudioParityChipWrite.ym2612(0, 0x2B, 0x00);
     }

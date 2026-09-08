@@ -43,6 +43,33 @@ class TestArchitecturalSourceGuard {
         assertOrdered(source, "displayAndSwap(this::display,", "glfwSwapBuffers(window));");
     }
 
+    @Test
+    void suppressedLevelMusicPreservesTheActiveAudioSource() throws IOException {
+        SourceFile source = SourceFile.read(SRC_MAIN.resolve("com/openggf/level/LevelManager.java"));
+        MethodSpan span = source.methodNamed("initAudio");
+        assertTrue(span != null, "LevelManager must retain the level audio initializer");
+        String method = String.join("\n",
+                source.lines().subList(span.startLine() - 1, span.endLine()));
+
+        assertOrdered(method, "transitions.isSuppressNextMusicChange()", "configureAudio();");
+    }
+
+    @Test
+    void levelStartClearsReusedPlayableAnimationState() throws IOException {
+        SourceFile source = SourceFile.read(SRC_MAIN.resolve(
+                "com/openggf/sprites/playable/AbstractPlayableSprite.java"));
+        MethodSpan span = source.methodNamed("resetState");
+        assertTrue(span != null, "Playable sprites must retain the level-start reset owner");
+        String method = String.join("\n",
+                source.lines().subList(span.startLine() - 1, span.endLine()));
+
+        assertTrue(method.contains("this.animationId = 0;"));
+        assertTrue(method.contains("this.mappingFrame = 0;"));
+        assertTrue(method.contains("this.animationFrameIndex = 0;"));
+        assertTrue(method.contains("this.animationTick = 0;"));
+        assertTrue(method.contains("forceAnimationRestart();"));
+    }
+
     private static void assertOrdered(String source, String first, String second) {
         int firstIndex = source.indexOf(first);
         int secondIndex = source.indexOf(second, firstIndex + first.length());
@@ -72,7 +99,10 @@ class TestArchitecturalSourceGuard {
             // controller state captured by the playable rewind schema.
             // 2026-08-26: exact merged inventory for next's Mod API hooks and develop's
             // native player-SST reset/restore ownership.
-            "com/openggf/sprites/playable/AbstractPlayableSprite.java", 3256,
+            // 2026-09-08: upstream resets the reused player animation before the
+            // pre-fade BuildSprites pass and removes duplicate invincibility resets:
+            // net +2 effective lines over next. Freeze the combined inventory.
+            "com/openggf/sprites/playable/AbstractPlayableSprite.java", 3258,
             // 2026-08-26: exact merged inventory for next's mod/editor/session and
             // seamless-transition surface plus develop's bootstrap, VBlank and
             // transient oscillation/respawn handoff wiring.
@@ -546,7 +576,7 @@ class TestArchitecturalSourceGuard {
                 "agent guidance must retain the comparison-only trace rule");
         assertTrue(agentGuidance.contains("dedicated hardware-timing input contract"),
                 "agent guidance must retain the dedicated hardware-timing exception");
-        assertTrue(agentGuidance.contains("it may release only the readiness of a matching, prepared, production-submitted"),
+        assertTrue(agentGuidance.contains("It may release only the readiness of a matching, prepared, production-submitted"),
                 "agent guidance must retain the bounded timing-release rule");
 
         String discrepancies = Files.readString(Path.of("docs", "status", "known-discrepancies.md"));

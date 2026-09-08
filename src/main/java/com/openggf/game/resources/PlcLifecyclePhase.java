@@ -4,6 +4,7 @@ package com.openggf.game.resources;
 public enum PlcLifecyclePhase {
     LAG,
     TITLE_SCREEN,
+    CONTINUE_SCREEN,
     LEVEL_SELECT,
     LEVEL_TITLE_CARD,
     ORDINARY_LEVEL,

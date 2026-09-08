@@ -24,6 +24,7 @@ public final class RewindController {
     private final EngineStepper engineStepper;
     private final SegmentCache segmentCache;
     private final int keyframeInterval;
+    private int gameplayCheckpointInterval;
     private final AudioManager audioManager;
     private final AudioKeyframeStore audioKeyframes;
     private final SectionProfiler profiler;
@@ -68,6 +69,7 @@ public final class RewindController {
                     "keyframeInterval must be > 0, got " + keyframeInterval);
         }
         this.keyframeInterval = keyframeInterval;
+        this.gameplayCheckpointInterval = keyframeInterval;
         this.audioManager = audioManager;
         this.audioKeyframes = audioManager != null ? new AudioKeyframeStore() : null;
         this.segmentCache = new SegmentCache(keyframeInterval);
@@ -76,6 +78,21 @@ public final class RewindController {
         // Capture frame 0 so seekTo(0) always has a base.
         keyframes.put(0, registry.capture());
         captureAudioKeyframe(0);
+    }
+
+    /**
+     * Adds gameplay-only checkpoints between audio keyframes to bound cold replay
+     * work. Configure before stepping; durable audio snapshots keep their original
+     * cadence. A divisor keeps each audio keyframe aligned with a gameplay one.
+     */
+    public void setGameplayCheckpointInterval(int interval) {
+        if (interval <= 0 || keyframeInterval % interval != 0) {
+            throw new IllegalArgumentException("gameplay interval must divide the keyframe interval");
+        }
+        if (currentFrame != 0) {
+            throw new IllegalStateException("configure gameplay checkpoints before stepping");
+        }
+        gameplayCheckpointInterval = interval;
     }
 
     public int currentFrame() { return currentFrame; }
@@ -154,8 +171,10 @@ public final class RewindController {
             return;
         }
         currentFrame++;
-        if (currentFrame % keyframeInterval == 0) {
+        if (currentFrame % gameplayCheckpointInterval == 0) {
             keyframes.put(currentFrame, registry.capture());
+        }
+        if (currentFrame % keyframeInterval == 0) {
             captureAudioKeyframe(currentFrame);
         }
     }
@@ -175,8 +194,10 @@ public final class RewindController {
         currentFrame++;
         beginAudioFrame(currentFrame);
         segmentCache.invalidate();
-        if (currentFrame % keyframeInterval == 0) {
+        if (currentFrame % gameplayCheckpointInterval == 0) {
             keyframes.put(currentFrame, registry.capture());
+        }
+        if (currentFrame % keyframeInterval == 0) {
             captureAudioKeyframe(currentFrame);
             if (determinismAuditor != null) {
                 auditLastSegment();
@@ -187,7 +208,7 @@ public final class RewindController {
 
     private void auditLastSegment() {
         try {
-            var prevOpt = keyframes.latestAtOrBefore(currentFrame - 1);
+            var prevOpt = keyframes.latestAtOrBefore(currentFrame - keyframeInterval);
             var liveOpt = keyframes.latestAtOrBefore(currentFrame);
             if (prevOpt.isEmpty() || liveOpt.isEmpty() || liveOpt.get().frame() != currentFrame) {
                 return;
@@ -229,16 +250,11 @@ public final class RewindController {
     /**
      * Drops rewind history older than {@code retainedFrames}, aligned to a
      * retained keyframe so replay from the new earliest frame still has every
-     * input row needed to reach current time. Audio history is pruned in
-     * lockstep: audio keyframes below the retained keyframe are dropped, and
-     * the command timeline is pruned to the earliest retained audio
-     * keyframe's {@code commandEntryCount} so all surviving keyframes keep
-     * valid replay ranges.
-     *
-     * <p>No production caller exists on this branch yet — the method is
-     * mirrored from the release-remediation branch (whose
-     * {@code LiveRewindManager.pruneOldHistory} invokes it) so the branches
-     * stay in sync and the tests ship with the implementation.
+     * input row needed to reach current time. Audio retains the keyframe at
+     * or before the gameplay floor, which can fall between audio boundaries.
+     * The command timeline is pruned to that retained audio keyframe's
+     * {@code commandEntryCount} so replay from every surviving gameplay
+     * checkpoint still has its audio base and commands.
      *
      * @return the earliest retained frame after pruning
      */
@@ -257,7 +273,7 @@ public final class RewindController {
         int retainedKeyframe = retainedFloor.get().frame();
         keyframes.discardBefore(retainedKeyframe);
         if (audioKeyframes != null) {
-            audioKeyframes.discardBefore(retainedKeyframe);
+            audioKeyframes.discardBeforeRetainingFloor(retainedKeyframe);
             AudioLogicalSnapshot earliestAudio = audioKeyframes.earliestSnapshot();
             if (earliestAudio != null) {
                 audioManager.pruneAudioCommandsBefore(earliestAudio.commandEntryCount());

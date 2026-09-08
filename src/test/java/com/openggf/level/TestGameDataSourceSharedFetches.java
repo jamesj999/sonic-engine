@@ -29,6 +29,7 @@ import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.level.objects.TouchResponseTable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.Isolated;
 import org.mockito.ArgumentCaptor;
 
@@ -47,25 +48,28 @@ class TestGameDataSourceSharedFetches {
     @AfterEach void clearSession() { SessionManager.clear(); }
 
     @Test
-    void sourceDefaultsRequireRomCapabilityButPreserveStockRomBytes() throws Exception {
+    void sourceDefaultsRequireRomCapabilityButPreserveStockRomBytes(@TempDir Path directory) throws Exception {
         GameModule module = mock(GameModule.class, CALLS_REAL_METHODS);
         GameDataSource missing = missingSource();
         assertThrows(IllegalStateException.class, () -> module.createGame(missing));
         assertThrows(IllegalStateException.class, () -> module.createTouchResponseTable(missing));
 
-        Rom rom = mock(Rom.class);
-        when(rom.readAllBytes()).thenReturn(new byte[] { 0x12, 0x34, 0x56 });
-        Game expectedGame = mock(Game.class);
-        TouchResponseTable expectedTable = mock(TouchResponseTable.class);
-        when(module.createGame(rom)).thenReturn(expectedGame);
-        when(module.createTouchResponseTable(any(RomByteReader.class))).thenReturn(expectedTable);
-        RomDataSource source = new RomDataSource(rom, "rom:test");
+        Path path = directory.resolve("source.gen");
+        Files.write(path, new byte[] { 0x12, 0x34, 0x56 });
+        try (Rom rom = new Rom()) {
+            assertTrue(rom.open(path.toString()));
+            Game expectedGame = mock(Game.class);
+            TouchResponseTable expectedTable = mock(TouchResponseTable.class);
+            when(module.createGame(rom)).thenReturn(expectedGame);
+            when(module.createTouchResponseTable(any(RomByteReader.class))).thenReturn(expectedTable);
+            RomDataSource source = new RomDataSource(rom, "rom:test");
 
-        assertSame(expectedGame, module.createGame(source));
-        assertSame(expectedTable, module.createTouchResponseTable(source));
-        ArgumentCaptor<RomByteReader> reader = ArgumentCaptor.forClass(RomByteReader.class);
-        verify(module).createTouchResponseTable(reader.capture());
-        assertArrayEquals(new byte[] { 0x12, 0x34, 0x56 }, reader.getValue().slice(0, 3));
+            assertSame(expectedGame, module.createGame(source));
+            assertSame(expectedTable, module.createTouchResponseTable(source));
+            ArgumentCaptor<RomByteReader> reader = ArgumentCaptor.forClass(RomByteReader.class);
+            verify(module).createTouchResponseTable(reader.capture());
+            assertArrayEquals(new byte[] { 0x12, 0x34, 0x56 }, reader.getValue().slice(0, 3));
+        }
     }
 
     @Test

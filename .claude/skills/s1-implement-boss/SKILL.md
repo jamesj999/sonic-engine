@@ -1,454 +1,54 @@
 ---
 name: s1-implement-boss
-description: Use when implementing a Sonic 1 boss — ports boss object logic from s1disasm, arena setup, hit detection, defeat sequence.
+description: Use when implementing or changing a Sonic 1 boss, including arena events, hit handling, children, defeat, and escape.
 ---
 
-# Implement Sonic 1 Boss
-
-Implement a Sonic 1 zone boss with complete ROM accuracy. This skill guides complete implementation including arena setup, hit handling, defeat sequences, and cross-validation against the Sonic 1 disassembly.
-
-## Inputs
-
-$ARGUMENTS: Boss name or zone (e.g., "GHZ boss", "Green Hill boss", "0x3D", "Final Zone boss")
-
-## Related Skills
-
-- **s1disasm-guide** (`.agents/skills/s1disasm-guide/SKILL.md`) - Disassembly navigation, label conventions, RomOffsetFinder
-- **s1-implement-object** (`.agents/skills/s1-implement-object/SKILL.md`) - For non-boss Sonic 1 objects and badniks. **Section 2.4 lists all reusable engine utilities** — check it before writing movement, collision, or rendering code.
-
-## Sonic 1 Boss List
-
-| Zone | Object ID | ASM File | Notes |
-|------|-----------|----------|-------|
-| GHZ | 0x3D | `_incObj/3D Boss - Green Hill (part 1-2).asm` | Wrecking ball on chain |
-| MZ | 0x73 | `_incObj/73 Boss - Marble.asm` | Fire dropper over lava |
-| SYZ | 0x75 | `_incObj/75 Boss - Spring Yard.asm` | Spike dropper with retracting platforms |
-| LZ | 0x77 | `_incObj/77 Boss - Labyrinth.asm` | Rising water chase |
-| SLZ | 0x7A | `_incObj/7A Boss - Star Light.asm` | Seesaw bomb launcher |
-| SBZ | 0x7D | `_incObj/7D Boss - Scrap Brain 2 & Final.asm` | Appears in SBZ2 cutscene |
-| FZ | 0x85 | `_incObj/85 Boss - Final.asm` | Final boss (4 pistons + energy balls) |
-
-## Key Differences: S1 Bosses vs S2 Bosses
-
-| Aspect | Sonic 1 | Sonic 2 |
-|--------|---------|---------|
-| **Boss object file** | `_incObj/XX Boss - Zone.asm` | Inline in `s2.asm` (ObjXX) |
-| **Sub-object spawning** | `BossName_ObjData` tables | `AllocateObjectAfterCurrent` |
-| **Hit counter** | `obColProp(a0)` (collision property) | `objoff_3C` or similar |
-| **Palette flash** | `v_palette+$22` (line 1, color 1) | Boss-specific palette line |
-| **Hit count** | 8 hits (standard) | 8 hits (standard) |
-| **Arena setup** | Zone-specific camera lock in object code | `LevEvents_ZONE2` routines |
-| **Level events** | `Sonic1LevelEventManager` (per-zone handler classes) | `Sonic2LevelEventManager.java` |
-| **Music** | `MUS_BOSS` (0x8C) | `Sonic2AudioConstants.MUS_BOSS` |
-| **Defeat** | Explosion sequence + flee + EggPrison | Similar pattern |
-| **Boss state** | Object-local fields (`obRoutine`, `ob2ndRout`) | `BossStateContext` |
-| **Child objects** | Defined via `ObjData` tables or inline | `AbstractBossChild` |
-| **Constants file** | `Sonic1Constants.java` | `Sonic2Constants.java` |
-| **Art prefix** | `Nem_Eggman`, `Nem_BossItems` | `ArtNem_Eggman`, `ArtNem_BossItems` |
-
-## Implementation Process
-
-### Phase 1: Research & Discovery
-
-Delegate multiple agents to explore the disassembly. **Include this instruction in each agent prompt:**
-
-> Use the s1disasm-guide skill (`.agents/skills/s1disasm-guide/SKILL.md`) for reference on disassembly structure, label conventions, RomOffsetFinder commands, and object system patterns.
-
-**Research checklist:**
-- [ ] Locate boss object file in `docs/s1disasm/_incObj/` (may have multiple parts)
-- [ ] Find animation file in `docs/s1disasm/_anim/Eggman.asm` or boss-specific
-- [ ] Find mapping file in `docs/s1disasm/_maps/` (e.g., `Eggman.asm`, `Boss Items.asm`)
-- [ ] Identify sub-object spawning pattern (`ObjData` tables or inline)
-- [ ] Document state machine (`obRoutine` / `ob2ndRout`) transitions
-- [ ] Note arena setup: camera lock coordinates, boundary changes
-- [ ] Note defeat sequence timing (explosion count, flee direction)
-- [ ] Find boss art addresses using RomOffsetFinder:
-  ```bash
-  mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="--game s1 search Nem_Eggman" -q
-  mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="--game s1 search Nem_BossItems" -q
-  mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="--game s1 search Boss" -q
-  ```
-  - Use `plc` command to see which PLCs load boss art:
-    ```bash
-    mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="--game s1 plc PLC_GHZ" -q
-    ```
-  - Search results now show PLC cross-references inline
-
-**Key disassembly patterns to identify:**
-- `obColType` set to boss collision category
-- `obColProp(a0)` used for hit count (starts at 8, decremented)
-- Boss palette flash via direct palette RAM writes (`v_palette+$22`)
-- Camera boundary manipulation for arena lock
-- Sub-object data tables: `BossName_ObjData` defines children with offsets and IDs
-
-When porting boss object positions, ROM `obX` / `obY` are centre coordinates. Use `getCentreX()` / `setCentreX()` and `getCentreY()` / `setCentreY()` for boss bodies, children, projectiles, and dynamic spawns; reserve `getX()` / `getY()` for top-left render bounds.
-
-### Phase 2: Arena & Level Event Setup
-
-S1 bosses use `Sonic1LevelEventManager` (at `game/sonic1/events/Sonic1LevelEventManager.java`) for arena setup and boss spawning. This manager extends `AbstractLevelEventManager` and delegates to per-zone handler classes.
-
-Add zone-specific event handling in a zone handler class:
-
-```java
-// In the zone's event handler class (called from Sonic1LevelEventManager)
-private void updateGhzEvents() {
-    if (currentAct != 2) return; // Act 3 (0-indexed act 2)
-    switch (eventRoutine) {
-        case 0 -> {
-            // Wait for approach trigger
-            if (camera.getX() >= GHZ_BOSS_TRIGGER_X) {
-                camera.setMinX(camera.getX());
-                eventRoutine += 2;
-            }
-        }
-        case 2 -> {
-            // Lock arena and spawn boss
-            if (camera.getX() >= GHZ_BOSS_ARENA_X) {
-                camera.setMinX((short) GHZ_BOSS_ARENA_MIN);
-                camera.setMaxX((short) GHZ_BOSS_ARENA_MAX);
-                spawnGhzBoss();
-                eventRoutine += 2;
-                audio().playMusic(Sonic1Music.BOSS.id);
-            }
-        }
-        // ...
-    }
-}
-```
-
-**Extract arena coordinates from disassembly** - search for camera boundary writes in the boss ASM or in `Constants.asm`:
-```asm
-boss_ghz_x: equ $2A70   ; Boss X position
-```
-
-### Phase 3: Boss Instance Class
-
-Create the boss class in the S1 objects package:
-
-```java
-package com.openggf.game.sonic1.objects.bosses;
-
-public class Sonic1ZoneBossInstance extends AbstractBossInstance {
-
-    // State machine constants (from obRoutine / ob2ndRout values)
-    private static final int ROUTINE_INIT = 0x00;
-    private static final int ROUTINE_MAIN = 0x02;
-    private static final int ROUTINE_DEFEAT = 0x04;
-
-    // Position constants from disassembly
-    private static final int BOSS_START_X = 0xXXXX;
-    private static final int BOSS_START_Y = 0xXXXX;
-
-    public Sonic1ZoneBossInstance(ObjectSpawn spawn) {
-        super(spawn, "Zone Boss");
-    }
-
-    @Override
-    protected void initializeBossState() {
-        state.x = BOSS_START_X;
-        state.y = BOSS_START_Y;
-        state.routineSecondary = ROUTINE_INIT;
-        spawnChildComponents();
-    }
-
-    @Override
-    protected void updateBossLogic(int frameCounter, AbstractPlayableSprite player) {
-        switch (state.routineSecondary) {
-            case ROUTINE_INIT -> updateInit();
-            case ROUTINE_MAIN -> updateMain(player);
-            case ROUTINE_DEFEAT -> updateDefeat();
-        }
-    }
-
-    @Override protected int getInitialHitCount() { return 8; }
-    @Override protected int getCollisionSizeIndex() { /* from obColType */ return 0x0F; }
-    @Override protected void onHitTaken(int remainingHits) { /* hit reaction */ }
-    @Override protected void onDefeatStarted() { /* begin defeat sequence */ }
-}
-```
-
-**Implementation checklist:**
-- [ ] Create boss class extending `AbstractBossInstance`
-- [ ] Define state machine constants matching `obRoutine`/`ob2ndRout` values
-- [ ] Define position/velocity constants from disassembly
-- [ ] Implement `initializeBossState()` with child spawning
-- [ ] Implement `updateBossLogic()` state machine
-- [ ] Override `getInitialHitCount()` (typically 8)
-- [ ] Override `getCollisionSizeIndex()`
-- [ ] Override `onHitTaken()` - S1 uses `obColProp` for remaining hits
-- [ ] Override `onDefeatStarted()` for defeat transition
-- [ ] Implement `appendRenderCommands()`
-
-### Phase 4: Sub-Object / Child Components
-
-S1 bosses use `ObjData` tables to define child objects. Parse these tables and spawn children:
-
-```java
-// S1 pattern: sub-objects defined as data table entries
-private void spawnChildComponents() {
-    // From BossName_ObjData table in disassembly
-    // Each entry typically: x_offset, y_offset, mapping_frame, subtype
-    BossChildInstance child = spawnChild(() -> new BossChildInstance(this, xOffset, yOffset));
-    childComponents.add(child);
-}
-```
-
-Children can extend `AbstractBossChild` (shared with S2) or be simple independent objects depending on the boss pattern. Prefer `spawnChild(...)`, `spawnFreeChild(...)`, or an existing `level.objects` lifecycle helper instead of direct `ObjectManager.addDynamicObject(...)`.
-
-### Phase 5: Hit Handling
-
-S1 hit handling differs slightly from S2:
-
-```java
-// S1 pattern: obColProp holds remaining hit count
-// Palette flash via v_palette+$22 (palette line 1, color 1)
-@Override
-protected void onHitTaken(int remainingHits) {
-    // Flash palette (S1 uses palette line 1)
-    // Bounce player back
-    // Invulnerability period
-}
-```
-
-The hit response typically:
-1. Decrements `obColProp` (hit count)
-2. Checks for defeat (hits == 0)
-3. Applies palette flash to boss sprite
-4. Sets invulnerability timer
-5. May trigger behavior change (some bosses speed up at low health)
-
-#### Shared defeat / escape / camera-unlock pitfalls (all 5 Eggman-ship bosses)
-
-The GHZ/MZ/SYZ/SLZ/LZ bosses (`AbstractS1EggmanBossInstance`) share three ROM
-behaviours that each caused a distinct trace divergence in the post-boss
-camera-unlock tail (SYZ3 f12490 -> GREEN, commit on `bugfix/ai-syz3-f12490`;
-GHZ3 had the same defeat-deferral fix earlier):
-
-1. **Defeat routine is dispatched read-once — defer the first defeat frame.**
-   The killing hit sets the defeated flag, but the boss only acts on it when its
-   own routine reaches its status-update tail, where `B*_Defeated` does
-   `move.b #<explode>,ob2ndRout` + `move.w #<timer>,GenericTimer` then **`rts`**
-   (it does NOT fall through to the explode routine). `B*_ShipMain` re-reads
-   `ob2ndRout` at the top of its dispatch next frame, so the defeat countdown's
-   first decrement lands one frame after the hit. The engine selects the defeat
-   routine in the touch-response pass that runs *before* the boss's own
-   `update()`, so set `defeatDeferralAppliesToThisBoss()=true` to restore that
-   one-frame offset (otherwise the whole defeat→ascent→escape sequence — and the
-   escape's `addq.w #2,(v_limitright2)` camera scroll — runs one frame early).
-   Watch the per-boss defeat timer value (GHZ `$B3`, SYZ `$B4=180`).
-   (`docs/s1disasm/_incObj/75, 76 Boss - SYZ Main and Blocks.asm:70-74,154-160`.)
-
-2. **Eggman bosses are never `out_of_range`-culled — make them persistent.**
-   `B*_ShipMain` ends with `jmp (DisplaySprite).l`, never `MarkObjGone` /
-   `out_of_range`; the boss owns its whole lifecycle and self-deletes only from
-   its escape routine once `v_limitright2` reaches `boss_*_end`. During the
-   escape the ship flies right at 8px/frame (two BossMoves) and outruns the
-   2px/frame camera, so the generic engine off-screen unload culls it mid-escape
-   and freezes the right-boundary scroll short of `boss_*_end` (SYZ3 f12575:
-   `maxX` stuck at 0x2CA4 instead of 0x2D40). `AbstractS1EggmanBossInstance`
-   returns `isPersistent()=true` for the whole family. (asm:84.)
-
-3. **Defeat does NOT clear `f_lockscreen` — the Egg Prison does.**
-   `B*_Explode .transition` clears velocities and the defeated status bit but
-   never touches `f_lockscreen`; the screen lock stays set through the ascent,
-   escape, and the run to the egg capsule, and is cleared only by the Egg Prison
-   (Obj3E `clr.b (f_lockscreen).w`). The engine models `f_lockscreen` via
-   `currentBossId` (which the Egg Prison clears). Do NOT call
-   `setCurrentBossId(0)` from the boss's defeat code — clearing it early drops
-   the strict right-boundary (the `RIGHT_EXTRA` +0x40 in `doLevelBoundary` is
-   re-enabled), letting the player overrun `v_limitright2+0x128` before reaching
-   the capsule (SYZ3 f12767: ROM wall-stops the player, engine kept running).
-   NOTE: as of `bugfix/ai-syz3-f12490` only the SYZ boss had this `setCurrentBossId(0)`
-   removed; GHZ/MZ/SLZ still call it at defeat (latent — their players don't reach
-   the boundary band in that window). Remove it there too if a trace exposes it.
-
-### Phase 6: Art Loading
-
-**PLC-based art loading:** S1 boss art has dedicated PLC IDs in ArtLoadCues. Use the shared `PlcParser` API for standalone decompression to avoid VRAM tile conflicts. See `plc-system` skill. Use `RomOffsetFinder plc <name>` to inspect PLC contents from the CLI.
-
-```bash
-# Find boss art
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="--game s1 search Nem_Eggman" -q
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="--game s1 search Nem_BossItems" -q
-```
-
-S1 bosses typically use shared Eggman art plus zone-specific boss weapon art:
-- `Nem_Eggman` - Eggpod / Eggman sprite
-- `Nem_BossItems` - Shared boss accessories (explosions, etc.)
-- Zone-specific art (e.g., `Nem_GHZBoss_Wrecking_Ball` for GHZ)
-
-**Standalone PLC pattern (preferred):**
-```java
-PlcDefinition plc = PlcParser.parse(rom, Sonic1Constants.ART_LOAD_CUES_ADDR, plcId);
-List<Pattern[]> artArrays = PlcParser.decompressAll(rom, plc);
-ObjectSpriteSheet sheet = new ObjectSpriteSheet(
-    artArrays.get(entryIndex),
-    S1SpriteDataLoader.loadMappingFrames(reader, mappingAddr),
-    paletteIndex, 1);
-```
-
-**Implementation checklist:**
-- [ ] Find the boss PLC ID in the disassembly's ArtLoadCues
-- [ ] Add PLC ID or ROM address constants to `Sonic1Constants.java`
-- [ ] Add art keys (create `Sonic1ObjectArtKeys.java` if needed)
-- [ ] Use `PlcParser.decompressAll()` for standalone `Pattern[]` (preferred), or create loader method in `Sonic1ObjectArt.java` for direct Nemesis loading
-- [ ] Create mappings method (parse from `_maps/Eggman.asm`, `_maps/Boss Items.asm`)
-- [ ] Register in art provider
-
-### Phase 7: Factory Registration
-
-Register in `Sonic1ObjectRegistry`:
-
-```java
-registerFactory(Sonic1ObjectIds.ZONE_BOSS,
-    (spawn, registry) -> new Sonic1ZoneBossInstance(spawn));
-```
-
-`Sonic1ObjectRegistry` already has `registerDefaultFactories()` — add your factory registration there.
-
-### Phase 8: Rewind Synchronization Fields
-
-Before finalizing a boss or boss child, classify every instance field for rewind. Key synchronization-relevant fields must remain captured: routine/state variables, phase flags, hit counters, timers, attack cooldowns, arena/camera-lock latches, subpixel positions, velocities, movement helper state, child component state, defeat-flow state, per-player contact/carry/rider latches, and dynamic spawn coordinates. Do not add `@RewindTransient` to these fields just to satisfy `GenericFieldCapturer` or audit tests.
-
-Use `@RewindTransient(reason = "...")` only for structural or derived fields: `ObjectServices`, stable spawn identity, parent/child graph references, renderers/art caches, listeners/callbacks, immutable config, debug-only state, or values rebuilt from ROM data/live managers. If a field is synchronization-relevant but not generically capturable, convert it to a primitive/record/supported array, add an explicit snapshot/codec, or keep the class on its legacy/manual rewind path. Boss `dynamicSpawn` references are not structural by default; capture coordinates explicitly or defer generic migration.
-
-Prefer standard value forms before boss-specific adapters: replace callback `Runnable` fields with rewindable enum continuation tokens, and make small mutable helper or owned-child state implement `RewindStateful<S>` so the generic capturer snapshots its value while preserving live object identity.
-
-Bosses participate in player/object lifecycle beyond hit counts. Cross-check player and sidekick contacts, carried state, invulnerability/hurt timing, child despawn, and arena-lock latches against the ROM, especially across defeat and transition frames.
-
-### Phase 8.5: Shared Object Contracts
-
-Bosses and boss children may need bespoke state, but still prefer shared contracts when they fit:
-
-- Use `ObjectControlState` for forced-control and cutscene-control predicates instead of raw boolean combinations.
-- Use `ObjectPlayerQuery` and `ObjectPlayerParticipationPolicy` for hit, contact, and targeting decisions. S1 native boss logic is main-player focused; OpenGGF sidekick participation must be explicit when extended.
-- Use `NativePositionOps` for playable-sprite native `x_pos` / `y_pos` writes; reserve raw preserve-subpixel setters for lower-level sprite internals or non-playable boss-local state.
-- Use `ObjectLifetimeOps` for child deletion, despawn, and dynamic-expire semantics.
-- Reuse canonical `SolidRoutineProfile`, `TouchResponseProfile`, and `ObjectLifecycleProfile` compatibility wrappers where they preserve existing boss behavior.
-- Ratchet guard baselines when adding source guards; do not let historical direct-control or lifecycle calls block new hard-fail enforcement.
-
-### Phase 9: Code Quality
-
-Ensure the implementation:
-- Has no TODOs or placeholder code
-- Has no "engine limitation" workarounds
-- Uses explicit disassembly references in comments
-- Handles object creation and cleanup correctly
-- Properly manages object lifecycle
-- Follows existing code patterns
-
-### Phase 9: Cross-Validation
-
-Delegate to a review agent:
-
-```
-Review the implementation of [ZoneName] Boss (0xXX) against the Sonic 1 disassembly.
-
-Reference: Use the s1disasm-guide skill for disassembly navigation guidance.
-
-Files to review:
-- [List all created/modified files]
-
-Disassembly references:
-- Boss object: docs/s1disasm/_incObj/XX Boss - Zone.asm
-- Boss animation: docs/s1disasm/_anim/Eggman.asm (or boss-specific)
-- Boss mappings: docs/s1disasm/_maps/Eggman.asm, _maps/Boss Items.asm
-
-Validation checklist:
-1. Arena setup matches disassembly camera boundaries
-2. State machine transitions match obRoutine/ob2ndRout values
-3. All child/sub-objects spawned correctly
-4. Hit count and invulnerability timing match ROM
-5. Defeat sequence matches ROM (explosions, flee, EggPrison)
-6. Art and mappings render correctly
-7. Music transitions work (boss music on spawn, zone music on defeat)
-8. Camera boundaries lock/unlock correctly
-9. No TODOs or simplifications
-10. No "engine limitation" workarounds
-
-Report any discrepancies with specific line references.
-```
-
-### Phase 10: Finalization
-
-1. **Verify registration** in `Sonic1ObjectRegistry`
-
-2. **Add to IMPLEMENTED_IDS** in `Sonic1ObjectProfile.java` (the `IMPLEMENTED_IDS` set):
-   ```java
-   Sonic1ObjectIds.ZONE_BOSS
-   ```
-   Keep the set entries sorted logically with the other entries.
-
-3. **Build and test**:
-   ```bash
-   mvn package
-   ```
-
-4. Report completion with summary.
-
-## Reference Files
-
-| Purpose | Location |
-|---------|----------|
-| **Disassembly guide** | `.agents/skills/s1disasm-guide/SKILL.md` |
-| **Object skill** | `.agents/skills/s1-implement-object/SKILL.md` |
-| Base boss | `src/.../level/objects/boss/AbstractBossInstance.java` |
-| Boss state context | `src/.../level/objects/boss/BossStateContext.java` |
-| Boss child base | `src/.../level/objects/boss/AbstractBossChild.java` |
-| Object IDs | `src/.../game/sonic1/constants/Sonic1ObjectIds.java` |
-| ROM offsets | `src/.../game/sonic1/constants/Sonic1Constants.java` |
-| Music / SFX ids | `src/.../game/sonic1/audio/Sonic1Music.java`, `src/.../game/sonic1/audio/Sonic1Sfx.java` |
-| Level events | `src/.../game/sonic1/events/Sonic1LevelEventManager.java` |
-| Per-zone event handlers | `src/.../game/sonic1/events/` (e.g. `Sonic1GHZEvents.java`), base class `Sonic1ZoneEvents.java` (`camera()`/`audio()`/`gameState()` helpers) |
-| Registry | `src/.../game/sonic1/objects/Sonic1ObjectRegistry.java` |
-| S2 boss examples | `src/.../game/sonic2/objects/bosses/` |
-| Disassembly bosses | `docs/s1disasm/_incObj/*Boss*.asm` |
-| Disassembly mappings | `docs/s1disasm/_maps/Eggman.asm`, `_maps/Boss Items.asm` |
-| Implemented IDs | `src/.../tools/Sonic1ObjectProfile.java` (IMPLEMENTED_IDS set) |
-
-## Boss-Specific Notes
-
-### GHZ Boss (0x3D) - Wrecking Ball
-- Eggpod swings a wrecking ball on a chain
-- Chain links are calculated positions (Multi-Piece pattern)
-- Ball has separate collision from Eggpod
-- Swings left-right with increasing speed
-
-### MZ Boss (0x73) - Fire Dropper
-- Flies over lava arena
-- Drops fire projectiles
-- Arena has rising/falling lava
-
-### SYZ Boss (0x75) - Spike Dropper
-- Drops spikes from above
-- Retracting platforms in arena
-- Spike timing pattern from disassembly
-- **objoff_3C/3D word/byte aliasing trap:** the block-drop hold/break shake reads `btst #1/#0,PhaseTimer` where `PhaseTimer` (objoff_3D) is the LOW BYTE of the WORD timer `GenericTimer` (objoff_3C). The `subq.w #1,GenericTimer` each frame overwrites objoff_3D, so the ±2 shake alternates with the decrementing timer's low bits — it is NOT a separate persistent flag (objoff_3D doubles as a patrol "already attacked" flag, but only because the word ops clobber it during the drop). If you model objoff_3D as its own field, the shake freezes and the ship's collision Y stops oscillating, mistiming the rolling-player boss-hit bounce by a frame (SYZ3 f11169, commit on `bugfix/ai-syz3-f11169`). Read the timer's low byte for the shake: `(timer & 2)` / `(timer & 1)`. (`docs/s1disasm/_incObj/75, 76 Boss - SYZ Main and Blocks.asm:20-21,264-295`.) General lesson: any S1 boss that decrements a WORD timer while also `btst`-ing an adjacent BYTE at the timer's low offset is using ROM memory aliasing — model them as one storage location.
-
-### LZ Boss (0x77) - Rising Water
-- Unique chase boss (not arena-based)
-- Water rises, Sonic must climb
-- Eggman at top of shaft
-- Different defeat pattern (no traditional arena)
-
-### SLZ Boss (0x7A) - Seesaw Bombs
-- Uses seesaw mechanic from SLZ
-- Launches bombs via seesaw
-- Player uses same seesaws to reach Eggman
-
-### SBZ Boss (0x7D) - Scrap Brain / Final Zone Setup
-- Appears in SBZ2 cutscene transition
-- May share code with FZ boss sequence
-
-### FZ Boss (0x85) - Final Boss
-- Multi-phase final boss
-- 4 crushing pistons
-- Energy ball projectiles
-- No rings available
-- Most complex S1 boss
-
-## Queue Diagnostics Routing
-
-If boss work reaches PLC/DPLC queue timing or `dynamic_art.*` reports, use
-`plc-system` and `trace-replay-bug-fixing`; use `trace-green-fleet` when moving
-multiple frontiers. These fields are zero-tolerance, comparison-only evidence.
+# Sonic 1 bosses
+
+Start with the existing boss family and zone event owner. Scope the encounter
+from arena entry through defeat, escape, and the next playable transition.
+
+## ROM behaviors to resolve
+
+- Arena thresholds, camera bounds/locks, entry timer, music, art readiness,
+  boss allocation, and failure to allocate required children.
+- Routine dispatch and init timing; movement arithmetic; hit count, damage
+  eligibility, collision disable/restore, flashing, and attack cooldowns.
+- Parent/child slot order, immediate shared-state writes, and which components
+  remain collidable or persistent after the main body changes routine.
+- Killing-hit timing versus the first defeat update, explosion allocation and
+  identity, escape movement, camera release, capsule/signpost, and act handoff.
+
+Preserve the ROM's order and owning state for each branch. Use an existing boss
+base only where its contract matches; keep encounter-specific phases explicit.
+
+## Integration
+
+S1 arenas usually enter in Act 3 (zero-based act 2); Final Zone and
+scripted encounters require their own source check. The shared Eggman-ship
+defeat/escape sequence has subtle clock, persistence, and screen-lock semantics:
+read [ship defeat and escape](references/ship-defeat.md) when touching that family.
+
+Objects use injected `services()`. Native player position writes use
+`NativePositionOps`; lifecycle, player control, participation, and rewind use
+the existing object contracts described in
+`docs/architecture/object-implementation-reference.md`.
+
+Load boss art through the game's ROM-backed provider/PLC path and verify mappings
+against the chosen art. Register the factory and any persistent child recreate paths.
+Do not treat an offscreen escape as ordinary object culling without checking the ROM.
+
+## Verification and references
+
+Exercise the changed encounter boundaries: arena entry, killing hit, first defeat
+update, child cleanup, and camera/transition release as applicable. Run relevant
+art and rewind guards when those contracts change. A source-backed replay can
+verify frame ordering; a screenshot alone cannot establish it.
+
+- Use `../s1disasm-guide/SKILL.md` for locating routines and assets.
+- Use `../s1-implement-object/SKILL.md` for ordinary object/art integration;
+  search its `rom-pitfalls.md` for the affected interaction rather than reading all entries.
+- Use `../plc-system/SKILL.md` for queue/PLC ownership and
+  `../trace-replay-bug-fixing/SKILL.md` for replay divergence.
+
+Project workflow owns integration and full-suite requirements.

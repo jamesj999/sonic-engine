@@ -219,25 +219,6 @@ class TestBuildToolingGuard {
             "**/tests/trace/runs/TestS3kMegaRunChain.java",
             "**/tests/trace/s3k/sonictails/*.java",
             "**/tests/trace/s3k/*ZoneSliceTraceReplay.java");
-    private static final List<String> RELEASE_OPTIONAL_TEST_SKIPS = List.of(
-            "com.openggf.game.rewind.TestRewindTorture#tortureProgressiveLongRewinds",
-            "com.openggf.level.objects.TestObjectRewindTypeSafetyDispatchPerformance#measureMixedRouteDispatchAllocationAndTime",
-            "com.openggf.level.TestLevelRendererBackgroundSamplingPerformance#captureLiveBackgroundSamplingScenes",
-            "com.openggf.level.TestLevelRendererBackgroundSamplingPerformance#postWarmupRenderSamplingAllocationProbe",
-            "com.openggf.tests.TestCPZObjectBugs#testSpinTubeForcesRolling",
-            "com.openggf.tools.audio.parity.TestS1OpenGgfAudioCapture#capturesTheCompleteReferenceControlledInterval",
-            "com.openggf.tools.audio.completerun.s2.TestS2CompleteRunRealRow769DecodeGate#capturesAndDecodesTheExactRealRow769Boundary",
-            "com.openggf.graphics.shaderlib.TestDisplayShaderPackDiagnostics#writeCompatibilityReportForLocalShaderPack",
-            "com.openggf.tools.audio.timeline.TestS1Ghz1OpenGgfAudioTimelineCapture#captureRequestedOutput",
-            "com.openggf.tools.audio.completerun.s3k.TestS3kCompleteRunRealRow810DecodeGate#capturesAndDecodesTheExactRealRow810Boundary",
-            "com.openggf.audio.AudioRegressionTest#testMusicEhzMatchesReference",
-            "com.openggf.audio.AudioRegressionTest#testMusicCpzMatchesReference",
-            "com.openggf.audio.AudioRegressionTest#testMusicHtzMatchesReference",
-            "com.openggf.audio.AudioRegressionTest#testSfxRingMatchesReference",
-            "com.openggf.audio.AudioRegressionTest#testSfxJumpMatchesReference",
-            "com.openggf.audio.AudioRegressionTest#testSfxSpringMatchesReference",
-            "com.openggf.audio.AudioRegressionTest#testMixedMusicSfxMatchesReference",
-            "com.openggf.audio.TestSmpsRepeatedPlaybackBenchmark#repeatedPublicMusicAndSfxPlaybackEmitsStableRawSamples");
     private static final List<Pattern> TRACE_BOOTSTRAP_POLICY_SIGNALS = List.of(
             Pattern.compile("\\b(?:meta|metadata)\\s*\\.\\s*(?:zoneId|act|traceProfile)\\s*\\("),
             Pattern.compile("\\bhasPerFrameSlotMachineState\\s*\\("),
@@ -899,18 +880,14 @@ class TestBuildToolingGuard {
                 || !agents.contains("tools/testing/install-hooks.ps1")) {
             violations.add("AGENTS.md/CLAUDE.md do not document explicit hook bootstrap");
         }
-        if (!agents.contains("Codex") || !agents.contains("Claude")) {
-            violations.add("AGENTS.md/CLAUDE.md must name both Codex and Claude in the agent workflow contract");
-        }
         for (String requiredText : List.of(
                 "mvn package",
                 "mvn test",
                 "mvn \"-Dtest=TestCollisionLogic\" test",
                 "mvn -Dmse=off -Pguards test -B",
-                "OpenGGF uses Maven directly. Build and test output belongs below the current\n"
-                        + "worktree's `target/` directory. Do not redirect Maven build/report roots to a\n"
-                        + "shared or durable session directory. Parallel agents use separate worktrees;\n"
-                        + "repeated runs in one worktree reuse its target tree.")) {
+                "Maven output belongs in the current worktree's `target/` directory.",
+                "Do not share or\n  copy build trees.",
+                "Concurrent Maven runs need separate worktrees.")) {
             if (!agents.contains(requiredText)) {
                 violations.add("AGENTS.md/CLAUDE.md do not contain required direct-Maven guidance: "
                         + requiredText);
@@ -1060,7 +1037,7 @@ class TestBuildToolingGuard {
     private static boolean isTextSource(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
         return !List.of(".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".wav", ".mp3",
-                ".gen", ".bin", ".zip", ".jar", ".so", ".dll", ".dylib").stream()
+                ".gen", ".bin", ".zip", ".jar", ".so", ".dll", ".dylib", ".pyc").stream()
                 .anyMatch(name::endsWith);
     }
 
@@ -1154,6 +1131,39 @@ class TestBuildToolingGuard {
     }
 
     /**
+     * Proves the two push-reachability predicates actually disagree, so a job
+     * condition cannot satisfy both and slip past every branch of
+     * {@link #allBranchPushPolicyShouldRemainLightweight()}.
+     *
+     * <p>They could: {@code conditionExcludesPush} read
+     * {@code github.event_name != 'push'} as a substring, so the
+     * integration-branch pin -- which contains that substring and then adds
+     * {@code || github.ref == 'refs/heads/develop'} -- was reported as
+     * excluding pushes. Moving a nine-minute job back onto develop pushes
+     * passed both guards silently.
+     */
+    @Test
+    void pushReachabilityPredicatesMustDisagree() {
+        String pinned = "github.event_name != 'push' || github.ref == 'refs/heads/develop'"
+                + " || github.ref == 'refs/heads/master'";
+        assertTrue(conditionPinsPushToIntegrationBranches(pinned));
+        assertFalse(conditionExcludesPush(pinned),
+                "a condition that still runs on develop pushes must not read as push-free");
+
+        String excluded = "github.event_name != 'push'";
+        assertTrue(conditionExcludesPush(excluded));
+        assertFalse(conditionPinsPushToIntegrationBranches(excluded));
+
+        String dispatchOnly = "github.event_name == 'workflow_dispatch'";
+        assertTrue(conditionExcludesPush(dispatchOnly));
+        assertFalse(conditionPinsPushToIntegrationBranches(dispatchOnly));
+
+        String reachable = "github.event_name == 'pull_request' || github.event_name == 'push'";
+        assertFalse(conditionExcludesPush(reachable));
+        assertFalse(conditionPinsPushToIntegrationBranches(reachable));
+    }
+
+    /**
      * Proves the pattern matcher above can actually reject, so the coverage
      * check cannot pass by matching everything. A guard named outside the
      * convention, or parked under a path the profile does not reach, must be
@@ -1173,13 +1183,31 @@ class TestBuildToolingGuard {
     }
 
     /**
-     * The default {@code test} job is skipped on push, and work lands on
-     * develop by direct push, so a guard that only the default profile selects
-     * is effectively ungated. The guards profile is source-only and ROM-free,
-     * so it can and must run on every push.
+     * The guards profile must exist as its own blocking CI job that invokes
+     * Maven directly.
+     *
+     * <p>This once required the job to be reachable from a develop push,
+     * because work lands on develop by direct push and
+     * {@code TestS1S2PlcComparisonOnlyGuard} had sat red there for weeks with
+     * nothing selecting it. That requirement was removed deliberately: nine
+     * minutes of guards on every merge to develop was mail nobody read, and an
+     * unread gate is not a gate either.
+     *
+     * <p>What is still pinned here is everything that made the job trustworthy
+     * once it does run -- it exists, it runs {@code -Pguards} directly rather
+     * than through a wrapper, and it is blocking. The reachability half now
+     * lives on the pull request path, and
+     * {@link #allBranchPushPolicyShouldRemainLightweight()} pins the other
+     * side: {@code guards} must stay off the push path so it cannot creep back
+     * onto every merge.
+     *
+     * <p>The exposure this leaves is real and unguarded by CI: a structural
+     * guard can go red on develop and stay red until a pull request or a manual
+     * dispatch runs it. {@code smoke} will not catch it, because the default
+     * Surefire execution excludes the guard classes by name convention.
      */
     @Test
-    void ciShouldRunTheGuardsProfileOnPushes() throws Exception {
+    void ciShouldRunTheGuardsProfileAsABlockingJob() throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/ci.yml"));
         List<String> violations = new ArrayList<>();
 
@@ -1197,18 +1225,18 @@ class TestBuildToolingGuard {
             if (guardJob.contains("test-session.sh")) {
                 violations.add(".github/workflows/ci.yml guards job still invokes the retired wrapper");
             }
-            if (!conditionPinsPushToIntegrationBranches(yamlJobCondition(guardJob))) {
-                violations.add(".github/workflows/ci.yml guards job is not reachable from a develop"
-                        + " push, which is how work lands");
-            }
             if (guardJob.contains("continue-on-error: true")) {
                 violations.add(".github/workflows/ci.yml guards job is non-blocking, so a red guard"
                         + " reports green");
             }
+            if (!conditionExcludesPush(yamlJobCondition(guardJob))) {
+                violations.add(".github/workflows/ci.yml guards job is reachable from a push;"
+                        + " it was taken off the push path deliberately and must stay off");
+            }
         }
 
         if (!violations.isEmpty()) {
-            fail("structural guards must be gated by CI on every push:\n  "
+            fail("the structural guard job must stay direct and blocking:\n  "
                     + String.join("\n  ", new TreeSet<>(violations)));
         }
     }
@@ -1354,8 +1382,7 @@ class TestBuildToolingGuard {
         if (!ci.contains("pull_request:\n    branches:\n      - next\n      - develop")) {
             violations.add(".github/workflows/ci.yml must validate pull requests targeting next and develop");
         }
-        // Pushes are policy-validated on every branch; the lightweight all-branch
-        // push trigger still reaches next and develop.
+        // Every branch push reaches the destination-aware smoke suite.
         if (!ci.contains("push:\n    branches:\n      - '**'")) {
             violations.add(".github/workflows/ci.yml must validate pushes on every branch");
         }
@@ -1368,9 +1395,9 @@ class TestBuildToolingGuard {
 
         assertDestinationAwareMavenStep(ci, ".github/workflows/ci.yml", "Run tests (pull request)",
                 "github.event_name == 'pull_request'", "github.base_ref", violations);
-        assertDestinationAwareMavenStep(ci, ".github/workflows/ci.yml", "Run tests (push)",
+        assertDestinationAwareMavenStep(ci, ".github/workflows/ci.yml", "Run smoke suite (push)",
                 "github.event_name == 'push'", "github.ref_name", violations);
-        assertMavenStepOmitsDestination(ci, ".github/workflows/ci.yml", "Run tests (manual or scheduled)",
+        assertMavenStepOmitsDestination(ci, ".github/workflows/ci.yml", "Run tests (manual)",
                 violations);
 
         for (String step : List.of("Run tests", "Run trace replay policy tests")) {
@@ -1493,7 +1520,8 @@ class TestBuildToolingGuard {
 
     @Test
     void releaseWorkflowShouldAssertTraceReplayCoverageWasNotSkipped() throws Exception {
-        String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
+        String workflow = Files.readString(Path.of(".github/workflows/release.yml"))
+                + Files.readString(Path.of("tools/testing/assert_release_trace_coverage.py"));
         List<String> violations = new ArrayList<>();
 
         if (!workflow.contains("Assert trace replay coverage")) {
@@ -1571,7 +1599,8 @@ class TestBuildToolingGuard {
 
     @Test
     void releaseWorkflowShouldMirrorTraceReplayProfileExclusions() throws Exception {
-        String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
+        String workflow = Files.readString(Path.of(".github/workflows/release.yml"))
+                + Files.readString(Path.of("tools/testing/assert_release_trace_coverage.py"));
         List<String> violations = new ArrayList<>();
 
         if (!workflow.contains("TRACE_REPLAY_PROFILE_EXCLUDES")) {
@@ -1596,41 +1625,39 @@ class TestBuildToolingGuard {
     @Test
     void releaseWorkflowShouldClassifyEveryDefaultTestSkip() throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
-        List<String> violations = new ArrayList<>();
-
-        if (!workflow.contains("RELEASE_OPTIONAL_TEST_SKIPS")) {
-            violations.add(".github/workflows/release.yml does not define the explicit optional-skip inventory");
-        }
-        for (String skip : RELEASE_OPTIONAL_TEST_SKIPS) {
-            if (!workflow.contains("\"" + skip + "\"")) {
-                violations.add(".github/workflows/release.yml optional-skip inventory is missing " + skip);
-            }
-        }
-        if (!workflow.contains("unexpected_skips")) {
-            violations.add(".github/workflows/release.yml does not reject unclassified default-suite skips");
-        }
-
-        if (!violations.isEmpty()) {
-            fail("release default-suite skips must be explicit and reviewable:\n  "
-                    + String.join("\n  ", new TreeSet<>(violations)));
-        }
+        assertTrue(workflow.contains("python3 tools/testing/classify_surefire_skips.py --reports target/surefire-reports"));
+        assertTrue(workflow.contains("--policy tools/testing/release-skip-policy.json"));
+        assertTrue(workflow.contains("--capabilities gl=true,"), "release graphics tests must execute");
+        assertTrue(workflow.contains("--check-evidence --root ."));
+        assertFalse(workflow.contains("RELEASE_OPTIONAL_TEST_SKIPS"), "policy has one reviewed inventory");
     }
 
     @Test
-    void releaseWorkflowShouldFailTraceReplayWarnings() throws Exception {
+    void releaseWorkflowShouldCompareTraceDebtAgainstReviewedBaseline() throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
-        List<String> violations = new ArrayList<>();
+        String comparator = Files.readString(Path.of("tools/testing/compare_release_traces.py"));
+        assertTrue(workflow.contains("python3 tools/testing/compare_release_traces.py compare"));
+        assertTrue(workflow.contains("--expected-baseline"));
+        assertTrue(workflow.contains("--expected-candidate"));
+        assertTrue(workflow.contains("git merge-base --is-ancestor"));
+        assertTrue(workflow.contains("trace_exit=$?"));
+        assertTrue(workflow.contains("--exit-code \"$trace_exit\""));
+        assertTrue(comparator.contains("base[kind][key] != candidate[kind][key]"),
+                "compare complete report payloads including warnings, not only error totals");
+        assertFalse(workflow.contains("Trace replay warnings are release-blocking;"));
+        assertTrue(Files.readString(Path.of("tools/testing/release-trace-baseline.txt")).trim().matches("[0-9a-f]{40}"));
+    }
 
-        if (!workflow.contains("--warning-context release-blocking")) {
-            violations.add(".github/workflows/release.yml does not fail release validation on trace warnings");
-        }
-        assertOwnerKeyedTraceReportConsumer(
-                ".github/workflows/release.yml", workflow, violations);
-
-        if (!violations.isEmpty()) {
-            fail("release trace validation must not certify warning-only trace parity fields:\n  "
-                    + String.join("\n  ", new TreeSet<>(violations)));
-        }
+    @Test
+    void releaseGateToolsShouldRejectCorruptAndChangedEvidence() throws Exception {
+        Process process = new ProcessBuilder("python3", "-m", "unittest", "discover", "-s", "tools/testing",
+                "-p", "test_*release*.py").redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(0, process.waitFor(), output);
+        Process skips = new ProcessBuilder("python3", "-m", "unittest", "discover", "-s", "tools/testing",
+                "-p", "test_classify_surefire_skips.py").redirectErrorStream(true).start();
+        String skipOutput = new String(skips.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(0, skips.waitFor(), skipOutput);
     }
 
     @Test
@@ -2249,11 +2276,73 @@ class TestBuildToolingGuard {
     }
 
     @Test
-    void candidateCiShouldProtectPullRequestsAndPushes() throws Exception {
-        // 2026-07-02: the full Maven suite on direct develop pushes was
-        // deliberately removed by f18d4d9be ("fix: stop develop push CI").
-        // The lightweight all-branch push policy is a separate backstop; this
-        // guard still covers the PR path and scheduled develop trace replay.
+    void retiredSessionRelocationMustNotSurviveInSupportedWorkflows() throws Exception {
+        String release = Files.readString(Path.of(".github/workflows/release.yml"));
+        assertFalse(release.contains("path: target/*"),
+                "release jobs must upload only finished archives, not the complete Maven target tree");
+        for (String archive : List.of(
+                "target/OpenGGF-windows.zip",
+                "target/OpenGGF-macos.zip",
+                "target/OpenGGF-linux.tar.gz")) {
+            assertTrue(release.contains(archive), "release workflow must upload " + archive);
+        }
+        String ci = Files.readString(Path.of(".github/workflows/ci.yml"));
+        // next's owner-aware validator replaces the inline report scan. Its
+        // selector and fail-closed behavior are covered by the dedicated guard
+        // and malformed-evidence tests below.
+        List<String> traceViolations = new ArrayList<>();
+        assertOwnerKeyedTraceReportConsumer(".github/workflows/ci.yml", ci, traceViolations);
+        assertTrue(traceViolations.isEmpty(), String.join("\n", traceViolations));
+        String comparator = Files.readString(Path.of("tools/testing/compare_release_traces.py"));
+        assertTrue(comparator.contains("trace_dir.rglob(\"*.json\")")
+                        || comparator.contains("trace_dir.rglob('*.json')"),
+                "release comparison must recurse through profile-scoped reports");
+        assertFalse(comparator.contains("trace_dir.glob(\"*_report.json\")"),
+                "release comparison must not assume retired root-level report names");
+
+        String parity = Files.readString(Path.of("tools/audio/run_s1_audio_parity.sh"));
+        assertTrue(parity.contains("cd \"$REPO\""),
+                "audio parity Maven must run from the worktree root so .mvn/jvm.config applies");
+        assertFalse(parity.contains("-f \"$REPO/pom.xml\""),
+                "supported tooling must not launch Maven outside the worktree root");
+
+        for (String file : List.of(
+                "tools/audio/run_s1_audio_parity.sh",
+                "tools/audio/run_complete_audio_parity.sh",
+                "src/main/java/com/openggf/tools/audio/parity/S1AudioParityTool.java",
+                "src/main/java/com/openggf/tools/audio/timeline/S1GameplayAudioTimelineTool.java")) {
+            String source = Files.readString(Path.of(file));
+            for (String retired : List.of(
+                    "OPENGGF_ARTIFACT_ROOT", "OPENGGF_BUILD_DIRECTORY",
+                    "OPENGGF_TEST_DIAGNOSTICS", "OPENGGF_TEST_MANIFEST")) {
+                assertFalse(source.contains(retired), file + " still accepts retired relocation: " + retired);
+            }
+        }
+
+        for (String file : List.of(
+                "docs/guide/contributing/dev-setup.md",
+                "docs/architecture/plans/2026-03-25-user-guide-authoring-plan.md",
+                "docs/guide/contributing/trace-replay.md",
+                "docs/guide/contributing/trace-framework-reference.md")) {
+            String guidance = Files.readString(Path.of(file)).toLowerCase(Locale.ROOT);
+            assertFalse(guidance.contains("session manifest"), file + " still directs contributors to session manifests");
+            assertFalse(guidance.contains("session guard"), file + " still describes the retired session guard");
+        }
+
+        String roadmap = Files.readString(Path.of("ROADMAP.md"));
+        assertTrue(roadmap.indexOf("## v0.8 Tooling Ask: Actworks")
+                        < roadmap.indexOf("## 1.0 Criteria"),
+                "the Actworks v0.8 ask must not capture the 1.0 criteria body");
+
+        String traceGuide = Files.readString(Path.of("docs/guide/contributing/trace-replay.md"));
+        assertTrue(traceGuide.contains("<profile>/<logical-key>-<lane>-<owner-hash>.json"),
+                "trace guidance must document the owner-aware report layout");
+    }
+
+    @Test
+    void developCiShouldProtectPullRequests() throws Exception {
+        // Branch pushes run smoke; policy and full suites run on pull requests.
+        // The manual trace job continues to validate the pinned develop branch.
         String ci = Files.readString(Path.of(".github/workflows/ci.yml"));
         String shellPolicy = Files.readString(Path.of(".githooks/validate-policy.sh"));
         String powershellPolicy = Files.readString(Path.of(".githooks/validate-policy.ps1"));
@@ -2262,14 +2351,11 @@ class TestBuildToolingGuard {
         if (!ci.contains("github.event_name == 'pull_request'")) {
             violations.add(".github/workflows/ci.yml policy job must keep pull-request branch policy validation");
         }
-        if (!ci.contains(".githooks/validate-policy.sh ci-push")) {
-            violations.add(".github/workflows/ci.yml policy job must validate direct pushes to next and develop");
-        }
         if (!ci.contains("develop-trace-replay:")) {
-            violations.add(".github/workflows/ci.yml must include the nightly/manual develop trace replay job");
+            violations.add(".github/workflows/ci.yml must include the manual develop trace replay job");
         }
         if (!ci.contains("ref: develop")) {
-            violations.add(".github/workflows/ci.yml develop trace replay checkout must pin ref: develop so scheduled default-branch runs validate develop");
+            violations.add(".github/workflows/ci.yml develop trace replay checkout must pin ref: develop so manual default-branch runs validate develop");
         }
         if (!shellPolicy.contains("validate_ci_commit_range \"$before_sha\" \"$after_sha\"")) {
             violations.add(".githooks/validate-policy.sh direct pushes must validate commit trailers over the pushed range");
@@ -2279,7 +2365,7 @@ class TestBuildToolingGuard {
         }
 
         if (!violations.isEmpty()) {
-            fail("candidate CI must protect pull requests, pushes, and the scheduled trace replay:\n  "
+            fail("candidate CI must protect pull requests and the manual trace replay:\n  "
                     + String.join("\n  ", new TreeSet<>(violations)));
         }
     }
@@ -2410,8 +2496,10 @@ class TestBuildToolingGuard {
 
     @Test
     void macosBundleMetadataShouldMatchMavenVersion() throws Exception {
-        String expectedVersion = property(parsePom("pom.xml"), "version");
+        String mavenVersion = property(parsePom("pom.xml"), "version");
+        String expectedVersion = macosBundleVersion(mavenVersion);
         String plist = Files.readString(Path.of("src/packaging/Info.plist"));
+        String assembler = Files.readString(Path.of("src/packaging/assemble-macos-app.sh"));
         List<String> violations = new ArrayList<>();
 
         if (!plistValueEquals(plist, "CFBundleVersion", expectedVersion)) {
@@ -2420,6 +2508,10 @@ class TestBuildToolingGuard {
         if (!plistValueEquals(plist, "CFBundleShortVersionString", expectedVersion)) {
             violations.add("src/packaging/Info.plist CFBundleShortVersionString must match pom.xml version "
                     + expectedVersion);
+        }
+        if (!assembler.contains("plutil -replace CFBundleVersion")
+                || !assembler.contains("plutil -replace CFBundleShortVersionString")) {
+            violations.add("src/packaging/assemble-macos-app.sh must write valid numeric bundle versions");
         }
 
         if (!violations.isEmpty()) {
@@ -2758,6 +2850,29 @@ class TestBuildToolingGuard {
         }
     }
 
+    /**
+     * An ordinary branch push must reach exactly one Maven job, and that job
+     * must be the bounded {@code smoke} suite.
+     *
+     * <p>This used to require that a branch push run <em>no</em> Maven at all.
+     * That kept pushes cheap but gave a feature branch no regression signal
+     * whatsoever, so the full suite was pinned onto develop and master pushes
+     * instead -- twenty-six minutes of mail per merge, which stopped being read.
+     * The replacement splits the difference: {@code smoke} runs everywhere and
+     * finishes in minutes because it drops the {@code slow-suite} oracle sweeps,
+     * and the full {@code test} job moved to pull requests and manual
+     * dispatch.
+     *
+     * <p>The lever this protects is the same one as before -- a push must not
+     * silently acquire another long Maven job. {@code guards} and {@code test}
+     * both stay off the push path entirely, and any new Maven-bearing job has
+     * to be push-excluded or pinned to the integration branches.
+     *
+     * <p>Branch policy validation is no longer part of the push path: the
+     * {@code .githooks} enforce it at commit time on every branch, and master
+     * pushes are still validated by release.yml's own {@code ci-push} step,
+     * which {@link #releaseWorkflowShouldRunBranchPolicyOnMasterPullRequests()} pins.
+     */
     @Test
     void allBranchPushPolicyShouldRemainLightweight() throws Exception {
         String workflow = normalizeLineEndings(Files.readString(Path.of(".github/workflows/ci.yml")));
@@ -2770,38 +2885,57 @@ class TestBuildToolingGuard {
         if (pushTrigger.contains("tags:")) {
             violations.add(".github/workflows/ci.yml branch policy push trigger also declares tag reachability");
         }
+
         String policyJob = yamlIndentedBlock(workflow, "  policy:", 2);
-        if (!policyJob.contains("if: github.event_name == 'pull_request' || github.event_name == 'push'")) {
-            violations.add(".github/workflows/ci.yml policy job is not limited to PR and push events");
+        if (!policyJob.contains("if: github.event_name == 'pull_request'")) {
+            violations.add(".github/workflows/ci.yml policy job is not limited to pull requests");
         }
         if (!policyJob.contains("fetch-depth: 0")) {
             violations.add(".github/workflows/ci.yml policy checkout does not fetch full cutover history");
         }
-        if (!policyJob.contains("Validate pushed branch resource policy")) {
-            violations.add(".github/workflows/ci.yml does not define a push-range policy step");
-        }
-        if (!policyJob.contains(".githooks/validate-policy.sh ci-push")) {
-            violations.add(".github/workflows/ci.yml does not invoke ci-push policy");
+        if (!policyJob.contains(".githooks/validate-policy.sh ci-pr")) {
+            violations.add(".github/workflows/ci.yml does not invoke ci-pr policy");
         }
         if (policyJob.contains("\"refs/remotes/origin/${{ github.ref_name }}\"")
                 || policyJob.contains("+refs/heads/*:refs/remotes/origin/*")) {
             violations.add(".github/workflows/ci.yml still lets fetched peer refs influence new-branch selection");
         }
 
-        for (Map.Entry<String, String> job : yamlJobBlocks(workflow).entrySet()) {
-            if (!job.getValue().contains("mvn ")) {
+        Map<String, String> jobs = yamlJobBlocks(workflow);
+        String smokeJob = jobs.get("smoke");
+        if (smokeJob == null) {
+            violations.add(".github/workflows/ci.yml does not define the smoke job, so a branch push"
+                    + " runs no tests at all");
+        } else {
+            if (!smokeJob.contains("run: mvn -Dmse=off -Psmoke test -B")) {
+                violations.add(".github/workflows/ci.yml smoke job does not run the smoke profile directly");
+            }
+            String smokeCondition = yamlJobCondition(smokeJob);
+            if (conditionExcludesPush(smokeCondition)
+                    || conditionPinsPushToIntegrationBranches(smokeCondition)) {
+                violations.add(".github/workflows/ci.yml smoke job is not reachable from an ordinary"
+                        + " branch push, which leaves branch pushes with no test signal");
+            }
+            if (smokeJob.contains("continue-on-error: true")) {
+                violations.add(".github/workflows/ci.yml smoke job is non-blocking, so a red smoke"
+                        + " suite reports green");
+            }
+        }
+
+        for (Map.Entry<String, String> job : jobs.entrySet()) {
+            if (!job.getValue().contains("mvn ") || "smoke".equals(job.getKey())) {
                 continue;
             }
             String jobCondition = yamlJobCondition(job.getValue());
             if (!conditionExcludesPush(jobCondition)
                     && !conditionPinsPushToIntegrationBranches(jobCondition)) {
                 violations.add(".github/workflows/ci.yml Maven-bearing job " + job.getKey()
-                        + " is reachable from a branch push");
+                        + " is reachable from a branch push; only smoke may be");
             }
         }
 
         if (!violations.isEmpty()) {
-            fail("all-branch pushes need a lightweight policy-only CI path with fetched remote context:\n  "
+            fail("all-branch pushes need exactly one bounded Maven job:\n  "
                     + String.join("\n  ", new TreeSet<>(violations)));
         }
     }
@@ -4438,11 +4572,13 @@ class TestBuildToolingGuard {
 
     /**
      * True when a job runs on pushes, but only to the integration branches.
-     * Feature-branch pushes stay policy-only and Maven-free (see
-     * {@link #allBranchPushPolicyShouldRemainLightweight()}); develop and
-     * master are where work actually lands, so a source-only gate there costs
-     * one short job per merge and is the only thing standing between a red
-     * structural guard and nobody noticing.
+     *
+     * <p>No job is shaped this way at present: {@code smoke} runs on every
+     * push and everything heavier is off the push path entirely. It stays
+     * because {@link #allBranchPushPolicyShouldRemainLightweight()} accepts
+     * this shape as the one alternative to full push exclusion, so a future
+     * job that wants a develop-and-master-only gate has a spelling that is
+     * recognised rather than reported as reachable from a feature branch.
      */
     private static boolean conditionPinsPushToIntegrationBranches(String condition) {
         if (condition == null || condition.isBlank()) {
@@ -4596,7 +4732,14 @@ class TestBuildToolingGuard {
 
     private static boolean conditionExcludesPush(String condition) {
         if (condition.contains("github.event_name != 'push'")) {
-            return true;
+            // Only when nothing lets a push back in. `github.event_name !=
+            // 'push' || github.ref == 'refs/heads/develop'` contains the
+            // exclusion but still runs on develop pushes, and reading the
+            // substring alone reported that as push-free -- which is how a
+            // job could be moved back onto the push path without any guard
+            // noticing. A ref test in the condition means
+            // conditionPinsPushToIntegrationBranches owns it instead.
+            return !condition.contains("github.ref");
         }
         var eventMatches = Pattern.compile("github\\.event_name == '([^']+)'").matcher(condition);
         boolean constrainsEvent = false;
@@ -4639,6 +4782,16 @@ class TestBuildToolingGuard {
         return Pattern.compile("<key>\\s*" + Pattern.quote(key)
                         + "\\s*</key>\\s*<string>\\s*" + Pattern.quote(expectedValue) + "\\s*</string>",
                 Pattern.DOTALL).matcher(plist).find();
+    }
+
+    private static String macosBundleVersion(String mavenVersion) {
+        var matcher = Pattern.compile("^(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?").matcher(mavenVersion);
+        if (!matcher.find()) {
+            fail("Maven version does not start with numeric components: " + mavenVersion);
+        }
+        return matcher.group(1) + "."
+                + (matcher.group(2) == null ? "0" : matcher.group(2)) + "."
+                + (matcher.group(3) == null ? "0" : matcher.group(3));
     }
 
     private static boolean surefirePluginUsesSharedArgLine(Document pom) {

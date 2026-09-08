@@ -311,6 +311,11 @@ public final class S1OpenGgfAudioCapture {
         }
 
         static void initializeS1MusicPlayback(SmpsDriver driver, AbstractSmpsData song) {
+            // Capture-only setup for a window with no preceding SFX. This is
+            // not production song-start validation: Sound_PlayBGM's closing
+            // note-offs consult SFX ownership (:912-959), and zero FM count
+            // bypasses FM6 disposition (:826). A shared production transition
+            // must preserve those branches; do not promote this program as-is.
             for (int channel = 2; channel >= 0; channel--) {
                 driver.writeFm(driver, 0, 0x28, channel);
                 driver.writeFm(driver, 0, 0x28, channel + 4);

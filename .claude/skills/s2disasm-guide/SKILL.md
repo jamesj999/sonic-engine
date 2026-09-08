@@ -1,353 +1,48 @@
 ---
 name: s2disasm-guide
-description: Use when navigating the Sonic 2 disassembly — label conventions, file structure, RomOffsetFinder commands for s2disasm.
+description: Use when locating Sonic 2 disassembly routines, labels, compression types, or verified ROM offsets.
 ---
 
-# s2disasm Navigation Guide
+# Sonic 2 disassembly lookup
 
-This skill provides guidance on finding, identifying, and interpreting items in the Sonic 2 disassembly (`docs/s2disasm/`).
+The root is `docs/s2disasm/s2.asm`; most object routines are inline.
+Look for `ObjXX`, `ObjXX_Index`, `ArtNem_`, and `Map_` labels. Sprite mappings
+live under `mappings/sprite/`; object fields use `routine`, `x_pos`, `y_pos`.
 
-## Directory Structure
+Disassemblies are optional research submodules; initialize the relevant one if
+needed. Runtime data comes from the user-supplied ROM, not these reference files.
 
-The disassembly is organized into these major directories:
+## Lookup commands
 
-| Directory | Contents | Notes |
-|-----------|----------|-------|
-| `art/` | Graphics data | Compressed sprite/tile art |
-| `art/kosinski/` | Kosinski-compressed level tiles | Zone pattern data |
-| `art/nemesis/` | Nemesis-compressed sprite art | Objects, badniks, HUD |
-| `art/enigma/` | Enigma-compressed mappings | Block mappings |
-| `art/palettes/` | Uncompressed palette files | .bin files, 32 bytes each |
-| `collision/` | Collision data | Height arrays, collision indices |
-| `level/` | Level layouts | Foreground/background layouts |
-| `mappings/` | Tile arrangement data | 16x16 and 128x128 mappings |
-| `mappings/16x16/` | Block (chunk) mappings | .bin files |
-| `mappings/128x128/` | Metatile (block) mappings | .bin files |
-| `mappings/sprite/` | Sprite frame mappings | Object animation frames |
-| `sound/` | Audio data | SMPS music and SFX |
-| `startpos/` | Player start positions | Per-zone starting coordinates |
-| `misc/` | Miscellaneous data | Demo data, credits, etc. |
-
-## Compression Types
-
-| Extension | Type | Tool Flag | Description |
-|-----------|------|-----------|-------------|
-| `.nem` | Nemesis | `nem` | Sprite art, HUD graphics |
-| `.kos` | Kosinski | `kos` | Level tiles, large graphics |
-| `.eni` | Enigma | `eni` | Block/chunk mappings |
-| `.sax` | Saxman | `sax` | Special stage data |
-| `.bin` | Uncompressed | `bin` | Palettes, collision data |
-
-### Compression Selection Guidelines
-
-- **Nemesis**: Best for sprite art with many repeated patterns
-- **Kosinski**: Best for level tiles, larger data sets
-- **Enigma**: Optimized for tile mappings with incremental pattern IDs
-- **Saxman**: Used specifically for special stage track data
-
-## Finding Items with RomOffsetFinder
-
-The RomOffsetFinder tool searches the disassembly and calculates ROM offsets. S2 is the default game profile when no `--game` flag is given, but it also accepts `--game s2` / `--game sonic2` explicitly (same as S1/S3K); it additionally supports `find <label> [startOffset]` (resolve an included-file label directly) and `plc <name>` (show a PLC definition's contents) subcommands alongside `search`/`list`/`test`/`verify`/`export`.
-
-### Search Command (Most Common)
+Run from the repository/worktree root; replace the example label with the target:
 
 ```bash
-# Search by partial name - finds labels and calculates ROM offset
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search Ring" -q
-
-# Search for zone-specific items
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search EHZ" -q
-
-# Search for palettes
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search Pal_" -q
+mvn exec:java "-Dexec.mainClass=com.openggf.tools.disasm.RomOffsetFinder" \
+  "-Dexec.args=--game s2 search <label>" -q
+mvn exec:java "-Dexec.mainClass=com.openggf.tools.disasm.RomOffsetFinder" \
+  "-Dexec.args=--game s2 verify <label>" -q
 ```
 
-### List Command
-
-```bash
-# List all Nemesis-compressed items
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="list nem" -q
-
-# List all palettes (uncompressed)
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="list bin" -q
-
-# List all compression types
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="list" -q
-```
-
-### Test Decompression
-
-```bash
-# Test if data at offset is Nemesis-compressed
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="test 0xDD8CE nem" -q
-
-# Auto-detect compression type
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="test 0x3000 auto" -q
-```
-
-### Verify and Export
-
-```bash
-# Verify a single offset
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="verify ArtNem_SpecialHUD" -q
-
-# Batch verify all Nemesis items
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="verify-batch nem" -q
-
-# Export as Java constants
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="export nem ART_" -q
-```
-
-### Search ROM Binary
-
-Use `search-rom` to find inline assembly data (pointer tables, animation scripts, `dc.w`/`dc.b` directives) that have no binary file — the `search` and `find` commands only work with `binclude` items.
-
-```bash
-# Search for known hex byte pattern (spaces optional)
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search-rom \"07 72 73 26 15 08\"" -q
-
-# Restrict search to a specific ROM range
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search-rom \"0002\" 0x28000 0x29000" -q
-```
-
-## Label Naming Conventions
-
-Labels follow consistent prefixes that indicate data type and compression:
-
-| Prefix | Meaning | Example |
-|--------|---------|---------|
-| `ArtNem_` | Nemesis art | `ArtNem_Buzzer` |
-| `ArtKos_` | Kosinski art | `ArtKos_EHZ` |
-| `ArtUnc_` | Uncompressed art | `ArtUnc_Ings` |
-| `Pal_` | Palette | `Pal_EHZ` |
-| `MapEni_` | Enigma mappings | `MapEni_EHZ` |
-| `MapUnc_` | Uncompressed mappings | `MapUnc_Sonic` |
-| `Obj_` | Object code | `Obj_Monitor` |
-| `loc_` | Code location | `loc_1B4A2` |
-| `off_` | Offset table | `off_Rings` |
-| `word_` | Word data | `word_1B4A0` |
-| `byte_` | Byte data | `byte_1B4A1` |
-| `PLC_` | Pattern Load Cue | `PLC_EHZ` |
-
-## Zone Abbreviations
-
-| Abbrev | Full Name | Zone ID |
-|--------|-----------|---------|
-| EHZ | Emerald Hill Zone | 0x00 |
-| CPZ | Chemical Plant Zone | 0x0D |
-| ARZ | Aquatic Ruin Zone | 0x0F |
-| CNZ | Casino Night Zone | 0x0C |
-| HTZ | Hill Top Zone | 0x07 |
-| MCZ | Mystic Cave Zone | 0x0B |
-| OOZ | Oil Ocean Zone | 0x0A |
-| MTZ | Metropolis Zone | 0x04 |
-| SCZ | Sky Chase Zone | 0x10 |
-| WFZ | Wing Fortress Zone | 0x11 |
-| DEZ | Death Egg Zone | 0x12 |
-| HPZ | Hidden Palace Zone | 0x02 (unused) |
-| GHZ | Green Hill Zone | 0x16 (S1 leftover) |
-
-## File Parsing Patterns
-
-### BINCLUDE Directive
-
-Used to include binary data files:
-
-```asm
-ArtNem_Buzzer:  BINCLUDE "art/nemesis/Buzzer.bin"
-```
-
-Format: `LABEL: BINCLUDE "path/to/file.ext"`
-
-### Palette Macro
-
-Palettes use a special macro format:
-
-```asm
-Pal_EHZ:    palette Emerald Hill Zone.bin
-```
-
-These are located in `art/palettes/` as uncompressed .bin files (32 bytes each = 16 colors × 2 bytes).
-
-### Include Directives
-
-Assembly includes for code:
-
-```asm
-    include "s2.macrosetup.asm"
-```
-
-## Object System Reference
-
-### Object Status Table Offsets
-
-Common offsets used in object code (`a0` = object pointer):
-
-| Offset | Name | Size | Description |
-|--------|------|------|-------------|
-| 0x00 | id | long | Object ID |
-| 0x08 | x_pos | word | X position (center) |
-| 0x0C | y_pos | word | Y position (center) |
-| 0x10 | x_vel | word | X velocity |
-| 0x12 | y_vel | word | Y velocity |
-| 0x22 | mapping_frame | byte | Current frame |
-| 0x24 | routine | byte | Current routine |
-| 0x28 | subtype | byte | Object subtype |
-
-### Object Routine Pattern
-
-Objects typically follow this routine structure:
-
-```asm
-Obj_Example:
-    moveq   #0,d0
-    move.b  routine(a0),d0
-    move.w  Obj_Example_Index(pc,d0.w),d1
-    jmp     Obj_Example_Index(pc,d1.w)
-
-Obj_Example_Index:
-    dc.w Obj_Example_Init - Obj_Example_Index   ; routine 0
-    dc.w Obj_Example_Main - Obj_Example_Index   ; routine 2
-```
-
-## Sprite Mappings Format
-
-Sprite mappings define how patterns are arranged into frames:
-
-```
-Frame header:
-  dc.w  <piece_count>
-
-Per piece:
-  dc.b  <y_offset>
-  dc.b  <size>       ; bits 0-1: width, bits 2-3: height (in 8px units - 1)
-  dc.w  <pattern>    ; pattern index + flags (priority, palette, flip)
-  dc.w  <x_offset>
-```
-
-Size byte encoding:
-- `0x00` = 1×1 (8×8 pixels)
-- `0x05` = 2×2 (16×16 pixels)
-- `0x0F` = 4×4 (32×32 pixels)
-
-## Resource Overlay System
-
-Some zones share base resources with overlays. HTZ is the primary example:
-
-| Resource | Base | Overlay | Offset |
-|----------|------|---------|--------|
-| Patterns | EHZ_HTZ.bin | HTZ_Supp.bin | 0x3F80 |
-| Blocks | EHZ.bin | HTZ.bin | 0x0980 |
-| Chunks | EHZ_HTZ.bin | (shared) | - |
-| Collision | EHZ and HTZ*.bin | (shared) | - |
-
-The overlay is applied at the specified byte offset after decompressing the base data.
-
-## Common Search Patterns
-
-### Finding Badnik Art
-
-```bash
-# Search for specific badnik
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search Buzzer" -q
-
-# Find all badnik mappings
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search MapUnc_" -q
-```
-
-### Finding Zone Data
-
-```bash
-# All EHZ resources
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search EHZ" -q
-
-# Zone palette
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search Pal_CPZ" -q
-```
-
-### Finding Object Code
-
-```bash
-# Monitor object
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search Obj_Monitor" -q
-
-# Spring object
-mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="search Obj_Spring" -q
-```
-
-## Troubleshooting
-
-### "Item not found"
-
-- Check spelling and case sensitivity
-- Try partial names (e.g., "Buzz" instead of "Buzzer")
-- Use `list` command to see all items of a type
-
-### Offset Mismatch
-
-- ROM revision matters (tool expects REV01)
-- Use `verify` to check calculated vs actual offset
-- Some items have multiple definitions
-
-### Decompression Fails
-
-- Verify the offset is correct
-- Try `auto` detection to identify compression type
-- Check if data is actually compressed (some .bin files are raw)
-
-## RAM Address Reference
-
-Key RAM addresses for understanding disassembly:
-
-| Address | Name | Description |
-|---------|------|-------------|
-| 0xFFB000 | Object_RAM | Object status table (64 slots × 64 bytes) |
-| 0xFFFE10 | Camera_X_pos | Camera X position |
-| 0xFFFE14 | Camera_Y_pos | Camera Y position |
-| 0xFFFE20 | Level_Layout | Pointer to level layout |
-| 0xFFFFD0 | Vint_routine | V-int routine counter |
-| 0xFFFFF0 | Demo_mode_flag | Demo mode indicator |
-
-## Quick Reference Card
-
-```
-Search:  search <pattern>      Find items by name
-List:    list [type]           List items (nem/kos/eni/sax/bin)
-Test:    test <offset> <type>  Test decompression
-Verify:  verify <label>        Check calculated offset
-Export:  export <type> [prefix] Generate Java constants
-```
-
-## Queue Diagnostics Routing
-
-Use this skill to find ROM labels and routines, then use `plc-system` and
-`trace-replay-bug-fixing` for PLC/DPLC queue timing and `dynamic_art.*` report
-interpretation. Trace evidence is zero-tolerance and comparison-only.
-
-## `fixBugs` conditionals — always take the un-fixed path
-
-This disassembly is assembled with `fixBugs = 0` (docs/s2disasm/s2.asm:27), which is what the shipped
-ROM does. The recorded traces capture shipped-ROM behaviour, so **the engine must
-model the un-fixed branch**, including where the disassembly's own comment calls it
-a bug. Taking the fixed branch will desync any trace that compares the affected
-field — and often only much later, when the divergence finally reaches a compared
-column.
-
-There are ~262 blocks (note the lower-case `f` — grepping `FixBugs` finds nothing in s2disasm) in this tree, so this comes up regularly. Two real examples of the
-un-fixed path mattering:
-
-- S1 `Moto_Main` runs `ObjectFall` + `ObjFloorDist` while invisible, and the
-  "fell below max level height -> `DeleteObject`" guard sits inside `if FixBugs`
-  (`_incObj/"40 Badnik - Moto Bug.asm":29-52`), so a Moto Bug with no floor beneath
-  it free-falls instead of being deleted. It then lands on real geometry because
-  `FindNearestTile` *masks* the layout row index (`andi.w #$380`) rather than
-  bounds-checking it, wrapping Y modulo `0x800`.
-- S1 leaves the leftward camera move uncapped because the cap is inside a
-  `if FixBugs` block; S2 and S3K cap it (`Camera.java:122-124`).
-
-**Annotate every one you touch.** When porting code at or near such a conditional,
-write a comment naming the flag, stating which branch the engine implements and why,
-and summarising what the fixed branch would have done. The conditional is invisible
-once the code is in Java, and these notes are the only thing that would make a future
-effort to support the bug-fixed revisions tractable. `Camera.java:122-124` and
-`Sonic1BatbrainBadnikInstance.java:394` show the shape.
+Use `rg -n '<label>|<routine>' docs/s2disasm/s2.asm` to inspect callers and dispatch tables.
+For split files, use `rg --files` under the relevant disassembly directory.
+A name match is a candidate, not proof: verify bytes/decompression and the
+routine's pointer to the asset. Check the actual ROM filename and revision.
+
+## Porting details
+
+S2/S3K mapping frames have a word piece count and 6-byte pieces (signed word X).
+Y offsets are signed bytes. Decode the size byte and flags using the existing
+mapping loader; sprite tiles are column-major. Do not reuse a parser for a
+different mapping format solely because the art looks similar.
+
+The shipped disassembly build uses `fixBugs = 0`.
+Model that branch, including its bugs. When porting a conditional, comment the
+flag, chosen branch, and what the fixed branch changes. Preserve instruction
+width, signedness, carry, and fallthrough where they affect the routine.
+
+## Conditional routing
+
+For object/boss integration, use the matching implementation skill.
+For PLC/DPLC queue ownership use `../plc-system/SKILL.md`; for compared trace
+fields or timing admission use `../trace-replay-bug-fixing/SKILL.md` and the
+current timing contract it references. This lookup skill does not select replay behavior.

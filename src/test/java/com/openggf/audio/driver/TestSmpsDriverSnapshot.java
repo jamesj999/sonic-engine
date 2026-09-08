@@ -22,6 +22,24 @@ import static org.junit.jupiter.api.Assertions.*;
 class TestSmpsDriverSnapshot {
 
     @Test
+    void regionQueryTracksConfigurationSnapshotRestoreAndCommandRollback() {
+        SmpsDriver driver = new SmpsDriver();
+        assertEquals(SmpsSequencer.Region.NTSC, driver.getRegion());
+        driver.setRegion(SmpsSequencer.Region.PAL);
+        SmpsDriverSnapshot pal = driver.captureSnapshot();
+        assertEquals(SmpsSequencer.Region.PAL, driver.getRegion());
+
+        driver.setRegion(SmpsSequencer.Region.NTSC);
+        driver.restoreSnapshot(pal, SmpsDriverSnapshot.liveReferences());
+        assertEquals(SmpsSequencer.Region.PAL, driver.getRegion());
+
+        SmpsDriver.LiveCommandMutationToken token = driver.captureLiveCommandMutation();
+        driver.setRegion(SmpsSequencer.Region.NTSC);
+        driver.rollbackLiveCommandMutation(token);
+        assertEquals(SmpsSequencer.Region.PAL, driver.getRegion());
+    }
+
+    @Test
     void logicalSnapshotContainsNoPhysicalSynthState() {
         assertTrue(Arrays.stream(
                         SmpsDriverSnapshot.class.getRecordComponents())

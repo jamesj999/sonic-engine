@@ -72,6 +72,9 @@ final class LevelDirtyRegionDispatcher {
         } else if (effects.foregroundRedrawRequired()) {
             levelManager.invalidateForegroundTilemap();
         }
+        if (effects.patternLookupRefreshRequired() && !effects.allTilemapsRedrawRequired()) {
+            levelManager.invalidatePatternLookup();
+        }
         if (effects.objectResyncRequired()) {
             levelManager.resyncObjectSpawnListFromLevel();
         }

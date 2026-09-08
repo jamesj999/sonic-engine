@@ -12,6 +12,7 @@ public interface CaptureEncoder {
     /** @param output the file the encoder must write (owned by the recorder). */
     void open(Path output, int width, int height, int fps, int sampleRate) throws CaptureException;
 
+    /** Consume synchronously: frame pixel storage must not be retained after return. */
     void encode(CapturedFrame frame) throws CaptureException;
 
     /** Flush and finalize; returns the written output file (normally {@code output}). */

@@ -149,6 +149,32 @@ public class TestSonic3kCoordFlagParity {
     }
 
     @Test
+    public void musicF2StopsWithOnlyItsDriverSilenceTransaction() {
+        CaptureSynth toneSynth = new CaptureSynth();
+        SmpsSequencer tone = new SmpsSequencer(createMusicData(2, 1,
+                new byte[] {(byte) 0xF2}, new byte[] {(byte) 0xF2}, null),
+                EMPTY_DAC, toneSynth, Sonic3kSmpsSequencerConfig.CONFIG);
+        toneSynth.psgWrites.clear();
+        tone.advanceSamples(20000);
+        assertEquals(List.of(0x9F, 0xFF), toneSynth.psgWrites);
+        assertFalse(findTrack(tone, SmpsSequencer.TrackType.PSG).active);
+
+        CaptureSynth noiseSynth = new CaptureSynth();
+        SmpsSequencer noise = new SmpsSequencer(createMusicData(2, 1,
+                new byte[] {(byte) 0xF2},
+                new byte[] {(byte) 0xF3, (byte) 0xE7, (byte) 0xF2}, null),
+                EMPTY_DAC, noiseSynth, Sonic3kSmpsSequencerConfig.CONFIG);
+        noiseSynth.psgWrites.clear();
+        noise.advanceSamples(20000);
+        assertEquals(List.of(0xDF, 0xE7, 0x9F, 0xFF, 0xFF), noiseSynth.psgWrites);
+        SmpsSequencer.Track stoppedNoise = findTrack(
+                noise, SmpsSequencer.TrackType.PSG);
+        assertFalse(stoppedNoise.active);
+        assertFalse(stoppedNoise.resting,
+                "music F2 has no SFX release callback that normalizes rest");
+    }
+
+    @Test
     public void fdRawFreqReadsWordAndAppliesRawFrequency() {
         byte[] fmTrack = {
                 (byte) 0xFD, 0x01, // raw frequency mode on

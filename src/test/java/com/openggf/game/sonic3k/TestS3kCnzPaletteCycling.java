@@ -245,6 +245,69 @@ public class TestS3kCnzPaletteCycling {
                 + distinctCount);
     }
 
+    @Test
+    public void allChannelsMatchRomThroughTimerEdgesAndWraps() throws IOException {
+        RomByteReader reader = RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom());
+        Palette[] underwater = blankPalettes();
+        PaletteOwnershipRegistry registry = new PaletteOwnershipRegistry();
+        cycler = new Sonic3kPaletteCycler(reader, level, 3, 0, registry, underwater);
+        for (int tick = 0; tick < 192; tick++) {
+            registry.beginFrame();
+            cycler.update();
+            assertCnzFrame(reader, underwater, tick);
+        }
+    }
+
+    @Test
+    public void rewindRestoresAllChannelOffsetsAndTimersWithReusablePatches() throws IOException {
+        RomByteReader reader = RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom());
+        Palette[] underwater = blankPalettes();
+        PaletteOwnershipRegistry registry = new PaletteOwnershipRegistry();
+        cycler = new Sonic3kPaletteCycler(reader, level, 3, 0, registry, underwater);
+        for (int tick = 0; tick < 59; tick++) {
+            registry.beginFrame();
+            cycler.update();
+        }
+        byte[] saved = cycler.captureCyclerState();
+        for (int tick = 0; tick < 80; tick++) {
+            registry.beginFrame();
+            cycler.update();
+        }
+        cycler.restoreCyclerState(saved);
+        assertArrayEquals(saved, cycler.captureCyclerState());
+        // Palette surfaces are snapshotted separately in production. Allow each
+        // channel to fire once here before comparing retained as well as new colors.
+        for (int tick = 59; tick < 128; tick++) {
+            registry.beginFrame();
+            cycler.update();
+            if (tick >= 62) {
+                assertCnzFrame(reader, underwater, tick);
+            }
+        }
+    }
+
+    private void assertCnzFrame(RomByteReader reader, Palette[] underwater, int tick) {
+        assertChannel(reader, Sonic3kConstants.ANPAL_CNZ_1_ADDR,
+                Sonic3kConstants.ANPAL_CNZ_2_ADDR, underwater, 3, 9, 3, (tick / 4) % 16, tick);
+        assertChannel(reader, Sonic3kConstants.ANPAL_CNZ_3_ADDR,
+                Sonic3kConstants.ANPAL_CNZ_4_ADDR, underwater, 2, 9, 3, tick % 30, tick);
+        assertChannel(reader, Sonic3kConstants.ANPAL_CNZ_5_ADDR,
+                Sonic3kConstants.ANPAL_CNZ_5_ADDR, underwater, 2, 7, 2, (tick / 3) % 16, tick);
+    }
+
+    private void assertChannel(RomByteReader reader, int normalAddress, int waterAddress,
+                               Palette[] underwater, int line, int start, int colors,
+                               int tableFrame, int tick) {
+        for (int color = 0; color < colors; color++) {
+            int offset = (tableFrame * colors + color) * 2;
+            String context = "tick " + tick + ", line " + line + ", color " + (start + color);
+            assertColorEquals(segaColor(reader, normalAddress + offset),
+                    level.getPalette(line).getColor(start + color), "normal " + context);
+            assertColorEquals(segaColor(reader, waterAddress + offset),
+                    underwater[line].getColor(start + color), "underwater " + context);
+        }
+    }
+
     // ===== helpers =====
 
     private static Palette[] blankPalettes() {

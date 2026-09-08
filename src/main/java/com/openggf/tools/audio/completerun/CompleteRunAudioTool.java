@@ -116,7 +116,31 @@ public final class CompleteRunAudioTool {
                 if (report.kind() == Kind.MATCH) return SUCCESS;
                 return report.kind() == Kind.CAPTURE_FAILURE ? CAPTURE_FAILURE : MISMATCH;
             }
-            throw new UsageFailure("usage: producer-status|producer-kind-status|produce|validate|publish|compare");
+            if ((args.length == 2 || args.length == 4) && "coverage-text".equals(args[0])) {
+                safeIdentifier(args[1], "profile ID");
+                CompleteRunAudioProfile profile;
+                try { profile = CompleteRunAudioProfiles.require(args[1]); }
+                catch (IllegalArgumentException unknown) { throw new UsageFailure(unknown.getMessage()); }
+                CompleteRunAudioReport report = null;
+                if (args.length == 4) {
+                    report = CompleteRunAudioComparator.compare(
+                            safeAbsolute(args[2]), safeAbsolute(args[3]));
+                    if (report.kind() == Kind.CAPTURE_FAILURE) {
+                        out.print(report.toText());
+                        return CAPTURE_FAILURE;
+                    }
+                }
+                CompleteRunAudioCoverageSummary coverage;
+                try {
+                    coverage = CompleteRunAudioCoverageSummary.from(profile, report);
+                } catch (IllegalArgumentException correlationFailure) {
+                    throw new UsageFailure(correlationFailure.getMessage());
+                }
+                out.print(coverage.toText());
+                return coverage.fullParity() ? SUCCESS : MISMATCH;
+            }
+            throw new UsageFailure(
+                    "usage: producer-status|producer-kind-status|produce|validate|publish|compare|coverage-text");
         } catch (CompleteRunAudioProducerRegistry.ProducerUnavailableException unavailable) {
             error.println("PRODUCER_UNAVAILABLE: " + unavailable.getMessage());
             return CAPTURE_FAILURE;

@@ -115,8 +115,10 @@ public final class ConfigCatalog {
         // audio
         put(AUDIO_ENABLED, of("audio", "enabled", BOOL, "Enable music and SFX"));
         put(REGION, ofEnum("audio", "region", "Region for audio timing", Set.of("NTSC", "PAL")));
-        put(DAC_INTERPOLATE, of("audio", "dacInterpolate", BOOL,
-                "DAC interpolation (optional smoothing; disabled for hardware parity)"));
+        put(DAC_INTERPOLATE, of("audio", "dacInterpolate", BOOL, "DAC interpolation (optional smoothing; disabled for hardware parity)"));
+        put(AUDIO_FM_CORE, ofEnum("audio", "fmCore",
+                "FM synthesis core: accurate (cycle-exact Nuked-OPN2, the parity oracle) or fast (register-level)",
+                Set.of("accurate", "fast")));
         put(AUDIO_INTERNAL_RATE_OUTPUT, of("audio", "internalRateOutput", BOOL,
                 "Output audio at the internal YM2612 rate (~53kHz)"));
         put(FM6_DAC_OFF, of("audio", "fm6DacOff", BOOL,

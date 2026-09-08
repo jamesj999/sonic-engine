@@ -62,7 +62,8 @@ public record AudioParityReport(
 
     public String toHumanText() {
         if (matches()) {
-            return "S1 audio parity: MATCH (" + ticksCompared + " ticks)";
+            return "S1 audio parity: MATCH (" + ticksCompared + " ticks)"
+                    + "\ncoverage: driver after harness initialization; production song startup is not validated";
         }
         StringBuilder result = new StringBuilder("S1 audio parity: ")
                 .append(kind == Kind.CAPTURE_FAILURE ? "CAPTURE FAILURE" : "MISMATCH")
@@ -98,6 +99,8 @@ public record AudioParityReport(
         root.put("result", matches() ? "match" : kind == Kind.CAPTURE_FAILURE ? "capture_failure" : "mismatch");
         root.put("kind", label(kind));
         root.put("ticksCompared", ticksCompared);
+        root.put("coverage", "driver-after-harness-initialization");
+        root.put("productionStartupValidated", false);
         put(root, "tick", tickOrdinal);
         put(root, "event", eventIndex);
         put(root, "role", role);

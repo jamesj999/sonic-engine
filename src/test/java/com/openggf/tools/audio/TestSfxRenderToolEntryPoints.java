@@ -43,8 +43,12 @@ class TestSfxRenderToolEntryPoints {
         File rom = RomTestUtils.ensureSonic1RomAvailable();
         assertNotNull(rom);
 
-        FmSfxRenderTool.main(arguments(rom, outputDirectory,
-                Sonic1Sfx.ELECTRIC.id));
+        String[] arguments = arguments(rom, outputDirectory,
+                Sonic1Sfx.ELECTRIC.id);
+        String[] physicalArguments = Arrays.copyOf(arguments,
+                arguments.length + 1);
+        physicalArguments[arguments.length] = "--physical-writes";
+        FmSfxRenderTool.main(physicalArguments);
 
         assertStereoPcm(outputDirectory.resolve("s1-sfx-b1-mix.wav"));
         Path fmOnly = outputDirectory.resolve("s1-sfx-b1-fm.wav");
@@ -59,6 +63,16 @@ class TestSfxRenderToolEntryPoints {
         assertTrue(ymLog.lines().findFirst().orElseThrow()
                         .contains("complete=true"),
                 "FM fixture must complete rather than hit the render cap");
+        String physicalLog = Files.readString(outputDirectory.resolve(
+                "s1-sfx-b1-ym-bus.jsonl"));
+        assertTrue(physicalLog.contains("\"format\":\"openggf-physical-chip-bus-v1\""));
+        assertTrue(physicalLog.contains("\"ym_domain\":\"YM2612_INTERNAL_CYCLE\""));
+        assertTrue(physicalLog.contains("\"initial_state\":\"constructor_reset\""));
+        assertTrue(physicalLog.contains("\"rom_sha1\":\"69e102855d4389c3fd1a8f3dc7d193f8eee5fe5b\""));
+        assertTrue(physicalLog.contains("\"type\":\"psg\",\"ordinal\":"),
+                "early physical attachment includes session boot PSG writes");
+        assertTrue(physicalLog.lines().anyMatch(line -> line.contains("\"type\":\"ym\"")),
+                "opt-in capture must include dispatched YM bus strobes");
         int frames = frameCount(ymLog);
         assertArrayEquals(readPcm(outputDirectory.resolve(
                         "s1-sfx-b1-mix.wav")),

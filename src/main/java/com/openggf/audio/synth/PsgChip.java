@@ -106,6 +106,8 @@ public class PsgChip {
     private int panning = 0xFF;
     private final boolean[] mutes = new boolean[CHANNELS];
     private ChipWriteObserver writeObserver = ChipWriteObserver.NONE;
+    /** Diagnostic-only native generator ticks; snapshots deliberately do not restore it. */
+    private long physicalTick;
 
     // --- Registers (§2, §3, §4) --------------------------------------------
 
@@ -162,6 +164,8 @@ public class PsgChip {
         }
         this.sampleRate = sampleRate;
         blip.setRates(TICK_RATE_HZ, sampleRate);
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /**
@@ -175,6 +179,8 @@ public class PsgChip {
         }
         chipType = type;
         lfsr = lfsrReset();
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /**
@@ -189,6 +195,8 @@ public class PsgChip {
         for (int ch = 0; ch < CHANNELS; ch++) {
             updateAmplitude(ch);
         }
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /** Ignores channels outside 0..3. A muted channel keeps advancing. */
@@ -198,11 +206,17 @@ public class PsgChip {
         }
         mutes[ch] = mute;
         updateAmplitude(ch);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /** Installs the diagnostic write sink; {@code null} means none. */
     void setWriteObserver(ChipWriteObserver observer) {
         this.writeObserver = observer == null ? ChipWriteObserver.NONE : observer;
+    }
+
+    void reportPhysicalTimelineBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        emitPhysicalBoundary(boundary);
     }
 
     /**
@@ -225,6 +239,7 @@ public class PsgChip {
         for (int ch = 0; ch < CHANNELS; ch++) {
             updateAmplitude(ch);
         }
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.RESET);
     }
 
     /** The ROM's silence-all sequence: attenuation 0xF to every channel (§7). */
@@ -276,6 +291,9 @@ public class PsgChip {
             noiseControl = data & 0x7;
             lfsr = lfsrReset();
         }
+        if (writeObserver.observesPhysicalWrites()) {
+            writeObserver.onPsgBusWrite(physicalTick, value);
+        }
     }
 
     // --- Rendering ---------------------------------------------------------
@@ -299,6 +317,7 @@ public class PsgChip {
             emitLevelChanges(t);
             tick();
         }
+        physicalTick += ticks;
         blip.endFrame(ticks);
         blip.readSamples(left, right, len);
     }
@@ -542,6 +561,70 @@ public class PsgChip {
         }
     }
 
+    /** Mutable owner-private transaction storage; never used by durable snapshots. */
+    static final class MutationBackup {
+        private double sampleRate;
+        private ChipType chipType;
+        private int preamp;
+        private int panning;
+        private int noiseControl;
+        private int latch;
+        private int lfsr;
+        private boolean[] mutes = new boolean[CHANNELS];
+        private int[] tonePeriod = new int[TONE_CHANNELS];
+        private int[] attenuation = new int[CHANNELS];
+        private int[] counter = new int[CHANNELS];
+        private boolean[] polarity = new boolean[CHANNELS];
+        private int[] emittedLeft = new int[CHANNELS];
+        private int[] emittedRight = new int[CHANNELS];
+        private final BlipDeltaBuffer.MutationBackup blip = new BlipDeltaBuffer.MutationBackup();
+    }
+
+    void captureMutation(MutationBackup backup) {
+        backup.sampleRate = sampleRate;
+        backup.chipType = chipType;
+        backup.preamp = preamp;
+        backup.panning = panning;
+        backup.noiseControl = noiseControl;
+        backup.latch = latch;
+        backup.lfsr = lfsr;
+        if (backup.mutes.length < mutes.length) backup.mutes = new boolean[mutes.length];
+        System.arraycopy(mutes, 0, backup.mutes, 0, mutes.length);
+        if (backup.tonePeriod.length < tonePeriod.length) backup.tonePeriod = new int[tonePeriod.length];
+        System.arraycopy(tonePeriod, 0, backup.tonePeriod, 0, tonePeriod.length);
+        if (backup.attenuation.length < attenuation.length) backup.attenuation = new int[attenuation.length];
+        System.arraycopy(attenuation, 0, backup.attenuation, 0, attenuation.length);
+        if (backup.counter.length < counter.length) backup.counter = new int[counter.length];
+        System.arraycopy(counter, 0, backup.counter, 0, counter.length);
+        if (backup.polarity.length < polarity.length) backup.polarity = new boolean[polarity.length];
+        System.arraycopy(polarity, 0, backup.polarity, 0, polarity.length);
+        if (backup.emittedLeft.length < emittedLeft.length) backup.emittedLeft = new int[emittedLeft.length];
+        System.arraycopy(emittedLeft, 0, backup.emittedLeft, 0, emittedLeft.length);
+        if (backup.emittedRight.length < emittedRight.length) backup.emittedRight = new int[emittedRight.length];
+        System.arraycopy(emittedRight, 0, backup.emittedRight, 0, emittedRight.length);
+        blip.captureMutation(backup.blip);
+    }
+
+    void restoreMutation(MutationBackup backup) {
+        sampleRate = backup.sampleRate;
+        chipType = backup.chipType;
+        preamp = backup.preamp;
+        panning = backup.panning;
+        noiseControl = backup.noiseControl;
+        latch = backup.latch;
+        lfsr = backup.lfsr;
+        System.arraycopy(backup.mutes, 0, mutes, 0, mutes.length);
+        System.arraycopy(backup.tonePeriod, 0, tonePeriod, 0, tonePeriod.length);
+        System.arraycopy(backup.attenuation, 0, attenuation, 0, attenuation.length);
+        System.arraycopy(backup.counter, 0, counter, 0, counter.length);
+        System.arraycopy(backup.polarity, 0, polarity, 0, polarity.length);
+        System.arraycopy(backup.emittedLeft, 0, emittedLeft, 0, emittedLeft.length);
+        System.arraycopy(backup.emittedRight, 0, emittedRight, 0, emittedRight.length);
+        blip.restoreMutation(backup.blip);
+        for (int ch = 0; ch < CHANNELS; ch++) updateAmplitude(ch);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.SNAPSHOT_RESTORE);
+    }
+
     public Snapshot captureSnapshot() {
         return new Snapshot(
                 sampleRate,
@@ -580,6 +663,17 @@ public class PsgChip {
         blip.restoreSnapshot(snapshot.blip());
         for (int ch = 0; ch < CHANNELS; ch++) {
             updateAmplitude(ch);
+        }
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.SNAPSHOT_RESTORE);
+    }
+
+    private void emitPhysicalBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        if (writeObserver.observesPhysicalWrites()) {
+            writeObserver.onPhysicalTimelineBoundary(
+                    ChipWriteObserver.ChipClockDomain.PSG_GENERATOR_TICK,
+                    physicalTick, boundary);
         }
     }
 
@@ -635,5 +729,7 @@ public class PsgChip {
             }
             updateAmplitude(ch);
         }
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 }

@@ -47,15 +47,10 @@ import org.junit.jupiter.api.Test;
  * synth's noise clock or on any audio configuration key: the contract is the
  * ordered byte stream the driver puts on the bus.
  *
- * <p>What is asserted here is that the silence and the ROM's own operand both
- * reach the bus, in that order. Their exact adjacency is <em>not</em> asserted,
- * because the engine currently interposes the SFX takeover's {@code 0FFh}
- * between them: it runs that takeover lazily on the first latch of the stolen
- * channel, and the {@code 0E7h} write is that latch, whereas the ROM emits it
- * during SFX setup in {@code zGetSFXChannelPointers} (:2128-2134) before the
- * track's first pass. That ordering gap is recorded as accepted debt in
- * docs/S3K_KNOWN_DISCREPANCIES.md; tightening this to strict adjacency is the
- * check to add once the takeover moves.
+ * <p>The pair must be adjacent: retail {@code cfSetPSGNoise} has no call
+ * between its writes (:3562-3572). The loader's separate noise silence
+ * belongs to admission, before this track's first pass, and cannot be
+ * injected again when the first noise latch takes hardware ownership.
  */
 @RequiresRom(SonicGame.SONIC_3K)
 class TestS3kNoiseFormEffectWriteStream {
@@ -108,9 +103,9 @@ class TestS3kNoiseFormEffectWriteStream {
                     "SFX 0x%02X: cfSetPSGNoise must write the ROM's own noise operand"
                     + " %02X (:3567); stream was %s",
                     sfxId, expectedForm, hex(writes)));
-            assertTrue(silenceAt < formAt, () -> String.format(
-                    "SFX 0x%02X: the 0DFh silence precedes the noise operand in"
-                    + " cfSetPSGNoise (:3560-3567); stream was %s",
+            assertEquals(silenceAt + 1, formAt, () -> String.format(
+                    "SFX 0x%02X: the 0DFh silence immediately precedes the noise operand in"
+                    + " cfSetPSGNoise (:3562-3572); stream was %s",
                     sfxId, hex(writes)));
         }
     }
@@ -141,9 +136,9 @@ class TestS3kNoiseFormEffectWriteStream {
 
     /**
      * The ordered PSG bytes the driver emits over the effect's opening
-     * services. The service in which the sequencer is installed puts nothing
-     * on the bus; the track's first pass, and so {@code cfSetPSGNoise}, runs
-     * in the next one. A small bound is taken rather than a fixed index so the
+     * services, excluding its admission noise silence. The track's first
+     * pass, and so {@code cfSetPSGNoise}, runs after admission. A small bound
+     * is taken rather than a fixed index so the
      * contract is "the effect opens with this pair", not "frame N does".
      */
     private List<Integer> firstServicePsgWrites(Rom rom, Sonic3kSmpsLoader loader, int sfxId) {
@@ -173,6 +168,9 @@ class TestS3kNoiseFormEffectWriteStream {
             sequencer.setSampleRate(SAMPLE_RATE);
             sequencer.setSfxMode(true);
             driver.addSequencer(sequencer, true);
+            // Admission now writes FF. Measure the first track pass rather
+            // than treating that setup write as proof the track has run.
+            writes.clear();
             for (int service = 0; service < OPENING_SERVICES && writes.isEmpty(); service++) {
                 driver.serviceOuterFrame();
             }

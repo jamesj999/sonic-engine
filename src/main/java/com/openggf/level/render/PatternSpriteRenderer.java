@@ -21,7 +21,7 @@ public class PatternSpriteRenderer {
     private static final int MAX_FRAME_SPAN_PIXELS = 1024;
     private static final int MAX_ABS_PIECE_OFFSET_PIXELS = 2048;
 
-    private final SpriteSheet<? extends SpriteFrame<? extends SpriteFramePiece>> spriteSheet;
+    private SpriteSheet<? extends SpriteFrame<? extends SpriteFramePiece>> spriteSheet;
     private final GraphicsManager graphicsManager;
     private int patternBase = -1;
     private final FrameBounds[] frameBoundsCache;
@@ -66,6 +66,23 @@ public class PatternSpriteRenderer {
 
     public boolean isReady() {
         return patternBase >= 0;
+    }
+
+    /**
+     * Points this renderer at {@code replacement}, a sheet whose pattern pixels,
+     * frames, palette and frame delay equal the current sheet's. The GPU
+     * patterns already uploaded for the current sheet therefore stay valid and
+     * are not re-uploaded; only the object references change, so later
+     * in-place pattern refreshes address the replacement's {@code Pattern}
+     * instances. Callers establish the equivalence; this only checks shape.
+     */
+    public void rebindEquivalentSheet(SpriteSheet<? extends SpriteFrame<? extends SpriteFramePiece>> replacement) {
+        if (replacement == null
+                || replacement.getPatterns().length != spriteSheet.getPatterns().length
+                || replacement.getFrameCount() != spriteSheet.getFrameCount()) {
+            throw new IllegalArgumentException("replacement sheet shape differs");
+        }
+        spriteSheet = replacement;
     }
 
     /** Returns the allocated virtual pattern base, or {@code -1} before caching. */

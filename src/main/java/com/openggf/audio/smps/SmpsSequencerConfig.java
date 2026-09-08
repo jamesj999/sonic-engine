@@ -257,7 +257,9 @@ public final class SmpsSequencerConfig {
         /** Legacy engine behavior: silence, restore all state, then resend frequency. */
         LEGACY_FULL_RESTORE,
         /** Shipped S1 behavior: the SFX note-off stands; restore voice/pan at rest. */
-        ROM_VOICE_RESTORE
+        ROM_VOICE_RESTORE,
+        /** Restore voice/pan without changing the covered music track's rest state. */
+        ROM_VOICE_RESTORE_PRESERVE_REST
     }
 
     /** How a PSG channel returns to music after its SFX track stops. */
@@ -266,7 +268,9 @@ public final class SmpsSequencerConfig {
         /** Legacy engine behavior: silence, restore volume, then resend frequency. */
         LEGACY_FULL_RESTORE,
         /** Shipped S1 behavior: the SFX note-off stands; restore at rest/noise only. */
-        ROM_REST_RESTORE
+        ROM_REST_RESTORE,
+        /** S3K: preserve music state and restore only a signed raw noise byte. */
+        ROM_NOISE_RESTORE_PRESERVE_REST
     }
 
     /** How SFX track RAM is walked after header initialization. */
@@ -323,6 +327,7 @@ public final class SmpsSequencerConfig {
     private final PalUpdateMode palUpdateMode;
     private final boolean relativePointers; // S1: true (68k PC-relative), S2: false (Z80 absolute)
     private final boolean tempoOnFirstTick; // S1: true (DOTEMPO), S2: false (PlayMusic)
+    private final boolean resetTempoOnMusicLoad;
     private final boolean direct68kDriver;
     private final boolean advancePsgEnvelopeOnRest;
     private final boolean writeFmPanOnNote;
@@ -362,6 +367,7 @@ public final class SmpsSequencerConfig {
     private final PsgVolumeTail psgVolumeTail;
     private final boolean sfxWalkPrecedesRequest;
     private final boolean sfxAdmissionKeyOffAndClearsSsgEg;
+    private final boolean psgSfxAdmissionSilencesNoise;
     private final boolean trackEndFlagOwnsTheStop;
     private final NoteFillTail noteFillTail;
     private final int fadeOutDelay;
@@ -389,6 +395,7 @@ public final class SmpsSequencerConfig {
         this.palUpdateMode = b.palUpdateMode;
         this.relativePointers = b.relativePointers;
         this.tempoOnFirstTick = b.tempoOnFirstTick;
+        this.resetTempoOnMusicLoad = b.resetTempoOnMusicLoad;
         this.direct68kDriver = b.direct68kDriver;
         this.advancePsgEnvelopeOnRest = b.advancePsgEnvelopeOnRest;
         this.writeFmPanOnNote = b.writeFmPanOnNote;
@@ -426,6 +433,7 @@ public final class SmpsSequencerConfig {
         this.psgVolumeTail = b.psgVolumeTail;
         this.sfxWalkPrecedesRequest = b.sfxWalkPrecedesRequest;
         this.sfxAdmissionKeyOffAndClearsSsgEg = b.sfxAdmissionKeyOffAndClearsSsgEg;
+        this.psgSfxAdmissionSilencesNoise = b.psgSfxAdmissionSilencesNoise;
         this.trackEndFlagOwnsTheStop = b.trackEndFlagOwnsTheStop;
         this.noteFillTail = b.noteFillTail;
         this.fadeOutDelay = b.fadeOutDelay;
@@ -604,6 +612,10 @@ public final class SmpsSequencerConfig {
         return tempoOnFirstTick;
     }
 
+    public boolean isResetTempoOnMusicLoad() {
+        return resetTempoOnMusicLoad;
+    }
+
     /** Volume mode: ALGO (S1/S2) or BIT7 (S3K). */
     public VolMode getVolMode() {
         return volMode;
@@ -757,10 +769,16 @@ public final class SmpsSequencerConfig {
      * zero. On the shipped {@code fix_sndbugs = 0} branch the clear is also
      * called for PSG tracks, but {@code zWriteFMIorII} returns on bit 7 of
      * {@code VoiceControl} before writing anything (:2549-2551), so no PSG
-     * track puts a byte on the bus; the fixed branch merely skips the call.
+     * track's SSG-EG clear puts a byte on the bus; the fixed branch merely
+     * skips the call.
      */
     public boolean isSfxAdmissionKeyOffAndClearsSsgEg() {
         return sfxAdmissionKeyOffAndClearsSsgEg;
+    }
+
+    /** Whether each declared PSG SFX header unconditionally silences noise at admission. */
+    public boolean isPsgSfxAdmissionSilencesNoise() {
+        return psgSfxAdmissionSilencesNoise;
     }
 
     /**
@@ -961,6 +979,7 @@ public final class SmpsSequencerConfig {
         private PalUpdateMode palUpdateMode = PalUpdateMode.NONE;
         private boolean relativePointers = false;
         private boolean tempoOnFirstTick = false;
+        private boolean resetTempoOnMusicLoad;
         private boolean direct68kDriver = false;
         private boolean advancePsgEnvelopeOnRest = true;
         private boolean writeFmPanOnNote = false;
@@ -1004,6 +1023,7 @@ public final class SmpsSequencerConfig {
         private PsgVolumeTail psgVolumeTail = PsgVolumeTail.NOTE_AND_ENVELOPE_ONLY;
         private boolean sfxWalkPrecedesRequest = false;
         private boolean sfxAdmissionKeyOffAndClearsSsgEg = false;
+        private boolean psgSfxAdmissionSilencesNoise = false;
         private boolean trackEndFlagOwnsTheStop = false;
         private NoteFillTail noteFillTail = NoteFillTail.LEGACY;
         private int fadeOutDelay = 3;
@@ -1023,6 +1043,7 @@ public final class SmpsSequencerConfig {
         public Builder palUpdateMode(PalUpdateMode val) { palUpdateMode = val; return this; }
         public Builder relativePointers(boolean val) { relativePointers = val; return this; }
         public Builder tempoOnFirstTick(boolean val) { tempoOnFirstTick = val; return this; }
+        public Builder resetTempoOnMusicLoad(boolean val) { resetTempoOnMusicLoad = val; return this; }
         public Builder direct68kDriver(boolean val) { direct68kDriver = val; return this; }
         public Builder advancePsgEnvelopeOnRest(boolean val) { advancePsgEnvelopeOnRest = val; return this; }
         public Builder writeFmPanOnNote(boolean val) { writeFmPanOnNote = val; return this; }
@@ -1060,6 +1081,7 @@ public final class SmpsSequencerConfig {
         public Builder psgVolumeTail(PsgVolumeTail val) { psgVolumeTail = val; return this; }
         public Builder sfxWalkPrecedesRequest(boolean val) { sfxWalkPrecedesRequest = val; return this; }
         public Builder sfxAdmissionKeyOffAndClearsSsgEg(boolean val) { sfxAdmissionKeyOffAndClearsSsgEg = val; return this; }
+        public Builder psgSfxAdmissionSilencesNoise(boolean val) { psgSfxAdmissionSilencesNoise = val; return this; }
         public Builder trackEndFlagOwnsTheStop(boolean val) { trackEndFlagOwnsTheStop = val; return this; }
         public Builder noteFillTail(NoteFillTail val) { noteFillTail = val; return this; }
         public Builder fadeOutDelay(int val) { fadeOutDelay = val; return this; }

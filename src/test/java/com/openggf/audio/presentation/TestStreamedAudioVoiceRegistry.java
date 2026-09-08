@@ -1,6 +1,9 @@
 package com.openggf.audio.presentation;
 
 import com.openggf.audio.StreamedMusicPort;
+import com.openggf.audio.session.SmpsDriverSession;
+import com.openggf.audio.presentation.AudioPresentationCommand.FadeMusic;
+import com.openggf.audio.presentation.AudioPresentationCommand.SetSpeedShoes;
 import com.openggf.audio.presentation.AudioPresentationCommand.PushMusicOverride;
 import com.openggf.audio.presentation.AudioPresentationCommand.ReplaceMusic;
 import com.openggf.audio.presentation.AudioPresentationCommand.RestoreMusicOverride;
@@ -14,8 +17,51 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class TestStreamedAudioVoiceRegistry {
+
+    @Test
+    void sessionFadeAlsoFadesStreamedMusicAndRetainsClearedSpeedShoes() {
+        SmpsDriverSession session = mock(SmpsDriverSession.class);
+        Fixture fixture = new Fixture(config(1, 0), false, session);
+        fixture.registry.apply(new ReplaceMusic(
+                fixture.factory.streamedStockOverride(1, 0x81)));
+        fixture.registry.apply(new SetSpeedShoes(true));
+        assertTrue(fixture.registry.snapshot().speedShoesEnabled());
+        // The session has already applied the retail host fade policy when
+        // presentation receives this command (S1 clears speed shoes here).
+        when(session.speedShoesEnabled()).thenReturn(false);
+
+        fixture.registry.apply(new FadeMusic(40, 3));
+
+        assertEquals(1, fixture.port.fadeOutCount);
+        assertEquals(40, fixture.port.lastFadeSteps);
+        assertEquals(3, fixture.port.lastFadeDelay);
+        assertFalse(fixture.registry.snapshot().speedShoesEnabled());
+    }
+
+    @Test
+    void streamedRestoreKeepsItsFadeBoundaryWhenSmpsSessionAlsoOwnsSfx() {
+        SmpsDriverSession session = mock(SmpsDriverSession.class);
+        when(session.suppressesSfxDuringOverride()).thenReturn(true);
+        when(session.releasesSfxSuppressionAtRestore()).thenReturn(false);
+        when(session.isMusicFadingIn()).thenReturn(false);
+        Fixture fixture = new Fixture(config(2, 0), true, session);
+        fixture.replaceAndPush();
+
+        fixture.registry.apply(new RestoreMusicOverride());
+
+        assertEquals(1, fixture.registry.orderedVoiceCount(),
+                "streamed PCM must remain in the mix beside a SMPS session");
+        assertTrue(fixture.registry.areSfxRequestsBlocked(),
+                "an idle SMPS fade must not release the streamed cursor's fade block");
+        fixture.renderFrame();
+        assertTrue(fixture.registry.areSfxRequestsBlocked());
+        fixture.renderFrame();
+        assertFalse(fixture.registry.areSfxRequestsBlocked());
+    }
 
     @Test
     void completionSweepRetiresFiniteStreamedCursors() {
@@ -89,6 +135,11 @@ class TestStreamedAudioVoiceRegistry {
         private final AudioVoiceRegistry registry;
 
         private Fixture(SmpsSequencerConfig config, boolean blockSfxDuringFade) {
+            this(config, blockSfxDuringFade, null);
+        }
+
+        private Fixture(SmpsSequencerConfig config, boolean blockSfxDuringFade,
+                        SmpsDriverSession session) {
             SmpsCoordFlagHandlerOwner handlers =
                     new SmpsCoordFlagHandlerOwner(
                             new SmpsCoordFlagRuntimeState());
@@ -98,7 +149,7 @@ class TestStreamedAudioVoiceRegistry {
             factory.installStreamedMusicPort(port);
             factory.setStreamedRestoreConfig(config, blockSfxDuringFade);
             registry = new AudioVoiceRegistry(factory, factory, handlers,
-                    ignored -> { });
+                    ignored -> { }, session);
         }
 
         private void replaceAndPush() {
@@ -124,6 +175,7 @@ class TestStreamedAudioVoiceRegistry {
         private State state;
         private boolean finite;
         private int fadeInCount;
+        private int fadeOutCount;
         private int lastFadeSteps;
         private int lastFadeDelay;
 
@@ -150,7 +202,11 @@ class TestStreamedAudioVoiceRegistry {
         }
         @Override public void pause(int reason) { }
         @Override public void resume(int reason) { }
-        @Override public void fadeOut(int steps, int stepDelay) { }
+        @Override public void fadeOut(int steps, int stepDelay) {
+            fadeOutCount++;
+            lastFadeSteps = steps;
+            lastFadeDelay = stepDelay;
+        }
         @Override public void fadeIn(int steps, int stepDelay) {
             fadeInCount++;
             lastFadeSteps = steps;

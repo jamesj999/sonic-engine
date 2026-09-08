@@ -1,15 +1,27 @@
 # Configuration Reference
 
-All settings live in `config.yaml` in the working directory (next to the JAR). The bundled
-`src/main/resources/config.yaml` is written to **`config.yaml.example`** alongside it on
-every run, so the fully commented current template — including the worked ffmpeg recipes —
-is always there to read or copy values from. Your own `config.yaml` is never overwritten by
-it; once written it holds your values and does not regain later comments or new keys.
+Settings live in `config.yaml` in the working directory (next to the JAR), and that file
+holds **only the settings you have changed**. Every other setting reads its built-in
+default, so a default that changes in a later build applies to every install that never
+touched the key. The bundled `src/main/resources/config.yaml` documents every setting with
+its default and is written to **`config.yaml.example`** alongside your file on every run;
+copy a line from it into `config.yaml` to change that setting. Your own `config.yaml` is
+never overwritten by the example.
 
-`src/main/resources/config.yaml` is used as the default template. On first run, a legacy
-`config.json` is automatically migrated to `config.yaml` and the original is backed up to
-`config.json.bak`. Keys are now grouped into nested YAML sections rather than being flat
-enum names.
+The file opens with `configFormat: 2`, which marks this sparse format. A `config.yaml`
+written by an older build (one that copied every default into it) is converted once on
+first load: keys still at their default are dropped, keys you changed are kept, and the
+marker is written. One default changed before this format existed —
+`gameplay.loadTimeSimulation` moved from `NONE` to `FAST` — so that value is treated as
+the former default during the conversion; set `NONE` again afterwards if you want it and
+it stays. On first run, a legacy `config.json` is migrated to `config.yaml` and backed up
+to `config.json.bak`. Keys are grouped into nested YAML sections rather than flat enum
+names.
+
+**Changing a default** (maintainers): change the `putDefault` line in
+`SonicConfigurationService`, the value in `src/main/resources/config.yaml`, and the row in
+this file. Nothing else: no migration, no version bump. `TestSparseUserConfig` fails if the
+bundled template and the registered default disagree.
 
 Key bindings accept either **GLFW key codes** (integers) or human-readable key names such as
 `"SPACE"`, `"Q"`, and `"GLFW_KEY_F9"`. See the
@@ -71,7 +83,7 @@ The `config.yaml` is organized into the following top-level sections:
 | `SCREEN_HEIGHT` | `display` / `debug.window.height` | int | `448` | Actual window height in OS pixels. |
 | `SCALE` | `debug.window.scale` | double | `1.0` | **DEPRECATED** additional rendering scale factor. |
 | `FPS` | `display.fps` | int | `60` | Target frames per second. Affects game speed — use `60` for NTSC, `50` for PAL. |
-| `LOAD_TIME_SIMULATION` | `gameplay.loadTimeSimulation` | enum | `NONE` | Optional normal-play readiness admission for jobs submitted through `HardwareTimingService` (currently S3K Kosinski): `NONE` admits as soon as production preparation allows; `PROFILED` uses published deterministic profile data; `FAST` is a retained reserved alias that warns and returns `NONE`; `REALISTIC` is a retained reserved alias that warns and returns `PROFILED`. S1/S2 still resolve this enum through their default module factory, but every value yields their supplied immediate profile and their ROM-derived PLC plus dynamic-art/DPLC lifecycles remain game-owned; `NONE` does not disable them and another value does not retime them. Trace replay uses recorded hardware-timing authority instead of this setting; queue-state diagnostics remain comparison-only. |
+| `LOAD_TIME_SIMULATION` | `gameplay.loadTimeSimulation` | enum | `FAST` | Normal-play ROM-load timing: `NONE` completes as soon as production preparation allows; `PROFILED` uses the generator-owned measured profile data; `FAST` (default) uses the hand-tuned copy of that data (`load-time-profiles/s3k-fast-v1.json`, which also carries the S3K title-screen Sonic frame decodes taken from the original hardware capture), and warns then behaves as `NONE` for a game without a FAST manifest; `REALISTIC` is a retained reserved alias that warns when the profile is resolved and returns `PROFILED`. S1/S2 resolve through their default module factory to the supplied immediate profile; their ROM-derived PLC and dynamic-art/DPLC lifecycles remain game-owned and are not retimed by this setting. Trace replay uses its recorded hardware-timing policy and does not consume this setting; queue-state trace diagnostics are comparison-only and never alter this configuration. |
 | `DISPLAY_COLOR_PROFILE` | `display.colorProfile` | string | `"RAW_RGB"` | Palette presentation profile. `"RAW_RGB"` keeps the current direct 8-bit expansion, `"MD_ANALOG"` applies a darker Mega Drive-style analog ramp, and `"NTSC_SOFT"` applies the analog ramp plus mild desaturation. |
 | `DISPLAY_COLOR_PROFILE_TOGGLE_KEY` | `display.colorProfileToggleKey` | key | `V` | Runtime key used to cycle display color profiles. The selected profile is saved to `config.yaml` and shown briefly in the bottom-left corner. |
 | `DISPLAY_ASPECT` | `display.aspect` | string | `"NATIVE_4_3"` | Display aspect preset. Controls the logical pixel width used by the renderer. Accepted values: `"NATIVE_4_3"` (320 px, exact native behavior), `"WIDE_16_10"` (352 px, supported), `"WIDE_16_9"` (400 px, primary supported widescreen target), `"ULTRA_21_9"` (528 px, best-effort smoke tier), and `"SUPER_32_9"` (800 px, exploratory). Wider presentation does not widen ROM world boundaries or trace-comparison authority. |
@@ -273,6 +285,7 @@ Allowed launch profile enums:
 | `AUDIO_ENABLED` | `audio.enabled` | bool | `true` | Master switch for all audio output (music and SFX). |
 | `REGION` | `audio.region` | string | `"NTSC"` | Hardware region: `"NTSC"` (60 Hz) or `"PAL"` (50 Hz). Affects SMPS tempo timing and DAC sample rates. |
 | `DAC_INTERPOLATE` | `audio.dacInterpolate` | bool | `false` | Optional smoothing with no hardware counterpart: `true` writes a linearly interpolated value between DAC (drum) samples when the chip bus is idle. Off by default to preserve the hardware's stepped output; it never changes sample pitch or length. |
+| `AUDIO_FM_CORE` | `audio.fmCore` | string | `"fast"` | Which FM synthesis core renders music and SFX. `"accurate"` is the cycle-exact Nuked-OPN2 port and the audio parity oracle; `"fast"` is the default register-level clean-room core (lower CPU cost, not bit-exact). Existing explicit selections are preserved. Unknown values fall back to `"accurate"`. Physical audio parity captures explicitly use the accurate core. |
 | `AUDIO_INTERNAL_RATE_OUTPUT` | `audio.internalRateOutput` | bool | `false` | Output audio at the YM2612 internal sample rate (~53 kHz) rather than the system rate. Useful for bit-accurate captures; may cause issues on some audio drivers. |
 | `FM6_DAC_OFF` | `audio.fm6DacOff` | bool | `true` | Silence FM channel 6 whenever a DAC note is active. Matches the SMPSPlay parity hack used in Sonic 2; prevents FM bleed audible during percussion. |
 
@@ -450,6 +463,14 @@ ones. The bundled `config.yaml` supplies the live toggle default.
 | `CAPTURE_FFMPEG_PASS1_ARGS` | `capture.ffmpegPass1Args` | string | `"default"` | **Advanced.** Full ffmpeg argument list for the encode pass. See "Overriding the ffmpeg commands" below. |
 | `CAPTURE_FFMPEG_PASS2_ARGS` | `capture.ffmpegPass2Args` | string | `"default"` | **Advanced.** Full ffmpeg argument list for the mux pass; leave empty to skip it and record video only. |
 
+Live recording reuses a bounded pool of RGBA arrays (encoder queue capacity plus
+two in-flight frames). On OpenGL 2.1 or newer, two additional GPU pixel-pack
+buffers overlap readback with the next presentation; their memory is outside
+`capture.queueBudgetMb`. Older contexts use synchronous readback. Video and audio
+remain paired, and stopping flushes the final pending frame. Sustained GPU or
+encoder overload can still block lossless recording; the queue cannot compensate
+for an encoder that remains slower than playback.
+
 Invoke the tool through Maven (requires a ROM in the working directory, an offscreen-capable GL context, and `ffmpeg` on `PATH`):
 
 ```bash
@@ -547,6 +568,13 @@ before BK2 playback can be controlled from the keyboard.
 | `DISCORD_RICH_PRESENCE_ENABLED` | `discord.enabled` | bool | `false` | Opt in to publishing OpenGGF menu/gameplay status through the local Discord desktop client. Disabled by default for privacy and no-ops when Discord is unavailable. |
 | `DISCORD_RICH_PRESENCE_SHOW_TIMER` | `discord.showTimer` | bool | `true` | Include the current level timer in Discord Rich Presence gameplay status when presence is enabled. |
 | `DISCORD_RICH_PRESENCE_SHOW_ZONE` | `discord.showZone` | bool | `true` | Include the current zone and act in Discord Rich Presence gameplay status when presence is enabled. |
+
+Live rewind stores gameplay checkpoints every 10 ticks and audio checkpoints every
+60 ticks. A cold backward step therefore replays at most nine gameplay ticks.
+Compared with the previous 60-tick gameplay cadence, this retains roughly six
+times as many gameplay snapshots and performs more forward-play capture work.
+`rewind.historySeconds` bounds that history; reduce it if memory use matters.
+Trace playback retains its configured checkpoint interval.
 
 ### Level Editor (experimental)
 
@@ -862,6 +890,7 @@ audio:
   enabled: true   # Enable music and SFX
   region: "NTSC"   # Region for audio timing
   dacInterpolate: false   # Optional DAC smoothing (no hardware counterpart); true interpolates between PCM samples
+  fmCore: fast   # FM core: accurate (cycle-exact Nuked-OPN2) or fast (register-level clean-room core)
   internalRateOutput: false   # Output audio at the internal YM2612 rate (~53kHz)
   fm6DacOff: true   # Mute FM6 when a note plays on it while DAC is enabled (SMPSPlay parity hack)
 

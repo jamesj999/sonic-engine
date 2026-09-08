@@ -1,6 +1,7 @@
 package com.openggf.audio.synth.nuked;
 
 import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.TestFactory;
 
 import java.io.BufferedReader;
@@ -35,6 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the validation record is
  * {@code docs/architecture/validation/2026-08-29-nuked-opn2-port-bit-exactness.md}.
  */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestNukedOpn2BitExactScripts {
     private static final long FNV_OFFSET = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;

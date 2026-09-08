@@ -21,6 +21,9 @@ public enum GameMode {
     /** Title Screen (shown on game startup before gameplay) */
     TITLE_SCREEN,
 
+    /** ROM Continue countdown and character departure sequence. */
+    CONTINUE_SCREEN,
+
     /** Data Select Screen (S3K save file selection) */
     DATA_SELECT,
 

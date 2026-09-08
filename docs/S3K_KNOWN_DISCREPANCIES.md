@@ -1636,35 +1636,86 @@ Full context:
 
 ---
 
-## SFX channel takeover splits `cfSetPSGNoise`'s two writes
+## PSG admission stale-IX silence remains incomplete
 
 **What the ROM does.** The S3K sound driver is built with `fix_sndbugs = 0`
 (`Sound/Z80 Sound Driver.asm:16`), so `cfSetPSGNoise` takes the `else` branch at
-`:3558-3571`. That branch puts exactly two bytes on the PSG bus, back to back and
+`:3559-3572`. That branch puts exactly two bytes on the PSG bus, back to back and
 with nothing between them: `0DFh` to silence PSG3, then the effect's own noise
 operand. The routine has no calls between the two writes, so their adjacency is
 structural rather than incidental.
 
-**What we do.** The engine emits `DF FF E7`. `SmpsDriver.silencePsgChannel`
-performs the SFX channel takeover lazily, on the first latch of the channel being
-stolen from music, and for a noise-form effect the `0E7h` write is that first
-latch. The takeover's own `0FFh` therefore lands between `cfSetPSGNoise`'s two
-writes. The ROM performs the equivalent takeover during SFX setup instead, before
-the track's first pass runs.
+**Resolved ordering gap (2026-09-05).** The engine previously emitted
+`DF FF E7`: noise-channel ownership injected a second silence after the loader
+had already emitted the guaranteed admission `FF`. The S3K profile now selects
+`REGISTER_SEQUENCE`, so admission retains its `FF` in header order and the
+command emits adjacent `DF E7`. Ownership, release and rollback are unchanged.
 
-**Scope.** Every S3K effect that carries a PSG form is affected, because all 36 of
+**Scope of the resolved gap.** Every S3K effect that carries a PSG form was affected, because all 36 of
 them declare `$E7`. Among them are three behind reported AIZ1 audio faults:
 `sfx_Splash` (`$39`), `sfx_InstaAttack` (`$42`) and `sfx_Collapse` (`$59`).
 
-**Why it is probably not what anyone hears.** The interposed byte sets the noise
-channel to silence, and the effect's real attenuation follows within the same
-driver service. It is an ordering divergence in the write stream, not a sustained
-level change. The audible fault reported against these effects is being tracked
-separately against the PSG noise clock, not against this.
+**Remaining admission gap.** `zGetSFXChannelPointers.is_psg` calls
+`zSilencePSGChannel` before replacing IX (:2131-2154). That stale pointer can
+contribute additional PSG writes before the guaranteed `FF`; the engine still
+models only the guaranteed write. Collapse's preceding FM5 header contributes
+none, so this comparison does not establish general stale-IX parity.
 
-**Coverage.** `TestS3kNoiseFormEffectWriteStream` asserts the ROM's adjacency for
-all three effects, reading each expected noise operand out of the effect's own
-script in the ROM rather than naming it. The class is `@Disabled` against this
-entry; removing that annotation is the whole of enabling it. The write stream is
-not yet arbitrated by the hardware oracle, whose S3K frontier is service 565 while
-the first splash request in the captured window is service 4,087.
+**Coverage and next frontier.** `TestS3kNoiseFormEffectWriteStream` asserts that
+`DF` immediately precedes the ROM-derived noise operand for all three effects.
+The synthetic zero-operand test also checks adjacent `DF FF` without a duplicate.
+Observation starts after admission
+so a setup silence cannot be mistaken for the track's first pass.
+The independent committed AIZ1 intro oracle now advances within service
+**1570** from event **43** to **48**. The event-43 duplicate was an engine
+sequencer defect: note-start modulation sent Collapse's frequency pair and the
+single volume tail reached by the ROM's `zUpdatePSGTrack` fall-through
+(`Sound/Z80 Sound Driver.asm:4059-4135`), then the generic attacked-note
+epilogue sent the same `F0` again. The engine now suppresses that epilogue only
+when the configured S3K frequency tail already performed the write. The new
+frontier is reference PSG `FF` against an exhausted engine service stream.
+That `FF` is the second byte of the ordered `AF FF` source-driver frequency
+transaction and, because bit 7 is set, is also physically decoded as a PSG3
+volume latch. The engine formerly made a new ownership decision for that
+second bus byte and rejected it. The ROM checks track override once before
+writing the pair and performs no ownership decision between its bytes. The
+driver now admits the source transaction once and forwards both bytes verbatim,
+preserving the chip's final latch and noise attenuation. The next FM3 release
+gap is also resolved: the covered music track's retained normal/special mode
+is written to register `27` before its voice, matching `cfStopTrack`
+(:3443-3518). The music PSG3 envelope gap is also resolved: an attacked note
+still resets `VolEnv`, but while overridden it no longer consumes the first
+envelope byte before `zUpdatePSGTrack`'s override return (:4058-4115). The
+S3K's `cfChangePSGVolume` envelope rewind is also now byte-accurate: its `DEC`
+wraps `VolEnv` from `00` to `FF`; the prior Java guard incorrectly left zero
+unchanged (`Sound/Z80 Sound Driver.asm:3263-3285`). The oracle advances from
+service **1594** to **1652**. That ordered-write gap is also resolved: retail
+`zUpdateSFXTracks` walks fixed FM3..FM6 then PSG1..PSG3 RAM slots, independent
+of sound admission/header order (`Sound/Z80 Sound Driver.asm:727-759`). The
+S3K PSG track stop also preserves the shipped pointer helper's unconditional
+`FF` after its channel/noise silence and before ownership restoration
+(`:2115-2142, :3443-3469, :4226-4249`). The covered music track's signed raw
+noise byte is now restored without changing its playing/rest state
+(`:3521-3533`). The oracle advances to service **2012** event 1: reference PSG
+`BF` versus engine PSG `FF`.
+`TestS3kOracleRequestSidecarWiring` pins that mismatch and separately asserts a
+matching 1690-service prefix through ordinal 1689. Service 1690 and the full
+window are not claimed to match. The immediate `FF` RAM state is proven; a
+later envelope walk from `FF` remains unverified because retail `zDoVolEnv`
+uses it as an unsigned `envelope + 255` table offset while Java bounds the
+cursor to the loaded envelope array. The DAC stream
+remains independently red at run 338, byte 0 (`88` versus `7F`). See the
+[2026-09-05 validation report](architecture/validation/audio/2026-09-05-s3k-psg-takeover.md)
+for commands and red-first evidence; this is not full-window audio parity.
+
+The later SFX-header correction moved the frontier to service 2357. That
+state mismatch was diagnostic input selection: retail raw ring request `33h`
+toggles boot-zeroed `zRingSpeaker` at dispatch and selects Sound34/Sound33
+(`Sound/Z80 Sound Driver.asm:547,1919-1928`), while the capture loaded Sound33
+directly. The capture now applies the alternating transform at its pending
+driver callback and advances to service **2409**, `MUS_PSG1.overridden`
+(`true` versus `false`). This does not close live request parity: S3K still has
+no production three-slot mailbox consumer, AudioManager selects rings before
+retail's consume point and resets its fallback side on stop paths. The
+capture's 1-up/fade mailbox-clearing behavior remains unverified against
+`zUpdateMusic` (:658-701).

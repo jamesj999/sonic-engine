@@ -1,0 +1,645 @@
+{
+  "commit": "988b5d73a5a80ecd0b9c5be655bb08474c55b3fd",
+  "identity_count": 57,
+  "failure_identity_count": 36,
+  "error_identity_count": 21,
+  "failure_occurrences": 39,
+  "error_occurrences": 21,
+  "records": [
+    {
+      "identity": "com.openggf.TestEngine#restoreSlotAfterGameOverSpendsAContinueAndRestoresThreeLives",
+      "occurrences": 1,
+      "evidence": [
+        "E01"
+      ]
+    },
+    {
+      "identity": "com.openggf.TestEngineConfiguredHeadlessStartup#headlessStartupRetainsTheExactInputAndInitializedBackend",
+      "occurrences": 1,
+      "evidence": [
+        "E02"
+      ]
+    },
+    {
+      "identity": "com.openggf.TestModEngineWiringSeams#audioResetAndBackendReplacementReleaseStreamedSessionState",
+      "occurrences": 1,
+      "evidence": [
+        "E03"
+      ]
+    },
+    {
+      "identity": "com.openggf.audio.debug.TestSoundTestPresentationHost#consoleAndInteractivePathsTickTheSameHostOwnedProducer",
+      "occurrences": 1,
+      "evidence": [
+        "E04"
+      ]
+    },
+    {
+      "identity": "com.openggf.data.TestRomManagerGameResolution#resolvesOnlyExplicitStockGameCodesAndFailsClosedOtherwise",
+      "occurrences": 1,
+      "evidence": [
+        "E05"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.patch.TestDelegatingGameModuleCoversInterface#delegatingGameModuleDeclaresEveryGameModuleMethod",
+      "occurrences": 1,
+      "evidence": [
+        "E06"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.session.TestGameplayModeContextRewindRegistry#exactlyElevenAtomicKeysAfterAttach",
+      "occurrences": 1,
+      "evidence": [
+        "E07"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.session.TestGameplayModeContextRewindRegistry#reattachRebuildsRegistry",
+      "occurrences": 1,
+      "evidence": [
+        "E08"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic1.objects.TestSonic1GiantRingTimeAttackGate#ringCollectsNormallyWhenTimeAttackInactive",
+      "occurrences": 1,
+      "evidence": [
+        "E09"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic2.objects.TestCPZSpinTubeObjectInstance#destinationHandoffUsesLivePositionWithoutInventingCatchUpMovement",
+      "occurrences": 1,
+      "evidence": [
+        "E10"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic3k.events.TestSonic3kAIZEvents#fireMusicRestoreFollowsRomEscapeTimerAcrossActReload",
+      "occurrences": 1,
+      "evidence": [
+        "E11"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic3k.objects.TestFbz2SubbossRewind#songFadeCallersUseInclusiveNativeSignedWaitWords",
+      "occurrences": 4,
+      "evidence": [
+        "E12",
+        "E12",
+        "E12",
+        "E12"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic3k.objects.TestFbzObjectRegistryCompleteness#fbzProfileAllowlistMatchesTheCheckedConcreteFactoryInventory",
+      "occurrences": 1,
+      "evidence": [
+        "E13"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic3k.objects.bosses.TestCnzEndBossChildren#magnetDropUsesInjectedTerrainOwnerInsteadOfConflictingGlobalSession",
+      "occurrences": 1,
+      "evidence": [
+        "E14"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic3k.scroll.SwScrlMgzTest#sameFrameZeroShakeRequestDoesNotClobberEarlierActiveShake",
+      "occurrences": 1,
+      "evidence": [
+        "E15"
+      ]
+    },
+    {
+      "identity": "com.openggf.game.sonic3k.scroll.SwScrlMgzTest#screenShakeOffsetsBothForegroundAndBackgroundVScrollInStateEight",
+      "occurrences": 1,
+      "evidence": [
+        "E16"
+      ]
+    },
+    {
+      "identity": "com.openggf.level.TestGameDataSourceSharedFetches#levelModuleAndAudioNullPathsUseExactSourceWithoutRomManager",
+      "occurrences": 1,
+      "evidence": [
+        "E17"
+      ]
+    },
+    {
+      "identity": "com.openggf.level.TestGameDataSourceSharedFetches#romSessionPropagatesTheExactSameRomAcrossSharedConsumers",
+      "occurrences": 1,
+      "evidence": [
+        "E17"
+      ]
+    },
+    {
+      "identity": "com.openggf.level.objects.TestObjectManagerLifecycle#s2InitialAndRuntimeLoadsBothBypassVerticalFilter",
+      "occurrences": 1,
+      "evidence": [
+        "E18"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestS3kModZoneLifecycle#taggedIdentitySurvivesSaveReopenEditorAndRealBackwardSeek",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#bootsVisibleNativeTailsAtFixedAnchorAndMaintainsFlight",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#customZoneComposesNativeTailsHudCreatorClaimsAndDecodedPipeArt",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#engineRestartResetsRunAndRecreatesTheSameInitialSequence",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#firstForwardUpdateCreatesSixIndependentEntriesAndCoversSuper32By9",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#initialTitleCardSeesTheResolvedS3kCustomZonePalette",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#onePipeScoresOncePerCycleAndResetEnablesTheNextCycle",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#pipeAndVisibleBoundsAlwaysUseCrushDeath",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#recycleMovesTheSameEntryAndAdvancesCounterPermutation",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#rewindAcrossFirstControllerUpdateKeepsOneControllerAndSixStablePipes",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#rewindRestoresAndResimulatesScoreAndLiveRecycleExactly",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.mods.code.TestSampleFlappyIntegration#scoreCrossingOneHundredDoesNotRunCollectibleRingBonusLogic",
+      "occurrences": 1,
+      "evidence": [
+        "E19"
+      ]
+    },
+    {
+      "identity": "com.openggf.sprites.managers.TestSpriteManagerDebugEmeraldGrant#shiftedEmeraldKeyGrantsOnlySuperEmeralds",
+      "occurrences": 1,
+      "evidence": [
+        "E20"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzAct2RouteHeadless#nativeStartWaveCompletesFbz2AndRequestsSandopolisAct0",
+      "occurrences": 1,
+      "evidence": [
+        "E21"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzActTransitionHeadless#productionReloadPreservesConcreteSstFamiliesAtExactBoundarySlotsAndLinks",
+      "occurrences": 1,
+      "evidence": [
+        "E22"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzActTransitionHeadless#screenEventReloadPreservesLiveTeamStateAndUsesShiftedWindows",
+      "occurrences": 1,
+      "evidence": [
+        "E23"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#configuredTeamSurvivesSharedPlaneAndBossState(TeamCase)[1]",
+      "occurrences": 1,
+      "evidence": [
+        "E24"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#configuredTeamSurvivesSharedPlaneAndBossState(TeamCase)[2]",
+      "occurrences": 1,
+      "evidence": [
+        "E21"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#configuredTeamSurvivesSharedPlaneAndBossState(TeamCase)[3]",
+      "occurrences": 1,
+      "evidence": [
+        "E21"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#configuredTeamSurvivesSharedPlaneAndBossState(TeamCase)[4]",
+      "occurrences": 1,
+      "evidence": [
+        "E25"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#configuredTeamSurvivesSharedPlaneAndBossState(TeamCase)[5]",
+      "occurrences": 1,
+      "evidence": [
+        "E26"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#donatedMovementProfileCanReachTheMandatoryBossEntryWithoutSpindash(String, Path)[1]",
+      "occurrences": 1,
+      "evidence": [
+        "E24"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#donatedMovementProfileCanReachTheMandatoryBossEntryWithoutSpindash(String, Path)[2]",
+      "occurrences": 1,
+      "evidence": [
+        "E27"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#donatedMovementProfileCanReachTheMandatoryBossEntryWithoutSpindash(String, Path)[3]",
+      "occurrences": 1,
+      "evidence": [
+        "E28"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#viewportKeepsWorldThresholdsCullingAndBossContainment(WidescreenAspect, int)[1]",
+      "occurrences": 1,
+      "evidence": [
+        "E21"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#viewportKeepsWorldThresholdsCullingAndBossContainment(WidescreenAspect, int)[2]",
+      "occurrences": 1,
+      "evidence": [
+        "E29"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#viewportKeepsWorldThresholdsCullingAndBossContainment(WidescreenAspect, int)[3]",
+      "occurrences": 1,
+      "evidence": [
+        "E30"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#viewportKeepsWorldThresholdsCullingAndBossContainment(WidescreenAspect, int)[4]",
+      "occurrences": 1,
+      "evidence": [
+        "E31"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzCompatibilityMatrix#viewportKeepsWorldThresholdsCullingAndBossContainment(WidescreenAspect, int)[5]",
+      "occurrences": 1,
+      "evidence": [
+        "E32"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzNativeCharacterRoutes#everySoloNativeCharacterCanEnterTheTerminalBossGraphAlive(Team)[1]",
+      "occurrences": 1,
+      "evidence": [
+        "E33"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzNativeCharacterRoutes#everySoloNativeCharacterCanEnterTheTerminalBossGraphAlive(Team)[2]",
+      "occurrences": 1,
+      "evidence": [
+        "E33"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestFbzNativeCharacterRoutes#everySoloNativeCharacterCanEnterTheTerminalBossGraphAlive(Team)[3]",
+      "occurrences": 1,
+      "evidence": [
+        "E33"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestRomAudioIntegration#sonic2DacUsesTheShippedTwoSampleCycleBudget",
+      "occurrences": 1,
+      "evidence": [
+        "E34"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestS3kCnzTeleporterRouteHeadless#groundedTeleporterWaitsForArtReadinessAndPublishesRomPalettePatch",
+      "occurrences": 1,
+      "evidence": [
+        "E35"
+      ]
+    },
+    {
+      "identity": "com.openggf.tests.TestS3kIczEndBossObject#frostPuffCaptureIsLimitedToTheNativeP1P2Prefix",
+      "occurrences": 1,
+      "evidence": [
+        "E36"
+      ]
+    },
+    {
+      "identity": "com.openggf.tools.audio.completerun.TestProductionBk2AudioRunner#emptyMovieIsRejectedBeforeStartupCanCreateAFrameBoundary",
+      "occurrences": 1,
+      "evidence": [
+        "E37"
+      ]
+    },
+    {
+      "identity": "com.openggf.tools.fbzvisual.TestFbzVisualEvidenceToolingContract#emulatorAndValidatorSourcesContainFailClosedVisibilityAndSupersessionGates",
+      "occurrences": 1,
+      "evidence": [
+        "E38"
+      ]
+    },
+    {
+      "identity": "com.openggf.tools.fbzvisual.TestFbzVisualEvidenceToolingContract#validatorExcludesHistoricalSupersededSeriesFromActiveFailureAccounting",
+      "occurrences": 1,
+      "evidence": [
+        "E38"
+      ]
+    }
+  ],
+  "evidence": {
+    "E01": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <3> but was: <0>",
+      "causes": []
+    },
+    "E02": {
+      "status": "error",
+      "type": "java.lang.NoSuchMethodException",
+      "message": "com.openggf.Engine.ensureAudioBackend()",
+      "causes": []
+    },
+    "E03": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "source is missing public void setBackend(AudioBackend backend) ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E04": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E05": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "Expected java.lang.IllegalArgumentException to be thrown, but nothing was thrown.",
+      "causes": []
+    },
+    "E06": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "DelegatingGameModule must forward these GameModule methods to the base module:\ngetGameOverFlowProvider[]\ngetShieldFactory[]\ngetInstaShieldFactory[]\ngetWaterSplashFactory[] ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E07": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "Expected exactly 11 atomic adapters, got: [hardware-timing, dynamic-art-diagnostics, seamless_transition_resource_handoffs, camera, gamestate, gamerng, timermanager, fademanager, oscillation, kosinski-module-queue, sonic2.level-music-scheduler, solid-execution] ==> expected: <11> but was: <12>",
+      "causes": []
+    },
+    "E08": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <11> but was: <12>",
+      "causes": []
+    },
+    "E09": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "Precondition: normal touch (no time attack) still plays the giant-ring SFX ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E10": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "The capture pass writes velocity but does not invent an Obj1E_MoveCharacter call. ==> expected: <4336> but was: <4328>",
+      "causes": []
+    },
+    "E11": {
+      "status": "failure",
+      "type": "Argument(s) are different! Wanted",
+      "message": "\nArgument(s) are different! Wanted:\naudioManager.playMusic(2);\n-> at com.openggf.audio.AudioManager.playMusic(AudioManager.java:1959)\nActual invocations have different arguments:\naudioManager.playMusic(1);\n-> at com.openggf.game.sonic3k.events.Sonic3kAIZEvents.advanceFireMusicRestore(Sonic3kAIZEvents.java:733)\n",
+      "causes": []
+    },
+    "E12": {
+      "status": "failure",
+      "type": "Argument(s) are different! Wanted",
+      "message": "\nArgument(s) are different! Wanted:\naudioManager.fadeOutMusic(40, 6);\n-> at com.openggf.audio.AudioManager.fadeOutMusic(AudioManager.java:3126)\nActual invocations have different arguments:\naudioManager.fadeOutMusic();\n-> at com.openggf.game.sonic3k.objects.SongFadeTransitionInstance.update(SongFadeTransitionInstance.java:164)\n",
+      "causes": []
+    },
+    "E13": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <[171, 170, 169, 168, 61, 255, 52, 51, 47, 133, 42, 138, 40, 128, 38, 229, 228, 227, 226, 225, 224, 208, 127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 15, 112, 111, 207, 206, 107, 106, 8, 7, 2, 1, 0]> but was: <[255, 235, 229, 228, 227, 226, 225, 224, 208, 207, 206, 194, 193, 192, 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180, 179, 178, 177, 176, 175, 174, 173, 172, 171, 170, 169, 168, 167, 166, 165, 164, 163, 162, 161, 159, 158, 157, 156, 155, 154, 153, 152, 151, 150, 149, 148, 147, 146, 145, 144, 143, 142, 141, 140, 138, 137, 136, 135, 134, 133, 131, 130, 128, 127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112, 111, 110, 109, 108, 107, 106, 105, 104, 103, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80, 79, 78, 77, 76, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 38, 36, 34, 32, 25, 24, 23, 22, 21, 16, 15, 14, 13, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]>",
+      "causes": []
+    },
+    "E14": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "the injected floor distance must win over the foreign global floor ==> expected: <594> but was: <592>",
+      "causes": []
+    },
+    "E15": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "The current frame publishes the sample prepared by the preceding background-event pass ==> expected: <0> but was: <3>",
+      "causes": []
+    },
+    "E16": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "The sample prepared at the background-event tail is not visible until the next frame ==> expected: <0> but was: <3>",
+      "causes": []
+    },
+    "E17": {
+      "status": "error",
+      "type": "java.lang.NullPointerException",
+      "message": "Cannot invoke \"com.openggf.game.LevelInitProfile.isLevelMusicPublicationPending()\" because \"profile\" is null",
+      "causes": []
+    },
+    "E18": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "S2 ObjectsManager_Init uses the same X-only load window as its runtime passes ==> expected: <1> but was: <0>",
+      "causes": []
+    },
+    "E19": {
+      "status": "error",
+      "type": "java.lang.RuntimeException",
+      "message": "java.io.IOException: Failed to load level due to unexpected error.",
+      "causes": [
+        "Caused by: java.io.IOException: Failed to load level due to unexpected error.",
+        "Caused by: java.lang.IndexOutOfBoundsException: Index: 392 Size: 1"
+      ]
+    },
+    "E20": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <1> but was: <0>",
+      "causes": []
+    },
+    "E21": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "obj28-terrain-recovery-timeout frame=30613 target=$1d7d player=($1d6e,$76c) speed=($0,$0) air=false onObject=false hurt=false dead=false controller={postSwitch=true,lateStage=4,lateButtonLive=true,lateDoorLive=true,trigger7Stage=4,trigger7RightHandoff=true,trigger7HandoffPlayer=($1a19,$5d0),trigger7HandoffXSpeed=$fb21,trigger7Landing=true,trigger7Turn=true,trigger7ButtonLive=true,trigger7DoorLive=true,obj74Armed=true,obj74VerticalClear=true,obj74Cleared=true,obj74Clearances=2,obj74Bindings=2,obj74Encountered=[250, 255],obj74ClearedLayouts=[250, 255],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=30,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=135,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d4b,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true],obj28RecoveryActive=true,obj28RecoveryFrontier=7549,obj28RecoveryHold=7532,obj28RecoveryFrames=512,obj28LastCandidate=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=135,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d4b,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true,owner=obj28-recovery-terrain-hold,mask=$0} recent=[ f30584:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30585:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30586:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30587:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30588:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30589:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30590:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30591:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30592:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30593:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30594:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30595:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30596:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30597:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30598:i08 p=1D6F,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30599:i04 p=1D6E,076C v=FF80,0000 g=FF80 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30600:i00 p=1D6E,076C v=FF8C,0000 g=FF8C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30601:i00 p=1D6D,076C v=FF98,0000 g=FF98 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30602:i08 p=1D6E,076C v=0080,0000 g=0080 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30603:i04 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30604:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30605:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30606:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30607:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30608:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30609:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30610:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30611:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30612:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30613:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false] recoveryFrames=513 evidence=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=135,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d4b,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E22": {
+      "status": "error",
+      "type": "java.lang.IllegalStateException",
+      "message": "fresh initial Process_Sprites unexpectedly registered absolute slot 3",
+      "causes": []
+    },
+    "E23": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <ObjectRefId[slotIndex=100, generation=0, spawnId=-1, dynamicId=3, kind=DYNAMIC]> but was: <ObjectRefId[slotIndex=100, generation=0, spawnId=-1, dynamicId=2, kind=DYNAMIC]>",
+      "causes": []
+    },
+    "E24": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "obj28-terrain-recovery-timeout frame=30613 target=$1d7d player=($1d6e,$76c) speed=($0,$0) air=false onObject=false hurt=false dead=false controller={postSwitch=true,lateStage=4,lateButtonLive=true,lateDoorLive=true,trigger7Stage=4,trigger7RightHandoff=true,trigger7HandoffPlayer=($1a1a,$5d1),trigger7HandoffXSpeed=$fb10,trigger7Landing=true,trigger7Turn=true,trigger7ButtonLive=true,trigger7DoorLive=true,obj74Armed=true,obj74VerticalClear=true,obj74Cleared=true,obj74Clearances=2,obj74Bindings=2,obj74Encountered=[250, 255],obj74ClearedLayouts=[250, 255],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=30,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=135,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d4b,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true],obj28RecoveryActive=true,obj28RecoveryFrontier=7549,obj28RecoveryHold=7532,obj28RecoveryFrames=512,obj28LastCandidate=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=135,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d4b,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true,owner=obj28-recovery-terrain-hold,mask=$0} recent=[ f30584:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30585:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30586:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30587:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30588:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30589:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30590:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30591:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30592:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30593:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30594:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30595:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30596:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30597:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30598:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30599:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30600:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30601:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30602:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30603:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30604:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30605:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30606:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30607:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30608:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30609:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30610:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30611:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30612:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30613:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false] recoveryFrames=513 evidence=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=135,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d4b,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E25": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "obj28-terrain-recovery-timeout frame=30608 target=$1d7d player=($1d6e,$76c) speed=($c,$0) air=false onObject=false hurt=false dead=false controller={postSwitch=true,lateStage=4,lateButtonLive=true,lateDoorLive=true,trigger7Stage=4,trigger7RightHandoff=true,trigger7HandoffPlayer=($1a19,$5d0),trigger7HandoffXSpeed=$fb21,trigger7Landing=true,trigger7Turn=true,trigger7ButtonLive=true,trigger7DoorLive=true,obj74Armed=true,obj74VerticalClear=true,obj74Cleared=true,obj74Clearances=2,obj74Bindings=2,obj74Encountered=[250, 255],obj74ClearedLayouts=[250, 255],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=25,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=143,frontier=7549,hold=7532,stoppingEdge=7533,authority=predicate=false/centre=($1d48,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true],obj28RecoveryActive=true,obj28RecoveryFrontier=7549,obj28RecoveryHold=7532,obj28RecoveryFrames=512,obj28LastCandidate=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=143,frontier=7549,hold=7532,stoppingEdge=7533,authority=predicate=false/centre=($1d48,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true,owner=obj28-recovery-terrain-hold,mask=$8} recent=[ f30579:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30580:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30581:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30582:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30583:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30584:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30585:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30586:i08 p=1D6F,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30587:i04 p=1D6E,076C v=FF80,0000 g=FF80 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30588:i00 p=1D6E,076C v=FF8C,0000 g=FF8C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30589:i00 p=1D6D,076C v=FF98,0000 g=FF98 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30590:i08 p=1D6E,076C v=0080,0000 g=0080 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30591:i04 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30592:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30593:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30594:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30595:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30596:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30597:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30598:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30599:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30600:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30601:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30602:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30603:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30604:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30605:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30606:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30607:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30608:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false] recoveryFrames=513 evidence=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=143,frontier=7549,hold=7532,stoppingEdge=7533,authority=predicate=false/centre=($1d48,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E26": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "obj28-terrain-recovery-timeout frame=30608 target=$1d7d player=($1d6e,$76c) speed=($c,$0) air=false onObject=false hurt=false dead=false controller={postSwitch=true,lateStage=4,lateButtonLive=true,lateDoorLive=true,trigger7Stage=4,trigger7RightHandoff=true,trigger7HandoffPlayer=($1a19,$5d0),trigger7HandoffXSpeed=$fb21,trigger7Landing=true,trigger7Turn=true,trigger7ButtonLive=true,trigger7DoorLive=true,obj74Armed=true,obj74VerticalClear=true,obj74Cleared=true,obj74Clearances=2,obj74Bindings=2,obj74Encountered=[250, 255],obj74ClearedLayouts=[250, 255],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=25,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=142,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d49,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true],obj28RecoveryActive=true,obj28RecoveryFrontier=7549,obj28RecoveryHold=7532,obj28RecoveryFrames=512,obj28LastCandidate=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=142,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d49,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true,owner=obj28-recovery-terrain-hold,mask=$8} recent=[ f30579:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30580:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30581:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30582:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30583:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30584:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30585:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30586:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30587:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30588:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30589:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30590:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30591:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30592:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30593:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30594:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30595:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30596:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30597:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30598:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30599:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30600:i08 p=1D6F,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30601:i04 p=1D6E,076C v=FF80,0000 g=FF80 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30602:i00 p=1D6E,076C v=FF8C,0000 g=FF8C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30603:i00 p=1D6D,076C v=FF98,0000 g=FF98 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30604:i08 p=1D6E,076C v=0080,0000 g=0080 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30605:i04 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30606:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30607:i00 p=1D6E,076C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f30608:i08 p=1D6E,076C v=000C,0000 g=000C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false] recoveryFrames=513 evidence=aborted-prelaunch-layout=273,playerOnObject=false,playerAir=true,stage=0,launchAuthorityLost=true,episodeActive=true,latchedSame=false,carTimer=142,frontier=7549,hold=7532,stoppingEdge=7534,authority=predicate=false/centre=($1d49,$ 765)/radius=19/standRadius=19/rollRadius=14/feet=$778/air=true/groundMode=GROUND/angle=$0/rolling=false/spindash=false/crouching=false/sliding=false/objectControlled=false/controlLocked=false/moveLock=0/pushing=false/onObject=false/latchedType=com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance/latchedIsButton=true/latchedIsSelectedCar=false/buttonPos=($1d38,$ 77e)/buttonOffset=(0,0)/buttonHalfWidth=16/buttonGroundHalfHeight=6/buttonBounds=[$1d28,$ 1d48]/buttonSurface=$778/feetDelta=0/buttonDestroyed=false/buttonSkip=false/buttonSolid=true ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E27": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "frame=7343 camera=($b56,$934) player=($be5,$994) speed=($0,$f900) rings=0 hurt=false dead=true nearby=[Sonic3kSpikeObjectInstance@($c00, $930), Sonic3kSpikeObjectInstance@($c00, $9b8), Sonic3kSpikeObjectInstance@($b80, $940), Sonic3kSpikeObjectInstance@($c00, $9e8), Sonic3kSpikeObjectInstance@($b80, $970), Sonic3kSpikeObjectInstance@($b80, $9a0), FbzMineObjectInstance@($c38, $97c), Sonic3kSpikeObjectInstance@($b80, $9d0), Car@($bc0, $9e5), Car@($bc0, $985), Car@($bc0, $925), FbzMineObjectInstance@($c60, $97c)] milestones={cage=true,prison=false,elevator=true,launcher=true,flame=false,magnetic=false,chain=true,spider=false} controller=unobserved recent=[ f7314:i04 p=0BFB,0994 v=FFF4,0000 g=FFF4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7315:i04 p=0BFB,0994 v=FFE8,0000 g=FFE8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7316:i04 p=0BFA,0994 v=FFDC,0000 g=FFDC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7317:i04 p=0BFA,0994 v=FFD0,0000 g=FFD0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7318:i04 p=0BFA,0994 v=FFC4,0000 g=FFC4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7319:i04 p=0BFA,0994 v=FFB8,0000 g=FFB8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7320:i04 p=0BF9,0994 v=FFAC,0000 g=FFAC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7321:i04 p=0BF9,0994 v=FFA0,0000 g=FFA0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7322:i04 p=0BF9,0994 v=FF94,0000 g=FF94 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7323:i04 p=0BF8,0994 v=FF88,0000 g=FF88 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7324:i04 p=0BF8,0994 v=FF7C,0000 g=FF7C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7325:i04 p=0BF7,0994 v=FF70,0000 g=FF70 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7326:i04 p=0BF6,0994 v=FF64,0000 g=FF64 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7327:i04 p=0BF6,0994 v=FF58,0000 g=FF58 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7328:i04 p=0BF5,0994 v=FF4C,0000 g=FF4C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7329:i04 p=0BF4,0994 v=FF40,0000 g=FF40 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7330:i04 p=0BF3,0994 v=FF34,0000 g=FF34 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7331:i04 p=0BF3,0994 v=FF28,0000 g=FF28 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7332:i04 p=0BF2,0994 v=FF1C,0000 g=FF1C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7333:i04 p=0BF1,0994 v=FF10,0000 g=FF10 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7334:i04 p=0BF0,0994 v=FF04,0000 g=FF04 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7335:i04 p=0BEF,0994 v=FEF8,0000 g=FEF8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7336:i04 p=0BEE,0994 v=FEEC,0000 g=FEEC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7337:i04 p=0BED,0994 v=FEE0,0000 g=FEE0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7338:i04 p=0BEB,0994 v=FED4,0000 g=FED4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7339:i04 p=0BEA,0994 v=FEC8,0000 g=FEC8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7340:i04 p=0BE9,0994 v=FEBC,0000 g=FEBC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7341:i04 p=0BE8,0994 v=FEB0,0000 g=FEB0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7342:i04 p=0BE6,0994 v=FEA4,0000 g=FEA4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f7343:i04 p=0BE5,0994 v=0000,F900 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=false obj=false dead=true] ==> expected: <false> but was: <true>",
+      "causes": []
+    },
+    "E28": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "frame=29706 camera=($1810,$579) player=($18b0,$5d0) speed=($fe00,$fc00) rings=0 hurt=true dead=false nearby=[AnimalObjectInstance@($1868, $59a), LostRingObjectInstance@($18af, $5d1), Sonic3kPointsObjectInstance@($1868, $59b), LostRingObjectInstance@($18b0, $5d1), FbzMagneticSpikeBallObjectInstance@($1840, $590), FbzMagneticSpikeBallObjectInstance@($1840, $5ac), ExplosionObjectInstance@($1868, $5c0), FbzMagneticSpikeBallObjectInstance@($18c0, $590), FbzMagneticSpikeBallObjectInstance@($18c0, $5ac), FbzMagneticSpikeBallObjectInstance@($18c0, $5cb), LostRingObjectInstance@($18ad, $5d1), LostRingObjectInstance@($18b2, $5d1), LostRingObjectInstance@($18ac, $5d2), LostRingObjectInstance@($18b3, $5d2), LostRingObjectInstance@($18ac, $5d4), LostRingObjectInstance@($18b3, $5d4), LostRingObjectInstance@($18ac, $5d5), LostRingObjectInstance@($18b3, $5d5), LostRingObjectInstance@($18ac, $5d7), LostRingObjectInstance@($18b3, $5d7), LostRingObjectInstance@($18ad, $5d8), LostRingObjectInstance@($18b2, $5d8), LostRingObjectInstance@($18af, $5d8), LostRingObjectInstance@($18b0, $5d8), LostRingObjectInstance@($18af, $5d3), LostRingObjectInstance@($18b0, $5d3), LostRingObjectInstance@($18ae, $5d3), LostRingObjectInstance@($18b1, $5d3), LostRingObjectInstance@($18ae, $5d3), LostRingObjectInstance@($18b1, $5d3), LostRingObjectInstance@($18ae, $5d4), LostRingObjectInstance@($18b1, $5d4), LostRingObjectInstance@($18ae, $5d5), LostRingObjectInstance@($18b1, $5d5), LostRingObjectInstance@($18ae, $5d6), LostRingObjectInstance@($18b1, $5d6), LostRingObjectInstance@($18ae, $5d6), LostRingObjectInstance@($18b1, $5d6), LostRingObjectInstance@($18af, $5d6), LostRingObjectInstance@($18b0, $5d6)] milestones={cage=true,prison=false,elevator=true,launcher=true,flame=false,magnetic=false,chain=true,spider=true} subboss=[] laser=[] boss=[] controller={postSwitch=true,lateStage=4,lateButtonLive=true,lateDoorLive=true,trigger7Stage=0,trigger7RightHandoff=false,trigger7HandoffPlayer=($ffffffff,$ffffffff),trigger7HandoffXSpeed=$0,trigger7Landing=false,trigger7Turn=false,trigger7ButtonLive=false,trigger7DoorLive=false,obj74Armed=false,obj74VerticalClear=false,obj74Cleared=false,obj74Clearances=0,obj74Bindings=0,obj74Encountered=[],obj74ClearedLayouts=[],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=0,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[],obj28RecoveryActive=false,obj28RecoveryFrontier=-1,obj28RecoveryHold=-1,obj28RecoveryFrames=0,obj28LastCandidate=none,owner=post-door-live-hazards,mask=$8} recent=[ f29677:i08 p=1809,05EC v=05B6,0000 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f29678:i18 p=1809,05F1 v=05B6,F980 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29679:i18 p=180E,05EA v=05CE,F9B8 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29680:i18 p=1814,05E4 v=05E6,F9F0 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29681:i18 p=181A,05DE v=05FE,FA28 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29682:i18 p=1820,05D8 v=0600,FA60 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29683:i18 p=1826,05D2 v=0600,FA98 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29684:i18 p=182C,05CD v=0600,FAD0 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29685:i18 p=1832,05C8 v=0600,FB08 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29686:i18 p=1838,05C3 v=0600,FB40 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29687:i18 p=183E,05BE v=0600,FB78 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29688:i18 p=1844,05BE v=0600,0000 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29689:i08 p=184A,05BE v=0600,0038 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29690:i08 p=1850,05BE v=0600,FF90 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29691:i18 p=1856,05BE v=05D0,0000 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29692:i08 p=185C,05BE v=05E8,0038 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29693:i08 p=1862,05BF v=0600,0070 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29694:i08 p=1868,05BF v=0600,00A8 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29695:i08 p=186E,05C0 v=0600,00E0 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29696:i08 p=1874,05C0 v=0600,0118 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29697:i08 p=187A,05C2 v=0600,0150 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29698:i08 p=1880,05C3 v=0600,0188 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29699:i08 p=1886,05C4 v=0600,01C0 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29700:i08 p=188C,05C6 v=0600,01F8 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29701:i08 p=1892,05C8 v=0600,0230 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29702:i08 p=1898,05CA v=0600,0268 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29703:i08 p=189E,05CD v=0600,02A0 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29704:i08 p=18A4,05CF v=0600,02D8 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29705:i08 p=18AA,05D2 v=0600,0310 g=05B6 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29706:i08 p=18B0,05D0 v=FE00,FC00 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=false obj=false dead=false] ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E29": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "frame=27356 camera=($625,$7ea) player=($6ef,$84a) speed=($0,$f900) rings=30 hurt=false dead=true nearby=[Sonic3kSpikeObjectInstance@($680, $8b8), Sonic3kInvisibleHurtBlockVObjectInstance@($6c0, $818), Car@($6c0, $81d), Sonic3kInvisibleBlockObjectInstance@($6c0, $82c), Car@($6c0, $87d)] milestones={cage=true,prison=false,elevator=true,launcher=true,flame=false,magnetic=false,chain=true,spider=false} controller={postSwitch=false,lateStage=0,lateButtonLive=false,lateDoorLive=false,trigger7Stage=0,trigger7RightHandoff=false,trigger7HandoffPlayer=($ffffffff,$ffffffff),trigger7HandoffXSpeed=$0,trigger7Landing=false,trigger7Turn=false,trigger7ButtonLive=false,trigger7DoorLive=false,obj74Armed=false,obj74VerticalClear=false,obj74Cleared=false,obj74Clearances=0,obj74Bindings=0,obj74Encountered=[],obj74ClearedLayouts=[],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=0,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[],obj28RecoveryActive=false,obj28RecoveryFrontier=-1,obj28RecoveryHold=-1,obj28RecoveryFrames=0,obj28LastCandidate=none,owner=main-route,mask=$8} recent=[ f27327:i08 p=06CC,086C v=0084,0000 g=0084 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27328:i08 p=06CC,086B v=0090,0000 g=0090 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27329:i08 p=06CD,086A v=009C,0000 g=009C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27330:i08 p=06CD,0869 v=00A8,0000 g=00A8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27331:i08 p=06CE,0868 v=00B4,0000 g=00B4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27332:i08 p=06CF,0866 v=00C0,0000 g=00C0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27333:i08 p=06D0,0865 v=00CC,0000 g=00CC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27334:i08 p=06D1,0864 v=00D8,0000 g=00D8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27335:i08 p=06D1,0863 v=00E4,0000 g=00E4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27336:i08 p=06D2,0862 v=00F0,0000 g=00F0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27337:i08 p=06D3,0861 v=00FC,0000 g=00FC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27338:i08 p=06D4,0860 v=0108,0000 g=0108 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27339:i08 p=06D5,085E v=0114,0000 g=0114 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27340:i08 p=06D7,085D v=0120,0000 g=0120 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27341:i08 p=06D8,085C v=012C,0000 g=012C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27342:i08 p=06D9,085B v=0138,0000 g=0138 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27343:i08 p=06DA,085A v=0144,0000 g=0144 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27344:i08 p=06DC,0858 v=0150,0000 g=0150 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27345:i08 p=06DD,0857 v=015C,0000 g=015C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27346:i08 p=06DE,0856 v=0168,0000 g=0168 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27347:i08 p=06E0,0855 v=0174,0000 g=0174 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27348:i08 p=06E1,0853 v=0180,0000 g=0180 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27349:i08 p=06E3,0852 v=018C,0000 g=018C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27350:i08 p=06E4,0851 v=0198,0000 g=0198 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27351:i08 p=06E6,0850 v=01A4,0000 g=01A4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27352:i08 p=06E8,084E v=01B0,0000 g=01B0 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27353:i08 p=06E9,084D v=01BC,0000 g=01BC a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27354:i08 p=06EB,084C v=01C8,0000 g=01C8 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27355:i08 p=06ED,084A v=01D4,0000 g=01D4 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f27356:i08 p=06EF,084A v=0000,F900 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=false obj=false dead=true] ==> expected: <false> but was: <true>",
+      "causes": []
+    },
+    "E30": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "frame=29138 camera=($168f,$589) player=($178f,$5ec) speed=($fe00,$fc00) rings=0 hurt=true dead=false nearby=[BlasterBadnikInstance@($17a6, $5f1), FbzScrewDoorObjectInstance@($1718, $59e), LostRingObjectInstance@($178e, $5e8), LostRingObjectInstance@($178f, $5e8), LostRingObjectInstance@($178c, $5e8), LostRingObjectInstance@($1791, $5e8), LostRingObjectInstance@($178b, $5e9), LostRingObjectInstance@($1792, $5e9), LostRingObjectInstance@($178b, $5eb), LostRingObjectInstance@($1792, $5eb), LostRingObjectInstance@($178b, $5ec), LostRingObjectInstance@($1792, $5ec), LostRingObjectInstance@($178b, $5ee), LostRingObjectInstance@($1792, $5ee), LostRingObjectInstance@($178c, $5ef), LostRingObjectInstance@($1791, $5ef), LostRingObjectInstance@($178e, $5ef), LostRingObjectInstance@($178f, $5ef), LostRingObjectInstance@($178e, $5ea), LostRingObjectInstance@($178f, $5ea), LostRingObjectInstance@($178d, $5ea), LostRingObjectInstance@($1790, $5ea), LostRingObjectInstance@($178d, $5ea), LostRingObjectInstance@($1790, $5ea), LostRingObjectInstance@($178d, $5eb), LostRingObjectInstance@($1790, $5eb), LostRingObjectInstance@($178d, $5ec), LostRingObjectInstance@($1790, $5ec), LostRingObjectInstance@($178d, $5ed), LostRingObjectInstance@($1790, $5ed), LostRingObjectInstance@($178d, $5ed), LostRingObjectInstance@($1790, $5ed), LostRingObjectInstance@($178e, $5ed), LostRingObjectInstance@($178f, $5ed)] milestones={cage=true,prison=false,elevator=true,launcher=true,flame=false,magnetic=false,chain=true,spider=true} subboss=[] laser=[] boss=[] controller={postSwitch=true,lateStage=4,lateButtonLive=true,lateDoorLive=true,trigger7Stage=0,trigger7RightHandoff=false,trigger7HandoffPlayer=($ffffffff,$ffffffff),trigger7HandoffXSpeed=$0,trigger7Landing=false,trigger7Turn=false,trigger7ButtonLive=false,trigger7DoorLive=false,obj74Armed=false,obj74VerticalClear=false,obj74Cleared=false,obj74Clearances=0,obj74Bindings=0,obj74Encountered=[],obj74ClearedLayouts=[],obj74Crossing=false,obj74CrossBudget=0,obj74CrossFrames=0,obj74YFixed=none,obj74WaitFrames=0,obj28Target=none,obj28Support=none,obj28RollRequested=false,obj28Stage=0,obj28SpindashCapable=false,obj28LaunchSpeed=$0,obj28AssistConsumed=false,obj28Entered=false,obj28SupportAcquired=false,obj28SupportExited=false,obj28Bindings=0,obj28Clearances=0,obj28Encountered=[],obj28Cleared=[],obj28MinimumGaps={},obj28RollEntrySpeeds={},obj28SupportEvidence={},obj28TentativeBinding=false,obj28AbortEvidence=[],obj28RecoveryActive=false,obj28RecoveryFrontier=-1,obj28RecoveryHold=-1,obj28RecoveryFrames=0,obj28LastCandidate=none,owner=post-door-live-hazards,mask=$8} recent=[ f29109:i08 p=1733,05EC v=0210,0000 g=0210 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f29110:i08 p=1735,05EC v=021C,0000 g=021C a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f29111:i08 p=1737,05EC v=0228,0000 g=0228 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f29112:i08 p=173A,05EC v=0234,0000 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f29113:i18 p=173A,05F1 v=0234,F980 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29114:i18 p=173C,05EB v=024C,F9B8 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29115:i18 p=173E,05E4 v=0264,F9F0 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29116:i18 p=1741,05DE v=027C,FA28 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29117:i18 p=1743,05D8 v=0294,FA60 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29118:i18 p=1746,05D3 v=02AC,FA98 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29119:i18 p=1749,05CE v=02C4,0000 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29120:i08 p=174C,05CE v=02DC,0038 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29121:i08 p=174F,05CF v=02F4,0070 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29122:i08 p=1752,05CF v=030C,00A8 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29123:i08 p=1755,05D0 v=0324,00E0 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29124:i08 p=1758,05D1 v=033C,0118 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29125:i08 p=175B,05D2 v=0354,0150 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29126:i08 p=175F,05D3 v=036C,0188 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29127:i08 p=1762,05D4 v=0384,01C0 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29128:i08 p=1766,05D6 v=039C,01F8 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29129:i08 p=176A,05D8 v=03B4,0230 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29130:i08 p=176D,05DA v=03CC,0268 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29131:i08 p=1771,05DD v=03E4,02A0 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29132:i08 p=1775,05DF v=03FC,02D8 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29133:i08 p=1779,05E2 v=0414,0310 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29134:i08 p=177D,05E5 v=042C,0348 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29135:i08 p=1782,05E9 v=0444,0380 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29136:i08 p=1786,05EC v=045C,03B8 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29137:i08 p=178B,05F0 v=0474,03F0 g=0234 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=false dead=false,  f29138:i08 p=178F,05EC v=FE00,FC00 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=false obj=false dead=false] ==> expected: <true> but was: <false>",
+      "causes": []
+    },
+    "E31": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "frame=1455 camera=($730,$20c) player=($870,$26c) speed=($0,$f900) rings=0 hurt=false dead=true nearby=[Sonic3kSpikeObjectInstance@($810, $290), FbzPlatformBlocksObjectInstance@($810, $2b0), Sonic3kSpikeObjectInstance@($870, $290), FbzPlatformBlocksObjectInstance@($870, $2b0)] milestones={cage=true,prison=false,elevator=false,launcher=true,flame=false,magnetic=false,chain=true,spider=false} controller=unobserved recent=[ f1426:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1427:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1428:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1429:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1430:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1431:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1432:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1433:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1434:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1435:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1436:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1437:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1438:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1439:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1440:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1441:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1442:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1443:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1444:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1445:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1446:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1447:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1448:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1449:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1450:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1451:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1452:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1453:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1454:i02 p=0870,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=false roll=false obj=false dead=false,  f1455:i02 p=0870,026C v=0000,F900 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=false obj=false dead=true] ==> expected: <false> but was: <true>",
+      "causes": []
+    },
+    "E32": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "frame=1291 camera=($688,$1e9) player=($818,$26c) speed=($0,$f900) rings=0 hurt=false dead=true nearby=[Sonic3kSpikeObjectInstance@($870, $290), Sonic3kSpikeObjectInstance@($810, $290)] milestones={cage=true,prison=false,elevator=false,launcher=true,flame=false,magnetic=false,chain=true,spider=false} controller=unobserved recent=[ f1262:i08 p=0818,0236 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1263:i08 p=0818,0238 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1264:i08 p=0818,023A v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1265:i08 p=0818,023C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1266:i08 p=0818,023E v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1267:i08 p=0818,0240 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1268:i08 p=0818,0242 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1269:i08 p=0818,0244 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1270:i08 p=0818,0246 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1271:i08 p=0818,0248 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1272:i08 p=0818,024A v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1273:i08 p=0818,024C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1274:i08 p=0818,024E v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1275:i08 p=0818,0250 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1276:i08 p=0818,0252 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1277:i08 p=0818,0254 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1278:i08 p=0818,0256 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1279:i08 p=0818,0258 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1280:i08 p=0818,025A v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1281:i08 p=0818,025C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1282:i08 p=0818,025E v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1283:i08 p=0818,0260 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1284:i08 p=0818,0262 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1285:i08 p=0818,0264 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1286:i08 p=0818,0266 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1287:i08 p=0818,0268 v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1288:i08 p=0818,026A v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1289:i08 p=0818,026C v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1290:i08 p=0818,026E v=0000,0000 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=true obj=true dead=false,  f1291:i08 p=0818,026C v=0000,F900 g=0000 a=00 mode=GROUND layer=0 solid=0C/0D air=true roll=false obj=false dead=true] ==> expected: <false> but was: <true>",
+      "causes": []
+    },
+    "E33": {
+      "status": "error",
+      "type": "java.lang.IndexOutOfBoundsException",
+      "message": "Index 0 out of bounds for length 0",
+      "causes": []
+    },
+    "E34": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "zWriteToDAC costs 295 Z80 cycles per two decoded samples ==> expected: <295> but was: <288>",
+      "causes": []
+    },
+    "E35": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "the object pass precedes the loop-tail art pump, so readiness is visible next frame ==> expected: <false> but was: <true>",
+      "causes": []
+    },
+    "E36": {
+      "status": "failure",
+      "type": "org.mockito.exceptions.verification.NeverWantedButInvoked",
+      "message": "\nabstractPlayableSprite.setAnimationId(26);\nNever wanted here:\n-> at com.openggf.sprites.playable.AbstractPlayableSprite.setAnimationId(AbstractPlayableSprite.java:1807)\nBut invoked here:\n-> at com.openggf.game.sonic3k.objects.bosses.IczEndBossInstance.frostCapture(IczEndBossInstance.java:1045) with arguments: [26]\n",
+      "causes": []
+    },
+    "E37": {
+      "status": "failure",
+      "type": "org.opentest4j.AssertionFailedError",
+      "message": "expected: <null> but was: <com.openggf.GameLoop@3a106223>",
+      "causes": []
+    },
+    "E38": {
+      "status": "error",
+      "type": "java.nio.file.NoSuchFileException",
+      "message": "tools/validation/Validate-FbzVisualCheckpoints.ps1",
+      "causes": []
+    }
+  }
+}

@@ -90,30 +90,44 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     public interface LiveMutationToken {
     }
 
+    /** Only one registry mutation is open; token flags and diagnostics remain independent. */
+    private final class MutationBuffers {
+        private final MusicSlot[] overrides = new MusicSlot[overrideStack.length];
+        private final SampleBackedVoice[] samples = new SampleBackedVoice[sampleSfx.length];
+        private final PresentationVoice[] voices =
+                new PresentationVoice[overrideStack.length + sampleSfx.length + 2];
+        private final Object[] voiceStates = new Object[voices.length];
+        private final long[] removals = new long[deferredRemovals.length];
+        private final long[] warnings = new long[warnedRejectionVoiceIds.length];
+
+        private void clearReferences() {
+            java.util.Arrays.fill(overrides, null);
+            java.util.Arrays.fill(samples, null);
+            java.util.Arrays.fill(voices, null);
+            java.util.Arrays.fill(voiceStates, null);
+        }
+    }
+
+    private MutationBuffers mutationBuffers;
+
     private final class RegistryLiveMutation implements LiveMutationToken {
         private final AudioVoiceRegistry owner = AudioVoiceRegistry.this;
         private final MusicSlot activeMusic =
                 AudioVoiceRegistry.this.activeMusic;
-        private final MusicSlot[] overrides = java.util.Arrays.copyOf(
-                AudioVoiceRegistry.this.overrideStack,
-                AudioVoiceRegistry.this.overrideCount);
+        private final MusicSlot[] overrides = mutationBuffers.overrides;
         private final SampleBackedVoice rawPcm =
                 AudioVoiceRegistry.this.rawPcm;
-        private final SampleBackedVoice[] sampleSfx =
-                java.util.Arrays.copyOf(
-                        AudioVoiceRegistry.this.sampleSfx,
-                        AudioVoiceRegistry.this.sampleSfxCount);
-        private final PresentationVoice[] voices;
-        private final Object[] voiceStates;
+        private final SampleBackedVoice[] sampleSfx = mutationBuffers.samples;
+        private final PresentationVoice[] voices = mutationBuffers.voices;
+        private final Object[] voiceStates = mutationBuffers.voiceStates;
+        private final int voiceCount;
         private final int overrideCount =
                 AudioVoiceRegistry.this.overrideCount;
         private final int sampleSfxCount =
                 AudioVoiceRegistry.this.sampleSfxCount;
         private final int deferredRemovalCount =
                 AudioVoiceRegistry.this.deferredRemovalCount;
-        private final long[] deferredRemovals = java.util.Arrays.copyOf(
-                AudioVoiceRegistry.this.deferredRemovals,
-                AudioVoiceRegistry.this.deferredRemovalCount);
+        private final long[] deferredRemovals = mutationBuffers.removals;
         private final int completionSweepCount =
                 AudioVoiceRegistry.this.completionSweepCount;
         private final boolean completionSweepRequired =
@@ -122,6 +136,8 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
                 AudioVoiceRegistry.this.rendering;
         private final boolean sfxBlocked =
                 AudioVoiceRegistry.this.sfxBlocked;
+        private final boolean sfxBlockHeldThroughFadeIn =
+                AudioVoiceRegistry.this.sfxBlockHeldThroughFadeIn;
         private final boolean pendingRestore =
                 AudioVoiceRegistry.this.pendingRestore;
         private final boolean speedShoesEnabled =
@@ -144,7 +160,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         private final int warnedRejectionCursor =
                 AudioVoiceRegistry.this.warnedRejectionCursor;
         private final long[] warnedRejectionVoiceIds =
-                AudioVoiceRegistry.this.warnedRejectionVoiceIds.clone();
+                mutationBuffers.warnings;
         private final SmpsCoordFlagRuntimeState.Snapshot coordState =
                 coordFlagHandlers.state().snapshot();
         private final AudioPresentationDependencyResolver
@@ -156,9 +172,14 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         private RegistryLiveMutation() {
             diagnostics = dependencyResolver.beginDiagnosticTransaction();
             try {
-                voices = allOwnedVoices();
-                voiceStates = new Object[voices.length];
-                for (int index = 0; index < voices.length; index++) {
+                System.arraycopy(overrideStack, 0, overrides, 0, overrideCount);
+                System.arraycopy(AudioVoiceRegistry.this.sampleSfx, 0, sampleSfx, 0, sampleSfxCount);
+                System.arraycopy(AudioVoiceRegistry.this.deferredRemovals, 0,
+                        deferredRemovals, 0, deferredRemovalCount);
+                System.arraycopy(AudioVoiceRegistry.this.warnedRejectionVoiceIds, 0,
+                        warnedRejectionVoiceIds, 0, warnedRejectionVoiceIds.length);
+                voiceCount = copyOwnedVoices(voices);
+                for (int index = 0; index < voiceCount; index++) {
                     voiceStates[index] = captureVoiceMutationState(
                             voices[index]);
                 }
@@ -221,6 +242,12 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     private boolean rendering;
     private boolean completionSweepRequired;
     private boolean sfxBlocked;
+    /**
+     * The S1/S2 {@code f_fadein_flag} half of the SFX block: the 1-up has
+     * handed back and the block now lasts only until the restored song's fade
+     * in completes. False while the jingle itself plays.
+     */
+    private boolean sfxBlockHeldThroughFadeIn;
     private boolean pendingRestore;
     private boolean speedShoesEnabled;
     private int speedMultiplier = 1;
@@ -297,7 +324,11 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         if (command instanceof ReplaceMusic replace) {
             replaceMusic(replace.music());
         } else if (command instanceof PushMusicOverride push) {
+            if (smpsSession != null && smpsSession.stopsSfxWhenOverrideStarts()) {
+                stopAllSfx();
+            }
             pushMusicOverride(push.music());
+            blockOverrideSfx();
             sfxInstantiation.observeLifecycle(
                     SmpsDriverServiceObserver.LifecycleEvent.registry(
                             SmpsDriverServiceObserver.LifecycleKind.SAVE,
@@ -395,6 +426,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
                     "SMPS SFX policy rejected " + source.assetKey());
             return null;
         }
+        releaseSfxBlockWhenFadeInEnds();
         if (sfxBlocked) {
             observeAdmissionQuarantined(
                     sfxInstantiation.rejectedAdmission(admission,
@@ -465,6 +497,9 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         }
         if (command instanceof FadeMusic fade) {
             fadeMusic(fade.steps(), fade.delay());
+            // The host fade policy may clear speed shoes. Retain the session's
+            // result so later metadata snapshots/restores cannot resurrect them.
+            speedShoesEnabled = smpsSession.speedShoesEnabled();
             return true;
         }
         if (command instanceof ChangeMusicTempo) {
@@ -509,6 +544,11 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
 
     private void replaceSessionMusic(MusicVoiceEntry entry) {
         stopMusic();
+        SmpsVoiceDescriptor descriptor = (SmpsVoiceDescriptor) entry.voiceDescriptor();
+        if (descriptor.activation().logicalPolicy().resetsTempoOnMusicStart()) {
+            speedShoesEnabled = false;
+            speedMultiplier = 1;
+        }
         activeMusic = sessionMusicSlot(entry);
         noteVoiceId(activeMusic.voice());
     }
@@ -531,6 +571,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
             activeMusic = replacement;
         }
         noteVoiceId(replacement.voice());
+        blockOverrideSfx();
     }
 
     private void restoreSessionMusic() {
@@ -582,11 +623,13 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
             throw new IllegalStateException(
                     "an audio registry mutation is already active");
         }
+        if (mutationBuffers == null) mutationBuffers = new MutationBuffers();
         liveMutationOpen = true;
         try {
             return new RegistryLiveMutation();
         } catch (RuntimeException failure) {
             liveMutationOpen = false;
+            mutationBuffers.clearReferences();
             throw failure;
         }
     }
@@ -604,6 +647,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         }
         state.consumed = true;
         liveMutationOpen = false;
+        mutationBuffers.clearReferences();
     }
 
     /** Runs the only fallible commit work while rollback is still possible. */
@@ -653,7 +697,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         } catch (RuntimeException failure) {
             primary = failure;
         }
-        for (int index = state.voices.length - 1; index >= 0; index--) {
+        for (int index = state.voiceCount - 1; index >= 0; index--) {
             try {
                 rollbackVoiceMutation(
                         state.voices[index], state.voiceStates[index]);
@@ -682,6 +726,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         completionSweepRequired = state.completionSweepRequired;
         rendering = state.rendering;
         sfxBlocked = state.sfxBlocked;
+        sfxBlockHeldThroughFadeIn = state.sfxBlockHeldThroughFadeIn;
         pendingRestore = state.pendingRestore;
         speedShoesEnabled = state.speedShoesEnabled;
         speedMultiplier = state.speedMultiplier;
@@ -700,6 +745,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         rebuildOrderedVoices();
         state.consumed = true;
         liveMutationOpen = false;
+        mutationBuffers.clearReferences();
         if (primary != null) {
             throw primary;
         }
@@ -715,6 +761,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         java.util.Arrays.fill(sampleSfx, null);
         sampleSfxCount = 0;
         pendingRestore = false;
+        releaseOverrideSfx();
         speedShoesEnabled = false;
         speedMultiplier = 1;
         ringLeft = true;
@@ -755,6 +802,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     }
 
     public void beginRendering() {
+        releaseSfxBlockWhenFadeInEnds();
         assertOwnerThread();
         if (rendering) {
             throw new IllegalStateException("audio voice traversal already active");
@@ -762,6 +810,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         rendering = true;
         deferredRemovalCount = 0;
         completionSweepRequired = false;
+        releaseSfxBlockWhenFadeInEnds();
     }
 
     /** Services every live SMPS driver once at the outer-frame boundary. */
@@ -867,6 +916,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
                 psgMuteMask,
                 psgSoloMask,
                 sfxBlocked,
+                sfxBlockHeldThroughFadeIn,
                 pendingRestore,
                 speedShoesEnabled,
                 speedMultiplier,
@@ -969,6 +1019,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
             psgMuteMask = snapshot.psgMuteMask();
             psgSoloMask = snapshot.psgSoloMask();
             sfxBlocked = snapshot.sfxBlocked();
+            sfxBlockHeldThroughFadeIn = snapshot.sfxBlockHeldThroughFadeIn();
             pendingRestore = snapshot.pendingRestore();
             speedShoesEnabled = snapshot.speedShoesEnabled();
             speedMultiplier = snapshot.speedMultiplier();
@@ -1117,6 +1168,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         psgMuteMask = 0;
         psgSoloMask = 0;
         sfxBlocked = false;
+        sfxBlockHeldThroughFadeIn = false;
         pendingRestore = false;
         speedShoesEnabled = false;
         speedMultiplier = 1;
@@ -1134,6 +1186,64 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     public void setSfxBlocked(boolean blocked) {
         assertOwnerBoundary();
         sfxBlocked = blocked;
+        if (!blocked) {
+            sfxBlockHeldThroughFadeIn = false;
+        }
+    }
+
+    boolean areSfxRequestsBlocked() {
+        assertOwnerBoundary();
+        releaseSfxBlockWhenFadeInEnds();
+        return sfxBlocked;
+    }
+
+    private void blockOverrideSfx() {
+        if (smpsSession != null && smpsSession.suppressesSfxDuringOverride()) {
+            sfxBlocked = true;
+            sfxBlockHeldThroughFadeIn = false;
+        }
+    }
+
+    private void releaseOverrideSfx() {
+        if (smpsSession != null && smpsSession.suppressesSfxDuringOverride()) {
+            sfxBlocked = false;
+            sfxBlockHeldThroughFadeIn = false;
+        }
+    }
+
+    /**
+     * The restore has brought the saved song back. S3K lifts the block here;
+     * S1 and S2 keep it until that song's fade in completes
+     * (see {@code SmpsStatefulCommandPolicy.releasesSfxSuppressionAtRestore}).
+     */
+    private void releaseOrHoldOverrideSfxAtRestore() {
+        if (smpsSession == null || !smpsSession.suppressesSfxDuringOverride()) {
+            return;
+        }
+        if (smpsSession.releasesSfxSuppressionAtRestore()) {
+            releaseOverrideSfx();
+        } else if (sfxBlocked) {
+            sfxBlockHeldThroughFadeIn = true;
+        }
+    }
+
+    /**
+     * Models S1's {@code DoFadeIn} and S2's {@code zUpdateFadeIn} clearing the
+     * fade-in flag once the counter has run down (s1.sounddriver.asm:1650,
+     * s2.sounddriver.asm:2740). The ROM clears it at the top of the service
+     * that follows the last step, ahead of that service's request cycle, so
+     * the engine evaluates it at each frame boundary and again at every SFX
+     * admission: a request that arrives after the fade has completed is
+     * admitted, whatever the flag said a frame earlier.
+     */
+    private void releaseSfxBlockWhenFadeInEnds() {
+        if (!sfxBlocked || !sfxBlockHeldThroughFadeIn || smpsSession == null) {
+            return;
+        }
+        if (!smpsSession.isMusicFadingIn()) {
+            sfxBlocked = false;
+            sfxBlockHeldThroughFadeIn = false;
+        }
     }
 
     public void setPendingRestore(boolean pending) {
@@ -1241,6 +1351,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     private boolean restoreMusicOverride() {
         if (overrideCount == 0) {
             pendingRestore = false;
+            releaseOverrideSfx();
             return false;
         }
         MusicSlot restored = overrideStack[overrideCount - 1];
@@ -1261,6 +1372,9 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         pendingRestore = false;
         if (restored.voice() instanceof StreamedMusicVoice streamed) {
             sfxBlocked = overrideCount > 0 || !streamed.releasesSfxOnRestore();
+            // Streamed restoration is paced by its own cursor fade, even
+            // when a SMPS session is present to own SFX and host commands.
+            sfxBlockHeldThroughFadeIn = false;
         }
         // The ROM does the whole resume inside the driver: zFadeInToPrevious
         // restores the saved tracks, attenuates and re-voices them and arms
@@ -1269,6 +1383,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         // body, or it returns at full volume with stale voices.
         if (smpsSession != null && restored.voice() instanceof SmpsMusicHandle) {
             smpsSession.fadeInRestoredMusic();
+            releaseOrHoldOverrideSfxAtRestore();
         }
         return true;
     }
@@ -1410,6 +1525,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     }
 
     private void admitSampleSfx(SampleVoiceDescriptor descriptor) {
+        releaseSfxBlockWhenFadeInEnds();
         if (sfxBlocked) {
             warnRejected(descriptor.voiceId(),
                     "sample SFX blocked at presentation boundary");
@@ -1535,6 +1651,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         }
         overrideCount = 0;
         pendingRestore = false;
+        releaseOverrideSfx();
     }
 
     private void stopAllSfx() {
@@ -1563,6 +1680,11 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
     private PresentationVoice[] allOwnedVoices() {
         PresentationVoice[] voices =
                 new PresentationVoice[overrideCount + sampleSfxCount + 4];
+        int count = copyOwnedVoices(voices);
+        return java.util.Arrays.copyOf(voices, count);
+    }
+
+    private int copyOwnedVoices(PresentationVoice[] voices) {
         int count = 0;
         if (activeMusic != null) {
             voices[count++] = activeMusic.voice();
@@ -1576,7 +1698,7 @@ public final class AudioVoiceRegistry implements PresentationVoiceSource {
         for (int index = 0; index < sampleSfxCount; index++) {
             voices[count++] = sampleSfx[index];
         }
-        return java.util.Arrays.copyOf(voices, count);
+        return count;
     }
 
     private void fadeMusic(int steps, int delay) {

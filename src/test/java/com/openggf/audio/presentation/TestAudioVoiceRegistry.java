@@ -63,6 +63,47 @@ class TestAudioVoiceRegistry {
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
     @Test
+    void completedTransactionsReleaseBackupVoiceReferencesWithoutAnotherCapture() throws Exception {
+        for (boolean rollback : new boolean[] {false, true}) {
+            AudioVoiceRegistry registry = registry(new RecordingInstantiation(), new ArrayList<>());
+            registry.apply(new ReplaceMusic(fallbackMusic(1, 10, "base")));
+            registry.apply(new PushMusicOverride(fallbackMusic(2, 20, "override")));
+            registry.apply(raw(sample(30, 0, "raw")));
+            registry.apply(start(sample(40, 1, "sfx")));
+            var expected = JSON.valueToTree(registry.snapshot());
+            var token = registry.captureLiveMutation();
+            Field buffersField = AudioVoiceRegistry.class.getDeclaredField("mutationBuffers");
+            buffersField.setAccessible(true);
+            Object buffers = buffersField.get(registry);
+            for (String name : List.of("overrides", "samples", "voices", "voiceStates")) {
+                assertTrue(Arrays.stream(backupReferences(buffers, name)).anyMatch(java.util.Objects::nonNull),
+                        name + " must contain actual captured state before completion");
+            }
+            registry.apply(new HardReset());
+            if (rollback) {
+                registry.rollbackLiveMutation(token);
+                assertEquals(expected, JSON.valueToTree(registry.snapshot()));
+            } else {
+                registry.commitLiveMutation(token);
+                assertEquals(0, registry.orderedVoiceCount());
+                registry.publishCommittedDiagnostics(token);
+                assertThrows(IllegalStateException.class, () -> registry.publishCommittedDiagnostics(token));
+            }
+            for (String name : List.of("overrides", "samples", "voices", "voiceStates")) {
+                assertTrue(Arrays.stream(backupReferences(buffers, name)).allMatch(java.util.Objects::isNull),
+                        name + " retained references after " + (rollback ? "rollback" : "commit"));
+            }
+            assertThrows(IllegalStateException.class, () -> registry.rollbackLiveMutation(token));
+        }
+    }
+
+    private static Object[] backupReferences(Object buffers, String name) throws Exception {
+        Field field = buffers.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return (Object[]) field.get(buffers);
+    }
+
+    @Test
     void iterationOrderIsMusicThenRawPcmThenSampleSfxByVoiceId() {
         RecordingInstantiation instantiation = new RecordingInstantiation();
         AudioVoiceRegistry registry = registry(instantiation, new ArrayList<>());

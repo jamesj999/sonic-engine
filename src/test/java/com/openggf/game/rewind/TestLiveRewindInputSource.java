@@ -251,4 +251,33 @@ class TestLiveRewindInputSource {
         assertEquals(0, source.read(9).p1InputMask());
         assertEquals(0, source.read(9).p1ActionMask());
     }
+    @Test
+    void circularHistoryPreservesRowsThroughWrapGrowthBranchAndReset() {
+        InputHandler input = new InputHandler();
+        LiveRewindInputSource source = new LiveRewindInputSource();
+        for (int frame = 1; frame <= 5000; frame++) {
+            source.appendFrame(input, config);
+            if (frame < 1500) source.discardBefore(Math.max(0, frame - 90));
+            else source.discardBefore(Math.max(0, frame - 700));
+            assertEquals(frame, source.read(frame).frameIndex());
+            assertEquals(source.earliestFrame(), source.read(source.earliestFrame()).frameIndex());
+        }
+        for (int frame = source.earliestFrame(); frame <= 5000; frame++) {
+            assertEquals(frame, source.read(frame).frameIndex());
+        }
+        source.discardAfter(4800);
+        input.handleKeyEvent(config.getInt(SonicConfiguration.RIGHT), GLFW_PRESS);
+        input.refreshLogicalSnapshot();
+        source.appendFrame(input, config);
+        assertEquals(4802, source.frameCount());
+        assertEquals(AbstractPlayableSprite.INPUT_RIGHT, source.read(4801).p1InputMask());
+        source.retainOnlyFrame(4801);
+        assertEquals(4801, source.earliestFrame());
+        source.appendFrame(input, config);
+        assertEquals(4802, source.read(4802).frameIndex());
+        source.resetToFrameZero();
+        assertEquals(1, source.frameCount());
+        assertEquals(0, source.read(0).frameIndex());
+    }
+
 }

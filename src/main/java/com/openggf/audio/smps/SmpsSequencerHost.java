@@ -9,6 +9,11 @@ import com.openggf.audio.driver.SmpsDriverServiceObserver;
 public interface SmpsSequencerHost {
     SmpsSequencerHost NONE = NoOp.INSTANCE;
 
+    /** Host command ownership, independent of the source song's driver configuration. */
+    default boolean fadeOutCompletesWithGlobalStop() {
+        return false;
+    }
+
     SmpsDriverServiceObserver.ServiceEvent beginSequencerService(
             SmpsSequencer sequencer,
             SmpsDriverServiceObserver.ServiceKind kind);
@@ -19,7 +24,7 @@ public interface SmpsSequencerHost {
 
     /** See {@link CoordFlagContext#releaseChannelToMusic}. */
     default void releaseChannelToMusic(SmpsSequencer sequencer,
-            SmpsSequencer.TrackType type, int channelId) {
+            SmpsSequencer.Track endingTrack) {
     }
 
     /**

@@ -21,8 +21,13 @@ public class RomByteReader {
         this.data = data;
     }
 
+    /**
+     * Returns the immutable reader shared for the current open ROM. Closing,
+     * reopening, or writing through Rom invalidates its cached reader; already
+     * issued readers remain immutable snapshots of their original bytes.
+     */
     public static RomByteReader fromRom(Rom rom) throws IOException {
-        return new RomByteReader(rom.readAllBytes());
+        return rom.byteReader();
     }
 
     /** Builds a reader over the given bytes (used for logical-ROM windows and tests). */

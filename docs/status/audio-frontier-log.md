@@ -27,11 +27,368 @@ defined by `com.openggf.tools.audio.parity`.
 
 <!-- entries are prepended below, newest first -->
 
+## 2026-09-07 - S1/S2: SFX are refused through the 1-up jingle and its fade in
+
+- **Worktree/branch:** `.worktrees/s1s2-1up-restore`,
+  `bugfix/ai-s1s2-1up-restore`, following the FM voice resend fix
+  (`212a71ec1`). Closes the gap that entry left open.
+- **What the ROM does.** `Sound_PlaySFX` / `Sound_PlaySpecial` and
+  `zPlaySound_CheckRing` refuse every SFX while the 1-up flag or the fade-in
+  flag is set (s1.sounddriver.asm:978-982, :1118-1122;
+  s2.sounddriver.asm:2118-2120). The extra-life load raises the first
+  (s1:784, s2:1712); `cfFadeInToPrevious` clears it and raises the second
+  (s1:2220-2222, s2:3150-3155); the fade-in stepper clears that one when the
+  counter reaches zero (s1:1650, s2:2740). An ordinary song load clears both
+  (`.bgmnot1up` s1:790, s2:1730; the RAM clear in `InitMusicPlayback` /
+  `zInitMusicPlayback`, s1:1498-1510, s2:2597-2623). S1's extra-life branch
+  also clears the playing bit on all six SFX tracks before the backup
+  (s1:769-774); S2 stops them through `zStopSoundEffects` on every song
+  (s2:1667-1672), which the request path already issued.
+- **What the engine did.** Only `Sonic3kStatefulCommandPolicy` suppressed
+  SFX during an override, and the registry lifted the block at the restore.
+  S2 had no stateful policy at all. Measured headlessly through
+  `presentFrame` before the fix: a jump requested five frames into the jingle
+  was admitted in both games, and again ten frames into the fade in; in S1 the
+  jump playing before the 1-up carried on under the jingle.
+- **The fix.** `SmpsStatefulCommandPolicy` gains
+  `releasesSfxSuppressionAtRestore` (S3K true, S1/S2 false) and
+  `stopsSfxWhenOverrideStarts` (S1 true). New `Sonic2StatefulCommandPolicy`
+  (`sonic2-commands-v1`). The registry keeps a second bit,
+  `sfxBlockHeldThroughFadeIn`, in the presentation snapshot: set at the
+  restore when the policy holds, cleared when the restored song's fade in is
+  no longer running. The clear is evaluated at each frame boundary and at
+  every SFX admission, because the ROM clears its flag at the top of the
+  service after the last step, ahead of that service's request cycle, and the
+  engine's sequencer fade completion lands after the registry's end-of-frame
+  hook.
+- **Tests.** Three cases added to `OneUpRestoreLivePathSupport`, run under
+  both ROMs: the pre-jingle SFX is stopped and requests during the jingle and
+  the fade in are refused, then admitted once the fade completes; a snapshot
+  round trip mid fade still releases at the end; an ordinary song during the
+  jingle releases at once. Ablating `suppressesSfxDuringOverride` in both
+  policies fails all three per game on the first block assertion.
+  `TestS3kOneUpRestoreRom` (release at restore) unchanged and green.
+- **Not modelled, recorded in known-discrepancies.md.** The refused request's
+  priority-latch clear (`zKillSFXPrio`, `.clear_sndprio`); the fade-in hold
+  over a jingle that had no song to save; S1 `StopAllSound` preserving
+  `f_1up_playing` across its RAM clear.
+
+
+## 2026-09-07 - S1/S2: the live 1-up restore never re-sent the FM voices
+
+- **Worktree/branch:** `.worktrees/s1s2-1up-restore`,
+  `bugfix/ai-s1s2-1up-restore`, from `develop` at `77c244548`. Reported in
+  game on both Sonic 1 and Sonic 2: the music does not come back properly
+  after an extra life.
+- **What was actually wrong.** `cfFadeInToPrevious` restores the backed-up
+  driver RAM and then, per playing FM track that no SFX owns, re-sends the
+  whole voice with the attenuated volume in its TL bytes: `SetVoice`
+  (s1.sounddriver.asm:2196-2200) and `zSetVoiceMusic`
+  (s2.sounddriver.asm:3111-3118). The chip is still holding the jingle's
+  instrument on every FM channel at that point. The engine's `REST_TRACKS`
+  branch of `SmpsSequencer.triggerFadeIn` rested and attenuated the tracks
+  but wrote only TL; the voice reload it relied on was
+  `refreshAllVoices` in `AbstractSmpsAudioBackend.doRestoreMusic`, which the
+  live path does not reach (`AudioManager.sendLiveBackendCommands` is false).
+  The S3K branch already resent its voices from the 2026-09-04 fix, which is
+  why S3K was not reported.
+- **Measured before the fix, headlessly through `presentFrame`.** The level
+  music came back with its positions and tempo intact, rested, attenuated by
+  28h, and faded in over 120 frames, so the restore itself was sound. The
+  chip writes on the restore frame were TL and PSG note-off only: no 30h-3Fh,
+  50h-9Fh or B0h-B2h register for any channel. The song resumed on the
+  jingle's algorithms, multipliers and envelopes with the level music's TLs
+  laid over them, until each track's own next voice change.
+- **The fix.** The `REST_TRACKS` branch now follows the routine's own order:
+  playing tracks only, rest, add the fade depth, then `refreshInstrument` on
+  FM tracks that are not overridden and a note-off on PSG tracks, with no
+  separate TL write. The depth is `28h` less the fade-in counter the restored
+  copy carries (s1:2186, s2:3099), so a second extra life during a running
+  restore fade no longer stacks a full attenuation on the first.
+- **Tests.** New `TestS1OneUpRestoreRom` and `TestS2OneUpRestoreRom` drive
+  the live path and assert the song resumes rather than restarts, that the
+  restore frame carries a B0h+ch write for every playing FM track and a
+  note-off for every PSG track, and that the fade runs back to the song's
+  own volume. Ablating the resend (TL write in its place) fails both on
+  "the restore must re-send FM0's voice". `TestS3kOneUpRestoreRom` and
+  `TestSmpsFadeInRestoreDriverModes` stay green.
+- **Oracle unchanged.** `TestS2OneUpRestoreDriverStateOracle` still reports
+  the window measurement-only at the same points as when it was committed:
+  state at tick 2880 (`PSG1.volFlutter`), writes at tick 0. The 1-up in that
+  window is at 2875, so neither frontier reaches the restore; it cannot see
+  this fix either way, and the harness behind it runs the legacy backend.
+- **Still open, deliberately not done here.** On the live path S1 and S2
+  admit new SFX during the jingle and during the fade in. The ROM refuses
+  them and clears the priority latch while `f_1up_playing` or
+  `f_fadein_flag` is set (`Sound_PlaySFX`, s1.sounddriver.asm:978-982;
+  `zPlaySound_CheckRing`, s2.sounddriver.asm:2118-2120). Only the S3K
+  session policy suppresses SFX during an override, and nothing on the live
+  path releases a block at fade completion. That is a separate gap from the
+  reported one and needs its own release hook.
+
+
+## 2026-09-05 - S3K diagnostic ring dispatch advances service 2357 to 2409
+
+- **Before:** service 2357, `MUS_FM4.overridden`, reference `false`, engine
+  `true`.
+- **After:** service 2409, `MUS_PSG1.overridden`, reference `true`, engine
+  `false`.
+- **ROM owner:** raw request `33h` reaches `zPlaySound_CheckRing`, toggles the
+  boot-zeroed `zRingSpeaker`, and selects Sound34/Sound33 in turn
+  (`Sound/Z80 Sound Driver.asm:547,1919-1928`, retail `fix_sndbugs=0`). The
+  diagnostic capture now performs that transform inside its pending driver
+  callback, so submission itself cannot advance the side.
+- **Scope:** this is capture-adapter accuracy, not proof of live request
+  parity. The live S3K presentation still lacks the three-slot mailbox cycle;
+  retail's 1-up/fade mailbox clearing remains unverified here.
+- **Evidence:** candidate `0bbd98884`; focused JDK 21 invocation used all
+  three absolute ROM properties and
+  `-Dtest=TestS3kCaptureRingDispatch,TestS3kOracleRequestSidecarWiring#theFullOraclePinsTheNextSfxWriteFrontier+firstRawRingSelectsFm5WithExactReferenceWrites`
+  (4 passed, no failures/errors/skips). The ring-write assertion compares the
+  exact non-DAC service stream under the existing DAC timing exclusion; it is
+  not a claim that PCM window partitioning matches.
+
+## 2026-09-05 - S3K SFX header order advances service 2012 to 2357
+
+- **Before:** service 2012 event 1, reference PSG `BF`, engine PSG `FF`.
+- **After:** service 2357, `MUS_FM4.overridden`, reference `false`, engine
+  `true`.
+- **ROM owner:** `zSFXTrackInitLoop` leaves IX naming the preceding newly
+  initialized header when the next `zGetSFXChannelPointers` call silences it
+  (`Sound/Z80 Sound Driver.asm:1997-2103, 2109-2165`). Skid's shipped PSG2 then
+  PSG1 headers emit `FF BF FF`. Runtime service remains in fixed channel-RAM
+  order; only admission uses immutable ROM header order.
+- **Evidence:** the hard oracle matches through service 2012. The next state
+  mismatch is independent; full-game audio parity remains open.
+
+## 2026-09-05 - S3K covered-noise restore advances service 1690 to 2012
+
+- **Before:** service 1690 event 7, reference PSG `E7`, engine PSG `C0`.
+- **After:** service 2012 event 1, reference PSG `BF`, engine PSG `FF`.
+- **ROM owner:** `zStopPSGTrack` preserves the covered music track's state and
+  writes its exact stored `PSGNoise` byte only for noise mode and a negative
+  raw byte (driver:3521-3533). Tone and positive-byte cases write nothing.
+- **Ownership:** the ended noise-form PSG3 SFX releases only its own tone/noise
+  locks and channel-2 admission claim before the one music callback.
+
+## 2026-09-05 - S3K PSG stop helper advances service 1690 event 6 to event 7
+
+- **Before:** service 1690 event 6, reference PSG `FF`, engine PSG `C0`.
+- **After:** service 1690 event 7, reference PSG `E7`, engine PSG `C0`; the
+  first 1,690 services and first seven writes of that service match.
+- **ROM owner:** retail `fix_sndbugs=0` `zGetSFXChannelPointers` calls
+  `zSilencePSGChannel` and then emits an unconditional compensating `FF`
+  before `cfStopTrack` restores music ownership (driver:2115-2142,
+  3443-3469, 4226-4249). OpenGGF previously emitted only the channel/noise
+  silence pair.
+- **Evidence:** tone/noise stop tests pin `mute+FF` and `mute+FF+FF`; FM and
+  earlier-game handlers remain untouched. The next `E7` restore gap is
+  separate. The independent DAC frontier is unchanged.
+
+## 2026-09-05 - Fixed SFX RAM walk: service 1652 to service 1690
+
+- **Before:** service 1652 event 0, reference Flying FM4 voice release
+  (`80=FF`), engine older Collapse PSG `C8`.
+- **After:** service 1690 event 6, reference PSG `FF`, engine PSG `C0`; the
+  first 1,690 services match.
+- **ROM owner:** `zUpdateSFXTracks` linearly walks `zTracksSFXStart` through
+  FM3..FM6 then PSG1..PSG3 (`Sound/Z80 Sound Driver.asm:727-759`). OpenGGF now
+  uses its existing cross-program fixed-channel walker for S3K as for S1/S2.
+- **Evidence:** the ROM-backed concurrent test admits Flying after Collapse
+  and pins the complete service-1652 transaction, proving FM4 precedes the
+  older PSG slots without synthetic occupancy. The independent DAC frontier
+  is unchanged.
+
+## 2026-09-05 - PSG-volume envelope rewind: service 1594 to service 1652
+
+- **Before:** service 1594 SFX PSG3 `volEnv`, reference `FF`, engine `00`.
+- **After:** `EVENT_VALUE_DIFFERENT` at service 1652 event 0, reference YM2612
+  port I `80=FF`, engine PSG `C8`; the first 1,652 services match.
+- **ROM owner:** S3K `cfChangePSGVolume` clears rest and performs a byte-sized
+  `DEC` on `VolEnv`, so zero wraps to `FF` before its wrapped volume add and
+  unsigned `0Fh` clamp (`Sound/Z80 Sound Driver.asm:3263-3285`). The engine's
+  prior `envPos > 0` guard incorrectly suppressed only that zero wrap.
+- **Evidence:** red-first unit coverage pins `00 -> FF`, signed underflow
+  clamping, the PSG-only gate, and absence of an immediate PSG write. The
+  committed ROM oracle pins the new event-order frontier and its 1,652-service
+  matching prefix. A later envelope walk from unsigned offset `FF` is not yet
+  claimed because Java bounds cursors to the loaded envelope array. The
+  independent DAC frontier is unchanged.
+
+## 2026-09-05 - Overridden PSG attack envelope: service 1592 to service 1594
+
+- **Before:** service 1592 music PSG3 `volEnv`, reference `0`, engine `1`.
+- **After:** `TRACK_STATE_MISMATCH` at service 1594, SFX PSG3 `volEnv`,
+  reference `FF`, engine `00`; the first 1,594 services match.
+- **ROM owner:** `zFinishTrackUpdate` resets `VolEnv` on an attacked note, but
+  `zUpdatePSGTrack` returns on the music track's override bit before calling
+  `zDoVolEnv` (`Sound/Z80 Sound Driver.asm:1055-1069, :4058-4115`). The first
+  envelope byte is consumed only on the first pass after release.
+- **Evidence:** a focused red test observed cursor `1` under override; it now
+  pins reset cursor `0`, no volume latch before release, and one first-step
+  volume latch after release. Tied notes still preserve then step their cursor,
+  attacked rests reset without stepping, and S1/S2 keep their existing eager
+  attacked-note step. The independent DAC frontier is unchanged.
+
+## 2026-09-05 - FM3 release mode: service 1588 event 1 to service 1592 PSG3 state
+
+- **Before:** service 1588 event 1, reference YM2612 port 0 `27=0F`, engine
+  port 0 `B6=C0`.
+- **After:** `TRACK_STATE_MISMATCH` at service 1592, music PSG3 `volEnv`,
+  reference `0`, engine `1`; the first 1,592 services match.
+- **ROM owner:** shipped `fix_sndbugs=0` `cfStopTrack` clears the music override
+  and writes FM3 mode `0F` or `4F` before uploading the restored music voice
+  (`Sound/Z80 Sound Driver.asm:3443-3518`). The shipped branch also stores the
+  setting in driver RAM; the fixed branch omits that store, but both write
+  register `27` physically.
+- **Evidence:** focused normal/special-mode tests failed red with `B6` as the
+  first restore write and now pin `27` before `B6`; non-FM3 and S1/S2 release
+  modes remain excluded. The ROM-backed oracle pins the new PSG-envelope
+  frontier. The independent DAC frontier is unchanged.
+
+## 2026-09-05 - PSG frequency transaction: service 1570 event 48 to service 1588 event 1
+
+- **Before:** `EVENT_MISSING` at service 1570 event 48, reference PSG `FF`.
+- **After:** `EVENT_VALUE_DIFFERENT` at service 1588 event 1, reference YM2612
+  port 0 `27=0F`, engine port 0 `B6=C0`; the first 1,588 services match.
+- **ROM and hardware owner:** `zUpdatePSGTrack` gates the source track before
+  writing both frequency bytes (`Sound/Z80 Sound Driver.asm:4085-4095`). The
+  second byte remains physically literal: `FF` is decoded by the SN76489 as a
+  PSG3-volume latch and silences noise. Only the driver's second ownership
+  decision was extraneous.
+- **Evidence:** the driver-level transaction tests pin exact `AF FF` observer
+  order, final physical latch 7/noise attenuation 15, atomic rejection when
+  the source tone channel is owned, and continued rejection of an unrelated
+  single `FF` latch. Contention diagnostics now report one decision per ROM
+  frequency transaction instead of one per physical byte; source-byte and
+  physical-write observers still receive both bytes in order. The ROM-backed
+  oracle pins the new frontier and preserves the full prior prefix. The
+  independent DAC frontier remains unchanged.
+
+## 2026-09-05 - S3K first-note volume tail: service 1570 event 43 to event 48
+
+- **Context:** `bugfix/ai-sol-s3k-psg-parity`,
+  `.worktrees/sol-s3k-psg-parity`, base `develop` `be5a9e596`; JDK 21.0.11,
+  isolated build output and the absolute verified locked-on ROM path.
+- **Fixture:** `s3k/s3k-aiz1-intro-reference-v2.jsonl.gz` with
+  `s3k-aiz1-intro-requests-v1.json`.
+- **Before:** service 1570 event 43, reference YM2612 port 0 `A4=22`, engine
+  PSG `F0`.
+- **After:** `EVENT_MISSING` at service 1570 event 48, reference PSG `FF`,
+  engine stream exhausted. The first 1,570 services and first 48 ordered writes
+  of service 1570 match. The independent DAC frontier is unchanged at run 338,
+  byte 0, reference `88` versus engine `7F`.
+- **ROM owner:** `zUpdatePSGTrack` has one shared volume tail after the new-note
+  and continuing-note frequency paths (`Sound/Z80 Sound Driver.asm:4059-4135`).
+  Collapse's note-start modulation already reached that tail; the engine then
+  added a second generic attacked-note volume write.
+- **Evidence:** `collapseFirstNoteWritesItsNoiseVolumeOnce` failed red with two
+  writes in the first sounding service and passes with one after the fix. The
+  exact comparison command remains the `S3kAudioParityTool compare` command in
+  the preceding entry, run from this worktree with the same fixture, request
+  sidecar and absolute ROM path.
+- **Event-48 diagnosis:** reference `AF FF` is one PSG tone-frequency pair, not
+  a final noise silence. The sequencer submits both bytes; `SmpsDriver.writePsg`
+  reclassifies the high-bit `FF` as a PSG3 latch and drops it because Collapse
+  owns noise. The ROM performs its override check before the pair and has no
+  per-byte ownership arbitration, so the next repair belongs at the driver PSG
+  transaction boundary rather than in `SmpsSequencer`. This diagnosis does not
+  advance the pinned frontier.
+
+## 2026-09-05 - PSG command takeover: service 1570 event 39 to event 43
+
+- **Context:** `bugfix/ai-audio-next-psg`, `.worktrees/audio-next-psg`,
+  base `develop` `bbf28b7dc`; implementation is the commit containing this
+  entry. JDK 21.0.11, isolated build output, absolute verified ROM paths.
+- **Fixture:** `s3k/s3k-aiz1-intro-reference-v2.jsonl.gz` with
+  `s3k-aiz1-intro-requests-v1.json`.
+- **Command:** after `mvn -Dmse=off -q dependency:build-classpath
+  -Dmdep.outputFile=target/gates/cp.txt`, with `S3K_ROM` denoting the discovered
+  absolute locked-on ROM path (SHA-1
+  `cfbf98c36c776677290a872547ac47c53d2761d6`):
+
+  ```bash
+  java -cp "target/classes:$(cat target/gates/cp.txt)" \
+    com.openggf.tools.audio.parity.s3k.S3kAudioParityTool compare \
+    --reference src/test/resources/audio/parity/s3k/s3k-aiz1-intro-reference-v2.jsonl.gz \
+    --requests src/test/resources/audio/parity/s3k/s3k-aiz1-intro-requests-v1.json \
+    --rom "$S3K_ROM"
+  ```
+
+- **Before:** `EVENT_VALUE_DIFFERENT`, service 1570, event 39,
+  reference PSG `E7`, engine PSG `FF`.
+- **After:** same service, event 43, reference YM2612 port 0 `A4=22`,
+  engine PSG `F0`; full comparison exits 3. Independent DAC remains
+  `BYTE_DIFFERENT`, run 338, byte 0, reference `88`, engine `7F`.
+- **ROM owner:** retail `fix_sndbugs=0` `cfSetPSGNoise`
+  (`Sound/Z80 Sound Driver.asm:3559-3572`) emits adjacent `DF` and its
+  operand. The S3K provider now selects existing `REGISTER_SEQUENCE`, so
+  noise ownership acquisition no longer inserts another silence after the
+  loader's guaranteed `FF`. Locks, admission, release and rollback are unchanged.
+- **Evidence:** all three ROM-backed effect adjacency checks and the
+  zero-operand check were red before the setting. The 1571-service `MATCH`
+  attempt exposed the next volume write, so the approved final gates retain
+  1570 whole matching services and add exact equality for all 43 ordered
+  service writes preceding the new frontier. That ordered-prefix gate was
+  also demonstrated red with the setting removed. Final focused suite:
+  74 tests, zero failures/errors/skips, including cross-game policies,
+  configuration copy, admission rollback, release and noise lifetime.
+- **Limits:** no additional whole matching service, listening-parity or
+  all-green claim. Stale-IX admission writes remain incomplete. The second
+  fresh-note `F0` is the next source-backed investigation candidate; DAC
+  remains separate. Exact red/green commands, observer corrections and
+  attribution are in [the validation report](../architecture/validation/audio/2026-09-05-s3k-psg-takeover.md).
+
+## 2026-09-04 - PSG SFX admission noise silence: 1569 to 1570
+
+- **Context:** `bugfix/ai-audio-round-s3k`, `.worktrees/audio-round-s3k`,
+  based on `develop` `4296bc291`; implementation is the commit containing
+  this entry. JDK 21.0.11, fresh isolated build, absolute verified ROM path.
+- **Fixture:** `s3k/s3k-aiz1-intro-reference-v2.jsonl.gz` with
+  `s3k-aiz1-intro-requests-v1.json`.
+- **Command:** after compilation and `mvn -Dmse=off -q
+  dependency:build-classpath -Dmdep.outputFile=target/gates/cp.txt`.
+  Export `S3K_ROM` to the discovered absolute locked-on ROM path (SHA-1
+  `cfbf98c36c776677290a872547ac47c53d2761d6`); the placeholder replaces the
+  executed machine-local path:
+
+  ```bash
+  java -cp "target/classes:$(cat target/gates/cp.txt)" \
+    com.openggf.tools.audio.parity.s3k.S3kAudioParityTool compare \
+    --reference src/test/resources/audio/parity/s3k/s3k-aiz1-intro-reference-v2.jsonl.gz \
+    --requests src/test/resources/audio/parity/s3k/s3k-aiz1-intro-requests-v1.json \
+    --rom "$S3K_ROM"
+  ```
+
+- **Before:** service 1569, `EVENT_VALUE_DIFFERENT`, event 15: reference
+  PSG `FF`, engine YM2612 port 0 register `A4` value `22`.
+- **After:** service 1570, `EVENT_VALUE_DIFFERENT`, event 39: reference
+  PSG `E7`, engine PSG `FF`. Full comparison exits 3; no all-green claim.
+  The DAC stream stays at `BYTE_DIFFERENT`, run 338, byte 0, reference `88`
+  versus engine `7F`.
+- **ROM owner:** retail `fix_sndbugs=0`,
+  `zGetSFXChannelPointers.is_psg` (`Sound/Z80 Sound Driver.asm:2131-2136`),
+  unconditionally emits `FF` for every PSG header. Collapse loads FM3,
+  FM4, FM5, PSG3, so the write follows 15 FM initialization writes. A
+  profile-owned setting now emits that guaranteed write in header order.
+  The preceding stale-IX silence call is not fully modelled; the next
+  service's lazy noise takeover remains open.
+- **Evidence:** new prefix test failed at the exact missing write before
+  implementation and now asserts `MATCH` for all 1570 services through
+  1569. Final focused suite: 54 tests, zero failures/errors/skips, including
+  admission order, PSG1/PSG2/default profiles, configuration copy, runtime
+  noise tails and admission rollback. Ordinary/guards remain the integration
+  lead's checks. Exact red/green commands and test-observer corrections are
+  in [the validation report](../architecture/validation/audio/2026-09-04-s3k-admission-silence.md).
+
 ## 2026-09-04 - HANDOVER: S3K AIZ1 intro oracle, state at branch head
 
-- **Branch:** `bugfix/ai-s3k-oracle-freq-resend`, head `3c552b92a`, merged with
-  develop at `37c3f0c0b`. Worktree `.worktrees/audio-s3k-freq`. Tree clean,
-  nothing in flight.
+- **Historical branch:** `bugfix/ai-s3k-oracle-freq-resend`; the measured code
+  head was `3c552b92a`, followed by handover documentation at `ebc90caa3`.
+  This work entered develop through `a306c0351`, not the earlier merge
+  `37c3f0c0b` (which predates `3c552b92a`). The originating worktree was
+  `.worktrees/audio-s3k-freq`, reported clean at handover. Counts and frontiers
+  below describe that historical measurement, not the current branch.
 - **Resume command.** From the worktree, after `mvn -q -Dmse=off clean package
   -DskipTests` and `mvn -q -Dmse=off dependency:build-classpath
   -Dmdep.outputFile=target/gates/cp.txt`:

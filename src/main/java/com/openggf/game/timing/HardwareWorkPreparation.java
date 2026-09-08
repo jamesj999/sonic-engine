@@ -6,6 +6,15 @@ package com.openggf.game.timing;
  * <p>One call to {@link #stepOneWorkUnit()} consumes one integer work unit.
  * Implementations define that unit from ROM decoder or queue semantics; elapsed
  * host time is never an input.
+ *
+ * <p>A live preparation stays reachable through
+ * {@code HardwareTimingService.coordinatorPreparation} until its job is claimed,
+ * and callers may step or {@link #restore} it there. {@code HardwareTimingJob}
+ * therefore re-snapshots an unclaimed job on every capture and shares one
+ * immutable snapshot only once the job is claimed and its preparation is no
+ * longer exposed. Implementations need not be immutable after
+ * {@link #isPrepared()}; the shipped S1 arm and S3K Kosinski preparations
+ * happen to be, and throw on live {@link #restore}.
  */
 public interface HardwareWorkPreparation {
     boolean stepOneWorkUnit();

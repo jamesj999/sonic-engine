@@ -1839,6 +1839,7 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
                 left.dirtyRegionProcessingRequired() || right.dirtyRegionProcessingRequired(),
                 left.foregroundRedrawRequired() || right.foregroundRedrawRequired(),
                 left.allTilemapsRedrawRequired() || right.allTilemapsRedrawRequired(),
+                left.patternLookupRefreshRequired() || right.patternLookupRefreshRequired(),
                 left.objectResyncRequired() || right.objectResyncRequired(),
                 left.ringResyncRequired() || right.ringResyncRequired());
     }

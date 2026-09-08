@@ -8,6 +8,7 @@ import com.openggf.audio.rewind.SmpsSequencerSnapshot;
 import com.openggf.audio.rewind.SmpsTrackSnapshot;
 import com.openggf.game.GameServices;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -50,6 +51,8 @@ public class SmpsSequencer implements CoordFlagContext {
     private final DacData dacData;
     private final int tempoModBase;
     private final List<Track> tracks = new ArrayList<>();
+    /** Immutable ROM-header-order projection into {@link #tracks}. */
+    private int[] sfxHeaderOrderIndices = new int[0];
 
     public enum Region {
         NTSC(60.0), PAL(50.0);
@@ -158,36 +161,126 @@ public class SmpsSequencer implements CoordFlagContext {
      */
     public static final class LiveCommandMutationToken {
         private final SmpsSequencer owner;
-        private final SmpsSequencerSnapshot snapshot;
-        private final Track[] tracks;
-        private final AbstractSmpsData fallbackVoiceData;
-        private final SmpsSourceDescriptor sourceDescriptor;
-        private final SourceDescriptorTrust sourceDescriptorTrust;
-        private final Runnable onFadeComplete;
+        /** The live {@link Track} objects at capture, restored in place on rollback. */
+        private Track[] identities = new Track[10];
+        /** Pooled storage tracks holding each identity's captured state. */
+        private Track[] storage = new Track[10];
+        private int trackCount;
+        private boolean inUse;
+        private Region region;
+        private boolean speedShoes;
+        private boolean sfxMode;
+        private int normalTempo;
+        private int commData;
+        private boolean fm6DacOff;
+        private int maxTicks;
+        private float pitch;
+        private int sfxPriority;
+        private boolean specialSfx;
+        private boolean isSfx;
+        private int psgLatchChannel;
+        private int speedMultiplier;
+        private int speedupTimeout;
+        private int fadeSteps;
+        private int fadeDelayInit;
+        private int fadeDelayCounter;
+        private int fadeAddFm;
+        private int fadeAddPsg;
+        private boolean fadeActive;
+        private boolean fadeOut;
+        private double sampleRate;
+        private double samplesPerFrame;
+        private double sampleCounter;
+        private int tempoWeight;
+        private int tempoAccumulator;
+        private int dividingTiming;
+        private boolean primed;
+        private AbstractSmpsData fallbackVoiceData;
+        private SmpsSourceDescriptor sourceDescriptor;
+        private SourceDescriptorTrust sourceDescriptorTrust;
+        private Runnable onFadeComplete;
 
-        private LiveCommandMutationToken(
-                SmpsSequencer owner,
-                SmpsSequencerSnapshot snapshot,
-                Track[] tracks,
-                AbstractSmpsData fallbackVoiceData,
-                SmpsSourceDescriptor sourceDescriptor,
-                SourceDescriptorTrust sourceDescriptorTrust,
-                Runnable onFadeComplete) {
+        private LiveCommandMutationToken(SmpsSequencer owner) {
             this.owner = owner;
-            this.snapshot = snapshot;
-            this.tracks = tracks;
-            this.fallbackVoiceData = fallbackVoiceData;
-            this.sourceDescriptor = sourceDescriptor;
-            this.sourceDescriptorTrust = sourceDescriptorTrust;
-            this.onFadeComplete = onFadeComplete;
+        }
+
+        private void ensureCapacity(int count) {
+            if (identities.length < count) {
+                int grown = Math.max(count, identities.length * 2);
+                identities = Arrays.copyOf(identities, grown);
+                storage = Arrays.copyOf(storage, grown);
+            }
         }
     }
 
+    /**
+     * Free tokens for {@link #captureLiveCommandMutation()}. A token returns
+     * here from {@link #rollbackLiveCommandMutation} or
+     * {@link #releaseLiveCommandMutation}; one that is dropped without either
+     * is simply not reused, so pooling never affects correctness, only
+     * allocation. Callers capture one token per outstanding mutation, so a
+     * token is never shared between two live mutations.
+     */
+    private final ArrayDeque<LiveCommandMutationToken> liveTokenPool = new ArrayDeque<>();
+
+    /**
+     * Captures the state {@link #rollbackLiveCommandMutation} restores. The
+     * token and its per-track storage are pooled and refilled in place: the
+     * session captures one per frame, and a fresh immutable snapshot per
+     * capture was the largest steady-state garbage source on the audio path.
+     */
     public LiveCommandMutationToken captureLiveCommandMutation() {
-        return new LiveCommandMutationToken(
-                this, captureSnapshot(), tracks.toArray(Track[]::new),
-                fallbackVoiceData,
-                sourceDescriptor, sourceDescriptorTrust, onFadeComplete);
+        LiveCommandMutationToken token = liveTokenPool.pollFirst();
+        if (token == null) {
+            token = new LiveCommandMutationToken(this);
+        }
+        token.inUse = true;
+        token.region = region;
+        token.speedShoes = speedShoes;
+        token.sfxMode = sfxMode;
+        token.normalTempo = normalTempo;
+        token.commData = commData;
+        token.fm6DacOff = fm6DacOff;
+        token.maxTicks = maxTicks;
+        token.pitch = pitch;
+        token.sfxPriority = sfxPriority;
+        token.specialSfx = specialSfx;
+        token.isSfx = isSfx;
+        token.psgLatchChannel = psgLatchChannel;
+        token.speedMultiplier = speedMultiplier;
+        token.speedupTimeout = speedupTimeout;
+        token.fadeSteps = fadeState.steps;
+        token.fadeDelayInit = fadeState.delayInit;
+        token.fadeDelayCounter = fadeState.delayCounter;
+        token.fadeAddFm = fadeState.addFm;
+        token.fadeAddPsg = fadeState.addPsg;
+        token.fadeActive = fadeState.active;
+        token.fadeOut = fadeState.fadeOut;
+        token.sampleRate = sampleRate;
+        token.samplesPerFrame = samplesPerFrame;
+        token.sampleCounter = sampleCounter;
+        token.tempoWeight = tempoWeight;
+        token.tempoAccumulator = tempoAccumulator;
+        token.dividingTiming = dividingTiming;
+        token.primed = primed;
+        token.fallbackVoiceData = fallbackVoiceData;
+        token.sourceDescriptor = sourceDescriptor;
+        token.sourceDescriptorTrust = sourceDescriptorTrust;
+        token.onFadeComplete = onFadeComplete;
+        int count = tracks.size();
+        token.ensureCapacity(count);
+        for (int index = 0; index < count; index++) {
+            Track track = tracks.get(index);
+            Track backup = token.storage[index];
+            if (backup == null) {
+                backup = new Track(0, track.type, 0);
+                token.storage[index] = backup;
+            }
+            copyTrack(track, backup);
+            token.identities[index] = track;
+        }
+        token.trackCount = count;
+        return token;
     }
 
     public void rollbackLiveCommandMutation(
@@ -197,15 +290,42 @@ public class SmpsSequencer implements CoordFlagContext {
             throw new IllegalArgumentException(
                     "live command token belongs to another sequencer");
         }
-        restoreSnapshot(token.snapshot);
-        if (token.tracks.length != token.snapshot.tracks().size()) {
+        if (!token.inUse) {
             throw new IllegalStateException(
-                    "live rollback track count changed");
+                    "live command token was already rolled back or released");
         }
+        region = token.region;
+        speedShoes = token.speedShoes;
+        sfxMode = token.sfxMode;
+        normalTempo = token.normalTempo;
+        commData = token.commData;
+        fm6DacOff = token.fm6DacOff;
+        maxTicks = token.maxTicks;
+        pitch = token.pitch;
+        sfxPriority = token.sfxPriority;
+        specialSfx = token.specialSfx;
+        isSfx = token.isSfx;
+        psgLatchChannel = token.psgLatchChannel;
+        speedMultiplier = token.speedMultiplier;
+        speedupTimeout = token.speedupTimeout;
+        fadeState.steps = token.fadeSteps;
+        fadeState.delayInit = token.fadeDelayInit;
+        fadeState.delayCounter = token.fadeDelayCounter;
+        fadeState.addFm = token.fadeAddFm;
+        fadeState.addPsg = token.fadeAddPsg;
+        fadeState.active = token.fadeActive;
+        fadeState.fadeOut = token.fadeOut;
+        sampleRate = token.sampleRate;
+        samplesPerFrame = token.samplesPerFrame;
+        sampleCounter = token.sampleCounter;
+        tempoWeight = token.tempoWeight;
+        tempoAccumulator = token.tempoAccumulator;
+        dividingTiming = token.dividingTiming;
+        primed = token.primed;
         tracks.clear();
-        for (int index = 0; index < token.tracks.length; index++) {
-            Track track = token.tracks[index];
-            restoreTrack(track, token.snapshot.tracks().get(index));
+        for (int index = 0; index < token.trackCount; index++) {
+            Track track = token.identities[index];
+            copyTrack(token.storage[index], track);
             tracks.add(track);
         }
         fallbackVoiceData = token.fallbackVoiceData;
@@ -213,6 +333,124 @@ public class SmpsSequencer implements CoordFlagContext {
         sourceDescriptor = token.sourceDescriptor;
         sourceDescriptorTrust = token.sourceDescriptorTrust;
         onFadeComplete = token.onFadeComplete;
+        releaseLiveCommandMutation(token);
+    }
+
+    /** Returns a committed token to the pool; no-op for one already rolled back or released. */
+    public void releaseLiveCommandMutation(LiveCommandMutationToken token) {
+        Objects.requireNonNull(token, "token");
+        if (token.owner != this) {
+            throw new IllegalArgumentException(
+                    "live command token belongs to another sequencer");
+        }
+        if (!token.inUse) {
+            return;
+        }
+        token.inUse = false;
+        Arrays.fill(token.identities, 0, token.trackCount, null);
+        token.fallbackVoiceData = null;
+        token.sourceDescriptor = null;
+        token.onFadeComplete = null;
+        token.trackCount = 0;
+        liveTokenPool.addFirst(token);
+    }
+
+    /**
+     * Copies the state {@link SmpsTrackSnapshot} carries from one track to
+     * another. Program data references ({@code voiceData}, {@code envData},
+     * {@code modEnvData}, {@code fmVolEnvData}) are shared: they are replaced
+     * as whole arrays and never written in place, so a live rollback restores
+     * the same content by restoring the reference. The scratch, stack and
+     * counter arrays are copied by content.
+     */
+    private static void copyTrack(Track from, Track to) {
+        to.pos = from.pos;
+        to.type = from.type;
+        to.channelId = from.channelId;
+        to.duration = from.duration;
+        to.note = from.note;
+        to.active = from.active;
+        to.overridden = from.overridden;
+        to.rawDuration = from.rawDuration;
+        to.scaledDuration = from.scaledDuration;
+        to.fill = from.fill;
+        to.fillCounter = from.fillCounter;
+        to.resting = from.resting;
+        to.keyOffset = from.keyOffset;
+        to.volumeOffset = from.volumeOffset;
+        to.tieNext = from.tieNext;
+        to.pan = from.pan;
+        to.ams = from.ams;
+        to.fms = from.fms;
+        to.voiceData = from.voiceData;
+        System.arraycopy(from.voiceScratch, 0, to.voiceScratch, 0, to.voiceScratch.length);
+        to.voiceId = from.voiceId;
+        to.baseFnum = from.baseFnum;
+        to.baseBlock = from.baseBlock;
+        if (to.loopCounters.length != from.loopCounters.length) {
+            to.loopCounters = new int[from.loopCounters.length];
+        }
+        System.arraycopy(from.loopCounters, 0, to.loopCounters, 0, from.loopCounters.length);
+        to.loopTarget = from.loopTarget;
+        System.arraycopy(from.returnStack, 0, to.returnStack, 0, to.returnStack.length);
+        to.returnSp = from.returnSp;
+        to.dividingTiming = from.dividingTiming;
+        to.modDelay = from.modDelay;
+        to.modDelayInit = from.modDelayInit;
+        to.modRate = from.modRate;
+        to.modDelta = from.modDelta;
+        to.modSteps = from.modSteps;
+        to.modStepsFull = from.modStepsFull;
+        to.modPendingDelayInit = from.modPendingDelayInit;
+        to.modPendingRate = from.modPendingRate;
+        to.modPendingDelta = from.modPendingDelta;
+        to.modPendingSteps = from.modPendingSteps;
+        to.modPendingStepsFull = from.modPendingStepsFull;
+        to.modRateCounter = from.modRateCounter;
+        to.modStepCounter = from.modStepCounter;
+        to.modAccumulator = from.modAccumulator;
+        to.modCurrentDelta = from.modCurrentDelta;
+        to.modEnabled = from.modEnabled;
+        to.customModEnabled = from.customModEnabled;
+        to.detune = from.detune;
+        to.modEnvId = from.modEnvId;
+        to.modEnvData = from.modEnvData;
+        to.modEnvPos = from.modEnvPos;
+        to.modEnvMult = from.modEnvMult;
+        to.modEnvCache = from.modEnvCache;
+        to.modEnvHold = from.modEnvHold;
+        to.rawFreqMode = from.rawFreqMode;
+        to.rawFrequency = from.rawFrequency;
+        to.instrumentId = from.instrumentId;
+        to.noiseMode = from.noiseMode;
+        to.psgNoiseParam = from.psgNoiseParam;
+        to.decayOffset = from.decayOffset;
+        to.decayTimer = from.decayTimer;
+        to.envData = from.envData;
+        to.envPos = from.envPos;
+        to.envValue = from.envValue;
+        to.envHold = from.envHold;
+        to.envAtRest = from.envAtRest;
+        to.fmVolEnvData = from.fmVolEnvData;
+        to.fmVolEnvPos = from.fmVolEnvPos;
+        to.fmVolEnvValue = from.fmVolEnvValue;
+        to.fmVolEnvHold = from.fmVolEnvHold;
+        to.fmVolEnvOpMask = from.fmVolEnvOpMask;
+        to.forceRefresh = from.forceRefresh;
+        System.arraycopy(from.ssgEg, 0, to.ssgEg, 0, to.ssgEg.length);
+        to.dacMuted = from.dacMuted;
+        to.modStepInEffect = from.modStepInEffect;
+        to.modStepChanged = from.modStepChanged;
+        to.modStepDelta = from.modStepDelta;
+        to.modEnvStepInEffect = from.modEnvStepInEffect;
+        to.modEnvStepChanged = from.modEnvStepChanged;
+        to.modEnvStepDelta = from.modEnvStepDelta;
+        to.fm3SpecialMode = from.fm3SpecialMode;
+        to.customSsgEgPresent = from.customSsgEgPresent;
+        System.arraycopy(from.customSsgEgPayload, 0, to.customSsgEgPayload, 0, to.customSsgEgPayload.length);
+        to.customSsgEgPayloadKnown = from.customSsgEgPayloadKnown;
+        to.rawPsgNoise = from.rawPsgNoise;
+        to.rawPsgNoiseKnown = from.rawPsgNoiseKnown;
     }
 
     private static class FadeState {
@@ -527,10 +765,13 @@ public class SmpsSequencer implements CoordFlagContext {
 
         if (smpsData instanceof SmpsSfxData sfxData) {
             initSfxTracks(sfxData, z80Start);
+            List<Track> headerOrder = List.copyOf(tracks);
             if (config.getSfxTrackWalkMode()
                     == SmpsSequencerConfig.SfxTrackWalkMode.CHANNEL_RAM_ORDER) {
                 tracks.sort(Comparator.comparingInt(SmpsSequencer::sfxTrackRamOrder));
             }
+            sfxHeaderOrderIndices = headerOrder.stream()
+                    .mapToInt(track -> tracks.indexOf(track)).toArray();
             setSfxMode(true);
             return;
         }
@@ -777,21 +1018,60 @@ public class SmpsSequencer implements CoordFlagContext {
     }
 
     public void setChannelOverridden(TrackType type, int channelId, boolean overridden) {
+        setChannelOverridden(type, channelId, overridden, false);
+    }
+
+    /** Restore cause owned only by S3K cfStopTrack's immediate handoff. */
+    public void setChannelOverriddenAfterSfxTrackStop(
+            TrackType type, int channelId) {
+        setChannelOverridden(type, channelId, false, true);
+    }
+
+    private void setChannelOverridden(TrackType type, int channelId,
+            boolean overridden, boolean afterSfxTrackStop) {
         for (Track t : tracks) {
             if (t.type == type && t.channelId == channelId) {
                 boolean wasOverridden = t.overridden;
                 t.overridden = overridden;
                 if (wasOverridden && !overridden) {
+                    if (afterSfxTrackStop && t.type == TrackType.PSG
+                            && config.getPsgSfxReleaseMode()
+                            == SmpsSequencerConfig.PsgSfxReleaseMode
+                                    .ROM_NOISE_RESTORE_PRESERVE_REST) {
+                        // zStopPSGTrack has no playing-bit guard. It preserves
+                        // rest and re-sends only a negative raw PSGNoise byte
+                        // (skdisasm Sound/Z80 Sound Driver.asm:3521-3533).
+                        if (t.noiseMode && t.rawPsgNoiseKnown
+                                && (t.rawPsgNoise & 0x80) != 0) {
+                            synth.writePsg(this, t.rawPsgNoise);
+                        }
+                        continue;
+                    }
                     if (!t.active)
                         continue;
 
                     if (t.type == TrackType.FM
                             && config.getFmSfxReleaseMode()
-                            == SmpsSequencerConfig.FmSfxReleaseMode.ROM_VOICE_RESTORE) {
-                        // S1 cfStopTrack: the SFX track already sent FMNoteOff;
-                        // restore the music voice/pan, mark it at rest, and do
-                        // not resend frequency or key on (SD:2489-2537).
-                        t.resting = true;
+                            != SmpsSequencerConfig.FmSfxReleaseMode.LEGACY_FULL_RESTORE) {
+                        // The SFX's note-off stands: restore voice/pan without
+                        // resending frequency or key-on. The profile owns whether
+                        // this handoff also sets the music track's rest bit.
+                        if (config.getFmSfxReleaseMode()
+                                == SmpsSequencerConfig.FmSfxReleaseMode.ROM_VOICE_RESTORE) {
+                            t.resting = true;
+                        }
+                        if (t.channelId == 2
+                                && config.getFmSfxReleaseMode()
+                                == SmpsSequencerConfig.FmSfxReleaseMode
+                                        .ROM_VOICE_RESTORE_PRESERVE_REST) {
+                            // S3K cfStopTrack restores FM3 settings before the
+                            // covered music voice (:3472-3499). Shipped
+                            // fix_sndbugs=0 also saves this byte in
+                            // zFM3Settings; the fixed branch omits that RAM
+                            // store, but both branches write 27h physically.
+                            synth.writeFm(this, 0, 0x27,
+                                    t.fm3SpecialMode ? 0x4F : 0x0F);
+                        }
                         refreshInstrument(t);
                         continue;
                     }
@@ -861,8 +1141,9 @@ public class SmpsSequencer implements CoordFlagContext {
 
                 int data = reg & 0xF;
                 int ch = t.channelId;
-                synth.writePsg(this, 0x80 | (ch << 5) | (0) | data);
-                synth.writePsg(this, psgFrequencyHighByte(reg));
+                synth.writePsgFrequencyPair(this,
+                        0x80 | (ch << 5) | data,
+                        psgFrequencyHighByte(reg));
             }
 
             if (t.noiseMode) {
@@ -899,6 +1180,22 @@ public class SmpsSequencer implements CoordFlagContext {
 
     public List<Track> getTracks() {
         return Collections.unmodifiableList(tracks);
+    }
+
+    /** SFX header order before any fixed channel-RAM service ordering. */
+    public List<Track> getSfxHeaderOrderTracks() {
+        if (sfxHeaderOrderIndices.length == 0) {
+            return getTracks();
+        }
+        List<Track> ordered = new ArrayList<>(sfxHeaderOrderIndices.length);
+        for (int index : sfxHeaderOrderIndices) {
+            ordered.add(tracks.get(index));
+        }
+        for (int index = sfxHeaderOrderIndices.length;
+                index < tracks.size(); index++) {
+            ordered.add(tracks.get(index));
+        }
+        return Collections.unmodifiableList(ordered);
     }
 
     public int trackCount() {
@@ -1983,6 +2280,18 @@ public class SmpsSequencer implements CoordFlagContext {
         setFadeSteps(fadeSteps() - 1);
         setFadeDelayCounter(fadeDelayReload());
 
+        if (fadeState.fadeOut && config.isDriverOwnedFadeDelay() && fadeSteps() == 0
+                && host.fadeOutCompletesWithGlobalStop()) {
+            // zDoMusicFadeOut jumps to zStopAllSound before the terminal TL
+            // loop (Z80 driver:2347-2362). The host applies that shared stop
+            // after this step; do not emit another volume or note update here.
+            fadeState.active = false;
+            for (Track track : tracks) {
+                track.active = false;
+            }
+            return;
+        }
+
         int dir = fadeState.fadeOut ? 1 : -1;
 
         for (Track t : tracks) {
@@ -2749,6 +3058,7 @@ public class SmpsSequencer implements CoordFlagContext {
 
         int baseNoteOffset = (t.type == TrackType.PSG) ? smpsData.getPsgBaseNoteOffset() : smpsData.getBaseNoteOffset();
         int n = t.note - 0x81 + t.keyOffset + baseNoteOffset;
+        boolean psgVolumeWrittenByFrequencyTail = false;
 
         if (t.type == TrackType.FM) {
             // Match SMPSPlay/GetNote FM note indexing behavior.
@@ -2898,8 +3208,9 @@ public class SmpsSequencer implements CoordFlagContext {
             if (writeToneFreq && !modulationSendsNoteFrequency) {
                 int data = reg & 0xF;
                 int ch = t.channelId;
-                synth.writePsg(this, 0x80 | (ch << 5) | (0) | data);
-                synth.writePsg(this, psgFrequencyHighByte(reg));
+                synth.writePsgFrequencyPair(this,
+                        0x80 | (ch << 5) | data,
+                        psgFrequencyHighByte(reg));
                 // baseFnum stores detune-free period; modulation applies detune dynamically.
             }
 
@@ -2913,28 +3224,61 @@ public class SmpsSequencer implements CoordFlagContext {
                 t.forceModulationWrite = config.getNoteGoingFreqSend()
                         == SmpsSequencerConfig.NoteGoingFreqSend.EVERY_PASS;
                 applyModulation(t);
+                // Claim the shared ROM tail only when this pass necessarily
+                // emitted it: S3K forces every-pass sends, and only a live,
+                // unowned tone channel reaches writeTrackFrequency's PSG pair.
+                psgVolumeWrittenByFrequencyTail =
+                        config.getNoteGoingFreqSend()
+                                == SmpsSequencerConfig.NoteGoingFreqSend.EVERY_PASS
+                        && config.getPsgVolumeTail()
+                                == SmpsSequencerConfig.PsgVolumeTail.EVERY_NOTE_GOING_PASS
+                        && t.instrumentId == 0
+                        && (t.modStepInEffect || t.modEnvStepInEffect)
+                        && t.channelId >= 0
+                        && t.channelId < 3
+                        && !t.resting
+                        && !t.overridden;
             }
 
         }
 
         if (!preventAttack) {
+            boolean deferPsgEnvelopeToOverrideGate =
+                    t.type == TrackType.PSG
+                    && t.overridden
+                    && config.getPsgNoteGoingOrder()
+                            == SmpsSequencerConfig.PsgNoteGoingOrder
+                                    .FREQUENCY_THEN_VOLUME;
             t.decayOffset = 0;
             t.decayTimer = 0;
             t.envPos = 0;
             t.envHold = false;
             t.envAtRest = false;
             if (t.envData != null && t.envData.length > 0) {
-                int val = t.envData[0] & 0xFF;
-                if (val < 0x80) {
-                    t.envValue = val;
-                    t.envPos = 1;
+                if (deferPsgEnvelopeToOverrideGate) {
+                    // zFinishTrackUpdate resets VolEnv, but the later S3K
+                    // override gate returns before zDoVolEnv can consume byte
+                    // zero (Sound/Z80 Sound Driver.asm:1055-1069, :4079-4106).
+                    t.envValue = 0;
+                } else {
+                    int val = t.envData[0] & 0xFF;
+                    if (val < 0x80) {
+                        t.envValue = val;
+                        t.envPos = 1;
+                    }
                 }
             } else {
                 t.envData = null;
                 t.envValue = 0;
             }
 
-            if (t.type == TrackType.PSG) {
+            if (t.type == TrackType.PSG
+                    && !deferPsgEnvelopeToOverrideGate
+                    && !psgVolumeWrittenByFrequencyTail) {
+                // S3K's modulation-driven frequency send already falls through
+                // zUpdatePSGTrack's one volume tail. Do not append a second
+                // attacked-note write when that tail had no envelope to step
+                // (Sound/Z80 Sound Driver.asm:4059-4135).
                 refreshVolume(t); // Apply the first envelope step immediately on note start
             }
             if (t.type == TrackType.FM && t.fmVolEnvData != null) {
@@ -3036,8 +3380,9 @@ public class SmpsSequencer implements CoordFlagContext {
             boolean writeToneFreq = t.channelId < 3 && (!t.noiseMode || noiseUsesTone2);
             if (writeToneFreq) {
                 int ch = t.channelId;
-                synth.writePsg(this, 0x80 | (ch << 5) | (reg & 0x0F));
-                synth.writePsg(this, psgFrequencyHighByte(reg));
+                synth.writePsgFrequencyPair(this,
+                        0x80 | (ch << 5) | (reg & 0x0F),
+                        psgFrequencyHighByte(reg));
             }
 
             if (t.customModEnabled && !preventAttack) {
@@ -3093,8 +3438,8 @@ public class SmpsSequencer implements CoordFlagContext {
     }
 
     @Override
-    public void releaseChannelToMusic(TrackType type, int channelId) {
-        host.releaseChannelToMusic(this, type, channelId);
+    public void releaseChannelToMusic(Track endingTrack) {
+        host.releaseChannelToMusic(this, endingTrack);
     }
 
     @Override
@@ -3126,6 +3471,14 @@ public class SmpsSequencer implements CoordFlagContext {
                 }
             }
         }
+    }
+
+    @Override
+    public void stopPsgNoteWithDriverSilence(Track t) {
+        if (t.type != TrackType.PSG) {
+            throw new IllegalArgumentException("driver PSG silence requires a PSG track");
+        }
+        synth.writePsgDriverSilence(this, t.channelId, t.noiseMode);
     }
 
     public boolean isComplete() {
@@ -3727,8 +4080,9 @@ public class SmpsSequencer implements CoordFlagContext {
 
                 int data = reg & 0xF;
                 int ch = t.channelId;
-                synth.writePsg(this, 0x80 | (ch << 5) | data);
-                synth.writePsg(this, psgFrequencyHighByte(reg));
+                synth.writePsgFrequencyPair(this,
+                        0x80 | (ch << 5) | data,
+                        psgFrequencyHighByte(reg));
             }
             if (config.getPsgVolumeTail()
                     == SmpsSequencerConfig.PsgVolumeTail.EVERY_NOTE_GOING_PASS
@@ -4019,7 +4373,24 @@ public class SmpsSequencer implements CoordFlagContext {
         speedShoes = false;
     }
 
+    /** Whether a fade in armed by {@link #triggerFadeIn} is still running. */
+    public boolean isFadingIn() {
+        return fadeState.active && !fadeState.fadeOut;
+    }
+
     public void triggerFadeIn(int steps, int delay) {
+        boolean restTracks = config.getFadeInRestore()
+                == SmpsSequencerConfig.FadeInRestore.REST_TRACKS;
+        // S1 and S2 attenuate by 28h less the fade-in counter the restored
+        // RAM copy carries, so a 1-up that lands during an earlier restore's
+        // fade in does not stack a second full attenuation on the first
+        // (s1.sounddriver.asm:2186, s2.sounddriver.asm:3099). The counter is
+        // the saved song's own fade state here, because that is what the
+        // restore brought back. S3K adds a fixed 40h.
+        int restDelta = steps;
+        if (restTracks && fadeState.active && !fadeState.fadeOut) {
+            restDelta = steps - fadeSteps();
+        }
         // Start a fade in from current volume (silence) to normal
         fadeState.addFm = 1;
         fadeState.addPsg = 1;
@@ -4046,56 +4417,69 @@ public class SmpsSequencer implements CoordFlagContext {
                 stopNote(track);
                 continue;
             }
-            boolean restTracks = config.getFadeInRestore()
-                    == SmpsSequencerConfig.FadeInRestore.REST_TRACKS;
-            // S1 and S2 attenuate every playing FM and PSG track by the fade
-            // depth (s2.sounddriver.asm:3098-3099, :3109, :3134;
-            // s1.sounddriver.asm:2194, :2213). S3K attenuates only the FM
-            // tracks, by 40h, and leaves the PSG volumes alone
-            // (Sound/Z80 Sound Driver.asm:2767-2770).
-            if (restTracks || track.type == TrackType.FM) {
+            if (restTracks) {
+                // S1/S2 cfFadeInToPrevious walks only the playing tracks
+                // (s1.sounddriver.asm:2191, s2.sounddriver.asm:3105).
+                if (!track.active) {
+                    continue;
+                }
+                // Mark the track at rest so the resumed song stays silent
+                // until each track reads its own next note, rather than
+                // holding the note that was sounding when the jingle
+                // interrupted it (s1.sounddriver.asm:2193, :2211;
+                // s2.sounddriver.asm:3107, :3131), then attenuate it by the
+                // fade depth (s1:2194, :2213; s2:3109, :3134).
+                track.resting = true;
+                track.volumeOffset += restDelta;
+                if (track.type == TrackType.FM) {
+                    // The FM tracks get no key-off and no separate volume
+                    // write. Unless an SFX owns the channel, the ROM re-sends
+                    // the track's whole voice, carrying the attenuated volume
+                    // in its TL bytes: SetVoice (s1.sounddriver.asm:2196-2200)
+                    // and zSetVoiceMusic (s2.sounddriver.asm:3111-3118). The
+                    // chip is still holding the jingle's instrument on every
+                    // channel at this point, so without the resend the level
+                    // music comes back played on the wrong voices until each
+                    // track next changes instrument on its own.
+                    if (!track.overridden) {
+                        refreshInstrument(track);
+                    }
+                } else {
+                    // zPSGNoteOff / PSGNoteOff on each rested PSG track
+                    // (s2.sounddriver.asm:3132, s1.sounddriver.asm:2212).
+                    stopNote(track);
+                }
+                continue;
+            }
+            // S3K attenuates only the FM tracks, by 40h, and leaves the PSG
+            // volumes alone (Sound/Z80 Sound Driver.asm:2767-2770).
+            if (track.type == TrackType.FM) {
                 track.volumeOffset += steps;
                 refreshVolume(track);
             }
             if (!track.active) {
                 continue;
             }
-            if (restTracks) {
-                // S1/S2: mark the track at rest so the resumed song stays
-                // silent until each track reads its own next note, rather
-                // than holding the note that was sounding when the jingle
-                // interrupted it (s2.sounddriver.asm:3107, :3131;
-                // s1.sounddriver.asm:2193, :2211).
-                track.resting = true;
-                if (track.type == TrackType.PSG) {
-                    // zPSGNoteOff / PSGNoteOff on each rested PSG track
-                    // (s2.sounddriver.asm:3132, s1.sounddriver.asm:2212).
-                    // The FM tracks get no key-off: the ROM re-sends their
-                    // voice instead.
-                    stopNote(track);
-                }
-            } else {
-                // S3K silences by a different bit. zFadeInToPrevious ORs 84h
-                // over every track and then clears bit 2 again on the FM ones
-                // (Sound/Z80 Sound Driver.asm:2761-2770). Bit 2 is "SFX is
-                // overriding this track" and bit 4 is "track is resting" in
-                // this driver (Driver.asm:25, :27; zRestTrack at :4220-4223
-                // sets bit 4 then tests bit 2), so 84h is bits 7 and 2,
-                // playing plus overriding -- the routine's inline comment
-                // naming it "playing and resting" is a mislabel. The PSG
-                // tracks keep the overriding bit, which is what mutes them
-                // through the fade; the FM tracks have it cleared whatever it
-                // was before, and no track is rested.
-                track.overridden = track.type == TrackType.PSG;
-                if (track.type == TrackType.FM) {
-                    // The ROM's per-track order is: clear the overriding bit,
-                    // add 40h to the volume, then fetch and send the FM
-                    // instrument (:2766-2772). The resend comes after the
-                    // attenuation, so the voice reaches the chip already
-                    // carrying the fade's starting level rather than the
-                    // level the song had before the jingle interrupted it.
-                    refreshInstrument(track);
-                }
+            // S3K silences by a different bit. zFadeInToPrevious ORs 84h
+            // over every track and then clears bit 2 again on the FM ones
+            // (Sound/Z80 Sound Driver.asm:2761-2770). Bit 2 is "SFX is
+            // overriding this track" and bit 4 is "track is resting" in
+            // this driver (Driver.asm:25, :27; zRestTrack at :4220-4223
+            // sets bit 4 then tests bit 2), so 84h is bits 7 and 2,
+            // playing plus overriding -- the routine's inline comment
+            // naming it "playing and resting" is a mislabel. The PSG
+            // tracks keep the overriding bit, which is what mutes them
+            // through the fade; the FM tracks have it cleared whatever it
+            // was before, and no track is rested.
+            track.overridden = track.type == TrackType.PSG;
+            if (track.type == TrackType.FM) {
+                // The ROM's per-track order is: clear the overriding bit,
+                // add 40h to the volume, then fetch and send the FM
+                // instrument (:2766-2772). The resend comes after the
+                // attenuation, so the voice reaches the chip already
+                // carrying the fade's starting level rather than the
+                // level the song had before the jingle interrupted it.
+                refreshInstrument(track);
             }
         }
     }

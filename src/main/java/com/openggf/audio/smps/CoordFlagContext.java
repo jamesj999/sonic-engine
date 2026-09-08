@@ -38,6 +38,13 @@ public interface CoordFlagContext {
     void stopNote(SmpsSequencer.Track t);
 
     /**
+     * Emits the ROM driver's complete PSG stop transaction. Unlike an
+     * ordinary track write, reaching this command owns the physical bus
+     * operation even while another track retains logical channel ownership.
+     */
+    void stopPsgNoteWithDriverSilence(SmpsSequencer.Track t);
+
+    /**
      * Hands one channel back to music from inside the track-end flag, which is
      * where S3K's {@code cfStopTrack} does it: after keying the SFX track off
      * it clears the overridden music track's bit and sends that track's FM
@@ -63,7 +70,7 @@ public interface CoordFlagContext {
     default void restorePreviousMusic() {
     }
 
-    default void releaseChannelToMusic(SmpsSequencer.TrackType type, int channelId) {
+    default void releaseChannelToMusic(SmpsSequencer.Track endingTrack) {
     }
 
     /** Refresh the track's volume (re-apply TL for FM, attenuation for PSG). */

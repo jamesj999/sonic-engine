@@ -281,7 +281,18 @@ final class NukedOpn2Tables {
     /** {@code cycles % 6} for cycles 0..23: the channel the C computes by modulo. */
     static final int[] SLOT_CHANNEL = new int[24];
 
+    /** Signed OPN2_PhaseCalcIncrement detune for [DT * 32 + keycode]. */
+    static final byte[] PG_DETUNE_SIGNED = new byte[8 * 32];
+
     static {
+        /* Generate once at class initialization using the original
+         * ym3438.c:OPN2_PhaseCalcIncrement detune calculation below.
+         * The signed result fits in a byte. */
+        for (int dt = 0; dt < 8; dt++) {
+            for (int code = 0; code < 32; code++) {
+                PG_DETUNE_SIGNED[(dt << 5) | code] = (byte) calculateSignedDetune(dt, code);
+            }
+        }
         for (int op = 0; op < 4; op++) {
             for (int connect = 0; connect < 8; connect++) {
                 int bits = 0;
@@ -306,5 +317,23 @@ final class NukedOpn2Tables {
             SLOT_OP[slot] = slot / 6;
             SLOT_CHANNEL[slot] = slot % 6;
         }
+    }
+
+    /** Original detune calculation, run only while building the runtime table. */
+    private static int calculateSignedDetune(int dt, int kcode) {
+        int dtL = dt & 0x03;
+        int detune = 0;
+        if (dtL != 0) {
+            if (kcode > 0x1c) {
+                kcode = 0x1c;
+            }
+            int block = kcode >> 2;
+            int note = kcode & 0x03;
+            int sum = block + 9 + ((dtL == 3 ? 1 : 0) | (dtL & 0x02));
+            int sumH = sum >> 1;
+            int sumL = sum & 0x01;
+            detune = PG_DETUNE[(sumL << 2) | note] >> (9 - sumH);
+        }
+        return (dt & 0x04) != 0 ? -detune : detune;
     }
 }

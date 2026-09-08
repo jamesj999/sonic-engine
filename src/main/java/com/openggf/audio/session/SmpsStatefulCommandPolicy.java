@@ -20,6 +20,48 @@ public interface SmpsStatefulCommandPolicy {
 
     Identity identity();
 
+    /** Blocks new SFX during an override, releasing them at music restoration. */
+    default boolean suppressesSfxDuringOverride() {
+        return false;
+    }
+
+    /**
+     * Whether {@link #suppressesSfxDuringOverride()} lifts at the restore
+     * itself, or only once the restored song's fade in has completed.
+     *
+     * <p>S3K clears {@code zFadeToPrevFlag} before the restoration fade
+     * starts, so its block ends at the restore. S1 and S2 replace one flag
+     * with another: {@code cfFadeInToPrevious} clears {@code f_1up_playing}
+     * and sets {@code f_fadein_flag} (s1.sounddriver.asm:2220-2222,
+     * s2.sounddriver.asm:3150-3155), the SFX entry refuses while either is
+     * set (s1:978-982, s2:2118-2120), and only the fade-in stepper clears the
+     * second flag when its counter reaches zero (s1:1650, s2:2740).
+     */
+    default boolean releasesSfxSuppressionAtRestore() {
+        return true;
+    }
+
+    /**
+     * Whether starting an override stops the SFX already playing. S1's
+     * extra-life branch clears the playing bit on every SFX track before it
+     * backs the driver up (s1.sounddriver.asm:769-774); S2 reaches the same
+     * result for every song through {@code zStopSoundEffects}, which the
+     * request path already models, and S3K does not stop them.
+     */
+    default boolean stopsSfxWhenOverrideStarts() {
+        return false;
+    }
+
+    /** State and physical writes owned by the host's music-fade command. */
+    default SmpsFadeOutEffects fadeOutEffects() {
+        return SmpsFadeOutEffects.NONE;
+    }
+
+    /** Whether the terminal driver-owned fade step invokes the host's global stop. */
+    default boolean fadeOutCompletesWithGlobalStop() {
+        return false;
+    }
+
     /**
      * Hosts without a stateful operation retain their established behavior.
      */

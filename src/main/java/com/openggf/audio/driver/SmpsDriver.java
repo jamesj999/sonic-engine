@@ -392,6 +392,12 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         }
     }
 
+    @Override
+    public boolean fadeOutCompletesWithGlobalStop() {
+        return synthesizer instanceof SmpsDriverSessionAccess access
+                && access.fadeOutCompletesWithGlobalStop();
+    }
+
     /** Installs the disabled-by-default complete-service diagnostic observer. */
     public void setServiceObserver(SmpsDriverServiceObserver observer) {
         serviceObserver = Objects.requireNonNull(observer, "observer");
@@ -666,6 +672,9 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                 }
                 throw failure;
             }
+            if (rollbackState != null) {
+                releaseSfxAdmissionMutation(rollbackState);
+            }
         }
     }
 
@@ -787,8 +796,7 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
      * those, because every write goes through {@code zWriteFMIorII}, which
      * returns at once on bit 7 of {@code VoiceControl} (:2549-2551). The
      * fixed branch would test that bit at the call site and skip the call
-     * instead; the observable write stream is identical either way, so this
-     * models the FM tracks alone and is complete rather than partial.
+     * instead; the observable SSG-EG clear stream is identical either way.
      *
      * <p>The same routine's second guard is modelled too: {@code
      * zWriteFMIorII} also returns on bit 2 of {@code PlaybackControl}, the
@@ -805,13 +813,36 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
      * SFX's note before the new one attacks.
      */
     private void emitSfxTrackInitWrites(SmpsSequencer sequencer) {
-        if (!sequencer.getConfig().isSfxAdmissionKeyOffAndClearsSsgEg()) {
+        boolean initializeFm = sequencer.getConfig().isSfxAdmissionKeyOffAndClearsSsgEg();
+        boolean silenceNoise = sequencer.getConfig().isPsgSfxAdmissionSilencesNoise();
+        if (!initializeFm && !silenceNoise) {
             return;
         }
-        for (SmpsSequencer.Track track : sequencer.getTracks()) {
+        SmpsSequencer.Track previousInitializedHeader = null;
+        for (SmpsSequencer.Track track : sequencer.getSfxHeaderOrderTracks()) {
+            if (track.type == SmpsSequencer.TrackType.PSG && silenceNoise) {
+                // The first header's incoming IX is pre-existing slot RAM,
+                // which this bounded admission model does not project.
+                // At the next header, IX still identifies the track initialized
+                // by the preceding loop pass. All shipped S3K SFX headers seed
+                // PlaybackControl with 80h, so zSilencePSGChannel's bit-0 gate
+                // is clear (TestSonic3kSmpsMetaCommandReachability).
+                if (previousInitializedHeader != null
+                        && previousInitializedHeader.type
+                        == SmpsSequencer.TrackType.PSG) {
+                    writeRawPsg(0x9F
+                            | (previousInitializedHeader.channelId << 5));
+                }
+                // Retail fix_sndbugs=0: zGetSFXChannelPointers.is_psg writes
+                // FF unconditionally, even for PSG1/2, before initializing
+                // the incoming track (skdisasm Sound/Z80 Sound Driver.asm:2131-2136).
+                // The fixed branch relies on corrected channel silence instead.
+                writeRawPsg(0xFF);
+            }
+            previousInitializedHeader = track;
             // zWriteFMIorII returns on bit 7 of VoiceControl, so a PSG track's
             // clear writes nothing at all.
-            if (track.type != SmpsSequencer.TrackType.FM) {
+            if (track.type != SmpsSequencer.TrackType.FM || !initializeFm) {
                 continue;
             }
             if (track.overridden) {
@@ -1285,6 +1316,13 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         return --contSfxLoopCnt <= 0;
     }
 
+    /** Reads the current clock region without capturing sequencer or track state. */
+    public SmpsSequencer.Region getRegion() {
+        synchronized (sequencersLock) {
+            return region;
+        }
+    }
+
     public void setRegion(SmpsSequencer.Region region) {
         this.region = region;
         synchronized (sequencersLock) {
@@ -1433,6 +1471,19 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                     nextServiceOrdinal, nextServiceSequencerOrdinal,
                     continuousSfxId,
                     continuousSfxFlag, contSfxLoopCnt);
+        }
+    }
+
+    /** Returns a committed admission's per-sequencer backups to their pools. */
+    void releaseSfxAdmissionMutation(SfxAdmissionMutationState state) {
+        if (state.continuousOnly) {
+            return;
+        }
+        synchronized (sequencersLock) {
+            for (int index = 0; index < state.affected.length; index++) {
+                state.affected[index].releaseLiveCommandMutation(
+                        state.sequencerStates[index]);
+            }
         }
     }
 
@@ -1623,6 +1674,21 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                     contSfxLoopCnt,
                     palUpdateCounter,
                     s1SpecialVoicePointer);
+        }
+    }
+
+    /** Returns a committed token's per-sequencer backups to their pools. */
+    public void releaseLiveCommandMutation(LiveCommandMutationToken token) {
+        Objects.requireNonNull(token, "token");
+        if (token.owner != this) {
+            throw new IllegalArgumentException(
+                    "live command token belongs to another SMPS driver");
+        }
+        synchronized (sequencersLock) {
+            for (int index = 0; index < token.sequencers.length; index++) {
+                token.sequencers[index].releaseLiveCommandMutation(
+                        token.sequencerStates[index]);
+            }
         }
     }
 
@@ -2319,7 +2385,15 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
             return;
         }
         fadeDelayTimeout = fadeDelay;
+        int previousFadeSteps = fadeOutTimeout;
         fadeOutTimeout = (fadeOutTimeout - 1) & 0xFF;
+        completeHostFadeIfTerminal(previousFadeSteps);
+    }
+
+    private boolean completeHostFadeIfTerminal(int previousFadeSteps) {
+        return previousFadeSteps != 0 && driverOwnedFade && fadeOutTimeout == 0
+                && synthesizer instanceof SmpsDriverSessionAccess access
+                && access.completeFadeOut();
     }
 
     public void stopAllSfx() {
@@ -2494,17 +2568,25 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         SmpsSequencer music = firstMusicSequencerLocked();
         serviceSequencers(true);
         if (music != null) {
+            int previousFadeSteps = fadeOutTimeout;
             music.serviceS3kSpeedupTail();
+            if (completeHostFadeIfTerminal(previousFadeSteps)) {
+                music = null;
+            }
         }
         if (music != null) {
+            int previousFadeSteps = fadeOutTimeout;
             music.serviceFadeStepAheadOfRequest();
+            completeHostFadeIfTerminal(previousFadeSteps);
         }
         stepSonglessFadeIfNoSong();
         runPendingServiceRequest();
         music = firstMusicSequencerLocked();
         serviceSequencers(false);
         if (music != null) {
+            int previousFadeSteps = fadeOutTimeout;
             music.serviceS3kSpeedupTail();
+            completeHostFadeIfTerminal(previousFadeSteps);
         }
     }
 
@@ -2719,7 +2801,12 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         int size = sequencers.size();
         for (int i = 0; i < size; i++) {
             SmpsSequencer seq = sequencers.get(i);
+            int previousFadeSteps = fadeOutTimeout;
             seq.advanceBatch(frames);
+            if (completeHostFadeIfTerminal(previousFadeSteps)) {
+                // Global stop has replaced the sequencer list and save area.
+                return;
+            }
             if (seq.isComplete()) {
                 pendingRemovals.add(seq);
             }
@@ -2792,16 +2879,42 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
      */
     @Override
     public void releaseChannelToMusic(SmpsSequencer sequencer,
-            SmpsSequencer.TrackType type, int channelId) {
+            SmpsSequencer.Track endingTrack) {
         if (!isSfx(sequencer)) {
             return;
         }
+        SmpsSequencer.TrackType type = endingTrack.type;
+        int channelId = endingTrack.channelId;
         SmpsSequencer[] locks = type == SmpsSequencer.TrackType.PSG ? psgLocks : fmLocks;
-        if (channelId < 0 || channelId >= locks.length || locks[channelId] != sequencer) {
+        if (channelId < 0 || channelId >= locks.length
+                || locks[channelId] != sequencer
+                || hasOtherActiveTrack(sequencer, endingTrack)) {
             return;
         }
         locks[channelId] = null;
-        updateOverrides(type, channelId, false);
+        if (type == SmpsSequencer.TrackType.PSG) {
+            if (psgSfxClaims[channelId] == sequencer) {
+                psgSfxClaims[channelId] = null;
+            }
+            if (channelId == PSG_TONE3_CHANNEL
+                    && endingTrack.noiseMode
+                    && psgLocks[PSG_NOISE_CHANNEL] == sequencer) {
+                psgLocks[PSG_NOISE_CHANNEL] = null;
+            }
+        }
+        updateOverridesAfterSfxTrackStop(type, channelId);
+    }
+
+    private static boolean hasOtherActiveTrack(
+            SmpsSequencer sequencer, SmpsSequencer.Track endingTrack) {
+        for (SmpsSequencer.Track track : sequencer.getTracks()) {
+            if (track != endingTrack && track.active
+                    && track.type == endingTrack.type
+                    && track.channelId == endingTrack.channelId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void releaseLocks(SmpsSequencer seq) {
@@ -2822,7 +2935,9 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         for (int i = 0; i < 4; i++) {
             if (psgLocks[i] == seq) {
                 if (isSfx && seq.getConfig().getPsgSfxReleaseMode()
-                        == SmpsSequencerConfig.PsgSfxReleaseMode.LEGACY_FULL_RESTORE) {
+                        != SmpsSequencerConfig.PsgSfxReleaseMode.ROM_REST_RESTORE) {
+                    // Preserve the established wholesale-teardown silence for
+                    // profiles whose ROM-specific policy is scoped to F2.
                     seq.forceSilence(SmpsSequencer.TrackType.PSG, i);
                 }
                 psgLocks[i] = null;
@@ -2944,7 +3059,7 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                 continue;
             }
             if (sequencer.getConfig().getPsgSfxReleaseMode()
-                    == SmpsSequencerConfig.PsgSfxReleaseMode.LEGACY_FULL_RESTORE) {
+                    != SmpsSequencerConfig.PsgSfxReleaseMode.ROM_REST_RESTORE) {
                 sequencer.forceSilence(SmpsSequencer.TrackType.PSG, channel);
             }
             SmpsSequencer waitingPsg = waitingSpecialSfx(
@@ -3041,6 +3156,18 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
             for (SmpsSequencer s : sequencers) {
                 if (!isSfx(s)) {
                     s.setChannelOverridden(type, ch, overridden);
+                }
+            }
+        }
+    }
+
+    private void updateOverridesAfterSfxTrackStop(
+            SmpsSequencer.TrackType type, int channel) {
+        synchronized (sequencersLock) {
+            for (SmpsSequencer sequencer : sequencers) {
+                if (!isSfx(sequencer)) {
+                    sequencer.setChannelOverriddenAfterSfxTrackStop(
+                            type, channel);
                 }
             }
         }
@@ -3200,6 +3327,78 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
                 // Pass for safety/compatibility
                 synthesizer.writePsg(source, val);
             }
+        }
+    }
+
+    @Override
+    public void writePsgFrequencyPair(
+            Object source, int latchByte, int followingByte) {
+        int first = latchByte & 0xFF;
+        int second = followingByte & 0xFF;
+        int hardwareChannel = (first >> 5) & 0x03;
+        if ((first & 0x90) != 0x80 || hardwareChannel >= 3) {
+            throw new IllegalArgumentException(
+                    "PSG frequency transaction must start with a tone latch");
+        }
+
+        int ownershipChannel = psgOwnershipChannel(hardwareChannel, source);
+        boolean admitted;
+        if (isSfx(source)) {
+            LockDecision decision = decideLock(SfxContentionObserver.Bus.PSG,
+                    ownershipChannel, psgLocks[ownershipChannel],
+                    (SmpsSequencer) source);
+            if (decision.acquired()) {
+                if (psgLocks[ownershipChannel] != source
+                        && !isSfx(psgLocks[ownershipChannel])
+                        && usesForcedPsgTakeover(source)) {
+                    silencePsgChannel(ownershipChannel);
+                }
+                psgLocks[ownershipChannel] = (SmpsSequencer) source;
+                updateOverrides(SmpsSequencer.TrackType.PSG,
+                        ownershipChannel, true);
+            }
+            reportLockDecision(decision);
+            admitted = psgLocks[ownershipChannel] == source;
+        } else {
+            admitted = psgLocks[ownershipChannel] == null;
+        }
+        if (!admitted) {
+            return;
+        }
+
+        // zUpdatePSGTrack gates the source track once, then writes both bytes
+        // without another ownership check (:4085-4095). Keep both physical
+        // bytes verbatim: S3K's unmasked second byte can itself be a latch.
+        synthesizer.writePsg(source, first);
+        synthesizer.writePsg(source, second);
+        int physicalLatchChannel = (second & 0x80) != 0
+                ? (second >> 5) & 0x03 : hardwareChannel;
+        if (source instanceof SmpsSequencer sequencer) {
+            sequencer.setPsgLatchChannel(physicalLatchChannel);
+        } else {
+            psgLatches.put(source, physicalLatchChannel);
+        }
+    }
+
+    @Override
+    public void writePsgDriverSilence(
+            Object source, int toneChannel, boolean noiseMode) {
+        if (toneChannel < 0 || toneChannel >= 3) {
+            throw new IllegalArgumentException(
+                    "PSG driver silence requires a tone channel");
+        }
+        // This is one driver-owned physical transaction, reached after the
+        // ROM stream has already selected cfStopTrack. It neither competes
+        // for nor releases the logical channel lock.
+        synthesizer.writePsg(source, 0x80 | (toneChannel << 5) | 0x1F);
+        if (noiseMode) {
+            synthesizer.writePsg(source, 0xFF);
+        }
+        synthesizer.writePsg(source, 0xFF);
+        if (source instanceof SmpsSequencer sequencer) {
+            sequencer.setPsgLatchChannel(PSG_NOISE_CHANNEL);
+        } else {
+            psgLatches.put(source, PSG_NOISE_CHANNEL);
         }
     }
 

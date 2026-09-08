@@ -1,8 +1,13 @@
 # Load-time reserved-mode boundary hardening
 
 Date: 2026-08-09
-Status: implemented and validated on the feature branch; reserved modes remain unfinished
+Status: historical boundary hardening; FAST superseded on 2026-09-06, REALISTIC remains reserved
 Base: `origin/develop` at `9de7ecf7230100626fb7084b3f678daa6a5f478c`
+
+> FAST now resolves to its independent manifest where supplied and is the repository
+> default. The fallback table and FAST completion proposals below record the
+> August boundary, not current behavior. See the [current status](2026-07-29-profiled-load-time-simulation.md#current-status-2026-09-06).
+> S1/S2 native queue ownership and REALISTIC evidence constraints remain relevant.
 
 ## Goal
 

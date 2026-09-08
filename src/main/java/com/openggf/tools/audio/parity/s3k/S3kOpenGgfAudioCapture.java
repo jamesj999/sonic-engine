@@ -75,7 +75,9 @@ public final class S3kOpenGgfAudioCapture {
                     new SmpsPhysicalDevice.Settings(
                             SAMPLE_RATE, false),
                     Sonic3kSmpsPhysicalPolicy.INSTANCE,
-                    ChipWriteObserver.NONE)) {
+                    ChipWriteObserver.NONE,
+                    new com.openggf.audio.session.SmpsDriverSessionConfiguration(
+                            com.openggf.game.sonic3k.audio.Sonic3kStatefulCommandPolicy.INSTANCE))) {
             SmpsDriver driver = stream.logicalDriver();
             driver.setRegion(SmpsSequencer.Region.NTSC);
             List<AudioParityChipWrite> writes = new ArrayList<>();
@@ -121,6 +123,7 @@ public final class S3kOpenGgfAudioCapture {
             short[] dacScratch = new short[framesPerVint * 2];
 
             boolean[] segaPending = new boolean[1];
+            RingDispatch ringDispatch = new RingDispatch();
             for (int index = 1; index < reference.size(); index++) {
                 S3kAudioTick referenceTick = reference.get(index);
                 int ordinal = referenceTick.ordinal();
@@ -150,7 +153,8 @@ public final class S3kOpenGgfAudioCapture {
                 // puts it at that point instead of ahead of the whole service.
                 for (int request : referenceTick.mailbox()) {
                     if (request != 0) {
-                        driver.submitServiceRequest(() -> dispatch(request,
+                        driver.submitServiceRequest(() -> dispatch(
+                                ringDispatch.select(request),
                                 loader, dacData, stream, unsupported,
                                 ordinal, segaPending));
                     }
@@ -168,6 +172,33 @@ public final class S3kOpenGgfAudioCapture {
             }
             return new CaptureResult(ticks, unsupported);
             }
+        }
+    }
+
+    /**
+     * Diagnostic model of the retail request transform, deliberately local to
+     * this capture host.  {@code zPlaySound_CheckRing} toggles
+     * {@code zRingSpeaker} only when raw request 33h reaches dispatch, then
+     * selects Sound34/Sound33 (Sound/Z80 Sound Driver.asm:1919-1928,
+     * shipped {@code fix_sndbugs=0}).  Keeping selection inside the pending
+     * service callback prevents submission itself from advancing the latch.
+     * The live presentation still lacks S3K's complete three-slot mailbox
+     * consumer and must not treat this diagnostic state as production parity.
+     */
+    static final class RingDispatch {
+        private boolean leftNext = true;
+
+        int select(int request) {
+            if (request != 0x33) {
+                return request;
+            }
+            int selected = leftNext ? 0x34 : 0x33;
+            leftNext = !leftNext;
+            return selected;
+        }
+
+        boolean leftNext() {
+            return leftNext;
         }
     }
 
@@ -271,26 +302,11 @@ public final class S3kOpenGgfAudioCapture {
         }
         if (id == S3kAudioParitySchema.CMD_FADE_OUT
                 || id == S3kAudioParitySchema.CMD_FADE_OUT2) {
-            // zFadeOutMusic arms the fade and falls through zHaltDACPSG,
-            // which halts FM6/DAC and the three PSG tracks and then jumps to
-            // zPSGSilenceAll (D:2307-2325). The counters are the ROM's own:
-            // zFadeOutTimeout 28h and zFadeDelay 6, which the S3K sequencer
-            // config already carries from the same routine. zDoMusicFadeOut
-            // then steps them once per zUpdateMusic (D:2331-2385), which the
-            // sequencer already drives.
-            // zFadeOutMusic writes zFadeDelayTimeout and zFadeDelay before it
-            // looks at anything else, and never asks whether a song is loaded
-            // (D:2306-2312), so the driver records the pair either way.
-            driver.armFadeOut(
+            // The production session owns zFadeOutMusic's counters, track
+            // halts and physical silence, including the no-music case.
+            stream.fadeOutMusic(
                     Sonic3kSmpsSequencerConfig.CONFIG.getFadeOutSteps(),
                     Sonic3kSmpsSequencerConfig.CONFIG.getFadeOutDelay());
-            SmpsSequencer music = driver.firstMusicSequencer();
-            if (music != null) {
-                music.triggerFadeOut(Sonic3kSmpsSequencerConfig.CONFIG.getFadeOutSteps(),
-                        Sonic3kSmpsSequencerConfig.CONFIG.getFadeOutDelay());
-            }
-            applyProgram(driver,
-                    Sonic3kSmpsPhysicalPolicy.INSTANCE.silenceAllPsg());
             return;
         }
         if (id == S3kAudioParitySchema.CMD_SEGA) {

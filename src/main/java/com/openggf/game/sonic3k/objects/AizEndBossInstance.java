@@ -504,8 +504,9 @@ public class AizEndBossInstance extends AbstractBossInstance
         collisionEnabled = false;
         collisionEnablePending = false;
 
-        // Restore normal palette (ROM: bsr.w sub_69C94)
-        restoreNormalPalette();
+        // ROM sub_69C94 restores the palette and clears both the hit-flash
+        // timer ($20) and invulnerable status bit before the waterfall phase.
+        cancelHitFlashAndRestoreNormalPalette();
 
         // Set render-facing from angle using the ROM's render_flags logic.
         facingRight = angle < 8;
@@ -682,7 +683,9 @@ public class AizEndBossInstance extends AbstractBossInstance
         // Clear collision while submerged
         collisionEnabled = false;
         collisionEnablePending = false;
-        restoreNormalPalette();
+        // ROM loc_693FA calls sub_69C94 here. An active hit flash must not
+        // expire later and restore collision behind the waterfall.
+        cancelHitFlashAndRestoreNormalPalette();
 
         // ChildObjDat_69D2E -> CreateChild1_Normal, then subtype 2 selects the
         // falling-drop callback.
@@ -1004,6 +1007,12 @@ public class AizEndBossInstance extends AbstractBossInstance
                 BOSS_PALETTE_INDEX,
                 FLASH_PAL_INDICES,
                 FLASH_NORMAL_COLORS);
+    }
+
+    private void cancelHitFlashAndRestoreNormalPalette() {
+        restoreNormalPalette();
+        state.invulnerabilityTimer = 0;
+        state.invulnerable = false;
     }
 
     private void loadBossPalette() {

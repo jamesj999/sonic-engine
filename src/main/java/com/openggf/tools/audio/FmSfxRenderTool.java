@@ -18,6 +18,7 @@ import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsLoader;
 import com.openggf.game.sonic3k.audio.Sonic3kSmpsSequencerConfig;
 import com.openggf.game.sonic3k.audio.smps.Sonic3kSmpsLoader;
+import com.openggf.version.AppVersion;
 
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
@@ -28,6 +29,8 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -53,19 +56,19 @@ import java.util.Locale;
  *       one frame at a time so the position is exact.</li>
  * </ul>
  *
- * <p>The write log is the input for the chip-level bit-exactness comparison:
- * replaying it into the pinned C build and into the Java port reproduces the
- * FM render from register writes alone. Capturing at {@code --rate internal}
- * (the chip's own {@code clock / 144} output rate) makes every frame stamp an
- * exact multiple of 24 internal cycles, which is what the harness scripts
- * assume. Internally scheduled DAC sample writes ({@code 0x2A} from
- * {@code playDac}) are not observed, only the sequencer's own {@code 0x2B}
- * enable, so a DAC-carrying song log replays without its drum samples.
+ * <p>The legacy write log remains a frame-stamped logical diagnostic. Pass
+ * {@code --physical-writes} to also produce {@code -ym-bus.jsonl}: dispatched
+ * raw YM address/data strobes (including DAC bytes) and PSG data bytes at
+ * native chip clocks. It is an engine/Nuked comparison artifact, not a
+ * hardware capture or gameplay timing authority. The physical file carries
+ * reset, restore, policy, and rollback discontinuities explicitly and never
+ * manufactures a bus write for those model changes.
  *
  * <pre>
  * java -cp target/classes:... com.openggf.tools.audio.FmSfxRenderTool \
  *     --game s1 --rom /path/to/s1.gen (--sfx A6 | --music 81) --out /task/dir \
  *     [--rate 44100 | --rate internal] [--max-seconds 5]
+ *     [--physical-writes [--physical-capacity 1000000]]
  * </pre>
  */
 public final class FmSfxRenderTool {
@@ -74,6 +77,7 @@ public final class FmSfxRenderTool {
     private static final double DEFAULT_SFX_MAX_SECONDS = 5.0;
     private static final double DEFAULT_MUSIC_MAX_SECONDS = 30.0;
     private static final int PSG_CHANNELS = 4;
+    private static final int DEFAULT_PHYSICAL_CAPTURE_CAPACITY = 1_000_000;
 
     private FmSfxRenderTool() {
     }
@@ -86,6 +90,8 @@ public final class FmSfxRenderTool {
         Path out = null;
         double rate = DEFAULT_RATE;
         double maxSeconds = -1;
+        boolean physicalWrites = false;
+        int physicalCapacity = DEFAULT_PHYSICAL_CAPTURE_CAPACITY;
         for (int i = 0; i < arguments.length; i++) {
             switch (arguments[i]) {
                 case "--game" -> game = arguments[++i].toLowerCase(Locale.ROOT);
@@ -95,6 +101,8 @@ public final class FmSfxRenderTool {
                 case "--out" -> out = Path.of(arguments[++i]);
                 case "--rate" -> rate = parseRate(arguments[++i]);
                 case "--max-seconds" -> maxSeconds = Double.parseDouble(arguments[++i]);
+                case "--physical-writes" -> physicalWrites = true;
+                case "--physical-capacity" -> physicalCapacity = Integer.parseInt(arguments[++i]);
                 default -> throw new IllegalArgumentException("unknown argument: " + arguments[i]);
             }
         }
@@ -143,7 +151,8 @@ public final class FmSfxRenderTool {
         String stem = String.format(Locale.ROOT, "%s-%s-%02x", game, music ? "music" : "sfx", id);
         int maxFrames = (int) (maxSeconds * rate);
 
-        Render mix = render(data, dac, config, rate, maxFrames, music, false);
+        Render mix = render(data, dac, config, rate, maxFrames, music, false,
+                physicalWrites ? new PhysicalChipCapture(physicalCapacity) : null);
         Render fmOnly = render(data, dac, config, rate, maxFrames, music, true);
 
         writeWav(out.resolve(stem + "-mix.wav"), mix.samples, rate);
@@ -153,6 +162,18 @@ public final class FmSfxRenderTool {
                     game, music ? "music" : "sfx", id, rate, mix.frames, mix.complete);
             for (Write w : mix.writes) {
                 log.printf(Locale.ROOT, "%d %d %02X %02X%n", w.frame, w.port, w.register, w.value);
+            }
+        }
+        if (mix.physicalCapture != null) {
+            PhysicalChipCapture capture = mix.physicalCapture;
+            capture.write(out.resolve(stem + "-ym-bus.jsonl"), game,
+                    music ? "music" : "sfx", id, rate,
+                    Path.of(romPath).toAbsolutePath().normalize().toString(),
+                    sha1(Path.of(romPath)), AppVersion.identity());
+            if (capture.overflowed()) {
+                throw new IllegalStateException("physical capture overflowed after render: "
+                        + capture.dropped() + " events dropped; incomplete "
+                        + stem + "-ym-bus.jsonl is not replayable");
             }
         }
         System.out.printf(Locale.ROOT, "%s: %d frames (%.3f s), %d YM writes, complete=%s%n",
@@ -170,54 +191,149 @@ public final class FmSfxRenderTool {
         return Double.parseDouble(text);
     }
 
+    private static String sha1(Path path) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            try (var input = Files.newInputStream(path)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) >= 0) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException failure) {
+            throw new IllegalStateException("JDK lacks SHA-1", failure);
+        }
+    }
+
     private record Write(long frame, int port, int register, int value) {
     }
 
-    private record Render(short[] samples, int frames, boolean complete, List<Write> writes) {
+    private record Render(short[] samples, int frames, boolean complete,
+            List<Write> writes, PhysicalChipCapture physicalCapture) {
     }
 
     private static Render render(AbstractSmpsData data, DacData dac, SmpsSequencerConfig config,
             double rate, int maxFrames, boolean music, boolean mutePsg) {
+        return render(data, dac, config, rate, maxFrames, music, mutePsg, null);
+    }
+
+    private static Render render(AbstractSmpsData data, DacData dac, SmpsSequencerConfig config,
+            double rate, int maxFrames, boolean music, boolean mutePsg,
+            PhysicalChipCapture physicalCapture) {
+        List<Write> writes = new ArrayList<>();
+        long[] framesRendered = {0};
+        ChipWriteObserver physicalOnly = physicalObserver(physicalCapture);
         try (OwnedSmpsAudioStream stream = new OwnedSmpsAudioStream(
                 "fm-render", 0,
-                new SmpsPhysicalDevice.Settings(rate, false),
+                new SmpsPhysicalDevice.Settings(rate, false, com.openggf.audio.synth.FmCoreSelection.ACCURATE),
                 LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE,
-                ChipWriteObserver.NONE)) {
+                physicalOnly)) {
             SmpsDriver driver = stream.logicalDriver();
             driver.setRegion(SmpsSequencer.Region.NTSC);
             stream.applyChannelMasks(0, mutePsg ? 0x0F : 0);
-        List<Write> writes = new ArrayList<>();
-        long[] framesRendered = {0};
-        stream.setChipWriteObserver(new ChipWriteObserver() {
+            if (physicalCapture != null) {
+                physicalCapture.beginYmReplaySegment(stream.captureSynthSnapshotForTesting().ym());
+            }
+            // Keep the historical logical log starting after boot and mask setup,
+            // while physical capture has already observed those dispatched strobes.
+            stream.setChipWriteObserver(new ChipWriteObserver() {
+                @Override
+                public void onYm2612Write(int port, int register, int value) {
+                    writes.add(new Write(framesRendered[0], port, register, value));
+                }
+
+                @Override
+                public void onPsgWrite(int value) {
+                }
+
+                @Override
+                public boolean observesPhysicalWrites() {
+                    return physicalCapture != null;
+                }
+
+                @Override
+                public void onYm2612BusWrite(long cycle, int busPort, int value,
+                        ChipWriteObserver.PhysicalWriteOrigin origin) {
+                    physicalCapture.onYm2612BusWrite(cycle, busPort, value, origin);
+                }
+
+                @Override
+                public void onPsgBusWrite(long tick, int value) {
+                    physicalCapture.onPsgBusWrite(tick, value);
+                }
+
+                @Override
+                public void onPhysicalTimelineBoundary(
+                        ChipWriteObserver.ChipClockDomain domain, long clock,
+                        ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+                    physicalCapture.onPhysicalTimelineBoundary(domain, clock, boundary);
+                }
+            });
+
+            SmpsSequencer seq = new SmpsSequencer(data, dac, driver, () -> { }, config);
+            seq.setSampleRate(rate);
+            seq.setSfxMode(!music);
+            driver.addSequencer(seq, !music);
+
+            short[] samples = new short[maxFrames * 2];
+            short[] frame = new short[2];
+            int frames = 0;
+            while (frames < maxFrames && !driver.isComplete()) {
+                stream.read(frame, 2);
+                samples[frames * 2] = frame[0];
+                samples[frames * 2 + 1] = frame[1];
+                frames++;
+                framesRendered[0] = frames;
+            }
+            short[] trimmed = new short[frames * 2];
+            System.arraycopy(samples, 0, trimmed, 0, trimmed.length);
+            if (physicalCapture != null) {
+                physicalCapture.finish(frames, stream.captureSynthSnapshotForTesting().ym());
+            }
+            return new Render(trimmed, frames, driver.isComplete(), writes,
+                    physicalCapture);
+        }
+    }
+
+    private static ChipWriteObserver physicalObserver(
+            PhysicalChipCapture physicalCapture) {
+        if (physicalCapture == null) {
+            return ChipWriteObserver.NONE;
+        }
+        return new ChipWriteObserver() {
             @Override
             public void onYm2612Write(int port, int register, int value) {
-                writes.add(new Write(framesRendered[0], port, register, value));
             }
 
             @Override
             public void onPsgWrite(int value) {
             }
-        });
 
-        SmpsSequencer seq = new SmpsSequencer(data, dac, driver, () -> { }, config);
-        seq.setSampleRate(rate);
-        seq.setSfxMode(!music);
-        driver.addSequencer(seq, !music);
+            @Override
+            public boolean observesPhysicalWrites() {
+                return true;
+            }
 
-        short[] samples = new short[maxFrames * 2];
-        short[] frame = new short[2];
-        int frames = 0;
-        while (frames < maxFrames && !driver.isComplete()) {
-            stream.read(frame, 2);
-            samples[frames * 2] = frame[0];
-            samples[frames * 2 + 1] = frame[1];
-            frames++;
-            framesRendered[0] = frames;
-        }
-        short[] trimmed = new short[frames * 2];
-        System.arraycopy(samples, 0, trimmed, 0, trimmed.length);
-            return new Render(trimmed, frames, driver.isComplete(), writes);
-        }
+            @Override
+            public void onYm2612BusWrite(long cycle, int busPort, int value,
+                    ChipWriteObserver.PhysicalWriteOrigin origin) {
+                physicalCapture.onYm2612BusWrite(cycle, busPort, value, origin);
+            }
+
+            @Override
+            public void onPsgBusWrite(long tick, int value) {
+                physicalCapture.onPsgBusWrite(tick, value);
+            }
+
+            @Override
+            public void onPhysicalTimelineBoundary(
+                    ChipWriteObserver.ChipClockDomain domain, long clock,
+                    ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+                physicalCapture.onPhysicalTimelineBoundary(domain, clock, boundary);
+            }
+        };
     }
 
     private static void writeWav(Path path, short[] interleaved, double rate) throws IOException {

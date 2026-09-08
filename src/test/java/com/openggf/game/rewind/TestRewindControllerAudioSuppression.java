@@ -31,6 +31,24 @@ class TestRewindControllerAudioSuppression {
     }
 
     @Test
+    void pruningBetweenAudioCheckpointsPreservesInterveningCommandForSeek() {
+        RewindController controller = new RewindController(new RewindRegistry(),
+                new InMemoryKeyframeStore(), new FakeInputSource(200), in -> {
+                    if (in.frameIndex() == 65) audio.playSfx(com.openggf.audio.GameSound.RING);
+                    if (in.frameIndex() == 80) audio.resetRingSound();
+                    return com.openggf.LevelFrameResult.GAMEPLAY_FRAME;
+                }, 60, audio);
+        controller.setGameplayCheckpointInterval(10);
+        for (int frame = 1; frame <= 130; frame++) controller.step();
+        assertTrue(audio.captureLogicalSnapshot().ringLeft());
+        assertEquals(70, controller.pruneHistoryToRetainFrames(60));
+        controller.seekTo(70);
+        assertEquals(false, audio.captureLogicalSnapshot().ringLeft(),
+                "frame 65 ring command must replay from retained audio base 60");
+        assertEquals(70, controller.currentFrame());
+    }
+
+    @Test
     void seekToSuppressesAudioDuringInternalReplay() {
         RewindRegistry registry = new RewindRegistry();
         InMemoryKeyframeStore keyframes = new InMemoryKeyframeStore();

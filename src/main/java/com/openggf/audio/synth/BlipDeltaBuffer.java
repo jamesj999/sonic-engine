@@ -346,6 +346,44 @@ public class BlipDeltaBuffer {
         offsetFp += (long) clocks * factorFp;
     }
 
+    /** Mutable owner-private transaction storage; never used by durable snapshots. */
+    static final class MutationBackup {
+        private long factorFp;
+        private long offsetFp;
+        private int size;
+        private int integL;
+        private int integR;
+        private int[] left = new int[0], right = new int[0];
+    }
+
+    void captureMutation(MutationBackup backup) {
+        backup.factorFp = factorFp;
+        backup.offsetFp = offsetFp;
+        backup.size = size;
+        backup.integL = integL;
+        backup.integR = integR;
+        if (backup.left.length < size) {
+            backup.left = new int[size];
+            backup.right = new int[size];
+        }
+        System.arraycopy(bufferL, 0, backup.left, 0, size);
+        System.arraycopy(bufferR, 0, backup.right, 0, size);
+    }
+
+    void restoreMutation(MutationBackup backup) {
+        factorFp = backup.factorFp;
+        offsetFp = backup.offsetFp;
+        size = backup.size;
+        integL = backup.integL;
+        integR = backup.integR;
+        if (bufferL.length != size) {
+            bufferL = new int[size];
+            bufferR = new int[size];
+        }
+        System.arraycopy(backup.left, 0, bufferL, 0, size);
+        System.arraycopy(backup.right, 0, bufferR, 0, size);
+    }
+
     Snapshot captureSnapshot() {
         // The compact constructor performs the single defensive copy (truncated
         // to size); passing the live buffers avoids a second full copy here.

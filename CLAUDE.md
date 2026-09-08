@@ -1,485 +1,188 @@
-# Guidance for AI agents
+# OpenGGF agent guidance
 
-This guidance is mirrored between `AGENTS.md` and `CLAUDE.md`; keep the two in sync (the
-`Agent-Docs` trailer requires both to be staged together).
+Keep this file and `CLAUDE.md` identical. Skills are mirrored between
+`.agents/skills/` and `.claude/skills/`.
 
-## What this is
+## Project and scope
 
-OpenGGF is a community-made, fan-made, open-source Java game engine for research and
-preservation of classic Mega Drive / Genesis platform games — the mainline Sonic the
-Hedgehog series. It is not affiliated with, sponsored by, approved by, or endorsed by Sega.
-It reimplements the original hardware's physics and rendering using data loaded from
-user-supplied ROM images (Sonic 1, 2, and 3&K). No copyrighted assets live in this repo.
-Alongside faithful emulation of behaviour it aspires to provide modern tooling — an in-engine
-level editor and an open framework for modding — but neither exists yet beyond an
-experimental editor overlay; do not describe them as shipped features.
+OpenGGF is an alpha Java 21 reimplementation of Sonic 1, 2, and 3&K for
+research and preservation. Runtime assets come from user-supplied ROMs; this
+is an independent fan project with no Sega affiliation. The editor is
+experimental. The unpublished Mod API candidate is implemented on `next`;
+it is outside the 0.6 release scope.
 
-**Accuracy is the point.** The engine must replicate original physics pixel-for-pixel.
-The disassembly is the source of truth — verify against it rather than tuning values until
-a test goes green.
+Accuracy means reproducing shipped-ROM behavior. Use the disassembly to
+explain differences; do not tune gameplay to make a fixture pass. Prioritize
+S3K playable routes, keep AIZ → HCZ stable, and choose later-zone work by
+current route blockers and trace frontiers. Broader cleanup should serve the
+requested work or remove an active risk.
 
-The project is in **alpha**. All three games are supported with game-specific modules,
-level loading, objects, audio, and scroll handlers.
+Carry authorized work through verification and the user's delivery flow.
+Use skills for relevant domain knowledge; load supporting references only
+for the current question. Routine implementation choices do not need a
+planning ceremony or another approval. User instructions override skill
+workflow defaults.
 
-## Current priority
-
-S3K playable vertical-slice parity and release readiness, not broad architecture migration
-for its own sake. Prefer work that closes an actual route through Sonic 3 & Knuckles.
-
-1. Keep AIZ → HCZ stable — the primary release slice.
-2. Work CNZ, MGZ, ICZ, MHZ, and LBZ by current route blockers and complete-run trace
-   frontiers.
-3. Implement S3K objects by route impact: traversal blockers, terrain modifiers, hazards,
-   bosses/miniboss support, sidekick/object-lifetime mismatches, then high-usage badniks.
-4. Data select, special stages, and broad S1/S2 framework uplift are follow-up polish
-   unless they block the active slice or a release gate.
-
-Uplift S1/S2 or older S3K code onto the runtime-owned frameworks opportunistically when it
-removes active duplication or risk — but don't let cleanup displace playable S3K progress.
-
-## Build, test, run
+## Build and verification
 
 ```bash
-tools/testing/install-hooks.sh
-mvn package                          # executable JAR with dependencies
+mvn -v                              # must report Java 21
+tools/testing/install-hooks.sh     # once per worktree
+mvn package
 mvn test
-mvn "-Dtest=TestCollisionLogic" test # focused run
-mvn -Dmse=off -Pguards test -B       # structural guards in a fresh JVM
-java -jar target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar
+mvn "-Dtest=TestCollisionLogic" test
+mvn -Dmse=off -Psmoke test -B         # what every branch push runs in CI
+mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
 ```
 
-PowerShell uses `tools/testing/install-hooks.ps1` and the same Maven arguments.
-For release evidence, run both the ordinary suite and the separate `-Pguards`
-invocation; the structural guards are intentionally excluded from the long reused
-ordinary fork so whole-production graph imports receive a fresh JVM.
+- Surefire inherits Maven's JVM. Set `JAVA_HOME` to JDK 21 if needed.
+- Use Lua 5.4 for the TraceChaser forwarder guard; set `LUA_BIN` if needed.
+- Maven output belongs in the current worktree's `target/` directory. Do not share or
+  copy build trees. The per-Surefire-fork LWJGL extraction uses
+  `target/test-tmp`. Concurrent Maven runs need separate worktrees. Keep diagnostic output bounded
+  with targeted searches and reads.
+- Use JUnit 5/Jupiter. `-Dmse=off` exposes full Maven logs. PowerShell quotes
+  `-D...` arguments and uses `tools/testing/install-hooks.ps1`.
+- CI runs only `-Psmoke` on pushes. The full suite and `-Pguards` run on pull
+  requests, on a manually dispatched CI run, and in release validation; nothing
+  runs them unattended. `smoke` does not select the structural guards, so run
+  both the full suite and `-Pguards` locally before delivery -- a red guard on
+  develop will not surface on its own.
+- Match focused checks to the change and complete required integration
+  checks. Release evidence includes ordinary tests and `-Pguards` separately.
+- Before reporting suite results, read the measurement-hazard table in
+  [briefing-trace-rounds.md](docs/agent-workflow/briefing-trace-rounds.md#measurement-hazards--all-produce-plausible-output).
+  Attribute results to the command, commit, and completed run; inspect skips.
 
-### Agent test isolation contract
+## ROM and reference setup
 
-Codex and Claude agents both follow this contract.
-
-OpenGGF uses Maven directly. Build and test output belongs below the current
-worktree's `target/` directory. Do not redirect Maven build/report roots to a
-shared or durable session directory. Parallel agents use separate worktrees;
-repeated runs in one worktree reuse its target tree.
-
-The per-Surefire-fork LWJGL extraction uses a distinct directory below
-`target/test-tmp`. Keep command output bounded when diagnosing long runs: use
-targeted `rg` searches and bounded `tail`/`sed` reads rather than replaying a
-complete Maven log into context.
-
-- Entry point is `com.openggf.Engine` (declared in the manifest): a GLFW window with a
-  manual timing game loop.
-- **Build on JDK 21** — what CI and the release workflow use. Surefire forks inherit
-  *Maven's* JVM, not the `java` on `PATH`, so `mvn -v` is the check that matters; if it
-  reports anything but 21, `export JAVA_HOME=/path/to/jdk-21` first. A newer JDK makes the
-  suite report hundreds of phantom failures (Mockito stubbing errors leaking across
-  classes, ROM fixtures failing to load) that look like real regressions but aren't. The
-  build fails fast at `validate` if the JVM is wrong.
-- **Lua 5.4 runs the TraceChaser forwarder guard.** Set `LUA_BIN` when the executable is
-  not named `lua`; CI pins it to `lua5.4` and verifies the version before Maven.
-- Maven Silent Extension is enabled by default (`-Dmse=relaxed` via `.mvn/maven.config`).
-  Use `-Dmse=off` when you need full Maven logs.
-- In PowerShell, quote `-D...` properties (`mvn "-Dtest=com.openggf.pkg.TestClass" test`).
-- Tests are **JUnit 5 / Jupiter only** — no JUnit 4 tests, rules, runners, or `org.junit.*`
-  imports.
-- Git hooks are installed explicitly once per worktree with
-  `tools/testing/install-hooks.sh` (or `tools/testing/install-hooks.ps1` on
-  PowerShell). Maven never mutates Git configuration during `validate`.
-
-## ROMs
-
-When a task needs a ROM, search the project root for `.gen` files and use the filename
-that's actually there. Identify the game from the filename and verify the hash when it
-matters. Do not assume a fixed filename, and do not rename, copy, delete, or symlink a ROM
-just to satisfy an example command. For ROM-backed tests, pass the discovered path through
-that game's property — note S3K's is **not** `sonic3k.rom.path`. A sweep that touches all
-three games needs all three. When a ROM is missing, `@RequiresRom` classes are **disabled
-silently** (`RequiresRomCondition` reports them as skipped, not failed); only the audio
-`*CompleteRunStateDecoder` classes throw. So a green run with a wrong path proves nothing —
-**pass absolute ROM paths**, especially from a worktree, because a relative path like
-`s3k.gen` resolves against the worktree and quietly skips every ROM-gated class. Check the
-skip count against the expected total before trusting a result.
+Discover existing root `.gen` files and pass absolute paths to ROM-backed
+tests. Missing/wrong paths silently skip `@RequiresRom` tests. Do not rename,
+copy, delete, or create ROM links to satisfy an example. Verify identity when
+it matters:
 
 | ROM | Test property | CRC32 | SHA-1 |
 |---|---|---|---|
-| Sonic 1 World REV01 | `-Dsonic1.rom.path=` | `AFE05EEE` | `69E102855D4389C3FD1A8F3DC7D193F8EEE5FE5B` |
-| Sonic 2 World REV01 | `-Dsonic2.rom.path=` | `7B905383` | `8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9` |
-| Sonic 3&K locked-on | `-Ds3k.rom.path=` | `63522553` | `CFBF98C36C776677290A872547AC47C53D2761D6` |
+| S1 World REV01 | `-Dsonic1.rom.path=` | `AFE05EEE` | `69E102855D4389C3FD1A8F3DC7D193F8EEE5FE5B` |
+| S2 World REV01 | `-Dsonic2.rom.path=` | `7B905383` | `8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9` |
+| S3&K locked-on | `-Ds3k.rom.path=` | `63522553` | `CFBF98C36C776677290A872547AC47C53D2761D6` |
 
-Disassemblies live under `docs/s1disasm/`, `docs/s2disasm/`, and `docs/skdisasm/` as
-optional development references pinned to the canonical Sonic Retro repositories. Builds,
-tests, and runtime do not require them. Contributors doing disassembly-backed parity research
-can opt in with `git submodule update --init`. The SMPS audio reference under
-`docs/SMPS-rips/SMPSPlay/` remains untracked and available locally.
+Disassemblies in `docs/s1disasm`, `docs/s2disasm`, and `docs/skdisasm` are
+optional development references. Builds, tests, and runtime do not require them.
+Use `git submodule update --init` when needed.
+Trace production/probes live in the optional pinned `tools/tracechaser/` submodule; initialize it with
+`git submodule update --init --recursive tools/tracechaser` for trace work.
+Follow its current guide and verified BizHawk 2.11 dependency. Use
+`tools/tracechaser/...` paths; old paths are compatibility forwarders.
 
-Trace producers, BizHawk integration, probes, and trace validation utilities live in the
-optional pinned `tools/tracechaser/` submodule. Ordinary builds and tests do not require it.
-For trace work, run `git submodule update --init --recursive tools/tracechaser`, then follow
-TraceChaser's own capture guide. OpenGGF keeps only 0.6 compatibility forwarders at selected
-old command paths; new guidance must use `tools/tracechaser/...`. BizHawk is not vendored:
-TraceChaser requires the verified official 2.11 release because later versions remove Lua
-functionality used by the supported recorders.
+## Runtime invariants
 
-## Temporary and durable artifacts
+1. Load every runtime asset byte through the ROM pipeline. Disassembly
+   trees provide research and labels, never runtime fallback assets.
+2. Shared runtime code consumes semantic rules, not game/zone-name
+   carve-outs. Use `GameRules` for game-wide gates and existing
+   providers/profiles/registries for narrower differences. See
+   [rule placement](docs/architecture/per-game-rule-placement.md).
+3. Trace fixes model ROM state and generalize to another BK2. Cite the
+   owning routine for constants and branch conditions. Do not key behavior
+   on a fixture, route, frame index, or fitted measurement.
+4. **Trace data is comparison-only by default.** Never hydrate or sync engine
+   gameplay from physics/aux rows. The only input exception is the isolated
+   [dedicated hardware-timing input contract](docs/architecture/designs/2026-07-27-cross-game-hardware-timing-trace-contract.md):
+   It may release only the readiness of a matching, prepared, production-submitted
+   ROM-backed job after kind, ordinal, stable fingerprint, and service boundary match;
+   per-row lag admission may select an already-existing ROM loop. Neither
+   shape supplies gameplay values, calls gameplay owners, creates work,
+   uses physics/aux comparison data, or keys on frame/zone/route/game name.
+   Keep authority inside the timing port and its guard. Consult the
+   contract for implemented kinds and fixture coverage; scope is not proof
+   of implementation or coverage.
+5. V5 (`trace_schema: 5`) is the sole live trace contract across metadata,
+   rows, timing, and manifests. Recorder provenance never selects behavior;
+   `lua_script_version` is removed. Commit compressed trace payloads only.
+6. Objects use injected `services()`, never `getInstance()`. Gameplay tile
+   edits use `ZoneLayoutMutationPipeline` / `LevelMutationSurface`; editor
+   commands and initial decoders are exempt.
+7. Model `FixBugs = 0` / `fixBugs = 0`, matching shipped ROMs. Near conditional
+   code, comment which branch is used, why, and what the fixed branch changes.
 
-Maven-owned output stays below the current worktree's `target/` directory. Put durable
-captures or research outputs in an explicit task/archive directory outside the repository,
-and keep `/tmp` for short-lived operating-system files only. Do not invent a shared Maven
-output root or copy another worktree's build tree.
+8. `mod-api-release-policy.properties` is the sole authority for branch topology,
+   API version/status, and published baselines. Mod API surface/version changes
+   update the descriptor, `ModApiVersion`, and normalized signature pins together.
+   Candidate pins use `MAJOR.MINOR`, published pins immutable `MAJOR.MINOR.PATCH`.
+   Publish only by master promotion.
+9. Creator content uses `ModContext` transactions and fault boundaries; never
+   trust creator-reported owners, allocate numeric mod IDs, or use standalone
+   content as a ROM fallback. Assets use bounded `ModAssetRoot` + typed `LoadOp`.
 
-## Hard rules
+## Implementation details that change decisions
 
-These are non-negotiable and enforced by guards, CI, or review. Everything else in this
-file is guidance you can weigh against the situation in front of you.
+- ROM `x_pos`/`y_pos` are `getCentreX()`/`getCentreY()`. `getX()`/`getY()` and
+  HUD `Pos:` are top-left. Playable native writes use `NativePositionOps`.
+- Object `update` receives `V_int_run_count`, not executed-frame count or
+  `Level_frame_counter`. Name the ROM clock a gate actually reads.
+- Preserve rewind: new objects need recreation and captured state; persistent
+  global managers need a registered `RewindSnapshottable` adapter.
+- Keep logic in managers rather than `Engine.java`; match nearby Java idioms.
+- Read [implementation pitfalls](docs/architecture/implementation-pitfalls.md)
+  for collision, tiles, headless setup, rewind, and audio source references.
+  Read [AGENTS_S3K.md](AGENTS_S3K.md) for S3K half/table selection and zone work.
+- S3K changes keep `TestS3kAiz1SkipHeadless`, `TestSonic3kLevelLoading`,
+  `TestSonic3kBootstrapResolver`, and `TestSonic3kDecodingUtils` green.
 
-1. **ROM-only runtime assets.** Object art, mappings, DPLCs, animation scripts, PLC data,
-   and any other gameplay/runtime asset bytes must come from the user-supplied ROM through
-   the ROM-loading pipeline. Never read runtime asset bytes from `docs/` disassembly trees
-   as a fallback — that tree is for research, labels, and offset discovery only. If a
-   ROM-backed source is missing, find or verify the ROM address instead.
-2. **No game-name or zone carve-outs in shared runtime code.** Per-game differences use the
-   smallest accurate owner: a typed `GameRules` record for game-wide runtime gates, or an
-   existing provider/profile/registry for data, art, zone-local, or object-family behaviour.
-   See [docs/architecture/per-game-rule-placement.md](docs/architecture/per-game-rule-placement.md).
-3. **Trace fixes model ROM state, never the trace.** If a trace diverges, model what
-   actually drives the branch — object id/routine, status/control bits, frame-counter
-   visibility, physics profile, event flag, data-driven condition. Do not branch on zone
-   id/name, trace route, frame number, or a "known failing trace" exception. *"ROM-default
-   behaviour except in AIZ"* is still a zone carve-out. Zone/event/object providers may
-   expose ROM state at the owning boundary, but shared physics/sidekick/object code
-   consumes semantic predicates.
-   **The bar is any BK2, not this BK2.** Traces exist to prove engine accuracy, so a fix
-   must hold for a movie nobody has recorded yet — a green fixture proves the fixture.
-   A constant derived by measuring a fixture's own rows, rather than read out of the
-   disassembly, is a fitted model even when every test passes, and it will desync the
-   first different recording. Measuring a fixture is only a legitimate *starting point*:
-   the landed value must be traceable to the ROM routine that owns it and cited there.
-   A value that is close to the ROM's but not equal is usually absorbing an error
-   elsewhere — chase that, don't keep the constant. Where genuine hardware timing cannot
-   be derived from frame-granularity state at all, the answer is a regenerable per-movie
-   timing sidecar under rule 4, never a tuned number.
-4. **Trace data is comparison-only by default.** Engine gameplay state must never be
-   hydrated or synced from a trace in committed test code. The sole exception is the
-   dedicated hardware-timing input contract documented in
-   [docs/architecture/designs/2026-07-27-cross-game-hardware-timing-trace-contract.md](docs/architecture/designs/2026-07-27-cross-game-hardware-timing-trace-contract.md).
-   That contract is **cross-game** and has **two permitted shapes**; both are scheduling
-   outcomes, and neither may decide *what* happens.
-   *Readiness release.* Recorded hardware timing may drive a **delay** in the
-   art-loading pipelines of all three games — S1 PLC, S2 DPLC, and S3K Kosinski queues. It
-   it may release only the readiness of a matching, prepared, production-submitted ROM-backed
-   hardware job after kind, ordinal, stable submission fingerprint, and service boundary all
-   match.
-   *Per-row scheduling admission.* A recorded per-row outcome may select which ROM loop a row
-   represents — the lag contract, where `lag_state.lagged` admits the `VBlank_Lag` branch that
-   services no PLC while the frame counter still advances. This shape carries no job, ordinal
-   or fingerprint, because it names no work: it selects between two ROM loops that both
-   already exist in the engine. It predates the readiness shape and already ships in
-   `TraceRunSpecialStageRows.syntheticLagPhase`. It may admit or suppress a loop; it may never
-   supply a *value*, and `lagcount` is comparison data like any other.
+## Delivery and documentation
 
-   *Both shapes.* The exception must not use physics/aux comparison data, carry gameplay
-   values, call gameplay owners, or create work the engine did not submit, and it must not key
-   on a frame index, zone, route, or game name. The test is whether the change only affects
-   *when* real, engine-created work becomes ready, or *which* already-existing ROM loop a row
-   takes — never *what* work exists, and never what values it carries. Anything deciding
-   *what* happens is outside the exception however well the ROM behaviour is cited. Guard tests must keep this exception
-   confined to the timing port. `TestHardwareTimingAuthorityGuard` enforces parser/authority
-   isolation and forbids physics/aux/gameplay and reflective mutation paths. A v5
-   `hardware_timing.jsonl` stream records S3K module-queue readiness, S3K direct Kosinski
-   readiness, and the S1 `RunPLC` arming edge (`NEMESIS_PLC_QUEUE`) — the three kinds
-   `HardwareWorkKind` admits, and no others; each still requires matching
-   production-submitted ROM work. Contract scope, implementation and fixture coverage are
-   three different things: S2 DPLC is in scope but unimplemented, and every committed
-   timing sidecar is S3K, so the S1 path is implemented but exercised by no trace fixture.
-   The design doc's coverage-status section is authoritative on which is which.
-   V5 is the sole live
-   trace contract: `trace_schema: 5` owns metadata, rows, timing, and run manifests.
-   `recorder` and `recorder_version` are opaque provenance only;
-   `lua_script_version` was removed, not renamed, and no provenance field selects
-   replay behaviour.
-5. **Objects never call `getInstance()`.** Use the injected `services()`.
-6. **Gameplay tile edits route through `ZoneLayoutMutationPipeline` / a
-   `LevelMutationSurface`** — never a direct `getMap().setValue(...)`. Editor commands and
-   initial layout decoders are exempt.
-7. **Never bypass the commit policy with `--no-verify`.**
-8. **Mod API changes move the descriptor with the code.**
-   `mod-api-release-policy.properties` is the sole authority for branch topology, the
-   current API version/status, and published baselines. Any Mod API surface or version
-   change updates the descriptor, `ModApiVersion`, and the normalized signature pins
-   together. Candidate pins use `MAJOR.MINOR`; published pins use immutable
-   `MAJOR.MINOR.PATCH`. Publication happens only by promotion from `master`.
-9. **Mod content never bypasses its boundaries.** Never bypass `ModContext`
-   transactions or creator fault boundaries, trust a creator-reported runtime owner,
-   allocate numeric mod ids, or make standalone content a ROM fallback. Creator assets
-   enter through the sealed, bounded `ModAssetRoot` + source-typed `LoadOp` path.
+Follow the user's global branch/integration workflow. Never switch the main
+workspace branch. New branches use isolated `.worktrees/` checkouts and
+`feature/ai-*` or `bugfix/ai-*` names, based on the current main branch.
+Preserve unrelated changes, including dirty submodules.
 
-## Commit and branch policy
+Install and obey `.githooks/`; never use `--no-verify`. Non-master,
+non-merge commits need all seven trailers (`Changelog`, `Guide`,
+`Known-Discrepancies`, `S3K-Known-Discrepancies`, `Agent-Docs`,
+`Configuration-Docs`, `Skills`), each beginning `updated` or `n/a`.
+Mapped files and trailers must agree. A source `feat`/`fix`/`perf` needs a
+changelog update or an inline reason for skipping it. A merge into `develop`
+touches the README release section only when it adds or changes a version
+theme; most merges leave it alone, and no hook requires it.
 
-Tracked hooks live in `.githooks/`, dispatched via `.githooks/run-policy`
-(`validate-policy.ps1` on Windows, `validate-policy.sh` elsewhere). CI mirrors the same
-rules on PRs into `develop`.
+Use the [documentation obligation checklist](docs/agent-workflow/documentation-obligation-checklist.md)
+when staging. `pom.xml`'s `<version>` names the version `develop` carries and
+so the `CHANGELOG.<version>.md` that receives release prose (`master` is the
+last released version and `next` the one after `develop`; today that is master
+0.5.20260411, develop 0.6.prerelease, next 0.7.prerelease; promoting them at
+release time follows [release rollover](docs/project/release-rollover.md)). Root `CHANGELOG.md` is the index (its exact
+path owns the hook trailer). The README release section is only a very
+high-level summary of the version's themes, not a change log; a fix to a
+feature introduced in that same unreleased version folds into the existing
+entry rather than earning one of its own.
+Update guides/config/discrepancies when their behavior changes. Update
+`docs/status/trace-frontier-log.md` when a frontier moves, a trace fix lands,
+a passing trace regresses, or a sweep selects the next target; include
+command, commit/worktree, errors, and first-error frame/field.
 
-- Every non-`master` non-merge commit carries these trailers, each starting with `updated`
-  or `n/a`: `Changelog`, `Guide`, `Known-Discrepancies`, `S3K-Known-Discrepancies`,
-  `Agent-Docs`, `Configuration-Docs`, `Skills`. `prepare-commit-msg` appends the block —
-  fill it in rather than deleting it. If a trailer's mapped files are staged, it must not
-  say `n/a`; `.githooks/run-policy` holds the authoritative mapping.
-- A `feat`/`fix`/`perf` commit touching `src/main/` must set `Changelog: updated` (staging
-  `CHANGELOG.md`) or justify the skip inline: `Changelog: n/a: <reason>`. A bare
-  `Changelog: n/a` is rejected.
-- Merging a non-`master` branch into `develop` requires a staged `README.md` update
-  summarising the change in the release/change log section.
+Keep engineering artifacts under the matching `docs/architecture/`
+subdirectory from [docs/README.md](docs/README.md), release material under
+`docs/changelog/`, and stage relevant artifacts. Durable captures belong in
+an explicit task directory outside the repo; temporary Maven output stays
+under `target/`.
 
-### Documentation update map
+## Find the owning reference
 
-The active release is 0.6. Use this map before staging a change. The detailed
-trailer rules and exceptions remain authoritative in
-[docs/agent-workflow/documentation-obligation-checklist.md](docs/agent-workflow/documentation-obligation-checklist.md)
-and `.githooks/validate-policy.sh` / `.githooks/validate-policy.ps1`.
+- Architecture/services: [engine map](docs/architecture/engine-map.md).
+- Objects/bosses: matching `s1-`, `s2-`, or `s3k-implement-*` skill and
+  [implementation reference](docs/architecture/object-implementation-reference.md).
+- Disassembly lookup: matching `s1disasm-guide`, `s2disasm-guide`, or
+  `s3k-disasm-guide` skill.
+- Trace failures: `trace-replay-bug-fixing`; multiple independent traces:
+  `trace-green-fleet`; video: `trace-capture`; recording: `bizhawk-headless-trace`.
+- PLC/art queues: `plc-system`, plus `s3k-plc-system` for S3K.
+- Zone work: relevant S3K zone/events/parallax/animated-tiles/palette skill;
+  whole-zone delivery: `s3k-zone-bring-up`.
+- Headless tests: [headless testing](docs/guide/contributing/headless-testing.md).
+- Current gaps: [general](docs/status/known-discrepancies.md),
+  [S3K](docs/S3K_KNOWN_DISCREPANCIES.md). Configuration: [CONFIGURATION.md](CONFIGURATION.md).
 
-- **Release notes:** put concise, user-facing entries for release-worthy 0.6
-  features, fixes, and performance work in `CHANGELOG.0.6.md`. Do not add new
-  0.6 release prose only to the root index. Historical
-  `CHANGELOG.0.x.md` files are immutable except for factual corrections.
-- **Release index:** update `CHANGELOG.md` when adding, renaming, or publishing
-  a release file, changing the current-release pointer, or changing the release
-  index itself. The commit hook currently maps the `Changelog` trailer to the
-  exact root file `CHANGELOG.md`; if a source `feat`/`fix`/`perf` note is recorded
-  only in `CHANGELOG.0.6.md`, use a justified
-  `Changelog: n/a: release note recorded in CHANGELOG.0.6.md`. If
-  `CHANGELOG.md` changes, stage it and use `Changelog: updated`.
-- **README release section:** update `README.md` when the current release
-  summary, release status, supported-scope statement, or release links change.
-  Keep the rest of the README as the stable user and contributor guide; do not
-  replace it with a release ledger.
-- **Public release copy:** update
-  `docs/changelog/v0.6-release-summary.md` when website/GitHub messaging,
-  validation results, or release blockers change. Update the detailed
-  `docs/changelog/v0.6-prerelease-detailed.md` ledger for substantial 0.6
-  investigations, workstreams, and gate decisions.
-- **Trace evidence:** update `docs/status/trace-frontier-log.md` whenever a
-  frontier moves, a trace fix lands, a passing trace regresses, or a full
-  `*TraceReplay` sweep selects the next target. Record the command,
-  commit/worktree context, pass/fail result, error count, and first-error
-  frame/field. This obligation has no trailer.
-- **Known discrepancies:** update `docs/status/known-discrepancies.md` for
-  cross-game or general intentional ROM divergences, and
-  `docs/S3K_KNOWN_DISCREPANCIES.md` for S3K-specific gaps. Set the matching
-  discrepancy trailer to `updated`.
-- **Configuration and guides:** update `CONFIGURATION.md` for config flags,
-  bindings, or toggles; update the relevant file under `docs/guide/` for player
-  or contributor instructions. Set `Configuration-Docs` or `Guide` to
-  `updated` respectively.
-- **Agent guidance:** update `AGENTS.md` and `CLAUDE.md` together whenever
-  top-level workflow or project guidance changes. Update `AGENTS_S3K.md` for
-  S3K-specific agent guidance. Set `Agent-Docs: updated` when the root pair
-  changes; keep the pair identical.
-- **Skills:** update matching files in both `.agents/skills/` and
-  `.claude/skills/` together. Set `Skills: updated`; never update one mirror
-  without the other.
-- **Architecture artifacts:** put designs, audits, validation reports, and
-  other engineering records under the matching `docs/architecture/`
-  subdirectory; put release material under `docs/changelog/`. Do not leave
-  task documentation loose or untracked.
-
-- Branch naming: `feature/ai-*`, `bugfix/ai-*`. Keep a session's PRs on one branch.
-- Trace frontier work keeps [docs/status/trace-frontier-log.md](docs/status/trace-frontier-log.md)
-  current — when a frontier moves, a fix lands, a passing trace regresses, or a full
-  `*TraceReplay` sweep picks the next target. Record command, commit/worktree context,
-  pass/fail, error count, and first-error frame/field.
-- Never commit an uncompressed trace payload (`physics*.csv`, `aux_state*.jsonl`) under
-  `src/test/resources/traces/` — they exceed GitHub's per-file limit. Enforced by
-  `TestTraceFixtureCompressionGuard`.
-- **Architecture artifact placement.** Designs, specifications, implementation plans,
-  research notes, audits, validation reports, and similar agent-generated engineering
-  artifacts live under the matching `docs/architecture/` subdirectory described in
-  [docs/README.md](docs/README.md). Classify documentation by purpose before creating it:
-  point-in-time assessments belong in `docs/architecture/audits/`, and audio
-  investigations with their supporting assets belong in
-  `docs/architecture/research/audio/`. These repository paths override skill defaults.
-  Never create loose Markdown in `docs/`, `docs/superpowers`, a top-level `docs/plans`,
-  or generic `archive`, `misc`, `notes`, or tool-named dumping grounds. Before finishing,
-  stage every relevant artifact created for the task; do not leave documentation or its
-  supporting assets untracked.
-
-## Gotchas
-
-The things that cost the most time when missed.
-
-**Coordinates.** ROM `x_pos` / `y_pos` map to `getCentreX()` / `getCentreY()`. `getX()` /
-`getY()` are top-left render bounds — mixing them produces a ~19px vertical offset and
-wrong collision. When porting disassembly that touches `x_pos` / `y_pos`, default to the
-centre APIs unless the code is explicitly about sprite bounds, render extents, or collision
-box edges; route playable-sprite native writes through `NativePositionOps`. If camera,
-collision, object anchoring, or scripted movement drifts relative to the player, suspect
-this first. The debug HUD `Pos:` line prints top-left, **not** ROM centre — don't quote it
-against a disassembly trace without converting. Y increases downward (Mega Drive
-convention). VDP coordinates in the disassembly are offset by +128; the engine uses direct
-screen coordinates.
-
-**Object clocks.** `ObjectInstance.update(int vIntRunCount, ...)` receives the
-object-visible ROM `V_int_run_count`, stored by `ObjectManager` as `vblaCounter`. It is not
-the manager's executed-frame counter or the ROM `Level_frame_counter`; lag frames can
-de-phase those clocks. When porting a frame gate, name and read the clock the disassembly
-actually uses instead of treating the update parameter as a generic frame number.
-
-**Terminology** differs from standard Sonic 2 naming: **Pattern** = 8x8 tile, **Chunk** =
-16x16 (composed of Patterns), **Block** = 128x128 (composed of Chunks).
-
-**Sprite tiles are column-major:** `tileIndex = column * heightTiles + row`. H-flip draws
-from the last column first, V-flip from the bottom row first.
-
-**Pattern IDs exceed the VDP's 11 bits.** The engine adds a virtual pattern ID space above
-`0x7FF` with a non-overlapping base per category; use
-`GraphicsManager.renderPatternWithId()` when IDs exceed the VDP range, and pick a fresh
-base for a new category. Range table in
-[docs/status/known-discrepancies.md](docs/status/known-discrepancies.md).
-
-**ENEMY touch responses poll every frame** while the overlap persists (matching the ROM
-`Touch_Loop`) — SPECIAL/monitor contacts stay edge-triggered. Don't add consumed-once
-"already hit" latches to the enemy touch path.
-
-**S1 silently ignores solid-bit setters.** `setTopSolidBit()` / `setLrbSolidBit()` no-op
-under `CollisionModel.UNIFIED`, so springs and plane switchers are automatic no-ops for S1.
-
-**Rewind coverage is guarded.** A new spawnable object without a recreate path, an
-uncaptured `final` scalar, or an object reference not captured as a rewind id fails
-`TestRewindCoverageGuard`. A global static manager consumed across frames but unregistered
-fails `TestStaticStateRewindCoverageGuard` — fix it with a `RewindSnapshottable` adapter,
-not a baseline entry, unless the gap is genuinely intentional.
-
-**Headless tests:** call `GroundSensor.setLevelManager(...)` and
-`Camera.updatePosition(true)` *after* the level load, and prefer
-`@ExtendWith(SingletonResetExtension.class)` over manual teardown. Set
-`startup.legalDisclaimer=false` in tests that boot the full `Engine`.
-
-**`FixBugs` / `fixBugs` assembly paths.** All three disassemblies are built with the
-bug-fix conditional OFF — `FixBugs = 0` (`s1disasm/sonic.asm:20`,
-`skdisasm/sonic3k.asm:38`, `skdisasm/s3.asm:25`) and `fixBugs = 0`
-(`s2disasm/s2.asm:27`) — because that is what the shipped ROMs do, and the traces
-record shipped-ROM behaviour. **Always model the `FixBugs = 0` path**, including
-when it is plainly a bug: the un-fixed path is the accurate one, and taking the
-fixed branch will desync a trace that compares the affected field. There are ~327
-such blocks in s1disasm, ~262 in s2disasm and ~111 in skdisasm, so you will meet
-them often.
-
-When you port code near one of these conditionals, **say so in a comment** — name
-the flag, state which branch the engine takes and why, and describe what the fixed
-branch would do. That costs a line now and is the only thing that will make a
-future "support the bug-fixed revisions" effort tractable, since the sites are
-otherwise invisible once ported. `Camera.java:122-124` and
-`Sonic1BatbrainBadnikInstance.java:394` are existing examples of the shape.
-
-**Audio accuracy:** the FM core is the Nuked-OPN2 port (`audio.synth.nuked`); its only
-reference is the pinned `ym3438.c`, and `Ym2612Chip` is engine glue over it. For the PSG
-reference the libvgm cores, for the sequencer the SMPSPlay source, rather than simplified
-versions. Diagnose against a source of truth instead of twiddling knobs.
-
-### Sonic 3&K bring-up notes
-
-Full detail in [AGENTS_S3K.md](AGENTS_S3K.md) and the `s3k-*` skills. The expensive ones:
-
-- **Prefer S&K-half addresses.** The locked-on ROM has an S&K half (`< 0x200000`) and an S3
-  half (`>= 0x200000`) with identical shared bytes; the S3KL/SKL runtime references the S&K
-  half for the overwhelming majority of assets. Put `sonic3k.asm` offsets in
-  `Sonic3kConstants.java` by default and run `RomOffsetFinder --game s3k`; when both halves
-  hit, pick `sonic3k.asm`. Some objects genuinely reference S3-half (`s3.asm`) assets —
-  verify the object's code points there, then use it. Don't loop hunting for an S&K
-  equivalent that doesn't exist.
-- **Dual object pointer tables.** S3K remaps many object IDs by zone set: `S3kZoneSet.S3KL`
-  (zones 0-6, AIZ-LBZ, 256 entries) and `SKL` (zones 7-13, MHZ-DDZ, 185 entries). Resolve
-  names via `Sonic3kObjectRegistry.getPrimaryName(id, zoneSet)`. **Zone ids 0-6 are seven
-  ids, not six: FBZ is 4** (`Sonic3kZoneIds.java`). It takes the S3KL *object table* while
-  being an S&K-half *level* — the ROM's own level predicate `SSEntry_CheckLevel`
-  (`sonic3k.asm:128433-128443`) is `Current_zone < 7 && Current_zone != 4`. "Which half" is
-  not one question; cite the routine that owns the question you are asking.
-- **Compression type is encoded in the label suffix** (e.g. `AIZ1_8x8_Primary_KosM`), since
-  S3K files use a `.bin` extension. `RomOffsetFinder` auto-infers it.
-- **Known limitation:** some S3K acts log `maxChunkPatternIndex > patternCount` (dynamic
-  art / PLC parity is incomplete).
-- **Keep green:** `TestS3kAiz1SkipHeadless`, `TestSonic3kLevelLoading`,
-  `TestSonic3kBootstrapResolver`, `TestSonic3kDecodingUtils`.
-
-### `next`-line subsystems
-
-`next` carries two subsystems that are not on `develop`. Read the linked docs before
-touching their contracts.
-
-**Mod API (`com.openggf.game.patch`, `com.openggf.mod*`).** Owner-tagged additive
-`GamePatch` decorators sit over a root `GameModule`. The engine-owned
-`ModuleResolutionService` resolves enabled built-in/mod owners in dependency order at
-gameplay launch choke points; `WorldSession` keeps both root and resolved modules so
-repeated resolution never double-wraps. Metadata/prerequisite failures disable the owner
-and its dependents while independent owners continue; arbitrary creator `apply` failures
-abort launch, because partial input mutation is not rollback-safe. `WorldSession` also
-owns the module's `GameDataSource` — ROM or bounded standalone assets.
-
-Creator content targets the unpublished mutable `@ModApi` 0.7.0 candidate surface (no Mod
-API baseline has been published) via the two-artifact `ggfmod` toolchain: namespaced
-objects and art, complete Sonic 2 zones, ROM-art intake, owner-tagged playable characters
-(`CharacterKey` identities over the immutable module registry), no-ROM standalone modules
-(`AbstractStandaloneGameModule`, durable `GameDataSource`, game-agnostic baked levels,
-namespaced slot-1 saves/audio), playable-subclass rewind capture hooks, the host-adapted
-S3K custom-zone/palette bridge, and exclusive game-start selection with destination-scoped
-launch teams, deterministic input filters, and row-only HUD profiles. Code-bearing mods
-stay namespaced, injected-service-only, rewind-recreatable, transactionally registered,
-and owner-fault-bounded. Complete new zones preserve tagged identities, not runtime
-indices. Maintained contracts live in [docs/modding/index.md](docs/modding/index.md) and
-[docs/architecture/mod-api-compatibility.md](docs/architecture/mod-api-compatibility.md);
-dated design specs under `docs/architecture/designs/` are historical provenance only.
-
-**Multiplayer time attack.** The direct-connect and master-server core lives under
-`com.openggf.net.protocol`, `.hub`, `.host`, `.client`, and `.master`. These packages are
-engine-free and may share only the canonical `GhostFrame` / `GhostFrameCodec`;
-`TestNetIsolationRules` enforces the boundary. Each `RoomHost` and `GhostHub` is confined
-to a single event-loop thread, and the master server reuses those room classes unchanged.
-Engine and UI adapters belong in `com.openggf.game.timeattack.mp`. Production masters
-require TLS (`plaintextForTest: true` is loopback-test only); the localhost admin HTTP
-endpoint requires its bearer token and appends to `admin-audit.jsonl`. Identity age, clean
-rounds, sanctions, and trust tiers persist in SQLite. Verified rooms are relay-only and
-need a live replay-verifier worker matching the room's determinism fingerprint; ROM bytes
-never cross the network and worker verdicts are Ed25519-signed. Operator commands:
-
-```bash
-java -cp target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar com.openggf.tools.net.GhostLoadTestTool --n 256 --duration 30 --mix adversarial
-java -cp target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar com.openggf.tools.verifier.VerifierMain --master https://host:27900 --registration-token <token> --rom s3k.gen --data ./verifier-data
-```
-
-The CI scale gate runs 32 in-JVM bots through `TestGhostLoadTest`; the 128/256-player gate
-above measures hub aggregation CPU, not deployed socket throughput.
-
-## Where to look next
-
-Skills carry the step-by-step procedures — reach for them rather than reconstructing a
-workflow. Sources live in `.agents/skills/` (mirrored in `.claude/skills/`).
-
-| Task | Skill |
-|---|---|
-| Any `*TraceReplay` failure | `trace-replay-bug-fixing` (plus `trace-green-fleet`, `trace-capture`) |
-| Implementing an object / badnik | `s1-implement-object`, `s2-implement-object`, `s3k-implement-object` |
-| Implementing a boss | `s1-implement-boss`, `s2-implement-boss`, `s3k-implement-boss` |
-| Navigating a disassembly | `s1disasm-guide`, `s2disasm-guide`, `s3k-disasm-guide` |
-| Bringing up an S3K zone | `s3k-zone-bring-up` (+ `-analysis`, `-events`, `-parallax`, `-animated-tiles`, `-palette-cycling`, `-validate`) |
-| Pattern Load Cues | `plc-system`, `s3k-plc-system` |
-
-Deeper reference, loaded when the work needs it:
-
-| Document | Covers |
-|---|---|
-| [docs/architecture/engine-map.md](docs/architecture/engine-map.md) | Service tiers, session ownership, runtime framework stack, `LevelManager` decomposition, multi-game and physics providers, level events, sidekicks, rewind, audio, config, tooling |
-| [docs/architecture/object-implementation-reference.md](docs/architecture/object-implementation-reference.md) | Object registration, behaviour contracts, base classes, shared utilities, per-game art loading, constants files |
-| [docs/architecture/per-game-rule-placement.md](docs/architecture/per-game-rule-placement.md) | Where a per-game behavioural difference belongs |
-| [docs/guide/contributing/headless-testing.md](docs/guide/contributing/headless-testing.md) | `HeadlessTestRunner`, singleton reset, test infrastructure |
-| [docs/agent-workflow/README.md](docs/agent-workflow/README.md) | Workflow CLIs, per-task runbooks, CI guard-failure explainer, pitfall index, documentation-obligation checklist |
-| [docs/agent-workflow/briefing-trace-rounds.md](docs/agent-workflow/briefing-trace-rounds.md) | Accumulated trace-round rules, indexed: how to brief a round, the evidence rules, and the **measurement-hazard table** — read that before reporting any suite number, because every hazard in it produces output indistinguishable from a real result |
-| [docs/status/known-discrepancies.md](docs/status/known-discrepancies.md) | Intentional divergences from the ROM, virtual pattern ID ranges, trace bootstrap contracts |
-| [AGENTS_S3K.md](AGENTS_S3K.md) | Sonic 3&K specifics |
-| [CONFIGURATION.md](CONFIGURATION.md) | `config.yaml` keys, bindings, debug flags |
-| [docs/modding/index.md](docs/modding/index.md) | Mod API creator handbook, formats, converters, examples, gallery |
-| [docs/architecture/mod-api-compatibility.md](docs/architecture/mod-api-compatibility.md) | Mod API surface, version pins, compatibility ranges |
-
-## Code style
-
-Keep logic in manager classes, not `Engine.java`. Java 21. Source files end with a newline.
-Write code that reads like the code around it — match its comment density, naming, and
-idiom.
+- Next-line Mod API and multiplayer contracts: [subsystem reference](docs/architecture/next-line-subsystems.md),
+  [creator handbook](docs/modding/index.md), and
+  [API compatibility](docs/architecture/mod-api-compatibility.md).

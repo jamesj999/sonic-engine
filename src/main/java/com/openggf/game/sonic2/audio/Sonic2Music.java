@@ -11,7 +11,8 @@ import java.util.Map;
  * Sparse ID range requires HashMap-based lookup.
  */
 public enum Sonic2Music {
-    CONTINUE(0x00, "Continue"),
+    // ContinueScreen / zMusIDPtr_Continue (s2.constants.asm:860), not the empty mailbox byte.
+    CONTINUE(0x9C, "Continue"),
     CASINO_NIGHT_2P(0x80, "Casino Night Zone (2P)"),
     EMERALD_HILL(0x81, "Emerald Hill Zone"),
     METROPOLIS(0x82, "Metropolis Zone"),

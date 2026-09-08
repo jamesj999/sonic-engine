@@ -1,5 +1,6 @@
 package com.openggf.tools.audio.parity.s2;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * with its ordered pre-consumption request transfers. The payload is
  * comparison-only reference data; nothing here hydrates engine state.
  */
+// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
+// the default suite on pull requests, the nightly schedule and release validation.
+@Tag("slow-suite")
 class TestS2RequestWindowFixture {
     static final String FIXTURE_RESOURCE =
             "/audio/parity/s2/s2-request-window-w10150-10900.raw-v2.jsonl.gz";

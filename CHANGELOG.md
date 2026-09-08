@@ -24,9 +24,15 @@ readable and historical versions can be referenced directly.
 
 ## 0.6 release documentation
 
+[CHANGELOG.0.6.md](CHANGELOG.0.6.md) is the thematic 0.6 changelog, organised by
+area in the same shape as the 0.5 file. Newest changes are folded into their
+area rather than listed at the top.
+
 - [Release Summary](docs/changelog/v0.6-release-summary.md) — polished copy for
   the website and GitHub release page, including the measured validation status
   and known limitations. `RELEASE_NOTES_v0.6.prerelease.md` is a pointer to it.
+- [Archived 0.6 development ledger](docs/changelog/v0.6-development-ledger.md) —
+  the unedited entry-by-entry history the changelog was condensed from.
 - [Detailed 0.6 development ledger](docs/changelog/v0.6-prerelease-detailed.md) —
   engineering notes and trace-frontier history.
 - [Trace frontier log](docs/status/trace-frontier-log.md) — current replay

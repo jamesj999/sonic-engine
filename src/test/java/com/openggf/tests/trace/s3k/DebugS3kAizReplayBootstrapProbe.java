@@ -1376,7 +1376,7 @@ public class DebugS3kAizReplayBootstrapProbe {
         return switch (currentMode) {
             case LEVEL, TITLE_CARD -> 0x04;
             case SPECIAL_STAGE -> 0x10;
-            case SPECIAL_STAGE_RESULTS -> 0x14;
+            case SPECIAL_STAGE_RESULTS, CONTINUE_SCREEN -> 0x14;
             case TITLE_SCREEN, MASTER_TITLE_SCREEN -> 0x00;
             case LEVEL_SELECT -> 0x08;
             case DATA_SELECT -> 0x18;

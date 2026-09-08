@@ -17,6 +17,22 @@ class TestCompleteRunAudioCli {
     @TempDir Path temp;
 
     @Test
+    void coverageTextReportsFixedInventoryWithoutInventingEvidence() {
+        CliResult coverage = result("coverage-text", "s2_rev01_complete_emeralds.v1");
+
+        assertEquals(CompleteRunAudioTool.MISMATCH, coverage.status());
+        assertEquals("", coverage.error());
+        assertTrue(coverage.out().startsWith("scope=complete-run profiles only\n"));
+        assertTrue(coverage.out().contains("profile=s2_rev01_complete_emeralds.v1\n"));
+        assertTrue(coverage.out().contains("evidence=NOT_RUN"));
+        assertTrue(coverage.out().endsWith("full_parity=false\n"));
+        assertEquals(CompleteRunAudioTool.USAGE_OR_SECURITY,
+                result("coverage-text", "unknown.profile").status());
+        assertEquals(CompleteRunAudioTool.USAGE_OR_SECURITY,
+                result("coverage-text").status());
+    }
+
+    @Test
     void classifiesUsageCaptureAndMismatchFailures() {
         assertEquals(2, run("unknown"));
         assertEquals(2, run("validate", "relative", "REFERENCE", "profile"));

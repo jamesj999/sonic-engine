@@ -700,6 +700,7 @@ public class Sonic3kMHZEvents extends Sonic3kZoneEvents {
                 first.dirtyRegionProcessingRequired() || second.dirtyRegionProcessingRequired(),
                 first.foregroundRedrawRequired() || second.foregroundRedrawRequired(),
                 first.allTilemapsRedrawRequired() || second.allTilemapsRedrawRequired(),
+                first.patternLookupRefreshRequired() || second.patternLookupRefreshRequired(),
                 first.objectResyncRequired() || second.objectResyncRequired(),
                 first.ringResyncRequired() || second.ringResyncRequired());
     }

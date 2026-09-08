@@ -29,6 +29,7 @@ import com.openggf.graphics.PixelFont;
 import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.graphics.TexturedQuadRenderer;
 import com.openggf.level.PatternDesc;
+import com.openggf.level.Palette;
 import com.openggf.tests.SingletonResetExtension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -139,12 +140,23 @@ class TestOrdinaryTitleScreenCommandEvidence {
             Sonic1TitleScreenManager manager = new Sonic1TitleScreenManager();
             Sonic1TitleScreenDataLoader loader = field(manager, "dataLoader");
             setField(manager, "state", TitleScreenProvider.State.INTRO_TEXT_FADE_IN);
+            setField(manager, "introTextTimer", 4);
+            Palette target = new Palette();
+            target.colors[0].r = target.colors[0].g = target.colors[0].b = (byte) 0xEE;
+            setField(loader, "titlePaletteLines", new Palette[]{target, target, target, target});
             setField(manager, "creditTextCached", true);
             setWidth(width);
             graphics.clear();
             manager.draw();
-            assertEquals(width, graphics.rects().getLast().width(),
-                    "S1 intro fade must cover the live width at " + width);
+            assertEquals(4, graphics.palettes.size(),
+                    "S1 intro fade uploads every palette line at " + width);
+            for (Palette uploaded : graphics.palettes) {
+                assertEquals(0, Byte.toUnsignedInt(uploaded.colors[0].r));
+                assertEquals(0, Byte.toUnsignedInt(uploaded.colors[0].g));
+                assertTrue(Byte.toUnsignedInt(uploaded.colors[0].b) > 0,
+                        "the ROM fade raises blue first, independently of viewport width");
+            }
+            assertTrue(graphics.rects().isEmpty(), "palette fades do not draw an alpha overlay");
         }
     }
 
@@ -158,6 +170,9 @@ class TestOrdinaryTitleScreenCommandEvidence {
             setField(loader, "dataLoaded", true);
             setField(manager, "state", TitleScreenProvider.State.ACTIVE);
             setField(manager, "introComplete", true);
+            // ACTIVE follows Obj0E_Sonic_LoadPalette; palette-zero Plane A
+            // words (including this synthetic map) are visible at this boundary.
+            setField(manager, "sonicPaletteLoaded", true);
             setWidth(width);
             graphics.clear();
             manager.draw();
@@ -375,6 +390,12 @@ class TestOrdinaryTitleScreenCommandEvidence {
         private final List<ScissorCapture> scissorCaptures = new ArrayList<>();
         private final List<ScissorEvent> scissorEvents = new ArrayList<>();
         private final List<Rect> rects = new ArrayList<>();
+        private final List<Palette> palettes = new ArrayList<>();
+
+        @Override
+        public void cachePaletteTexture(Palette palette, int line) {
+            palettes.add(palette);
+        }
         private Scissor activeScissor;
         private int activeScissorPatternStart;
 
@@ -433,6 +454,7 @@ class TestOrdinaryTitleScreenCommandEvidence {
             scissorCaptures.clear();
             scissorEvents.clear();
             rects.clear();
+            palettes.clear();
         }
     }
 

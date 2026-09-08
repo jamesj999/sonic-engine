@@ -103,7 +103,7 @@ public class Sonic1ObjectArtProvider implements ObjectArtProvider {
         if (rom == null) {
             throw new IllegalStateException("ROM not loaded");
         }
-        RomByteReader reader = new RomByteReader(rom.readAllBytes());
+        RomByteReader reader = RomByteReader.fromRom(rom);
         this.romReader = reader;
         Sonic1ObjectArt art = new Sonic1ObjectArt(rom, reader);
 
@@ -3285,7 +3285,7 @@ public class Sonic1ObjectArtProvider implements ObjectArtProvider {
             try {
                 Rom rom = GameServices.rom().getRom();
                 if (rom != null) {
-                    RomByteReader reader = new RomByteReader(rom.readAllBytes());
+                    RomByteReader reader = RomByteReader.fromRom(rom);
                     Sonic1ObjectArt art = new Sonic1ObjectArt(rom, reader);
                     registerLzFloatingBlockSheet(art);
                 }
@@ -3424,7 +3424,7 @@ public class Sonic1ObjectArtProvider implements ObjectArtProvider {
                 if (rom == null) {
                     throw new IllegalStateException("ROM not loaded");
                 }
-                romReader = new RomByteReader(rom.readAllBytes());
+                romReader = RomByteReader.fromRom(rom);
             } catch (IOException ex) {
                 throw new IllegalStateException("Unable to load Sonic 1 ROM mapping data", ex);
             }

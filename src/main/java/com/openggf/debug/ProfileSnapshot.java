@@ -53,7 +53,7 @@ public class ProfileSnapshot {
 
     /**
      * Updates this snapshot in-place with new profiling data.
-     * Avoids all map/array allocation after the first frame that establishes the section set.
+     * Reuses the history array; section values remain immutable records.
      */
     public void populate(Map<String, Long> rollingSums, int effectiveFrames,
                          float[] sourceHistory, int historyIndex, int frameCount,
@@ -61,24 +61,55 @@ public class ProfileSnapshot {
         sections.clear();
 
         long totalSectionNanos = 0;
-        for (Map.Entry<String, Long> entry : rollingSums.entrySet()) {
-            String name = entry.getKey();
-            long sumNanos = entry.getValue();
-            double avgNanos = (double) sumNanos / effectiveFrames;
-            double avgMs = avgNanos / 1_000_000.0;
-            sections.put(name, new SectionStats(name, avgMs, 0));
+        for (long sumNanos : rollingSums.values()) {
             totalSectionNanos += sumNanos;
         }
-
         double totalMs = (double) totalSectionNanos / effectiveFrames / 1_000_000.0;
-        if (totalMs > 0) {
-            for (Map.Entry<String, SectionStats> entry : sections.entrySet()) {
-                SectionStats stats = entry.getValue();
-                double pct = (stats.timeMs() / totalMs) * 100.0;
-                entry.setValue(new SectionStats(stats.name(), stats.timeMs(), pct));
+        for (Map.Entry<String, Long> entry : rollingSums.entrySet()) {
+            putSection(entry.getKey(), entry.getValue(), effectiveFrames, totalMs);
+        }
+        populateFrame(effectiveFrames, sourceHistory, historyIndex, frameCount,
+                actualFrameTimeSum, totalMs);
+    }
+
+    /** Internal primitive path retains map nodes when the section order is unchanged. */
+    void populate(SectionMeasurements measurements, int effectiveFrames,
+                  float[] sourceHistory, int historyIndex, int frameCount,
+                  long actualFrameTimeSum) {
+        int index = 0;
+        boolean compatible = sections.size() <= measurements.size();
+        if (compatible) {
+            for (String name : sections.keySet()) {
+                if (!java.util.Objects.equals(name, measurements.get(index++).name)) {
+                    compatible = false;
+                    break;
+                }
             }
         }
+        if (!compatible) {
+            sections.clear();
+        }
+        long totalSectionNanos = 0;
+        for (int i = 0; i < measurements.size(); i++) {
+            totalSectionNanos += measurements.get(i).sum;
+        }
+        double totalMs = (double) totalSectionNanos / effectiveFrames / 1_000_000.0;
+        for (int i = 0; i < measurements.size(); i++) {
+            SectionMeasurements.Section section = measurements.get(i);
+            putSection(section.name, section.sum, effectiveFrames, totalMs);
+        }
+        populateFrame(effectiveFrames, sourceHistory, historyIndex, frameCount,
+                actualFrameTimeSum, totalMs);
+    }
 
+    private void putSection(String name, long sumNanos, int effectiveFrames, double totalMs) {
+        double avgMs = (double) sumNanos / effectiveFrames / 1_000_000.0;
+        double percentage = totalMs > 0 ? avgMs / totalMs * 100.0 : 0;
+        sections.put(name, new SectionStats(name, avgMs, percentage));
+    }
+
+    private void populateFrame(int effectiveFrames, float[] sourceHistory, int historyIndex,
+                               int frameCount, long actualFrameTimeSum, double totalMs) {
         this.totalFrameTimeMs = totalMs;
 
         // Reuse or resize the history array

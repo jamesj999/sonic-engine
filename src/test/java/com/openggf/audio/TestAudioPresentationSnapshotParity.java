@@ -663,7 +663,8 @@ class TestAudioPresentationSnapshotParity {
             assertEquals(0,
                     boundary.presentation().coordFlagRuntimeState()
                             .spindashRevCounter());
-            assertTrue(boundary.presentation().speedShoesEnabled());
+            assertFalse(boundary.presentation().speedShoesEnabled(),
+                    "the frame-11 ordinary S3K donor load clears the old speed state");
             assertEquals(3, boundary.presentation().speedMultiplier());
             assertEquals(1 << 2, boundary.presentation().fmMuteMask());
             assertEquals(1 << 1, boundary.presentation().psgSoloMask());
@@ -805,6 +806,8 @@ class TestAudioPresentationSnapshotParity {
         assertEquals(expected.psgMuteMask(), actual.psgMuteMask());
         assertEquals(expected.psgSoloMask(), actual.psgSoloMask());
         assertEquals(expected.sfxBlocked(), actual.sfxBlocked());
+        assertEquals(expected.sfxBlockHeldThroughFadeIn(),
+                actual.sfxBlockHeldThroughFadeIn());
         assertEquals(expected.pendingRestore(), actual.pendingRestore());
         assertEquals(expected.speedShoesEnabled(),
                 actual.speedShoesEnabled());

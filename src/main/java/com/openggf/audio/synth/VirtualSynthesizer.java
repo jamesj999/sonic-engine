@@ -14,7 +14,8 @@ public class VirtualSynthesizer implements SmpsLogicalWriteTarget {
     }
 
     private final PsgChip psg;
-    private final Ym2612Chip ym;
+    private final FmChip ym;
+    private final FmCoreSelection fmCore;
     private double outputSampleRate = Ym2612Chip.getDefaultOutputRate();
     private boolean chipWriteObserverEnabled;
 
@@ -63,10 +64,25 @@ public class VirtualSynthesizer implements SmpsLogicalWriteTarget {
             double outputSampleRate,
             ChipWriteObserver observer,
             Initialization initialization) {
+        this(outputSampleRate, observer, initialization, FmCoreSelection.ACCURATE);
+    }
+
+    /**
+     * @param fmCore which FM core renders: the cycle-exact Nuked-OPN2 port or
+     *               the register-level fast core (see {@code audio.fmCore})
+     */
+    public VirtualSynthesizer(
+            double outputSampleRate,
+            ChipWriteObserver observer,
+            Initialization initialization,
+            FmCoreSelection fmCore) {
+        this.fmCore = Objects.requireNonNull(fmCore, "fmCore");
         // Clean-room SN76489 core; the FM:PSG balance is set here, not inside the chip.
         this.psg = new PsgChip(outputSampleRate, PsgChip.ChipType.INTEGRATED);
         this.psg.configure(PSG_PREAMP_PERCENT, PSG_PANNING_BOTH);
-        this.ym = new Ym2612Chip();
+        this.ym = fmCore == FmCoreSelection.FAST
+                ? new FastYm2612Chip(com.openggf.audio.synth.fast.FastFmCores.newDsp())
+                : new Ym2612Chip();
         setChipWriteObserver(observer);
         setOutputSampleRate(outputSampleRate);
         if (Objects.requireNonNull(initialization, "initialization")
@@ -83,6 +99,11 @@ public class VirtualSynthesizer implements SmpsLogicalWriteTarget {
         this.outputSampleRate = outputSampleRate;
         ym.setOutputSampleRate(outputSampleRate);
         psg.setSampleRate(outputSampleRate);
+    }
+
+    /** The FM core this synthesizer was built with. */
+    public FmCoreSelection fmCore() {
+        return fmCore;
     }
 
     public double getOutputSampleRate() {
@@ -105,6 +126,37 @@ public class VirtualSynthesizer implements SmpsLogicalWriteTarget {
         return chipWriteObserverEnabled;
     }
 
+    /** Opaque mutable rollback storage, separate from immutable rewind snapshots. */
+    public static final class MutationBackup {
+        private final VirtualSynthesizer owner;
+        private final FmChip.MutationBackup ym;
+        private final PsgChip.MutationBackup psg = new PsgChip.MutationBackup();
+        private double outputSampleRate;
+
+        private MutationBackup(VirtualSynthesizer owner) {
+            this.owner = owner;
+            this.ym = owner.ym.createMutationBackup();
+        }
+    }
+
+    public MutationBackup createMutationBackup() {
+        return new MutationBackup(this);
+    }
+
+    public void captureMutation(MutationBackup backup) {
+        if (backup.owner != this) throw new IllegalArgumentException("foreign synth backup");
+        backup.outputSampleRate = outputSampleRate;
+        ym.captureMutation(backup.ym);
+        psg.captureMutation(backup.psg);
+    }
+
+    public void restoreMutation(MutationBackup backup) {
+        if (backup.owner != this) throw new IllegalArgumentException("foreign synth backup");
+        outputSampleRate = backup.outputSampleRate;
+        ym.restoreMutation(backup.ym);
+        psg.restoreMutation(backup.psg);
+    }
+
     public Snapshot captureSynthSnapshot() {
         return new Snapshot(outputSampleRate, ym.captureSnapshot(), psg.captureSnapshot());
     }
@@ -115,13 +167,23 @@ public class VirtualSynthesizer implements SmpsLogicalWriteTarget {
         psg.restoreSnapshot(snapshot.psg());
     }
 
+    /**
+     * Delimits a diagnostic raw-bus segment without mutating either chip.
+     * Used after a live transaction restores and discards unpublished writes.
+     */
+    public void reportPhysicalTimelineBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        ym.reportPhysicalTimelineBoundary(boundary);
+        psg.reportPhysicalTimelineBoundary(boundary);
+    }
+
     /** Channel-bounded rollback state for one prepared SFX admission. */
     public static final class SfxAdmissionState {
-        private final Ym2612Chip.SfxAdmissionState ym;
+        private final FmChip.SfxAdmissionState ym;
         private final PsgChip.SfxAdmissionState psg;
 
         private SfxAdmissionState(
-                Ym2612Chip.SfxAdmissionState ym,
+                FmChip.SfxAdmissionState ym,
                 PsgChip.SfxAdmissionState psg) {
             this.ym = ym;
             this.psg = psg;
@@ -290,7 +352,7 @@ public class VirtualSynthesizer implements SmpsLogicalWriteTarget {
 
     public record Snapshot(
             double outputSampleRate,
-            Ym2612Chip.Snapshot ym,
+            FmChip.Snapshot ym,
             PsgChip.Snapshot psg) {
     }
 }

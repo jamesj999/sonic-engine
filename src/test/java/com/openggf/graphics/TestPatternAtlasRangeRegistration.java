@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class TestPatternAtlasRangeRegistration {
-    private static final int SYNTHETIC_BASE = 0x188000;
+    private static final int SYNTHETIC_BASE = PatternAtlasRange.CONTINUE_SCREEN.endExclusive();
 
     @Test
     public void adjacentHalfOpenRangesAreValid() {

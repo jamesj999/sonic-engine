@@ -2,6 +2,8 @@ package com.openggf.graphics.shaderlib;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.lwjgl.opengl.GL;
 
 import java.nio.ByteBuffer;
@@ -365,8 +367,9 @@ public class TestDisplayShaderPipelineSmoke {
         }
     }
 
-    @Test
-    public void applyRestoresCallerGlStateAfterSuccess() {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void applyRestoresCallerGlStateAfterSuccess(int textureUnit) {
         try (GlContext ignored = GlContext.open()) {
             DisplayShaderPipeline pipeline = new DisplayShaderPipeline();
             pipeline.resize(32, 32, 32, 32);
@@ -383,7 +386,7 @@ public class TestDisplayShaderPipelineSmoke {
             int sentinelProgram = createSentinelProgram();
             int sentinelVao = glGenVertexArrays();
             int boundTexture = glGenTextures();
-            glActiveTexture(GL_TEXTURE1);
+            glActiveTexture(GL_TEXTURE0 + textureUnit);
             glBindTexture(GL_TEXTURE_2D, boundTexture);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, sentinelFbo);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sentinelFbo);
@@ -405,8 +408,12 @@ public class TestDisplayShaderPipelineSmoke {
             assertEquals(sentinelFbo, glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING));
             assertEquals(sentinelProgram, glGetInteger(GL_CURRENT_PROGRAM));
             assertEquals(sentinelVao, glGetInteger(GL_VERTEX_ARRAY_BINDING));
-            assertEquals(GL_TEXTURE1, glGetInteger(GL_ACTIVE_TEXTURE));
+            assertEquals(GL_TEXTURE0 + textureUnit, glGetInteger(GL_ACTIVE_TEXTURE));
             assertEquals(boundTexture, glGetInteger(GL_TEXTURE_BINDING_2D));
+            glActiveTexture(GL_TEXTURE0);
+            assertEquals(textureUnit == 0 ? boundTexture : sentinelTexture,
+                    glGetInteger(GL_TEXTURE_BINDING_2D));
+            glActiveTexture(GL_TEXTURE0 + textureUnit);
             assertTrue(glIsEnabled(GL_BLEND));
             assertTrue(glIsEnabled(GL_DEPTH_TEST));
 

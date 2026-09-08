@@ -122,6 +122,8 @@ class TestGameLoopSpecialStageEntryPresentation {
         loop.enterSpecialStage();
 
         verify(audio, times(1)).playSfx(anyInt());
+        assertEquals(GameMode.SPECIAL_STAGE, loop.getCurrentGameMode(),
+                "the provider owns the entry fade after the immediate mode change");
     }
 
     @Test
@@ -191,10 +193,39 @@ class TestGameLoopSpecialStageEntryPresentation {
         invokeUpdateSpecialStageMode();
 
         InOrder order = inOrder(audio, fade);
+        order.verify(audio).setSpeedShoes(false);
+        order.verify(audio).setSpeedMultiplier(1);
         order.verify(audio).playMusic(GameMusic.SPECIAL_STAGE);
         order.verify(fade).startFadeFromBlack(any());
         verify(audio, times(1)).playMusic(GameMusic.SPECIAL_STAGE);
         verify(fade, times(1)).startFadeFromBlack(any());
+    }
+
+    @Test
+    void accurateWhiteEntryFadesLevelToWhiteThenStartsMusicAndRevealExactlyOnce() throws Exception {
+        setActiveTraceSession(mock(TraceSessionLauncher.class));
+        AtomicBoolean ready = new AtomicBoolean(false);
+        SpecialStageProvider provider = providerWithReadiness(ready);
+
+        loop.doEnterSpecialStage(provider, 0, false, SpecialStageStartupPolicy.TRACE_ACCURATE);
+
+        verify(fade).startFadeToWhite(isNull(), eq(Integer.MAX_VALUE));
+        verify(fade).deferFirstStepToNextVint();
+        verify(fade, never()).holdWhite();
+        verify(audio, never()).playMusic(GameMusic.SPECIAL_STAGE);
+        assertEquals(GameMode.SPECIAL_STAGE, loop.getCurrentGameMode());
+
+        ready.set(true);
+        invokeUpdateSpecialStageMode();
+        invokeUpdateSpecialStageMode();
+
+        InOrder order = inOrder(audio, fade);
+        order.verify(audio).setSpeedShoes(false);
+        order.verify(audio).setSpeedMultiplier(1);
+        order.verify(audio).playMusic(GameMusic.SPECIAL_STAGE);
+        order.verify(fade).startFadeFromWhite(any());
+        verify(audio, times(1)).playMusic(GameMusic.SPECIAL_STAGE);
+        verify(fade, times(1)).startFadeFromWhite(any());
     }
 
     @Test

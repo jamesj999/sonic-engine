@@ -20,6 +20,8 @@ import java.util.logging.Logger;
 
 public class Sonic2SmpsLoader extends AbstractSmpsLoader {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SmpsLoader.class.getName());
+    /** Retail fixBugs=0 zWriteToDAC cost per byte/two decoded samples. */
+    private static final int DPCM_BASE_CYCLES = 295;
     private final SaxmanDecompressor decompressor = new SaxmanDecompressor();
     private final DcmDecoder dcmDecoder = new DcmDecoder();
     private final Map<Integer, Integer> musicMap = new HashMap<>();
@@ -33,7 +35,7 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
         // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
         // These ROM addresses were discovered empirically and are correct.
         // The IDs here are what the game uses when requesting music.
-        musicMap.put(0x00, 0x0F0002); // Continue
+        musicMap.put(Sonic2Music.CONTINUE.id, 0x0F0002); // Continue
         musicMap.put(Sonic2Music.CASINO_NIGHT_2P.id, 0x0F84F6); // Casino Night 2P
         musicMap.put(Sonic2Music.EMERALD_HILL.id, 0x0F88C4); // Emerald Hill
         musicMap.put(Sonic2Music.METROPOLIS.id, 0x0F8DEE); // Metropolis
@@ -738,10 +740,10 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
                 mapping.put(noteId, new DacData.DacEntry(sampleId, rate));
             }
 
-            return new DacData(samples, mapping, 288); // S2 baseCycles = 288
+            return new DacData(samples, mapping, DPCM_BASE_CYCLES);
         } catch (IOException | RuntimeException e) {
             LOGGER.log(Level.SEVERE, "Failed to load DAC Data", e);
-            return new DacData(new HashMap<>(), new HashMap<>(), 288);
+            return new DacData(new HashMap<>(), new HashMap<>(), DPCM_BASE_CYCLES);
         }
     }
 }

@@ -80,17 +80,16 @@ class TestSpecialStageViewportContract {
         SpecialStageProvider first = mock(SpecialStageProvider.class);
         SpecialStageProvider replacement = mock(SpecialStageProvider.class);
         AtomicReference<SpecialStageProvider> active = new AtomicReference<>(first);
-        when(harness.gameLoop.getCurrentGameMode())
-                .thenReturn(GameMode.SPECIAL_STAGE, GameMode.SPECIAL_STAGE,
-                        GameMode.SPECIAL_STAGE, GameMode.LEVEL_SELECT,
-                        GameMode.SPECIAL_STAGE);
+        when(harness.gameLoop.getCurrentGameMode()).thenReturn(GameMode.SPECIAL_STAGE);
         when(harness.gameLoop.getActiveSpecialStageProvider()).thenAnswer(ignored -> active.get());
 
         drawAt(harness.engine, 320);
         active.set(replacement);
         drawAt(harness.engine, 400);
         drawAt(harness.engine, 352);
+        when(harness.gameLoop.getCurrentGameMode()).thenReturn(GameMode.LEVEL_SELECT);
         drawAt(harness.engine, 320);
+        when(harness.gameLoop.getCurrentGameMode()).thenReturn(GameMode.SPECIAL_STAGE);
         active.set(first);
         drawAt(harness.engine, 528);
 

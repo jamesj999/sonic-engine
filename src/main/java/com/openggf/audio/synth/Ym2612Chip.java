@@ -94,7 +94,7 @@ import java.util.Objects;
  * resampler tail, so restoring into any chip and clocking on is bit-identical
  * to never having stopped.
  */
-public class Ym2612Chip {
+public class Ym2612Chip implements FmChip {
 
     private static final double MASTER_CLOCK_HZ = 7670453.0;
     /** Six master clocks per internal cycle, 24 cycles per frame. */
@@ -237,6 +237,10 @@ public class Ym2612Chip {
 
     /* DAC streaming. */
     private int dacSampleId = NO_DAC_VALUE;
+    /** Resolved {@link #dacSampleId} in {@link #dacData}; derived, never snapshotted. */
+    private DacData.Sample dacSample;
+    private DacData dacSampleData;
+    private int dacSampleDataId = NO_DAC_VALUE;
     private int dacPeriod;
     private int dacIndex;
     private int dacAccumulator;
@@ -244,6 +248,8 @@ public class Ym2612Chip {
     private int dacPendingValue = NO_DAC_VALUE;
     private int dacWritePhase;
     private int dacWriteValue;
+    private ChipWriteObserver.PhysicalWriteOrigin dacWriteOrigin =
+            ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS;
     private boolean dacInterpolate = false;
     /**
      * Sample-end edges raised but not yet consumed. Raised where the ROM's
@@ -253,6 +259,8 @@ public class Ym2612Chip {
      * the index without reaching that fall-through, so neither raises one.
      */
     private int dacSampleEndPending;
+    /** Diagnostic-only clock; it deliberately does not participate in snapshots. */
+    private long physicalCycle;
 
     /** Constructs a reset chip at {@link #getDefaultOutputRate()}; nothing global is touched. */
     public Ym2612Chip() {
@@ -282,6 +290,8 @@ public class Ym2612Chip {
         resampler.reset(INTERNAL_RATE, rate);
         directFrameHead = 0;
         directFrameCount = 0;
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /**
@@ -292,6 +302,8 @@ public class Ym2612Chip {
      */
     public void setChipType(int type) {
         applyChipType(type);
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     private void applyChipType(int type) {
@@ -303,18 +315,28 @@ public class Ym2612Chip {
 
     public void setDacInterpolate(boolean interpolate) {
         dacInterpolate = interpolate;
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     public void setDacData(DacData data) {
         dacData = data;
     }
 
-    DacData liveDacDataReference() {
+    @Override
+    public DacData liveDacDataReference() {
         return dacData;
     }
 
-    void setWriteObserver(ChipWriteObserver observer) {
+    @Override
+    public void setWriteObserver(ChipWriteObserver observer) {
         writeObserver = observer == null ? ChipWriteObserver.NONE : observer;
+    }
+
+    @Override
+    public void reportPhysicalTimelineBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        emitPhysicalBoundary(boundary);
     }
 
     /** Hardware reset ({@code OPN2_Reset}); chip type, output rate and mutes are retained. */
@@ -335,8 +357,10 @@ public class Ym2612Chip {
         dacPendingValue = NO_DAC_VALUE;
         dacWritePhase = 0;
         dacWriteValue = 0;
+        dacWriteOrigin = ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS;
         dacSampleEndPending = 0;
         resampler.reset(INTERNAL_RATE, outputRate);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.RESET);
     }
 
     // ---------------------------------------------------------------- writes
@@ -437,12 +461,14 @@ public class Ym2612Chip {
             return;
         }
         enqueue(OP_FORCE_SILENCE, ch, 0, 0, ch);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /** Output-stage mute: the channel keeps running and contributes its silent resting level. */
     public void setMute(int ch, boolean mute) {
         if (ch >= 0 && ch < 6) {
             mutes[ch] = mute;
+            emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
         }
     }
 
@@ -556,6 +582,7 @@ public class Ym2612Chip {
             frameSumLeft = 0;
             frameSumRight = 0;
         }
+        physicalCycle++;
     }
 
     private void emitFrame(int leftSample, int rightSample) {
@@ -618,10 +645,13 @@ public class Ym2612Chip {
         }
         if (dacWritePhase == 1) {
             core.write(1, dacWriteValue);
+            emitPhysicalYmWrite(1, dacWriteValue, dacWriteOrigin);
             dacWritePhase = 0;
             busHold = DATA_SETTLE_CYCLES;
         } else if (dacPendingValue != NO_DAC_VALUE) {
             core.write(0, DAC_REGISTER);
+            dacWriteOrigin = ChipWriteObserver.PhysicalWriteOrigin.DAC_STREAM;
+            emitPhysicalYmWrite(0, DAC_REGISTER, dacWriteOrigin);
             dacWriteValue = dacPendingValue;
             dacPendingValue = NO_DAC_VALUE;
             dacWritePhase = 1;
@@ -640,6 +670,8 @@ public class Ym2612Chip {
                         + (int) (((long) (next - dacPreviousValue) * dacAccumulator) / dacPeriod);
                 if (interpolated != dacWriteValue) {
                     core.write(0, DAC_REGISTER);
+                    dacWriteOrigin = ChipWriteObserver.PhysicalWriteOrigin.DAC_INTERPOLATION;
+                    emitPhysicalYmWrite(0, DAC_REGISTER, dacWriteOrigin);
                     dacWriteValue = interpolated;
                     dacWritePhase = 1;
                     busHold = ADDRESS_SETTLE_CYCLES;
@@ -653,7 +685,15 @@ public class Ym2612Chip {
         if (dacData == null) {
             return NO_DAC_VALUE;
         }
-        DacData.Sample sample = dacData.sample(dacSampleId);
+        // The bank's lookup boxes the id; resolve it once per (bank, id) pair
+        // instead of once per streamed byte. The cache is derived state, not
+        // snapshot state: any restore that changes either key re-resolves.
+        if (dacSample == null || dacSampleData != dacData || dacSampleDataId != dacSampleId) {
+            dacSample = dacData.sample(dacSampleId);
+            dacSampleData = dacData;
+            dacSampleDataId = dacSampleId;
+        }
+        DacData.Sample sample = dacSample;
         if (sample == null || index >= sample.length()) {
             return NO_DAC_VALUE;
         }
@@ -738,13 +778,34 @@ public class Ym2612Chip {
     private void applyAddress(int port, int reg) {
         waitBusIdle();
         core.write(port * 2, reg);
+        emitPhysicalYmWrite(port * 2, reg,
+                ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS);
         busHold = ADDRESS_SETTLE_CYCLES;
     }
 
     private void applyData(int port, int val) {
         waitBusIdle();
         core.write(port * 2 + 1, val);
+        emitPhysicalYmWrite(port * 2 + 1, val,
+                ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS);
         busHold = DATA_SETTLE_CYCLES;
+    }
+
+    private void emitPhysicalYmWrite(int busPort, int value,
+            ChipWriteObserver.PhysicalWriteOrigin origin) {
+        if (writeObserver.observesPhysicalWrites()) {
+            writeObserver.onYm2612BusWrite(physicalCycle, busPort, value,
+                    origin);
+        }
+    }
+
+    private void emitPhysicalBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        if (writeObserver.observesPhysicalWrites()) {
+            writeObserver.onPhysicalTimelineBoundary(
+                    ChipWriteObserver.ChipClockDomain.YM2612_INTERNAL_CYCLE,
+                    physicalCycle, boundary);
+        }
     }
 
     /**
@@ -777,6 +838,122 @@ public class Ym2612Chip {
     }
 
     // ------------------------------------------------------------ snapshot
+
+    /** Mutable owner-private transaction storage; never used by durable snapshots. */
+    static final class MutationBackup implements FmChip.MutationBackup {
+        private Ym2612Chip owner;
+        private int chipType;
+        private int frameSumLeft;
+        private int frameSumRight;
+        private int directFrameCount;
+        private int busHold;
+        private int pendingCount;
+        private int queuedAddress;
+        private int dacSampleId;
+        private int dacPeriod;
+        private int dacIndex;
+        private int dacAccumulator;
+        private int dacPreviousValue;
+        private int dacPendingValue;
+        private int dacWritePhase;
+        private int dacWriteValue;
+        private int dacSampleEndPending;
+        private double outputRate;
+        private boolean dacInterpolate;
+        private boolean[] mutes = new boolean[6];
+        private final NukedOpn2State core = new NukedOpn2State();
+        private final BlipResampler.MutationBackup resampler = new BlipResampler.MutationBackup();
+        private int[] direct = new int[0], ops = new int[0];
+    }
+
+    @Override
+    public FmChip.MutationBackup createMutationBackup() {
+        MutationBackup backup = new MutationBackup();
+        backup.owner = this;
+        return backup;
+    }
+
+    private MutationBackup own(FmChip.MutationBackup candidate) {
+        if (!(candidate instanceof MutationBackup backup) || (backup.owner != null && backup.owner != this)) {
+            throw new IllegalArgumentException("foreign FM mutation backup");
+        }
+        return backup;
+    }
+
+    @Override
+    public void captureMutation(FmChip.MutationBackup candidate) {
+        MutationBackup backup = own(candidate);
+        backup.chipType = chipType;
+        backup.frameSumLeft = frameSumLeft;
+        backup.frameSumRight = frameSumRight;
+        backup.directFrameCount = directFrameCount;
+        backup.busHold = busHold;
+        backup.pendingCount = pendingCount;
+        backup.queuedAddress = queuedAddress;
+        backup.dacSampleId = dacSampleId;
+        backup.dacPeriod = dacPeriod;
+        backup.dacIndex = dacIndex;
+        backup.dacAccumulator = dacAccumulator;
+        backup.dacPreviousValue = dacPreviousValue;
+        backup.dacPendingValue = dacPendingValue;
+        backup.dacWritePhase = dacWritePhase;
+        backup.dacWriteValue = dacWriteValue;
+        backup.dacSampleEndPending = dacSampleEndPending;
+        backup.outputRate = outputRate;
+        backup.dacInterpolate = dacInterpolate;
+        if (backup.mutes.length < mutes.length) backup.mutes = new boolean[mutes.length];
+        System.arraycopy(mutes, 0, backup.mutes, 0, mutes.length);
+        backup.core.copyFrom(state);
+        int directSize = directFrameCount * 2;
+        if (backup.direct.length < directSize) backup.direct = new int[directSize];
+        for (int i = 0; i < directFrameCount; i++) {
+            int from = ((directFrameHead + i) % (directFrames.length / 2)) * 2;
+            backup.direct[i * 2] = directFrames[from];
+            backup.direct[i * 2 + 1] = directFrames[from + 1];
+        }
+        int opSize = pendingCount * OP_STRIDE;
+        if (backup.ops.length < opSize) backup.ops = new int[opSize];
+        System.arraycopy(pendingOps, 0, backup.ops, 0, opSize);
+        resampler.captureMutation(backup.resampler);
+    }
+
+    @Override
+    public void restoreMutation(FmChip.MutationBackup candidate) {
+        MutationBackup backup = own(candidate);
+        chipType = backup.chipType;
+        frameSumLeft = backup.frameSumLeft;
+        frameSumRight = backup.frameSumRight;
+        directFrameCount = backup.directFrameCount;
+        busHold = backup.busHold;
+        pendingCount = backup.pendingCount;
+        queuedAddress = backup.queuedAddress;
+        dacSampleId = backup.dacSampleId;
+        dacPeriod = backup.dacPeriod;
+        dacIndex = backup.dacIndex;
+        dacAccumulator = backup.dacAccumulator;
+        dacPreviousValue = backup.dacPreviousValue;
+        dacPendingValue = backup.dacPendingValue;
+        dacWritePhase = backup.dacWritePhase;
+        dacWriteValue = backup.dacWriteValue;
+        dacSampleEndPending = backup.dacSampleEndPending;
+        outputRate = backup.outputRate;
+        dacInterpolate = backup.dacInterpolate;
+        System.arraycopy(backup.mutes, 0, mutes, 0, mutes.length);
+        applyChipType(chipType);
+        state.copyFrom(backup.core);
+        int directSize = directFrameCount * 2;
+        if (directFrames.length < directSize) directFrames = new int[directSize];
+        System.arraycopy(backup.direct, 0, directFrames, 0, directSize);
+        directFrameHead = 0;
+        int opSize = pendingCount * OP_STRIDE;
+        if (pendingOps.length < opSize) pendingOps = new int[opSize];
+        System.arraycopy(backup.ops, 0, pendingOps, 0, opSize);
+        dacWriteOrigin = dacWritePhase == 0
+                ? ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS
+                : ChipWriteObserver.PhysicalWriteOrigin.RESTORED_UNKNOWN;
+        resampler.restoreMutation(backup.resampler);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.SNAPSHOT_RESTORE);
+    }
 
     /** Pure: captures the complete chip, queue, DAC, output-stage and resampler state. */
     public Snapshot captureSnapshot() {
@@ -813,7 +990,12 @@ public class Ym2612Chip {
     }
 
     /** Total and authoritative: the chip continues bit-exactly from the snapshot. */
-    public void restoreSnapshot(Snapshot snapshot) {
+    @Override
+    public void restoreSnapshot(FmChip.Snapshot candidate) {
+        if (!(candidate instanceof Snapshot snapshot)) {
+            throw new IllegalArgumentException(
+                    "snapshot was captured by a different FM core: " + candidate.getClass().getSimpleName());
+        }
         applyChipType(snapshot.chipType());
         outputRate = snapshot.outputRate();
         state.copyFrom(snapshot.coreRef());
@@ -842,10 +1024,15 @@ public class Ym2612Chip {
         dacPendingValue = snapshot.dacPendingValue();
         dacWritePhase = snapshot.dacWritePhase();
         dacWriteValue = snapshot.dacWriteValue();
+        dacWriteOrigin = dacWritePhase == 0
+                ? ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS
+                : ChipWriteObserver.PhysicalWriteOrigin.RESTORED_UNKNOWN;
         dacSampleEndPending = snapshot.dacSampleEndPending();
         dacInterpolate = snapshot.dacInterpolate();
         System.arraycopy(snapshot.mutesRef(), 0, mutes, 0, mutes.length);
         resampler.restoreSnapshot(snapshot.resampler());
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.SNAPSHOT_RESTORE);
     }
 
     /**
@@ -855,11 +1042,16 @@ public class Ym2612Chip {
      * pending queue; the token records where the queue stood, and restoring
      * removes the entries queued since then that target the masked channels.
      */
-    SfxAdmissionState captureSfxAdmissionState(int affectedChannelMask) {
+    @Override
+    public FmChip.SfxAdmissionState captureSfxAdmissionState(int affectedChannelMask) {
         return new SfxAdmissionState(affectedChannelMask & 0x3f, flushedOps + pendingCount, queuedAddress);
     }
 
-    void restoreSfxAdmissionState(SfxAdmissionState admission) {
+    @Override
+    public void restoreSfxAdmissionState(FmChip.SfxAdmissionState candidate) {
+        if (!(candidate instanceof SfxAdmissionState admission)) {
+            throw new IllegalArgumentException("foreign FM admission state");
+        }
         long firstNewOp = admission.opsEnqueuedAtCapture() - flushedOps;
         int start = (int) Math.max(0, Math.min(pendingCount, firstNewOp));
         int kept = start;
@@ -883,6 +1075,8 @@ public class Ym2612Chip {
                 queuedAddress = (pendingOps[i * OP_STRIDE + 1] << 8) | pendingOps[i * OP_STRIDE + 2];
             }
         }
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     /**
@@ -912,7 +1106,7 @@ public class Ym2612Chip {
             int dacSampleEndPending,
             boolean dacInterpolate,
             boolean[] mutes,
-            BlipResampler.Snapshot resampler) {
+            BlipResampler.Snapshot resampler) implements FmChip.Snapshot {
         public Snapshot {
             core = core.copy();
             directFrames = Arrays.copyOf(directFrames, directFrames.length);
@@ -928,6 +1122,17 @@ public class Ym2612Chip {
 
         @Override
         public int[] pendingOps() { return Arrays.copyOf(pendingOps, pendingOps.length); }
+
+        /** Whether deferred work is reconstructable from the future raw bus strobes alone. */
+        public boolean hasOnlyPendingBusWrites() {
+            for (int index = 0; index < pendingOps.length; index += OP_STRIDE) {
+                int kind = pendingOps[index];
+                if (kind != OP_WRITE && kind != OP_ADDRESS && kind != OP_DATA) {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         @Override
         public boolean[] mutes() { return Arrays.copyOf(mutes, mutes.length); }
@@ -986,5 +1191,6 @@ public class Ym2612Chip {
     }
 
     /** See {@link #captureSfxAdmissionState(int)}. */
-    record SfxAdmissionState(int affectedChannelMask, long opsEnqueuedAtCapture, int queuedAddress) { }
+    record SfxAdmissionState(int affectedChannelMask, long opsEnqueuedAtCapture, int queuedAddress)
+            implements FmChip.SfxAdmissionState { }
 }

@@ -55,18 +55,62 @@ class TestSmpsSegaPcmTransport {
     }
 
     @Test
-    void s1AndS2KeepTheirOwnSegaMechanism() {
-        // S2's zPlaySegaSound (s2.sounddriver.asm:1603-1652) and S1's
-        // zPlay_SegaPCM (sound/z80.asm:187-206) are the same shape, but
-        // neither policy claims the transport yet, so their SEGA screens are
-        // untouched by this vocabulary.
-        assertEquals(Optional.empty(),
-                Sonic1SmpsCompatibilityPolicy.INSTANCE.segaPcmTransport());
-        assertEquals(Optional.empty(),
-                Sonic2SmpsCompatibilityPolicy.INSTANCE.segaPcmTransport());
-        assertEquals(Optional.empty(),
-                LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE
-                        .segaPcmTransport());
+    void allShippedGamesOwnTheDacTransport() {
+        assertEquals(220, Sonic1SmpsCompatibilityPolicy.INSTANCE
+                .segaPcmTransport().orElseThrow().z80CyclesPerByte());
+        assertEquals(219, Sonic2SmpsCompatibilityPolicy.INSTANCE
+                .segaPcmTransport().orElseThrow().z80CyclesPerByte());
+        assertEquals(Optional.empty(), LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE
+                .segaPcmTransport());
+    }
+
+    @Test
+    void allGamesUseTheSameChipGainForTheSameDacCode() {
+        for (var core : com.openggf.audio.synth.FmCoreSelection.values()) {
+            Short expected = null;
+            for (SmpsPhysicalPolicy policy : List.of(Sonic1SmpsCompatibilityPolicy.INSTANCE,
+                    Sonic2SmpsCompatibilityPolicy.INSTANCE, Sonic3kSmpsPhysicalPolicy.INSTANCE)) {
+                var settings = new SmpsPhysicalDevice.Settings(OUTPUT_RATE, false, core);
+                var session = new SmpsDriverSession(settings, policy, ChipWriteObserver.NONE,
+                        new SmpsSessionProfileFingerprint("gain-test", 1, policy.identity(), settings),
+                        SmpsDriverSessionConfiguration.DEFAULT);
+                session.install();
+                byte[] pcm = new byte[2048];
+                java.util.Arrays.fill(pcm, (byte) 0xFF);
+                session.beginSegaPcmTransport(pcm);
+                short[] samples = new short[2048];
+                session.renderFrames(samples, 0, 1024);
+                short level = samples[samples.length - 2];
+                assertTrue(level > 2000 && level < 4500, "single DAC channel, not legacy PCM gain");
+                if (expected != null) assertEquals(expected.shortValue(), level, policy.identity().value());
+                expected = level;
+            }
+        }
+    }
+
+    @Test
+    void exitPreservesEachDriversDacDisposition() {
+        assertTrue(Sonic1SmpsCompatibilityPolicy.INSTANCE.exitSegaPcmTransport(0).writes().isEmpty());
+        for (int tracks : new int[] {0, 6, 7}) {
+            int expected = tracks == 6 ? 0x80 : 0;
+            assertEquals(List.of(new SmpsChipWrite.Ym2612(0, 0x2B, expected)),
+                    Sonic2SmpsCompatibilityPolicy.INSTANCE.exitSegaPcmTransport(tracks).writes());
+        }
+        assertEquals(List.of(new SmpsChipWrite.Ym2612(0, 0x2B, 0)),
+                Sonic3kSmpsPhysicalPolicy.INSTANCE.exitSegaPcmTransport(6).writes());
+    }
+
+    @Test
+    void s2RequestsInterruptTheChantWithoutChangingS3kStopSemantics() {
+        for (SmpsPhysicalPolicy policy : List.of(Sonic2SmpsCompatibilityPolicy.INSTANCE,
+                Sonic3kSmpsPhysicalPolicy.INSTANCE)) {
+            RecordingSession recording = session(policy);
+            recording.session.install();
+            recording.session.beginSegaPcmTransport(new byte[2048]);
+            recording.session.applyCommand(new SmpsSessionCommand.StopMusic());
+            assertEquals(policy == Sonic3kSmpsPhysicalPolicy.INSTANCE,
+                    recording.session.segaPcmTransportActive());
+        }
     }
 
     @Test
@@ -179,6 +223,29 @@ class TestSmpsSegaPcmTransport {
     }
 
     @Test
+    void everyTransportRestoresAudioAndIsIndependentOfRenderBatchSize() {
+        for (SmpsPhysicalPolicy policy : List.of(Sonic1SmpsCompatibilityPolicy.INSTANCE,
+                Sonic2SmpsCompatibilityPolicy.INSTANCE, Sonic3kSmpsPhysicalPolicy.INSTANCE)) {
+            RecordingSession recording = session(policy);
+            recording.session.install();
+            byte[] pcm = new byte[64];
+            for (int i = 0; i < pcm.length; i++) pcm[i] = (byte) (i * 37);
+            recording.session.beginSegaPcmTransport(pcm);
+            recording.session.renderFrames(new short[16], 0, 8);
+            var physical = recording.session.captureSnapshot();
+            var logical = recording.session.captureLogicalSnapshot();
+            short[] whole = new short[512];
+            recording.session.renderFrames(whole, 0, 256);
+            assertFalse(recording.session.segaPcmTransportActive());
+            recording.session.commitRestore(recording.session.prepareRestore(physical, logical, ignored -> null));
+            short[] split = new short[512];
+            for (int i = 0; i < 256; i++) recording.session.renderFrames(split, i * 2, 1);
+            org.junit.jupiter.api.Assertions.assertArrayEquals(whole, split, policy.identity().value());
+            assertFalse(recording.session.segaPcmTransportActive());
+        }
+    }
+
+    @Test
     void rollingBackALiveMutationRestoresTheLoopPosition() {
         RecordingSession recording = s3kSession();
         recording.session.install();
@@ -215,9 +282,12 @@ class TestSmpsSegaPcmTransport {
     }
 
     private static RecordingSession s3kSession() {
+        return session(Sonic3kSmpsPhysicalPolicy.INSTANCE);
+    }
+
+    private static RecordingSession session(SmpsPhysicalPolicy policy) {
         SmpsSessionTestFixtures.RecordingObserver writes =
                 new SmpsSessionTestFixtures.RecordingObserver();
-        SmpsPhysicalPolicy policy = Sonic3kSmpsPhysicalPolicy.INSTANCE;
         SmpsPhysicalDevice.Settings settings =
                 new SmpsPhysicalDevice.Settings(OUTPUT_RATE, false);
         return new RecordingSession(new SmpsDriverSession(

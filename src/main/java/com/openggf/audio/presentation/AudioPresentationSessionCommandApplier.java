@@ -47,6 +47,11 @@ public final class AudioPresentationSessionCommandApplier {
                     session.applyCommand(
                             new SmpsSessionCommand.SuspendForPcmOverride());
                 }
+                if (session.stopsSfxWhenOverrideStarts()) {
+                    // S1's extra-life branch stops every SFX track before it
+                    // backs the driver up (s1.sounddriver.asm:769-774).
+                    session.applyCommand(new SmpsSessionCommand.StopAllSfx());
+                }
                 session.applyCommand(
                         new SmpsSessionCommand.PushOverride(
                                 smps.activation()));

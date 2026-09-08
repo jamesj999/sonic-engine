@@ -2,6 +2,7 @@ package com.openggf.mods.code;
 
 import com.openggf.game.session.PatternWindowState;
 import com.openggf.graphics.PatternAtlas;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Pattern;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TestModPatternWindowAllocator {
     private static final int FIRST_FREE = 0x108000;
-    private static final int PRODUCTION_FIRST_FREE = 0x188000;
+    private static final int PRODUCTION_FIRST_FREE = PatternAtlasRange.CONTINUE_SCREEN.endExclusive();
 
     @Test
     void acceptsOneAndSixteenWindowOwnersInEffectiveOrder() {

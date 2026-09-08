@@ -159,6 +159,8 @@ the collaborator that owns it:
 | `LevelWaterCoordinator` | Water provider loading, dynamic water advancement, playable underwater state |
 | `LevelCheckpointCoordinator` | Checkpoint/respawn state, checkpoint restore, rewind checkpoint capture |
 | `LevelActTransitionExecutor` | ROM-aligned in-place act-transition reload choreography |
+| `LevelLoadPreparer` | One level build running ahead of a seamless transition on a daemon thread; the install always joins it, so it changes timing only. Games opt in through `PreparableLevelLoader` (S3K: `Sonic3k.prepareLevelBuild`/`installPreparedLevel`) |
+| `LevelTilemapPrebuilder` | Builds FG/BG tilemaps for a not-yet-installed level over its own `LevelGeometry.forLevel` and `LevelLayoutLookup.blockAt`; the live manager adopts them via `adoptPrebuiltTilemaps` and `swapToPrebuiltTilemaps` |
 | `LevelLostRingSpawnCoordinator` | Lost-ring scattering, the deferred spawn queue, and its dynamic-slot reservations |
 | `LevelTransitionCoordinator` | Transition request/consume state for acts, warps, title cards, respawns |
 | `LevelDebugRenderer` | Debug overlay rendering (collision, chunks, paths) |
@@ -401,7 +403,9 @@ presentation-independent state machine; each game implements `DataSelectHostProf
 configs, slot counts, zone labels, restart destinations). S3K renders with
 `S3kDataSelectManager`; S1/S2 route through `CrossGameDataSelectPresentations.donated(...)`
 — there is no simplified fallback presentation. `SaveManager` (`game.save`) persists slots
-as JSON with SHA256 integrity and quarantines corrupt files. Title-screen `ONE_PLAYER`
+as JSON with SHA256 integrity and quarantines corrupt files; in-game progression saves go
+through `writeSlotAsync` (snapshot encoded on the frame, file written by the single
+`save-writer` thread, flushed before any slot read/delete and at shutdown). Title-screen `ONE_PLAYER`
 flows through `StartupRouteResolver` → `TitleActionRoute.DATA_SELECT` → controller →
 `DataSelectAction` → `Engine.launchGameplayFromDataSelect()`.
 

@@ -7,6 +7,22 @@ import java.util.Objects;
 
 public final class EngineRenderDispatcher {
 
+    /**
+     * Clear-colour routing with the special-stage entry override: while the
+     * stage is still inside the ROM's entry fade-to-white
+     * ({@code SpecialStageProvider#isEntryFadeToWhiteActive}) the level's last
+     * frame is what the display shows, so the level's clear colour applies.
+     */
+    public void applyClearColor(GameMode mode, boolean specialStageShowsLevel,
+                                ClearActions actions) {
+        Objects.requireNonNull(actions, "actions");
+        if (mode == GameMode.SPECIAL_STAGE && specialStageShowsLevel) {
+            actions.level();
+            return;
+        }
+        applyClearColor(mode, actions);
+    }
+
     public void applyClearColor(GameMode mode, ClearActions actions) {
         Objects.requireNonNull(actions, "actions");
         if (mode == null) {
@@ -20,11 +36,26 @@ public final class EngineRenderDispatcher {
             case LEVEL_SELECT -> actions.levelSelect();
             case DATA_SELECT -> actions.dataSelect();
             case CREDITS_TEXT, ENDING_CUTSCENE -> actions.ending();
-            case TRY_AGAIN_END, MASTER_TITLE_SCREEN, LEGAL_DISCLAIMER, NATIVE_MOD_NOTICE,
+            case CONTINUE_SCREEN, TRY_AGAIN_END, MASTER_TITLE_SCREEN, LEGAL_DISCLAIMER, NATIVE_MOD_NOTICE,
                     EDITOR -> actions.black();
             case TITLE_CARD -> actions.level();
             default -> actions.level();
         }
+    }
+
+    /**
+     * Draw routing with the special-stage entry override: see
+     * {@link #applyClearColor(GameMode, boolean, ClearActions)}. The frozen
+     * level is drawn through the ordinary level path, debug views included.
+     */
+    public void draw(GameMode mode, boolean specialStageShowsLevel, boolean debugViewEnabled,
+                     DebugState debugState, DrawActions actions) {
+        Objects.requireNonNull(actions, "actions");
+        if (mode == GameMode.SPECIAL_STAGE && specialStageShowsLevel) {
+            drawLevel(debugViewEnabled, debugState, actions);
+            return;
+        }
+        draw(mode, debugViewEnabled, debugState, actions);
     }
 
     public void draw(GameMode mode, boolean debugViewEnabled, DebugState debugState, DrawActions actions) {
@@ -43,6 +74,7 @@ public final class EngineRenderDispatcher {
             case TITLE_SCREEN -> actions.titleScreen();
             case LEVEL_SELECT -> actions.levelSelect();
             case DATA_SELECT -> actions.dataSelect();
+            case CONTINUE_SCREEN -> actions.continueScreen();
             case ENDING_CUTSCENE -> actions.endingCutscene();
             case CREDITS_TEXT -> actions.creditsText();
             case CREDITS_DEMO -> actions.creditsDemo();
@@ -76,6 +108,7 @@ public final class EngineRenderDispatcher {
     }
 
     public interface DrawActions {
+        void continueScreen();
         void legalDisclaimer();
         void nativeModNotice();
         void masterTitle();

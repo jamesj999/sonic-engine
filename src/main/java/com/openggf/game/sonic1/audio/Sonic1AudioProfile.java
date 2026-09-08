@@ -8,6 +8,7 @@ import com.openggf.game.audio.SegaPcmRomReader;
 import com.openggf.audio.smps.SmpsLoader;
 import com.openggf.audio.smps.SmpsSequencerConfig;
 import com.openggf.audio.session.SmpsPhysicalPolicy;
+import com.openggf.audio.session.SmpsStatefulCommandPolicy;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic1.audio.smps.Sonic1SmpsLoader;
 
@@ -86,6 +87,11 @@ public class Sonic1AudioProfile extends AbstractAudioProfile {
     @Override
     public SmpsPhysicalPolicy smpsPhysicalPolicy() {
         return Sonic1SmpsCompatibilityPolicy.INSTANCE;
+    }
+
+    @Override
+    public SmpsStatefulCommandPolicy smpsStatefulCommandPolicy() {
+        return Sonic1StatefulCommandPolicy.INSTANCE;
     }
 
     @Override

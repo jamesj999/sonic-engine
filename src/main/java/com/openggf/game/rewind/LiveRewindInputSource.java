@@ -6,8 +6,7 @@ import com.openggf.control.InputHandler;
 import com.openggf.control.PlayerInputState;
 import com.openggf.debug.playback.Bk2FrameInput;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -20,20 +19,22 @@ import java.util.Objects;
  */
 public final class LiveRewindInputSource implements InputSource {
 
-    private final List<Bk2FrameInput> frames = new ArrayList<>();
+    private Bk2FrameInput[] frames = new Bk2FrameInput[128];
+    private int head;
+    private int size;
     private int baseFrame;
 
     public LiveRewindInputSource() {
-        frames.add(neutralFrameInput(0));
+        append(neutralFrameInput(0));
     }
 
     public void appendFrame(InputHandler input, SonicConfigurationService config) {
         Objects.requireNonNull(input, "input");
         Objects.requireNonNull(config, "config");
-        int frameIndex = baseFrame + frames.size();
+        int frameIndex = baseFrame + size;
         PlayerInputState p1 = input.logical().player1();
         PlayerInputState p2 = input.logical().player2();
-        frames.add(new Bk2FrameInput(
+        append(new Bk2FrameInput(
                 frameIndex,
                 p1.heldMask(),
                 p1.actionHeldMask(),
@@ -50,25 +51,29 @@ public final class LiveRewindInputSource implements InputSource {
     }
 
     public void discardAfter(int frame) {
-        int keepCount = Math.max(1, Math.min(frames.size(), frame - baseFrame + 1));
-        while (frames.size() > keepCount) {
-            frames.remove(frames.size() - 1);
+        int keepCount = Math.max(1, Math.min(size, frame - baseFrame + 1));
+        while (size > keepCount) {
+            frames[(head + --size) % frames.length] = null;
         }
     }
 
     public void discardBefore(int frame) {
-        int removeCount = Math.min(Math.max(0, frame - baseFrame), frames.size() - 1);
+        int removeCount = Math.min(Math.max(0, frame - baseFrame), size - 1);
         if (removeCount <= 0) {
             return;
         }
-        frames.subList(0, removeCount).clear();
+        for (int i = 0; i < removeCount; i++) {
+            frames[(head + i) % frames.length] = null;
+        }
+        head = (head + removeCount) % frames.length;
+        size -= removeCount;
         baseFrame += removeCount;
     }
 
     public void resetToFrameZero() {
-        frames.clear();
+        clear();
         baseFrame = 0;
-        frames.add(neutralFrameInput(0));
+        append(neutralFrameInput(0));
     }
 
     public void retainOnlyFrame(int frame) {
@@ -77,9 +82,9 @@ public final class LiveRewindInputSource implements InputSource {
             return;
         }
         Bk2FrameInput retained = read(frame);
-        frames.clear();
+        clear();
         baseFrame = frame;
-        frames.add(retained);
+        append(retained);
     }
 
     public int earliestFrame() {
@@ -88,23 +93,41 @@ public final class LiveRewindInputSource implements InputSource {
 
     @Override
     public int frameCount() {
-        return baseFrame + frames.size();
+        return baseFrame + size;
     }
 
     @Override
     public Bk2FrameInput read(int frame) {
         int index = frame - baseFrame;
-        if (index < 0 || index >= frames.size()) {
+        if (index < 0 || index >= size) {
             throw new IndexOutOfBoundsException("Live rewind frame " + frame
                     + " outside " + baseFrame + ".." + (frameCount() - 1));
         }
-        return frames.get(index);
+        return frames[(head + index) % frames.length];
     }
 
     private void resetToSingleNeutralFrame(int frame) {
-        frames.clear();
+        clear();
         baseFrame = frame;
-        frames.add(neutralFrameInput(frame));
+        append(neutralFrameInput(frame));
+    }
+
+    private void append(Bk2FrameInput frame) {
+        if (size == frames.length) {
+            Bk2FrameInput[] grown = new Bk2FrameInput[frames.length * 2];
+            int tail = Math.min(size, frames.length - head);
+            System.arraycopy(frames, head, grown, 0, tail);
+            System.arraycopy(frames, 0, grown, tail, size - tail);
+            frames = grown;
+            head = 0;
+        }
+        frames[(head + size++) % frames.length] = frame;
+    }
+
+    private void clear() {
+        Arrays.fill(frames, null);
+        head = 0;
+        size = 0;
     }
 
     private static Bk2FrameInput neutralFrameInput(int frame) {

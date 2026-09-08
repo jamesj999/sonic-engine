@@ -421,8 +421,17 @@ public abstract class AbstractSmpsAudioBackend implements AudioBackend {
                 if (pause.paused()) streamedMusicPort.pause(pause.reason());
                 else streamedMusicPort.resume(pause.reason());
             } else if (transition instanceof FadeForeground fade) {
-                if (currentSmps != null) currentSmps.triggerFadeOut(fade.steps(), fade.delay());
-                else if (streamedMusicPort.hasSource()) streamedMusicPort.fadeOut(fade.steps(), fade.delay());
+                synchronized (streamLock) {
+                    // A streamed override can retain the saved SMPS stream;
+                    // currentSmps identifies whether it owns the foreground.
+                    if (currentSmps != null && smpsStream != null) {
+                        // The session owns the retail command's pre-fade
+                        // effects as well as its driver-owned fade counter.
+                        smpsStream.fadeOutMusic(fade.steps(), fade.delay());
+                    } else if (streamedMusicPort.hasSource()) {
+                        streamedMusicPort.fadeOut(fade.steps(), fade.delay());
+                    }
+                }
             } else if (transition instanceof SetStreamedSpeed speed) {
                 streamedMusicPort.setSpeedMultiplier(speed.multiplier());
             } else if (transition instanceof StopForeground) {
@@ -1039,7 +1048,9 @@ public abstract class AbstractSmpsAudioBackend implements AudioBackend {
                 new SmpsPhysicalDevice.Settings(
                         sampleRate,
                         configService.getBoolean(
-                                SonicConfiguration.DAC_INTERPOLATE)),
+                                SonicConfiguration.DAC_INTERPOLATE),
+                        com.openggf.audio.synth.FmCoreSelection.fromConfig(
+                                configService.getString(SonicConfiguration.AUDIO_FM_CORE))),
                 physicalPolicy,
                 diagnosticChipWriteObserver(),
                 new com.openggf.audio.session.SmpsDriverSessionConfiguration(
@@ -1141,11 +1152,33 @@ public abstract class AbstractSmpsAudioBackend implements AudioBackend {
                         chipWriteObserver.onPsgWrite(value));
             }
 
+            @Override
+            public boolean observesPhysicalWrites() {
+                return chipWriteObserver.observesPhysicalWrites();
+            }
 
+            @Override
+            public void onYm2612BusWrite(long cycle, int busPort, int value,
+                    ChipWriteObserver.PhysicalWriteOrigin origin) {
+                AudioDiagnosticObserverException.invoke(() ->
+                        chipWriteObserver.onYm2612BusWrite(
+                                cycle, busPort, value, origin));
+            }
 
+            @Override
+            public void onPsgBusWrite(long tick, int value) {
+                AudioDiagnosticObserverException.invoke(() ->
+                        chipWriteObserver.onPsgBusWrite(tick, value));
+            }
 
-
-
+            @Override
+            public void onPhysicalTimelineBoundary(
+                    ChipWriteObserver.ChipClockDomain domain, long clock,
+                    ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+                AudioDiagnosticObserverException.invoke(() ->
+                        chipWriteObserver.onPhysicalTimelineBoundary(
+                                domain, clock, boundary));
+            }
         };
     }
 

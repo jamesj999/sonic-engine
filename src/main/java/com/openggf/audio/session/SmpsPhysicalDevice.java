@@ -2,16 +2,26 @@ package com.openggf.audio.session;
 
 import com.openggf.audio.smps.DacData;
 import com.openggf.audio.synth.ChipWriteObserver;
+import com.openggf.audio.synth.FmCoreSelection;
 import com.openggf.audio.synth.VirtualSynthesizer;
 
 import java.util.Arrays;
 import java.util.Objects;
 
 public final class SmpsPhysicalDevice {
+    private static final java.util.logging.Logger LOGGER =
+            java.util.logging.Logger.getLogger(SmpsPhysicalDevice.class.getName());
     public record Settings(
             double outputSampleRate,
-            boolean dacInterpolate) {
+            boolean dacInterpolate,
+            FmCoreSelection fmCore) {
+        /** Accurate-core settings; the core is the Nuked-OPN2 port unless configured otherwise. */
+        public Settings(double outputSampleRate, boolean dacInterpolate) {
+            this(outputSampleRate, dacInterpolate, FmCoreSelection.ACCURATE);
+        }
+
         public Settings {
+            Objects.requireNonNull(fmCore, "fmCore");
             if (!Double.isFinite(outputSampleRate)
                     || outputSampleRate <= 0.0) {
                 throw new IllegalArgumentException(
@@ -44,6 +54,9 @@ public final class SmpsPhysicalDevice {
     private final class LiveMutationState implements LiveMutationToken {
         private final Object deviceIdentity;
         private final Snapshot snapshot;
+        private final VirtualSynthesizer.MutationBackup backup;
+        private final long generation;
+        private final boolean outputSilenced;
         private final DacData selectedDac;
         private boolean consumed;
 
@@ -52,7 +65,19 @@ public final class SmpsPhysicalDevice {
                 DacData selectedDac) {
             deviceIdentity = identity;
             this.snapshot = snapshot;
+            backup = null;
+            generation = 0;
+            outputSilenced = snapshot.outputSilenced();
             this.selectedDac = selectedDac;
+        }
+
+        private LiveMutationState(VirtualSynthesizer.MutationBackup backup, long generation) {
+            deviceIdentity = identity;
+            snapshot = null;
+            this.backup = backup;
+            this.generation = generation;
+            selectedDac = synth.selectedDacDataForSnapshot();
+            outputSilenced = SmpsPhysicalDevice.this.outputSilenced;
         }
     }
 
@@ -60,6 +85,8 @@ public final class SmpsPhysicalDevice {
     private final Object identity = new Object();
     private final Settings settings;
     private final VirtualSynthesizer synth;
+    private VirtualSynthesizer.MutationBackup mutationBackup;
+    private long mutationGeneration;
     private int renderInvocationCount;
     private long renderedStereoFrames;
     private boolean outputSilenced = true;
@@ -71,8 +98,11 @@ public final class SmpsPhysicalDevice {
         synth = new VirtualSynthesizer(
                 settings.outputSampleRate(),
                 Objects.requireNonNull(observer, "observer"),
-                VirtualSynthesizer.Initialization.DEFERRED);
+                VirtualSynthesizer.Initialization.DEFERRED,
+                settings.fmCore());
         synth.setDacInterpolate(settings.dacInterpolate());
+        LOGGER.info("FM core: " + settings.fmCore().configValue()
+                + " (" + settings.outputSampleRate() + " Hz)");
     }
 
     double outputSampleRate() {
@@ -83,7 +113,7 @@ public final class SmpsPhysicalDevice {
         requireActive();
         var writes = Objects.requireNonNull(program, "program").writes();
         if (!writes.isEmpty()) {
-            outputSilenced = false;
+            setOutputSilenced(false);
         }
         for (SmpsChipWrite write : writes) {
             if (write instanceof SmpsChipWrite.Ym2612 ym) {
@@ -142,6 +172,14 @@ public final class SmpsPhysicalDevice {
         outputSilenced = resolved.outputSilenced();
     }
 
+    /** Session transactions are exclusive; only their private storage is reusable. */
+    LiveMutationToken captureSessionMutation() {
+        requireActive();
+        if (mutationBackup == null) mutationBackup = synth.createMutationBackup();
+        synth.captureMutation(mutationBackup);
+        return new LiveMutationState(mutationBackup, ++mutationGeneration);
+    }
+
     LiveMutationToken captureLiveMutation() {
         requireActive();
         return new LiveMutationState(
@@ -155,10 +193,20 @@ public final class SmpsPhysicalDevice {
             throw new IllegalStateException(
                     "physical mutation token has already been consumed");
         }
+        if (state.backup != null && state.generation != mutationGeneration) {
+            throw new IllegalStateException("physical mutation token is stale");
+        }
         synth.restoreSelectedDacData(state.selectedDac);
-        synth.restoreSynthSnapshot(state.snapshot.synth());
-        outputSilenced = state.snapshot.outputSilenced();
+        if (state.backup == null) synth.restoreSynthSnapshot(state.snapshot.synth());
+        else synth.restoreMutation(state.backup);
+        outputSilenced = state.outputSilenced;
         state.consumed = true;
+    }
+
+    void reportPhysicalTimelineBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        requireActive();
+        synth.reportPhysicalTimelineBoundary(boundary);
     }
 
     void setFmMute(int channel, boolean mute) {
@@ -173,13 +221,13 @@ public final class SmpsPhysicalDevice {
 
     void writeFm(int port, int register, int value) {
         requireActive();
-        outputSilenced = false;
+        setOutputSilenced(false);
         synth.writeFm(this, port, register, value);
     }
 
     void writePsg(int value) {
         requireActive();
-        outputSilenced = false;
+        setOutputSilenced(false);
         synth.writePsg(this, value);
     }
 
@@ -204,14 +252,14 @@ public final class SmpsPhysicalDevice {
 
     void setInstrument(int channelId, byte[] voice) {
         requireActive();
-        outputSilenced = false;
+        setOutputSilenced(false);
         synth.setInstrument(this, channelId,
                 Objects.requireNonNull(voice, "voice"));
     }
 
     void playDac(int note) {
         requireActive();
-        outputSilenced = false;
+        setOutputSilenced(false);
         synth.playDac(this, note);
     }
 
@@ -270,7 +318,19 @@ public final class SmpsPhysicalDevice {
 
     void silenceOutput() {
         requireActive();
-        outputSilenced = true;
+        setOutputSilenced(true);
+    }
+
+    private void setOutputSilenced(boolean silenced) {
+        if (outputSilenced == silenced) {
+            return;
+        }
+        outputSilenced = silenced;
+        // This device-level PCM gate is not a chip bus write. A raw-chip
+        // recorder must reject a cross-boundary PCM comparison instead of
+        // treating the chip stream as a complete presentation transcript.
+        synth.reportPhysicalTimelineBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.OUTPUT_GATE_CHANGE);
     }
 
     AdmissionState captureAdmissionState(
@@ -285,7 +345,7 @@ public final class SmpsPhysicalDevice {
         requireActive();
         AdmissionState resolved = Objects.requireNonNull(state, "state");
         synth.restoreSfxAdmissionState(resolved.synth());
-        outputSilenced = resolved.outputSilenced();
+        setOutputSilenced(resolved.outputSilenced());
     }
 
     void close() {

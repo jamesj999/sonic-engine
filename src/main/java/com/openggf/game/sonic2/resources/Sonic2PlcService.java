@@ -155,7 +155,7 @@ public final class Sonic2PlcService
                     TWO_PLAYER_RESULTS -> serviceNormalVBlank();
             case ORDINARY_LEVEL, SPECIAL_STAGE, SPECIAL_STAGE_RESULTS, NORMAL_PAUSE ->
                     serviceLevelVBlank();
-            case LAG, CREDITS_TEXT, CREDITS_DEMO, CREDITS_DEMO_FADE, ENDING,
+            case CONTINUE_SCREEN, LAG, CREDITS_TEXT, CREDITS_DEMO, CREDITS_DEMO_FADE, ENDING,
                     POST_CREDITS, SPECIAL_STAGE_PAUSE -> {
                 // The selected S2 VBlank handler does not service PLCs.
             }
@@ -174,7 +174,7 @@ public final class Sonic2PlcService
         return switch (phase) {
             case TITLE_SCREEN, LEVEL_TITLE_CARD, ORDINARY_LEVEL, PALETTE_FADE,
                     SPECIAL_STAGE, SPECIAL_STAGE_RESULTS, TWO_PLAYER_RESULTS -> true;
-            case LAG, LEVEL_SELECT, CREDITS_TEXT, CREDITS_DEMO, CREDITS_DEMO_FADE,
+            case CONTINUE_SCREEN, LAG, LEVEL_SELECT, CREDITS_TEXT, CREDITS_DEMO, CREDITS_DEMO_FADE,
                     ENDING, POST_CREDITS, NORMAL_PAUSE, SPECIAL_STAGE_PAUSE -> false;
         };
     }

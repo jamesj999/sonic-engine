@@ -481,7 +481,6 @@ public class TitleScreenManager implements TitleScreenProvider {
         segaPcmStarted = false;
         introTextTimer = 0;
         state = State.INTRO_TEXT_FADE_IN;
-        playSparkleAtIndex(0);
         LOGGER.info("SEGA screen complete, entering INTRO_TEXT_FADE_IN state");
     }
 
@@ -498,7 +497,7 @@ public class TitleScreenManager implements TitleScreenProvider {
         creditTextCached = false;
         // Force palette re-upload for main title screen
         dataLoader.resetCache();
-        state = State.FADE_IN;
+        beginTitleFadeIn();
         LOGGER.info("Intro text skipped, entering FADE_IN state");
     }
 
@@ -542,9 +541,22 @@ public class TitleScreenManager implements TitleScreenProvider {
             creditTextCached = false;
             // Force palette re-upload for main title screen
             dataLoader.resetCache();
-            state = State.FADE_IN;
+            beginTitleFadeIn();
             LOGGER.info("Intro text complete, entering FADE_IN state");
         }
+    }
+
+    /**
+     * Enters the title-screen fade-in. In the ROM the intro text has already
+     * faded to black by this point and {@code TitleScreen} spawns the intro
+     * object and runs it for one frame before {@code Pal_FadeFromBlack};
+     * {@code Obj0E_Sonic_Init} plays {@code SndID_Sparkle} on that frame, so the
+     * twinkle is heard on the black screen as the title starts to fade in, not
+     * when the "SONIC AND MILES 'TAILS' PROWER IN" text appears.
+     */
+    private void beginTitleFadeIn() {
+        state = State.FADE_IN;
+        playSparkleAtIndex(0);
     }
 
     private void updateFadeIn(InputHandler input) {
@@ -1607,7 +1619,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                     continue;
                 }
                 int word = map[idx];
-                if (word == 0) {
+                if (!planeATileVisible(word)) {
                     continue;
                 }
                 reusableDesc.set(word);
@@ -1615,6 +1627,24 @@ public class TitleScreenManager implements TitleScreenProvider {
                 gm.renderPatternWithId(patternId, reusableDesc, tx * 8 + ox, ty * 8);
             }
         }
+    }
+
+    /**
+     * Whether a Plane A map word draws this frame.
+     *
+     * <p>Word 0 is the blank tile. Palette line 0 words are the "@ 1992 SEGA"
+     * copyright line ({@link TitleScreenCopyrightText}); in the ROM that line
+     * is cleared by {@code clearRAM Normal_palette} during setup and stays black
+     * until {@code Obj0E_Sonic_LoadPalette} copies {@code Pal_133EC} into it at
+     * frame 128, so the text pops in together with Sonic's palette. The other
+     * palette lines fade through {@code ObjC9}, which the emblem gating models.
+     */
+    private boolean planeATileVisible(int word) {
+        if (word == 0) {
+            return false;
+        }
+        int paletteLine = (word >> 13) & 0x03;
+        return paletteLine != 0 || sonicPaletteLoaded;
     }
 
     /**
@@ -1668,7 +1698,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                 continue;
             }
             int word = map[idx];
-            if (word == 0) {
+            if (!planeATileVisible(word)) {
                 continue;
             }
             reusableDesc.set(word);

@@ -437,6 +437,11 @@ public final class AudioPresentationProducer {
         return registry.snapshot();
     }
 
+    public boolean areSfxRequestsBlocked() {
+        assertOwnerBoundary();
+        return registry.areSfxRequestsBlocked();
+    }
+
     /**
      * Read-only identity/state fingerprint used by transactional-release
      * diagnostics. Mutable runtime objects are represented by opaque,

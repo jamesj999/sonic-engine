@@ -328,6 +328,18 @@ public class GameStateManager implements RewindSnapshottable<GameStateSnapshot> 
         return continues;
     }
 
+    /**
+     * Accepted Continue: S1 Cont_GotoLevel, S2 ContinueScreen and S3K loc_5C48A.
+     * Emerald inventory and route progression survive; this is not a new game.
+     */
+    public boolean consumeContinue() {
+        if (continues <= 0) return false;
+        continues--;
+        lives = 3;
+        score = 0;
+        return true;
+    }
+
     public void addContinue() {
         this.continues++;
     }

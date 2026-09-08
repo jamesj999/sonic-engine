@@ -1,101 +1,74 @@
 ---
 name: bizhawk-headless-trace
-description: Use when recording or publishing a Sonic 1, Sonic 2, or Sonic 3&K trace from a BizHawk BK2 movie with the native headless harness, including complete-game runs, special-stage detours, and compressed test fixtures.
+description: Record and publish Sonic 1, 2, or 3&K trace fixtures from a BizHawk BK2 movie using the native headless harness.
 ---
 
-# BizHawk Headless Trace
+# BizHawk headless trace
 
-Use the native GPGX harness as the canonical recording path for BK2-backed
-traces. The harness runs BizHawk 2.11 through Mono without a display and
-publishes an all-or-nothing output directory.
+Use TraceChaser's native GPGX harness for canonical BK2 capture. Initialize the
+optional `tools/tracechaser` submodule if needed, then read its
+`bizhawk/README.md` and the applicable game behavior document under
+`bizhawk-headless/docs/` for current capture options.
 
-## Before capture
+## Capture identity and invocation
 
-- Preserve the current branch and unrelated working-tree changes.
-- Discover the ROM at the repository root; do not assume a filename. Verify
-  the documented game/hash when the capture identity matters:
-  S1 `AFE05EEE`, S2 REV01 `7B905383`, S3&K `63522553`.
-- Use BizHawk 2.11 Linux x64 at `tools/tracechaser/.dependencies/BizHawk-2.11-linux-x64` or set
-  `BIZHAWK_HOME` to an absolute existing directory. Do not substitute 2.11.1.
-- Keep the BK2's truthful filename. The published `source_bk2` metadata must
-  match it exactly.
-- Choose an output path that does not exist; the CLI refuses to overwrite it.
+Discover the actual ROM filename and verify its game/hash using root `AGENTS.md`.
+Use official BizHawk **2.11**, not 2.11.1 or a later version. The default location
+is `tools/tracechaser/.dependencies/BizHawk-2.11-linux-x64`; `BIZHAWK_HOME` may name
+another absolute installation directory. The Linux harness runs through Mono
+without a display and publishes an all-or-nothing output directory.
 
-## Capture
-
-The game is selected from the ROM. Always use `--mode trace`:
+Preserve the BK2 filename: `source_bk2` must name that file exactly. Set absolute
+ROM/movie/output paths; the output must not already exist. Durable capture work
+belongs in an explicit task directory outside the repository.
 
 ```bash
 tools/tracechaser/bizhawk-headless/run.sh \
-  --mode trace \
-  --rom "$S1_ROM_PATH" \
-  --movie "$MOVIE" \
-  --output "$OUTPUT"
+  --mode trace --rom "$ROM_PATH" --movie "$MOVIE" --output "$OUTPUT"
 ```
 
-For one level, use the default S1 profile or the game's documented standard
-profile. For a multi-stage complete movie, select one of these mutually
-exclusive modes:
+Use the game's documented profile. For multi-stage movies, `--trace-profile
+complete_run` records level segments, adding a manifest when a stage detour
+requires it; `--run-id <truthful-id>` names a run and preserves its manifest,
+stage/bonus segments, and transitions. Treat different movies, including ordinary
+and emerald routes, as distinct fixtures. Do not inject gameplay state or a fake
+movie length to force completion.
 
-- `--trace-profile complete_run` records level segments without forcing a run
-  manifest unless the movie contains a stage detour.
-- `--run-id <truthful-run-id>` records a named run, emits `run_manifest.json`,
-  and preserves special-stage/bonus segments and transition metadata.
+For queue/DPLC investigations, enable documented `--load-queue-state` capture
+and verify `load_queue_state_per_frame` and, when applicable,
+`dynamic_art_transfer_state_per_frame` in metadata. A metadata flag cannot
+substitute for the corresponding observations. Diagnostic probes are opt-in
+when the current investigation needs evidence absent from normal capture.
 
-For S1, a complete-emeralds movie is a distinct run from the ordinary complete
-run. Give it its own run ID and destination; never replace the existing run.
-For S2/S3&K, follow the game-specific run-mode options in
-`tools/tracechaser/bizhawk/README.md` and the corresponding behavior document under
-`tools/tracechaser/bizhawk-headless/docs/`.
+## Validate and publish
 
-Do not set diagnostic recorder environment variables unless the task
-specifically requires them. Do not inject movie length or gameplay state to
-make a capture finish. The capture must model the ROM's actual movie.
+`trace_schema: 5` owns metadata, rows, hardware timing, and manifests. Recorder
+provenance is opaque; it does not select replay behavior. When changing a
+recorder, establish correctness from ROM semantics and meaningful native tests
+before using new output as evidence. Generated expectations from the same capture
+do not independently validate the recorder.
 
-## Publish under test resources
+Inspect the complete output inventory, ROM identity, source BK2 names, manifest
+segments/offsets, row/event counts, capabilities, and timing streams. Compare
+against the previous fixture where present and explain material deltas. Record
+hashes and sizes so the reviewed output can be identified. Follow the user's
+publication scope and existing authorization; do not invent an extra approval
+step for already-authorized fixture replacement.
 
-For a named run, place the BK2, manifest, and per-segment files together:
-
-```text
-src/test/resources/traces/<game>/runs/<run-id>/
-  <truthful-source-name>.bk2
-  run_manifest.json
-  <segment>/metadata.json
-  <segment>/physics.csv.gz or physics.csv
-  <segment>/aux_state.jsonl.gz or aux_state.jsonl
-```
-
-Copy `metadata.json`, `run_manifest.json`, the BK2, and every segment directory
-from the harness output. Native publication compresses payloads above its
-threshold by default; if a payload remains plain, gzip it with deterministic
-metadata before committing:
+Publish the BK2, manifest, metadata, sidecars, and every segment together under
+`src/test/resources/traces/<game>/runs/<run-id>/` for named runs. Install capture
+output without hand-tuning observations. Payload compression is the deliberate
+exception: never commit plain `physics*.csv` or `aux_state*.jsonl`. Use the
+native compression output or deterministic gzip:
 
 ```bash
 gzip -9 -n -c physics.csv > physics.csv.gz
 gzip -9 -n -c aux_state.jsonl > aux_state.jsonl.gz
 ```
 
-Never commit an uncompressed `physics*.csv` or `aux_state*.jsonl` under
-`src/test/resources/traces/` unless the path is explicitly grandfathered by
-`src/test/resources/trace-guard/uncompressed-payload-baseline.txt`.
-
-## Verify
-
-Check the output before publication:
-
-```bash
-find "$OUTPUT" -type f | sort
-cat "$OUTPUT/run_manifest.json"
-```
-
-Confirm that every manifest segment exists, every metadata `source_bk2` names
-the committed BK2, the ROM checksum is correct, segment counts and offsets are
-plausible, and no partial output or unexpected segment was published. Compare
-the new run ID and manifest with the existing run inventory; distinct movies
-must remain distinct fixtures.
-
-Run the native harness tests relevant to the capture, then the applicable Java
-trace replay tests. Record any new first-error frame/field and update the trace
-frontier log when a frontier moves. Use the behavior documents and
-`tools/tracechaser/bizhawk/README.md` as the detailed protocol references; this skill is
-the task-discovery and publication checklist, not a second recorder spec.
+Run relevant native capture tests, Java fixture-load/schema/compression/reference
+guards, and applicable replay tests with absolute ROM paths. Report skips and
+first-error frame/field, including pre-existing failures. Use
+`trace-replay-bug-fixing` for parity interpretation and append frontier evidence
+when required by root guidance. Keep original capture evidence until publication
+and verification succeed.

@@ -271,6 +271,7 @@ CF-ANNOTATION TYPE com.openggf.game.CharacterDefinition$RespawnStrategyFactory v
 CF-ANNOTATION TYPE com.openggf.game.CharacterKey visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.game.CheckpointState$RewindState visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.game.CollisionModel visible @com.openggf.game.ModApi
+CF-ANNOTATION TYPE com.openggf.game.ContinueScreenProvider visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.game.CrossGameDonorProvider visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.game.CrossGameFeatureProvider visible @com.openggf.architecture.CompositionRoot
 CF-ANNOTATION TYPE com.openggf.game.CrossGameFeatureProvider visible @com.openggf.game.ModApi
@@ -637,6 +638,8 @@ CF-ANNOTATION TYPE com.openggf.graphics.GLCommand$BlendType visible @com.openggf
 CF-ANNOTATION TYPE com.openggf.graphics.GLCommand$CommandType visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.GLCommandable visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.GraphicsManager visible @com.openggf.game.ModApi
+CF-ANNOTATION TYPE com.openggf.graphics.PaletteFadePresentation visible @com.openggf.game.ModApi
+CF-ANNOTATION TYPE com.openggf.graphics.PaletteFadePresentation$Mode visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.PaletteView visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.ParallaxShaderProgram visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.PatternAtlas visible @com.openggf.game.ModApi
@@ -705,6 +708,7 @@ CF-ANNOTATION TYPE com.openggf.level.Palette$Color visible @com.openggf.game.Mod
 CF-ANNOTATION TYPE com.openggf.level.ParallaxManager visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.level.Pattern visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.level.PatternDesc visible @com.openggf.game.ModApi
+CF-ANNOTATION TYPE com.openggf.level.PrebuiltTilemaps visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.level.SanctuaryReturnContext visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.level.SeamlessLevelTransitionRequest visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.level.SeamlessLevelTransitionRequest$Builder visible @com.openggf.game.ModApi
@@ -1268,7 +1272,7 @@ CONSTRUCTOR com.openggf.game.modzone.ModZoneRuntimeContribution public  <init>(j
 CONSTRUCTOR com.openggf.game.modzone.ModZoneRuntimeProfile public  <init>(com.openggf.game.modzone.ModZoneRuntimeProfile$ScrollPolicy,boolean,boolean,boolean,boolean)
 CONSTRUCTOR com.openggf.game.mutation.LayoutMutationContext public  <init>(com.openggf.game.mutation.LevelMutationSurface,java.util.function.Consumer<com.openggf.game.mutation.MutationEffects>)
 CONSTRUCTOR com.openggf.game.mutation.LayoutMutationContext public  <init>(java.util.function.Consumer<com.openggf.game.mutation.MutationEffects>)
-CONSTRUCTOR com.openggf.game.mutation.MutationEffects public  <init>(java.util.BitSet,boolean,boolean,boolean,boolean,boolean)
+CONSTRUCTOR com.openggf.game.mutation.MutationEffects public  <init>(java.util.BitSet,boolean,boolean,boolean,boolean,boolean,boolean)
 CONSTRUCTOR com.openggf.game.mutation.ZoneLayoutMutationPipeline public  <init>()
 CONSTRUCTOR com.openggf.game.palette.PaletteOwnershipRegistry public  <init>()
 CONSTRUCTOR com.openggf.game.patch.DelegatingGameModule protected  <init>(com.openggf.game.GameModule,java.lang.String)
@@ -1465,6 +1469,7 @@ CONSTRUCTOR com.openggf.graphics.GLCommand public  <init>(com.openggf.graphics.G
 CONSTRUCTOR com.openggf.graphics.GLCommand public  <init>(com.openggf.graphics.GLCommand$CommandType,int,com.openggf.graphics.GLCommand$BlendType,float,float,float,int,int,int,int)
 CONSTRUCTOR com.openggf.graphics.GLCommand public  <init>(com.openggf.graphics.GLCommand$CommandType,int,float,float,float,int,int,int,int)
 CONSTRUCTOR com.openggf.graphics.GraphicsManager public  <init>()
+CONSTRUCTOR com.openggf.graphics.PaletteFadePresentation public  <init>()
 CONSTRUCTOR com.openggf.graphics.ParallaxShaderProgram public  <init>(java.lang.String) THROWS java.io.IOException
 CONSTRUCTOR com.openggf.graphics.PatternAtlas public  <init>(int,int)
 CONSTRUCTOR com.openggf.graphics.PatternAtlas public  <init>(int,int,com.openggf.debug.PerformanceProfiler)
@@ -1522,6 +1527,7 @@ CONSTRUCTOR com.openggf.level.ParallaxManager public  <init>()
 CONSTRUCTOR com.openggf.level.Pattern public  <init>()
 CONSTRUCTOR com.openggf.level.PatternDesc public  <init>()
 CONSTRUCTOR com.openggf.level.PatternDesc public  <init>(int)
+CONSTRUCTOR com.openggf.level.PrebuiltTilemaps public  <init>(byte[],int,int,byte[],int,int)
 CONSTRUCTOR com.openggf.level.SanctuaryReturnContext public  <init>(int,boolean)
 CONSTRUCTOR com.openggf.level.SeamlessTransitionResourceHandoffId public  <init>(long)
 CONSTRUCTOR com.openggf.level.SeamlessTransitionResourceHandoffRegistry public  <init>()
@@ -1982,6 +1988,7 @@ FIELD com.openggf.audio.smps.SmpsSequencerConfig$FadeOutHalt public,static,final
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$FadeOutHalt public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FadeOutHalt DAC_ONLY
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$FmSfxReleaseMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FmSfxReleaseMode LEGACY_FULL_RESTORE
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$FmSfxReleaseMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FmSfxReleaseMode ROM_VOICE_RESTORE
+FIELD com.openggf.audio.smps.SmpsSequencerConfig$FmSfxReleaseMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FmSfxReleaseMode ROM_VOICE_RESTORE_PRESERVE_REST
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$FmSfxTakeoverMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FmSfxTakeoverMode FORCE_RESET
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$FmSfxTakeoverMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FmSfxTakeoverMode REGISTER_SEQUENCE
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$FmVoiceWriteProfile public,static,final com.openggf.audio.smps.SmpsSequencerConfig$FmVoiceWriteProfile S1_68K
@@ -2009,6 +2016,7 @@ FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgEnvRestCmd public,static,fin
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgNoteGoingOrder public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgNoteGoingOrder FREQUENCY_THEN_VOLUME
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgNoteGoingOrder public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgNoteGoingOrder VOLUME_THEN_FREQUENCY
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode LEGACY_FULL_RESTORE
+FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode ROM_NOISE_RESTORE_PRESERVE_REST
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode ROM_REST_RESTORE
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxTakeoverMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxTakeoverMode FORCE_SILENCE
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxTakeoverMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxTakeoverMode REGISTER_SEQUENCE
@@ -2030,6 +2038,7 @@ FIELD com.openggf.audio.smps.SmpsSequencerConfig$VolMode public,static,final com
 FIELD com.openggf.audio.smps.SmpsSequencerConfig$VolMode public,static,final com.openggf.audio.smps.SmpsSequencerConfig$VolMode BIT7
 FIELD com.openggf.camera.Camera public,static,final int VERTICAL_WRAP_RANGE
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration AUDIO_ENABLED
+FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration AUDIO_FM_CORE
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration AUDIO_INTERNAL_RATE_OUTPUT
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CAPTURE_AUDIO_CODEC
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CAPTURE_CODEC
@@ -2373,6 +2382,7 @@ FIELD com.openggf.game.GameId public,static,final com.openggf.game.GameId S2
 FIELD com.openggf.game.GameId public,static,final com.openggf.game.GameId S3K
 FIELD com.openggf.game.GameId public,static,final com.openggf.game.GameId STANDALONE
 FIELD com.openggf.game.GameMode public,static,final com.openggf.game.GameMode BONUS_STAGE
+FIELD com.openggf.game.GameMode public,static,final com.openggf.game.GameMode CONTINUE_SCREEN
 FIELD com.openggf.game.GameMode public,static,final com.openggf.game.GameMode CREDITS_DEMO
 FIELD com.openggf.game.GameMode public,static,final com.openggf.game.GameMode CREDITS_TEXT
 FIELD com.openggf.game.GameMode public,static,final com.openggf.game.GameMode DATA_SELECT
@@ -2602,7 +2612,14 @@ FIELD com.openggf.graphics.GLCommand$CommandType public,static,final com.openggf
 FIELD com.openggf.graphics.GLCommand$CommandType public,static,final com.openggf.graphics.GLCommand$CommandType RECTI
 FIELD com.openggf.graphics.GLCommand$CommandType public,static,final com.openggf.graphics.GLCommand$CommandType USE_PROGRAM
 FIELD com.openggf.graphics.GLCommand$CommandType public,static,final com.openggf.graphics.GLCommand$CommandType VERTEX2I
+FIELD com.openggf.graphics.PaletteFadePresentation public,static,final int COLOR_STEPS
+FIELD com.openggf.graphics.PaletteFadePresentation public,static,final int LINES_1_TO_3
+FIELD com.openggf.graphics.PaletteFadePresentation public,static,final int ROM_FADE_FRAMES
+FIELD com.openggf.graphics.PaletteFadePresentation$Mode public,static,final com.openggf.graphics.PaletteFadePresentation$Mode FROM_BLACK
+FIELD com.openggf.graphics.PaletteFadePresentation$Mode public,static,final com.openggf.graphics.PaletteFadePresentation$Mode NONE
+FIELD com.openggf.graphics.PaletteFadePresentation$Mode public,static,final com.openggf.graphics.PaletteFadePresentation$Mode TO_BLACK
 FIELD com.openggf.graphics.PatternAtlas public,static,final int TILE_SIZE
+FIELD com.openggf.graphics.PatternAtlasRange public,static,final com.openggf.graphics.PatternAtlasRange CONTINUE_SCREEN
 FIELD com.openggf.graphics.PatternAtlasRange public,static,final com.openggf.graphics.PatternAtlasRange HUD
 FIELD com.openggf.graphics.PatternAtlasRange public,static,final com.openggf.graphics.PatternAtlasRange LEVEL_TILES
 FIELD com.openggf.graphics.PatternAtlasRange public,static,final com.openggf.graphics.PatternAtlasRange MENU_AND_DATA_SELECT
@@ -3380,6 +3397,7 @@ METHOD com.openggf.GameLoop public  boolean shouldSuppressUserRecordingSceneRend
 METHOD com.openggf.GameLoop public  com.openggf.EscapeToMasterTitleController getEscapeToMasterTitleController()
 METHOD com.openggf.GameLoop public  com.openggf.audio.presentation.PresentationMode presentationModeForOuterFrame(boolean,boolean)
 METHOD com.openggf.GameLoop public  com.openggf.control.InputHandler getInputHandler()
+METHOD com.openggf.GameLoop public  com.openggf.game.ContinueScreenProvider getContinueScreenProvider()
 METHOD com.openggf.GameLoop public  com.openggf.game.DataSelectProvider getDataSelectProvider()
 METHOD com.openggf.GameLoop public  com.openggf.game.EndingProvider getEndingProvider()
 METHOD com.openggf.GameLoop public  com.openggf.game.GameMode getCurrentGameMode()
@@ -3876,7 +3894,7 @@ METHOD com.openggf.audio.smps.CoordFlagContext public  boolean decrementContSfxL
 METHOD com.openggf.audio.smps.CoordFlagContext public  boolean isContinuousSfxFlagSet()
 METHOD com.openggf.audio.smps.CoordFlagContext public  void clearContinuousSfxFlag()
 METHOD com.openggf.audio.smps.CoordFlagContext public  void clearContinuousSfxId()
-METHOD com.openggf.audio.smps.CoordFlagContext public  void releaseChannelToMusic(com.openggf.audio.smps.SmpsSequencer$TrackType,int)
+METHOD com.openggf.audio.smps.CoordFlagContext public  void releaseChannelToMusic(com.openggf.audio.smps.SmpsSequencer$Track)
 METHOD com.openggf.audio.smps.CoordFlagContext public  void restorePreviousMusic()
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  com.openggf.audio.smps.AbstractSmpsData getSmpsData()
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  com.openggf.audio.smps.SmpsProgramView programView()
@@ -3895,6 +3913,7 @@ METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void setCommData
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void setNormalTempo(int)
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void stopDac()
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void stopNote(com.openggf.audio.smps.SmpsSequencer$Track)
+METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void stopPsgNoteWithDriverSilence(com.openggf.audio.smps.SmpsSequencer$Track)
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void triggerFadeIn()
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void triggerFadeOut(int,int)
 METHOD com.openggf.audio.smps.CoordFlagContext public,abstract  void updateDividingTiming(int)
@@ -3948,7 +3967,9 @@ METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isFmNoteGoingR
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isHalveModSteps()
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isNoteResetAliasesModulationState()
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isPsgFrequencyHighByteNibbleSwap()
+METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isPsgSfxAdmissionSilencesNoise()
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isRelativePointers()
+METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isResetTempoOnMusicLoad()
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isSfxAdmissionKeyOffAndClearsSsgEg()
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isSfxWalkPrecedesRequest()
 METHOD com.openggf.audio.smps.SmpsSequencerConfig public  boolean isStepModulationAtRest()
@@ -4030,11 +4051,13 @@ METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.au
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgEnvRestCmd(com.openggf.audio.smps.SmpsSequencerConfig$PsgEnvRestCmd)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgFrequencyHighByteNibbleSwap(boolean)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgNoteGoingOrder(com.openggf.audio.smps.SmpsSequencerConfig$PsgNoteGoingOrder)
+METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgSfxAdmissionSilencesNoise(boolean)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgSfxReleaseMode(com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxReleaseMode)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgSfxTakeoverMode(com.openggf.audio.smps.SmpsSequencerConfig$PsgSfxTakeoverMode)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgSilenceShape(com.openggf.audio.smps.SmpsSequencerConfig$PsgSilenceShape)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder psgVolumeTail(com.openggf.audio.smps.SmpsSequencerConfig$PsgVolumeTail)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder relativePointers(boolean)
+METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder resetTempoOnMusicLoad(boolean)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder sfxAdmissionKeyOffAndClearsSsgEg(boolean)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder sfxChannelOwnershipMode(com.openggf.audio.smps.SmpsSequencerConfig$SfxChannelOwnershipMode)
 METHOD com.openggf.audio.smps.SmpsSequencerConfig$Builder public  com.openggf.audio.smps.SmpsSequencerConfig$Builder sfxTrackWalkMode(com.openggf.audio.smps.SmpsSequencerConfig$SfxTrackWalkMode)
@@ -4335,7 +4358,6 @@ METHOD com.openggf.data.Game public,abstract  java.util.Map<com.openggf.audio.Ga
 METHOD com.openggf.data.PlayerSpriteArtProvider public  com.openggf.level.Palette loadCharacterPalette(java.lang.String)
 METHOD com.openggf.data.PlayerSpriteArtProvider public,abstract  com.openggf.sprites.art.SpriteArtSet loadPlayerSpriteArt(java.lang.String) THROWS java.io.IOException
 METHOD com.openggf.data.Rom public  boolean isOpen()
-METHOD com.openggf.data.Rom public  boolean open(java.lang.String)
 METHOD com.openggf.data.Rom public  byte readByte(long) THROWS java.io.IOException
 METHOD com.openggf.data.Rom public  byte[] readAllBytes() THROWS java.io.IOException
 METHOD com.openggf.data.Rom public  byte[] readBytes(long,int) THROWS java.io.IOException
@@ -4348,11 +4370,12 @@ METHOD com.openggf.data.Rom public  java.lang.String readDomesticName() THROWS j
 METHOD com.openggf.data.Rom public  java.lang.String readInternationalName() THROWS java.io.IOException
 METHOD com.openggf.data.Rom public  java.nio.channels.FileChannel getFileChannel()
 METHOD com.openggf.data.Rom public  long getSize() THROWS java.io.IOException
-METHOD com.openggf.data.Rom public  void close()
-METHOD com.openggf.data.Rom public  void write16BitAddr(int,long) THROWS java.io.IOException
-METHOD com.openggf.data.Rom public  void write32BitAddr(int,long) THROWS java.io.IOException
 METHOD com.openggf.data.Rom public  void writeChecksum(int) THROWS java.io.IOException
 METHOD com.openggf.data.Rom public  void writeSize(int) THROWS java.io.IOException
+METHOD com.openggf.data.Rom public,synchronized  boolean open(java.lang.String)
+METHOD com.openggf.data.Rom public,synchronized  void close()
+METHOD com.openggf.data.Rom public,synchronized  void write16BitAddr(int,long) THROWS java.io.IOException
+METHOD com.openggf.data.Rom public,synchronized  void write32BitAddr(int,long) THROWS java.io.IOException
 METHOD com.openggf.data.RomByteReader public  byte[] slice(int,int)
 METHOD com.openggf.data.RomByteReader public  int readPointer16(int,int)
 METHOD com.openggf.data.RomByteReader public  int readS16BE(int)
@@ -4908,6 +4931,17 @@ METHOD com.openggf.game.CheckpointState$RewindState public,final  int hashCode()
 METHOD com.openggf.game.CheckpointState$RewindState public,final  java.lang.String toString()
 METHOD com.openggf.game.CollisionModel public,static  com.openggf.game.CollisionModel valueOf(java.lang.String)
 METHOD com.openggf.game.CollisionModel public,static  com.openggf.game.CollisionModel[] values()
+METHOD com.openggf.game.ContinueScreenProvider public  boolean clearsCheckpointOnContinue()
+METHOD com.openggf.game.ContinueScreenProvider public  boolean savesOnContinue()
+METHOD com.openggf.game.ContinueScreenProvider public  void advanceFadeFrame()
+METHOD com.openggf.game.ContinueScreenProvider public  void initialize(int,int)
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  boolean isAccepted()
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  boolean isFinished()
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  int currentVintRunCount()
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  void draw()
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  void initialize(int)
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  void reset()
+METHOD com.openggf.game.ContinueScreenProvider public,abstract  void update(boolean,boolean)
 METHOD com.openggf.game.CrossGameDonorProvider public  boolean hasSeparateTailsTailArt()
 METHOD com.openggf.game.CrossGameDonorProvider public  com.openggf.data.SpindashDustArtProvider createSpindashDustArtProvider(com.openggf.data.RomByteReader)
 METHOD com.openggf.game.CrossGameDonorProvider public  com.openggf.level.Palette loadCharacterPalette(com.openggf.data.RomByteReader,java.lang.String)
@@ -5076,6 +5110,7 @@ METHOD com.openggf.game.GameModule public  boolean isSidekickSuppressedForZone(i
 METHOD com.openggf.game.GameModule public  boolean supportsSidekick()
 METHOD com.openggf.game.GameModule public  com.openggf.data.Game createGame(com.openggf.game.GameDataSource)
 METHOD com.openggf.game.GameModule public  com.openggf.game.BonusStageProvider getBonusStageProvider()
+METHOD com.openggf.game.GameModule public  com.openggf.game.ContinueScreenProvider createContinueScreenProvider()
 METHOD com.openggf.game.GameModule public  com.openggf.game.CrossGameDonorProvider getCrossGameDonorProvider()
 METHOD com.openggf.game.GameModule public  com.openggf.game.DataSelectProvider getDataSelectProvider()
 METHOD com.openggf.game.GameModule public  com.openggf.game.DebugModeProvider getDebugModeProvider()
@@ -5177,6 +5212,7 @@ METHOD com.openggf.game.GameRng$Flavour public  long reseedValue()
 METHOD com.openggf.game.GameRng$Flavour public,static  com.openggf.game.GameRng$Flavour valueOf(java.lang.String)
 METHOD com.openggf.game.GameRng$Flavour public,static  com.openggf.game.GameRng$Flavour[] values()
 METHOD com.openggf.game.GameStateManager public  boolean applyPauseToggle(boolean)
+METHOD com.openggf.game.GameStateManager public  boolean consumeContinue()
 METHOD com.openggf.game.GameStateManager public  boolean hasAllEmeralds()
 METHOD com.openggf.game.GameStateManager public  boolean hasAllSuperEmeralds()
 METHOD com.openggf.game.GameStateManager public  boolean hasEmerald(int)
@@ -5769,6 +5805,8 @@ METHOD com.openggf.game.SpecialStageEntryRequest public,final  boolean equals(ja
 METHOD com.openggf.game.SpecialStageEntryRequest public,final  int hashCode()
 METHOD com.openggf.game.SpecialStageEntryRequest public,final  java.lang.String toString()
 METHOD com.openggf.game.SpecialStageEntryRequest public,static  com.openggf.game.SpecialStageEntryRequest ordinary()
+METHOD com.openggf.game.SpecialStageProvider public  boolean fadesMusicOnEntry()
+METHOD com.openggf.game.SpecialStageProvider public  boolean isEntryFadeToWhiteActive()
 METHOD com.openggf.game.SpecialStageProvider public  boolean isEntryPresentationReady()
 METHOD com.openggf.game.SpecialStageProvider public  boolean isGameplayDebugMode()
 METHOD com.openggf.game.SpecialStageProvider public  boolean isLagCompensationDisplayEnabled()
@@ -6297,6 +6335,7 @@ METHOD com.openggf.game.mutation.MutationEffects public  boolean foregroundRedra
 METHOD com.openggf.game.mutation.MutationEffects public  boolean hasDirtyPatterns()
 METHOD com.openggf.game.mutation.MutationEffects public  boolean isEmpty()
 METHOD com.openggf.game.mutation.MutationEffects public  boolean objectResyncRequired()
+METHOD com.openggf.game.mutation.MutationEffects public  boolean patternLookupRefreshRequired()
 METHOD com.openggf.game.mutation.MutationEffects public  boolean ringResyncRequired()
 METHOD com.openggf.game.mutation.MutationEffects public  com.openggf.game.mutation.MutationEffects withoutRedrawHints()
 METHOD com.openggf.game.mutation.MutationEffects public  java.util.BitSet dirtyPatterns()
@@ -6306,6 +6345,7 @@ METHOD com.openggf.game.mutation.MutationEffects public,final  java.lang.String 
 METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects dirtyRegionProcessing()
 METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects foregroundRedraw()
 METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects objectResync()
+METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects patternLookupRefresh()
 METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects redraw()
 METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects redrawAllTilemaps()
 METHOD com.openggf.game.mutation.MutationEffects public,static  com.openggf.game.mutation.MutationEffects reuploadPattern(int)
@@ -6359,6 +6399,7 @@ METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.audio.Gam
 METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.data.Game createGame(com.openggf.data.Rom)
 METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.data.Game createGame(com.openggf.game.GameDataSource)
 METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.game.BonusStageProvider getBonusStageProvider()
+METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.game.ContinueScreenProvider createContinueScreenProvider()
 METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.game.CrossGameDonorProvider getCrossGameDonorProvider()
 METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.game.DataSelectProvider getDataSelectProvider()
 METHOD com.openggf.game.patch.DelegatingGameModule public  com.openggf.game.DebugModeProvider getDebugModeProvider()
@@ -6742,6 +6783,7 @@ METHOD com.openggf.game.rewind.RewindController public  void resetBufferAtCurren
 METHOD com.openggf.game.rewind.RewindController public  void resetToFrameZero()
 METHOD com.openggf.game.rewind.RewindController public  void seekTo(int)
 METHOD com.openggf.game.rewind.RewindController public  void setDeterminismAuditor(com.openggf.game.rewind.RewindDeterminismAuditor)
+METHOD com.openggf.game.rewind.RewindController public  void setGameplayCheckpointInterval(int)
 METHOD com.openggf.game.rewind.RewindController public  void step()
 METHOD com.openggf.game.rewind.RewindDeferred public,abstract  java.lang.String reason()
 METHOD com.openggf.game.rewind.RewindDeterminismAuditor public  boolean report(int,int,com.openggf.game.rewind.CompositeSnapshot,com.openggf.game.rewind.CompositeSnapshot)
@@ -7406,7 +7448,9 @@ METHOD com.openggf.game.save.RuntimeSaveContext public,static  com.openggf.game.
 METHOD com.openggf.game.save.SaveManager public  com.openggf.game.save.SaveSlotSummary readSlotSummary(java.lang.String,int) THROWS java.io.IOException
 METHOD com.openggf.game.save.SaveManager public  com.openggf.game.save.SaveSlotSummary readSlotSummary(java.lang.String,int,com.openggf.game.dataselect.DataSelectGameProfile) THROWS java.io.IOException
 METHOD com.openggf.game.save.SaveManager public  void deleteSlot(java.lang.String,int)
+METHOD com.openggf.game.save.SaveManager public  void flushPendingWrites()
 METHOD com.openggf.game.save.SaveManager public  void writeSlot(java.lang.String,int,java.util.Map<java.lang.String,java.lang.Object>) THROWS java.io.IOException
+METHOD com.openggf.game.save.SaveManager public  void writeSlotAsync(java.lang.String,int,java.util.Map<java.lang.String,java.lang.Object>) THROWS java.io.IOException
 METHOD com.openggf.game.save.SaveReason public,static  com.openggf.game.save.SaveReason valueOf(java.lang.String)
 METHOD com.openggf.game.save.SaveReason public,static  com.openggf.game.save.SaveReason[] values()
 METHOD com.openggf.game.save.SaveSessionContext public  boolean isClear()
@@ -7418,6 +7462,7 @@ METHOD com.openggf.game.save.SaveSessionContext public  java.lang.String gameCod
 METHOD com.openggf.game.save.SaveSessionContext public  java.util.OptionalInt activeSlot()
 METHOD com.openggf.game.save.SaveSessionContext public  void markClear()
 METHOD com.openggf.game.save.SaveSessionContext public  void requestSave(com.openggf.game.save.SaveReason,com.openggf.game.save.RuntimeSaveContext,com.openggf.game.save.SaveSnapshotProvider,com.openggf.game.save.SaveManager) THROWS java.io.IOException
+METHOD com.openggf.game.save.SaveSessionContext public  void requestSaveAsync(com.openggf.game.save.SaveReason,com.openggf.game.save.RuntimeSaveContext,com.openggf.game.save.SaveSnapshotProvider,com.openggf.game.save.SaveManager) THROWS java.io.IOException
 METHOD com.openggf.game.save.SaveSessionContext public,static  com.openggf.game.save.SaveSessionContext forSlot(java.lang.String,int,com.openggf.game.save.SelectedTeam,int,int)
 METHOD com.openggf.game.save.SaveSessionContext public,static  com.openggf.game.save.SaveSessionContext noSave(java.lang.String,com.openggf.game.save.SelectedTeam,int,int)
 METHOD com.openggf.game.save.SaveSlotState public,static  com.openggf.game.save.SaveSlotState valueOf(java.lang.String)
@@ -7901,6 +7946,7 @@ METHOD com.openggf.graphics.GraphicsManager public  boolean isWaterEnabled()
 METHOD com.openggf.graphics.GraphicsManager public  boolean uncachePattern(int)
 METHOD com.openggf.graphics.GraphicsManager public  com.openggf.Engine getEngine()
 METHOD com.openggf.graphics.GraphicsManager public  com.openggf.graphics.FadeManager getFadeManager()
+METHOD com.openggf.graphics.GraphicsManager public  com.openggf.graphics.PaletteFadePresentation getPaletteFadePresentation()
 METHOD com.openggf.graphics.GraphicsManager public  com.openggf.graphics.PatternAtlas getPatternAtlas()
 METHOD com.openggf.graphics.GraphicsManager public  com.openggf.graphics.PatternAtlas$Entry getPatternAtlasEntry(int)
 METHOD com.openggf.graphics.GraphicsManager public  com.openggf.graphics.ShaderProgram getDebugShaderProgram()
@@ -7951,6 +7997,7 @@ METHOD com.openggf.graphics.GraphicsManager public  void bindRuntimeManagedRefer
 METHOD com.openggf.graphics.GraphicsManager public  void cachePaletteTexture(com.openggf.level.Palette,int)
 METHOD com.openggf.graphics.GraphicsManager public  void cachePatternTexture(com.openggf.level.Pattern,int)
 METHOD com.openggf.graphics.GraphicsManager public  void cleanup()
+METHOD com.openggf.graphics.GraphicsManager public  void clearPaletteFadePresentation()
 METHOD com.openggf.graphics.GraphicsManager public  void clearPaletteTextures()
 METHOD com.openggf.graphics.GraphicsManager public  void clearRuntimeManagedReferences()
 METHOD com.openggf.graphics.GraphicsManager public  void disableScissor()
@@ -7994,6 +8041,7 @@ METHOD com.openggf.graphics.GraphicsManager public  void setEngine(com.openggf.E
 METHOD com.openggf.graphics.GraphicsManager public  void setGlInitialized(boolean)
 METHOD com.openggf.graphics.GraphicsManager public  void setHeadlessMode(boolean)
 METHOD com.openggf.graphics.GraphicsManager public  void setInstancedBatchingEnabled(boolean)
+METHOD com.openggf.graphics.GraphicsManager public  void setPaletteFadePresentation(com.openggf.graphics.PaletteFadePresentation$Mode,int,int)
 METHOD com.openggf.graphics.GraphicsManager public  void setPerformanceProfiler(com.openggf.debug.PerformanceProfiler)
 METHOD com.openggf.graphics.GraphicsManager public  void setProjectionMatrixBuffer(float[])
 METHOD com.openggf.graphics.GraphicsManager public  void setProjectionWidth(int)
@@ -8011,6 +8059,17 @@ METHOD com.openggf.graphics.GraphicsManager public  void updatePatternTexture(co
 METHOD com.openggf.graphics.GraphicsManager public <T> java.util.concurrent.CompletableFuture<T> submitRenderThreadTask(java.util.concurrent.Callable<T>)
 METHOD com.openggf.graphics.GraphicsManager public,static,final,synchronized  com.openggf.graphics.GraphicsManager getInstance()
 METHOD com.openggf.graphics.GraphicsManager public,static,synchronized  void destroyForReinit()
+METHOD com.openggf.graphics.PaletteFadePresentation public  boolean affects(int)
+METHOD com.openggf.graphics.PaletteFadePresentation public  boolean clear()
+METHOD com.openggf.graphics.PaletteFadePresentation public  boolean isActive()
+METHOD com.openggf.graphics.PaletteFadePresentation public  boolean set(com.openggf.graphics.PaletteFadePresentation$Mode,int,int)
+METHOD com.openggf.graphics.PaletteFadePresentation public  com.openggf.graphics.PaletteFadePresentation$Mode mode()
+METHOD com.openggf.graphics.PaletteFadePresentation public  int fadeRgb(int,int,int)
+METHOD com.openggf.graphics.PaletteFadePresentation public  int lineMask()
+METHOD com.openggf.graphics.PaletteFadePresentation public  int steps()
+METHOD com.openggf.graphics.PaletteFadePresentation public,static  int fadeRgb(int,int,int,com.openggf.graphics.PaletteFadePresentation$Mode,int)
+METHOD com.openggf.graphics.PaletteFadePresentation$Mode public,static  com.openggf.graphics.PaletteFadePresentation$Mode valueOf(java.lang.String)
+METHOD com.openggf.graphics.PaletteFadePresentation$Mode public,static  com.openggf.graphics.PaletteFadePresentation$Mode[] values()
 METHOD com.openggf.graphics.PaletteView public,abstract  byte blue(int)
 METHOD com.openggf.graphics.PaletteView public,abstract  byte green(int)
 METHOD com.openggf.graphics.PaletteView public,abstract  byte red(int)
@@ -8532,6 +8591,7 @@ METHOD com.openggf.level.CollisionMode public,static  com.openggf.level.Collisio
 METHOD com.openggf.level.CollisionMode public,static  com.openggf.level.CollisionMode[] values()
 METHOD com.openggf.level.Level public  boolean hasBackgroundCollisionRowAt(int)
 METHOD com.openggf.level.Level public  com.openggf.level.Palette$Color getBackdropColor()
+METHOD com.openggf.level.Level public  int getBackdropPaletteLine()
 METHOD com.openggf.level.Level public  int getBlockPixelSize()
 METHOD com.openggf.level.Level public  int getChunksPerBlockSide()
 METHOD com.openggf.level.Level public  int getLayerHeightBlocks(int)
@@ -8573,6 +8633,8 @@ METHOD com.openggf.level.LevelGeometry public  int fgWidthPx()
 METHOD com.openggf.level.LevelGeometry public,final  boolean equals(java.lang.Object)
 METHOD com.openggf.level.LevelGeometry public,final  int hashCode()
 METHOD com.openggf.level.LevelGeometry public,final  java.lang.String toString()
+METHOD com.openggf.level.LevelGeometry public,static  com.openggf.level.LevelGeometry forLevel(com.openggf.level.Level)
+METHOD com.openggf.level.LevelGeometry public,static  int contiguousBgDataWidthPx(com.openggf.level.Level,int)
 METHOD com.openggf.level.LevelManager protected  void executeInitialProcessSprites()
 METHOD com.openggf.level.LevelManager public  boolean advanceCameraDrivenScrollForFrame()
 METHOD com.openggf.level.LevelManager public  boolean advanceWaterLevelBeforePlayerPhysics()
@@ -8612,6 +8674,7 @@ METHOD com.openggf.level.LevelManager public  boolean isTitleCardRequested()
 METHOD com.openggf.level.LevelManager public  boolean isTransitionRingInitializationPendingForRewind()
 METHOD com.openggf.level.LevelManager public  boolean isVerticalWrapEnabled()
 METHOD com.openggf.level.LevelManager public  boolean objectsExecuteAfterPlayerPhysics()
+METHOD com.openggf.level.LevelManager public  boolean prepareActTransitionLevelLoad(int,int,java.lang.String)
 METHOD com.openggf.level.LevelManager public  boolean requestSanctuaryExit()
 METHOD com.openggf.level.LevelManager public  boolean setForegroundTileDescriptorAtWorld(int,int,int)
 METHOD com.openggf.level.LevelManager public  boolean skipPendingInitialTitleCardPresentation()
@@ -8676,6 +8739,7 @@ METHOD com.openggf.level.LevelManager public  int getRomActId()
 METHOD com.openggf.level.LevelManager public  int getRomZoneId()
 METHOD com.openggf.level.LevelManager public  int getTitleCardAct()
 METHOD com.openggf.level.LevelManager public  int getTitleCardZone()
+METHOD com.openggf.level.LevelManager public  int preparedLevelInstallCount()
 METHOD com.openggf.level.LevelManager public  int refreshObjectArtPatterns()
 METHOD com.openggf.level.LevelManager public  int reserveSidekickPatternBank(int)
 METHOD com.openggf.level.LevelManager public  int[] findPatternOffset(int,int,int,int,int)
@@ -8708,6 +8772,7 @@ METHOD com.openggf.level.LevelManager public  void completeFreshLevelTransitionC
 METHOD com.openggf.level.LevelManager public  void completeInitialTitleCardPresentation()
 METHOD com.openggf.level.LevelManager public  void completeSanctuaryOriginRestore()
 METHOD com.openggf.level.LevelManager public  void configureAudio() THROWS java.io.IOException
+METHOD com.openggf.level.LevelManager public  void discardPreparedLevelLoad()
 METHOD com.openggf.level.LevelManager public  void draw()
 METHOD com.openggf.level.LevelManager public  void drawAllPatterns()
 METHOD com.openggf.level.LevelManager public  void drawWithRenderOptions(com.openggf.sprites.managers.SpriteManager,com.openggf.level.LevelManager$LevelRenderOptions)
@@ -8736,6 +8801,7 @@ METHOD com.openggf.level.LevelManager public  void initWater() THROWS java.io.IO
 METHOD com.openggf.level.LevelManager public  void initZoneFeatures() THROWS java.io.IOException
 METHOD com.openggf.level.LevelManager public  void invalidateAllTilemaps()
 METHOD com.openggf.level.LevelManager public  void invalidateForegroundTilemap()
+METHOD com.openggf.level.LevelManager public  void invalidatePatternLookup()
 METHOD com.openggf.level.LevelManager public  void loadCurrentLevel()
 METHOD com.openggf.level.LevelManager public  void loadCurrentLevel(com.openggf.game.LevelLoadMode,boolean)
 METHOD com.openggf.level.LevelManager public  void loadLevel(int) THROWS java.io.IOException
@@ -8756,6 +8822,7 @@ METHOD com.openggf.level.LevelManager public  void playCurrentLevelMusic()
 METHOD com.openggf.level.LevelManager public  void playLevelMusic(int) THROWS java.io.IOException
 METHOD com.openggf.level.LevelManager public  void postCameraObjectPlacementSync()
 METHOD com.openggf.level.LevelManager public  void prebuildTransitionTilemaps()
+METHOD com.openggf.level.LevelManager public  void prepareEndingDemoScene()
 METHOD com.openggf.level.LevelManager public  void prepareTouchResponseSnapshots()
 METHOD com.openggf.level.LevelManager public  void processDirtyRegions()
 METHOD com.openggf.level.LevelManager public  void publishFreshLevelTransitionInitialBoundary()
@@ -8881,6 +8948,7 @@ METHOD com.openggf.level.LevelTilemapManager public  byte[] getBackgroundTilemap
 METHOD com.openggf.level.LevelTilemapManager public  byte[] getForegroundTilemapData()
 METHOD com.openggf.level.LevelTilemapManager public  byte[] getPatternLookupData()
 METHOD com.openggf.level.LevelTilemapManager public  com.openggf.game.rewind.snapshot.LevelTilemapSnapshot capturePersistentBgNametableSnapshot()
+METHOD com.openggf.level.LevelTilemapManager public  com.openggf.level.PrebuiltTilemaps takePrebuiltTilemaps()
 METHOD com.openggf.level.LevelTilemapManager public  int getBackgroundTilemapHeightTiles()
 METHOD com.openggf.level.LevelTilemapManager public  int getBackgroundTilemapWidthTiles()
 METHOD com.openggf.level.LevelTilemapManager public  int getBackgroundVdpWrapHeightTiles()
@@ -8891,6 +8959,7 @@ METHOD com.openggf.level.LevelTilemapManager public  int getForegroundTileDescri
 METHOD com.openggf.level.LevelTilemapManager public  int getForegroundTilemapHeightTiles()
 METHOD com.openggf.level.LevelTilemapManager public  int getForegroundTilemapWidthTiles()
 METHOD com.openggf.level.LevelTilemapManager public  int getPatternLookupSize()
+METHOD com.openggf.level.LevelTilemapManager public  void adoptPrebuiltTilemaps(com.openggf.level.PrebuiltTilemaps)
 METHOD com.openggf.level.LevelTilemapManager public  void ensureBackgroundTilemapData(com.openggf.level.LevelTilemapManager$BlockLookup,com.openggf.game.ZoneFeatureProvider,int,com.openggf.level.ParallaxManager,boolean)
 METHOD com.openggf.level.LevelTilemapManager public  void ensureBackgroundTilemapData(com.openggf.level.LevelTilemapManager$BlockLookup,com.openggf.game.ZoneFeatureProvider,int,com.openggf.level.ParallaxManager,com.openggf.level.scroll.BgTilemapUpdateMode,int,int,boolean)
 METHOD com.openggf.level.LevelTilemapManager public  void ensureForegroundTilemapData(com.openggf.level.LevelTilemapManager$BlockLookup,com.openggf.game.ZoneFeatureProvider,int,com.openggf.level.ParallaxManager,boolean)
@@ -8898,6 +8967,7 @@ METHOD com.openggf.level.LevelTilemapManager public  void ensurePatternLookupDat
 METHOD com.openggf.level.LevelTilemapManager public  void finishPersistentRestoreUpload()
 METHOD com.openggf.level.LevelTilemapManager public  void invalidateAllTilemaps()
 METHOD com.openggf.level.LevelTilemapManager public  void invalidateForegroundTilemap()
+METHOD com.openggf.level.LevelTilemapManager public  void invalidatePatternLookup()
 METHOD com.openggf.level.LevelTilemapManager public  void prebuildTransitionTilemaps(com.openggf.level.LevelTilemapManager$BlockLookup,com.openggf.game.ZoneFeatureProvider,int,com.openggf.level.ParallaxManager,boolean)
 METHOD com.openggf.level.LevelTilemapManager public  void rebuildDirtyRegions(java.util.BitSet,java.util.BitSet,com.openggf.level.Level)
 METHOD com.openggf.level.LevelTilemapManager public  void requestBgWindowBaseX(int)
@@ -9100,6 +9170,7 @@ METHOD com.openggf.level.Palette$Color public  float bFloat()
 METHOD com.openggf.level.Palette$Color public  float gFloat()
 METHOD com.openggf.level.Palette$Color public  float rFloat()
 METHOD com.openggf.level.Palette$Color public  void fromSegaFormat(byte[],int)
+METHOD com.openggf.level.Palette$Color public  void fromSegaFormat(int)
 METHOD com.openggf.level.ParallaxManager public  boolean advanceCameraDrivenScroll(int,int,com.openggf.camera.Camera,int)
 METHOD com.openggf.level.ParallaxManager public  com.openggf.game.rewind.snapshot.ParallaxSnapshot capture()
 METHOD com.openggf.level.ParallaxManager public  com.openggf.level.scroll.BgTilemapUpdateMode getBgTilemapUpdateMode()
@@ -9157,6 +9228,15 @@ METHOD com.openggf.level.PatternDesc public  void setPatternIndex(int)
 METHOD com.openggf.level.PatternDesc public  void setPriority(boolean)
 METHOD com.openggf.level.PatternDesc public  void setVFlip(boolean)
 METHOD com.openggf.level.PatternDesc public,static  int getIndexSize()
+METHOD com.openggf.level.PrebuiltTilemaps public  byte[] background()
+METHOD com.openggf.level.PrebuiltTilemaps public  byte[] foreground()
+METHOD com.openggf.level.PrebuiltTilemaps public  int backgroundHeightTiles()
+METHOD com.openggf.level.PrebuiltTilemaps public  int backgroundWidthTiles()
+METHOD com.openggf.level.PrebuiltTilemaps public  int foregroundHeightTiles()
+METHOD com.openggf.level.PrebuiltTilemaps public  int foregroundWidthTiles()
+METHOD com.openggf.level.PrebuiltTilemaps public,final  boolean equals(java.lang.Object)
+METHOD com.openggf.level.PrebuiltTilemaps public,final  int hashCode()
+METHOD com.openggf.level.PrebuiltTilemaps public,final  java.lang.String toString()
 METHOD com.openggf.level.SanctuaryReturnContext public  boolean succeeded()
 METHOD com.openggf.level.SanctuaryReturnContext public  int stageIndex()
 METHOD com.openggf.level.SanctuaryReturnContext public,final  boolean equals(java.lang.Object)
@@ -10689,6 +10769,7 @@ METHOD com.openggf.level.render.PatternSpriteRenderer public  void drawFramePiec
 METHOD com.openggf.level.render.PatternSpriteRenderer public  void drawPatternIndex(int,int,int,int)
 METHOD com.openggf.level.render.PatternSpriteRenderer public  void drawPieces(java.util.List<? extends com.openggf.level.render.SpriteFramePiece>,int,int,boolean,boolean)
 METHOD com.openggf.level.render.PatternSpriteRenderer public  void ensurePatternsCached(com.openggf.graphics.GraphicsManager,int)
+METHOD com.openggf.level.render.PatternSpriteRenderer public  void rebindEquivalentSheet(com.openggf.level.render.SpriteSheet<? extends com.openggf.level.render.SpriteFrame<? extends com.openggf.level.render.SpriteFramePiece>>)
 METHOD com.openggf.level.render.PatternSpriteRenderer public  void updatePatternRange(com.openggf.graphics.GraphicsManager,int,int)
 METHOD com.openggf.level.render.PatternSpriteRenderer$FrameBounds public  int height()
 METHOD com.openggf.level.render.PatternSpriteRenderer$FrameBounds public  int maxX()
@@ -11977,7 +12058,6 @@ METHOD com.openggf.sprites.managers.SpriteManager public  void drawUnifiedBucket
 METHOD com.openggf.sprites.managers.SpriteManager public  void drawUnifiedBucketWithPriority(int,com.openggf.graphics.GraphicsManager)
 METHOD com.openggf.sprites.managers.SpriteManager public  void invalidateRenderBuckets()
 METHOD com.openggf.sprites.managers.SpriteManager public  void prepareRenderBucketsForPass()
-METHOD com.openggf.sprites.managers.SpriteManager public  void primePlayableVisualState()
 METHOD com.openggf.sprites.managers.SpriteManager public  void processInitialDustFixedSlot(int)
 METHOD com.openggf.sprites.managers.SpriteManager public  void processInitialPlayableSlots(com.openggf.sprites.managers.ProcessSpritesEpoch,com.openggf.sprites.managers.InitialPlayableInput)
 METHOD com.openggf.sprites.managers.SpriteManager public  void processInitialTailsFixedSlot()
@@ -14012,6 +14092,7 @@ NESTED com.openggf.graphics.FadeManager com.openggf.graphics.FadeManager$FadeSta
 NESTED com.openggf.graphics.FadeManager com.openggf.graphics.FadeManager$FadeType
 NESTED com.openggf.graphics.GLCommand com.openggf.graphics.GLCommand$BlendType
 NESTED com.openggf.graphics.GLCommand com.openggf.graphics.GLCommand$CommandType
+NESTED com.openggf.graphics.PaletteFadePresentation com.openggf.graphics.PaletteFadePresentation$Mode
 NESTED com.openggf.graphics.PatternAtlas com.openggf.graphics.PatternAtlas$Entry
 NESTED com.openggf.graphics.PatternAtlas com.openggf.graphics.PatternAtlas$PatternRange
 NESTED com.openggf.graphics.TilemapGpuRenderer com.openggf.graphics.TilemapGpuRenderer$BackgroundRenderState
@@ -14737,6 +14818,7 @@ RECORD-COMPONENT com.openggf.game.mutation.MutationEffects dirtyPatterns java.ut
 RECORD-COMPONENT com.openggf.game.mutation.MutationEffects dirtyRegionProcessingRequired boolean
 RECORD-COMPONENT com.openggf.game.mutation.MutationEffects foregroundRedrawRequired boolean
 RECORD-COMPONENT com.openggf.game.mutation.MutationEffects objectResyncRequired boolean
+RECORD-COMPONENT com.openggf.game.mutation.MutationEffects patternLookupRefreshRequired boolean
 RECORD-COMPONENT com.openggf.game.mutation.MutationEffects ringResyncRequired boolean
 RECORD-COMPONENT com.openggf.game.patch.GameplayLaunchRequest gameId java.lang.String
 RECORD-COMPONENT com.openggf.game.patch.GameplayLaunchRequest mainCharacter java.lang.String
@@ -15385,6 +15467,12 @@ RECORD-COMPONENT com.openggf.level.LevelManager$LevelRenderOptions includeWaterS
 RECORD-COMPONENT com.openggf.level.MutableLevel$ObjectBackedRingState mapping java.util.Map<com.openggf.level.objects.ObjectSpawn,java.util.List<com.openggf.level.rings.RingSpawn>>
 RECORD-COMPONENT com.openggf.level.MutableLevel$ObjectBackedRingState objects java.util.List<com.openggf.level.objects.ObjectSpawn>
 RECORD-COMPONENT com.openggf.level.MutableLevel$ObjectBackedRingState rings java.util.List<com.openggf.level.rings.RingSpawn>
+RECORD-COMPONENT com.openggf.level.PrebuiltTilemaps background byte[]
+RECORD-COMPONENT com.openggf.level.PrebuiltTilemaps backgroundHeightTiles int
+RECORD-COMPONENT com.openggf.level.PrebuiltTilemaps backgroundWidthTiles int
+RECORD-COMPONENT com.openggf.level.PrebuiltTilemaps foreground byte[]
+RECORD-COMPONENT com.openggf.level.PrebuiltTilemaps foregroundHeightTiles int
+RECORD-COMPONENT com.openggf.level.PrebuiltTilemaps foregroundWidthTiles int
 RECORD-COMPONENT com.openggf.level.SanctuaryReturnContext stageIndex int
 RECORD-COMPONENT com.openggf.level.SanctuaryReturnContext succeeded boolean
 RECORD-COMPONENT com.openggf.level.SeamlessTransitionResourceHandoffId value long
@@ -17045,6 +17133,7 @@ TYPE class public,final com.openggf.game.timeattack.TimeAttackRuntime SUPER java
 TYPE class public,final com.openggf.game.timeattack.mp.MultiplayerRaceCoordinator SUPER java.lang.Object
 TYPE class public,final com.openggf.game.timeattack.mp.ServerBrowserScreen SUPER java.lang.Object
 TYPE class public,final com.openggf.game.zone.ZoneRuntimeRegistry SUPER java.lang.Object
+TYPE class public,final com.openggf.graphics.PaletteFadePresentation SUPER java.lang.Object
 TYPE class public,final com.openggf.io.ModInputLimits SUPER java.lang.Object
 TYPE class public,final com.openggf.level.ChunkDesc SUPER java.lang.Object
 TYPE class public,final com.openggf.level.PatternDesc SUPER java.lang.Object
@@ -17241,6 +17330,7 @@ TYPE enum public,static,final com.openggf.graphics.FadeManager$FadeState SUPER j
 TYPE enum public,static,final com.openggf.graphics.FadeManager$FadeType SUPER java.lang.Enum<com.openggf.graphics.FadeManager$FadeType>
 TYPE enum public,static,final com.openggf.graphics.GLCommand$BlendType SUPER java.lang.Enum<com.openggf.graphics.GLCommand$BlendType>
 TYPE enum public,static,final com.openggf.graphics.GLCommand$CommandType SUPER java.lang.Enum<com.openggf.graphics.GLCommand$CommandType>
+TYPE enum public,static,final com.openggf.graphics.PaletteFadePresentation$Mode SUPER java.lang.Enum<com.openggf.graphics.PaletteFadePresentation$Mode>
 TYPE enum public,static,final com.openggf.graphics.TilemapGpuRenderer$Layer SUPER java.lang.Enum<com.openggf.graphics.TilemapGpuRenderer$Layer>
 TYPE enum public,static,final com.openggf.level.SeamlessLevelTransitionRequest$ObjectOffsetPolicy SUPER java.lang.Enum<com.openggf.level.SeamlessLevelTransitionRequest$ObjectOffsetPolicy>
 TYPE enum public,static,final com.openggf.level.SeamlessLevelTransitionRequest$ObjectSurvivalPolicy SUPER java.lang.Enum<com.openggf.level.SeamlessLevelTransitionRequest$ObjectSurvivalPolicy>
@@ -17275,6 +17365,7 @@ TYPE interface public,abstract com.openggf.debug.SectionProfiler SUPER <none>
 TYPE interface public,abstract com.openggf.editor.EditorCommand SUPER <none>
 TYPE interface public,abstract com.openggf.game.AnimationId SUPER <none>
 TYPE interface public,abstract com.openggf.game.BonusStageProvider SUPER <none>
+TYPE interface public,abstract com.openggf.game.ContinueScreenProvider SUPER <none>
 TYPE interface public,abstract com.openggf.game.CrossGameDonorProvider SUPER <none>
 TYPE interface public,abstract com.openggf.game.DataSelectProvider SUPER <none>
 TYPE interface public,abstract com.openggf.game.DebugModeProvider SUPER <none>
@@ -17534,6 +17625,7 @@ TYPE record public,final com.openggf.graphics.shaderlib.DisplayShaderPass SUPER 
 TYPE record public,final com.openggf.graphics.shaderlib.DisplayShaderPreset SUPER java.lang.Record
 TYPE record public,final com.openggf.level.BigRingReturnState SUPER java.lang.Record
 TYPE record public,final com.openggf.level.LevelGeometry SUPER java.lang.Record
+TYPE record public,final com.openggf.level.PrebuiltTilemaps SUPER java.lang.Record
 TYPE record public,final com.openggf.level.SanctuaryReturnContext SUPER java.lang.Record
 TYPE record public,final com.openggf.level.SeamlessTransitionResourceHandoffId SUPER java.lang.Record
 TYPE record public,final com.openggf.level.TransitionSstOccupant SUPER java.lang.Record
@@ -18023,6 +18115,7 @@ TYPE-ANNOTATION com.openggf.game.CharacterDefinition$RespawnStrategyFactory @jav
 TYPE-ANNOTATION com.openggf.game.CharacterKey @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.game.CheckpointState$RewindState @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.game.CollisionModel @com.openggf.game.ModApi
+TYPE-ANNOTATION com.openggf.game.ContinueScreenProvider @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.game.CrossGameDonorProvider @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.game.CrossGameFeatureProvider @com.openggf.architecture.CompositionRoot
 TYPE-ANNOTATION com.openggf.game.CrossGameFeatureProvider @com.openggf.game.ModApi
@@ -18389,6 +18482,8 @@ TYPE-ANNOTATION com.openggf.graphics.GLCommand$BlendType @com.openggf.game.ModAp
 TYPE-ANNOTATION com.openggf.graphics.GLCommand$CommandType @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.GLCommandable @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.GraphicsManager @com.openggf.game.ModApi
+TYPE-ANNOTATION com.openggf.graphics.PaletteFadePresentation @com.openggf.game.ModApi
+TYPE-ANNOTATION com.openggf.graphics.PaletteFadePresentation$Mode @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.PaletteView @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.ParallaxShaderProgram @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.PatternAtlas @com.openggf.game.ModApi
@@ -18457,6 +18552,7 @@ TYPE-ANNOTATION com.openggf.level.Palette$Color @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.level.ParallaxManager @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.level.Pattern @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.level.PatternDesc @com.openggf.game.ModApi
+TYPE-ANNOTATION com.openggf.level.PrebuiltTilemaps @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.level.SanctuaryReturnContext @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.level.SeamlessLevelTransitionRequest @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.level.SeamlessLevelTransitionRequest$Builder @com.openggf.game.ModApi

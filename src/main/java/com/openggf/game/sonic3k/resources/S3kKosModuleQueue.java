@@ -10,6 +10,7 @@ import com.openggf.game.timing.HardwareWorkPreparationSnapshot;
 import com.openggf.game.timing.HardwareWorkSubmission;
 import com.openggf.game.resources.QueueDiagnosticSnapshot;
 import com.openggf.game.resources.QueueServiceObservation;
+import com.openggf.data.compression.KosinskiInspectionCache;
 import com.openggf.data.compression.KosinskiReader;
 
 import java.io.ByteArrayOutputStream;
@@ -204,18 +205,11 @@ public final class S3kKosModuleQueue {
             int destinationPatternAddress,
             boolean exportableAcrossSegment) throws IOException {
         Objects.requireNonNull(rom, "rom");
-        long remaining = rom.getSize() - source;
-        if (source < 0 || remaining < 2) {
-            throw new IOException("KosM source is outside ROM: 0x"
-                    + Integer.toHexString(source));
-        }
-        int inspectionLength = (int) Math.min(remaining, INSPECTION_LIMIT);
-        byte[] inspection = rom.readBytes(source, inspectionLength);
+        // The archive lengths are a pure function of the ROM; a warmed cache
+        // spares the submitting frame the full inspection decode.
         KosinskiReader.ModuledArchiveInfo info =
-                KosinskiReader.inspectModuled(inspection, 0);
-        byte[] archive = info.compressedLength() == inspection.length
-                ? inspection
-                : rom.readBytes(source, info.compressedLength());
+                KosinskiInspectionCache.inspectModuled(rom, source);
+        byte[] archive = rom.readBytes(source, info.compressedLength());
         S3kKosModuleDescriptor descriptor = new S3kKosModuleDescriptor(
                 source,
                 info.compressedLength(),

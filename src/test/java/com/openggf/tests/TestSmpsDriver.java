@@ -6,9 +6,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.openggf.audio.driver.SmpsDriver;
+import com.openggf.audio.driver.SmpsDriverSessionAccess;
 import com.openggf.audio.driver.SmpsDriverTestAccess;
+import com.openggf.audio.rewind.SmpsSourceDescriptor;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsData;
+import com.openggf.game.sonic3k.audio.Sonic3kSmpsSequencerConfig;
+import com.openggf.game.sonic3k.audio.smps.Sonic3kSmpsData;
 import com.openggf.audio.smps.SmpsSequencer;
 import com.openggf.audio.smps.DacData;
 import com.openggf.game.session.SessionManager;
@@ -21,6 +25,36 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class TestSmpsDriver {
+
+    private record PsgWrite(Object source, int value) { }
+
+    private static final class RecordingAccess implements SmpsDriverSessionAccess {
+        final List<PsgWrite> psgWrites = new ArrayList<>();
+        SmpsDriver inspectDriver;
+        boolean claimsClearAtWrite;
+
+        @Override public void writePsg(Object source, int value) {
+            psgWrites.add(new PsgWrite(source, value & 0xFF));
+            if (inspectDriver != null) {
+                claimsClearAtWrite = psgLock(inspectDriver, 2) == null
+                        && psgLock(inspectDriver, 3) == null
+                        && psgClaim(inspectDriver, 2) == null;
+            }
+        }
+        @Override public void writeFm(Object source, int port, int reg, int val) { }
+        @Override public void setInstrument(Object source, int channel, byte[] voice) { }
+        @Override public void playDac(Object source, int note) { }
+        @Override public void stopDac(Object source) { }
+        @Override public void setDacData(DacData data) { }
+        @Override public void setFmMute(int channel, boolean mute) { }
+        @Override public void setPsgMute(int channel, boolean mute) { }
+        @Override public void setDacInterpolate(boolean interpolate) { }
+        @Override public void silenceAll() { }
+        @Override public void selectDac(SmpsSourceDescriptor source, DacData data) { }
+        @Override public void forceSilenceFmChannel(int channelId) { }
+        @Override public boolean completeFadeOut() { return false; }
+        @Override public boolean fadeOutCompletesWithGlobalStop() { return false; }
+    }
 
     @BeforeEach
     void setUp() {
@@ -47,6 +81,7 @@ public class TestSmpsDriver {
             rawPsgWrites.add(val);
             super.writeRawPsg(val);
         }
+
 
         // Helper to check FM lock via reflection
         public Object getFmLock(int channel) {
@@ -268,6 +303,324 @@ public class TestSmpsDriver {
         // zPlaySound .sfxinitpsg emits the pair from the admitted C0 header;
         // it does not depend on there being an older PSG3 owner.
         assertEquals(List.of(0xDF, 0xFF), driver.rawPsgWrites);
+    }
+
+    @Test
+    public void driverSilenceWritesWhileMusicIsOverriddenWithoutChangingOwnership() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+        AbstractSmpsData ownerData = new Sonic2SmpsData(new byte[100]);
+        ownerData.setId(0xCD);
+        SmpsSequencer owner = new SmpsSequencer(
+                ownerData, dac, driver, Sonic2SmpsSequencerConfig.CONFIG);
+        owner.addTrack(createTrack(SmpsSequencer.TrackType.PSG, 2));
+        driver.addSequencer(owner, true);
+        driver.writePsg(owner, 0xC0);
+        physical.psgWrites.clear();
+
+        SmpsSequencer music = new SmpsSequencer(
+                new Sonic2SmpsData(new byte[100]), dac, driver,
+                Sonic2SmpsSequencerConfig.CONFIG);
+        driver.writePsg(music, 0xDF);
+        assertTrue(physical.psgWrites.isEmpty(),
+                "ordinary overridden music write stays gated at the physical bus");
+        driver.writePsgDriverSilence(music, 2, true);
+
+        assertEquals(List.of(new PsgWrite(music, 0xDF),
+                new PsgWrite(music, 0xFF), new PsgWrite(music, 0xFF)),
+                physical.psgWrites);
+        assertSame(owner, psgLock(driver, 2));
+        assertEquals(3, music.getPsgLatchChannel());
+
+        physical.psgWrites.clear();
+        int latchBefore = music.getPsgLatchChannel();
+        assertThrows(IllegalArgumentException.class,
+                () -> driver.writePsgDriverSilence(music, 3, false));
+        assertTrue(physical.psgWrites.isEmpty());
+        assertEquals(latchBefore, music.getPsgLatchChannel());
+        assertSame(owner, psgLock(driver, 2));
+    }
+
+    @Test
+    public void s3kNoiseStopReleasesBothClaimsBeforeExactMusicNoiseRestore() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        physical.inspectDriver = driver;
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+
+        Sonic3kSmpsData musicData = new Sonic3kSmpsData(new byte[64], 0);
+        SmpsSequencer music = new SmpsSequencer(musicData, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track musicTrack = createTrack(
+                SmpsSequencer.TrackType.PSG, 2);
+        musicTrack.active = true;
+        musicTrack.resting = true;
+        musicTrack.noiseMode = true;
+        musicTrack.rawPsgNoiseKnown = true;
+        musicTrack.rawPsgNoise = 0xE7;
+        music.addTrack(musicTrack);
+        driver.addSequencer(music, false);
+
+        Sonic3kSmpsData sfxData = new Sonic3kSmpsData(new byte[64], 0);
+        sfxData.setId(0x59);
+        SmpsSequencer sfx = new SmpsSequencer(sfxData, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track stopped = createTrack(
+                SmpsSequencer.TrackType.PSG, 2);
+        stopped.noiseMode = true;
+        sfx.addTrack(stopped);
+        driver.addSequencer(sfx, true);
+        assertSame(sfx, psgClaim(driver, 2),
+                "active header admission records the PSG3 claim");
+        driver.writePsg(sfx, 0xC0);
+        driver.writePsg(sfx, 0xE7);
+        physical.psgWrites.clear();
+
+        stopped.active = false;
+        driver.writePsgDriverSilence(sfx, 2, true);
+        driver.releaseChannelToMusic(sfx, stopped);
+
+        assertEquals(List.of(new PsgWrite(sfx, 0xDF),
+                new PsgWrite(sfx, 0xFF), new PsgWrite(sfx, 0xFF),
+                new PsgWrite(music, 0xE7)), physical.psgWrites);
+        assertNull(psgLock(driver, 2));
+        assertNull(psgLock(driver, 3));
+        assertTrue(physical.claimsClearAtWrite,
+                "tone/noise locks and admission claim clear before E7 callback");
+        assertFalse(musicTrack.overridden);
+        assertTrue(musicTrack.active);
+        assertTrue(musicTrack.resting);
+    }
+
+    @Test
+    public void s3kMusicNoiseRestoreUsesRawSignedByteWithoutStateNormalization() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+        SmpsSequencer music = new SmpsSequencer(
+                new Sonic3kSmpsData(new byte[64], 0), dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track track = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        track.active = false;
+        track.resting = false;
+        track.noiseMode = true;
+        track.rawPsgNoiseKnown = true;
+        track.rawPsgNoise = 0x85;
+        track.overridden = true;
+        music.addTrack(track);
+
+        music.setChannelOverriddenAfterSfxTrackStop(
+                SmpsSequencer.TrackType.PSG, 2);
+        assertEquals(List.of(new PsgWrite(music, 0x85)), physical.psgWrites);
+        assertFalse(track.active);
+        assertFalse(track.resting);
+
+        physical.psgWrites.clear();
+        track.overridden = true;
+        track.rawPsgNoise = 0x7F;
+        music.setChannelOverriddenAfterSfxTrackStop(
+                SmpsSequencer.TrackType.PSG, 2);
+        assertTrue(physical.psgWrites.isEmpty(), "positive raw noise byte is not restored");
+
+        track.overridden = true;
+        track.rawPsgNoise = 0x80;
+        music.setChannelOverriddenAfterSfxTrackStop(
+                SmpsSequencer.TrackType.PSG, 2);
+        assertEquals(List.of(new PsgWrite(music, 0x80)), physical.psgWrites,
+                "the sign boundary is restored verbatim");
+
+        physical.psgWrites.clear();
+        track.overridden = true;
+        track.rawPsgNoise = 0xE7;
+        track.noiseMode = false;
+        music.setChannelOverriddenAfterSfxTrackStop(
+                SmpsSequencer.TrackType.PSG, 2);
+        assertTrue(physical.psgWrites.isEmpty(), "tone-form PSG3 has no restore write");
+    }
+
+    @Test
+    public void genericOverrideReleaseDoesNotUseTheF2RawNoiseRestore() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        SmpsSequencer music = new SmpsSequencer(
+                new Sonic3kSmpsData(new byte[64], 0),
+                new DacData(new HashMap<>(), new HashMap<>()), driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track track = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        track.active = true;
+        track.noiseMode = true;
+        track.rawPsgNoiseKnown = true;
+        track.rawPsgNoise = 0x85;
+        track.overridden = true;
+        music.addTrack(track);
+
+        music.setChannelOverridden(SmpsSequencer.TrackType.PSG, 2, false);
+
+        assertFalse(physical.psgWrites.stream().anyMatch(write -> write.value() == 0x85),
+                "generic teardown/replacement callbacks cannot use zStopPSGTrack restore");
+    }
+
+    @Test
+    public void stopAllSfxKeepsLegacyCleanupAndNeverUsesF2RawNoiseRestore() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+        SmpsSequencer music = new SmpsSequencer(
+                new Sonic3kSmpsData(new byte[64], 0), dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track covered = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        covered.noiseMode = true;
+        covered.rawPsgNoiseKnown = true;
+        covered.rawPsgNoise = 0x85;
+        music.addTrack(covered);
+        driver.addSequencer(music, false);
+
+        Sonic3kSmpsData sfxData = new Sonic3kSmpsData(new byte[64], 0);
+        sfxData.setId(0x59);
+        SmpsSequencer sfx = new SmpsSequencer(sfxData, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track noise = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        noise.noiseMode = true;
+        sfx.addTrack(noise);
+        driver.addSequencer(sfx, true);
+        driver.writePsg(sfx, 0xC0);
+        driver.writePsg(sfx, 0xE7);
+        assertTrue(covered.overridden,
+                "normal admission must cover music before wholesale teardown");
+        physical.psgWrites.clear();
+
+        driver.stopAllSfx();
+
+        assertEquals(List.of(new PsgWrite(sfx, 0xDF),
+                new PsgWrite(sfx, 0xFF)), physical.psgWrites,
+                "wholesale cleanup retains its established silence and no raw 85 restore");
+    }
+
+    @Test
+    public void s3kNoiseStopDoesNotReleaseAnotherEffectsNoiseOwnership() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+        SmpsSequencer music = new SmpsSequencer(
+                new Sonic3kSmpsData(new byte[64], 0), dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track covered = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        covered.noiseMode = true;
+        covered.rawPsgNoiseKnown = true;
+        covered.rawPsgNoise = 0xE7;
+        music.addTrack(covered);
+        driver.addSequencer(music, false);
+
+        Sonic3kSmpsData oldData = new Sonic3kSmpsData(new byte[64], 0);
+        oldData.setId(0x59);
+        SmpsSequencer old = new SmpsSequencer(oldData, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track stopped = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        stopped.active = false;
+        stopped.noiseMode = true;
+        old.addTrack(stopped);
+        driver.addSequencer(old, true);
+        driver.writePsg(old, 0xC0);
+
+        Sonic3kSmpsData otherData = new Sonic3kSmpsData(new byte[64], 0);
+        otherData.setId(0xBA);
+        SmpsSequencer other = new SmpsSequencer(otherData, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        driver.addSequencer(other, true);
+        driver.writePsg(other, 0xE7);
+        physical.psgWrites.clear();
+
+        driver.releaseChannelToMusic(old, stopped);
+
+        assertTrue(physical.psgWrites.isEmpty(),
+                "covered noise restore remains gated by the other noise owner");
+        assertSame(other, psgLock(driver, 3));
+
+        covered.overridden = true;
+        driver.writePsg(other, 0xC0);
+        physical.psgWrites.clear();
+        driver.releaseChannelToMusic(old, stopped);
+        assertTrue(physical.psgWrites.isEmpty(),
+                "a non-owner stop cannot trigger a music restore");
+        assertTrue(covered.overridden);
+        assertSame(other, psgLock(driver, 2));
+    }
+
+    @Test
+    public void toneStopDoesNotInferNoiseFromStaleInactiveSibling() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+        Sonic3kSmpsData data = new Sonic3kSmpsData(new byte[64], 0);
+        data.setId(0x59);
+        SmpsSequencer sfx = new SmpsSequencer(data, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track endingTone = createTrack(
+                SmpsSequencer.TrackType.PSG, 2);
+        SmpsSequencer.Track staleNoise = createTrack(
+                SmpsSequencer.TrackType.PSG, 2);
+        staleNoise.active = false;
+        staleNoise.noiseMode = true;
+        sfx.addTrack(endingTone);
+        sfx.addTrack(staleNoise);
+        driver.addSequencer(sfx, true);
+        driver.writePsg(sfx, 0xC0);
+        driver.writePsg(sfx, 0xE7);
+        physical.psgWrites.clear();
+
+        endingTone.active = false;
+        driver.releaseChannelToMusic(sfx, endingTone);
+
+        assertNull(psgLock(driver, 2));
+        assertSame(sfx, psgLock(driver, 3),
+                "the exact tone-ending track cannot release a stale sibling's noise lock");
+        assertTrue(physical.psgWrites.isEmpty());
+    }
+
+    @Test
+    public void duplicateActiveSameChannelTrackFailsReleaseClosed() {
+        RecordingAccess physical = new RecordingAccess();
+        SmpsDriver driver = SmpsDriver.createSessionDriver(physical);
+        DacData dac = new DacData(new HashMap<>(), new HashMap<>());
+        Sonic3kSmpsData data = new Sonic3kSmpsData(new byte[64], 0);
+        data.setId(0x59);
+        SmpsSequencer sfx = new SmpsSequencer(data, dac, driver,
+                Sonic3kSmpsSequencerConfig.CONFIG);
+        SmpsSequencer.Track ending = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        SmpsSequencer.Track duplicate = createTrack(SmpsSequencer.TrackType.PSG, 2);
+        sfx.addTrack(ending);
+        sfx.addTrack(duplicate);
+        driver.addSequencer(sfx, true);
+        driver.writePsg(sfx, 0xC0);
+        physical.psgWrites.clear();
+
+        ending.active = false;
+        driver.releaseChannelToMusic(sfx, ending);
+
+        assertSame(sfx, psgLock(driver, 2));
+        assertSame(sfx, psgClaim(driver, 2));
+        assertTrue(physical.psgWrites.isEmpty());
+    }
+
+    private static SmpsSequencer psgLock(SmpsDriver driver, int channel) {
+        try {
+            java.lang.reflect.Field field = SmpsDriver.class.getDeclaredField("psgLocks");
+            field.setAccessible(true);
+            return ((SmpsSequencer[]) field.get(driver))[channel];
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static SmpsSequencer psgClaim(SmpsDriver driver, int channel) {
+        try {
+            java.lang.reflect.Field field = SmpsDriver.class.getDeclaredField("psgSfxClaims");
+            field.setAccessible(true);
+            return ((SmpsSequencer[]) field.get(driver))[channel];
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     @Test

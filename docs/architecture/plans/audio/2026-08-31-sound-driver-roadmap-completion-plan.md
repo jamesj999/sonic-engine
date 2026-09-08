@@ -1,5 +1,11 @@
 # Sound-driver roadmap completion implementation plan
 
+> **2026-09-05 S3K follow-up:** the diagnostic oracle now models retail's
+> dispatch-time `33h` ring alternation. Production still needs one source-owned
+> three-slot S3K mailbox service, including 1-up mailbox clearing and boot-only
+> ring-speaker reset. A partial one-request service was rejected because it
+> would retain suppressed sounds and change music/secondary ordering.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` to implement this plan task-by-task. Every behavior
 > change follows test-first development and receives an independent task review.

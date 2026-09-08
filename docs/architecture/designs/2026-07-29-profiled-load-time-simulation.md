@@ -15,15 +15,32 @@ It preserves production ROM bytes, queue ownership, FIFO contention, service bou
 global-empty predicates, rewind, and trace isolation. It is a pacing simulation, not
 cycle-accurate hardware emulation.
 
-## Current status (2026-08-09)
+## Current status (2026-09-06)
 
 The S3K `PROFILED` implementation is live for the published Kosinski service model.
-`FAST` and `REALISTIC` remain intentionally unfinished and are retained as explicit
-resolver aliases: `FAST` warns and returns the immediate profile, while `REALISTIC`
-warns and returns the supplied profiled profile. The warning is emitted by each
-`LoadTimeProfileFactory.resolve(...)` call; the factory does not maintain a global
-warn-once registry. A normal gameplay context usually resolves once at construction,
-but context reconstruction can resolve again.
+
+`FAST` is a real mode and the repository default since 2026-09-06. A game that ships a
+FAST manifest resolves to it without a warning; S3K's is
+`load-time-profiles/s3k-fast-v1.json`, seeded as a byte-for-byte copy of the measured
+`s3k-v1.json` entries and then hand-tuned. Unlike the PROFILED manifest it may be
+edited by hand, and that is its purpose: it also carries entries the native measurement
+stream never observed, currently the title-screen Sonic frame decodes taken from the
+original hardware capture that the removed `ANIM_FRAME_DURATIONS` table transcribed
+(fixture label `legacy-hardware-capture:...@34482b194`). A game without a FAST manifest
+warns on each `LoadTimeProfileFactory.resolve(...)` call and behaves as `NONE`.
+
+`REALISTIC` remains intentionally unfinished and is retained as an explicit resolver
+alias that warns and returns the supplied profiled profile. The factory does not maintain
+a global warn-once registry. A normal gameplay context usually resolves once at
+construction, but context reconstruction can resolve again.
+
+The S3K title screen runs outside a gameplay session, so `Sonic3kTitleScreenManager`
+owns a `HardwareTimingService` of its own for the title loop's Kosinski work: frame 7's
+art is queued at `loc_4040` as the ROM does, and frames 8 to B are submitted when
+`Iterate_TitleSonicFrame` selects them; a synchronous decode that is not ready stalls
+the loop, one missed V-int per iteration, until the profile admits it. `serviceFrames`
+for that kind count the `PRE_MAIN_LOOP` services from the iteration that starts the
+decode, so a value of N stalls N-1 iterations and `NONE` stalls none.
 
 The `LoadTimeProfile` submission contract and `HardwareWorkKind` registry currently
 model S3K Kosinski module/direct work only. S1/S2 still resolve the selected enum
@@ -34,35 +51,37 @@ PLC has ROM-derived 3/9-pattern service, S2's PLC has 3/6-pattern service, and d
 art is a separate ordered transfer lifecycle. A future S3K-only mode needs S1/S2
 non-interference evidence rather than a common submission type.
 
-`FAST` still has no approved safety-policy semantics. `REALISTIC` still lacks exact
+`REALISTIC` still lacks exact
 top-level S3K direct observations and an approved confidence/context rule; the
 published exact observations cover module-created direct children, while frame-end
 censored top-level observations are excluded. The cross-game hardware-timing contract
 also forbids trace comparison data from choosing normal-play timing. The
 [2026-08-09 boundary design](2026-08-09-load-time-profile-reserved-mode-boundary.md)
-records the exact capture path. Neither alias may gain a fitted constant or a
-trace-specific branch.
+records the exact capture path. The remaining alias may not gain a fixture-fitted constant or a
+trace-specific branch. FAST manifest tuning does not grant trace inputs authority
+over normal-play timing.
 
 ## Configuration
 
 The configuration key is:
 
 ```yaml
-loadTimeSimulation: PROFILED
+gameplay:
+  loadTimeSimulation: FAST
 ```
 
-The accepted values and initial behavior are:
+The accepted values and current behavior are:
 
 | configured value | effective normal-play behavior | diagnostic |
 |---|---|---|
 | `NONE` | Release prepared work as soon as its production dependencies permit. | None. |
 | `PROFILED` | Use deterministic measured work costs, with a validated estimator for missing fingerprints. | Warn once per missing fingerprint that uses estimation or immediate fallback. |
-| `FAST` | Reserved; behave as `NONE`. | Warn on each factory resolution that no independent `FAST` hardware-admission profile exists. |
+| `FAST` | Use the game's independent, hand-tunable FAST manifest; otherwise behave as `NONE`. | Warn on each factory resolution only when the game has no FAST manifest. |
 | `REALISTIC` | Reserved; behave as `PROFILED`. | Warn on each factory resolution that no independent `REALISTIC` hardware-admission profile exists. |
 
 Unknown values are configuration errors that list all accepted values. Existing
-installations and the repository default remain `NONE`, so the feature does not silently
-change established behavior. A gameplay session resolves the configured value once;
+installations retain explicit overrides; the repository default is `FAST`, and legacy
+materialized defaults are removed by configuration migration. A gameplay session resolves the configured value once;
 changing configuration does not retime work already pending in that session.
 
 `FAST` is intended to provide short safety delays that prevent jarring lifecycle
@@ -277,7 +296,8 @@ job. This prevents an unvalidated estimate from appearing authoritative.
 
 Diagnostics are rate-limited by stable identity:
 
-- `FAST` and `REALISTIC` emit one startup warning describing their effective fallback.
+- `FAST` warns on each factory resolution only when no FAST manifest exists.
+  `REALISTIC` warns on each resolution describing its PROFILED fallback.
 - A missing manifest fingerprint emits one warning per session and fingerprint.
 - The warning states whether an estimate or immediate fallback was selected.
 - Debug logging may include kind, fingerprint, boundary, measured/estimated source,
@@ -345,5 +365,5 @@ repeated runs.
 7. Enable S3K `PROFILED` normal play and pacing regression tests.
 8. S1/S2 PLC queues landed with game-owned native cadence; retain them outside the
    profile boundary unless a later owner-specific design proves an additional gate.
-9. Treat `FAST` and `REALISTIC` as explicitly separate future designs before changing
-   their fallback behavior.
+9. FAST gained its independent manifest on 2026-09-06. REALISTIC remains a separate
+   future design; retain its evidence requirements before changing the fallback.

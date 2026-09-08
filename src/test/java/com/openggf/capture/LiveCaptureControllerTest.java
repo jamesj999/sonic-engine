@@ -47,6 +47,57 @@ class LiveCaptureControllerTest {
         assertFalse(c.indicatorVisible());
     }
 
+    @Test void deferredReadbackPairsAudioAndFlushesLastFrameOnCaller() throws Exception {
+        Harness h = new Harness();
+        h.deferred = true;
+        h.sampleRate = 32_000; // alternating packet lengths expose off-by-one audio pairing
+        LiveCaptureController c = h.controller();
+        c.start(h.viewport, 60);
+        c.capturePresentedFrame(h.viewport);
+        assertTrue(h.recorder.frames.isEmpty());
+        c.capturePresentedFrame(h.viewport);
+        c.capturePresentedFrame(h.viewport);
+        assertEquals(List.of(0L, 1L), h.recorder.indexes);
+        c.requestStop(LiveCaptureController.StopReason.USER);
+        assertSame(Thread.currentThread(), h.grabberCloseThread);
+        awaitNotStopping(c);
+        assertEquals(List.of(0L, 1L, 2L), h.recorder.indexes);
+        AudioFrameClock expected = new AudioFrameClock(32_000, 60);
+        for (int i = 0; i < 3; i++) {
+            CapturedFrame frame = h.recorder.frames.get(i);
+            assertEquals(i + 1, frame.rgba()[0]);
+            assertEquals(expected.samplesForNextFrame(), frame.sampleCount());
+        }
+        assertEquals(LiveCaptureController.State.INACTIVE, c.state());
+    }
+
+    @Test void deferredStopMappingFailureAbortsOnCaller() {
+        Harness h = new Harness();
+        h.deferred = true;
+        LiveCaptureController c = h.controller();
+        c.start(h.viewport, 60);
+        c.capturePresentedFrame(h.viewport);
+        h.failGrab = true;
+        c.requestStop(LiveCaptureController.StopReason.USER);
+        assertEquals(LiveCaptureController.State.FAILED, c.state());
+        assertTrue(h.recorder.aborted);
+        assertSame(Thread.currentThread(), h.grabberCloseThread);
+    }
+
+    @Test void deferredFinalSubmitFailureAbortsWithoutLosingGlCleanup() throws Exception {
+        Harness h = new Harness();
+        h.deferred = true;
+        LiveCaptureController c = h.controller();
+        c.start(h.viewport, 60);
+        c.capturePresentedFrame(h.viewport);
+        h.recorder.failSubmit = true;
+        c.requestStop(LiveCaptureController.StopReason.USER);
+        awaitNotStopping(c);
+        assertEquals(LiveCaptureController.State.FAILED, c.state());
+        assertTrue(h.recorder.aborted);
+        assertSame(Thread.currentThread(), h.grabberCloseThread);
+    }
+
     // ---------------------------------------------------------------
     // Why a recording ended, for the on-screen notice
     // ---------------------------------------------------------------
@@ -470,6 +521,8 @@ class LiveCaptureControllerTest {
         int debugFailAfterFrames = -1;
         int audioCloseCalls;
         int grabs;
+        boolean deferred;
+        Thread grabberCloseThread;
 
         LiveCaptureController controller() {
             ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -519,6 +572,21 @@ class LiveCaptureControllerTest {
                     v -> new VideoFrameGrabber() {
                         public int width() { return v.width(); }
                         public int height() { return v.height(); }
+                        private final java.util.ArrayDeque<byte[]> pending = new java.util.ArrayDeque<>();
+                        public boolean deferredReadback() { return deferred; }
+                        public void beginReadback() {
+                            byte[] pixels = new byte[v.rgbaByteSize()];
+                            pixels[0] = (byte) ++grabs;
+                            pending.add(pixels);
+                        }
+                        public void grabInto(byte[] target) {
+                            if (!deferred) VideoFrameGrabber.super.grabInto(target);
+                            else {
+                                if (failGrab) throw new IllegalStateException("mapping");
+                                System.arraycopy(pending.remove(), 0, target, 0, target.length);
+                            }
+                        }
+                        public void close() { grabberCloseThread = Thread.currentThread(); }
                         public byte[] grab() {
                             grabs++;
                             if (failGrab) throw new IllegalStateException("grab");
@@ -553,7 +621,9 @@ class LiveCaptureControllerTest {
             @Override public void submit(CapturedFrame frame) throws CaptureException {
                 if (failSubmit) throw new CaptureException("submit");
                 indexes.add(frame.frameIndex());
-                frames.add(frame);
+                frames.add(new CapturedFrame(frame.rgba(), frame.width(), frame.height(),
+                        frame.pcm(), frame.sampleCount(), frame.frameIndex()));
+                frame.release();
             }
             @Override public Path stop() throws CaptureException {
                 if (stopGate != null) try { stopGate.await(); } catch (InterruptedException e) {

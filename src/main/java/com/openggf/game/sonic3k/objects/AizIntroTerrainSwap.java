@@ -77,14 +77,30 @@ public final class AizIntroTerrainSwap {
      * This moves the expensive tilemap rebuild from the transition frame to level load.
      */
     public static synchronized void precomputeTransitionTilemaps(ObjectServices services) {
-        preloadOverlayData(services);
-        OverlayData overlay = cachedOverlayData;
-        if (overlay == null) {
+        Rom rom;
+        try {
+            rom = services.rom();
+        } catch (IOException e) {
+            LOG.warning("AIZ intro transition tilemap pre-build skipped: " + e.getMessage());
             return;
         }
+        precomputeTransitionTilemaps(rom, services.levelManager());
+    }
 
-        LevelManager levelManager = services.levelManager();
-        if (levelManager == null) {
+    /**
+     * ROM-backed variant of {@link #precomputeTransitionTilemaps(ObjectServices)}
+     * for callers that run during level load, before an {@link ObjectServices}
+     * runtime is resolvable. {@link #applyMainLevelBlockOverlay} consumes the
+     * pre-built data on the $1400 terrain-swap frame; without it that frame
+     * falls back to a full foreground and background tilemap rebuild.
+     */
+    public static synchronized void precomputeTransitionTilemaps(Rom rom, LevelManager levelManager) {
+        if (rom == null || levelManager == null) {
+            return;
+        }
+        preloadOverlayData(rom);
+        OverlayData overlay = cachedOverlayData;
+        if (overlay == null) {
             return;
         }
         Level level = levelManager.getCurrentLevel();

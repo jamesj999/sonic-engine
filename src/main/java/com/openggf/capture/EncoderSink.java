@@ -38,6 +38,7 @@ public final class EncoderSink implements FrameSink {
     private volatile Path output;
     private final Object lifecycleLock = new Object();
     private volatile boolean terminal;
+    private volatile boolean stopping;
     private volatile boolean abortRequested;
 
     public EncoderSink(CaptureEncoder encoder, BackpressurePolicy policy, int capacity) {
@@ -65,49 +66,66 @@ public final class EncoderSink implements FrameSink {
 
     @Override
     public void submit(CapturedFrame frame) throws CaptureException {
-        if (workerFailure != null) {
-            throw new CaptureException("encoder thread failed", workerFailure);
-        }
-        switch (policy) {
-            case BLOCK -> {
-                long blockStartNanos = 0L;
-                try {
-                    // Timed offer rather than a blocking put: if the worker dies
-                    // while the queue is full, an unbounded put() would block the
-                    // producer forever and it would never reach stop(). Re-check
-                    // worker health between attempts.
-                    while (!queue.offer(frame, 50, TimeUnit.MILLISECONDS)) {
-                        if (blockStartNanos == 0L) {
-                            blockStartNanos = System.nanoTime();
+        boolean accepted = false;
+        try {
+            checkWorker();
+            switch (policy) {
+                case BLOCK -> {
+                    if (offer(frame)) { accepted = true; break; }
+                    long blockStartNanos = System.nanoTime();
+                    try {
+                        while (!offer(frame)) {
+                            checkWorker();
+                            // Wake promptly for capacity or failure, including waits shorter
+                            // than the health-check interval. Insertion is lifecycle-locked.
+                            synchronized (lifecycleLock) {
+                                checkWorker();
+                                if (queue.remainingCapacity() == 0) lifecycleLock.wait(50);
+                            }
                         }
-                        if (workerFailure != null) {
-                            throw new CaptureException("encoder thread failed", workerFailure);
-                        }
-                        if (!worker.isAlive()) {
-                            throw new CaptureException("encoder thread exited unexpectedly");
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new CaptureException("interrupted while submitting", e);
-                } finally {
-                    if (blockStartNanos != 0L) {
+                        accepted = true;
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new CaptureException("interrupted while submitting", e);
+                    } finally {
                         recordExhaustion(System.nanoTime() - blockStartNanos);
                     }
                 }
-            }
-            case DROP_OLDEST -> {
-                while (!queue.offer(frame)) {
-                    if (queue.poll() != null) {
-                        dropped.incrementAndGet();
+                case DROP_OLDEST -> {
+                    synchronized (lifecycleLock) {
+                        // stop marks its boundary under this same lock before
+                        // inserting POISON. A dropping submit must never consume it.
+                        checkWorker();
+                        while (!queue.offer(frame)) {
+                            CapturedFrame removed = queue.poll();
+                            if (removed != null) {
+                                removed.release();
+                                dropped.incrementAndGet();
+                            }
+                        }
+                        accepted = true;
                     }
                 }
-            }
-            case FAIL -> {
-                if (!queue.offer(frame)) {
-                    throw new CaptureException("capture queue full (FAIL policy)");
+                case FAIL -> {
+                    if (!offer(frame)) throw new CaptureException("capture queue full (FAIL policy)");
+                    accepted = true;
                 }
             }
+        } finally {
+            if (!accepted) frame.release();
+        }
+    }
+
+    private void checkWorker() throws CaptureException {
+        if (workerFailure != null) throw new CaptureException("encoder thread failed", workerFailure);
+        if (abortRequested || terminal || stopping) throw new CaptureException("capture aborted or stopped");
+        if (worker == null || !worker.isAlive()) throw new CaptureException("encoder thread exited unexpectedly");
+    }
+
+    private boolean offer(CapturedFrame frame) throws CaptureException {
+        synchronized (lifecycleLock) {
+            checkWorker();
+            return queue.offer(frame);
         }
     }
 
@@ -118,18 +136,22 @@ public final class EncoderSink implements FrameSink {
                 if (abortRequested) throw new CaptureException("capture aborted", workerFailure);
                 return output;
             }
+            stopping = true;
+            lifecycleLock.notifyAll();
         }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(stopJoinTimeoutMillis);
         try {
             // Deliver the poison pill without hanging: if the worker has already
             // died (e.g. encoder failure) the queue may be full and a blocking
             // put would never return. Offer with a timeout while the worker is
             // alive; bail out as soon as it has exited or recorded a failure.
             while (worker.isAlive() && !queue.offer(POISON, 50, TimeUnit.MILLISECONDS)) {
-                if (workerFailure != null) {
+                if (workerFailure != null || System.nanoTime() >= deadline) {
                     break;
                 }
             }
-            worker.join(stopJoinTimeoutMillis);
+            long remaining = Math.max(0, deadline - System.nanoTime());
+            if (remaining > 0) TimeUnit.NANOSECONDS.timedJoin(worker, remaining);
             if (worker.isAlive()) {
                 abort();
                 throw new CaptureException("encoder thread did not stop within "
@@ -162,13 +184,14 @@ public final class EncoderSink implements FrameSink {
         synchronized (lifecycleLock) {
             if (terminal || abortRequested) return;
             abortRequested = true;
+            lifecycleLock.notifyAll();
         }
         if (encoder instanceof FfmpegEncoder ffmpegEncoder) {
             ffmpegEncoder.abortUntil(deadline);
         } else {
             encoder.abort();
         }
-        queue.clear();
+        releaseQueuedFrames();
         if (worker != null && worker != Thread.currentThread()) {
             worker.interrupt();
             try {
@@ -253,13 +276,18 @@ public final class EncoderSink implements FrameSink {
 
     private void runWorker() {
         try {
-            while (true) {
+            while (!abortRequested) {
                 CapturedFrame frame = queue.take();
+                synchronized (lifecycleLock) { lifecycleLock.notifyAll(); }
                 if (frame == POISON) {
                     output = encoder.finish();
                     return;
                 }
-                encoder.encode(frame);
+                try {
+                    encoder.encode(frame);
+                } finally {
+                    frame.release();
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -268,6 +296,19 @@ public final class EncoderSink implements FrameSink {
         } catch (CaptureException e) {
             workerFailure = e;
             abort();
+        } catch (Throwable e) {
+            workerFailure = new CaptureException("encoder thread failed", e);
+            abort();
+        } finally {
+            releaseQueuedFrames();
+        }
+    }
+
+    private void releaseQueuedFrames() {
+        synchronized (lifecycleLock) {
+            CapturedFrame frame;
+            while ((frame = queue.poll()) != null) frame.release();
+            lifecycleLock.notifyAll();
         }
     }
 }

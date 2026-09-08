@@ -19,14 +19,14 @@ Entries should include:
 
 ## Table of Contents
 
-1. [Game Over and Continue Flow Missing](#game-over-and-continue-flow-missing)
+1. [Game Over and Continue Parity Details](#game-over-and-continue-parity-details)
 2. [Persisted Editor Saves Disabled for S3K Gameplay Loads](#persisted-editor-saves-disabled-for-s3k-gameplay-loads)
 3. [Trace Replay Recorder Coverage Follow-Up](#trace-replay-recorder-coverage-follow-up)
 4. [S3K AIZ Items Carried From The 2026-03-25 Working List](#s3k-aiz-items-carried-from-the-2026-03-25-working-list)
 
 ---
 
-## Game Over and Continue Flow Missing
+## Game Over and Continue Parity Details
 
 **Location:** `src/main/java/com/openggf/GameLoop.java`,
 `src/main/java/com/openggf/level/objects/AbstractGameOverCardObjectInstance.java`,
@@ -34,14 +34,11 @@ Entries should include:
 
 ### Symptom
 
-The GAME OVER / TIME OVER card now runs in all three games, but the screen the ROM enters after a game over with
-continues in hand — the continue screen (S1 `GM_Continue` `docs/s1disasm/sonic.asm:3449-3548`, S2 `ContinueScreen`
-`docs/s2disasm/s2.asm:10319-10420`, S3K `ContinueScreen` `docs/skdisasm/sonic3k.asm:122824`) — does not exist. The
-card's `GameMode_Continue` request is routed to the title screen, which is the ROM's own outcome when the continue
-countdown expires unused (`docs/s1disasm/sonic.asm:3525-3527`), minus the ten seconds in which Start would have
-consumed the continue and restarted the act with three lives (`Cont_GotoLevel`, `:3535-3543`). Continues are
-therefore counted and saved but never spent on S1/S2; S3K spends one when a slot with zero lives is reloaded from
-data select, as the ROM's slot load does (`docs/skdisasm/sonic3k.asm:16997-17012`).
+The GAME OVER / TIME OVER cards and ROM-backed Continue screens now run in all
+three games. Continue acceptance spends one continue, restores three lives and
+clears score/rings/time before the native level reload. S1/S2 clear their
+checkpoint; S3K retains it (so the checkpoint load may reinstate its saved timer)
+and requests `SaveGame_LivesContinues`. Emerald inventory survives.
 
 ### Current State
 
@@ -53,7 +50,10 @@ over music, queues the S1/S2 PLC and waits on it, slides the words in, waits 12 
 
 Remaining gaps:
 
-- No continue screen in any game (above).
+- S2's shipped `fixBugs = 0` Continue path does not clear stale HTZ DMA, so the
+  ROM can corrupt Tails' Continue art with a queued cloud upload. The standalone
+  Continue art bank does not reproduce this VRAM alias. The retained Super flag
+  and its animation-table selection are preserved separately.
 - S3K `Obj_GameOver` holds on `tst.l (Nem_decomp_queue).w` until `Load_PLC_2 #3` has decompressed `ArtNem_GameOver`
   (`docs/skdisasm/sonic3k.asm:62021-62023`). The engine has no per-frame S3K Nemesis drain (the same gap
   `Sonic3kTitleCardManager` notes), so the S3K card starts sliding on its first frame rather than a few frames later.
@@ -64,8 +64,8 @@ Remaining gaps:
 
 ### Removal Condition
 
-Remove this entry once each game has a ROM-appropriate continue screen that consumes a continue and restarts the
-act, and the S3K art-queue hold above is modelled or its absence is recorded as an intentional discrepancy.
+Remove this entry when the remaining art-queue, stale-DMA and lifecycle gaps are
+resolved or explicitly accepted as intentional discrepancies.
 
 ---
 

@@ -105,4 +105,20 @@ class TestAudioKeyframeReplay {
         assertNotNull(snapshot);
         assertEquals(1, snapshot.commandTimelineFrame());
     }
+    @Test
+    void pruningIntermediateGameplayCheckpointRetainsItsEarlierAudioBase() {
+        AudioKeyframeStore store = new AudioKeyframeStore();
+        for (int frame : new int[] {0, 60, 120}) {
+            audio.beginCommandTimelineFrame(frame);
+            store.capture(frame, audio);
+        }
+        store.discardBeforeRetainingFloor(70);
+        assertNull(store.keyframeAtOrBefore(59));
+        assertEquals(60, store.keyframeAtOrBefore(70).commandTimelineFrame());
+        assertEquals(120, store.keyframeAtOrBefore(120).commandTimelineFrame());
+        store.discardBeforeRetainingFloor(120);
+        assertNull(store.keyframeAtOrBefore(119));
+        assertEquals(120, store.earliestSnapshot().commandTimelineFrame());
+    }
+
 }

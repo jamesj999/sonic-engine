@@ -27,6 +27,7 @@ import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -51,7 +52,21 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestAudioPresentationArchitectureGuard {
+    private JavaClasses productionClasses;
+
+    private JavaClasses productionClasses() {
+        // The bytecode is fixed for this test class. Keep fixture imports separate
+        // so negative examples cannot contaminate the production graph.
+        if (productionClasses == null) {
+            productionClasses = new ClassFileImporter()
+                    .withImportOption(new ImportOption.DoNotIncludeTests())
+                    .importPackages("com.openggf");
+        }
+        return productionClasses;
+    }
+
     private static final Path AUDIO_ROOT =
             Path.of("src/main/java/com/openggf/audio");
     private static final Path PRODUCTION_ROOT =
@@ -235,9 +250,7 @@ class TestAudioPresentationArchitectureGuard {
                 "session logical access must resolve each ephemeral port "
                         + "from the current scoped epoch");
 
-        JavaClasses production = new ClassFileImporter()
-                .withImportOption(new ImportOption.DoNotIncludeTests())
-                .importPackages("com.openggf");
+        JavaClasses production = productionClasses();
         List<String> foreignFactories = production.stream()
                 .flatMap(owner -> owner.getMethodCallsFromSelf().stream())
                 .filter(call -> call.getTargetOwner()
@@ -1754,9 +1767,7 @@ class TestAudioPresentationArchitectureGuard {
     @Test
     void gameplayAudioTimelineIsToolingOnlyAndCannotDriveAudioOrTraceAuthority()
             throws IOException {
-        JavaClasses production = new ClassFileImporter()
-                .withImportOption(new ImportOption.DoNotIncludeTests())
-                .importPackages("com.openggf");
+        JavaClasses production = productionClasses();
         assertEquals(List.of(), timelineDependenciesOutsideTimeline(production),
                 "production runtime must not depend on gameplay-audio timeline tooling");
 
@@ -1866,9 +1877,7 @@ class TestAudioPresentationArchitectureGuard {
 
     @Test
     void productionDoesNotBypassManagerOwnedAudioCommands() {
-        JavaClasses production = new ClassFileImporter()
-                .withImportOption(new ImportOption.DoNotIncludeTests())
-                .importPackages("com.openggf");
+        JavaClasses production = productionClasses();
 
         assertEquals(List.of(), directBackendCommandBypasses(production));
     }

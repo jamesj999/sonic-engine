@@ -100,6 +100,32 @@ class TestAizEndBossInstance {
     }
 
     @Test
+    void retreatSubmergeCancelsHitFlashWithoutRestoringCollisionBehindWaterfall() throws Exception {
+        RecordingServices services = new RecordingServices();
+        services.withCamera(camera);
+        services.withGameState(new GameStateManager());
+
+        AizEndBossInstance boss = buildBoss(services);
+        invokeNoArg(boss, "onEmergeComplete");
+        boss.update(0, null);
+        boss.onPlayerAttack(null, null);
+
+        assertTrue(boss.getState().invulnerable);
+        assertEquals(0, boss.getCollisionFlags());
+
+        invokeNoArg(boss, "beginReSubmerge");
+
+        assertFalse(boss.getState().invulnerable,
+                "ROM sub_69C94 clears the hit-flash timer/status when Robotnik submerges");
+        assertEquals(0, boss.getState().invulnerabilityTimer);
+        for (int frame = 0; frame < 0x20; frame++) {
+            boss.update(frame, null);
+            assertEquals(0, boss.getCollisionFlags(),
+                    "Robotnik must remain non-interactive throughout the waterfall phase");
+        }
+    }
+
+    @Test
     void fireSignalTriggersBurnBridgeVariant() throws Exception {
         RecordingServices services = new RecordingServices();
         services.withCamera(camera);

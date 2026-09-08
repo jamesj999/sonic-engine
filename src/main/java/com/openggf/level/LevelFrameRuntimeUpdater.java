@@ -78,6 +78,10 @@ final class LevelFrameRuntimeUpdater {
     }
 
     void recomputeParallaxOnlyForCurrentFrame() {
+        refreshParallaxState();
+    }
+
+    void refreshParallaxState() {
         if (levelManager.parallaxManager == null || levelManager.camera == null) {
             return;
         }

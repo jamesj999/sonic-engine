@@ -45,7 +45,7 @@ import static com.openggf.audio.synth.nuked.NukedOpn2Tables.FN_NOTE;
 import static com.openggf.audio.synth.nuked.NukedOpn2Tables.LFO_CYCLES;
 import static com.openggf.audio.synth.nuked.NukedOpn2Tables.LOGSINROM;
 import static com.openggf.audio.synth.nuked.NukedOpn2Tables.OP_OFFSET;
-import static com.openggf.audio.synth.nuked.NukedOpn2Tables.PG_DETUNE;
+import static com.openggf.audio.synth.nuked.NukedOpn2Tables.PG_DETUNE_SIGNED;
 import static com.openggf.audio.synth.nuked.NukedOpn2Tables.PG_LFO_SH1_FLAT;
 import static com.openggf.audio.synth.nuked.NukedOpn2Tables.PG_LFO_SH2_FLAT;
 import static com.openggf.audio.synth.nuked.NukedOpn2Tables.SLOT_CHANNEL;
@@ -357,59 +357,42 @@ public final class NukedOpn2 {
         int chan = chip.channel;
         int slot = chip.cycles;
         int fnum = chip.pgFnum;
-        int fnumH = fnum >> 4;
         int fm;
         int basefreq;
-        int lfo = chip.lfoPm;
-        int lfoL = lfo & 0x0f;
         int pms = chip.pms[chan];
         int dt = chip.dt[slot];
-        int dtL = dt & 0x03;
-        int detune = 0;
-        int block;
-        int note;
-        int sum;
-        int sumH;
-        int sumL;
         int kcode = chip.pgKcode;
 
         fnum <<= 1;
-        /* Apply LFO */
-        if ((lfoL & 0x08) != 0) {
-            lfoL ^= 0x0f;
-        }
-        /* Flattened [pms][lfoL] lookups: one load each, same entries */
-        fm = (fnumH >> PG_LFO_SH1_FLAT[(pms << 3) | lfoL]) + (fnumH >> PG_LFO_SH2_FLAT[(pms << 3) | lfoL]);
-        if (pms > 5) {
-            fm <<= pms - 5;
-        }
-        fm >>= 2;
-        if ((lfo & 0x10) != 0) {
-            fnum -= fm; /* Bit32u wrap, then masked below */
-        } else {
-            fnum += fm;
+        /* At PMS=0 both C shift-table entries are 7: the 11-bit FNUM's
+         * high seven bits shift to zero. Skip only that zero arithmetic,
+         * never the LFO clock or phase pipeline (ym3438.c:457). */
+        if (pms != 0) {
+            int fnumH = fnum >> 5; /* Original fnum >> 4, before doubling. */
+            int lfo = chip.lfoPm;
+            int lfoL = lfo & 0x0f;
+            if ((lfoL & 0x08) != 0) {
+                lfoL ^= 0x0f;
+            }
+            /* Flattened [pms][lfoL] lookups: one load each, same entries */
+            fm = (fnumH >> PG_LFO_SH1_FLAT[(pms << 3) | lfoL]) + (fnumH >> PG_LFO_SH2_FLAT[(pms << 3) | lfoL]);
+            if (pms > 5) {
+                fm <<= pms - 5;
+            }
+            fm >>= 2;
+            if ((lfo & 0x10) != 0) {
+                fnum -= fm; /* Bit32u wrap, then masked below */
+            } else {
+                fnum += fm;
+            }
         }
         fnum &= 0xfff;
 
         basefreq = (fnum << chip.pgBlock) >> 2;
 
-        /* Apply detune */
-        if (dtL != 0) {
-            if (kcode > 0x1c) {
-                kcode = 0x1c;
-            }
-            block = kcode >> 2;
-            note = kcode & 0x03;
-            sum = block + 9 + ((dtL == 3 ? 1 : 0) | (dtL & 0x02));
-            sumH = sum >> 1;
-            sumL = sum & 0x01;
-            detune = PG_DETUNE[(sumL << 2) | note] >> (9 - sumH);
-        }
-        if ((dt & 0x04) != 0) {
-            basefreq -= detune; /* Bit32u wrap, then masked below */
-        } else {
-            basefreq += detune;
-        }
+        /* Same signed detune arithmetic, precomputed for the 3-bit DT and
+         * 5-bit keycode domain; unsigned wrap is still masked below. */
+        basefreq += PG_DETUNE_SIGNED[(dt << 5) | kcode];
         basefreq &= 0x1ffff;
         chip.pgInc[slot] = ((basefreq * chip.multi[slot]) >> 1) & 0xfffff; /* one store for the C = then &= */
     }

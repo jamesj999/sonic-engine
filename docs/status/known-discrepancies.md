@@ -53,6 +53,7 @@ no discrepancy entry was added or reclassified by the cutover.
 34. [FM:PSG Mix Balance Is Pre-Rewrite Parity, Not a Hardware Calibration](#fmpsg-mix-balance-is-pre-rewrite-parity-not-a-hardware-calibration)
 35. [S2 Compressed-Music Load Timing Omits Sub-Frame Bus Contention](#s2-compressed-music-load-timing-omits-sub-frame-bus-contention)
 36. [S2 stopMusic Bypasses the Mailbox While a Compressed Load Blocks It](#s2-stopmusic-bypasses-the-mailbox-while-a-compressed-load-blocks-it)
+37. [Fast FM Register-Level Timing and Output](#fast-fm-register-level-timing-and-output)
 
 ---
 
@@ -2704,9 +2705,10 @@ the discrete DAC.
   before the pitch loop) but `DacData` carries only the per-byte total, so the
   facade spaces the two samples evenly; the Z80 loop also stalls while the
   chip bus is busy with sequencer writes, which the facade models by pausing
-  the cadence rather than dropping samples. The S2 loader's `baseCycles` of 288
-  differs from the 295 that `s2.sounddriver.asm` counts for its own loop; the
-  loader value is used as found and is a separate follow-up.
+  the cadence rather than dropping samples. The S2 loader now uses the retail
+  loop's 295-cycle byte budget; ROM-backed coverage pins both that value and
+  the resulting rate-1 and kick-rate-23 cadence inputs. S1 and S3K retain their
+  separately owned constants.
 - **DAC interpolation** (`audio.dacInterpolate`, default off since
   2026-09-02) is a presentation option with no hardware counterpart: between
   two PCM samples the facade writes a linearly interpolated `0x2A` value once
@@ -3039,6 +3041,31 @@ window.
 
 ---
 
+## Audio Harness Startup and Compatibility Fade Boundaries
+
+The September 5 [live-boundary audit](../architecture/audits/audio/2026-09-05-live-parity-boundary-audit.md)
+found coverage gaps beyond the corrected native S1/S3K fade commands:
+
+- S1 captures supply startup register writes that are not yet a verified
+  ownership-sensitive production song-load implementation. Comparator reports
+  explicitly exclude production startup from their coverage. Correct startup
+  must respect normal/special SFX ownership; an unconditional harness reset is
+  not a safe production replacement.
+- A S3K donor song on an S1 host retains existing mixed source/host fade
+  semantics, including a possible PSG halt without the source driver's silence
+  burst. The terminal-stop capability check preserves existing donor key-off
+  behavior; it does not certify donor fade parity.
+- The legacy direct-read adapter has no driver-level sample-clock service for
+  a songless fade. Forward presentation and service-based capture advance its
+  counters, but direct-read compatibility calls advance sequencers only.
+
+These are open implementation/coverage limitations, not permission to omit
+differences from an oracle. Closing them requires source-owned initialization
+and host/source command semantics, plus a shared cadence model for songless
+direct reads; no comparison-state hydration or fitted timing is permitted.
+
+---
+
 ## PSG Tone-2-Linked Noise at Period 0/1 Follows the Reference Cores
 
 **Location:** `PsgChip.tickNoise()` / `PsgChip.linkedNoiseReload()`
@@ -3108,6 +3135,12 @@ pre-rewrite ratio. At the 16-bit output after `MASTER_GAIN_SHIFT` one full-scale
 FM channel is 3072, one full-scale PSG channel 1556, and silence rests at +288.
 Neither chip's own scale is adjusted.
 
+The S1, S2 and S3K SEGA boot chants now all pass through this shared DAC/mixer
+path. S1/S2 no longer use the standalone voice's legacy 0.25 gain. This makes
+their hardware gain consistent, but does not resolve the analogue calibration
+limitation below. See [shared SEGA DAC verification](../architecture/validation/audio/2026-09-08-sega-dac-gain.md)
+for ROM loop timing, measured boot output and remaining initialization/timing limits.
+
 ### Rationale
 
 No capture with both FM music and PSG sound exists in the repository (every
@@ -3127,3 +3160,66 @@ relative RMS of the FM- and PSG-dominated segments; replace the 38 % with the
 measured value and retire this entry.
 
 ---
+
+
+## Fast FM Register-Level Timing and Output
+
+The selectable `audio.fmCore=fast` core advances synthesis at one internal FM
+frame (144 input clocks), while retaining measured register and DAC output
+sampling boundaries within that frame. It does not emulate the full bus
+pipeline, busy flag, LSI test registers, or analogue ladder-effect output stage.
+Its facade preserves stereo panning and the mixer's nominal 6144 full-scale
+channel level, with writes paced and diagnostics timestamped at frame
+boundaries. These deliberate approximations reduce synthesis CPU cost.
+
+`audio.fmCore=accurate` retains the cycle-exact Nuked implementation and is
+required for physical reference captures. New configurations select fast;
+existing explicit accurate selections are preserved. Pitch-transition phase and per-path modulation history now have independent
+all-channel coverage. Carrier/channel output history and key-on phase now
+also account for the multiplexed sampling boundary, with all 24 write offsets
+covered on every channel. Frequency sampling has all-operator/all-offset
+coverage and brings S3K effect 3C within tolerance. FM/DAC relative timing
+and all DAC data/enable write offsets have independent output coverage.
+Scheduled frequency, level and key admission now closes the S2 BC and pan/TL
+failures, with independent sample-exact high-feedback transition coverage.
+The LFO prescaler and PM arithmetic are now oracle-measured (bit-containment
+terminals, half-step truncated partial sums, twelve-bit wrap). AM preserves
+discrete depths and operator output history, with independent all-channel/
+all-carrier measurements and rewind coverage. All 178 supported scripts now
+meet the unchanged waveform/level bounds without deferrals. Independent
+high-FNUM checks cover global PM sampling across every channel and carrier.
+Final integrated verification and human listening sign-off remain separate
+release gates; this tolerance result does not establish full SMPS parity. See the [fast FM validation record](../architecture/validation/audio/2026-09-06-fast-fm-release.md).
+
+## S1/S2 Extra-Life SFX Block: Residual Flag Edges
+
+**Location:** `AudioVoiceRegistry` (`sfxBlocked`, `sfxBlockHeldThroughFadeIn`),
+`Sonic1StatefulCommandPolicy`, `Sonic2StatefulCommandPolicy`,
+`Sonic2SoundRequestPipeline`
+
+The engine now models the two flags that refuse SFX around a Sonic 1 / Sonic 2
+extra life: the 1-up flag from the jingle's load to `cfFadeInToPrevious`
+(`s1.sounddriver.asm:784, :2222`; `s2.sounddriver.asm:1712, :3155`) and the
+fade-in flag from there until the fade-in stepper's counter runs down
+(`s1:2220, :1650`; `s2:3151, :2740`), with `Sound_PlaySFX` /
+`zPlaySound_CheckRing` refusing while either is set (`s1:978-982`,
+`s2:2118-2120`). Three edges of the same mechanism are not modelled:
+
+- **The refused request's priority clear.** Both refusals also zero the SFX
+  priority latch (`.clear_sndprio`, `s1:1085-1086`; `zKillSFXPrio`,
+  `s2:2334-2336`). Sonic 2's mailbox model
+  (`Sonic2SoundRequestPipeline.onSfxSuppressedDuringOneUpOrFadeIn`) has the
+  operation but the presentation's refusal is not reported back to the request
+  service, so the latch keeps the value `zCycleQueue` stored for the refused
+  request. Sonic 1's presentation admission is permissive and carries no latch.
+  Audible only as a lower-priority effect being turned away just after the
+  fade in, in the shipped-bug case where `cfFadeInToPrevious` restores a
+  non-zero latch from the RAM copy (`s2:1714-1722`).
+- **A jingle over silence.** With no song to save, the ROM still raises the
+  fade-in flag at `cfFadeInToPrevious` and holds SFX for the `28h`-step fade of
+  nothing. The engine has no song to fade, so it releases when the jingle ends.
+- **Sonic 1 `StopAllSound` keeps `f_1up_playing`.** The global stop saves and
+  restores that byte across its RAM clear (`s1:1490, :1506`), so a fade-out
+  that completes during the jingle leaves SFX refused until the next song
+  loads. The engine releases the block on the global stop, as it does for the
+  other two games.

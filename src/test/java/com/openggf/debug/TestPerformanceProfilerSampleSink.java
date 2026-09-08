@@ -144,6 +144,29 @@ class TestPerformanceProfilerSampleSink {
         assertEquals(5, snapshot.frameCount());
     }
 
+    @Test
+    void rollingSnapshotRetainsOrderAndExpiresAbsentSections() {
+        profiler.beginFrame();
+        profiler.recordSectionTime("b", 1_000_000);
+        profiler.recordSectionTime("a", 2_000_000);
+        profiler.recordSectionTime("b", 2_000_000);
+        profiler.endFrame();
+        ProfileSnapshot snapshot = profiler.getSnapshot();
+        assertEquals(List.of("b", "a"), new ArrayList<>(snapshot.sections().keySet()));
+        assertEquals(3.0, snapshot.sections().get("b").timeMs());
+        assertEquals(60.0, snapshot.sections().get("b").percentage());
+        for (int i = 0; i < 60; i++) {
+            profiler.beginFrame();
+            profiler.endFrame();
+        }
+        snapshot = profiler.getSnapshot();
+        assertEquals(0.0, snapshot.sections().get("b").timeMs());
+        assertEquals(0.0, snapshot.totalFrameTimeMs());
+        profiler.reset();
+        assertTrue(profiler.getSnapshot().sections().isEmpty());
+        assertEquals(0, profiler.getSnapshot().frameCount());
+    }
+
     private static void busyWork() {
         long sum = 0;
         for (int i = 0; i < 20_000; i++) {

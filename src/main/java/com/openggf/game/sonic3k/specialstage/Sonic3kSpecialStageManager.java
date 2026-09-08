@@ -226,6 +226,9 @@ public class Sonic3kSpecialStageManager {
 
     private int postBootFadeHoldFrames;
 
+    /** Whether the boot's palette upload has happened (see initialize). */
+    private boolean stagePalettesUploaded;
+
     // Debug state
     private boolean spriteDebugMode;
     private SpecialStageViewport specialStageViewport = SpecialStageViewport.nativeViewport();
@@ -560,9 +563,11 @@ public class Sonic3kSpecialStageManager {
         boolean skPalettes = superEmeraldMode || currentStage >= 8;
         palette.initialize(dataLoader, currentStage & 7,
                 playerCharacter == PlayerCharacter.KNUCKLES, skPalettes);
-        com.openggf.level.Palette[] palLines = palette.getPalettes();
-        Sonic3kSpecialStagePaletteUploader.cacheAll(gm, palLines);
-        LOGGER.fine("Cached " + palLines.length + " SS palette lines");
+        // The palette reaches the shared lines only once the entry
+        // Pal_FadeToWhite has elapsed: the ROM loads it inside the masked-
+        // interrupt boot (sub_9D5E, sonic3k.asm:12694), after the fade over
+        // the level's last frame.
+        stagePalettesUploaded = false;
 
         // Mark art as loaded
         renderer.setArtLoaded(true);
@@ -614,6 +619,21 @@ public class Sonic3kSpecialStageManager {
     }
 
     /**
+     * Returns whether {@code SpecialStage} has reached its reveal boundary: the
+     * entry {@code Pal_FadeToWhite} has elapsed, so {@code mus_SpecialStage}
+     * (sonic3k.asm:10731) and {@code Pal_FadeFromWhite} may start while the
+     * post-boot hold still keeps the stage frozen.
+     */
+    public boolean isEntryPresentationReady() {
+        return initialized && preBootFadeHoldFrames <= 0;
+    }
+
+    /** Returns whether the entry {@code Pal_FadeToWhite} is still running. */
+    public boolean isEntryFadeToWhiteActive() {
+        return initialized && preBootFadeHoldFrames > 0;
+    }
+
+    /**
      * Update the special stage by one frame.
      * ROM: loc_84C2 (sonic3k.asm:10737) - main loop
      */
@@ -628,6 +648,9 @@ public class Sonic3kSpecialStageManager {
         if (preBootFadeHoldFrames > 0) {
             preBootFadeHoldFrames--;
             return;
+        }
+        if (!stagePalettesUploaded) {
+            uploadStagePalettes();
         }
 
         frameCounter++;
@@ -906,9 +929,10 @@ public class Sonic3kSpecialStageManager {
                 break;
 
             case BLUE_SPHERE:
-                if (collisionQueue.addBlueSphere(result.gridIndex)) {
-                    GameServices.audio().playSfx(Sonic3kSfx.BLUE_SPHERE.id);
-                }
+                collisionQueue.addBlueSphere(result.gridIndex);
+                // loc_97BE requests the sound even when Find_SStageCollisionResponseSlot
+                // failed; animation admission does not gate audio (sonic3k.asm:12131-12142).
+                GameServices.audio().playSfx(Sonic3kSfx.BLUE_SPHERE.id);
                 break;
 
             case RED_SPHERE:
@@ -1331,13 +1355,24 @@ public class Sonic3kSpecialStageManager {
     }
 
     private void recacheRestoredPaletteForRewind() {
+        // A restore into the entry fade lands before the boot's palette load.
+        stagePalettesUploaded = false;
+        if (palette == null || preBootFadeHoldFrames > 0) {
+            return;
+        }
+        uploadStagePalettes();
+    }
+
+    /** {@code sub_9D5E}'s palette load: the stage palette replaces the level's. */
+    private void uploadStagePalettes() {
+        stagePalettesUploaded = true;
         if (palette == null) {
             return;
         }
         try {
             Sonic3kSpecialStagePaletteUploader.cacheAll(GameServices.graphics(), palette.getPalettes());
         } catch (IllegalStateException ignored) {
-            // Headless unit tests can exercise snapshot restore without graphics services.
+            // Headless unit tests can exercise startup without graphics services.
         }
     }
 

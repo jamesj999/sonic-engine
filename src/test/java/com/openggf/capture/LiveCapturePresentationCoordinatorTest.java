@@ -98,6 +98,9 @@ class LiveCapturePresentationCoordinatorTest {
             when(audio.clockSnapshot())
                     .thenAnswer(ignored -> audioClock.captureSnapshot());
             when(grabber.grab()).thenReturn(new byte[viewport.rgbaByteSize()]);
+            when(recorder.grabFrame(any(VideoFrameGrabber.class), any(short[].class), anyInt(), anyLong()))
+                    .thenAnswer(call -> new CapturedFrame(grabber.grab(), viewport.width(), viewport.height(),
+                            call.getArgument(1), call.getArgument(2), call.getArgument(3)));
             controller = new LiveCaptureController(new LiveCaptureController.Dependencies(
                     rate -> audio, () -> 48_000,
                     ignored -> grabber, (ignored, rate) -> recorder,

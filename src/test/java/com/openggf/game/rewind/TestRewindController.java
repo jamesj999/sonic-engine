@@ -459,6 +459,48 @@ class TestRewindController {
         assertEquals(0, keyframes.earliestFrame());
     }
 
+    @Test
+    void intermediateCheckpointsBoundColdReplayAcrossHistoryAndBranches() {
+        RewindRegistry registry = new RewindRegistry();
+        AtomicInteger state = new AtomicInteger();
+        AtomicInteger steps = new AtomicInteger();
+        registry.register(new RewindSnapshottable<Integer>() {
+            public String key() { return "counter"; }
+            public Integer capture() { return state.get(); }
+            public void restore(Integer value) { state.set(value); }
+        });
+        RewindController controller = new RewindController(registry,
+                new InMemoryKeyframeStore(), new FakeInputSource(300), in -> {
+                    state.incrementAndGet();
+                    steps.incrementAndGet();
+                    return com.openggf.LevelFrameResult.GAMEPLAY_FRAME;
+                }, 60);
+        controller.setGameplayCheckpointInterval(10);
+        for (int frame = 1; frame <= 180; frame++) {
+            state.incrementAndGet();
+            assertTrue(controller.recordExternalStep());
+        }
+        assertEquals(50, controller.pruneHistoryToRetainFrames(125));
+        for (int frame = 179; frame >= 50; frame--) {
+            int before = steps.get();
+            assertTrue(controller.stepBackward());
+            assertTrue(steps.get() - before <= 9, "cold replay exceeds nine ticks at " + frame);
+            assertEquals(frame, state.get());
+        }
+        assertFalse(controller.stepBackward());
+        // A new future and an unaligned boundary must not resurrect cached state.
+        for (int frame = 51; frame <= 67; frame++) controller.step();
+        controller.resetBufferAtCurrentFrame();
+        for (int frame = 68; frame <= 81; frame++) controller.step();
+        for (int frame = 80; frame >= 67; frame--) {
+            int before = steps.get();
+            assertTrue(controller.stepBackward());
+            assertTrue(steps.get() - before <= 9);
+            assertEquals(frame, state.get());
+        }
+        assertFalse(controller.stepBackward());
+    }
+
     private static class FakeInputSource implements InputSource {
         private final int count;
 

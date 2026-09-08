@@ -3,6 +3,8 @@ package com.openggf;
 import com.openggf.audio.AudioManager;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameOverExit;
+import com.openggf.game.ContinueScreenProvider;
+import com.openggf.game.GameStateManager;
 import com.openggf.game.TitleScreenProvider;
 import com.openggf.game.session.GameplayModeContext;
 import com.openggf.graphics.FadeManager;
@@ -23,11 +25,6 @@ import java.util.logging.Logger;
  * docs/s2disasm/s2.asm:4095-4099; S1 {@code GM_Continue} fades first as well,
  * docs/s1disasm/sonic.asm:3449-3450).
  *
- * <p>No game has a continue screen in the engine yet, so
- * {@link GameOverExit#CONTINUE_SCREEN} lands on the title screen too. That is
- * the ROM's own outcome for an unused continue ({@code Cont_GotoLevel} is
- * never reached: docs/s1disasm/sonic.asm:3525-3527), minus the ten-second
- * chance to press Start; the gap is recorded in docs/status/known-bugs.md.
  */
 final class GameLoopGameOverExit {
     private static final Logger LOGGER = Logger.getLogger(GameLoopGameOverExit.class.getName());
@@ -37,10 +34,21 @@ final class GameLoopGameOverExit {
 
     static void startToBlack(GameOverExit exit, LevelManager levelManager, AudioManager audioManager,
             FadeManager fadeManager, GameplayModeContext context, Runnable onBlack) {
-        LOGGER.info("Game over card dismissed toward " + exit + "; returning to title screen");
+        LOGGER.info("Game over card dismissed toward " + exit);
         levelManager.setLevelInactiveForTransition(true);
         audioManager.stopMusic();
         GameLoopPlcLifecycle.startToBlack(context, fadeManager, onBlack);
+    }
+
+    /** Apply the ROM Continue exit before the existing level restart/load boundary. */
+    static boolean acceptContinue(ContinueScreenProvider provider, GameStateManager state,
+                                  LevelManager levelManager, Runnable saveLivesContinues) {
+        if (provider == null || !provider.isAccepted() || !state.consumeContinue()) return false;
+        if (provider.clearsCheckpointOnContinue()) levelManager.getCheckpointState().clear();
+        levelManager.getLevelGamestate().setRings(0);
+        levelManager.getLevelGamestate().setTimerFrames(0);
+        if (provider.savesOnContinue()) saveLivesContinues.run();
+        return true;
     }
 
     /** The ending's own return: clean up demo state, fade the music, then black. */

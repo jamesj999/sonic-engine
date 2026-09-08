@@ -89,6 +89,19 @@ public final class OwnedSmpsAudioStream
         session.applyCommand(new SmpsSessionCommand.StopSmpsSfx());
     }
 
+    /** Runs the same host fade command used by live presentation. */
+    public void fadeOutMusic(int steps, int delay) {
+        session.applyCommand(new SmpsSessionCommand.FadeMusic(steps, delay));
+    }
+
+    public void prepareFadeOut() {
+        session.prepareFadeOut();
+    }
+
+    public void armFadeOut(int steps, int delay) {
+        session.armFadeOut(steps, delay);
+    }
+
     public VirtualSynthesizer.Snapshot captureSynthSnapshotForTesting() {
         return session.capturePhysicalSnapshotForTesting().synth();
     }

@@ -11,20 +11,29 @@ import java.util.Objects;
 /** Source-owned logical song-load policies shared by prepared programs. */
 public final class SmpsLogicalTransitionPolicies {
     private static final SmpsLogicalTransitionPolicy PRESERVE_SFX =
-            new Policy(true);
+            new Policy(true, false);
     private static final SmpsLogicalTransitionPolicy CLEAR_SFX =
-            new Policy(false);
+            new Policy(false, false);
+    private static final SmpsLogicalTransitionPolicy CLEAR_SFX_AND_TEMPO =
+            new Policy(false, true);
+    private static final SmpsLogicalTransitionPolicy PRESERVE_SFX_RESET_TEMPO =
+            new Policy(true, true);
 
     private SmpsLogicalTransitionPolicies() {
     }
 
     public static SmpsLogicalTransitionPolicy forConfig(
             SmpsSequencerConfig config) {
-        return Objects.requireNonNull(config, "config").isDirect68kDriver()
+        Objects.requireNonNull(config, "config");
+        if (config.isResetTempoOnMusicLoad()) {
+            return config.isDirect68kDriver()
+                    ? PRESERVE_SFX_RESET_TEMPO : CLEAR_SFX_AND_TEMPO;
+        }
+        return config.isDirect68kDriver()
                 ? PRESERVE_SFX : CLEAR_SFX;
     }
 
-    private record Policy(boolean preserveSfx)
+    private record Policy(boolean preserveSfx, boolean resetsTempoOnMusicStart)
             implements SmpsLogicalTransitionPolicy {
         @Override
         public Result prepareMusicStart(

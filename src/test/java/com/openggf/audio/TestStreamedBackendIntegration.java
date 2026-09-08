@@ -41,6 +41,36 @@ class TestStreamedBackendIntegration {
     }
 
     @Test
+    void fadeTargetsStreamedForegroundEvenWhenInactiveSmpsStreamIsRetained() throws Exception {
+        InstrumentedBackend backend = new InstrumentedBackend();
+        RecordingPort port = new RecordingPort(8_000, true);
+        backend.installStreamedMusicPort(port);
+        backend.playStreamedMusicOrElse(0x81, () -> fail("stock fallback is unexpected"));
+        backend.update();
+        var inactive = org.mockito.Mockito.mock(
+                com.openggf.audio.session.OwnedSmpsAudioStream.class);
+        // The legacy override stack retains its saved stream while
+        // currentSmps is null and the streamed cursor owns the foreground.
+        var stream = AbstractSmpsAudioBackend.class.getDeclaredField("smpsStream");
+        stream.setAccessible(true);
+        stream.set(backend, inactive);
+        try {
+            backend.fadeOutMusic(40, 3);
+            assertFalse(port.fadeActive());
+
+            backend.update();
+
+            assertTrue(port.fadeActive());
+            assertEquals(40, port.fade.remainingSteps());
+            org.mockito.Mockito.verify(inactive, org.mockito.Mockito.never())
+                    .fadeOutMusic(org.mockito.ArgumentMatchers.anyInt(),
+                            org.mockito.ArgumentMatchers.anyInt());
+        } finally {
+            backend.destroy();
+        }
+    }
+
+    @Test
     void mismatchedOutputRateIsRejectedAndClosedAtBoundary() {
         InstrumentedBackend backend = new InstrumentedBackend();
         RecordingPort mismatched = new RecordingPort(44_100, true);

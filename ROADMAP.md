@@ -19,7 +19,8 @@ OpenGGF has crossed an important threshold:
   stabilization; AIZ, HCZ, CNZ, MGZ, ICZ, MHZ, and LBZ have substantial coverage (about 57% of
   the object checklist, 134 unique ids), while FBZ and the S&K-half zones remain the largest
   content frontier and sit outside release-6 trace scope.
-- Game Over / Continue flow is missing in all three games (`docs/status/known-bugs.md`).
+- Game Over / Continue screens are implemented in all three games; remaining
+  timing details are tracked in `docs/status/known-bugs.md`.
 - The engine now has stronger multi-game architecture, better tests, and a more credible release story than before `v0.4`.
 
 That changes the planning problem. The project no longer needs a catch-all "prove this can work" roadmap. It needs a focused roadmap that turns broad momentum into a smaller number of high-value outcomes.
@@ -124,8 +125,13 @@ avoid starting wide new zone work unless it directly advances a route slice or r
   fixtures); S&K-half zones including FBZ and all Knuckles routes are gated into
   `-Ptrace-replay-r7` and are expected red. A known-red trace may not worsen, and every green
   trace must stay green, but 0.6 no longer waits for the frontier to clear.
-- The SMPS/chip-level audio parity programme developed during 0.6 was reverted and deferred to
-  0.7 because it introduced audible regressions its automated coverage did not catch.
+- The SMPS playback authenticity programme of 2026-08-21 was withdrawn on 2026-08-27 (commit
+  `b4c8fbd8a`) because its fixes produced audible regressions the suite could not detect. It was
+  then re-derived piecemeal between 2026-08-28 and 2026-09-04 against emulator-captured
+  per-service driver-state and chip write-stream oracles, each a hard assertion, with every engine
+  fix citing the driver routine it models (`README.md` "September 4 audio handover",
+  `docs/changelog/v0.6-release-summary.md` Audio). Complete SMPS parity and release listening
+  approval remain open; full-game parity is deferred to 0.7.
 - Performance work has moved from generic cleanup to measured release work, including rewind/audio
   and rendering hot-path reductions with trace-equivalence checks.
 
@@ -174,7 +180,7 @@ avoid starting wide new zone work unless it directly advances a route slice or r
 - Use `S3K_OBJECT_CHECKLIST.md` as input to prioritization, not as the prioritization itself.
 - The gaps listed in the June roadmap (AIZ drawbridge, HCZ large fan/block variants, MGZ
   launcher/pulley/boss work, LBZ boss/late-route work) have since landed. Remaining visible gaps
-  are the Game Over / Continue flow, the ~43% of S3K checklist rows still unimplemented (mostly
+  are the ~43% of S3K checklist rows still unimplemented (mostly
   S&K-half and decorative objects), and the mostly unopened FBZ object set.
 
 #### 4. Data Select and Save System
@@ -259,10 +265,10 @@ This release should focus on reducing obvious gaps rather than introducing new s
   fraction of a second and crossfaded in. Planned for 0.7; see the
   [FM core live switch item](docs/project/v0.7-roadmap.md#planned-audio-work--live-fm-core-switching).
 
-- Game Over / Continue flow for all three games, unless it lands as a 0.6 fix first.
-- The withdrawn SMPS and chip-level audio parity programme (retail service ordering, SFX
-  priority, pause/resume, fades, regional clocks, YM write scheduling, S3K special-stage and
-  SEGA PCM), re-landed with listening validation this time.
+- Game Over / Continue screens landed in 0.6; retain their input, save and restart coverage.
+- Complete SMPS and chip-level audio parity and listening validation beyond the
+  corrections and comparison tooling landed in 0.6. The September 4 audio
+  handover supersedes the earlier withdrawal; retain its measured boundaries.
 - Remaining high-value S3K gameplay gaps (additional zones, bosses, special stage polish),
   including moving the `-Ptrace-replay-r7` zones and Knuckles routes into scope.
 - Special stage polish where current support exists but parity is incomplete.

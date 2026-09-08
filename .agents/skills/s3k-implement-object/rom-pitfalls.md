@@ -1,23 +1,16 @@
 # Sonic 3 & Knuckles Object Implementation — ROM Behavioural Pitfalls
 
-Anti-pattern catalogue accumulated from trace replay frontier advancement
-fixes. **Read this before starting Phase 2 of `s3k-implement-object/SKILL.md`**
-and check each entry against the ROM behaviour of the object you're porting.
+Source-cited examples accumulated from trace fixes. Search headings and symptoms,
+then read entries relevant to the object or divergence being investigated:
 
-Each entry is a class of bug where the *naive* engine port diverges from ROM
-in a way that survives unit tests but breaks trace replay parity. The
-catalogue grows when a trace-replay-bug-fixing iteration commits an object
-fix whose root cause could occur in any not-yet-implemented object — see
-the `trace-replay-bug-fixing` skill Phase 5 for the update
-loop.
+```bash
+rg -n '^##|timer|standing|touch|child|slot|camera' <skill-dir>/rom-pitfalls.md
+```
 
-The patterns below were first surfaced during S2 frontier advancement (see
-the `s2-implement-object` skill's `rom-pitfalls.md` for the narrative
-origin) but are cross-game: each applies to S3K objects unless the entry
-explicitly says otherwise.
-
-Format per entry: pattern name, symptom, root cause, what to check during
-implementation, ROM citation, originating fix commit.
+Entries describe historical fixes, not universal implementation requirements.
+Verify the current code and the target game's ROM routine before applying a
+cross-game analogy. Preserve useful citations when adding or correcting an entry;
+read-only investigation does not require expanding this catalog.
 
 ---
 

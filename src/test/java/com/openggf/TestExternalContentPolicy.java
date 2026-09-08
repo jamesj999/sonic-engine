@@ -426,7 +426,7 @@ class TestExternalContentPolicy {
                 .anyMatch(descriptor -> descriptor.manifest().id().equals("boot-code")));
         assertTrue(accepted.trustedCodeOwners().contains("boot-code"));
         assertEquals(1, accepted.patternWindowStateForSession().totalWindows());
-        assertEquals(PatternAtlasRange.MGZ_ZOOM_CUES.endExclusive(),
+        assertEquals(PatternAtlasRange.CONTINUE_SCREEN.endExclusive(),
                 accepted.patternWindowStateForSession().assignment("boot-code")
                         .orElseThrow().base());
         accepted.disableForDeterministicSession();

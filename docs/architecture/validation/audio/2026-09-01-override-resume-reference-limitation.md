@@ -67,6 +67,26 @@ run the two serial S1 captures, two serial S2 native captures, two ProbeRuntime 
 duplicate equality checks, and the first dedicated-bundle no-replace publication. Java transition
 or resume behaviour remains hard-blocked until all of those steps succeed.
 
+## Truthful Java gate naming — 2026-09-05
+
+`TestS1OverrideResumeAudioOracle.authenticatedOverrideResumeReferenceIsUnavailable`
+names the executable guarantee that exists today. It opens the fail-closed bundle reader and
+requires the exact `FRESH_AUTHENTICATED_NATIVE_GPGX_AUTHORITY_UNAVAILABLE` limitation code. It does
+not compare a resumed service or PCM packet, and its green result is not evidence that OpenGGF's
+override/restore output matches the retail driver.
+
+The highest-risk missing S1 gate remains the extra-life restore at `Sound_PlayBGM`
+(`docs/s1disasm/s1.sounddriver.asm:754`) and `cfFadeInToPrevious` (`:2166`). In the shipped
+`FixBugs=0` branch, the latter restores the saved driver region but omits the conditional YM2612
+`$2B=$00` DAC-disable write. An authenticated comparison must therefore cover the source-ordered
+first resumed service and the immediately following native PCM packet; a negative control that
+invents `$2B=$00` must fail. Runtime changes remain unjustified until that evidence identifies an
+actual divergence.
+
+The S3K frontier tests already distinguish these outcomes: the full oracle method says it pins the
+next mismatch frontier, while methods containing `Matches` limit their claims to an explicit
+service prefix or write count. They require no reporting rename.
+
 ## Independent mechanics review — 2026-09-02
 
 TraceChaser commit `fa69e177328f35f55330637ddfc5c7a24dde839f` corrects three

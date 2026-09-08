@@ -167,24 +167,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
     }
 
-    private sealed interface ChipDiagnostic {
-        void publish(ChipWriteObserver observer);
-
-        record Ym(int port, int register, int value)
-                implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onYm2612Write(port, register, value);
-            }
-        }
-
-        record Psg(int value) implements ChipDiagnostic {
-            @Override
-            public void publish(ChipWriteObserver observer) {
-                observer.onPsgWrite(value);
-            }
-        }
-    }
+    private SavedOverride[] mutationOverrides;
 
     private final class SessionLiveMutation implements LiveMutationToken {
         private final Object ownerIdentity;
@@ -200,6 +183,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         private final boolean speedShoesEnabled;
         private final int speedMultiplier;
         private final boolean ringLeft;
+        private final int musicFmDacTrackCount;
         private final SegaPcmTransport segaPcmTransport;
         private final int diagnosticCount;
         private boolean commitPrepared;
@@ -219,13 +203,16 @@ public final class SmpsDriverSession implements AutoCloseable {
                     SmpsDriverSession.this.selectedDacSource;
             pendingService = SmpsDriverSession.this.pendingService == null
                     ? null : SmpsDriverSession.this.pendingService.copy();
-            overrides = Arrays.copyOf(overrideStack,
+            if (mutationOverrides == null) mutationOverrides = new SavedOverride[overrideStack.length];
+            System.arraycopy(overrideStack, 0, mutationOverrides, 0,
                     SmpsDriverSession.this.overrideCount);
+            overrides = mutationOverrides;
             this.overrideCount = SmpsDriverSession.this.overrideCount;
             speedShoesEnabled =
                     SmpsDriverSession.this.speedShoesEnabled;
             speedMultiplier = SmpsDriverSession.this.speedMultiplier;
             ringLeft = SmpsDriverSession.this.ringLeft;
+            musicFmDacTrackCount = SmpsDriverSession.this.musicFmDacTrackCount;
             segaPcmTransport =
                     SmpsDriverSession.this.segaPcmTransport == null
                             ? null
@@ -495,6 +482,22 @@ public final class SmpsDriverSession implements AutoCloseable {
             });
         }
 
+        @Override
+        public boolean completeFadeOut() {
+            if (logicalMaterialization
+                    || !fadeOutCompletesWithGlobalStop()) {
+                return false;
+            }
+            applyGlobalStopNow();
+            globalStopConsumedDuringService = true;
+            return true;
+        }
+
+        @Override
+        public boolean fadeOutCompletesWithGlobalStop() {
+            return configuration.statefulCommandPolicy().fadeOutCompletesWithGlobalStop();
+        }
+
         private PortCapability currentPort() {
             requireActive();
             if (openOwner == null) {
@@ -513,7 +516,7 @@ public final class SmpsDriverSession implements AutoCloseable {
     private final SmpsSessionProfileFingerprint profile;
     private final SmpsDriverSessionConfiguration configuration;
     private ChipWriteObserver chipWriteObserver;
-    private final List<Runnable> diagnostics = new ArrayList<>();
+    private final SmpsDiagnosticQueue diagnostics = new SmpsDiagnosticQueue();
     private final SavedOverride[] overrideStack =
             new SavedOverride[MAX_OVERRIDES];
     private final SmpsDriverServiceObserver.DriverIdentity driverIdentity =
@@ -532,11 +535,16 @@ public final class SmpsDriverSession implements AutoCloseable {
     private boolean speedShoesEnabled;
     private int speedMultiplier = 1;
     private boolean ringLeft = true;
+    // Retain the loaded header's DAC disposition after its sequencer ends.
+    // S2 DACEnabled is driver RAM, not the existence of active music tracks.
+    private int musicFmDacTrackCount;
     private SegaPcmTransport segaPcmTransport;
     private SmpsDriverServiceObserver.DriverIdentity openOwner;
     private long openEpoch;
     private long nextEpoch;
     private int serviceInvocationCount;
+    // Per-call outcome, not driver state: reset before every forward service.
+    private boolean globalStopConsumedDuringService;
     private boolean transactionOpen;
     private boolean logicalMaterialization;
     private boolean closed;
@@ -581,14 +589,77 @@ public final class SmpsDriverSession implements AutoCloseable {
                     @Override
                     public void onYm2612Write(
                             int port, int register, int value) {
-                        emitChipDiagnostic(
-                                new ChipDiagnostic.Ym(
-                                        port, register, value));
+                        if (transactionOpen) {
+                            diagnostics.addYm(port, register, value);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onYm2612Write(port, register, value);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
 
                     @Override
                     public void onPsgWrite(int value) {
-                        emitChipDiagnostic(new ChipDiagnostic.Psg(value));
+                        if (transactionOpen) {
+                            diagnostics.addPsg(value);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onPsgWrite(value);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
+                    }
+
+                    @Override
+                    public boolean observesPhysicalWrites() {
+                        return chipWriteObserver.observesPhysicalWrites();
+                    }
+
+                    @Override
+                    public void onYm2612BusWrite(long cycle, int busPort,
+                            int value,
+                            ChipWriteObserver.PhysicalWriteOrigin origin) {
+                        if (transactionOpen) {
+                            diagnostics.addYmBus(cycle, busPort, value, origin);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onYm2612BusWrite(cycle, busPort, value, origin);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
+                    }
+
+                    @Override
+                    public void onPsgBusWrite(long tick, int value) {
+                        if (transactionOpen) {
+                            diagnostics.addPsgBus(tick, value);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onPsgBusWrite(tick, value);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
+                    }
+
+                    @Override
+                    public void onPhysicalTimelineBoundary(
+                            ChipWriteObserver.ChipClockDomain domain,
+                            long clock,
+                            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+                        if (transactionOpen) {
+                            diagnostics.addBoundary(domain, clock, boundary);
+                            return;
+                        }
+                        try {
+                            chipWriteObserver.onPhysicalTimelineBoundary(domain, clock, boundary);
+                        } catch (RuntimeException failure) {
+                            reportDiagnosticFailure(failure);
+                        }
                     }
                 });
         directRenderer = (buffer, frameOffset, frames) -> {
@@ -643,12 +714,12 @@ public final class SmpsDriverSession implements AutoCloseable {
 
     public SmpsServiceOutcome serviceForward() {
         requireInstalled();
+        globalStopConsumedDuringService = false;
         serviceInvocationCount++;
         if (segaPcmTransport != null) {
-            // zPlaySEGAPCM runs under di for its whole duration
-            // (Sound/Z80 Sound Driver.asm:4372-4424), so every V-int that
-            // falls inside the transport is missed: no update runs and the
-            // 68k's queued requests stay in zMusicNumber until the loop ends.
+            // S2/S3K block their Z80 driver inside the PCM loop. S1's
+            // 68000 PlaySegaSound also blocks in its busyloop while the
+            // separate Z80 plays the chant (s1.sounddriver.asm:733-747).
             return SmpsServiceOutcome.SEGA_PCM_TRANSPORT;
         }
         if (pendingGlobalCommand == SmpsPendingGlobalCommand.STOP_ALL) {
@@ -679,6 +750,7 @@ public final class SmpsDriverSession implements AutoCloseable {
                     port.selectDac(service.selectedDac());
                 }
                 if (service.activation() != null) {
+                    musicFmDacTrackCount = service.activation().fmDacTrackCount();
                     applyProgram(port,
                             policy.activateMusic(service.activation()));
                 }
@@ -695,7 +767,8 @@ public final class SmpsDriverSession implements AutoCloseable {
             });
         }
         emitDacIdleLoopEnableIfQueued();
-        return SmpsServiceOutcome.ORDINARY;
+        return globalStopConsumedDuringService
+                ? SmpsServiceOutcome.GLOBAL_STOP_CONSUMED : SmpsServiceOutcome.ORDINARY;
     }
 
     /**
@@ -886,15 +959,13 @@ public final class SmpsDriverSession implements AutoCloseable {
     }
 
     /**
-     * Leaves the loop. {@code .done} jumps back into
-     * {@code zPlayDigitalAudio} (Sound/Z80 Sound Driver.asm:4422,
-     * :4256-4260), whose entry write disables the DAC again.
+     * Leaves through the driver's own DAC disposition. S1 returns to idle
+     * without a write; S2 restores its music DAC flag; S3K disables the DAC.
      */
     private void endSegaPcmTransport() {
-        SegaPcmTransport active = segaPcmTransport;
         segaPcmTransport = null;
         withPort(driverIdentity, port -> {
-            applyProgram(port, active.transport.exit());
+            applyProgram(port, policy.exitSegaPcmTransport(musicFmDacTrackCount));
             return null;
         });
     }
@@ -918,16 +989,31 @@ public final class SmpsDriverSession implements AutoCloseable {
 
     public void queueActivation(
             PreparedSmpsMusicActivation activation) {
+        queueActivation(activation, true);
+    }
+
+    private void queueActivation(
+            PreparedSmpsMusicActivation activation, boolean ordinaryLoad) {
         requireInstalled();
         PreparedSmpsMusicActivation resolved = Objects.requireNonNull(
                 activation, "activation");
+        interruptSegaPcmForRequest();
         SmpsLogicalTransitionPolicy.Result transition =
                 resolved.logicalPolicy().prepareMusicStart(
                         driver.captureSnapshot(),
                         resolved.incomingMusic());
+        boolean resetsTempo = ordinaryLoad
+                && resolved.logicalPolicy().resetsTempoOnMusicStart();
         SmpsLoadReadiness.Context context = new SmpsLoadReadiness.Context(
-                driver.captureSnapshot().region(), speedShoesEnabled);
+                driver.getRegion(), !resetsTempo && speedShoesEnabled);
         SmpsLoadReadiness.Work readiness = resolved.readiness().begin(context);
+        if (resetsTempo) {
+            speedShoesEnabled = false;
+            speedMultiplier = 1;
+            // The same ordinary-load boundary abandons any saved song;
+            // retain neither its tracks nor its old tempo for a later restore.
+            clearOverrides();
+        }
         if (resolved.readiness().immediate()) {
             restoreLogicalWithoutWrites(transition.logical());
             applyCurrentLogicalControls();
@@ -949,6 +1035,10 @@ public final class SmpsDriverSession implements AutoCloseable {
     public void applyCommand(SmpsSessionCommand command) {
         requireInstalled();
         Objects.requireNonNull(command, "command");
+        if (!(command instanceof SmpsSessionCommand.ResetRingAlternation)
+                && !(command instanceof SmpsSessionCommand.SetSpeedMultiplier)) {
+            interruptSegaPcmForRequest();
+        }
         switch (command) {
             case SmpsSessionCommand.AdmitSfx admit ->
                     admitSfx(admit.program());
@@ -970,13 +1060,8 @@ public final class SmpsDriverSession implements AutoCloseable {
             case SmpsSessionCommand.EndOverride end ->
                     endOverride(end.musicId());
             case SmpsSessionCommand.FadeMusic fade -> {
-                SmpsSequencer music = driver.firstMusicSequencer();
-                if (music != null) {
-                    withPort(driverIdentity, port -> {
-                        music.triggerFadeOut(fade.steps(), fade.delay());
-                        return null;
-                    });
-                }
+                prepareFadeOut();
+                armFadeOut(fade.steps(), fade.delay());
             }
             case SmpsSessionCommand.SetSpeedMultiplier speed -> {
                 speedMultiplier = speed.multiplier();
@@ -998,9 +1083,47 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
     }
 
+    private void interruptSegaPcmForRequest() {
+        if (segaPcmTransport != null && policy.segaPcmInterruptedByRequest()) {
+            // The host delivers requests at presentation boundaries. Finish
+            // the old transport before a new request mutates driver state.
+            endSegaPcmTransport();
+        }
+    }
+
     public void retainGlobalStop() {
         requireInstalled();
+        interruptSegaPcmForRequest();
         pendingGlobalCommand = SmpsPendingGlobalCommand.STOP_ALL;
+    }
+
+    public boolean suppressesSfxDuringOverride() {
+        requireInstalled();
+        return configuration.statefulCommandPolicy().suppressesSfxDuringOverride();
+    }
+
+    /** See {@link SmpsStatefulCommandPolicy#releasesSfxSuppressionAtRestore()}. */
+    public boolean releasesSfxSuppressionAtRestore() {
+        requireInstalled();
+        return configuration.statefulCommandPolicy()
+                .releasesSfxSuppressionAtRestore();
+    }
+
+    /** See {@link SmpsStatefulCommandPolicy#stopsSfxWhenOverrideStarts()}. */
+    public boolean stopsSfxWhenOverrideStarts() {
+        requireInstalled();
+        return configuration.statefulCommandPolicy().stopsSfxWhenOverrideStarts();
+    }
+
+    /**
+     * Whether the music song is fading in: the engine's {@code f_fadein_flag}
+     * / {@code FadeInFlag}, which lives on the song's own fade state in the
+     * S1 and S2 drivers.
+     */
+    public boolean isMusicFadingIn() {
+        requireInstalled();
+        SmpsSequencer music = driver.firstMusicSequencer();
+        return music != null && music.isFadingIn();
     }
 
     /**
@@ -1018,14 +1141,29 @@ public final class SmpsDriverSession implements AutoCloseable {
         speedShoesEnabled = false;
         speedMultiplier = 1;
         ringLeft = true;
-        withPort(driverIdentity, port -> {
+        Consumer<SmpsPhysicalPort> silence = port -> {
             applyProgram(port, policy.stopAll());
             port.silenceOutput();
-            return null;
-        });
+        };
+        // A terminal fade arrives inside the driver's existing write epoch.
+        // Reuse that capability; opening another epoch would reject ownership.
+        if (openOwner != null) {
+            silence.accept(new PortCapability(openOwner, openEpoch));
+        } else {
+            withPort(driverIdentity, port -> {
+                silence.accept(port);
+                return null;
+            });
+        }
         restoreLogicalWithoutWrites(emptyLogicalSnapshot(
                 driver.captureSnapshot()));
         pendingGlobalCommand = SmpsPendingGlobalCommand.NONE;
+    }
+
+    /** Current retained tempo control for presentation metadata after host commands. */
+    public boolean speedShoesEnabled() {
+        requireActive();
+        return speedShoesEnabled;
     }
 
     public SmpsDriverSessionSnapshot captureSnapshot() {
@@ -1038,6 +1176,7 @@ public final class SmpsDriverSession implements AutoCloseable {
                 speedShoesEnabled,
                 speedMultiplier,
                 ringLeft,
+                musicFmDacTrackCount,
                 segaPcmTransport == null ? null
                         : new SmpsSegaPcmTransportSnapshot(
                                 segaPcmTransport.pcm,
@@ -1130,6 +1269,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         speedShoesEnabled = resolved.session().speedShoesEnabled();
         speedMultiplier = resolved.session().speedMultiplier();
         ringLeft = resolved.session().ringLeft();
+        musicFmDacTrackCount = resolved.session().musicFmDacTrackCount();
         segaPcmTransport = materializeSegaPcmTransport(
                 resolved.session().segaPcmTransport());
         pendingService = materializePendingService(
@@ -1156,9 +1296,10 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
         transactionOpen = true;
         try {
-            return new SessionLiveMutation(device.captureLiveMutation());
+            return new SessionLiveMutation(device.captureSessionMutation());
         } catch (RuntimeException failure) {
             transactionOpen = false;
+            if (mutationOverrides != null) Arrays.fill(mutationOverrides, null);
             throw failure;
         }
     }
@@ -1176,6 +1317,10 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
         state.consumed = true;
         transactionOpen = false;
+        Arrays.fill(mutationOverrides, null);
+        if (state.logical != null && driver == state.driverIdentity) {
+            driver.releaseLiveCommandMutation(state.logical);
+        }
     }
 
     /** Validates commit while the composite owner can still roll back. */
@@ -1237,10 +1382,16 @@ public final class SmpsDriverSession implements AutoCloseable {
         speedShoesEnabled = state.speedShoesEnabled;
         speedMultiplier = state.speedMultiplier;
         ringLeft = state.ringLeft;
+        musicFmDacTrackCount = state.musicFmDacTrackCount;
         segaPcmTransport = state.segaPcmTransport;
         truncateDiagnostics(state.diagnosticCount);
         state.consumed = true;
         transactionOpen = false;
+        Arrays.fill(mutationOverrides, null);
+        // The aborted raw strobes remain private, but the restored chip state
+        // and monotonic diagnostic clocks require a surviving segment break.
+        device.reportPhysicalTimelineBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.TRANSACTION_ROLLBACK);
         if (primary != null) {
             throw primary;
         }
@@ -1256,11 +1407,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         if (diagnostics.isEmpty()) {
             return;
         }
-        List<Runnable> committed = List.copyOf(diagnostics);
-        diagnostics.clear();
-        for (Runnable diagnostic : committed) {
-            publishDiagnostic(diagnostic);
-        }
+        diagnostics.publishAll(chipWriteObserver, diagnosticErrorSink);
     }
 
     public void applyChannelMasks(int fmMask, int psgMask) {
@@ -1585,7 +1732,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         int activeMusicId = musicId(current);
         if (activeMusicId < 0 || activeMusicId == activation.activation()
                 .source().id()) {
-            queueActivation(activation);
+            queueActivation(activation, false);
             return;
         }
         if (overrideCount == overrideStack.length) {
@@ -1596,7 +1743,7 @@ public final class SmpsDriverSession implements AutoCloseable {
                 current,
                 policyForSavedMusic(current),
                 selectedDacFor(current), pendingService);
-        queueActivation(activation);
+        queueActivation(activation, false);
         driver.observeLifecycle(
                 SmpsDriverServiceObserver.LifecycleKind.SAVE);
     }
@@ -1640,10 +1787,10 @@ public final class SmpsDriverSession implements AutoCloseable {
                     null, null, transition.firstServiceWrites(),
                     saved.selectedDac(), SmpsLoadReadiness.immediatePlan(),
                     new SmpsLoadReadiness.Context(
-                            driver.captureSnapshot().region(),
+                            driver.getRegion(),
                             speedShoesEnabled), SmpsLoadReadiness.immediatePlan()
                             .begin(new SmpsLoadReadiness.Context(
-                                    driver.captureSnapshot().region(),
+                                    driver.getRegion(),
                                     speedShoesEnabled)));
         }
         applyCurrentLogicalControls();
@@ -1669,6 +1816,36 @@ public final class SmpsDriverSession implements AutoCloseable {
             overrideStack[--overrideCount] = null;
             return;
         }
+    }
+
+    /** Pre-service effects for hosts whose SFX slots must stop before the music walk. */
+    public void prepareFadeOut() {
+        requireInstalled();
+        SmpsFadeOutEffects effects = configuration.statefulCommandPolicy().fadeOutEffects();
+        if (effects.stopSfx()) {
+            stopAllSfx();
+        }
+        if (effects.clearSpeedShoes()) {
+            speedShoesEnabled = false;
+            applyCurrentLogicalControls();
+        }
+    }
+
+    /** Arms the fade at the host's command-dispatch boundary. */
+    public void armFadeOut(int steps, int delay) {
+        requireInstalled();
+        SmpsFadeOutEffects effects = configuration.statefulCommandPolicy().fadeOutEffects();
+        if (effects.driverOwnedCounters()) {
+            driver.armFadeOut(steps, delay);
+        }
+        SmpsSequencer music = driver.firstMusicSequencer();
+        withPort(driverIdentity, port -> {
+            if (music != null) {
+                music.triggerFadeOut(steps, delay);
+            }
+            port.applyTransientPsgSilence(effects.psgSilence());
+            return null;
+        });
     }
 
     private void hardReset() {
@@ -1713,6 +1890,8 @@ public final class SmpsDriverSession implements AutoCloseable {
         try {
             driver.restoreSnapshot(Objects.requireNonNull(
                     snapshot, "snapshot"));
+            SmpsSequencer music = driver.firstMusicSequencer();
+            musicFmDacTrackCount = music == null ? 0 : music.getSmpsData().getChannels();
         } finally {
             logicalMaterialization = false;
         }
@@ -1767,31 +1946,27 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
     }
 
-    private void emitChipDiagnostic(ChipDiagnostic event) {
-        emitDiagnostic(() -> event.publish(chipWriteObserver));
-    }
-
     private void beforePhysicalWrite(SmpsChipWrite write) {
         physicalWriteInterceptorForTesting.accept(write);
     }
 
     private void emitDiagnostic(Runnable diagnostic) {
         if (transactionOpen) {
-            diagnostics.add(diagnostic);
-        } else {
-            publishDiagnostic(diagnostic);
+            diagnostics.addRunnable(diagnostic);
+            return;
         }
-    }
-
-    private void publishDiagnostic(Runnable diagnostic) {
         try {
             diagnostic.run();
         } catch (RuntimeException failure) {
-            try {
-                diagnosticErrorSink.accept(failure);
-            } catch (RuntimeException ignored) {
-                // Diagnostic failures cannot influence committed audio state.
-            }
+            reportDiagnosticFailure(failure);
+        }
+    }
+
+    private void reportDiagnosticFailure(RuntimeException failure) {
+        try {
+            diagnosticErrorSink.accept(failure);
+        } catch (RuntimeException ignored) {
+            // Diagnostic failures cannot influence committed audio state.
         }
     }
 
@@ -2041,9 +2216,7 @@ public final class SmpsDriverSession implements AutoCloseable {
     }
 
     private void truncateDiagnostics(int size) {
-        while (diagnostics.size() > size) {
-            diagnostics.removeLast();
-        }
+        diagnostics.truncate(size);
     }
 
     private void requireOpen(PortCapability capability) {

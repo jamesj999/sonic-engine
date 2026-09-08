@@ -25,6 +25,9 @@ import java.util.function.Supplier;
 public final class LiveRewindManager {
 
     private static final int KEYFRAME_INTERVAL = 60;
+    // Bound a cold backward step to nine replay ticks without multiplying costly
+    // audio snapshots. Gameplay snapshots remain bounded by historySeconds.
+    private static final int GAMEPLAY_CHECKPOINT_INTERVAL = 10;
 
     private final SonicConfigurationService config;
     private final Supplier<GameMode> modeSupplier;
@@ -333,6 +336,9 @@ public final class LiveRewindManager {
                 stepper,
                 KEYFRAME_INTERVAL);
         rewindController = gameplayMode.getRewindController();
+        if (rewindController != null) {
+            rewindController.setGameplayCheckpointInterval(GAMEPLAY_CHECKPOINT_INTERVAL);
+        }
         if (rewindController != null
                 && config.getBoolean(SonicConfiguration.LIVE_REWIND_DETERMINISM_AUDIT)) {
             rewindController.setDeterminismAuditor(new RewindDeterminismAuditor());

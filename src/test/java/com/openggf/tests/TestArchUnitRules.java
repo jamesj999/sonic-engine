@@ -281,6 +281,9 @@ class TestArchUnitRules {
             "tools -> net",
             "tools -> sprites",
             "tools -> trace",
+            // Offline capture provenance consumes the leaf build-identity package;
+            // version has no runtime back-edge and does not join the cycle cluster.
+            "tools -> version",
             "trace -> camera",
             "trace -> configuration",
             "trace -> debug",

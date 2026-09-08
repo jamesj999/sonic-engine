@@ -1,280 +1,58 @@
 ---
 name: s3k-zone-bring-up
-description: Use when bringing up a new S3K zone — orchestrates analysis, parallel feature implementation (events, parallax, animated tiles, palette cycling), merge, and validation for a target zone.
+description: Use for a substantial S3K zone or playable-route bring-up spanning events, objects, scroll, palette, and art; use the individual skill for a local fix.
 ---
 
-# S3K Zone Bring-Up Orchestrator
-
-One-stop skill for full zone bring-up in Sonic 3 & Knuckles. Given a zone abbreviation, this skill runs analysis against the disassembly, dispatches parallel agents to implement each feature category, merges their work, verifies the build, and validates the result. It coordinates 6 other skills and is itself a coordinator -- it contains no implementation details.
-
-## Agent Workflow Tooling
-
-Use these tools/docs to ground the bring-up before and during orchestration:
-
-- **ZoneSpecNormalizerTool** -- normalize the `s3k-zone-analysis` output into the stable 13-section layout (palette cycling vs mutation kept separate, `(not analyzed)` placeholders for gaps) before the Step 2 review gate: `mvn exec:java "-Dexec.mainClass=com.openggf.tools.ZoneSpecNormalizerTool" "-Dexec.args=<path-to-zone-analysis-spec.md>"`
-- **AgentWorkflowTool** -- preflight checklist (zone-set resolution, registry status, RomOffsetFinder commands, required guards, docs) when a route blocker is an object/badnik: `mvn exec:java "-Dexec.mainClass=com.openggf.tools.AgentWorkflowTool" "-Dexec.args=object s3k MHZ 0x8A"`
-- **Doc:** `docs/agent-workflow/runbooks/runbook-s3k-zone-feature.md` -- end-to-end runbook for an S3K zone feature.
-
-## Inputs
-
-$ARGUMENTS: Zone abbreviation (e.g., "HCZ", "LBZ", "CNZ") followed by optional flags:
-
-- `--skip-review` -- skip the human review gate after analysis and proceed directly to feature dispatch
-- `--validate-only` -- skip implementation, run only the validation skill against an already-implemented zone
-
-Examples:
-```
-HCZ
-LBZ --skip-review
-CNZ --validate-only
-```
-
-## Related Skills
-
-| Skill | Path | Purpose |
-|-------|------|---------|
-| **s3k-zone-analysis** | `.agents/skills/s3k-zone-analysis/SKILL.md` | Read the disassembly and produce a structured zone feature catalogue |
-| **s3k-zone-events** | `.agents/skills/s3k-zone-events/SKILL.md` | Implement camera locks, boss arenas, cutscenes, act transitions, palette mutations from Dynamic_Resize |
-| **s3k-parallax** | `.agents/skills/s3k-parallax/SKILL.md` | Implement per-line scroll handlers and deform routines |
-| **s3k-animated-tiles** | `.agents/skills/s3k-animated-tiles/SKILL.md` | Implement AniPLC script triggers, gating conditions, dynamic art overrides |
-| **s3k-palette-cycling** | `.agents/skills/s3k-palette-cycling/SKILL.md` | Implement AnPal handlers with counter/step/limit cycling and validation |
-
-## S&K-Side Addresses by Default — Sonic 3 Standalone Is a Rare Fallback
-
-When dispatching feature agents, re-iterate this rule in every prompt: **the engine is S3KL (locked-on), so ROM constants should come from the S&K half (`sonic3k.asm`, addresses < 0x200000) by default**, even when the two halves look identical. Always invoke `RomOffsetFinder` with `--game s3k`, and if a lookup returns both halves, pick the `sonic3k.asm` result. **Rare exception:** if an object has genuinely no S&K equivalent, it may reference the S3-half (`s3.asm`) asset directly — use that after verifying, rather than blocking. See `s3k-disasm-guide` for the full selection rule.
-
-## Framework-First Rule
-
-When feature agents implement the zone, prefer the runtime-owned stack over bespoke zone-local state, but keep the goal practical: close a playable S3K route slice. Do not launch broad architecture-only migrations unless they directly reduce risk or duplication in the target slice.
-
-- Shared event/object/scroll state belongs in a typed `ZoneRuntimeRegistry` adapter.
-- Timer-driven palette work and event-driven palette mutations should route through `PaletteOwnershipRegistry`.
-- AniPLC and script-driven art uploads should use `AnimatedTileChannelGraph` and `S3kAnimatedTileChannels` where possible.
-- Tile/block/chunk edits should use `ZoneLayoutMutationPipeline` (directly or via `S3kSeamlessMutationExecutor`).
-- Extra overlays and frame render flags should go through `SpecialRenderEffectRegistry` / `AdvancedRenderModeController`.
-- New scanline-fill math should reuse `ScrollEffectComposer`, `DeformationPlan`, `ScatterFillPlan`, and `WaterlineBlendComposer`.
-
-## Slice-First Completion Rule
-
-A zone bring-up is successful when it advances a playable route, not when a checklist row changes state. For current work, prioritize AIZ -> HCZ continuity first, then feed CNZ, MGZ, and ICZ into the same standard.
-
-Every bring-up plan should identify:
-
-- Traversal blockers: doors, launchers, forced-movement paths, water/chase mechanics, boss gates, and terrain mutations required to finish the route.
-- Event flow: camera locks, bounds, cutscenes, act transitions, boss/miniboss arenas, and palette mutations.
-- Visual coherence: parallax, animated tiles, palette cycling, PLC/art loads, staged overlays, and render-mode state needed for the area to look recognizable.
-- Parity gates: known trace blockers, object lifecycle, player/sidekick participation, coordinate semantics, rewind-relevant state, focused headless tests, and native screenshot/headless validation where practical.
-
-When route blockers involve objects or bosses, make the object contract decision explicit in the plan: `ObjectControlState` for forced/control bits, `ObjectPlayerQuery` plus `ObjectPlayerParticipationPolicy` for native slots versus OpenGGF sidekicks, `ObjectLifetimeOps` for delete/despawn/remembered-object behavior, and canonical solid/touch/lifecycle profiles through compatibility wrappers. Guard work should ratchet baselines from inventory before hard-failing new shortcuts.
-
-## Zone Priority Order
-
-Zones listed in recommended bring-up order. This order favors playable route closure over global checklist coverage. AIZ is already implemented and serves as the reference.
-
-**Existing Features is a dated snapshot (as of 2026-07).** Before dispatching any feature agent, check the live ground truth instead of trusting this table: `ls src/main/java/com/openggf/game/sonic3k/scroll/` + `Sonic3kScrollHandlerProvider` registrations for parallax, and `ls src/main/java/com/openggf/game/sonic3k/events/` for per-zone event handler classes (`Sonic3k{ZONE}Events`).
-
-| Priority | Zone | Full Name | Existing Features | Complexity Notes |
-|----------|------|-----------|-------------------|------------------|
-| -- | AIZ | Angel Island Zone | Events, parallax, animated tiles, palette cycling | **Reference zone** -- fully implemented |
-| 1 | HCZ | Hydrocity Zone | Events, parallax, palette cycling exist | First AIZ continuation slice; water, chase, transitions, and boss/event parity |
-| 2 | CNZ | Carnival Night Zone | Events, parallax, palette cycling exist | Existing trace/object work; bumpers, cylinders, miniboss, lighting, and sidekick-sensitive interactions |
-| 3 | MGZ | Marble Garden Zone | Events, parallax exist | Existing runtime-state/parallax base; animated tiles, miniboss/boss flow |
-| 4 | ICZ | IceCap Zone | Events, parallax, palette cycling exist | Active object work; snowboarding, ice objects, Freezer, validation of palette/PLC state |
-| 5 | LBZ | Launch Base Zone | Events, parallax, palette cycling exist | Complex events (rising water, dual acts), validate existing palette cycling |
-| 6 | LRZ | Lava Reef Zone | Palette cycling exists | Lava mechanics, visual payoff, validate existing palette cycling; no dedicated event handler or scroll handler yet |
-| 7 | FBZ | Flying Battery Zone | Palette cycling placeholder | Flying Battery mechanics, palette cycling may be stub; no dedicated event handler or scroll handler yet |
-| 8 | MHZ | Mushroom Hill Zone | Events, parallax exist | Time-of-season (act color changes); no palette cycling yet |
-| 9 | SOZ | Sandopolis Zone | None | Time-of-day system, ghosts, complex zone |
-| 10 | SSZ | Sky Sanctuary Zone | None | Short zone, unique sky mechanics |
-| 11 | DEZ | Death Egg Zone | None | Death Egg mechanics, complex bosses |
-| 12 | DDZ | Doomsday Zone | None | Entirely unique (flight-only boss chase), lowest priority |
-
-Competition zones (ALZ, BPZ, DPZ, CGZ, EMZ) follow after main zones.
-
-## Orchestration Process
-
-### Step 1: Run Zone Analysis
-
-Dispatch an agent with the `s3k-zone-analysis` skill for the target zone. The agent reads the disassembly and produces a structured feature catalogue.
-
-```
-Agent prompt: "Use /s3k-zone-analysis {ZONE}"
-```
-
-**Output:** `docs/architecture/research/s3k-zones/{zone}-analysis.md` (e.g., `docs/architecture/research/s3k-zones/hcz-analysis.md`)
-
-Wait for the analysis agent to complete before proceeding. The analysis spec is the input to all subsequent steps.
-
-### Step 2: Human Review Gate
-
-Present the analysis spec to the user for review. Display a summary:
-
-```
-Zone Analysis Complete: {ZONE} ({Full Name})
-  Events:          {N stages Act 1} + {N stages Act 2} (confidence: HIGH/MEDIUM/LOW)
-  Parallax:        {N bands} (confidence: HIGH/MEDIUM/LOW)
-  Animated Tiles:  {N scripts} (confidence: HIGH/MEDIUM/LOW)
-  Palette Cycling: {N channels} (confidence: HIGH/MEDIUM/LOW)
-  Cross-cutting:   {water/shake/character paths/...}
-
-Full spec: docs/architecture/research/s3k-zones/{zone}-analysis.md
-Proceed with implementation? [Y/n]
-```
-
-If `--skip-review` was passed, skip this step and proceed directly to Step 3.
-
-### Step 3: Determine Feature Scope
-
-Read the analysis spec and decide which features apply to this zone. Not every zone needs every feature -- some have `rts` stubs for AnPal (no palette cycling), some share a parallax handler with another zone, some have no animated tiles.
-
-**Decision flowchart:**
-
-```
-For each feature category:
-  1. Events (Dynamic_Resize)
-     - ALWAYS applicable -- every zone has a _Resize routine
-     - Check: is it just "rts" or a trivial stub? If so, create a minimal handler
-
-  2. Parallax (Deform)
-     - Check: does the zone have a unique _Deform routine?
-     - If the analysis says "shares deform with {other zone}" -> SKIP (already implemented)
-     - If the analysis says "unique deform" -> DISPATCH
-
-  3. Animated Tiles (AniPLC)
-     - Check: does the analysis list any AniPLC scripts?
-     - If "no animated tiles" or "AniPLC routine is rts" -> SKIP
-     - If scripts listed -> DISPATCH
-
-  4. Palette Cycling (AnPal)
-     - Check: does the analysis say "AnPal is rts" or "no palette cycling"?
-     - If rts -> SKIP
-     - If channels listed AND already implemented -> DISPATCH with --validate-only flag
-     - If channels listed AND not implemented -> DISPATCH
-```
-
-Display the scope decision to the user:
-
-```
-Feature Scope for {ZONE}:
-  [DISPATCH] Events       -- {N} stages, {reason}
-  [DISPATCH] Parallax     -- {N} bands, unique deform routine
-  [SKIP]    Animated Tiles -- AniPLC routine is rts
-  [VALIDATE] Palette Cycling -- {N} channels, already implemented
-```
-
-### Step 4: Dispatch Feature Agents
-
-Launch one agent per applicable feature in a separate worktree. Each agent receives the zone name and the path to the analysis spec.
-
-**Dispatch prompt templates:**
-
-**Events agent:**
-```
-Use /s3k-zone-events {ZONE}
-
-Zone analysis spec: docs/architecture/research/s3k-zones/{zone}-analysis.md
-Read the Events section of the analysis spec first, then implement the zone event handler.
-```
-
-**Parallax agent:**
-```
-Use /s3k-parallax {ZONE}
-
-Zone analysis spec: docs/architecture/research/s3k-zones/{zone}-analysis.md
-Read the Parallax section of the analysis spec first for band counts and data table locations.
-```
-
-**Animated tiles agent:**
-```
-Use /s3k-animated-tiles {ZONE}
-
-Zone analysis spec: docs/architecture/research/s3k-zones/{zone}-analysis.md
-Read the Animated Tiles section of the analysis spec first for script addresses and gating conditions.
-```
-
-**Palette cycling agent:**
-```
-Use /s3k-palette-cycling {ZONE}
-
-Zone analysis spec: docs/architecture/research/s3k-zones/{zone}-analysis.md
-Read the Palette Cycling section of the analysis spec first for channel definitions and counter addresses.
-```
-
-All applicable agents run in parallel. Wait for all to complete before proceeding to Step 5.
-
-### Step 5: Merge Results
-
-Merge the worktree branches from each feature agent into the main working branch. Since all feature agents work on different primary files (event handler class, scroll handler class, pattern animator cases, palette cycler cases), the only conflicts occur in shared files (see Section 6 below).
-
-**Merge sequence:**
-1. Merge the events worktree first (it is the most foundational -- other features may reference event state)
-2. Merge parallax worktree
-3. Merge animated tiles worktree
-4. Merge palette cycling worktree
-5. For each merge conflict in a shared file, apply the additive resolution strategy (Section 6)
-
-### Step 6: Build Verification
-
-Run the full build to verify compilation:
-
-```bash
-mvn package
-```
-
-If the build fails:
-1. Read the compiler error
-2. Identify which shared file has a conflict or which feature agent introduced an incompatibility
-3. Fix the issue (most likely a missing import, duplicate constant name, or switch case ordering)
-4. Re-run `mvn package`
-
-Also run existing S3K tests to verify no regressions:
-
-```bash
-mvn test -Dtest=TestS3kAiz1SkipHeadless,TestSonic3kLevelLoading,TestSonic3kBootstrapResolver,TestSonic3kDecodingUtils
-```
-
-### Step 7: Validate
-
-Run the focused headless zone tests and capture engine screenshots where the
-zone supports them. Compare against the ROM-backed trace/replay evidence and
-the zone analysis targets for parallax layers, palette cycling, animated tiles,
-and camera locks. Record any unsupported visual comparison as a validation gap
-rather than introducing a second emulator workflow.
-
-## Shared File Conflict Resolution
-
-Five files are touched by multiple feature agents. All changes are additive (new constants, new switch cases, new registrations), so conflicts are mechanical -- resolve by combining the additions from each branch.
-
-| File | What Each Agent Adds | Resolution |
-|------|---------------------|------------|
-| `Sonic3kConstants.java` | ROM address constants (events adds event-related offsets, parallax adds deform data offsets, etc.) | Combine all new `public static final` declarations. No two agents define the same constant name since they use different prefixes (`DEFORM_`, `ANIPLC_`, `ANPAL_`, etc.) |
-| `Sonic3kLevelEventManager.java` | Zone dispatch case in `createEventsForZone()` or equivalent switch | Only the events agent adds a case here. If another agent also touches this file (e.g., to read event state), take both changes. |
-| `Sonic3kScrollHandlerProvider.java` | Zone case returning the new scroll handler | Only the parallax agent adds a case. Merge is trivial -- add the new case to the switch. |
-| `Sonic3kPatternAnimator.java` | Zone case in `resolveAniPlcAddr()` and/or `update()` | Only the animated tiles agent adds cases. Merge is trivial. |
-| `Sonic3kPaletteCycler.java` | Zone case or channel updates in the cycling method | Only the palette cycling agent adds cases. Merge is trivial. |
-
-**If a true conflict occurs** (two agents modified the same line), prefer the events agent's version for event-state-related code, and the feature-specific agent's version for its own feature code.
-
-## Common Mistakes
-
-1. **Skipping analysis.** Never dispatch feature agents without running `s3k-zone-analysis` first. The analysis spec is the contract between analysis and implementation -- without it, feature agents will re-derive information from the disassembly independently, leading to inconsistent interpretations and duplicated work.
-
-2. **Not checking feature applicability.** Some zones have `rts` stubs for AnPal (no palette cycling) or share a Deform routine with another zone (no unique parallax to implement). Dispatching an agent for a non-applicable feature wastes time and may produce incorrect code. Always run Step 3's decision flowchart before dispatching.
-
-3. **Merging without building.** After merging worktree branches, always run `mvn package` before proceeding to validation. Shared file conflicts that silently produce invalid Java (duplicate switch cases, missing imports) will only surface at compile time.
-
-4. **Forgetting palette cycling validation for already-implemented zones.** HCZ, CNZ, ICZ, LBZ, and LRZ already have palette cycling implemented (check `Sonic3kPaletteCycler` for the current set). The palette cycling agent should run in `--validate-only` mode for these zones, verifying the existing code against the disassembly rather than reimplementing from scratch. Skipping this validation misses opportunities to catch discrepancies in the existing implementation.
-
-5. **Dispatching all 4 feature agents unconditionally.** The decision flowchart in Step 3 exists for a reason. MGZ already has parallax implemented -- dispatching a parallax agent will create a conflicting second implementation. FBZ may have an `rts` stub for AniPLC -- dispatching an animated tiles agent will produce a no-op handler that clutters the codebase.
-
-6. **Ignoring cross-cutting concerns from the analysis.** The analysis spec's "Cross-Cutting Concerns" section flags water systems, screen shake, character branching, and dynamic tilemap changes. These affect multiple features (e.g., water level changes in events affect parallax water-split logic). Review cross-cutting concerns before dispatch and include relevant notes in each agent's prompt.
-
-7. **Wrong merge order.** Events should merge first because event state variables (routine counters, boss flags) may be referenced by other features (animated tile gating, parallax mode switches). Merging parallax first and then events can create forward-reference errors if the parallax handler reads an event field that the events agent introduces.
-
-## Queue Diagnostics Routing
-
-When bring-up reaches runtime art-load timing, use `s3k-plc-system` for direct
-Kosinski/KosM ownership and hardware-timing schema 2. Use
-`trace-replay-bug-fixing` for `queue.*` and `dynamic_art.*` reports and
-`trace-green-fleet` for fleet frontiers. The evidence is zero-tolerance and
-comparison-only.
+# S3K zone bring-up
+
+Advance the requested playable route using the zone's current implementation and
+ROM evidence. Treat a zone abbreviation as a scope to investigate, not a command
+to reimplement every subsystem. Validation-only requests inspect/test existing behavior.
+
+## Establish the slice
+
+Read the existing analysis under `docs/architecture/research/s3k-zones/` and the
+relevant live event/object/scroll/art registrations. Use `../s3k-zone-analysis/SKILL.md`
+when substantial source analysis is missing. Identify traversal blockers, event
+flow, necessary visuals/art readiness, sidekick interactions, and transition exit.
+
+Choose only applicable missing behavior. An `rts` handler needs no implementation
+unless another required effect is absent. Shared routines may still require
+zone-specific data/registration; existing classes may still have route gaps.
+
+## Delivery
+
+- Resolve shared state and update boundaries before implementing consumers:
+  event state, camera/water, palette ownership, animation channels, terrain
+  mutation, and render modes should use their existing runtime owners.
+- Implement the requested route blockers first. Avoid broad migrations unless
+  they remove a concrete obstacle or duplication in the work being changed.
+- Independent feature work may run in separate worktrees when useful; give each
+  task a concrete owner, behavior, source evidence, dependencies, and validation
+  target. Keep dependent state-contract changes sequential.
+- Integrate using the repository workflow. Inspect shared-file conflicts
+  semantically; additive-looking constants or registrations can still disagree
+  about addresses, ordering, or ownership.
+- Continue authorized implementation without a routine human review gate. Ask
+  only when required information or an unresolved consequential choice blocks progress.
+
+## Conditional skills
+
+| Work | Skill |
+|---|---|
+| Camera, arena, cutscene, transition, terrain | `../s3k-zone-events/SKILL.md` |
+| Scroll/deformation, water/render split | `../s3k-parallax/SKILL.md` |
+| AniPLC/direct animated upload | `../s3k-animated-tiles/SKILL.md` |
+| AnPal cycling | `../s3k-palette-cycling/SKILL.md` |
+| Traversal object/badnik | `../s3k-implement-object/SKILL.md` |
+| Boss encounter | `../s3k-implement-boss/SKILL.md` |
+| PLC/queue/art refresh | `../s3k-plc-system/SKILL.md` |
+
+## Validation
+
+Verify the route's entry, blocker passage, event/camera progression, and exit.
+Exercise changed subsystem boundaries with focused tests and ROM-backed evidence;
+use representative visual capture for rendering effects. Keep the project's
+S3K bootstrap/loading gates and required full-suite comparison intact.
+Report the actual route advanced, validation gaps, and unresolved blockers.
+A level loading or a collection of merged classes is insufficient evidence of parity.

@@ -39,10 +39,28 @@ final class LevelLayoutLookup {
             LevelManager.LOGGER.warning("Level or Map is not initialized.");
             return null;
         }
+        return blockAt(owner.level,
+                owner.getCachedLayerWidthPx(layer), owner.getCachedLayerHeightPx(layer),
+                owner.blockPixelSize, owner.verticalWrapEnabled, layer, x, y);
+    }
 
-        int levelWidth = owner.getCachedLayerWidthPx(layer);
-        int levelHeight = owner.getCachedLayerHeightPx(layer);
+    /**
+     * Block lookup for a level that is not (yet) the manager's current level,
+     * using the same wrap/clamp rules as {@link #getBlockAtPosition}.
+     */
+    static Block blockAt(Level level, LevelGeometry geometry, boolean verticalWrapEnabled,
+                         byte layer, int x, int y) {
+        if (level == null || level.getMap() == null) {
+            return null;
+        }
+        int levelWidth = layer == 0 ? geometry.fgWidthPx() : geometry.bgWidthPx();
+        int levelHeight = layer == 0 ? geometry.fgHeightPx() : geometry.bgHeightPx();
+        return blockAt(level, levelWidth, levelHeight, geometry.blockPixelSize(),
+                verticalWrapEnabled, layer, x, y);
+    }
 
+    private static Block blockAt(Level level, int levelWidth, int levelHeight, int blockPixelSize,
+                                 boolean verticalWrapEnabled, byte layer, int x, int y) {
         // Handle wrapping for X
         int wrappedX = ((x % levelWidth) + levelWidth) % levelWidth;
 
@@ -51,7 +69,7 @@ final class LevelLayoutLookup {
         if (layer == 1) {
             // Background loops vertically
             wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
-        } else if (owner.verticalWrapEnabled) {
+        } else if (verticalWrapEnabled) {
             // ROM: LZ3/SBZ2 — FG also wraps vertically
             wrappedY = ((wrappedY % levelHeight) + levelHeight) % levelHeight;
         } else {
@@ -60,20 +78,20 @@ final class LevelLayoutLookup {
                 return null;
         }
 
-        Map map = owner.level.getMap();
-        int mapX = wrappedX / owner.blockPixelSize;
-        int mapY = wrappedY / owner.blockPixelSize;
+        Map map = level.getMap();
+        int mapX = wrappedX / blockPixelSize;
+        int mapY = wrappedY / blockPixelSize;
 
         byte value = map.getValue(layer, mapX, mapY);
 
         // Mask the value to treat the byte as unsigned
         int blockIndex = value & 0xFF;
 
-        if (blockIndex >= owner.level.getBlockCount()) {
+        if (blockIndex >= level.getBlockCount()) {
             return null;
         }
 
-        Block block = owner.level.getBlock(blockIndex);
+        Block block = level.getBlock(blockIndex);
         if (block == null) {
             LevelManager.LOGGER.warning("Block at index " + blockIndex + " is null.");
         }

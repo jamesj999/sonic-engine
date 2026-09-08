@@ -98,6 +98,31 @@ class TestS3kSfxNoiseTailWriteStream {
     }
 
     @Test
+    void collapseFirstNoteWritesItsNoiseVolumeOnce() {
+        Rom rom = openRom();
+        try (rom) {
+            Sonic3kSmpsLoader loader = new Sonic3kSmpsLoader(rom);
+            List<int[]> writes = noiseVolumeWrites(loader, 0x59);
+            int firstSoundingService = writes.stream()
+                    .filter(write -> (write[1] & 0x0F) != 0x0F)
+                    .mapToInt(write -> write[0])
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "sfx_Collapse never wrote a sounding noise volume"));
+            long writesInService = writes.stream()
+                    .filter(write -> write[0] == firstSoundingService)
+                    .filter(write -> (write[1] & 0x0F) == 0)
+                    .count();
+
+            assertEquals(1, writesInService,
+                    "zUpdatePSGTrack has one volume tail after its frequency"
+                    + " pair on the new-note path; applying modulation must not"
+                    + " add a second attacked-note volume write"
+                    + " (Sound/Z80 Sound Driver.asm:4059-4135)");
+        }
+    }
+
+    @Test
     void dashKeepsItsNoiseTailToTheRomsLength() {
         Rom rom = openRom();
         try (rom) {

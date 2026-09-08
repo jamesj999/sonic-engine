@@ -108,13 +108,11 @@ class TestS3kResultsKosQueueAndChildren {
         ObjectManager manager = GameServices.level().getObjectManager();
         manager.addDynamicObject(root);
 
-        for (int phase = 0; phase < 6; phase++) {
-            fixture.stepFrame(false, false, false, false, false);
-        }
+        awaitResultsArt(fixture, root);
         assertTrue(fixture.gameplayMode().getKosinskiModuleQueue().isIdle());
 
         // Fill immediately before Obj_LevelResultsCreate executes. Ordinary
-        // placement objects may retire while the six KosM phases elapse.
+        // placement objects may retire while the KosM jobs complete.
         List<SlotFiller> fillers = new ArrayList<>();
         while (true) {
             SlotFiller filler = ObjectConstructionContext.construct(TestEnvironment.objectServices(),
@@ -149,9 +147,7 @@ class TestS3kResultsKosQueueAndChildren {
         S3kResultsScreenObjectInstance root = createResults();
         ObjectManager manager = GameServices.level().getObjectManager();
         manager.addDynamicObject(root);
-        for (int phase = 0; phase < 6; phase++) {
-            fixture.stepFrame(false, false, false, false, false);
-        }
+        awaitResultsArt(fixture, root);
 
         List<SlotFiller> fillers = fillEveryDynamicSlot(manager);
         fillers.stream()
@@ -181,9 +177,7 @@ class TestS3kResultsKosQueueAndChildren {
                 TestEnvironment.objectServices(),
                 () -> new S3kResultsScreenObjectInstance(PlayerCharacter.TAILS_ALONE, 1));
         manager.addDynamicObject(root);
-        for (int phase = 0; phase < 6; phase++) {
-            fixture.stepFrame(false, false, false, false, false);
-        }
+        awaitResultsArt(fixture, root);
         fixture.stepFrame(false, false, false, false, false);
         List<S3kResultsElementObjectInstance> capturedChildren = resultChildren();
         assertEquals(12, capturedChildren.size());
@@ -222,6 +216,20 @@ class TestS3kResultsKosQueueAndChildren {
         if (!inPlace) {
             assertNotSame(root, restoredRoot);
         }
+    }
+
+    /** Stops at completed art, before the next Obj_LevelResultsCreate dispatch. */
+    private static void awaitResultsArt(HeadlessTestFixture fixture,
+                                        S3kResultsScreenObjectInstance root) {
+        root.update(GameServices.level().getObjectManager().getVblaCounter(), fixture.sprite());
+        int guard = 0;
+        while (GameServices.hardwareTiming().incompleteCount(
+                com.openggf.game.timing.HardwareWorkKind.KOS_MODULE_QUEUE) > 0) {
+            assertTrue(resultChildren().isEmpty(), "pending art must not publish result children");
+            fixture.stepFrame(false, false, false, false, false);
+            assertTrue(++guard < 64, "results KosM work must complete");
+        }
+        assertTrue(resultChildren().isEmpty(), "child allocation belongs to the next dispatch");
     }
 
     private static HeadlessTestFixture fixture() {

@@ -4,6 +4,10 @@ import com.openggf.audio.driver.SmpsDriver;
 import com.openggf.audio.session.LegacyCompatibilitySmpsPhysicalPolicy;
 import com.openggf.audio.session.OwnedSmpsAudioStream;
 import com.openggf.audio.session.SmpsPhysicalDevice;
+import com.openggf.audio.session.SmpsChipWrite;
+import com.openggf.audio.session.SmpsMusicActivation;
+import com.openggf.audio.session.SmpsWriteProgram;
+import com.openggf.audio.rewind.SmpsSourceDescriptor;
 import com.openggf.audio.rewind.SmpsSequencerSnapshot;
 import com.openggf.audio.rewind.SmpsTrackSnapshot;
 import com.openggf.audio.smps.AbstractSmpsData;
@@ -14,6 +18,7 @@ import com.openggf.data.Rom;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.audio.Sonic2SmpsConstants;
+import com.openggf.game.sonic2.audio.Sonic2SmpsCompatibilityPolicy;
 import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsLoader;
 
@@ -277,46 +282,20 @@ public final class S2OracleEngineCapture {
      * VoiceControl bytes, with undefined tracks aliasing 0 (sd:2008-2075).
      */
     private static void emitS2MusicLoadBurst(SmpsDriver driver, AbstractSmpsData song) {
-        for (int channel = 2; channel >= 0; channel--) {
-            driver.writeFm(driver, 0, 0x28, channel);
-            driver.writeFm(driver, 0, 0x28, channel + 4);
-        }
-        for (int register = 0x30; register <= 0x8f; register++) {
-            driver.writeFm(driver, 0, register, 0xff);
-            driver.writeFm(driver, 1, register, 0xff);
-        }
-        driver.writePsg(driver, 0x9f);
-        driver.writePsg(driver, 0xbf);
-        driver.writePsg(driver, 0xdf);
-        driver.writePsg(driver, 0xff);
+        var policy = Sonic2SmpsCompatibilityPolicy.INSTANCE;
+        applyProgram(driver, policy.beginMusicLoad());
+        applyProgram(driver, policy.activateMusic(new SmpsMusicActivation(
+                SmpsSourceDescriptor.baseMusic(song), song.getFmPointers().length,
+                song.getPsgPointers().length)));
+    }
 
-        int declaredFmDacTracks = song.getFmPointers().length;
-        int[] fmOrder = Sonic2SmpsSequencerConfig.FM_CHANNEL_ORDER;
-        if (declaredFmDacTracks < fmOrder.length) {
-            // Song leaves FM6 free: key it off, silence its part-II TLs, reset
-            // its pan, DACEnabled = 80h (sd:1893-1935).
-            driver.writeFm(driver, 0, 0x28, 6);
-            for (int register : new int[] { 0x42, 0x46, 0x4a, 0x4e }) {
-                driver.writeFm(driver, 1, register, 0xff);
+    private static void applyProgram(SmpsDriver driver, SmpsWriteProgram program) {
+        for (SmpsChipWrite write : program.writes()) {
+            if (write instanceof SmpsChipWrite.Ym2612 ym) {
+                driver.writeFm(driver, ym.port(), ym.register(), ym.value());
+            } else if (write instanceof SmpsChipWrite.Psg psg) {
+                driver.writePsg(driver, psg.value());
             }
-            driver.writeFm(driver, 1, 0xb6, 0xc0);
-            driver.writeFm(driver, 0, 0x2b, 0x80);
-        } else {
-            driver.writeFm(driver, 0, 0x2b, 0x00);
-        }
-
-        // zInitSFX note-offs: 28h <- VoiceControl for the six FM music tracks
-        // (undefined tracks carry VoiceControl 0 after the clear) and
-        // VoiceControl|1Fh for the three PSG tracks (sd:2045-2075).
-        for (int musicFmSlot = 1; musicFmSlot < fmOrder.length; musicFmSlot++) {
-            int channel = musicFmSlot < declaredFmDacTracks ? fmOrder[musicFmSlot] : 0;
-            driver.writeFm(driver, 0, 0x28, channel);
-        }
-        int[] psgOrder = Sonic2SmpsSequencerConfig.PSG_CHANNEL_ORDER;
-        int declaredPsgTracks = song.getPsgPointers().length;
-        for (int slot = 0; slot < psgOrder.length; slot++) {
-            int channel = slot < declaredPsgTracks ? psgOrder[slot] : 0;
-            driver.writePsg(driver, channel | 0x1f);
         }
     }
 

@@ -22,7 +22,7 @@ import java.util.Objects;
  * <p>Like every other voice this is confined to the presentation thread, which
  * is the confinement the port already requires.
  */
-public final class StreamedMusicVoice implements PresentationVoice {
+public final class StreamedMusicVoice implements PcmPresentationVoice {
 
     /** Music voices mix at the base priority, matching {@code loopingMusic}. */
     private static final int MUSIC_PRIORITY = 0;

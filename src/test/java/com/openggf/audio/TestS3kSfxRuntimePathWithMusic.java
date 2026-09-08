@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.openggf.audio.presentation.PresentationMode;
 import com.openggf.audio.rewind.SmpsDriverSnapshot;
+import com.openggf.audio.rewind.SmpsSourceDescriptor;
 import com.openggf.audio.rewind.SmpsTrackSnapshot;
 import com.openggf.audio.smps.SmpsSequencer;
 import com.openggf.audio.synth.ChipWriteObserver;
@@ -59,7 +60,8 @@ class TestS3kSfxRuntimePathWithMusic {
 
     /**
      * Collapse's audible part is a PSG3 noise track that outlives its FM
-     * tracks and fades over six repeats
+     * tracks and fades over five {@code $18}-tick notes. Its six observed
+     * levels include the terminal silence, not a sixth timed repeat
      * (skdisasm Sound/SFX/59 - Collapse.asm:24-36). With music playing, the
      * effect must take the noise channel, ramp through its own attenuation
      * ladder and silence the channel once, at the end.
@@ -67,8 +69,9 @@ class TestS3kSfxRuntimePathWithMusic {
     @Test
     void collapseRampsAndSilencesOnceWithMusicPlaying() {
         AudioManager audio = installWithAiz1();
-        List<Integer> levels = noiseLevelsForRequest(
+        NoiseTailObservation observation = noiseTailForRequest(
                 audio, Sonic3kSfx.COLLAPSE.id, 200);
+        List<Integer> levels = observation.effectLevels();
 
         assertEquals(List.of(0x00, 0x03, 0x06, 0x09, 0x0C, 0x0F), levels,
                 "Collapse must ring out through its ROM attenuation ladder over"
@@ -76,6 +79,15 @@ class TestS3kSfxRuntimePathWithMusic {
         assertEquals(1, countSilences(levels),
                 "Collapse's tail must reach the noise channel's silence once,"
                 + " at the end; noise levels were " + levels);
+        assertEquals(122, observation.framesThroughTerminalStop(),
+                "at one SFX tick per presented NTSC frame, five $18-tick notes"
+                + " are bracketed by deferred admission and the following F2 frame");
+        assertEquals(List.of(0xE7, 0x80, 0x14, 0x9F,
+                        0xAD, 0x17, 0xBF, 0xC0, 0x00, 0xF4),
+                observation.postStopWrites(),
+                "the source-proven zStopPSGTrack E7 restore precedes the"
+                + " characterized later AIZ1 writes"
+                + " (Sound/Z80 Sound Driver.asm:3521-3533)");
     }
 
     /**
@@ -102,8 +114,9 @@ class TestS3kSfxRuntimePathWithMusic {
             }
         }
 
-        List<Integer> levels = noiseLevelsForRequest(
+        NoiseTailObservation observation = noiseTailForRequest(
                 audio, Sonic3kSfx.DASH.id, 160);
+        List<Integer> levels = observation.effectLevels();
 
         assertFalse(levels.isEmpty(),
                 "the spindash release must reach the noise channel after the"
@@ -117,6 +130,14 @@ class TestS3kSfxRuntimePathWithMusic {
                 + " buzz rather than sweep; noise levels were " + levels);
         assertEquals(NOISE_SILENCE, levels.get(levels.size() - 1).intValue(),
                 "the spindash release ends on the noise channel's silence");
+        assertEquals(87, observation.framesThroughTerminalStop(),
+                "at one SFX tick per presented NTSC frame, $06 rest + $4F"
+                + " noise are bracketed by deferred admission and the following F2 frame");
+        assertEquals(List.of(0xE7, 0x9F, 0xBF,
+                        0xC0, 0x00, 0xF6), observation.postStopWrites(),
+                "the source-proven zStopPSGTrack E7 restore precedes the"
+                + " characterized later AIZ1 writes"
+                + " (Sound/Z80 Sound Driver.asm:3521-3533)");
     }
 
     /**
@@ -174,8 +195,19 @@ class TestS3kSfxRuntimePathWithMusic {
      * <p>Every noise-form effect opens by silencing the noise channel during
      * setup (Sound/Z80 Sound Driver.asm:3541-3571), so that leading {@code $0F}
      * is the ROM's and the ladder proper begins after it.
+     * S3K updates SFX once before music in each sound service (:650-701,
+     * :727-759); this fixture's one forward presentation per NTSC frame drives
+     * one such service. The queued request is therefore one deferred frame,
+     * the ROM durations occupy their literal tick counts, and F2 is parsed on
+     * the following frame.
+     *
+     * <p>The chip observer has no source identity. Attribution is instead
+     * bounded by the requested sequencer's authenticated source descriptor and
+     * its live-to-dead transition. Bytes after that transition's unique retail
+     * stop transaction are retained as characterization of the current
+     * covered-music restore and music pass, not asserted as retail parity.
      */
-    private List<Integer> noiseLevelsForRequest(
+    private NoiseTailObservation noiseTailForRequest(
             AudioManager audio, int sfxId, int frames) {
         psgWrites.clear();
         observe(audio);
@@ -185,15 +217,32 @@ class TestS3kSfxRuntimePathWithMusic {
         // effect's life would mix the music's writes into the measurement. The
         // effect owns the channel while its PSG track is alive, and the music
         // track's override is what keeps the music off it in the meantime.
+        int terminalFrame = -1;
+        List<Integer> terminalWrites = List.of();
+        boolean observedAlive = false;
         for (int frame = 0; frame < frames; frame++) {
+            int writeStart = psgWrites.size();
             audio.presentFrame(PresentationMode.FORWARD);
-            if (frame > 0 && !sfxPsgTrackAlive(audio)) {
+            boolean alive = sfxPsgTrackAlive(audio, sfxId);
+            if (alive) {
+                observedAlive = true;
+            } else if (observedAlive) {
+                terminalFrame = frame + 1;
+                terminalWrites = List.copyOf(
+                        psgWrites.subList(writeStart, psgWrites.size()));
                 break;
             }
         }
 
+        assertTrue(observedAlive, "accepted SFX must expose a live PSG track");
+        assertTrue(terminalFrame > 0, "SFX PSG track must terminate within the budget");
+        List<Integer> stopMarker = List.of(0xDF, 0xFF, 0xFF);
+        int marker = uniqueSubListIndex(terminalWrites, stopMarker);
+        int writesBeforeTerminalService = psgWrites.size() - terminalWrites.size();
+        int effectEnd = writesBeforeTerminalService + marker + stopMarker.size();
+
         List<Integer> levels = new ArrayList<>();
-        for (int write : psgWrites) {
+        for (int write : psgWrites.subList(0, effectEnd)) {
             if ((write & 0xF0) != NOISE_VOLUME_LATCH) {
                 continue;
             }
@@ -205,14 +254,38 @@ class TestS3kSfxRuntimePathWithMusic {
         if (!levels.isEmpty() && levels.get(0) == NOISE_SILENCE) {
             levels.remove(0);
         }
-        return levels;
+        return new NoiseTailObservation(levels,
+                List.copyOf(terminalWrites.subList(marker + stopMarker.size(),
+                        terminalWrites.size())), terminalFrame);
     }
 
-    /** Whether any live SFX still holds a PSG track, and so the noise channel. */
-    private boolean sfxPsgTrackAlive(AudioManager audio) {
+    private static int uniqueSubListIndex(List<Integer> values, List<Integer> marker) {
+        int found = -1;
+        for (int index = 0; index <= values.size() - marker.size(); index++) {
+            if (!values.subList(index, index + marker.size()).equals(marker)) {
+                continue;
+            }
+            assertEquals(-1, found,
+                    "terminal service must contain exactly one PSG3 stop transaction");
+            found = index;
+        }
+        assertTrue(found >= 0,
+                "terminal service must contain the retail DF FF FF stop transaction");
+        return found;
+    }
+
+    private record NoiseTailObservation(
+            List<Integer> effectLevels,
+            List<Integer> postStopWrites,
+            int framesThroughTerminalStop) { }
+
+    /** Whether the requested base-game SFX still has a live PSG track. */
+    private boolean sfxPsgTrackAlive(AudioManager audio, int sfxId) {
         for (SmpsDriverSnapshot.SequencerEntry entry
                 : audio.shadowSmpsDriverSnapshotForTesting().sequencers()) {
-            if (!entry.sfx()) {
+            if (!entry.sfx()
+                    || entry.source().kind() != SmpsSourceDescriptor.Kind.BASE_SFX_ID
+                    || entry.source().id() != sfxId) {
                 continue;
             }
             for (SmpsTrackSnapshot track : entry.snapshot().tracks()) {

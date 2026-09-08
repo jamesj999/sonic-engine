@@ -109306,3 +109306,89 @@ The other three death arms remain coordinates only.
   `B5h` ring on the music mailbox), `w13650-14400` 5 -> 7 (13712 `F9h`
   fade-out, 13849 `92h` `zMusIDPtr_SpecStage`), CPZ 33 -> 35 (2724 `8Eh` CPZ
   music, 3225 `B5h` the milestone ring).
+
+## 2026-09-05 — S3K audio-driver frontier advance
+
+- Audio-only work merged into develop as `a1e00c643`, based on `adcd0a3fa`.
+  No gameplay replay frontier is claimed moved by this entry.
+- The S3K intro oracle advances from service 1570 event 43 to service 1592,
+  `MUS_PSG3.volEnv`: reference 0, engine 1. The comparator reports the first
+  mismatch only; this is not a count of all later divergences.
+- Services 0 through 1591 match, after removing a duplicate PSG volume write,
+  preserving original frequency-pair ownership and restoring FM3 mode before
+  its music voice. Full-window audio parity remains open.
+- Focused command: `mvn -Dmse=off -Ds3k.rom.path=<absolute-ROM-path>
+  -Dtest=TestS3kOracleRequestSidecarWiring test -B`. The final integrated
+  focused selection also includes the admission, PSG transaction, FM3 and fade
+  tests: 65 tests, zero failures/errors/skips. Its known-frontier assertion is
+  deliberately distinct from the matching-prefix assertion.
+- Exact worker commands and source evidence live in [audio-frontier-log.md](audio-frontier-log.md);
+  baseline/candidate/post-merge verification status is recorded in the
+  [delivery ledger](../architecture/validation/audio/2026-09-05-sol-smps-parity-cycle.md).
+
+## 2026-09-05 - S3K PSG-volume envelope rewind advances service 1594 to 1652
+
+- Worktree `.worktrees/sol-s3k-envelope-parity`, branch
+  `bugfix/ai-sol-s3k-envelope-parity`, atop `d8488e080`.
+- S3K `cfChangePSGVolume` executes an 8-bit `DEC` on `VolEnv`; the engine's
+  `envPos > 0` guard suppressed the retail `00h -> FFh` wrap seen on SFX PSG3
+  at service 1594. The handler now preserves the byte-width operation. Its
+  existing PSG-only gate, rest clear, wrapped add, unsigned `0Fh` clamp, and
+  no-immediate-chip-write behavior remain unchanged
+  (`Sound/Z80 Sound Driver.asm:3263-3285`).
+- Red-first unit command: `mvn -Dmse=off
+  -Dtest=TestPsgVolumeChangeSemantics test`; zero stayed zero before the fix.
+  The focused test now covers the zero wrap, signed-underflow clamp, no direct
+  PSG write, and the non-PSG early return.
+- ROM oracle command: `mvn -Dmse=off
+  -Dtest=TestS3kOracleRequestSidecarWiring#theFullOraclePinsTheNextSfxWriteFrontier
+  -Ds3k.rom.path=<absolute-locked-on-ROM> test`. It advances to one error at
+  service 1652 event 0: reference YM2612 port-I `80=FF`, engine PSG `C8`.
+  The independent DAC mismatch remains outside this service-stream axis.
+
+## 2026-09-05 - S3K fixed SFX slot walk advances service 1652 to 1690
+
+- Worktree `.worktrees/sol-s3k-sfx-slot-order`, branch
+  `bugfix/ai-sol-s3k-sfx-slot-order`, based on `d004188d9`.
+- `zUpdateSFXTracks` walks fixed FM3..FM6 then PSG1..PSG3 RAM slots
+  (`Sound/Z80 Sound Driver.asm:727-759`). Selecting the existing shared
+  channel-RAM walker makes newly admitted Flying FM4 run before older Collapse
+  PSG slots, rather than preserving sequencer admission order.
+- ROM-backed concurrent service 1652 now matches completely. The hard oracle
+  advances to service 1690 event 6: reference PSG `FF`, engine PSG `C0`, with
+  a matching 1,690-service prefix. The independent DAC mismatch remains.
+
+## 2026-09-05 - S3K PSG stop helper advances within service 1690
+
+- Worktree `.worktrees/sol-s3k-sfx-slot-order`, second commit atop
+  `b39a47844`.
+- Retail `fix_sndbugs=0` emits an unconditional PSG `FF` from
+  `zGetSFXChannelPointers` after the stopped channel's own tone/noise silence
+  and before music release. The S3K F2 handler now preserves that transaction
+  order; generic reconciliation and other games are unchanged.
+- The oracle advances within service 1690 from event 6 (`FF` missing) to event
+  7: reference restored-noise `E7`, engine frequency `C0`. Prefix remains
+  1,690 complete services; the independent DAC mismatch remains.
+
+## 2026-09-05 - S3K covered-noise restore advances to service 2012
+
+- Worktree `.worktrees/sol-s3k-noise-restore` atop reviewed stop transaction.
+- `zStopPSGTrack` restores only the exact signed raw noise byte of the covered
+  music track, preserving active/rest state. The ended SFX's matching PSG3 and
+  noise locks are cleared before that callback; unrelated owners are retained.
+- The hard oracle advances from service 1690 event 7 (`E7` versus `C0`) to
+  service 2012 event 1: reference PSG `BF`, engine PSG `FF`.
+
+## 2026-09-05 - S3K SFX header order advances service 2012 to 2357
+
+- Worktree `.worktrees/sol-s3k-sfx-header-order`, based on `1e33747f1`.
+- Retail `zSFXTrackInitLoop` keeps IX on the preceding newly initialized
+  header across the next `zGetSFXChannelPointers` call. Skid's PSG2 then PSG1
+  headers therefore emit `FF BF FF`; OpenGGF previously retained only each
+  header's unconditional `FF` after sorting tracks for the separate runtime
+  fixed-slot walk.
+- Command: `mvn -Dmse=off
+  -Dtest=TestS3kOracleRequestSidecarWiring#theFullOraclePinsTheNextSfxWriteFrontier
+  -Ds3k.rom.path=<absolute-locked-on-ROM> test`.
+- The hard oracle advances to service 2357, `MUS_FM4.overridden`, reference
+  `false`, engine `true`. Full-game audio parity and authenticity remain open.

@@ -9,4 +9,9 @@ import com.openggf.audio.smps.SmpsLogicalWriteTarget;
  */
 public interface SmpsDriverSessionAccess extends SmpsLogicalWriteTarget {
     void forceSilenceFmChannel(int channelId);
+
+    /** Applies host-owned terminal fade semantics after a logical service step. */
+    boolean completeFadeOut();
+
+    boolean fadeOutCompletesWithGlobalStop();
 }

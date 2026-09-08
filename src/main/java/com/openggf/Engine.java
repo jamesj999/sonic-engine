@@ -327,6 +327,7 @@ public class Engine {
 	private int targetFps;
 	private final LiveCaptureChord liveCaptureChord = new LiveCaptureChord();
 	private final LiveCaptureController liveCaptureController;
+	private final AsyncScreenshotWriter screenshotWriter = new AsyncScreenshotWriter();
 	private final LiveCapturePresentationCoordinator liveCapturePresentation;
 	private final LiveCaptureIndicatorRenderer liveCaptureIndicator;
 	/** How long a recording-interrupted notice stays on screen. */
@@ -466,8 +467,7 @@ public class Engine {
 						audioManager.beginLiveCaptureAudio(frameRate),
 						resolveLiveCaptureAudioFailAfterFrames()),
 				audioManager::outputSampleRate,
-				viewport -> new GlReadPixelsGrabber(
-						viewport.x(), viewport.y(), viewport.width(), viewport.height()),
+				GlPboFrameGrabber::create,
 				recorderFactory::create,
 				finalizer,
 				Duration.ofSeconds(10)));
@@ -725,7 +725,11 @@ public class Engine {
 	private Throwable cleanupConfiguredHeadlessResources() {
 		Throwable failure = null;
 		failure = appendConfiguredHeadlessCleanupFailure(
+				failure, screenshotWriter::close);
+		failure = appendConfiguredHeadlessCleanupFailure(
 				failure, liveCaptureController::close);
+		failure = appendConfiguredHeadlessCleanupFailure(
+				failure, com.openggf.game.save.SessionSaveRequests::flushPendingSaves);
 		failure = appendConfiguredHeadlessCleanupFailure(
 				failure, SessionManager::clear);
 		failure = appendConfiguredHeadlessCleanupFailure(
@@ -1155,6 +1159,7 @@ public class Engine {
 	}
 
 	private Map<String, Object> requireStandaloneSlotPayload(GameModule module) throws IOException {
+		com.openggf.game.save.SessionSaveRequests.flushPendingSaves();
 		SaveSlotSummary summary = new SaveManager(com.openggf.game.save.SavePaths.root())
 				.readSlotSummary(module.getGameCode(), 1);
 		if (!summary.isLoadable()) throw new IOException("Standalone Continue slot is unavailable");
@@ -1740,6 +1745,8 @@ public class Engine {
 	}
 
 	private List<com.openggf.game.MasterTitleEntry> masterTitleEntries() {
+		// This menu's reader is distinct from the in-game async writer.
+		com.openggf.game.save.SessionSaveRequests.flushPendingSaves();
 		List<com.openggf.game.MasterTitleEntry> entries = new ArrayList<>();
 		entries.add(new com.openggf.game.MasterTitleEntry.Stock(MasterTitleScreen.GameEntry.SONIC_1));
 		entries.add(new com.openggf.game.MasterTitleEntry.Stock(MasterTitleScreen.GameEntry.SONIC_2));
@@ -1861,6 +1868,7 @@ public class Engine {
 	}
 
 	private void launchGameplayFromDataSelect(com.openggf.game.dataselect.DataSelectAction action) {
+		com.openggf.game.save.SessionSaveRequests.flushPendingSaves();
 		GameModule module = SessionManager.requireCurrentGameModule();
 		SaveManager saveManager = new SaveManager(com.openggf.game.save.SavePaths.root());
 		Map<String, Object> loadedPayload = loadDataSelectPayload(module, action, saveManager);
@@ -2921,7 +2929,8 @@ public class Engine {
 		projectionMatrix.identity().ortho2D(0, (float) projectionWidth, 0, (float) realHeight);
 		projectionMatrix.get(matrixBuffer);
 
-		renderDispatcher.applyClearColor(getCurrentGameMode(), clearActions);
+		renderDispatcher.applyClearColor(getCurrentGameMode(), specialStageEntryShowsLevel(),
+				clearActions);
 		glScissor(viewportX, viewportY, viewportWidth, viewportHeight);
 		glEnable(GL_SCISSOR_TEST);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -3223,7 +3232,7 @@ public class Engine {
 		Objects.requireNonNull(presentationSeam, "presentationSeam");
 		boolean renderedMode = switch (Objects.requireNonNull(mode, "mode")) {
 			case LEVEL, TITLE_CARD, SPECIAL_STAGE, SPECIAL_STAGE_RESULTS,
-					TITLE_SCREEN, DATA_SELECT, LEVEL_SELECT, EDITOR, CREDITS_TEXT,
+					TITLE_SCREEN, CONTINUE_SCREEN, DATA_SELECT, LEVEL_SELECT, EDITOR, CREDITS_TEXT,
 					CREDITS_DEMO, MASTER_TITLE_SCREEN, LEGAL_DISCLAIMER, TRY_AGAIN_END,
 					ENDING_CUTSCENE, BONUS_STAGE, NATIVE_MOD_NOTICE -> true;
 		};
@@ -3327,8 +3336,10 @@ public class Engine {
 			String timestamp = java.time.LocalDateTime.now()
 					.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
 			Path path = Path.of("screenshot_" + timestamp + ".png");
-			ScreenshotCapture.captureAndSavePNG(viewportWidth, viewportHeight, path);
-			LOGGER.info("Screenshot saved: " + path);
+			if (!screenshotWriter.captureAndSubmit(path,
+					() -> ScreenshotCapture.captureFramebuffer(viewportWidth, viewportHeight))) {
+				LOGGER.warning("Screenshot skipped: writer is busy or closed");
+			}
 		} catch (Exception e) {
 			LOGGER.warning("Screenshot failed: " + e.getMessage());
 		}
@@ -3512,6 +3523,11 @@ public class Engine {
 		@Override public void specialStage() { drawSpecialStage(); }
 		@Override public void specialStageResults() { drawSpecialStageResults(); }
 		@Override public void titleScreen() { drawTitleScreen(); }
+		@Override public void continueScreen() {
+			resetCameraForScreenSpace();
+			var provider = gameLoop.getContinueScreenProvider();
+			if (provider != null) provider.draw();
+		}
 		@Override public void levelSelect() { drawLevelSelect(); }
 		@Override public void dataSelect() { drawDataSelect(); }
 		@Override public void endingCutscene() { drawEndingCutscene(); }
@@ -3863,7 +3879,22 @@ public class Engine {
 	}
 
 	public void draw() {
-		renderDispatcher.draw(getCurrentGameMode(), debugViewEnabled, debugState, drawActions);
+		renderDispatcher.draw(getCurrentGameMode(), specialStageEntryShowsLevel(), debugViewEnabled, debugState, drawActions);
+	}
+
+	/**
+	 * True while a special stage is still inside the ROM's entry fade-to-white:
+	 * the level's last frame stays on screen under the fade until the stage's
+	 * own reveal boundary ({@link SpecialStageProvider#isEntryFadeToWhiteActive}).
+	 */
+	private boolean specialStageEntryShowsLevel() {
+		if (getCurrentGameMode() != GameMode.SPECIAL_STAGE || levelManager == null) {
+			// Outside SPECIAL_STAGE the accessor resolves the module's provider
+			// through the session, which editor-only draws do not have.
+			return false;
+		}
+		SpecialStageProvider ssProvider = gameLoop.getActiveSpecialStageProvider();
+		return ssProvider != null && ssProvider.isEntryFadeToWhiteActive();
 	}
 
 	static void applyViewportWidth(LevelSelectProvider provider, int width) {
@@ -3928,9 +3959,14 @@ public class Engine {
 	}
 
 	private void drawSpecialStage() {
+		// Special stages draw in screen coordinates. The level camera survives
+		// the entry fade-to-white (the level is still on screen then), so the
+		// stage re-origins the camera itself once it owns the frame.
+		resetCameraForScreenSpace();
 		SpecialStageProvider ssProvider = gameLoop.getActiveSpecialStageProvider();
 		applySpecialStageViewport(ssProvider);
-		if (ssProvider.isSpriteDebugMode()) {
+		if (SpecialStageDebugCapabilities.orNone(ssProvider.debugCapabilities()).spriteViewer()
+				&& ssProvider.isSpriteDebugMode()) {
 			SpecialStageDebugProvider debugProvider = ssProvider.getDebugProvider();
 			if (debugProvider != null) {
 				debugProvider.draw();
@@ -4118,7 +4154,9 @@ public class Engine {
 
 	private void cleanup() {
 		cleanupStep("multiplayer time attack", this::leaveTimeAttackRoom);
+		cleanupStep("screenshots", screenshotWriter::close);
 		cleanupStep("live capture", liveCaptureController::close);
+		cleanupStep("pending saves", com.openggf.game.save.SessionSaveRequests::flushPendingSaves);
 		cleanupStep("session state", SessionManager::clear);
 		cleanupStep("donor audio", audioManager::clearDonorAudio);
 		cleanupStep("cross-game features", crossGameFeatureProvider::resetState);

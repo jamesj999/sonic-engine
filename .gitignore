@@ -53,6 +53,7 @@ tools/*
 !tools/audio/lib/
 !tools/testing/
 !tools/testing/**
+/tools/testing/__pycache__/
 /.openggf/test-runs/
 !tools/audio/lib/s1_audio_parity_protocol.sh
 !tools/audio/nuked-opn2/

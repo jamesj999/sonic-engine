@@ -168,7 +168,9 @@ class TestConfigMigrationService {
 
         assertEquals(KeyChord.of(GLFW_KEY_O, SHIFT),
                 service.getKeyChord(SonicConfiguration.CAPTURE_TOGGLE_KEY));
-        assertTrue(Files.readString(tempDir.resolve("config.yaml")).contains("toggleKey: SHIFT+O"),
+        // The migrated value is the default, so the sparse file drops the key:
+        // the superseded bare O is gone and the binding reads SHIFT+O.
+        assertFalse(Files.readString(tempDir.resolve("config.yaml")).contains("toggleKey: O"),
                 "the migration must be persisted, not re-applied on every launch");
     }
 

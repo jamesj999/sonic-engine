@@ -4,6 +4,9 @@ import com.openggf.audio.rewind.AudioCommand;
 import com.openggf.audio.driver.SfxContentionObserver;
 import com.openggf.audio.driver.SmpsDriverServiceObserver;
 import com.openggf.audio.driver.SmpsRequestAdmissionPolicy;
+import com.openggf.audio.driver.SmpsRequestAdmissionPolicy.AdmissionResult;
+import com.openggf.audio.driver.SmpsRequestAdmissionPolicy.RejectionReason;
+import com.openggf.audio.driver.SmpsRequestAdmissionPolicy.SmpsAdmissionContext;
 import com.openggf.audio.rewind.AudioCommandTimeline;
 import com.openggf.audio.rewind.AudioLogicalSnapshot;
 import com.openggf.audio.rewind.AudioPresentationPolicy;
@@ -2234,12 +2237,43 @@ public class AudioManager implements MusicRestoreSink {
             }
         }
         if (sound == GameSound.RING) {
+            // Suppression precedes the driver's ring-speaker selection.
+            // The registry still rejects all other SFX at admission.
+            if (deferredReverseLogicalSnapshot != null
+                    ? deferredReverseLogicalSnapshot.presentation().sfxBlocked()
+                    : shadowProducer != null && shadowProducer.areSfxRequestsBlocked()) {
+                observeBlockedRingAdmission(rawSoundId);
+                return;
+            }
             playGameSfxResolved(ringLeft ? GameSound.RING_LEFT : GameSound.RING_RIGHT, pitch);
             ringLeft = !ringLeft;
             return;
         }
 
         playGameSfxResolved(sound, pitch);
+    }
+
+    /** Reports the caller-owned discard before ring-speaker selection mutates. */
+    private void observeBlockedRingAdmission(Integer rawSoundId) {
+        if (rawSoundId == null || admissionObserver == AudioAdmissionObserver.NONE) {
+            return;
+        }
+        GameAudioProfile profile = baseAudioSource.profile();
+        int priority = profile == null
+                ? SmpsRequestAdmissionPolicy.NO_PRIORITY
+                : profile.getSfxPriority(rawSoundId);
+        boolean special = profile != null && profile.isSpecialSfx(rawSoundId);
+        SmpsAdmissionContext context = new SmpsAdmissionContext(
+                rawSoundId, rawSoundId, priority,
+                SmpsRequestAdmissionPolicy.NO_PRIORITY, special, false);
+        AdmissionResult result = new AdmissionResult(false,
+                RejectionReason.BLOCKED,
+                context.priorityBefore(), context.priorityBefore(),
+                context.resolvedSoundId());
+        AudioDiagnosticObserverException.invoke(() ->
+                admissionObserver.onDecision(
+                        new AudioAdmissionObserver.AudioAdmissionDecision(
+                                context, result)));
     }
 
     private void playGameSfxResolved(GameSound sound, float pitch) {
@@ -3075,6 +3109,8 @@ public class AudioManager implements MusicRestoreSink {
      * Fade out the currently playing music using ROM default timing.
      * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
      * SFX admission follows the active game's retail fade policy.
+     * Host policy owns the command's pre-fade effects; Sonic 1 stops its
+     * normal and special SFX tracks before fading the music channels.
      *
      * <p>ROM uses fadeOutMusic() in these situations (for future implementation):
      * <ul>
@@ -3118,6 +3154,8 @@ public class AudioManager implements MusicRestoreSink {
      * Fade out the currently playing music over time.
      * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
      * SFX admission follows the active game's retail fade policy.
+     * Host policy owns the command's pre-fade effects; Sonic 1 stops its
+     * normal and special SFX tracks before fading the music channels.
      *
      * @param steps total number of volume steps (ROM default: 0x28 = 40)
      * @param delay frames between each volume step (ROM default: 3)
@@ -3452,9 +3490,14 @@ public class AudioManager implements MusicRestoreSink {
                         base.profile().smpsPhysicalPolicy(),
                         "smpsPhysicalPolicy")
                 : LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE;
+        com.openggf.configuration.SonicConfigurationService fmCoreConfig = configuredServicesOrNull();
         SmpsPhysicalDevice.Settings physicalSettings =
                 new SmpsPhysicalDevice.Settings(
-                        sampleRate, tuning.dacInterpolate());
+                        sampleRate, tuning.dacInterpolate(),
+                        fmCoreConfig != null
+                                ? com.openggf.audio.synth.FmCoreSelection.fromConfig(
+                                        fmCoreConfig.getString(SonicConfiguration.AUDIO_FM_CORE))
+                                : com.openggf.audio.synth.FmCoreSelection.ACCURATE);
         SmpsDriverSessionConfiguration sessionConfiguration =
                 new SmpsDriverSessionConfiguration(base.profile() != null
                         ? base.profile().smpsStatefulCommandPolicy()

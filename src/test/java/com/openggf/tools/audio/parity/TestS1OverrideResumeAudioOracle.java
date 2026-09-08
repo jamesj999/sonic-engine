@@ -12,7 +12,7 @@ class TestS1OverrideResumeAudioOracle {
             "src/test/resources/audio/parity").toAbsolutePath();
 
     @Test
-    void exactFirstServiceAndNextPcmMatch() {
+    void authenticatedOverrideResumeReferenceIsUnavailable() {
         OverrideResumeReferenceBundle.ReferenceUnavailableException failure = assertThrows(
                 OverrideResumeReferenceBundle.ReferenceUnavailableException.class,
                 () -> OverrideResumeReferenceBundle.open(PARITY_ROOT));

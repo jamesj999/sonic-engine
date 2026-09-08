@@ -19,7 +19,7 @@ public final class GlReadPixelsGrabber implements VideoFrameGrabber {
     private final int height;
     private final GlReadRegion glReadRegion;
     private final ByteBuffer readBuffer;
-    private final byte[] frameBytes;
+    private byte[] frameBytes;
     private boolean released;
 
     public GlReadPixelsGrabber(int width, int height) {
@@ -38,7 +38,6 @@ public final class GlReadPixelsGrabber implements VideoFrameGrabber {
         this.height = height;
         this.glReadRegion = glReadRegion;
         this.readBuffer = MemoryUtil.memAlloc(viewport.rgbaByteSize());
-        this.frameBytes = new byte[viewport.rgbaByteSize()];
     }
 
     /** RGBA8888 — 4 bytes per pixel. */
@@ -75,11 +74,19 @@ public final class GlReadPixelsGrabber implements VideoFrameGrabber {
      */
     @Override
     public byte[] grab() {
+        if (frameBytes == null) frameBytes = new byte[frameByteSize()];
+        grabInto(frameBytes);
+        return frameBytes;
+    }
+
+    @Override
+    public void grabInto(byte[] target) {
+        if (released) throw new IllegalStateException("grabber closed");
+        if (target.length != frameByteSize()) throw new IllegalArgumentException("wrong pixel buffer size");
         glReadRegion.read(x, y, width, height, readBuffer);
         readBuffer.clear();
-        readBuffer.get(frameBytes);  // tight copy, bottom-up as GL provides
+        readBuffer.get(target);  // tight copy, bottom-up as GL provides
         readBuffer.clear();
-        return frameBytes;
     }
 
     /** Releases the native read buffer. Safe to call more than once. */

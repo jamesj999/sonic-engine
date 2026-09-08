@@ -29,6 +29,17 @@ path; they do not enable the ROM's native two-player/competition mode. Human-P2
 competition gameplay, including its monitor-break branch, is not currently
 available.
 
+## Continue screens
+
+After Game Over, a remaining continue opens the game's countdown screen. Press
+Player 1 Start (Backspace by default, or the gamepad Start button) to use it;
+S3K also accepts Player 2 Start. Jump/action buttons do not accept a continue.
+In Sonic 1, Start becomes available after Sonic lands on the floor. Acceptance
+plays the departure animation, spends one continue and restores three lives.
+S1/S2 restart from the act start; S3K retains the checkpoint. Letting the
+countdown expire returns to title without spending the continue. These menu
+screens do not support held gameplay rewind.
+
 ## Gamepads
 
 Controller input is enabled by default through GLFW's gamepad API. D-pad and
@@ -99,6 +110,12 @@ These toggle visual debug information drawn over the game scene. They require
 | F10 | **Plane switchers** -- Plane switcher trigger zones |
 | F11 | **Touch response** -- Object touch/collision areas |
 | F12 | **Art viewer** -- Loaded sprite art atlas |
+
+F12 also saves a screenshot as `screenshot_yyyyMMdd_HHmmss.png` in the working
+directory. PNG encoding and disk writing run in the background, with at most
+two screenshots in flight. If both slots are busy, the new request is skipped
+and logged. Successful writes and failures are logged; shutdown allows up to
+five seconds for accepted writes to finish.
 
 ## Debug Mode
 

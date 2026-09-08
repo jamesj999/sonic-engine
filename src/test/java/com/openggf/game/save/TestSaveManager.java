@@ -167,6 +167,30 @@ class TestSaveManager {
     }
 
     @Test
+    void asyncProgressionSavePreservesDurableTeamAndClearFlag() throws Exception {
+        SaveManager manager = new SaveManager(root);
+        SelectedTeam selected = new SelectedTeam("sonic", java.util.List.of("tails"));
+        SaveSessionContext launch = SaveSessionLaunchTeamAccess.withLaunchTeam(
+                SaveSessionContext.forSlot("s3k", 1, selected, 0, 0),
+                new com.openggf.game.GameplayLaunchTeam(
+                        com.openggf.game.CharacterKey.KNUCKLES, java.util.List.of()));
+        launch.markClear();
+
+        launch.requestSaveAsync(SaveReason.PROGRESSION_SAVE,
+                RuntimeSaveContext.forGameplayMode(null, launch),
+                (reason, runtime) -> Map.of(
+                        "mainCharacter", runtime.saveSessionContext().selectedTeam().mainCharacter(),
+                        "sidekicks", runtime.saveSessionContext().selectedTeam().sidekicks(),
+                        "clear", runtime.saveSessionContext().isClear()), manager);
+        manager.flushPendingWrites();
+
+        Map<String, Object> payload = new SaveManager(root).readSlotSummary("s3k", 1).payload();
+        assertEquals("sonic", payload.get("mainCharacter"));
+        assertEquals(java.util.List.of("tails"), payload.get("sidekicks"));
+        assertEquals(true, payload.get("clear"));
+    }
+
+    @Test
     void multipleSlots_independentReadWrite() throws Exception {
         SaveManager manager = new SaveManager(root);
         manager.writeSlot("s3k", 1, Map.of("zone", 0));
@@ -226,5 +250,26 @@ class TestSaveManager {
             assertTrue(leftovers.isEmpty(),
                     "no temp publish artifacts may remain, found: " + leftovers);
         }
+    }
+
+    @Test
+    void writeSlotAsync_landsBeforeTheNextReadAndAfterFlush() throws Exception {
+        SaveManager manager = new SaveManager(root);
+        Path slot = root.resolve("s3k").resolve("slot2.json");
+
+        manager.writeSlotAsync("s3k", 2, Map.of("zone", 0, "act", 1, "lives", 3));
+        // readSlotSummary flushes the writer first, so a read never observes a
+        // save that was issued but not yet on disk.
+        SaveSlotSummary summary = manager.readSlotSummary("s3k", 2);
+        assertEquals(SaveSlotState.VALID, summary.state());
+        assertEquals(1, summary.payload().get("act"));
+        assertTrue(Files.exists(slot));
+
+        manager.writeSlotAsync("s3k", 2, Map.of("zone", 1, "act", 0, "lives", 3));
+        manager.flushPendingWrites();
+        assertEquals(1, manager.readSlotSummary("s3k", 2).payload().get("zone"),
+                "writes for one slot must complete in submission order");
+        assertFalse(Files.list(slot.getParent()).anyMatch(p -> p.toString().endsWith(".tmp")),
+                "no temp file left behind");
     }
 }

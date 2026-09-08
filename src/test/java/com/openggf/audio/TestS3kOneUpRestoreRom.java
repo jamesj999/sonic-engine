@@ -13,6 +13,8 @@ import com.openggf.tests.rules.RequiresRom;
 import com.openggf.tests.rules.SonicGame;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
 import java.util.logging.Handler;
@@ -46,6 +48,95 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @RequiresRom(SonicGame.SONIC_3K)
 class TestS3kOneUpRestoreRom {
     private Rom rom;
+
+    @ParameterizedTest
+    @ValueSource(ints = {0x62, 0x33})
+    void requestsDuringOneUpAreDiscardedAndResumeAtRestoration(int request) {
+        AudioManager audio = install();
+        audio.playMusic(Sonic3kMusic.AIZ1.id);
+        audio.presentFrame(PresentationMode.FORWARD);
+        audio.playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+        // Existing AIZ BK2: 1-up at 7700, first observed jump at 7733.
+        // This is a stimulus offset, not a driver timing expectation.
+        for (int frame = 0; frame < 33; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        boolean ringBefore = audio.captureLogicalSnapshot().ringLeft();
+        audio.playSfx(request);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertEquals(Sonic3kMusic.EXTRA_LIFE.id, playingMusicId(audio));
+        assertNoSfx(audio);
+        assertEquals(ringBefore, audio.captureLogicalSnapshot().ringLeft(),
+                "discarded rings must not advance speaker alternation");
+        for (int frame = 0; frame < 900
+                && playingMusicId(audio) != Sonic3kMusic.AIZ1.id; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+            assertNoSfx(audio);
+        }
+        assertEquals(Sonic3kMusic.AIZ1.id, playingMusicId(audio));
+        audio.playSfx(request);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertTrue(audio.shadowSmpsDriverSnapshotForTesting().sequencers()
+                .stream().anyMatch(SmpsDriverSnapshot.SequencerEntry::sfx),
+                "S3K permits SFX as soon as restoration starts, during the fade");
+    }
+
+    @Test
+    void oneUpSuppressionSurvivesSnapshotRestoreAndOrdinaryMusicReleasesIt() {
+        AudioManager audio = install();
+        audio.playMusic(Sonic3kMusic.AIZ1.id);
+        audio.presentFrame(PresentationMode.FORWARD);
+        audio.playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+        audio.presentFrame(PresentationMode.FORWARD);
+        var duringJingle = audio.captureLogicalSnapshot();
+        audio.playMusic(Sonic3kMusic.AIZ1.id);
+        audio.presentFrame(PresentationMode.FORWARD);
+        audio.playSfx(0x62);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertTrue(audio.shadowSmpsDriverSnapshotForTesting().sequencers()
+                .stream().anyMatch(SmpsDriverSnapshot.SequencerEntry::sfx));
+        audio.restoreLogicalSnapshot(duringJingle);
+        audio.playSfx(0x62);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertNoSfx(audio);
+    }
+
+    private static void assertNoSfx(AudioManager audio) {
+        assertTrue(audio.shadowSmpsDriverSnapshotForTesting().sequencers()
+                .stream().noneMatch(SmpsDriverSnapshot.SequencerEntry::sfx),
+                "zUpdateMusic discards both SFX mailboxes while the 1-up plays");
+    }
+
+    @Test
+    void oneUpWithoutSavedMusicReleasesSuppressionWhenItEnds() {
+        AudioManager audio = install();
+        audio.playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+        for (int frame = 0; frame < 900; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        audio.playSfx(0x62);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertTrue(audio.shadowSmpsDriverSnapshotForTesting().sequencers()
+                .stream().anyMatch(SmpsDriverSnapshot.SequencerEntry::sfx));
+    }
+
+    @Test
+    void globalFadeStopReleasesOneUpSuppression() {
+        AudioManager audio = install();
+        audio.playMusic(Sonic3kMusic.AIZ1.id);
+        audio.presentFrame(PresentationMode.FORWARD);
+        audio.playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+        audio.presentFrame(PresentationMode.FORWARD);
+        audio.fadeOutMusic(1, 1);
+        for (int frame = 0; frame < 16; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertEquals(-1, playingMusicId(audio));
+        audio.playSfx(0x62);
+        audio.presentFrame(PresentationMode.FORWARD);
+        assertTrue(audio.shadowSmpsDriverSnapshotForTesting().sequencers()
+                .stream().anyMatch(SmpsDriverSnapshot.SequencerEntry::sfx));
+    }
 
     @AfterEach
     void tearDown() {
@@ -203,6 +294,56 @@ class TestS3kOneUpRestoreRom {
         assertEquals(settledVolume, fmVolumeOffset(audio),
                 "the fade must run to completion across a round trip,"
                         + " not freeze at the attenuation it was captured at");
+    }
+
+    /** Retail restore must survive retriggering throughout the release slice. */
+    @ParameterizedTest
+    @ValueSource(ints = {0x01, 0x02, 0x03, 0x04})
+    void repeatedOneUpAndMidFadeRoundTripReleaseEveryPsgTrack(int musicId) {
+        AudioManager audio = install();
+        audio.playMusic(musicId);
+        for (int frame = 0; frame < 8; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        audio.playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+        for (int frame = 0; frame < 20; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertEquals(Sonic3kMusic.EXTRA_LIFE.id, playingMusicId(audio),
+                "retrigger must exercise the live jingle, not a finished one");
+        audio.playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+        for (int frame = 0; frame < 900 && playingMusicId(audio) != musicId; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertEquals(musicId, playingMusicId(audio),
+                "retrigger must preserve the original displaced song");
+        for (int frame = 0; frame < 20; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        assertTrue(audio.shadowSmpsDriverSnapshotForTesting().fadeInTimeout() > 0,
+                "snapshot must actually land during an active driver fade");
+        audio.restoreLogicalSnapshot(audio.captureLogicalSnapshot());
+        for (int frame = 0; frame < 400; frame++) {
+            audio.presentFrame(PresentationMode.FORWARD);
+        }
+        SmpsDriverSnapshot restored = audio.shadowSmpsDriverSnapshotForTesting();
+        assertEquals(0, restored.fadeInTimeout(), "driver fade must reach completion");
+        assertEquals(1, musicSequencerCount(audio));
+        assertEquals(musicId, playingMusicId(audio));
+        int psgTracks = 0;
+        for (SmpsDriverSnapshot.SequencerEntry entry : restored.sequencers()) {
+            if (entry.sfx()) {
+                continue;
+            }
+            for (SmpsTrackSnapshot track : entry.snapshot().tracks()) {
+                if (track.type() == SmpsSequencer.TrackType.PSG) {
+                    psgTracks++;
+                    assertFalse(track.overridden(),
+                            "every PSG track must be released, not only the first one");
+                }
+            }
+        }
+        assertEquals(3, psgTracks, "all three PSG tracks must be exercised");
     }
 
     private static int psgVolumeOffset(AudioManager audio) {

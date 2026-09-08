@@ -101,6 +101,37 @@ class GlReadPixelsGrabberTest {
         }
     }
 
+    @Test
+    void pboReadbackPreservesBothFramesAndExternalPackBinding() {
+        long window = createOffscreenContextOrAbort();
+        try {
+            Assumptions.assumeTrue(org.lwjgl.opengl.GL.getCapabilities().OpenGL21);
+            int external = org.lwjgl.opengl.GL15.glGenBuffers();
+            try (VideoFrameGrabber grabber = GlPboFrameGrabber.create(new CaptureViewport(5, 4, 16, 12))) {
+                org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER, external);
+                glClearColor(1f, 0f, 0f, 1f);
+                glClear(GL_COLOR_BUFFER_BIT);
+                grabber.beginReadback();
+                glClearColor(0f, 1f, 0f, 1f);
+                glClear(GL_COLOR_BUFFER_BIT);
+                grabber.beginReadback();
+                byte[] pixels = new byte[16 * 12 * 4];
+                grabber.grabInto(pixels);
+                assertRgba(pixels, 0, 255, 0, 0, 255);
+                assertRgba(pixels, pixels.length - 4, 255, 0, 0, 255);
+                grabber.grabInto(pixels);
+                assertRgba(pixels, 0, 0, 255, 0, 255);
+                assertEquals(external, glGetInteger(org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER_BINDING));
+            } finally {
+                org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER, 0);
+                org.lwjgl.opengl.GL15.glDeleteBuffers(external);
+            }
+        } finally {
+            glfwDestroyWindow(window);
+            glfwTerminate();
+        }
+    }
+
     private static long createOffscreenContextOrAbort() {
         boolean initialized;
         try {

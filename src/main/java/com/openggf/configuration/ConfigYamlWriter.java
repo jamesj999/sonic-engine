@@ -5,22 +5,35 @@ import java.util.OptionalInt;
 
 /**
  * Renders the flat config map to grouped, commented, deterministically-ordered
- * YAML. Walks {@link ConfigCatalog#emitOrder()} (persisted keys only), opening
+ * YAML. Only keys present in the map are written -- the file is the player's
+ * own settings, never a copy of the defaults -- and it opens with the
+ * {@link #FORMAT_KEY} marker so a loader can tell it from a legacy file that
+ * materialised every default. Walks {@link ConfigCatalog#emitOrder()}, opening
  * nested mapping blocks as section paths deepen, emitting a {@code # ── Title ──}
  * banner per top-level normal section and a single fence banner when the
  * {@code debug.*} block begins.
  */
 public final class ConfigYamlWriter {
+    /** Top-level marker declaring the sparse user-settings format. */
+    public static final String FORMAT_KEY = "configFormat";
+    /** Format 2: the file holds only settings the player set; defaults live in code. */
+    public static final int SPARSE_FORMAT = 2;
 
     public String write(Map<String, Object> flat) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# OpenGGF configuration — grouped and documented.\n");
-        sb.append("# Indentation is significant (YAML). This file is rewritten cleanly on save.\n");
+        sb.append("# OpenGGF configuration — only the settings you changed.\n");
+        sb.append("# Every other setting uses its built-in default; see config.yaml.example\n");
+        sb.append("# beside this file for the full documented list. Indentation is\n");
+        sb.append("# significant (YAML). This file is rewritten cleanly on save.\n");
+        sb.append(FORMAT_KEY).append(": ").append(SPARSE_FORMAT).append('\n');
 
         String[] prev = new String[0];
         boolean debugOpened = false;
 
         for (SonicConfiguration key : ConfigCatalog.emitOrder()) {
+            if (!flat.containsKey(key.name())) {
+                continue;
+            }
             ConfigKeyMeta m = ConfigCatalog.meta(key);
             String[] segs = m.section().split("\\.");
             boolean isDebug = segs[0].equals("debug");

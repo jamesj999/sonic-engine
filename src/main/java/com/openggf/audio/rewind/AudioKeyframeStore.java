@@ -87,6 +87,14 @@ public final class AudioKeyframeStore {
         keyframes.headMap(frame, false).clear();
     }
 
+    /** Keep the audio base needed by a gameplay checkpoint between audio boundaries. */
+    public void discardBeforeRetainingFloor(long frame) {
+        Long floor = keyframes.floorKey(frame);
+        if (floor != null) {
+            keyframes.headMap(floor, false).clear();
+        }
+    }
+
     /** Earliest retained keyframe snapshot, or {@code null} when empty. */
     public AudioLogicalSnapshot earliestSnapshot() {
         Map.Entry<Long, AudioLogicalSnapshot> first = keyframes.firstEntry();

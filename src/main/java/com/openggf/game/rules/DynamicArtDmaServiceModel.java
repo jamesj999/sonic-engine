@@ -60,7 +60,7 @@ public enum DynamicArtDmaServiceModel {
                 // those pre-Level_MainLoop passes queue is therefore drained
                 // by the very next V-int and never survives into the level's
                 // first main-loop row.
-                case ORDINARY_LEVEL, SPECIAL_STAGE, SPECIAL_STAGE_RESULTS,
+                case CONTINUE_SCREEN, ORDINARY_LEVEL, SPECIAL_STAGE, SPECIAL_STAGE_RESULTS,
                         TWO_PLAYER_RESULTS, CREDITS_TEXT, CREDITS_DEMO,
                         ENDING, POST_CREDITS, NORMAL_PAUSE,
                         SPECIAL_STAGE_PAUSE, LEVEL_TITLE_CARD -> true;

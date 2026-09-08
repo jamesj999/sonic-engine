@@ -366,6 +366,11 @@ public class Sonic2GameModule implements GameModule {
     }
 
     @Override
+    public com.openggf.game.ContinueScreenProvider createContinueScreenProvider() {
+        return new com.openggf.game.sonic2.continuescreen.Sonic2ContinueScreenProvider();
+    }
+
+    @Override
     public TitleScreenProvider getTitleScreenProvider() {
         return titleScreenProvider;
     }

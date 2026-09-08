@@ -1,386 +1,53 @@
 ---
 name: s2-implement-boss
-description: Use when implementing a Sonic 2 boss — ports boss object logic from s2disasm, arena setup, hit detection, defeat sequence.
+description: Use when implementing or changing a Sonic 2 boss, including arena events, hit handling, children, defeat, and escape.
 ---
 
-# Implement Sonic 2 Boss
+# Sonic 2 bosses
 
-Implement a Sonic 2 zone boss with complete ROM accuracy. This skill guides complete implementation including Sonic2LevelEventManager integration, multi-component architecture, hit handling, defeat sequences, and cross-validation against the disassembly.
+Start with the existing boss family and zone event owner. Scope the encounter
+from arena entry through defeat, escape, and the next playable transition.
 
-## Inputs
+## ROM behaviors to resolve
 
-$ARGUMENTS: Boss name or zone (e.g., "EHZ boss", "Chemical Plant boss", "0x56")
+- Arena thresholds, camera bounds/locks, entry timer, music, art readiness,
+  boss allocation, and failure to allocate required children.
+- Routine dispatch and init timing; movement arithmetic; hit count, damage
+  eligibility, collision disable/restore, flashing, and attack cooldowns.
+- Parent/child slot order, immediate shared-state writes, and which components
+  remain collidable or persistent after the main body changes routine.
+- Killing-hit timing versus the first defeat update, explosion allocation and
+  identity, escape movement, camera release, capsule/signpost, and act handoff.
 
-## Related Skills
+Preserve the ROM's order and owning state for each branch. Use an existing boss
+base only where its contract matches; keep encounter-specific phases explicit.
 
-- **s2disasm-guide** (`.agents/skills/s2disasm-guide/SKILL.md`) - Disassembly navigation, label conventions, RomOffsetFinder
-- **s2-implement-object** (`.agents/skills/s2-implement-object/SKILL.md`) - For non-boss Sonic 2 objects and badniks. **Section 2.4 lists all reusable engine utilities** — check it before writing movement, collision, or rendering code.
+## Integration
 
-## Key Differences: Bosses vs Regular Objects
+Use `Sonic2LevelEventManager` for arena/event integration. Read the
+selected boss's own hit count, collision transitions, child allocation, and
+escape/capsule sequence rather than borrowing another zone's thresholds.
 
-| Aspect | Regular Objects | Bosses |
-|--------|-----------------|--------|
-| **Spawning** | From level layout data via ObjectManager | Dynamically via Sonic2LevelEventManager |
-| **Camera** | No camera control | Arena setup with boundary locking |
-| **Components** | Single entity or simple children | Multi-component with AbstractBossChild |
-| **Hits** | 1 hit (badniks) or indestructible | 8 hits with invulnerability periods |
-| **Defeat** | Explosion + animal | Explosion sequence → Flee → EggPrison |
-| **Art** | Unique per object | Often shares Eggpod art + unique parts |
-| **Music** | No music changes | Boss music at spawn, stops at defeat |
-| **State** | Object-local | Shared BossStateContext (ROM: Boss_X_pos, etc.) |
+Objects use injected `services()`. Native player position writes use
+`NativePositionOps`; lifecycle, player control, participation, and rewind use
+the existing object contracts described in
+`docs/architecture/object-implementation-reference.md`.
 
-## Implementation Process
+Load boss art through the game's ROM-backed provider/PLC path and verify mappings
+against the chosen art. Register the factory and any persistent child recreate paths.
+Do not treat an offscreen escape as ordinary object culling without checking the ROM.
 
-### Phase 1: Research & Discovery
+## Verification and references
 
-Delegate multiple agents to explore the disassembly. **Include this instruction in each agent prompt:**
+Exercise the changed encounter boundaries: arena entry, killing hit, first defeat
+update, child cleanup, and camera/transition release as applicable. Run relevant
+art and rewind guards when those contracts change. A source-backed replay can
+verify frame ordering; a screenshot alone cannot establish it.
 
-> Use the s2disasm-guide skill (`.agents/skills/s2disasm-guide/SKILL.md`) for reference on disassembly structure, label conventions, RomOffsetFinder commands, and object system patterns.
+- Use `../s2disasm-guide/SKILL.md` for locating routines and assets.
+- Use `../s2-implement-object/SKILL.md` for ordinary object/art integration;
+  search its `rom-pitfalls.md` for the affected interaction rather than reading all entries.
+- Use `../plc-system/SKILL.md` for queue/PLC ownership and
+  `../trace-replay-bug-fixing/SKILL.md` for replay divergence.
 
-**Research checklist:**
-- [ ] Locate boss object in disassembly (e.g., `Obj56`, `Obj5D`, `Obj51`, `Obj89`)
-- [ ] Find corresponding `LevEvents_ZONE2` routine for arena setup
-- [ ] Identify all `AllocateObjectAfterCurrent` calls for child components
-- [ ] Document state machine (`routine_secondary`) transitions
-- [ ] Note defeat sequence timing (explosion duration, flee direction)
-- [ ] Find boss-specific art addresses (`ArtNem_XXXBoss`, `Map_XXXBoss`)
-- [ ] Use `plc` command to identify which PLCs load boss art:
-  ```bash
-  mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" -Dexec.args="plc PlrList_EhzBoss" -q
-  ```
-  Search results show PLC cross-references inline
-
-**Key disassembly patterns to identify:**
-- `collision_flags` set to `$C0 | size_index` (boss category)
-- `objoff_3C` used for hit count or defeat timer
-- `Boss_HandleHits` routine usage
-- `routine_secondary` state machine with approach/battle/defeat phases
-
-### Phase 2: Sonic2LevelEventManager Setup
-
-Bosses are spawned dynamically by zone-specific event handlers in `Sonic2LevelEventManager.java`.
-
-**Implementation checklist:**
-- [ ] Add zone constant if not present
-- [ ] Add boss reference field (e.g., `private Sonic2XXXBossInstance xxxBoss`)
-- [ ] Implement `updateXXX()` method with 4-6 event routines
-- [ ] Implement `spawnXXXBoss()` method
-- [ ] Add boss spawn coordinates and arena boundaries from disassembly
-- [ ] Initialize boss reference in `initLevel()`
-
-When porting boss object positions, ROM `x_pos` / `y_pos` are centre coordinates. Use `getCentreX()` / `setCentreX()` and `getCentreY()` / `setCentreY()` for boss bodies, children, projectiles, and dynamic spawns; reserve `getX()` / `getY()` for top-left render bounds.
-
-**Example event routine pattern:**
-
-```java
-// In Sonic2LevelEventManager.java - updateZONE() method
-private void updateZONE() {
-    if (currentAct != 1) return;  // Act 2 only
-
-    switch (eventRoutine) {
-        case 0 -> {
-            // Wait for approach trigger
-            if (camera.getX() >= APPROACH_TRIGGER_X) {
-                camera.setMinX(camera.getX());
-                camera.setMaxYTarget((short) ARENA_MAX_Y);
-                eventRoutine += 2;
-            }
-        }
-        case 2 -> {
-            // Lock arena and start spawn delay
-            if (camera.getX() >= ARENA_LOCK_X) {
-                camera.setMinX((short) ARENA_MIN_X);
-                camera.setMaxX((short) ARENA_MAX_X);
-                eventRoutine += 2;
-                bossSpawnDelay = 0;
-                audio().fadeOutMusic();
-                gameState().setCurrentBossId(BOSS_ID);
-            }
-        }
-        case 4 -> {
-            // Lock floor and spawn boss after delay
-            if (camera.getY() >= ARENA_FLOOR_Y) {
-                camera.setMinY((short) ARENA_FLOOR_Y);
-            }
-            bossSpawnDelay++;
-            if (bossSpawnDelay >= 0x5A) {  // 90 frames
-                spawnBoss();
-                eventRoutine += 2;
-                audio().playMusic(Sonic2Music.BOSS.id);
-            }
-        }
-        case 6 -> {
-            // Prevent backtracking during fight
-            if (camera.getX() > camera.getMinX()) {
-                camera.setMinX(camera.getX());
-            }
-        }
-    }
-}
-```
-
-### Phase 3: Boss Instance Class
-
-**Implementation checklist:**
-- [ ] Create `Sonic2XXXBossInstance extends AbstractBossInstance`
-- [ ] Define state machine constants (SUB0, SUB2, SUB4, etc.)
-- [ ] Define position/velocity constants from disassembly
-- [ ] Implement `initializeBossState()` with child spawning
-- [ ] Implement `updateBossLogic()` state machine
-- [ ] Implement each state update method
-- [ ] Override `getInitialHitCount()` (usually 8)
-- [ ] Override `getCollisionSizeIndex()` (usually 0x0F)
-- [ ] Override `onHitTaken()` for hit reactions
-- [ ] Override `onDefeatStarted()` for defeat transition
-- [ ] Override `usesDefeatSequencer()` (false for custom defeat)
-- [ ] Implement `appendRenderCommands()`
-
-**Boss instance template:**
-
-```java
-package com.openggf.game.sonic2.objects.bosses;
-
-public class Sonic2ZoneBossInstance extends AbstractBossInstance {
-
-    // State machine constants (ROM: routine_secondary values)
-    private static final int SUB0_APPROACH = 0x00;
-    private static final int SUB2_ACTIVE = 0x02;
-    private static final int SUB4_ATTACK = 0x04;
-    private static final int SUB6_DEFEATED = 0x06;
-    private static final int SUB8_FLEEING = 0x08;
-
-    // Position/velocity constants from disassembly
-    private static final int MAIN_START_X = 0xXXXX;
-    private static final int MAIN_START_Y = 0xXXXX;
-
-    public Sonic2ZoneBossInstance(ObjectSpawn spawn) {
-        super(spawn, "Zone Boss");
-    }
-
-    @Override
-    protected void initializeBossState() {
-        state.x = MAIN_START_X;
-        state.y = MAIN_START_Y;
-        state.routineSecondary = SUB0_APPROACH;
-        spawnChildComponents();
-    }
-
-    @Override
-    protected void updateBossLogic(int frameCounter, AbstractPlayableSprite player) {
-        switch (state.routineSecondary) {
-            case SUB0_APPROACH -> updateApproach();
-            case SUB2_ACTIVE -> updateActiveBattle(player);
-            // ... other states
-        }
-    }
-
-    @Override protected int getInitialHitCount() { return 8; }
-    @Override protected int getCollisionSizeIndex() { return 0x0F; }
-    @Override protected void onHitTaken(int remainingHits) { /* hit reaction */ }
-    @Override protected void onDefeatStarted() { /* transition to defeat state */ }
-}
-```
-
-#### Configurable Methods
-
-Override these in subclasses for boss-specific behavior:
-
-| Method | Default | Override When |
-|--------|---------|---------------|
-| `getInvulnerabilityDuration()` | 32 | Boss uses different duration (ARZ=64, CNZ=48) |
-| `getPaletteLineForFlash()` | 1 | Boss flashes different palette line (ARZ=0) |
-| `usesDefeatSequencer()` | true | Boss has custom defeat logic |
-| `calculateHoverOffset()` | sine oscillation | Boss uses different hover pattern |
-
-#### Common Helper Methods
-
-`AbstractBossInstance` provides these utilities:
-
-| Method | Description |
-|--------|-------------|
-| `calculateHoverOffset()` | Sine-based floating motion (2 per frame, >>6) |
-| `spawnDefeatExplosion()` | Random-offset explosion during defeat |
-| `applyObjectMoveAndFall()` | Apply velocity and gravity |
-| `getCustomFlag(offset)` / `setCustomFlag(offset, value)` | `objoff_XX` emulation |
-
-### Phase 4: Child Components
-
-**Implementation checklist:**
-- [ ] Create child classes extending `AbstractBossChild`
-- [ ] Spawn children via `spawnChild(...)`, `spawnFreeChild(...)`, or an existing `level.objects` lifecycle helper
-- [ ] Store children in parent's `childComponents` list
-- [ ] Implement position synchronization
-- [ ] Handle destruction when parent defeated
-
-**Boss child component template:**
-
-```java
-public class BossChildName extends AbstractBossChild {
-
-    public BossChildName(Sonic2ZoneBossInstance parent) {
-        super(parent, "Child Name", priority, Sonic2ObjectIds.BOSS_ID);
-    }
-
-    @Override
-    public void update(int frameCounter, AbstractPlayableSprite player) {
-        if (!shouldUpdate(frameCounter)) return;
-        syncPositionWithParent();
-        // Child-specific logic
-        updateDynamicSpawn();
-    }
-
-    @Override
-    public void appendRenderCommands(List<GLCommand> commands) {
-        // Render relative to parent position
-    }
-}
-```
-
-### Phase 5: Art Loading
-
-**PLC-based art loading:** S2 boss art has dedicated PLC IDs in ArtLoadCues. Use the shared `PlcParser` API for standalone decompression — this avoids VRAM overlap conflicts where boss art tiles overwrite other object tiles. See `plc-system` skill. Use `RomOffsetFinder plc <name>` to inspect PLC contents from the CLI.
-
-**Standalone PLC pattern (preferred):**
-```java
-PlcDefinition plc = PlcParser.parse(rom, Sonic2Constants.ART_LOAD_CUES_ADDR, plcId);
-List<Pattern[]> artArrays = PlcParser.decompressAll(rom, plc);
-ObjectSpriteSheet sheet = new ObjectSpriteSheet(
-    artArrays.get(entryIndex),
-    S2SpriteDataLoader.loadMappingFrames(reader, mappingAddr),
-    paletteIndex, 1);
-```
-
-**Implementation checklist:**
-- [ ] Find the boss PLC ID in the disassembly's `LoadPLC` call
-- [ ] Add PLC ID or ROM address constants to `Sonic2Constants.java`
-- [ ] Add art keys to `Sonic2ObjectArtKeys.java`
-- [ ] Use `PlcParser.decompressAll()` for standalone `Pattern[]` (preferred), or create loader method in `Sonic2ObjectArt.java` for direct Nemesis loading
-- [ ] Create mappings method (parse from `Map_XXXBoss`)
-- [ ] Register in `Sonic2ObjectArtProvider.loadArtForZone()`
-
-### Phase 6: Factory Registration
-
-Register in `Sonic2ObjectRegistry.registerDefaultFactories()`:
-
-```java
-registerFactory(Sonic2ObjectIds.ZONE_BOSS,
-    (spawn, registry) -> new Sonic2ZoneBossInstance(spawn));
-```
-
-### Phase 7: Rewind Synchronization Fields
-
-Before finalizing a boss or boss child, classify every instance field for rewind. Key synchronization-relevant fields must remain captured: routine/state variables, phase flags, hit counters, timers, attack cooldowns, arena/camera-lock latches, subpixel positions, velocities, movement helper state, child component state, defeat-flow state, per-player contact/carry/rider latches, and dynamic spawn coordinates. Do not add `@RewindTransient` to these fields just to satisfy `GenericFieldCapturer` or audit tests.
-
-Use `@RewindTransient(reason = "...")` only for structural or derived fields: `ObjectServices`, stable spawn identity, parent/child graph references, renderers/art caches, listeners/callbacks, immutable config, debug-only state, or values rebuilt from ROM data/live managers. If a field is synchronization-relevant but not generically capturable, convert it to a primitive/record/supported array, add an explicit snapshot/codec, or keep the class on its legacy/manual rewind path. Boss `dynamicSpawn` references are not structural by default; capture coordinates explicitly or defer generic migration.
-
-Prefer standard value forms before boss-specific adapters: replace callback `Runnable` fields with rewindable enum continuation tokens, and make small mutable helper or owned-child state implement `RewindStateful<S>` so the generic capturer snapshots its value while preserving live object identity.
-
-Bosses participate in player/object lifecycle beyond hit counts. Cross-check player and sidekick contacts, carried state, invulnerability/hurt timing, child despawn, and arena-lock latches against the ROM, especially across defeat and transition frames.
-
-### Phase 7.5: Shared Object Contracts
-
-Bosses and boss children may need bespoke state, but still prefer shared contracts when they fit:
-
-- Use `ObjectControlState` for forced-control and cutscene-control predicates instead of raw boolean combinations.
-- Use `ObjectPlayerQuery` and `ObjectPlayerParticipationPolicy` for hit, contact, and targeting decisions. Native S2 boss logic generally knows P1/Tails; OpenGGF multi-sidekick behavior must be explicit when extended.
-- Use `NativePositionOps` for playable-sprite native `x_pos` / `y_pos` writes; reserve raw preserve-subpixel setters for lower-level sprite internals or non-playable boss-local state.
-- Use `ObjectLifetimeOps` for child deletion, despawn, and dynamic-expire semantics.
-- Reuse canonical `SolidRoutineProfile`, `TouchResponseProfile`, and `ObjectLifecycleProfile` compatibility wrappers where they preserve existing boss behavior.
-- Ratchet guard baselines when adding source guards; do not let historical direct-control or lifecycle calls block new hard-fail enforcement.
-
-### Phase 8: Code Quality
-
-Ensure the implementation:
-- Has no TODOs or placeholder code
-- Has no "engine limitation" workarounds - if the ROM does it, the engine must support it
-- Uses explicit disassembly references in comments for non-trivial logic
-- Handles object creation and cleanup correctly
-- Properly manages object lifecycle (spawning, despawning)
-- Follows existing code patterns in the codebase
-
-### Phase 8: Cross-Validation
-
-Delegate to a review agent to cross-validate against the disassembly:
-
-```
-Review the implementation of [ZoneName] Boss (0xXX) against the Sonic 2 disassembly.
-
-Reference: Use the s2disasm-guide skill for disassembly navigation guidance.
-
-Files to review:
-- [List all created/modified files]
-
-Disassembly references:
-- Boss object: docs/s2disasm/ObjXX...
-- Level events: docs/s2disasm/LevEvents...
-
-Validation checklist:
-1. Sonic2LevelEventManager arena setup matches LevEvents_ZONE2
-2. State machine transitions match routine_secondary values
-3. All child components spawned correctly
-4. Hit count and invulnerability timing match ROM
-5. Defeat sequence (explosions, flee, EggPrison) matches ROM
-6. Art and mappings render correctly
-7. Music transitions (fade, boss music, resume) work correctly
-8. Camera boundaries lock/unlock correctly
-9. No TODOs or simplifications
-10. No "engine limitation" workarounds
-
-Report any discrepancies with specific line references from both code and disassembly.
-```
-
-### Phase 9: Finalization
-
-Once cross-validation passes:
-
-1. **Add to IMPLEMENTED_IDS** in `Sonic2ObjectProfile.java` (the `IMPLEMENTED_IDS` set):
-   ```java
-   0xXX,  // ZoneName Boss
-   ```
-
-2. **Build and test**:
-   ```bash
-   mvn package
-   ```
-
-3. Report completion with summary.
-
-## Reference Files
-
-| Purpose | Location |
-|---------|----------|
-| **Disassembly guide** | `.agents/skills/s2disasm-guide/SKILL.md` |
-| Base boss | `src/.../level/objects/boss/AbstractBossInstance.java` |
-| Boss state context | `src/.../level/objects/boss/BossStateContext.java` |
-| Boss child base | `src/.../level/objects/boss/AbstractBossChild.java` |
-| Boss child interface | `src/.../level/objects/boss/BossChildComponent.java` |
-| Level events | `src/.../game/sonic2/Sonic2LevelEventManager.java` |
-| Per-zone event handlers | `src/.../game/sonic2/events/` (e.g. `Sonic2EHZEvents.java`), base class `Sonic2ZoneEvents.java` (`camera()`/`audio()`/`gameState()`/`spawnObject(...)` helpers) |
-| Boss implementations | `src/.../game/sonic2/objects/bosses/` |
-| Object IDs | `src/.../game/sonic2/constants/Sonic2ObjectIds.java` |
-| ROM offsets | `src/.../game/sonic2/constants/Sonic2Constants.java` |
-| Art keys | `src/.../game/sonic2/Sonic2ObjectArtKeys.java` |
-| Art loader | `src/.../game/sonic2/Sonic2ObjectArt.java` |
-| Art provider | `src/.../game/sonic2/Sonic2ObjectArtProvider.java` |
-| Registry | `src/.../game/sonic2/objects/Sonic2ObjectRegistry.java` |
-| Music ids | `src/.../game/sonic2/audio/Sonic2Music.java` |
-| SFX constants | `src/.../game/sonic2/constants/Sonic2AudioConstants.java` |
-| Disassembly | `docs/s2disasm/` |
-| Implemented IDs | `src/.../tools/Sonic2ObjectProfile.java` (IMPLEMENTED_IDS set) |
-
-## Example Implementations
-
-Study these implemented bosses for patterns:
-
-| Boss | Object ID | Key Features |
-|------|-----------|--------------|
-| `Sonic2EHZBossInstance` | 0x56 | Ground vehicle, wheel terrain tracking, custom defeat |
-| `Sonic2CPZBossInstance` | 0x5D | Complex child hierarchy, gunk hazard, status bit flags |
-| `Sonic2ARZBossInstance` | 0x89 | Pillar spawning, hammer collision, multi-sprite rendering |
-| `Sonic2CNZBossInstance` | 0x51 | Electric balls, arena wall modification, palette swap |
-
-## Queue Diagnostics Routing
-
-If boss work reaches PLC/DPLC queue timing or `dynamic_art.*` reports, use
-`plc-system` and `trace-replay-bug-fixing`; use `trace-green-fleet` when moving
-multiple frontiers. These fields are zero-tolerance, comparison-only evidence.
+Project workflow owns integration and full-suite requirements.

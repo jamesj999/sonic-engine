@@ -5,6 +5,11 @@ import com.openggf.audio.rewind.SmpsDriverSnapshot;
 import java.util.Objects;
 
 public interface SmpsLogicalTransitionPolicy {
+    /** Ordinary song-load reset; override save/load is a separate boundary. */
+    default boolean resetsTempoOnMusicStart() {
+        return false;
+    }
+
     Result prepareMusicStart(
             SmpsDriverSnapshot current,
             SmpsDriverSnapshot.SequencerEntry incomingMusic);

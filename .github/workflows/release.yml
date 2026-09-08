@@ -36,6 +36,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+        with:
+          fetch-depth: 0
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -65,6 +68,14 @@ jobs:
           done
           exit "$missing"
 
+      - name: Verify release gate tools and graphics capability
+        shell: bash
+        run: |
+          test -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}"
+          mkdir -p target/release-evidence
+          python3 -m unittest discover -s tools/testing -p 'test_*release*.py'
+          python3 -m unittest discover -s tools/testing -p 'test_classify_surefire_skips.py'
+
       - name: Run tests (pull request)
         if: github.event_name == 'pull_request'
         shell: bash
@@ -75,6 +86,7 @@ jobs:
             -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
             -Ds3k.rom.path="${S3K_ROM_PATH}"
 
+
       - name: Run tests (push)
         if: github.event_name == 'push'
         shell: bash
@@ -84,6 +96,7 @@ jobs:
             -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
             -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
             -Ds3k.rom.path="${S3K_ROM_PATH}"
+
 
       - name: Run tests (manual)
         if: github.event_name == 'workflow_dispatch'
@@ -97,242 +110,139 @@ jobs:
       - name: Assert default test skip classification
         shell: bash
         run: |
-          python3 - <<'PY'
-          import sys
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          surefire_dir = Path("target/surefire-reports")
-          RELEASE_OPTIONAL_TEST_SKIPS = {
-              "com.openggf.game.rewind.TestRewindTorture#tortureProgressiveLongRewinds",
-              "com.openggf.level.objects.TestObjectRewindTypeSafetyDispatchPerformance#measureMixedRouteDispatchAllocationAndTime",
-              "com.openggf.level.TestLevelRendererBackgroundSamplingPerformance#captureLiveBackgroundSamplingScenes",
-              "com.openggf.level.TestLevelRendererBackgroundSamplingPerformance#postWarmupRenderSamplingAllocationProbe",
-              "com.openggf.tests.TestCPZObjectBugs#testSpinTubeForcesRolling",
-              "com.openggf.tools.audio.parity.TestS1OpenGgfAudioCapture#capturesTheCompleteReferenceControlledInterval",
-              "com.openggf.tools.audio.completerun.s2.TestS2CompleteRunRealRow769DecodeGate#capturesAndDecodesTheExactRealRow769Boundary",
-              "com.openggf.graphics.shaderlib.TestDisplayShaderPackDiagnostics#writeCompatibilityReportForLocalShaderPack",
-              "com.openggf.tools.audio.timeline.TestS1Ghz1OpenGgfAudioTimelineCapture#captureRequestedOutput",
-              "com.openggf.tools.audio.completerun.s3k.TestS3kCompleteRunRealRow810DecodeGate#capturesAndDecodesTheExactRealRow810Boundary",
-              "com.openggf.audio.AudioRegressionTest#testMusicEhzMatchesReference",
-              "com.openggf.audio.AudioRegressionTest#testMusicCpzMatchesReference",
-              "com.openggf.audio.AudioRegressionTest#testMusicHtzMatchesReference",
-              "com.openggf.audio.AudioRegressionTest#testSfxRingMatchesReference",
-              "com.openggf.audio.AudioRegressionTest#testSfxJumpMatchesReference",
-              "com.openggf.audio.AudioRegressionTest#testSfxSpringMatchesReference",
-              "com.openggf.audio.AudioRegressionTest#testMixedMusicSfxMatchesReference",
-              "com.openggf.audio.TestSmpsRepeatedPlaybackBenchmark#repeatedPublicMusicAndSfxPlaybackEmitsStableRawSamples",
-              "com.openggf.audio.synth.TestYm2612ChipGpgxParity#nativeEnvelopeHarnessReproducesTrackedVectorsWhenCoreIsPresent",
-          }
-
-          skipped = set()
-          for report in sorted(surefire_dir.glob("TEST-*.xml")):
-              root = ET.parse(report).getroot()
-              for testcase in root.iter("testcase"):
-                  if testcase.find("skipped") is not None:
-                      skipped.add(f"{testcase.attrib.get('classname', root.attrib.get('name', report.stem))}#{testcase.attrib.get('name', '<unnamed>')}")
-
-          unexpected_skips = sorted(skipped - RELEASE_OPTIONAL_TEST_SKIPS)
-          if unexpected_skips:
-              print("Unclassified default-suite skips are release-blocking", file=sys.stderr)
-              for identity in unexpected_skips:
-                  print(identity, file=sys.stderr)
-              sys.exit(1)
-          print(f"Default test skip classification: skipped={len(skipped)} allowed={len(RELEASE_OPTIONAL_TEST_SKIPS)}")
-          PY
+          python3 tools/testing/classify_surefire_skips.py --reports target/surefire-reports \
+            --policy tools/testing/release-skip-policy.json \
+            --capabilities gl=true,s2_bk2=false,s3k_observations=false,s1_bizhawk_reference=false,audio_reference_files=false \
+            --check-evidence --root . --json target/release-evidence/default-skips.json
+          cp -R target/surefire-reports target/release-evidence/default-reports
 
       - name: Run structural guards in a fresh JVM
         shell: bash
         run: mvn -Dmse=off -Pguards test -B
 
+      - name: Prepare reviewed trace baseline
+        shell: bash
+        run: |
+          baseline_sha=$(cat tools/testing/release-trace-baseline.txt)
+          [[ "$baseline_sha" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$baseline_sha" HEAD
+          baseline_tree="$RUNNER_TEMP/openggf-release-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git worktree add --detach "$baseline_tree" "$baseline_sha"
+          echo "RELEASE_BASELINE_TREE=$baseline_tree" >> "$GITHUB_ENV"
+          echo "RELEASE_BASELINE_SHA=$baseline_sha" >> "$GITHUB_ENV"
+          cp -R target/surefire-reports target/release-evidence/guard-reports
+          rm -rf target/surefire-reports target/trace-reports
+
       - name: Run trace replay policy tests (pull request)
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
-          mvn -Dmse=off test -Ptrace-replay -B \
-            -DmodApi.destinationBranch="${{ github.base_ref }}" \
-            -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
-            -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
-            -Ds3k.rom.path="${S3K_ROM_PATH}"
+          helper="$PWD/tools/testing/compare_release_traces.py"
+          candidate_tree="$PWD"
+          for tree in "$RELEASE_BASELINE_TREE" "$candidate_tree"; do
+            cd "$tree"
+            python3 "$helper" begin --tree "$tree" --output target/release-evidence/trace-start.json
+            # Assertion exit 1 is evidence. Collection rejects errors/crashes and
+            # incomplete runs; comparison decides whether known debt is unchanged.
+            set +e
+            mvn -Dmse=off test -Ptrace-replay -B \
+              -DmodApi.destinationBranch="${{ github.base_ref }}" \
+              -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
+              -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
+              -Ds3k.rom.path="${S3K_ROM_PATH}" > target/release-evidence/trace.log 2>&1
+            trace_exit=$?
+            set -e
+            echo "$trace_exit" > target/release-evidence/trace-exit.txt
+            tail -80 target/release-evidence/trace.log
+            python3 "$helper" collect --tree "$tree" \
+              --start target/release-evidence/trace-start.json --log target/release-evidence/trace.log \
+              --exit-code "$trace_exit" --output target/release-evidence/trace.json
+          done
+
 
       - name: Run trace replay policy tests (push)
         if: github.event_name == 'push'
         shell: bash
         run: |
-          mvn -Dmse=off test -Ptrace-replay -B \
-            -DmodApi.destinationBranch="${{ github.ref_name }}" \
-            -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
-            -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
-            -Ds3k.rom.path="${S3K_ROM_PATH}"
+          helper="$PWD/tools/testing/compare_release_traces.py"
+          candidate_tree="$PWD"
+          for tree in "$RELEASE_BASELINE_TREE" "$candidate_tree"; do
+            cd "$tree"
+            python3 "$helper" begin --tree "$tree" --output target/release-evidence/trace-start.json
+            # Assertion exit 1 is evidence. Collection rejects errors/crashes and
+            # incomplete runs; comparison decides whether known debt is unchanged.
+            set +e
+            mvn -Dmse=off test -Ptrace-replay -B \
+              -DmodApi.destinationBranch="${{ github.ref_name }}" \
+              -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
+              -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
+              -Ds3k.rom.path="${S3K_ROM_PATH}" > target/release-evidence/trace.log 2>&1
+            trace_exit=$?
+            set -e
+            echo "$trace_exit" > target/release-evidence/trace-exit.txt
+            tail -80 target/release-evidence/trace.log
+            python3 "$helper" collect --tree "$tree" \
+              --start target/release-evidence/trace-start.json --log target/release-evidence/trace.log \
+              --exit-code "$trace_exit" --output target/release-evidence/trace.json
+          done
+
 
       - name: Run trace replay policy tests (manual)
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
-          mvn -Dmse=off test -Ptrace-replay -B \
-            -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
-            -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
-            -Ds3k.rom.path="${S3K_ROM_PATH}"
+          helper="$PWD/tools/testing/compare_release_traces.py"
+          candidate_tree="$PWD"
+          for tree in "$RELEASE_BASELINE_TREE" "$candidate_tree"; do
+            cd "$tree"
+            python3 "$helper" begin --tree "$tree" --output target/release-evidence/trace-start.json
+            # Assertion exit 1 is evidence. Collection rejects errors/crashes and
+            # incomplete runs; comparison decides whether known debt is unchanged.
+            set +e
+            mvn -Dmse=off test -Ptrace-replay -B \
+              -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
+              -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
+              -Ds3k.rom.path="${S3K_ROM_PATH}" > target/release-evidence/trace.log 2>&1
+            trace_exit=$?
+            set -e
+            echo "$trace_exit" > target/release-evidence/trace-exit.txt
+            tail -80 target/release-evidence/trace.log
+            python3 "$helper" collect --tree "$tree" \
+              --start target/release-evidence/trace-start.json --log target/release-evidence/trace.log \
+              --exit-code "$trace_exit" --output target/release-evidence/trace.json
+          done
 
-      - name: Assert trace replay coverage
+      - name: Assert trace replay coverage and unchanged known debt
         shell: bash
         run: |
-          python3 - <<'PY'
-          import fnmatch
-          import re
-          import sys
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
+          python3 tools/testing/assert_release_trace_coverage.py
+          python3 tools/testing/compare_release_traces.py compare \
+            --baseline "$RELEASE_BASELINE_TREE/target/release-evidence/trace.json" \
+            --candidate target/release-evidence/trace.json \
+            --expected-baseline "$RELEASE_BASELINE_SHA" --expected-candidate "$(git rev-parse HEAD)"
 
-          surefire_dir = Path("target/surefire-reports")
-          source_root = Path("src/test/java/com/openggf/tests/trace")
-          TRACE_REPLAY_DIAGNOSTIC_EXCLUDES = (
-              "Debug*.java",
-              "*Debug*.java",
-              "*Probe.java",
-              "*Probe*.java",
-          )
-          TRACE_REPLAY_PROFILE_EXCLUDES = (
-              "**/tests/trace/s3k/**/*Mhz*.java",
-              "**/tests/trace/s3k/**/*Fbz*.java",
-              "**/tests/trace/s3k/**/*Ssz*.java",
-              "**/tests/trace/s3k/**/*Soz*.java",
-              "**/tests/trace/s3k/**/*Lrz*.java",
-              "**/tests/trace/s3k/**/*Hpz*.java",
-              "**/tests/trace/s3k/**/*Ddz*.java",
-              "**/tests/trace/s3k/**/*Dez*.java",
-              "**/tests/trace/s3k/**/*Zone0c*.java",
-              "**/tests/trace/s3k/TestS3kGumballBonusTraceReplay.java",
-              "**/tests/trace/s3k/TestS3kPachinkoBonusTraceReplay.java",
-              "**/tests/trace/s3k/TestS3kSpecialStageTraceReplay.java",
-              "**/tests/trace/runs/TestS3kKnucklesSuperEmeraldRunChain.java",
-              "**/tests/trace/runs/TestS3kMegaRunChain.java",
-              "**/tests/trace/s3k/sonictails/*.java",
-              "**/tests/trace/s3k/*ZoneSliceTraceReplay.java",
-          )
+      - name: Preserve baseline evidence
+        if: always() && env.RELEASE_BASELINE_TREE != ''
+        shell: bash
+        run: |
+          if [ -d "$RELEASE_BASELINE_TREE/target/release-evidence" ]; then
+            cp -R "$RELEASE_BASELINE_TREE/target/release-evidence" target/release-evidence/baseline
+          fi
 
-          def is_diagnostic_trace_source(source):
-              return any(fnmatch.fnmatch(source.name, pattern)
-                         for pattern in TRACE_REPLAY_DIAGNOSTIC_EXCLUDES)
+      - name: Upload release validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation-evidence
+          path: |
+            target/release-evidence/
+            target/surefire-reports/
+            target/trace-reports/
 
-          def is_release_profile_excluded_source(source):
-              relative = source.relative_to(Path("src/test/java")).as_posix()
-              if not relative.startswith("com/openggf/tests/trace/"):
-                  return False
-              for pattern in TRACE_REPLAY_PROFILE_EXCLUDES:
-                  if "/tests/trace/s3k/" in pattern and not relative.startswith(
-                          "com/openggf/tests/trace/s3k/"):
-                      continue
-                  if "/tests/trace/runs/" in pattern and not relative.startswith(
-                          "com/openggf/tests/trace/runs/"):
-                      continue
-                  if fnmatch.fnmatch(source.name, pattern.rsplit("/", 1)[-1]):
-                      return True
-              return False
-
-          expected_policy_reports = set()
-          expected_trace_reports = set()
-          for source in sorted(source_root.rglob("Test*.java")):
-              if is_diagnostic_trace_source(source):
-                  continue
-              if is_release_profile_excluded_source(source):
-                  continue
-              rel = source.relative_to(Path("src/test/java")).with_suffix("")
-              class_name = ".".join(rel.parts)
-              report_name = f"TEST-{class_name}.xml"
-              expected_policy_reports.add(report_name)
-              if source.name.endswith("TraceReplay.java"):
-                  expected_trace_reports.add(report_name)
-
-          missing_policy = [
-              report_name for report_name in sorted(expected_policy_reports)
-              if not (surefire_dir / report_name).exists()
-          ]
-          if missing_policy:
-              print("Missing expected trace policy reports:", file=sys.stderr)
-              for report_name in missing_policy:
-                  print(f"{surefire_dir / report_name}", file=sys.stderr)
-              sys.exit(1)
-
-          missing_expected = [
-              report_name for report_name in sorted(expected_trace_reports)
-              if not (surefire_dir / report_name).exists()
-          ]
-          if missing_expected:
-              print("Missing expected trace replay reports:", file=sys.stderr)
-              for report_name in missing_expected:
-                  print(f"{surefire_dir / report_name}", file=sys.stderr)
-              sys.exit(1)
-
-          expected_policy_executed = 0
-          expected_executed = 0
-          for report_name in sorted(expected_policy_reports):
-              report = surefire_dir / report_name
-              if not report.exists():
-                  continue
-              root = ET.parse(report).getroot()
-              tests = int(root.attrib.get("tests", "0"))
-              skipped_count = int(root.attrib.get("skipped", "0"))
-              executed_count = tests - skipped_count
-              if executed_count <= 0:
-                  if report_name in expected_trace_reports:
-                      print(
-                          f"Expected trace replay report did not execute: {report} "
-                          f"tests={tests} skipped={skipped_count}",
-                          file=sys.stderr)
-                  else:
-                      print(
-                          f"Expected trace policy report did not execute: {report} "
-                          f"tests={tests} skipped={skipped_count}",
-                          file=sys.stderr)
-                  sys.exit(1)
-              expected_policy_executed += executed_count
-              if report_name in expected_trace_reports:
-                  expected_executed += executed_count
-
-          reports = sorted(surefire_dir.glob("com.openggf.tests.trace*TraceReplay.txt"))
-          total = 0
-          skipped = 0
-          skipped_reports = []
-          for report in reports:
-              text = report.read_text(encoding="utf-8", errors="replace")
-              match = re.search(r"Tests run: (\d+), Failures: \d+, Errors: \d+, Skipped: (\d+)", text)
-              if match:
-                  run_count = int(match.group(1))
-                  skipped_count = int(match.group(2))
-                  total += run_count
-                  skipped += skipped_count
-                  if skipped_count > 0:
-                      skipped_reports.append((report, skipped_count))
-
-          executed = total - skipped
-          if executed == 0:
-              print("Trace replay profile produced no executed ROM-backed trace tests", file=sys.stderr)
-              print(f"trace_reports={len(reports)} total={total} skipped={skipped}", file=sys.stderr)
-              sys.exit(1)
-
-          unexpected_skipped = [
-              (report, skipped_count)
-              for report, skipped_count in skipped_reports
-          ]
-          if unexpected_skipped:
-              print("Trace replay skipped tests are release-blocking",
-                    file=sys.stderr)
-              for report, skipped_count in unexpected_skipped:
-                  print(f"{report}: skipped={skipped_count}", file=sys.stderr)
-              sys.exit(1)
-
-          print(
-              f"Trace replay coverage: executed={executed} total={total} skipped={skipped} "
-              f"expected_trace_executed={expected_executed} "
-              f"expected_trace_reports={len(expected_trace_reports)} "
-              f"expected_policy_executed={expected_policy_executed} "
-              f"expected_policy_reports={len(expected_policy_reports)}")
-          PY
-          python3 tools/testing/validate-trace-reports.py \
-            --root target/trace-reports \
-            --fail-on-warnings \
-            --warning-context release-blocking
+      - name: Remove validation baseline worktree
+        if: always() && env.RELEASE_BASELINE_TREE != ''
+        shell: bash
+        run: git worktree remove --force "$RELEASE_BASELINE_TREE"
 
   build:
     needs: test
@@ -446,6 +356,12 @@ jobs:
               fail("Could not read project version from pom.xml")
           version = match.group(1)
 
+          macos_version_match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", version)
+          if not macos_version_match:
+              fail(f"Could not derive a numeric macOS bundle version from {version}")
+          macos_version = ".".join(
+              part or "0" for part in macos_version_match.groups())
+
           # NOTICE.md: the GPL-3 / LGPL-2.1 texts and notices accompany every copy.
           LICENCE_FILES = {"LICENSE", "LICENSES/LGPL-2.1.txt", "NOTICE.md", "CREDITS.md"}
           LICENCE_FILES_IN_JAR = {f"META-INF/openggf/{name}" for name in LICENCE_FILES}
@@ -505,9 +421,9 @@ jobs:
                       if mode and (mode & stat.S_IXUSR) == 0:
                           fail(f"{archive_path} entry is not executable: {executable}")
               for key in ("CFBundleVersion", "CFBundleShortVersionString"):
-                  pattern = rf"<key>\s*{re.escape(key)}\s*</key>\s*<string>\s*{re.escape(version)}\s*</string>"
+                  pattern = rf"<key>\s*{re.escape(key)}\s*</key>\s*<string>\s*{re.escape(macos_version)}\s*</string>"
                   if not re.search(pattern, info_plist, re.DOTALL):
-                      fail(f"{archive_path} {key} does not match Maven version {version}")
+                      fail(f"{archive_path} {key} does not match numeric macOS version {macos_version} derived from Maven version {version}")
           elif platform == "linux":
               archive_path = distribution_root / "OpenGGF-linux.tar.gz"
               if not archive_path.is_file():

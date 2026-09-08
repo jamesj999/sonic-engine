@@ -216,6 +216,13 @@ public enum SonicConfiguration {
 	AUDIO_INTERNAL_RATE_OUTPUT,
 
 	/**
+	 * Which FM synthesis core renders music and SFX: {@code accurate}
+	 * (cycle-exact Nuked-OPN2 port, the parity oracle) or {@code fast}
+	 * (register-level clean-room core).
+	 */
+	AUDIO_FM_CORE,
+
+	/**
 	 * Whether to mute FM6 when playing a note on it (if DAC is enabled).
 	 * Parity hack from SMPSPlay.
 	 */

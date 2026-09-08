@@ -54,6 +54,11 @@ public class Palette implements PaletteView {
 
         // Converts the color from Sega's format (char-based data)
         public void fromSegaFormat(byte[] bytes, int offset) {
+            fromSegaFormat(((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF));
+        }
+
+        /** Decodes a packed Mega Drive color word without a temporary byte array. */
+        public void fromSegaFormat(int word) {
             // Mega Drive palette format is 1 word (2 bytes) per color.
             // Format: 0000 BBB0 GGG0 RRR0 (bits 11-9=B, 7-5=G, 3-1=R, each 3 bits)
             // The LSB of each nibble is always 0 (values are shifted left by 1)
@@ -62,9 +67,9 @@ public class Palette implements PaletteView {
             // Byte 1: GGG0 RRR0
 
             // Extract 3-bit color values (shift right by 1 to remove the 0 bit)
-            int r3 = (bytes[offset + 1] >> 1) & 0x07;  // Bits 3-1 of byte 1
-            int g3 = (bytes[offset + 1] >> 5) & 0x07;  // Bits 7-5 of byte 1
-            int b3 = (bytes[offset] >> 1) & 0x07;      // Bits 3-1 of byte 0
+            int r3 = (word >> 1) & 0x07;  // Bits 3-1 of byte 1
+            int g3 = (word >> 5) & 0x07;  // Bits 7-5 of byte 1
+            int b3 = (word >> 9) & 0x07;      // Bits 3-1 of byte 0
 
             // Scale 0-7 to 0-255: multiply by 255/7 ≈ 36.43
             // Use integer math: (value * 255 + 3) / 7 for proper rounding

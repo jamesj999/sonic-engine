@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TestPatternAtlasDynamicRanges {
-    private static final int MOD_BASE = 0x188000;
+    private static final int MOD_BASE = PatternAtlasRange.CONTINUE_SCREEN.endExclusive();
     private static final int WINDOW_SIZE = 0x8000;
 
     @Test

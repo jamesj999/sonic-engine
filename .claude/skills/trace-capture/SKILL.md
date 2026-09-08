@@ -1,91 +1,55 @@
 ---
 name: trace-capture
-description: Use when capturing a trace replay to a lossless synced video (demo reel) with the headless TraceCaptureTool — invocation, flags, ghost/HUD visibility, audio, and how the pipeline is wired.
+description: Render an existing OpenGGF trace replay to synchronized lossless MKV video with the headless TraceCaptureTool.
 ---
 
-# Trace Capture Tool
+# Trace capture
 
-`com.openggf.tools.TraceCaptureTool` renders a recorded trace **headless** (offscreen, deterministic) and writes a **lossless, audio+video-synced MKV** — optionally including the desync ghost(s). Because the engine replays deterministically, capture is 1:1 with no dropped frames and no realtime deadline.
+`com.openggf.tools.TraceCaptureTool` replays deterministically with offscreen GL
+and encodes FFV1 video plus FLAC audio in MKV. It renders existing evidence;
+it does not record a new ROM trace or prove parity.
 
-## Prerequisites
-
-- The relevant **ROM** in the working directory (resolved per `RomManager.resolveRomForGame`, same lookup as the rest of the engine).
-- **ffmpeg on `PATH`** (the encoder shells out to it; `FfmpegEncoder.findFfmpeg()` searches `PATH`).
-- At least one trace under `TRACE_CATALOG_DIR` (default `src/test/resources/traces`).
-
-## Invocation
+Have the relevant user-supplied ROM discoverable by `RomManager`, `ffmpeg` on
+`PATH`, and an existing trace directory. Do not rename/copy a ROM to satisfy an
+example. The trace catalog defaults to `src/test/resources/traces`.
 
 ```bash
-mvn exec:java "-Dexec.mainClass=com.openggf.tools.TraceCaptureTool" "-Dexec.args=--trace <id|name|dir> --out-dir target/trace-videos"
+mvn exec:java "-Dexec.mainClass=com.openggf.tools.TraceCaptureTool" \
+  "-Dexec.args=--trace <id|name|dir> --out-dir target/trace-videos"
 ```
 
-In PowerShell, quote the `-D...` properties (as above). Add `-Dmse=off` if you want full Maven logs.
+Output is `capture-<trace-name>-<UTC timestamp>.mkv`. Use a task directory outside
+the repository for durable captures; `target/trace-videos` is disposable output.
 
-The output file is `capture-<trace-name>-<UTCyyyyMMdd'T'HHmmss'Z'>.mkv` in the output directory.
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--trace <id\|name\|dir>` | Required | Zero-based catalog index, directory name, or path |
+| `--out-dir <dir>` | `CAPTURE_OUTPUT_DIR` | Destination directory |
+| `--scale <n>` | `CAPTURE_SCALE=4` | Integer nearest-neighbor scaling of 320×224 |
+| `--fps <n>` | `CAPTURE_FPS=60` | Capture/engine cadence; a region-pinned rate such as PAL 50 takes precedence |
+| `--codec <name>` | `CAPTURE_CODEC=ffv1` | Video codec; changing it may change losslessness |
+| `--no-ghosts` / `--ghosts` | `TRACE_SHOW_DESYNC_GHOSTS=true` | Desync ghost visibility |
 
-## Flags
+HUD visibility uses config rather than CLI flags:
+`TRACE_SHOW_GAME_HUD=true`, `TRACE_SHOW_DEBUG_HUD=false`; enabled debug panels
+also obey `DebugOverlayToggle`. These visibility flags apply to active trace
+sessions in both live playback and capture.
 
-All optional except `--trace`. Unspecified flags fall back to the `CAPTURE_*` config defaults.
+Audio uses the no-device `HeadlessSmpsAudioBackend`, fixed at 48 kHz stereo.
+The capture runtime must be the sole PCM consumer: a live device backend draining
+the same FIFO causes fast/out-of-sync audio. For silence, check `AUDIO_ENABLED`
+and backend installation; inspect the output with
+`ffmpeg -i <mkv> -af volumedetect -f null -`. Unexpected speaker output likewise
+indicates that the wrong backend was installed.
 
-| Flag | Default (config key) | Meaning |
-|------|----------------------|---------|
-| `--trace <id\|name\|dir>` | (required) | 0-based `TraceCatalog` index, a trace **directory name** (e.g. `cpz`, `ehz1_fullrun`), or a direct path to a trace directory. |
-| `--out-dir <dir>` | `CAPTURE_OUTPUT_DIR` (`target/trace-videos`) | Output directory. |
-| `--scale <n>` | `CAPTURE_SCALE` (`4`) | Integer nearest-neighbor upscale (4× → 1280×896). |
-| `--fps <n>` | `CAPTURE_FPS` (`60`) | Output frame rate. Also sets the engine frame rate for the capture process, because the audio producer presents exactly one packet per outer frame at that rate; if the region pins the engine rate (PAL = 50), the tool prints a notice and captures at the pinned rate so audio and video stay in sync. |
-| `--codec <name>` | `CAPTURE_CODEC` (`ffv1`) | Video codec. |
-| `--no-ghosts` / `--ghosts` | `TRACE_SHOW_DESYNC_GHOSTS` (`true`) | Per-run override to hide / show the desync ghost(s). |
+For pipeline changes, follow `TraceCaptureTool` → `HeadlessGameBoot` →
+`TraceReplayDriver` → `TraceCaptureSession` → `CaptureRecorder`/`FfmpegEncoder`.
+`GlReadPixelsGrabber` captures RGBA; ffmpeg flips/scales it.
+`DrainPcmAudioTap` drains the samples produced by each capture frame.
+`TraceGhostHook` registers ghost rendering for `LevelRenderer`.
 
-### Visibility (ghosts / HUD)
-
-Three trace-framework config flags gate rendering during **both** live Trace Test Mode and capture (read via `TraceRenderVisibility` in `LevelRenderer`):
-
-- `TRACE_SHOW_DESYNC_GHOSTS` (default `true`) — the desync ghost(s). CLI override: `--no-ghosts` / `--ghosts`.
-- `TRACE_SHOW_GAME_HUD` (default `true`) — rings/score/time HUD. (No CLI flag yet — set the config key.)
-- `TRACE_SHOW_DEBUG_HUD` (default `false`) — debug overlay; when on, individual `DebugOverlayToggle` panels apply. (No CLI flag yet.)
-
-These flags only affect rendering while a trace session is active, so normal gameplay is unaffected.
-
-## Output
-
-- Container/codecs: **FFV1 video + FLAC audio in MKV** — bit-exact lossless.
-- Video: native 320×224 upscaled by `--scale` with nearest-neighbor (ffmpeg-side `vflip,scale=...:flags=neighbor`).
-- Audio: captured at the engine's **48 kHz** SMPS synthesis rate, stereo, synced 1:1 with video (no timestamps — equal frame/sample cadence).
-- Files are large (lossless): a ~95 s clip is ~800 MB. `target/` is gitignored; re-generate as needed.
-
-## Audio is headless / no device output
-
-Headless capture installs `HeadlessSmpsAudioBackend` — a true **no-device** SMPS audio backend. It shares the synthesis/sequencer/SFX/snapshot/rewind machinery with `LWJGLAudioBackend` via the common `AbstractSmpsAudioBackend` base, but **opens no audio device at all**: every device-output hook (`hookInitDevice`/`hookStartStream`/`hookUpdateStream`/`hookUploadStreamBuffer`/…) is a no-op, so nothing reaches the sound device and the deterministic capture runtime is the **sole** consumer of the synthesized PCM (no FIFO competition → correct speed). The synthesis rate is fixed at 48 kHz. Because no device is opened, capture works on machines with no audio hardware too.
-
-`AbstractSmpsAudioBackend` (base) holds the synthesis; `LWJGLAudioBackend` implements the device hooks with OpenAL (live play, unchanged); `HeadlessSmpsAudioBackend` no-ops them (capture).
-
-## How it's wired (for maintainers)
-
-- `TraceCaptureTool` → `HeadlessGameBoot` (offscreen GL + gameplay session, no master-title/fade; installs the no-device `HeadlessSmpsAudioBackend`) → `TraceReplayDriver` (deterministic replay, extracted from `TraceSessionLauncher`; capture passes a **no-op desync-pause** so it records *through* mismatches to completion) → `TraceCaptureSession` (step → render → grab → submit) → `CaptureRecorder`/`EncoderSink`/`FfmpegEncoder` (`com.openggf.capture`).
-- Video tap: `GlReadPixelsGrabber` (`glReadPixels`, raw RGBA, no Java-side flip). Audio tap: `DrainPcmAudioTap` → `AudioManager.drainCaptureFrame` (drains exactly the frame's produced samples; capture mode installed via `beginCaptureMode`/`endCaptureMode`).
-- Desync ghosts render via `TraceGhostHook` (a shared active-renderer registry both the live launcher and the capture session register into), so `LevelRenderer` draws them for capture too.
-
-## Troubleshooting
-
-- **Silent audio**: usually means no synthesizing backend — confirm `AUDIO_ENABLED=true` and that `HeadlessGameBoot` installed `HeadlessSmpsAudioBackend`. Verify with `ffmpeg -i <mkv> -af volumedetect -f null -` (silence ≈ `-91 dB`).
-- **Audio too fast / out of sync**: a second consumer is draining the presentation FIFO — the capture runtime must be the sole consumer, so the backend's device-output hooks (`hookUpdateStream`/`hookStartStream`) must no-op (they do in `HeadlessSmpsAudioBackend`).
-- **Wrong sample rate**: capture drives at `backend.outputSampleRate()` (48 kHz from the headless backend), not a hardcoded value.
-- **Audio plays to the speakers**: should not happen — the headless backend opens no device. If it does, confirm `HeadlessGameBoot` installs `HeadlessSmpsAudioBackend`, not `LWJGLAudioBackend`.
-- **`ffmpeg` not found**: install it / put it on `PATH`; the encoder throws a clear error otherwise.
-- **Run never finishes / temp grows**: the capture loop is bounded (`trace.frameCount() + 600`); the driver uses a no-op desync-pause so a comparator mismatch does not freeze the run.
-- **Inspect a frame**: `ffmpeg -i <mkv> -vf "select=eq(n\,1500)" -vframes 1 out.png` to confirm ghosts/HUD after a desync.
-
-## Queue and Dynamic-Art Evidence
-
-This tool renders an existing replay; it does not add audit capabilities to a
-fixture. For queue/DPLC sync work, regenerate the fixture with the native
-BizHawk recorder's `--load-queue-state` option and verify
-`load_queue_state_per_frame` plus
-`dynamic_art_transfer_state_per_frame` in `metadata.json`.
-
-The capture deliberately continues through desyncs, so a finished video is not
-evidence that queue timing matched. Inspect the replay JSON report:
-`queue.*` covers physical PLC/Kosinski state and `dynamic_art.*` covers ordered
-player-art submissions, completions, requests, outstanding IDs, and ledger
-carry. Use `trace-replay-bug-fixing` to interpret the first failure and
-`trace-green-fleet` to maintain the recorded frontier.
+The driver deliberately continues through mismatches instead of pausing, with a
+bounded capture loop. Check `target/trace-reports/` for parity evidence even when
+the video finishes. For queue/dynamic-art debugging, use
+`trace-replay-bug-fixing`; regenerate missing audit observations with
+`bizhawk-headless-trace`. A video cannot supply missing fixture capabilities.

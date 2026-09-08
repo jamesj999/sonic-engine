@@ -57,6 +57,17 @@ class TestTraceBenchmarkToolArgs {
     }
 
     @Test
+    void fmCoreSelectionIsExplicitAndRejectsTypos() {
+        for (String core : new String[] {"fast", "accurate"}) {
+            assertEquals(core, TraceBenchmarkTool.Args.parse(new String[] {
+                    "--trace", "aiz1", "--fm-core", core}).fmCore());
+        }
+        assertThrows(IllegalArgumentException.class, () -> TraceBenchmarkTool.Args.parse(
+                new String[] {"--trace", "aiz1", "--fm-core", "fat"}),
+                "a typo must not silently benchmark the accurate fallback");
+    }
+
+    @Test
     void traceIsRequired() {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> TraceBenchmarkTool.Args.parse(new String[]{"--mode", "update"}));

@@ -37,7 +37,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class TestLevelManagerModPatternWindows {
-    private static final int MOD_BASE = PatternAtlasRange.MGZ_ZOOM_CUES.endExclusive();
+    private static final int MOD_BASE = PatternAtlasRange.CONTINUE_SCREEN.endExclusive();
 
     @Test
     void everyLoadAndEditorRebuildRegistersModWindowsBeforeStockArtCaching() throws Exception {
