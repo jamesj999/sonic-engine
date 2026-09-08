@@ -87,7 +87,11 @@ public final class StandaloneAudioPresentationHost
                 runnable -> {
                     Thread thread = new Thread(runnable,
                             "sound-test-audio-owner");
-                    thread.setDaemon(false);
+                    // Opening and cleanup have bounded caller waits, while a
+                    // device or native producer may still be completing on
+                    // this owner.  Do not let that late work keep a command
+                    // line JVM alive after its deadline has expired.
+                    thread.setDaemon(true);
                     return thread;
                 });
         Future<StandaloneAudioPresentationHost> creation = ownerExecutor.submit(

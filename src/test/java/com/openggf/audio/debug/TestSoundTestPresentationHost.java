@@ -16,6 +16,7 @@ import com.openggf.game.sonic3k.audio.smps.Sonic3kSfxData;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -170,6 +171,23 @@ class TestSoundTestPresentationHost {
                 host.toggleMute(ChannelType.FM, 1);
                 host.presentFrame();
             }).get(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void productionOwnerIsDaemonWhenADeadlineLeavesLateCleanup() throws Exception {
+        try (StandaloneAudioPresentationHost host =
+                     StandaloneAudioPresentationHost.open(
+                             "s1",
+                             SonicConfigurationService.createStandalone(),
+                             null, true)) {
+            Field ownerField = StandaloneAudioPresentationHost.class
+                    .getDeclaredField("ownerThread");
+            ownerField.setAccessible(true);
+            Thread owner = (Thread) ownerField.get(host);
+
+            assertTrue(owner.isDaemon(),
+                    "late open or cleanup must not keep the JVM alive");
         }
     }
 
