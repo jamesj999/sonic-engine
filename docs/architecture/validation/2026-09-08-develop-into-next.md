@@ -289,4 +289,34 @@ bash script syntax checks. Guidance/skill mirrors, validation JSON and whitespac
 checks pass.
 
 The pre-integration fetch confirms the original remote develop/next commits are
-unchanged. Post-integration verification is pending in the existing next checkout.
+unchanged. Merge commit `973fa3ab823610feda75f945486b1f44188daa15` has the pinned next
+and develop commits as its two parents. It was fast-forwarded into the existing
+next checkout without changing the main workspace branch.
+
+## Post-integration verification
+
+The ordinary suite ran from a fresh `target/` in `.worktrees/next-merge` at
+`973fa3ab8`, using the ordinary command above with label `postintegration-full`.
+It completed at 16:14:36 Europe/London in 16m26s: **20,118 tests, 35 failures,
+21 errors, 24 skips**. XML headers, cases, and suite events agree at 20,121 / 38 /
+21 / 24, with the already-explained dynamic-factory difference. There are no
+missing/extra suite reports and no added/missing identities relative to the
+validated candidate. Every outcome multiset matches, allowing only the two
+explicitly verified set-order/object-hash presentation differences described
+above. All 49 focused audio/save/standalone regression cases pass again without
+skips. The inherited 56 failing identities remain documented baseline debt;
+this is a no-regression integration, not an all-green suite claim.
+
+The only source-file change between the ordinary candidate's recorded tree and
+the merge commit is the separately verified architectural guard correction.
+Runtime source is identical. The evidence-only follow-up changes no executable
+contract; its JSON, links and whitespace are checked without repeating Maven.
+
+Completed raw logs, command metadata and reports are archived under
+`${MERGE_EVIDENCE_DIR}` in `ai-next-merge-base-20260908-evidence.tar.gz`,
+`ai-develop-merge-base-20260908-evidence.tar.gz`,
+`ai-next-merge-guards-20260908-evidence.tar.gz`, `merge-candidate-evidence.tar.gz`
+and `postintegration-evidence.tar.gz`. The final comparison is
+`postintegration-full-multiset.json`. These archives contain validation evidence,
+not shared/copied Maven build trees. The tracked appendix provides portable
+baseline failure and coverage inventories after temporary worktree cleanup.
