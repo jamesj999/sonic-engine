@@ -113,7 +113,7 @@ public final class SoundTestApp {
                         SonicConfigurationService.createStandalone(),
                         null, options.nullAudio);
         // Abnormal-exit safety net only; removed on the normal path below so
-        // backend.destroy() runs exactly once.
+        // the host's owner executor performs destruction exactly once.
         Thread destroyOnExit = new Thread(host::close);
         Runtime.getRuntime().addShutdownHook(destroyOnExit);
 
@@ -126,12 +126,19 @@ public final class SoundTestApp {
                 runConsole(options, loader, dacData, host, catalog, startSongId);
             }
         } finally {
+            boolean hostClosed = false;
             try {
-                Runtime.getRuntime().removeShutdownHook(destroyOnExit);
-            } catch (IllegalStateException ignored) {
-                // JVM already shutting down; the hook performs the destroy instead.
+                host.close();
+                hostClosed = true;
+            } finally {
+                if (hostClosed) {
+                    try {
+                        Runtime.getRuntime().removeShutdownHook(destroyOnExit);
+                    } catch (IllegalStateException ignored) {
+                        // JVM already shutting down; the hook owns cleanup.
+                    }
+                }
             }
-            host.close();
         }
     }
 
@@ -164,10 +171,9 @@ public final class SoundTestApp {
     private static void runInteractiveWindow(Options options, SmpsLoader loader, DacData dacData,
             StandaloneAudioPresentationHost host, SoundTestCatalog catalog, SmpsSequencerConfig seqConfig,
             TreeSet<Integer> validSfx, int startSongId) throws Exception {
-        // All backend mutation is funneled onto this single thread: it drives
-        // the 16ms stream update and executes the Swing handlers' play/stop/
-        // mute commands, so the EDT never swaps the SMPS driver or touches
-        // OpenAL sources while update() is mid-stream.
+        // The single command thread serializes the 16ms ticks and Swing
+        // handlers' play/stop/mute requests. The host marshals these calls to
+        // its producer owner executor, so the EDT never touches audio state.
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
         InteractiveState state = new InteractiveState(startSongId, loader, dacData, host,
                 catalog, seqConfig, validSfx, exec);

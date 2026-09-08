@@ -1773,7 +1773,9 @@ request scheduling. Full parity and human listening sign-off remain open.
 - **Unified presentation audio:** SMPS, WAV and PCM effects, and raw SEGA PCM commands all resolve
   through one composite, allocation-free presentation voice with unified voice snapshots,
   deterministic command ordering, phase-exact non-consuming capture taps, and full rewind and
-  reverse-playback support. Live recording and offline trace capture take the same packets.
+  reverse-playback support. Live recording and offline trace capture take the same packets. The
+  standalone sound test creates and closes that producer on its owner executor, so interactive
+  commands and shutdown cleanup cannot strand a live sink.
 - **Presentation rebuilds no longer silence the game:** the title-to-gameplay mode reset recreates
   the backend-owned presentation sink instead of letting enabled audio drop after the first reset,
   and the pre-game master title emits its own navigate, confirm and error cues independently of the
