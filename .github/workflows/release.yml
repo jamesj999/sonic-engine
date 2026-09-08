@@ -284,6 +284,12 @@ jobs:
               fail("Could not read project version from pom.xml")
           version = match.group(1)
 
+          macos_version_match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", version)
+          if not macos_version_match:
+              fail(f"Could not derive a numeric macOS bundle version from {version}")
+          macos_version = ".".join(
+              part or "0" for part in macos_version_match.groups())
+
           # NOTICE.md: the GPL-3 / LGPL-2.1 texts and notices accompany every copy.
           LICENCE_FILES = {"LICENSE", "LICENSES/LGPL-2.1.txt", "NOTICE.md", "CREDITS.md"}
           LICENCE_FILES_IN_JAR = {f"META-INF/openggf/{name}" for name in LICENCE_FILES}
@@ -343,9 +349,9 @@ jobs:
                       if mode and (mode & stat.S_IXUSR) == 0:
                           fail(f"{archive_path} entry is not executable: {executable}")
               for key in ("CFBundleVersion", "CFBundleShortVersionString"):
-                  pattern = rf"<key>\s*{re.escape(key)}\s*</key>\s*<string>\s*{re.escape(version)}\s*</string>"
+                  pattern = rf"<key>\s*{re.escape(key)}\s*</key>\s*<string>\s*{re.escape(macos_version)}\s*</string>"
                   if not re.search(pattern, info_plist, re.DOTALL):
-                      fail(f"{archive_path} {key} does not match Maven version {version}")
+                      fail(f"{archive_path} {key} does not match numeric macOS version {macos_version} derived from Maven version {version}")
           elif platform == "linux":
               archive_path = distribution_root / "OpenGGF-linux.tar.gz"
               if not archive_path.is_file():

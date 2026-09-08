@@ -153,14 +153,20 @@ For a deeper look at the source layout, see [Architecture](architecture.md).
 The engine supports ahead-of-time compilation via GraalVM native image. This produces
 a standalone binary that starts faster and does not require a JVM installation.
 
-To build a native image, you need GraalVM 21+ with the `native-image` tool installed.
-The build is configured in `pom.xml` under the `native` profile:
+To build a native image, you need GraalVM 21 with the `native-image` tool installed
+and selected as Maven's JDK. The build is configured in `pom.xml` under the `native`
+profile:
 
 ```bash
-mvn package -Pnative
+export JAVA_HOME=/path/to/graalvm-21
+export PATH="$JAVA_HOME/bin:$PATH"
+mvn -Dmse=off -Pnative -DskipTests package -B
 ```
 
-Native image metadata is maintained in `src/main/resources/META-INF/native-image/`.
+On macOS this produces `target/OpenGGF.app` as well as the direct
+`target/OpenGGF` executable. Put `config.yaml` and the user-supplied ROM files
+beside the app before launching it. Native image metadata is maintained in
+`src/main/resources/META-INF/native-image/`.
 
 ## Next Steps
 

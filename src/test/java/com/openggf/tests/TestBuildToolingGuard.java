@@ -1652,8 +1652,10 @@ class TestBuildToolingGuard {
 
     @Test
     void macosBundleMetadataShouldMatchMavenVersion() throws Exception {
-        String expectedVersion = property(parsePom("pom.xml"), "version");
+        String mavenVersion = property(parsePom("pom.xml"), "version");
+        String expectedVersion = macosBundleVersion(mavenVersion);
         String plist = Files.readString(Path.of("src/packaging/Info.plist"));
+        String assembler = Files.readString(Path.of("src/packaging/assemble-macos-app.sh"));
         List<String> violations = new ArrayList<>();
 
         if (!plistValueEquals(plist, "CFBundleVersion", expectedVersion)) {
@@ -1662,6 +1664,10 @@ class TestBuildToolingGuard {
         if (!plistValueEquals(plist, "CFBundleShortVersionString", expectedVersion)) {
             violations.add("src/packaging/Info.plist CFBundleShortVersionString must match pom.xml version "
                     + expectedVersion);
+        }
+        if (!assembler.contains("plutil -replace CFBundleVersion")
+                || !assembler.contains("plutil -replace CFBundleShortVersionString")) {
+            violations.add("src/packaging/assemble-macos-app.sh must write valid numeric bundle versions");
         }
 
         if (!violations.isEmpty()) {
@@ -3852,6 +3858,16 @@ class TestBuildToolingGuard {
         return Pattern.compile("<key>\\s*" + Pattern.quote(key)
                         + "\\s*</key>\\s*<string>\\s*" + Pattern.quote(expectedValue) + "\\s*</string>",
                 Pattern.DOTALL).matcher(plist).find();
+    }
+
+    private static String macosBundleVersion(String mavenVersion) {
+        var matcher = Pattern.compile("^(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?").matcher(mavenVersion);
+        if (!matcher.find()) {
+            fail("Maven version does not start with numeric components: " + mavenVersion);
+        }
+        return matcher.group(1) + "."
+                + (matcher.group(2) == null ? "0" : matcher.group(2)) + "."
+                + (matcher.group(3) == null ? "0" : matcher.group(3));
     }
 
     private static boolean surefirePluginUsesSharedArgLine(Document pom) {
