@@ -242,16 +242,28 @@ class TestMasterTitleRomPreview {
     }
 
     @Test
-    void sonic2PreviewClearsLogoChromaGreen() {
-        MasterTitleRomPreview.Image image = new MasterTitleRomPreview.Image(2, 1, new byte[] {
-                (byte) 0x92, (byte) 0xFF, 0x00, (byte) 0xFF,
-                (byte) 0xFF, 0x00, 0x00, (byte) 0xFF
-        });
+    void sonic2PreviewPreservesOpaqueEmblemInteriorBehindCharacters() {
+        MasterTitleScreen.GameEntry entry = MasterTitleScreen.GameEntry.SONIC_2;
+        Path path = Path.of(MasterTitleScreen.expectedRomFilename(entry));
+        assumeTrue(path.toFile().isFile(), "ROM not present: " + path);
 
-        MasterTitleRomPreview.clearSonic2LogoChromaGreen(image);
+        MasterTitleRomPreview.Image image = MasterTitleRomPreview.loadFor(entry, path).orElseThrow();
 
-        assertPixel(image, 0, 0, 0x00, 0x00, 0x00, 0x00);
-        assertPixel(image, 1, 0, 0xFF, 0x00, 0x00, 0xFF);
+        int opaqueGreenPixels = 0;
+        for (int y = 32; y < 104; y++) {
+            for (int x = 72; x < 248; x++) {
+                int offset = ((y * image.width()) + x) * 4;
+                byte[] rgba = image.rgba();
+                if ((rgba[offset] & 0xFF) == 0x92
+                        && (rgba[offset + 1] & 0xFF) == 0xFF
+                        && (rgba[offset + 2] & 0xFF) == 0x00
+                        && (rgba[offset + 3] & 0xFF) == 0xFF) {
+                    opaqueGreenPixels++;
+                }
+            }
+        }
+        assertTrue(opaqueGreenPixels > 500,
+                "the emblem interior should remain opaque behind Sonic and Tails, got " + opaqueGreenPixels);
     }
 
     @Test
