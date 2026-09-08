@@ -12,16 +12,20 @@ All baseline failures/errors are empty. Forty-three ordinary skips are allowed f
 
 | Task | Implementer group | Coordinator verdict | Evidence |
 |---|---|---|---|
-| 01 Save ordering | Persistence | Pending | Awaiting regression and change |
+| 01 Save ordering | Persistence | Source/regression review accepted; group suite pending | `0855fdd94`: complete operations share FIFO ordering; no per-instance retained futures; regressions cover cross-manager read/delete/synchronous write and interrupted waits. Coordinator review removed an unbounded test observer |
 | 02 SBZ3 rewind ownership | S1 rewind | Pending | Awaiting ObjectManager path evidence |
 | 03 Switch RAM rewind | S1 rewind | Pending | Awaiting registered-adapter evidence |
-| 04 Release skip policy | Delivery | Pending | Awaiting exact rule/classifier |
-| 05 Config migration | Persistence | Pending | Awaiting failed-write/restart regression |
+| 04 Release skip policy | Delivery | Focused review accepted; group suite pending | `f9d054f64`: exact opt-in rule inspected; coordinator classifier allows all 44 baseline skips with zero unknown/required/undeclared/stale; policy unit suite 20 tests, one absent historical-report skip |
+| 05 Config migration | Persistence | Focused review accepted; group suite pending | `0855fdd94`: coordinator reran the original failed-YAML/restart probe; legacy JSON remains, no backup is created, both startups retain `s1`. Public save API remains compatible |
 | 06 Discord presence | Presence | Pending | Awaiting bounded backpressure/lifecycle evidence |
-| 07 Current artifact launch | Delivery | Pending | Awaiting executable launcher checks |
+| 07 Current artifact launch | Delivery | Focused review accepted; package/group suite pending | `7dbc6af7e`: coordinator launcher tests 9 passed; manifest selection, stale-only failure, custom names, spaces, missing/invalid metadata and exit codes. Windows contract is statically inspected, not executed |
 | 08 Palette teardown | Presentation | Pending | Awaiting palette/session reset evidence |
 | 09 Sound-test ownership | Presentation | Pending | Awaiting owner-thread playback and close evidence |
 
 ## Integration
 
-No runtime changes accepted or integrated yet. Final combined-tree and post-merge verification, policy checks, push and task-worktree cleanup remain pending.
+No worker changes integrated yet. Focused acceptance above remains subject to completed development-tree verification. Final combined-tree and post-merge verification, policy checks, push and task-worktree cleanup remain pending.
+
+## Verification investigations
+
+The delivery worker ordinary run reported `TestAudioPresentationProducer#warmedProducerAllocatesNoFramePacketOrConsumerArray`: expected 0 allocated bytes, observed 80. Its source already documents historical full-suite-only 80/176-byte measurement artefacts, but this alone does not waive the current failure. The coordinator's focused control on unchanged base `8392494a0` passed one test with no skips using `mvn -Dmse=off -Dsurefire.forkCount=1 '-Dtest=TestAudioPresentationProducer#warmedProducerAllocatesNoFramePacketOrConsumerArray' -Dopenggf.surefire.reports=target/audit-20260908/remediation-baseline-audio-allocation test -B`. Its completed log is `target/audit-20260908/remediation-baseline-audio-allocation.log`. Final-tree reconciliation remains pending.
