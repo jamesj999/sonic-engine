@@ -185,5 +185,12 @@
     "com.openggf.tools.audio.parity.s2.TestS2WidenedRequestOracle#everyReplayableWindowComparesAgainstTheEnginesOwnRequests",
     "com.openggf.tools.audio.parity.s3k.TestS3kRequestObservationSidecar#supplyingTheObservedRequestRemovesTheProducerInputLimitation",
     "com.openggf.tools.audio.timeline.TestS1Ghz1OpenGgfAudioTimelineCapture#captureRequestedOutput"
-  ]
+  ],
+  "post_integration_commit": "918d5e9f6",
+  "post_integration_counts": {
+    "pass": 20091,
+    "skipped": 24,
+    "failure": 14
+  },
+  "post_integration_identities_and_assertions_match_candidate": true
 }

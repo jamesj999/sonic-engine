@@ -108,8 +108,7 @@ four-arm command and source attribution.
 Logs, XML summaries, original failure output and CPZ reports are preserved under
 `${CI_REPAIR_EVIDENCE}/`. Source changes are checked
 against baseline failures by identity and assertion, not totals alone. Completed
-final candidate results are recorded below. Post-integration results are recorded
-separately after that required run completes.
+final candidate and post-integration results are recorded below.
 
 ## Completed final candidate checks
 
@@ -148,3 +147,22 @@ Completed logs and XML use `target/ci-complete-full/` and
 `target/ci-complete-backed/` in the repair worktree. The tested dash wrapper is
 preserved outside the worktrees at
 `${CI_REPAIR_EVIDENCE}/ubuntu-shell/`.
+
+
+## Post-integration verification
+
+The repair fast-forwarded into `next` at `918d5e9f6` without conflicts. The full
+ordinary ROM-backed command above was rerun from `.worktrees/next-merge`, with
+reports and the complete log under `target/ci-repair-post-integration/`.
+It completed 20,129 testcase occurrences: 20,091 passed, 14 failed, zero errors,
+and the same 24 skips. Every testcase identity, status and failure assertion
+matches the completed candidate at `7716b39f1`; the only failing assertions are
+the same FBZ baseline cases documented above.
+
+A fresh `-Pguards -Dtest=TestBuildToolingGuard,TestTraceWorkflowToolingGuard`
+run on the integrated snapshot also passed all 110 selected cases without skips,
+covering the added evidence's resource policy and the manual workflow wiring.
+The complete 652-case guards run on the same repair source is recorded above.
+Subsequent changes in this evidence commit are documentation-only. The actual
+GitHub push-smoke result is reported with delivery rather than inferred from
+these local runs.
