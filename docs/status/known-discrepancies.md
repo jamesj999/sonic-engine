@@ -3137,6 +3137,12 @@ pre-rewrite ratio. At the 16-bit output after `MASTER_GAIN_SHIFT` one full-scale
 FM channel is 3072, one full-scale PSG channel 1556, and silence rests at +288.
 Neither chip's own scale is adjusted.
 
+The S1, S2 and S3K SEGA boot chants now all pass through this shared DAC/mixer
+path. S1/S2 no longer use the standalone voice's legacy 0.25 gain. This makes
+their hardware gain consistent, but does not resolve the analogue calibration
+limitation below. See [shared SEGA DAC verification](../architecture/validation/audio/2026-09-08-sega-dac-gain.md)
+for ROM loop timing, measured boot output and remaining initialization/timing limits.
+
 ### Rationale
 
 No capture with both FM music and PSG sound exists in the repository (every

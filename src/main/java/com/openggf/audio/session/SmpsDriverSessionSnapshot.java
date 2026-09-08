@@ -12,6 +12,7 @@ public record SmpsDriverSessionSnapshot(
         boolean speedShoesEnabled,
         int speedMultiplier,
         boolean ringLeft,
+        int musicFmDacTrackCount,
         SmpsSegaPcmTransportSnapshot segaPcmTransport,
         SmpsPhysicalDevice.Snapshot physical) {
     public SmpsDriverSessionSnapshot {
@@ -19,6 +20,9 @@ public record SmpsDriverSessionSnapshot(
                 "pendingGlobalCommand");
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(physical, "physical");
+        if (musicFmDacTrackCount < 0) {
+            throw new IllegalArgumentException("musicFmDacTrackCount must be non-negative");
+        }
         if (speedMultiplier < 1) {
             throw new IllegalArgumentException(
                     "speedMultiplier must be positive");

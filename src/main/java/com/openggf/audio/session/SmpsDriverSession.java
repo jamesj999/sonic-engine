@@ -183,6 +183,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         private final boolean speedShoesEnabled;
         private final int speedMultiplier;
         private final boolean ringLeft;
+        private final int musicFmDacTrackCount;
         private final SegaPcmTransport segaPcmTransport;
         private final int diagnosticCount;
         private boolean commitPrepared;
@@ -211,6 +212,7 @@ public final class SmpsDriverSession implements AutoCloseable {
                     SmpsDriverSession.this.speedShoesEnabled;
             speedMultiplier = SmpsDriverSession.this.speedMultiplier;
             ringLeft = SmpsDriverSession.this.ringLeft;
+            musicFmDacTrackCount = SmpsDriverSession.this.musicFmDacTrackCount;
             segaPcmTransport =
                     SmpsDriverSession.this.segaPcmTransport == null
                             ? null
@@ -533,6 +535,9 @@ public final class SmpsDriverSession implements AutoCloseable {
     private boolean speedShoesEnabled;
     private int speedMultiplier = 1;
     private boolean ringLeft = true;
+    // Retain the loaded header's DAC disposition after its sequencer ends.
+    // S2 DACEnabled is driver RAM, not the existence of active music tracks.
+    private int musicFmDacTrackCount;
     private SegaPcmTransport segaPcmTransport;
     private SmpsDriverServiceObserver.DriverIdentity openOwner;
     private long openEpoch;
@@ -712,10 +717,9 @@ public final class SmpsDriverSession implements AutoCloseable {
         globalStopConsumedDuringService = false;
         serviceInvocationCount++;
         if (segaPcmTransport != null) {
-            // zPlaySEGAPCM runs under di for its whole duration
-            // (Sound/Z80 Sound Driver.asm:4372-4424), so every V-int that
-            // falls inside the transport is missed: no update runs and the
-            // 68k's queued requests stay in zMusicNumber until the loop ends.
+            // S2/S3K block their Z80 driver inside the PCM loop. S1's
+            // 68000 PlaySegaSound also blocks in its busyloop while the
+            // separate Z80 plays the chant (s1.sounddriver.asm:733-747).
             return SmpsServiceOutcome.SEGA_PCM_TRANSPORT;
         }
         if (pendingGlobalCommand == SmpsPendingGlobalCommand.STOP_ALL) {
@@ -746,6 +750,7 @@ public final class SmpsDriverSession implements AutoCloseable {
                     port.selectDac(service.selectedDac());
                 }
                 if (service.activation() != null) {
+                    musicFmDacTrackCount = service.activation().fmDacTrackCount();
                     applyProgram(port,
                             policy.activateMusic(service.activation()));
                 }
@@ -954,15 +959,13 @@ public final class SmpsDriverSession implements AutoCloseable {
     }
 
     /**
-     * Leaves the loop. {@code .done} jumps back into
-     * {@code zPlayDigitalAudio} (Sound/Z80 Sound Driver.asm:4422,
-     * :4256-4260), whose entry write disables the DAC again.
+     * Leaves through the driver's own DAC disposition. S1 returns to idle
+     * without a write; S2 restores its music DAC flag; S3K disables the DAC.
      */
     private void endSegaPcmTransport() {
-        SegaPcmTransport active = segaPcmTransport;
         segaPcmTransport = null;
         withPort(driverIdentity, port -> {
-            applyProgram(port, active.transport.exit());
+            applyProgram(port, policy.exitSegaPcmTransport(musicFmDacTrackCount));
             return null;
         });
     }
@@ -994,6 +997,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         requireInstalled();
         PreparedSmpsMusicActivation resolved = Objects.requireNonNull(
                 activation, "activation");
+        interruptSegaPcmForRequest();
         SmpsLogicalTransitionPolicy.Result transition =
                 resolved.logicalPolicy().prepareMusicStart(
                         driver.captureSnapshot(),
@@ -1031,6 +1035,10 @@ public final class SmpsDriverSession implements AutoCloseable {
     public void applyCommand(SmpsSessionCommand command) {
         requireInstalled();
         Objects.requireNonNull(command, "command");
+        if (!(command instanceof SmpsSessionCommand.ResetRingAlternation)
+                && !(command instanceof SmpsSessionCommand.SetSpeedMultiplier)) {
+            interruptSegaPcmForRequest();
+        }
         switch (command) {
             case SmpsSessionCommand.AdmitSfx admit ->
                     admitSfx(admit.program());
@@ -1075,8 +1083,17 @@ public final class SmpsDriverSession implements AutoCloseable {
         }
     }
 
+    private void interruptSegaPcmForRequest() {
+        if (segaPcmTransport != null && policy.segaPcmInterruptedByRequest()) {
+            // The host delivers requests at presentation boundaries. Finish
+            // the old transport before a new request mutates driver state.
+            endSegaPcmTransport();
+        }
+    }
+
     public void retainGlobalStop() {
         requireInstalled();
+        interruptSegaPcmForRequest();
         pendingGlobalCommand = SmpsPendingGlobalCommand.STOP_ALL;
     }
 
@@ -1159,6 +1176,7 @@ public final class SmpsDriverSession implements AutoCloseable {
                 speedShoesEnabled,
                 speedMultiplier,
                 ringLeft,
+                musicFmDacTrackCount,
                 segaPcmTransport == null ? null
                         : new SmpsSegaPcmTransportSnapshot(
                                 segaPcmTransport.pcm,
@@ -1251,6 +1269,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         speedShoesEnabled = resolved.session().speedShoesEnabled();
         speedMultiplier = resolved.session().speedMultiplier();
         ringLeft = resolved.session().ringLeft();
+        musicFmDacTrackCount = resolved.session().musicFmDacTrackCount();
         segaPcmTransport = materializeSegaPcmTransport(
                 resolved.session().segaPcmTransport());
         pendingService = materializePendingService(
@@ -1363,6 +1382,7 @@ public final class SmpsDriverSession implements AutoCloseable {
         speedShoesEnabled = state.speedShoesEnabled;
         speedMultiplier = state.speedMultiplier;
         ringLeft = state.ringLeft;
+        musicFmDacTrackCount = state.musicFmDacTrackCount;
         segaPcmTransport = state.segaPcmTransport;
         truncateDiagnostics(state.diagnosticCount);
         state.consumed = true;
@@ -1870,6 +1890,8 @@ public final class SmpsDriverSession implements AutoCloseable {
         try {
             driver.restoreSnapshot(Objects.requireNonNull(
                     snapshot, "snapshot"));
+            SmpsSequencer music = driver.firstMusicSequencer();
+            musicFmDacTrackCount = music == null ? 0 : music.getSmpsData().getChannels();
         } finally {
             logicalMaterialization = false;
         }

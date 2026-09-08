@@ -1752,9 +1752,11 @@ request scheduling. Full parity and human listening sign-off remain open.
   free instead of seizing it, and plays with its own instrument rather than the music's. A broken
   Sonic 2 monitor's explosion sound plays from the explosion object's own first turn rather than the
   monitor's collision frame, one frame later as the ROM does.
-- **The S3K SEGA chant comes out of the emulated sound chip** rather than playing as a plain sample,
-  matching the original cutoff behaviour. Skipping the intro with Start no longer silences the title
-  screen, because the stop command tied to the chant is gated on the chant still playing.
+- **All three SEGA chants come out of the emulated sound chip**, sharing the DAC and mixer gain
+  with music samples. S1 and S2 use their ROM sample-loop cadence instead of the legacy standalone
+  PCM gain; each driver retains its own DAC completion behavior. S3K matches the original cutoff
+  behavior. Skipping its intro with Start no longer silences the title screen, because the stop
+  command tied to the chant is gated on the chant still playing.
 
 #### Presentation Audio, Capture, and Configuration
 

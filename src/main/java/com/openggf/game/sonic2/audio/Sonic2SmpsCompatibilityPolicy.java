@@ -4,10 +4,12 @@ import com.openggf.audio.session.LegacyCompatibilitySmpsPhysicalPolicy;
 import com.openggf.audio.session.SmpsChipWrite;
 import com.openggf.audio.session.SmpsMusicActivation;
 import com.openggf.audio.session.SmpsPhysicalPolicy;
+import com.openggf.audio.session.SmpsSegaPcmTransport;
 import com.openggf.audio.session.SmpsWriteProgram;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** Named S2 host policy retaining the verified pre-migration 202-write program. */
 public final class Sonic2SmpsCompatibilityPolicy
@@ -21,6 +23,37 @@ public final class Sonic2SmpsCompatibilityPolicy
             LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE;
 
     private Sonic2SmpsCompatibilityPolicy() {
+    }
+
+    @Override
+    public Optional<SmpsSegaPcmTransport> segaPcmTransport() {
+        // s2.sounddriver.asm:zPlaySegaSound enables the DAC, then streams
+        // pairs at 152 base cycles. REV01 Z80 0720/0733: 06 0C gives
+        // 76 + 13*11 = 219 cycles per byte (both halves have equal cost).
+        // FixDriverBugs=0: preserve panning; the fixed branch resets B6.
+        // At boot DACEnabled is zero after zClearTrackPlaybackMem clears RAM.
+        return Optional.of(SEGA_PCM);
+    }
+
+    private static final SmpsSegaPcmTransport SEGA_PCM = new SmpsSegaPcmTransport(
+            new SmpsWriteProgram(List.of(new SmpsChipWrite.Ym2612(0, 0x2B, 0x80))),
+            0, 0x2A,
+            new SmpsWriteProgram(List.of(new SmpsChipWrite.Ym2612(0, 0x2B, 0))),
+            16_500, 76);
+
+    @Override
+    public boolean segaPcmInterruptedByRequest() {
+        // zPlaySegaSound.loop leaves whenever QueueToPlay differs from 80h.
+        return true;
+    }
+
+    @Override
+    public SmpsWriteProgram exitSegaPcmTransport(int musicFmDacTrackCount) {
+        // zPlaySegaSound.stop restores DACEnabled, set by zBGMLoad's
+        // FM6 disposition: a seven-track header uses FM6 instead of DAC.
+        // No loaded music corresponds to zClearTrackPlaybackMem's zero.
+        int enabled = musicFmDacTrackCount == 0 || musicFmDacTrackCount == 7 ? 0 : 0x80;
+        return new SmpsWriteProgram(List.of(new SmpsChipWrite.Ym2612(0, 0x2B, enabled)));
     }
 
     @Override

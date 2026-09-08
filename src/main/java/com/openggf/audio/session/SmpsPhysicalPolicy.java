@@ -59,6 +59,19 @@ public interface SmpsPhysicalPolicy {
         return Optional.empty();
     }
 
+    /** Whether a new sound request makes the PCM loop leave its queue poll. */
+    default boolean segaPcmInterruptedByRequest() {
+        return false;
+    }
+
+    /**
+     * Writes on PCM completion. The loaded music header carries the FM6/DAC
+     * disposition; zero denotes a driver with no loaded music.
+     */
+    default SmpsWriteProgram exitSegaPcmTransport(int musicFmDacTrackCount) {
+        return segaPcmTransport().orElseThrow().exit();
+    }
+
     /** ROM work performed when a non-immediate music load begins. */
     default SmpsWriteProgram beginMusicLoad() {
         return SmpsWriteProgram.EMPTY;
