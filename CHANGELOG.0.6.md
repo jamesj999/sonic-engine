@@ -261,7 +261,9 @@ disassemblies. Entries below apply to every game unless a game is named.
   the line 2 backdrop colour included) while line 0 keeps Sonic, the HUD, and the title card at
   full colour, replacing the blended black overlay. Palette fades now apply where CRAM uploads
   happen, so palette cycles and other writes made during a fade stay faded. The card's black
-  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame.
+  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame. A complete
+  palette teardown also clears the active fade and its cached palette owners, so an interrupted
+  title-card session cannot tint the next session.
 
 ### Gameplay-Scoped Rewind
 
