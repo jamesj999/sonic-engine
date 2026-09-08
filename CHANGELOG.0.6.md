@@ -275,7 +275,9 @@ object family now restores through shared machinery, and the remaining coverage 
   covering bosses, badniks, mechanisms, debris and particles, cutscene controllers, and HUD and
   utility objects, moved from bespoke or missing restore paths onto shared spawn-based or
   graph-based generic recreate. Parent, child, and player references relink through the rewind
-  identity table and constructor-derived scalars restore compactly.
+  identity table and constructor-derived scalars restore compactly. Sonic 1's sixteen switch bytes
+  are captured too, and its SBZ3 door singleton rebinds from restored live slots, preserving the
+  first-loaded-slot rule across absent, reconstructed, and reused objects.
 - **Bespoke dynamic child codecs were deleted as they migrated:** lost rings, shields, boss and
   badnik children, seesaw balls, checkpoint children, Sonic 1 effects, S3K cutscene and miniboss
   children across six zones, signposts, entry flashes, and shared helper dynamics.
@@ -315,10 +317,6 @@ object family now restores through shared machinery, and the remaining coverage 
   release from cutting invincibility, extra-life, or Super music short.
 - **Sonic 2's post-camera object-unload latch is captured,** fixing permuted dynamic slot allocation
   and random-seed divergence after a seek.
-- **Sonic 1 shared object state now rewinds with its owners:** all sixteen `f_switch` bytes and
-  the SBZ3 `v_obj6B` door owner are registered before ObjectManager restoration, with the door
-  singleton rebound from restored slots so absent, reconstructed, and reused doors keep the
-  shipped first-loaded-slot rule.
 - **Live handles are treated as transient** where an object holds a reference that may already be
   gone, covering the Gumball machine's children, the Ice Cap snowboard intro, and the S3K
   special-stage entry flash, each of which had crashed capture or restore.

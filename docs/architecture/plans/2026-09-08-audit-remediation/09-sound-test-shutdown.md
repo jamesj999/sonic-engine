@@ -1,6 +1,6 @@
 # 09 — Make standalone sound-test cleanup respect audio ownership
 
-Lower priority developer tooling; low–medium complexity; estimated 1–3 hours.
+Lower priority developer tooling; medium complexity; revised estimate 3–6 hours including the confirmed interactive ownership path and bounded startup/shutdown lifecycle. The initial shutdown-only audit estimate was 1–3 hours.
 
 ## Problem
 
