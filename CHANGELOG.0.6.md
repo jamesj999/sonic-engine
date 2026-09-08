@@ -56,8 +56,8 @@ Maven after an experiment with managed test sessions was withdrawn.
   act 2 bridge layering fix out of the already-large object manager facade.
 - **Discord Rich Presence leaves the gameplay frame free of IPC:** enabled presence captures an
   immutable status on the game thread, coalesces the latest payload on a bounded worker, and
-  closes a stalled local client within a bounded shutdown window while retaining its privacy and
-  timer controls.
+  bounds shutdown waiting for a stalled local client while retaining its privacy and timer
+  controls.
 
 #### ROM Pipeline
 
@@ -1785,8 +1785,8 @@ request scheduling. Full parity and human listening sign-off remain open.
   through one composite, allocation-free presentation voice with unified voice snapshots,
   deterministic command ordering, phase-exact non-consuming capture taps, and full rewind and
   reverse-playback support. Live recording and offline trace capture take the same packets. The
-  standalone sound test creates and closes that producer on its owner executor, so interactive
-  commands and shutdown cleanup cannot strand a live sink.
+  standalone sound test marshals interactive commands and cleanup to its producer owner executor.
+  Shutdown waits are bounded while pending cleanup remains queued.
 - **Presentation rebuilds no longer silence the game:** the title-to-gameplay mode reset recreates
   the backend-owned presentation sink instead of letting enabled audio drop after the first reset,
   and the pre-game master title emits its own navigate, confirm and error cues independently of the
