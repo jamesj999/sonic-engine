@@ -560,8 +560,6 @@ final class MasterTitleRomPreview {
         Palette[] palettes = loadSonic2TitlePalettes(rom);
         Image image = composeTilemapImage(patterns, palettes, map, S2_TITLE_WIDTH_TILES, S2_TITLE_HEIGHT_TILES);
         Image logo = composeTilemapImage(patterns, palettes, map, S2_TITLE_WIDTH_TILES, S2_TITLE_HEIGHT_TILES);
-        clearSonic2LogoChromaGreen(image);
-        clearSonic2LogoChromaGreen(logo);
         int stillTick = S2_SETTLED_TICK;
         return new GeneratedPreviewSequence(image.width(), image.height(), stillTick,
                 MasterTitleRomPreview::sonic2PreviewTokenAt,
@@ -1067,23 +1065,6 @@ final class MasterTitleRomPreview {
                 image.rgba[offset + 1] = logo.rgba[offset + 1];
                 image.rgba[offset + 2] = logo.rgba[offset + 2];
                 image.rgba[offset + 3] = logo.rgba[offset + 3];
-            }
-        }
-    }
-
-    static void clearSonic2LogoChromaGreen(Image image) {
-        if (image == null) {
-            return;
-        }
-        for (int offset = 0; offset < image.rgba.length; offset += 4) {
-            int r = image.rgba[offset] & 0xFF;
-            int g = image.rgba[offset + 1] & 0xFF;
-            int b = image.rgba[offset + 2] & 0xFF;
-            if (r == 0x92 && g == 0xFF && b == 0x00) {
-                image.rgba[offset] = 0;
-                image.rgba[offset + 1] = 0;
-                image.rgba[offset + 2] = 0;
-                image.rgba[offset + 3] = 0;
             }
         }
     }
