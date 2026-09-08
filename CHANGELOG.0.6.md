@@ -315,6 +315,10 @@ object family now restores through shared machinery, and the remaining coverage 
   release from cutting invincibility, extra-life, or Super music short.
 - **Sonic 2's post-camera object-unload latch is captured,** fixing permuted dynamic slot allocation
   and random-seed divergence after a seek.
+- **Sonic 1 shared object state now rewinds with its owners:** all sixteen `f_switch` bytes and
+  the SBZ3 `v_obj6B` door owner are registered before ObjectManager restoration, with the door
+  singleton rebound from restored slots so absent, reconstructed, and reused doors keep the
+  shipped first-loaded-slot rule.
 - **Live handles are treated as transient** where an object holds a reference that may already be
   gone, covering the Gumball machine's children, the Ice Cap snowboard intro, and the S3K
   special-stage entry flash, each of which had crashed capture or restore.

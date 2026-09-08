@@ -3,10 +3,12 @@ package com.openggf.game.sonic1.events;
 import com.openggf.game.AbstractLevelEventManager;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.sonic1.Sonic1LoopManager;
+import com.openggf.game.sonic1.Sonic1StomperDoorSingletonRewindAdapter;
 import com.openggf.game.sonic1.resources.Sonic1PlcService;
 import com.openggf.game.sonic1.objects.Sonic1FixedEndCardSlot;
 import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
 import com.openggf.level.LevelManager;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.io.IOException;
@@ -421,5 +423,12 @@ public class Sonic1LevelEventManager extends AbstractLevelEventManager {
         return java.util.List.of(
                 new com.openggf.game.sonic1.Sonic1ConveyorStateRewindAdapter(),
                 new com.openggf.game.sonic1.Sonic1FloatingBlockStateRewindAdapter());
+    }
+
+    @Override
+    public void reconcileAfterRewindRestore() {
+        LevelManager level = levelManager();
+        ObjectManager objectManager = level != null ? level.getObjectManager() : null;
+        Sonic1StomperDoorSingletonRewindAdapter.rebindAfterObjectRestore(objectManager);
     }
 }

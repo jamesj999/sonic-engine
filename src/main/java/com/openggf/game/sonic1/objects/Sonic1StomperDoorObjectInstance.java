@@ -78,6 +78,38 @@ public class Sonic1StomperDoorObjectInstance extends AbstractObjectInstance
         sbz3Instance = null;
     }
 
+    /** Returns whether v_obj6B currently has a Java owner. */
+    public static boolean hasSbz3Singleton() {
+        return sbz3Instance != null;
+    }
+
+    /**
+     * Clears the pre-restore v_obj6B owner before ObjectManager reconstruction.
+     * Constructors then perform the normal first-loaded-slot ROM claim.
+     */
+    public static void prepareSbz3SingletonForRewindRestore() {
+        sbz3Instance = null;
+    }
+
+    /**
+     * Rebinds v_obj6B to the first restored live SBZ3 door in slot order.
+     * Destroyed duplicate constructors are skipped, preserving the ROM's
+     * first-loaded-slot ownership rule.
+     */
+    public static void rebindSbz3Singleton(
+            Iterable<Sonic1StomperDoorObjectInstance> restoredDoors) {
+        sbz3Instance = null;
+        if (restoredDoors == null) {
+            return;
+        }
+        for (Sonic1StomperDoorObjectInstance door : restoredDoors) {
+            if (door != null && door.isSbz3 && !door.isDestroyed()) {
+                sbz3Instance = door;
+                return;
+            }
+        }
+    }
+
     // ---- Sto_Var table entries ----
     // Each entry: {width, height, moveDist, typeNumber}
     private static final int[][] STO_VAR = {

@@ -91,8 +91,8 @@ class TestS1S2PlcSessionOwnership {
     }
 
     private static void assertSingleAdapter(GameModule module, RewindSnapshottable<?> service) {
-        assertEquals(1, module.rewindAdapters().size());
-        assertSame(service, module.rewindAdapters().getFirst());
+        assertTrue(module.rewindAdapters().stream().anyMatch(adapter -> adapter == service),
+                "the module must retain the ROM-bound PLC adapter alongside other S1 rewind state");
     }
 
     private static GameplayModeContext attachedBeforeGameCreation(GameModule module) {
