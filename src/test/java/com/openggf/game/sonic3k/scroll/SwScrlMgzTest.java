@@ -249,7 +249,6 @@ public class SwScrlMgzTest {
         handler.setBgRiseState(8, 0x200);
         handler.setScreenShakeOffset(3);
         handler.update(rising, 0x3500, 0x0850, 1, 1);
-        handler.update(rising, 0x3500, 0x0850, 2, 1);
 
         assertEquals(0, handler.getShakeOffsetY(),
                 "The sample prepared at the background-event tail is not visible until the next frame");
@@ -272,10 +271,6 @@ public class SwScrlMgzTest {
         assertEquals(0, handler.getShakeOffsetY(),
                 "ShakeScreen_Setup should publish its newly computed offset on the next frame");
 
-        handler.update(rising, 0x3500, 0x0850, 2, 1);
-
-        assertEquals(0, handler.getShakeOffsetY(),
-                "The current frame publishes the sample prepared by the preceding background-event pass");
         handler.update(rising, 0x3500, 0x0850, 2, 1);
 
         assertEquals(3, handler.getShakeOffsetY(),

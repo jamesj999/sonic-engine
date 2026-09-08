@@ -90,10 +90,10 @@ class TestModEngineWiringSeams {
                 "streamedMusicSessionInvalidator.run()", "releaseStreamedMusicPort()");
         assertMethodOrder(source, "private synchronized void releaseStreamedMusicPort()",
                 "backend.resetStreamedMusicPort()", "previous.close()");
-        assertMethodOrder(source, "public void setBackend(AudioBackend backend)",
+        assertMethodOrder(source, "public synchronized void setBackend(AudioBackend backend)",
                 "invalidateAndReleaseStreamedMusicSession()",
                 "destroyBackendQuietly(this.backend");
-        assertMethodOrder(source, "public void setBackend(AudioBackend backend)",
+        assertMethodOrder(source, "public synchronized void setBackend(AudioBackend backend)",
                 "destroyBackendQuietly(this.backend", "this.backend = backend");
     }
 

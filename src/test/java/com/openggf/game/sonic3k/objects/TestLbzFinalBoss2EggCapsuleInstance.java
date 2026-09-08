@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Source-facing checks for LBZ Big Arm's route-8 capsule lock writer. */
+@com.openggf.tests.rules.RequiresRom(com.openggf.tests.rules.SonicGame.SONIC_3K)
 class TestLbzFinalBoss2EggCapsuleInstance {
 
     private static final int CAMERA_X = 0x4000;

@@ -171,7 +171,16 @@ public class RomManager implements AutoCloseable {
     @Deprecated
     public static String resolveRomForGame(String gameId) {
         SonicConfigurationService configuration = GameServices.configuration();
-        return configuredRomValue(legacyRomGame(gameId), configuration);
+        if (gameId == null) {
+            throw new IllegalArgumentException("Game id must not be null");
+        }
+        RomGame game = switch (gameId.toLowerCase(java.util.Locale.ROOT)) {
+            case "s1" -> RomGame.S1;
+            case "s2" -> RomGame.S2;
+            case "s3k" -> RomGame.S3K;
+            default -> throw new IllegalArgumentException("No stock ROM mapping for game: " + gameId);
+        };
+        return configuredRomValue(game, configuration);
     }
 
     private static String configuredRomValue(RomGame game, SonicConfigurationService configuration) {

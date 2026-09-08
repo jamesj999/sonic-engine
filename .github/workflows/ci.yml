@@ -223,6 +223,16 @@ jobs:
         with:
           ref: develop
 
+      # This manual-only job tests develop, while github.sha identifies the
+      # revision selected for workflow_dispatch and supplies its validator.
+      - name: Checkout trace validation tooling from workflow revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .trace-validation-tools
+          sparse-checkout: tools/testing/validate-trace-reports.py
+          sparse-checkout-cone-mode: false
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -367,7 +377,7 @@ jobs:
               f"expected_trace_executed={expected_trace_executed} "
               f"expected_trace_reports={len(expected_trace_reports)}")
           PY
-          python3 tools/testing/validate-trace-reports.py \
+          python3 .trace-validation-tools/tools/testing/validate-trace-reports.py \
             --root target/trace-reports \
             --fail-on-warnings \
             --warning-context develop-blocking \

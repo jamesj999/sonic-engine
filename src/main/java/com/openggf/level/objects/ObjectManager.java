@@ -471,10 +471,11 @@ public class ObjectManager {
         // Materialize the current ObjectPlacementController window immediately after reset.
         // S1 needs this for ROM parity at level start; for S2/S3K it keeps
         // manual camera resets and headless probes from sitting on an empty
-        // active window until a later ObjectPlacementController delta occurs. Initial reset
-        // materialization still honors the camera-Y filter; S2's vertical bypass is runtime-only.
+        // active window until a later ObjectPlacementController delta occurs.
+        // S2 ObjectsManager_Init falls through to the same X-only loading pass
+        // as runtime ObjectsManager (s2.asm: ObjectsManager_Init / loc_17B3E).
         if (materializeInitialWindow) {
-            syncActiveSpawnsLoad(false);
+            syncActiveSpawnsLoad(skipVerticalSpawnLoadFilterForGame);
         }
     }
 
@@ -4453,6 +4454,18 @@ public class ObjectManager {
             }
         }
         return owned.toLongArray();
+    }
+
+    /** Retains rewind identities when a transition carries the exact live SST occupants. */
+    public void inheritTransitionObjectIdentities(ObjectManager previous,
+                                                   List<ObjectInstance> carriedObjects) {
+        dynamicObjectIdCounter = Math.max(dynamicObjectIdCounter, previous.dynamicObjectIdCounter);
+        for (ObjectInstance object : carriedObjects) {
+            ObjectRefId id = previous.rewindObjectIds.get(object);
+            if (id != null) {
+                rewindObjectIds.put(object, id);
+            }
+        }
     }
 
     /**

@@ -19,6 +19,9 @@ import com.openggf.mods.code.*;
 import com.openggf.tools.HeadlessGameBoot;
 import com.openggf.tools.modsdk.GgfModCli;
 import com.openggf.tests.HeadlessTestRunner;
+import com.openggf.tests.RomTestUtils;
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.tests.TestEnvironment;
 import com.openggf.tests.TestSessionOutputPaths;
 import com.openggf.physics.GroundSensor;
@@ -53,11 +56,35 @@ class TestPhase2SampleModIntegration {
         TestEnvironment.resetAll();
     }
 
-    @Test void realCreatorSampleLoadsZoneObjectRewindAndKeyedSave() throws Exception {
+    @Test void realCreatorSampleBuildsAndRegistersAuthoredResourcesWithoutRom() throws Exception {
+        Path jar = buildInitializedSample();
+        try (CatalogFixture fixture = load(jar, true)) {
+            GameModule base = new Sonic2GameModule();
+            GameModule resolved = resolver(base, fixture).resolveForLaunch(base,
+                    new GameplayLaunchRequest("s2", "sonic", List.of()),
+                    ModuleResolutionService.LaunchPolicy.STANDARD);
+            assertEquals(12, resolved.getZoneRegistry().getZoneCount());
+            assertEquals(11, resolved.getZoneRegistry().resolveZoneKey(
+                    ZoneKey.mod("phase2-sample", "sample-zone")).orElseThrow());
+            assertEquals(0x400, resolved.getZoneRegistry().getLevelDataForZone(11)
+                    .getFirst().levelIndex());
+            assertTrue(AbstractBadnikInstance.class.isAssignableFrom(fixture.runtime().loadOwned(
+                    "phase2-sample", "example.phase2sample.SampleBadnik")));
+            assertEquals(15, resolved.getObjectArtProvider().getSheet(
+                    "phase2-sample:sample-badnik").getPatterns()[0].getPixel(1, 0));
+        }
+    }
+
+    @Test
+    @RequiresRom(SonicGame.SONIC_2)
+    void realCreatorSampleLoadsZoneObjectRewindAndKeyedSave() throws Exception {
         assertTrue(Files.isRegularFile(Path.of("src/test/resources/mods/sample-mod-src/build.sh")));
         Path jar=buildInitializedSample();
         try(CatalogFixture fixture=load(jar,true);com.openggf.data.Rom rom=new com.openggf.data.Rom()){
-            assertTrue(rom.open("s2.gen"));GameModule base=new Sonic2GameModule();base.createGame(rom);
+            var romFile = RomTestUtils.ensureSonic2RomAvailable();
+            assertNotNull(romFile);
+            assertTrue(rom.open(romFile.getAbsolutePath()));
+            GameModule base=new Sonic2GameModule();base.createGame(rom);
             ModuleResolutionService resolver=resolver(base,fixture);
             GameModule resolved=resolver.resolveForLaunch(base,new GameplayLaunchRequest("s2","sonic",List.of()),
                     ModuleResolutionService.LaunchPolicy.STANDARD);

@@ -2149,7 +2149,7 @@ class TestBuildToolingGuard {
     private static void assertOwnerKeyedTraceReportConsumer(
             String sourceName, String workflow, List<String> violations) {
         for (String required : List.of(
-                "python3 tools/testing/validate-trace-reports.py",
+                "python3 .trace-validation-tools/tools/testing/validate-trace-reports.py",
                 "--root target/trace-reports",
                 "--fail-on-warnings")) {
             if (!workflow.contains(required)) {

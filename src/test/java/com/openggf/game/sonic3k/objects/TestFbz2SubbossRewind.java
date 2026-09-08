@@ -1,5 +1,7 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.level.objects.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -163,7 +165,7 @@ class TestFbz2SubbossRewind {
                         ()->new SongFadeTransitionInstance(waitWord,Sonic3kMusic.MINIBOSS_S3.id));
                 assertEquals(waitWord,transition.nativeWaitWordForTest());
                 for(int frame=0;frame<waitWord;frame++)transition.update(frame,h.player);
-                verify(h.audio).fadeOutMusic(0x28,6);
+                verify(h.audio).fadeOutMusic();
                 verify(h.audio,never()).playMusic(Sonic3kMusic.MINIBOSS_S3.id);
                 assertFalse(transition.isDestroyed(),"native wait word has not underflowed through update "+waitWord);
                 transition.update(waitWord,h.player);
@@ -181,7 +183,9 @@ class TestFbz2SubbossRewind {
                 .nativeWaitWordForTest());
     }
 
-    @Test void rumbleControllerDiesWhenTheGlobalShakeFlagClearsAndFinalShakePersists() {
+    @Test
+    @RequiresRom(SonicGame.SONIC_3K)
+    void rumbleControllerDiesWhenTheGlobalShakeFlagClearsAndFinalShakePersists() {
         Harness h=harness();
         Fbz2SubbossInstance root=h.manager.createDynamicObject(()->new Fbz2SubbossInstance(
                 new ObjectSpawn(0x2B40,0x5F0,0xAB,0,0,true,417)));
@@ -214,7 +218,9 @@ class TestFbz2SubbossRewind {
         for(Fbz2SubbossSolidSideChild side:h.manager.activeObjectsOfType(Fbz2SubbossSolidSideChild.class)){assertSame(root,side.root());assertNotNull(side.corner());}
     }
 
-    @Test void forcedReconstructionAtRawBeamCallbackPreservesOneShotRumbleAndExplosionAllocation(){
+    @Test
+    @RequiresRom(SonicGame.SONIC_3K)
+    void forcedReconstructionAtRawBeamCallbackPreservesOneShotRumbleAndExplosionAllocation(){
         Harness h=harness();
         Fbz2SubbossInstance root=h.manager.createDynamicObject(()->new Fbz2SubbossInstance(
                 new ObjectSpawn(0x2B40,0x5F0,0xAB,0,0,true,417)));
@@ -251,7 +257,9 @@ class TestFbz2SubbossRewind {
                 "the restored one-shot callback must not allocate a duplicate explosion owner");
     }
 
-    @Test void forcedReconstructionPreservesDetachedRolesDefeatWaitAndPilotEscapeCleanup(){
+    @Test
+    @RequiresRom(SonicGame.SONIC_3K)
+    void forcedReconstructionPreservesDetachedRolesDefeatWaitAndPilotEscapeCleanup(){
         Harness h=harness();
         Fbz2SubbossInstance root=h.manager.createDynamicObject(()->new Fbz2SubbossInstance(
                 new ObjectSpawn(0x2B40,0x5F0,0xAB,0,0,true,417)));

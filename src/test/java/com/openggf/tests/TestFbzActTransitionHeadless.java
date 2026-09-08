@@ -170,6 +170,9 @@ class TestFbzActTransitionHeadless {
                 .startPosition((short) 0x2EE1, (short) 0x0540)
                 .startPositionIsCentre()
                 .build();
+        // Finish the fresh initial Process_Sprites before installing synthetic
+        // transition occupants, including its normally empty absolute slot 3.
+        fixture.stepIdleFrames(1);
         ObjectManager act1 = GameServices.level().getObjectManager();
 
         FbzOutdoorBgMotionObjectInstance fixedSlot3 = ObjectConstructionContext.construct(
@@ -756,7 +759,12 @@ class TestFbzActTransitionHeadless {
         assertTrue(level.getRingManager().getActiveSpawns().isEmpty(),
                 "ring windowing must remain uninitialized inside ScreenEvents");
         for (var ring : act2Rings) {
-            assertEquals(ring, level.getRingManager().resolveCanonicalSpawn(ring.x(), ring.y()),
+            // Coordinate lookup selects the first authored placement when
+            // multiple ROM ring entries occupy the same position.
+            var firstAtPosition = act2Rings.stream()
+                    .filter(candidate -> candidate.x() == ring.x() && candidate.y() == ring.y())
+                    .findFirst().orElseThrow();
+            assertSame(firstAtPosition, level.getRingManager().resolveCanonicalSpawn(ring.x(), ring.y()),
                     "Load_Rings must install every canonical FBZ2 ring during ScreenEvents");
         }
         var act1OnlyRing = act1Rings.stream()

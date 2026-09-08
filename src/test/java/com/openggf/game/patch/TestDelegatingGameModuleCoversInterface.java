@@ -37,6 +37,29 @@ class TestDelegatingGameModuleCoversInterface {
     }
 
     @Test
+    void gameplayFactoriesAndGameOverFlowPreserveWrappedProviders() {
+        GameModule base = mock(GameModule.class);
+        var flow = mock(com.openggf.game.GameOverFlowProvider.class);
+        java.util.function.BiFunction<com.openggf.sprites.playable.AbstractPlayableSprite,
+                com.openggf.game.ShieldType, com.openggf.level.objects.ShieldObjectInstance>
+                shield = (player, type) -> null;
+        java.util.function.Function<com.openggf.sprites.playable.AbstractPlayableSprite,
+                com.openggf.level.objects.AbstractObjectInstance> instaShield = player -> null;
+        java.util.function.BiFunction<Integer, Integer,
+                com.openggf.level.objects.AbstractObjectInstance> splash = (x, y) -> null;
+        when(base.getGameOverFlowProvider()).thenReturn(flow);
+        when(base.getShieldFactory()).thenReturn(shield);
+        when(base.getInstaShieldFactory()).thenReturn(instaShield);
+        when(base.getWaterSplashFactory()).thenReturn(splash);
+        DelegatingGameModule patched = new DelegatingGameModule(base, "test-patch");
+
+        assertSame(flow, patched.getGameOverFlowProvider());
+        assertSame(shield, patched.getShieldFactory());
+        assertSame(instaShield, patched.getInstaShieldFactory());
+        assertSame(splash, patched.getWaterSplashFactory());
+    }
+
+    @Test
     void delegatingGameModuleDeclaresEveryGameModuleMethod() {
         List<String> missing = new ArrayList<>();
         for (Method method : GameModule.class.getMethods()) {

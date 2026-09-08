@@ -1,5 +1,7 @@
 package com.openggf.game.rewind;
 
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.audio.AudioManager;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameStateManager;
@@ -248,6 +250,7 @@ class TestS3kCnzEndBossGraphRewind {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     void defeatGraphRestoresExactExplosionFlameAndBoundaryControllerIdentities() throws Exception {
         Harness harness = Harness.create();
         ObjectManager objectManager = harness.objectManager();

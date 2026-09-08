@@ -60,6 +60,8 @@ class TestSonic1GiantRingTimeAttackGate {
 
         ring.update(1, player); // INIT -> ACTIVE (>=50 rings, <6 emeralds, on-screen)
         ring.onTouchResponse(player, specialTouch(), 1);
+        // ReactToItem queues collection; GRing_Collect runs on the object dispatch.
+        ring.update(2, player);
 
         assertFalse(services.sfxPlayed, "Giant ring SFX must not play while a time attack is active");
         verify(player, never()).setHidden(anyBoolean());
@@ -72,6 +74,8 @@ class TestSonic1GiantRingTimeAttackGate {
 
         ring.update(1, player);
         ring.onTouchResponse(player, specialTouch(), 1);
+        // ReactToItem queues collection; GRing_Collect runs on the object dispatch.
+        ring.update(2, player);
 
         assertTrue(services.sfxPlayed, "Precondition: normal touch (no time attack) still plays the giant-ring SFX");
     }

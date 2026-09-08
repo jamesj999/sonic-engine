@@ -356,23 +356,19 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance implements
         int objY = spawn.y();
         // ROM uses center-based coordinates (x_pos, y_pos).
         //
-        // Position basis matches ROM slot ordering of Obj1E_Main (s2.asm:48501-
-        // 48511). ROM loc_225FC reads the character's live x_pos/y_pos at the
-        // moment this tube's slot runs (s2.asm:48524-48532). The engine can
-        // observe the owner's same-frame move before a destination tube runs, so
-        // use current position only when that move crossed this tube's lower
-        // entry bound. Other mid-traversal handoffs keep the frame-start basis,
-        // preserving the ROM right-edge rejection/retry cadence.
-        boolean midTraversal = player.isObjectControlled()
-                && player.isObjectControlSuppressesMovement();
-        boolean ownerAlreadyMovedThisFrame = midTraversal
-                && (player.getCentreX() != player.getPrePhysicsCentreX()
-                || player.getCentreY() != player.getPrePhysicsCentreY());
-        boolean ownerRanBeforeThisTube = ownerAlreadyMovedThisFrame && activeOwnerRanBefore(player);
-        boolean useCurrentPosition = !midTraversal
-                || (ownerRanBeforeThisTube && crossedEntryLowerBoundThisFrame(player, objX, objY));
-        int playerX = useCurrentPosition ? player.getCentreX() : player.getPrePhysicsCentreX();
-        int playerY = useCurrentPosition ? player.getCentreY() : player.getPrePhysicsCentreY();
+        // ROM loc_225FC reads the character's LIVE x_pos/y_pos at the moment this
+        // tube's slot runs -- move.w x_pos(a1),d0 / move.w y_pos(a1),d1
+        // (docs/s2disasm/s2.asm:48529 and :48533). There is no frame-start
+        // snapshot anywhere in Obj1E: ExecuteObjects walks the object list in slot
+        // order, so a lower-slot Obj1E that already ran Obj1E_MoveCharacter this
+        // frame (docs/s2disasm/s2.asm:48661-48671) has already written x_pos/y_pos
+        // before a higher-slot tube evaluates this gate. Reading the live position
+        // is what reproduces that ordering; any frame-start basis makes a handoff
+        // between two overlapping tubes land a frame late, after which both tubes
+        // hold the character and Obj1E_MoveCharacter is applied twice per frame
+        // out of phase with the ROM.
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
 
         // Check X range: player must be within collisionDistance of object
         int dx = playerX - objX;
@@ -524,20 +520,12 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance implements
         // Calculate velocity to next waypoint
         calculateVelocity(player, cs, nextX, nextY, TUBE_SPEED);
 
-        if (ownerAlreadyMovedThisFrame && !useCurrentPosition) {
-            // This capture used the frame-start basis after the owner already
-            // moved the player in engine order. ROM's later owner pass then
-            // consumes the freshly written x_vel/y_vel(a1) in
-            // Obj1E_MoveCharacter(_2) (docs/s2disasm/s2.asm:48657-48669,
-            // 48732-48744), so apply that post-capture movement here and
-            // suppress the destination's next waypoint write that the still-
-            // active owner would overwrite.
-            moveCharacter(player);
-            cs.skipNextEntryMoveForOwnerOverwrite = true;
-            cs.skipMoveAfterOwnerExit = true;
-        } else {
-            cs.skipMoveAfterOwnerExit = false;
-        }
+        // ROM loc_22688 ends the capture pass at the PlaySound tail
+        // (docs/s2disasm/s2.asm:48612-48718): it writes the entry waypoint and the
+        // first loc_22902 velocity, and never calls Obj1E_MoveCharacter itself.
+        // The character is moved only by whichever Obj1E slots run afterwards, so
+        // no catch-up move belongs here.
+        cs.skipMoveAfterOwnerExit = false;
 
         // Play rolling sound
         playSound(GameSound.ROLLING);
@@ -549,18 +537,6 @@ public class CPZSpinTubeObjectInstance extends AbstractObjectInstance implements
                 ", entryFrame=" + cs.frame + ", pathIndex=" + pathIndex +
                 ", collisionDist=0x" + Integer.toHexString(collisionDistance) +
                 ", objPos=(" + objX + "," + objY + ")");
-    }
-
-    private boolean activeOwnerRanBefore(AbstractPlayableSprite player) {
-        CPZSpinTubeObjectInstance owner = activeTubeOwners.get(player);
-        return owner != null
-                && owner.currentVIntRunCount == currentVIntRunCount
-                && owner.getSlotIndex() < getSlotIndex();
-    }
-
-    private boolean crossedEntryLowerBoundThisFrame(AbstractPlayableSprite player, int objX, int objY) {
-        return (player.getPrePhysicsCentreX() < objX && player.getCentreX() >= objX)
-                || (player.getPrePhysicsCentreY() < objY && player.getCentreY() >= objY);
     }
 
     private void markActiveOwner(AbstractPlayableSprite player) {

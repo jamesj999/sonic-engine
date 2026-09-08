@@ -150,6 +150,8 @@ class TestSpriteManagerDebugEmeraldGrant {
         assertTrue(GameServices.gameState().hasAllSuperEmeralds());
         assertTrue(GameServices.gameState().isEmeraldsConverted());
         assertEquals(7, GameServices.gameState().getEmeraldCount());
+        AudioManager.getInstance().presentFrame(
+                com.openggf.audio.presentation.PresentationMode.FORWARD);
         assertEquals(1, musicCommands().size());
     }
 

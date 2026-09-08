@@ -175,7 +175,9 @@ public final class SwScrlFbz extends AbstractZoneScrollHandler implements FbzClo
 
     @Override
     public CloudPosition cloudPositionAtAddressSlot(int addressSlot) {
-        return cloudPositions.get(addressSlot);
+        // Obj_FBZCloud can run in initial Process_Sprites before CloudDeform.
+        // Its address still names the allocated RAM slot before publication.
+        return cloudPositionSlots[Objects.checkIndex(addressSlot, cloudPositionSlots.length)];
     }
 
     private static CloudPosition[] createCloudPositionSlots() {

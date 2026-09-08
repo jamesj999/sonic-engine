@@ -82,7 +82,7 @@ class TestEngineConfiguredHeadlessStartup {
         assertEquals(1, engine.initializeGameCalls,
                 "the shared configured-startup branch must own game startup");
         var ensureBackend = Engine.class.getDeclaredMethod(
-                "ensureAudioBackend");
+                "ensureMasterTitleAudioBackend");
         ensureBackend.setAccessible(true);
         ensureBackend.invoke(engine);
         assertSame(backend, audio.getBackend(),

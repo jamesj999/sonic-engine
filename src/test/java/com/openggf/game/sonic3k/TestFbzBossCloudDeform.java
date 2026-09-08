@@ -12,6 +12,19 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 class TestFbzBossCloudDeform {
     @Test
+    void cloudAddressSlotsExistBeforeTheFirstDeformationPass() {
+        SwScrlFbz handler = new SwScrlFbz(() -> null);
+        handler.init(1, 0, 0);
+        assertEquals(0, handler.cloudPositions().size());
+        for (int addressSlot = 0; addressSlot < 10; addressSlot++) {
+            var slot = handler.cloudPositionAtAddressSlot(addressSlot);
+            assertEquals(0, slot.x());
+            assertEquals(0, slot.y());
+            assertSame(slot, handler.cloudPositionAtAddressSlot(addressSlot));
+        }
+    }
+
+    @Test
     void bossCloudModeUsesEventOffsetsFastDriftAndRomCloudCoordinates() {
         Sonic3kFBZEvents events = new Sonic3kFBZEvents();
         events.init(1);

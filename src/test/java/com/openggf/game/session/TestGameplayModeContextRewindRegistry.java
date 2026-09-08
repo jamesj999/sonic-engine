@@ -152,18 +152,19 @@ class TestGameplayModeContextRewindRegistry {
                 DynamicArtLifecycleService.REWIND_KEY,
                 ctx.seamlessTransitionResourceHandoffs().key(),
                 com.openggf.game.sonic2.timing.Sonic2LevelMusicScheduler.REWIND_KEY,
-                "solid-execution");
+                "solid-execution",
+                "kosinski-module-queue");
         assertTrue(snapshot.entries().keySet().containsAll(expectedKeys),
                 "Expected all atomic adapter keys to be present, got: " + snapshot.entries().keySet());
     }
 
     @Test
-    void exactlyElevenAtomicKeysAfterAttach() {
+    void exactlyTwelveAtomicKeysAfterAttach() {
         GameplayModeContext ctx = buildAttachedContext();
         RewindRegistry registry = ctx.getRewindRegistry();
         CompositeSnapshot snapshot = registry.capture();
-        assertEquals(11, snapshot.entries().keySet().size(),
-                "Expected exactly 11 atomic adapters, got: " + snapshot.entries().keySet());
+        assertEquals(12, snapshot.entries().keySet().size(),
+                "Expected exactly 12 atomic adapters, got: " + snapshot.entries().keySet());
     }
 
     @Test
@@ -328,8 +329,8 @@ class TestGameplayModeContextRewindRegistry {
         RewindRegistry second = ctx.getRewindRegistry();
         assertNotNull(second);
         assertNotSame(first, second, "Re-attach should produce a new RewindRegistry instance");
-        // New registry should have the same eleven keys
-        assertEquals(11, second.capture().entries().keySet().size());
+        // New registry should have the same twelve keys
+        assertEquals(12, second.capture().entries().keySet().size());
     }
 
     @Test

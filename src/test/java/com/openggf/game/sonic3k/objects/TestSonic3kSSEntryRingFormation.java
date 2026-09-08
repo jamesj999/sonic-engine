@@ -1,5 +1,7 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameStateManager;
 import com.openggf.game.LevelState;
@@ -366,6 +368,7 @@ public class TestSonic3kSSEntryRingFormation {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     public void negativeSubtypeAlwaysUsesGlowingSuperEmeraldRingAndRoutesAfterFlash() {
         CapturingRing ring = createCapturingRing(0x80 | 3);
         AbstractPlayableSprite player = createMockPlayerAt(RING_X, RING_Y);
@@ -395,6 +398,7 @@ public class TestSonic3kSSEntryRingFormation {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     public void positiveMhzRingWithAllChaosRoutesToSanctuaryAfterFlash() {
         collectAllChaosEmeralds();
         services.currentZone = Sonic3kZoneIds.ZONE_MHZ;
@@ -417,6 +421,7 @@ public class TestSonic3kSSEntryRingFormation {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     public void superEmeraldPaletteLeadInUsesRomDelayAndColors() {
         Sonic3kSSEntryRingObjectInstance ring = createRing(0x80);
 
@@ -510,6 +515,7 @@ public class TestSonic3kSSEntryRingFormation {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     public void positiveFbzRingUsesSkSideRoutingPredicate() {
         collectAllChaosEmeralds();
         services.currentZone = Sonic3kZoneIds.ZONE_FBZ;
@@ -587,6 +593,7 @@ public class TestSonic3kSSEntryRingFormation {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     public void allSuperEmeraldsAwardFiftyOnSkSideInsteadOfEnteringSanctuary() {
         collectAllChaosAndSuperEmeralds();
         services.currentZone = Sonic3kZoneIds.ZONE_MHZ;

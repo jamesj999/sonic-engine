@@ -3,7 +3,11 @@ set -eu
 engine=$1 sdk=$2 out=$3
 cp -R "$(dirname "$0")/project" "$out"
 level_source="$out/src/main/mod/level-source"
-while IFS='=' read -r name data; do
+# Read the entire value: dash treats a trailing '=' IFS delimiter as a separator,
+# which would remove single-character Base64 padding.
+while IFS= read -r asset; do
+  name=${asset%%=*}
+  data=${asset#*=}
   printf '%s' "$data" | base64 -d > "$level_source/$name"
 done < "$level_source/binary-assets.properties"
 rm "$level_source/binary-assets.properties"

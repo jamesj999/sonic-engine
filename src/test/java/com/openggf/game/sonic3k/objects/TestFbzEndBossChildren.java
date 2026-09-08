@@ -1,5 +1,7 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.TestObjectServices;
@@ -67,6 +69,7 @@ class TestFbzEndBossChildren {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     void sharedBossExplosionUsesNativeFrameDelayColumnOrder() {
         S3kBossExplosionChild explosion = new S3kBossExplosionChild(0x3000, 0x600);
         explosion.setServices(new TestObjectServices());

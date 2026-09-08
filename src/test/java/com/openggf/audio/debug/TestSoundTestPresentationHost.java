@@ -79,12 +79,14 @@ class TestSoundTestPresentationHost {
         String source = Files.readString(Path.of(
                 "src/main/java/com/openggf/audio/debug/SoundTestApp.java"));
         assertTrue(source.contains(
-                "runInteractiveWindow(options, loader, dacData, host"));
+                "runInteractiveWindow(options, loader, dacData, catalog"));
         assertTrue(source.contains(
                 "runConsole(options, loader, dacData, host"));
         assertTrue(source.contains(
                 "exec.scheduleAtFixedRate(host::presentFrame"));
         assertTrue(source.contains("host.presentFrame();"));
+        assertTrue(source.contains("host = callOnAudioThread(exec,"));
+        assertTrue(source.contains("dacData, host, catalog, seqConfig, validSfx, exec"));
     }
 
     @Test

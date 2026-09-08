@@ -120,7 +120,9 @@ final class CnzEndBossMagnetChild extends AbstractObjectInstance
             dropJustStarted = false;
         } else if (!landed) {
             advanceDropMotion();
-            var floor = ObjectTerrainUtils.checkFloorDist(centreX, centreY, 0x10);
+            var floor = ObjectTerrainUtils.checkFloorDist(services().levelManager(),
+                    services().backgroundPlaneCollisionProvider(),
+                    services().useSecondaryTerrainCollisionPath(), centreX, centreY + 0x10);
             resolveFloorContact(floor.distance());
         }
         boolean animationSignalActive = magnetAnimationSignalActive();

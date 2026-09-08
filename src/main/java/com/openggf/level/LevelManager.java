@@ -565,13 +565,13 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
 
     /** Submits the level's playlist request after game-owned entry commands. */
     public void playLevelMusic(int levelIndex) throws IOException {
-        LevelMusicCoordinator.prepare(game, transitions, levelIndex)
+        LevelMusicCoordinator.prepare(game, activeGameModule().getZoneRegistry(), transitions, levelIndex)
                 .ifPresent(this::publishPreparedLevelMusic);
     }
 
     /** Resolves the selected zone/act's playlist entry without publishing it. */
     public java.util.OptionalInt prepareCurrentLevelMusic() throws IOException {
-        return LevelMusicCoordinator.prepareCurrent(game, transitions, resolveLevelData());
+        return LevelMusicCoordinator.prepareCurrent(game, activeGameModule().getZoneRegistry(), transitions, resolveLevelData());
     }
 
     /** Re-publishes the current level request through the canonical owner. */
@@ -2770,7 +2770,7 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      */
     public int getCurrentLevelMusicId() {
         return LevelMusicCoordinator.currentMusicId(
-                game, levels, currentZone, currentAct, LOGGER);
+                game, activeGameModule().getZoneRegistry(), levels, currentZone, currentAct, LOGGER);
     }
 
     /**
@@ -4064,6 +4064,9 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
             }
             com.openggf.level.objects.ObjectCallbackDispatch.inheritOwners(
                     objectManager, previousObjectManager, carriedIdentities);
+            if (exactSstCarry) {
+                objectManager.inheritTransitionObjectIdentities(previousObjectManager, carriedIdentities);
+            }
         }
 
         // Rebuild RingManager with the new act's ring spawns

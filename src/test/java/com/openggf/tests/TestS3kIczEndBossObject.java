@@ -1277,7 +1277,7 @@ class TestS3kIczEndBossObject {
     }
 
     @Test
-    void frostPuffCaptureIsLimitedToTheNativeP1P2Prefix() throws Exception {
+    void frostPuffCaptureExtendsBeyondNativePairWithoutConsumingNativeSlots() throws Exception {
         ObjectInstance instance = new Sonic3kObjectRegistry().create(
                 new ObjectSpawn(0x4490, 0x05B8, ICZ_END_BOSS_ID, 0, 0, false, 0));
         AbstractObjectInstance object = (AbstractObjectInstance) instance;
@@ -1308,15 +1308,16 @@ class TestS3kIczEndBossObject {
             }
         }
         assertTrue(activePuff >= 0);
-        // sub_8A9C6 walks only the native Player_1/Player_2 pair, so a configured
-        // extension sidekick sitting at participant index 2 is never a capture
-        // candidate even when it is standing exactly in the puff.
+        // sub_8A9C6 owns the native Player_1/Player_2 slots. The engine
+        // extends capture to extra sidekicks using slotless rewindable blocks.
         bindPlayerToFrostPuff(instance, extension, activePuff);
 
         instance.update(nextFrame, main);
         publishBossSolidContact(instance, extension, nextFrame);
 
-        org.mockito.Mockito.verify(extension, org.mockito.Mockito.never()).setAnimationId(0x1A);
+        org.mockito.Mockito.verify(extension).setAnimationId(0x1A);
+        org.mockito.Mockito.verify(services.objectManager)
+                .addRewindableAuxiliaryDynamicObject(any());
         org.mockito.Mockito.verify(main, org.mockito.Mockito.never()).setAnimationId(0x1A);
         org.mockito.Mockito.verify(nativeP2, org.mockito.Mockito.never()).setAnimationId(0x1A);
 

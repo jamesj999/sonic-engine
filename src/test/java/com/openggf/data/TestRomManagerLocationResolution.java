@@ -54,9 +54,12 @@ class TestRomManagerLocationResolution {
         assertEquals(" ./s3k configured.gen ", RomManager.resolveRomForGame("s3k"));
         assertEquals(" ./s3k configured.gen ", RomManager.resolveRomForGame("S3K"));
         assertEquals(" ./s2 configured.gen ", RomManager.resolveRomForGame("s2"));
-        assertEquals(" ./s2 configured.gen ", RomManager.resolveRomForGame(null));
-        assertEquals(" ./s2 configured.gen ", RomManager.resolveRomForGame("unknown"));
-        assertEquals(" ./s2 configured.gen ", RomManager.resolveRomForGame("other"));
+        assertThrows(IllegalArgumentException.class,
+                () -> RomManager.resolveRomForGame(null));
+        assertThrows(IllegalArgumentException.class,
+                () -> RomManager.resolveRomForGame("unknown"));
+        assertThrows(IllegalArgumentException.class,
+                () -> RomManager.resolveRomForGame("other"));
     }
 
     @Test

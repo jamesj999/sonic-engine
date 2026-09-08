@@ -54,6 +54,8 @@ import com.openggf.trace.TraceCharacterState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -826,8 +828,9 @@ public class TestSonic3kAIZEvents {
         assertEquals(0x0022_4000, events.getFireBgCopyFixed());
     }
 
-    @Test
-    public void fireMusicRestoreFollowsRomEscapeTimerAcrossActReload() {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void fireMusicRestoreFollowsRomEscapeTimerAcrossActReload(int apparentAct) {
         Camera camera = GameServices.camera();
         camera.setX((short) 0x2F10);
         camera.setY((short) 0x0200);
@@ -860,10 +863,14 @@ public class TestSonic3kAIZEvents {
                 "AIZ1 music must not be started by the act reload");
 
         events.init(1);
+        // The fire curtain loads AIZ2 resources while still displaying AIZ1.
+        // Restore_LevelMusic reads Apparent_zone_and_act, not the loaded act.
+        assertEquals(0, GameServices.level().getApparentAct());
+        GameServices.level().setApparentAct(apparentAct);
         for (int continuationFrame = 0; continuationFrame <= 0x120; continuationFrame++) {
             updateFireTransitionWithHardware(events, 1, frame + continuationFrame);
         }
-        verify(audio).playMusic(Sonic3kMusic.AIZ2.id);
+        verify(audio).playMusic(apparentAct == 0 ? Sonic3kMusic.AIZ1.id : Sonic3kMusic.AIZ2.id);
     }
 
     @Test

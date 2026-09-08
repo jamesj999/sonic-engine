@@ -121,12 +121,8 @@ class TestS3kCnzTeleporterRouteHeadless {
         assertFalse(artProvider.isCnzTeleporterArtPending());
         assertTrue(artProvider.isCnzTeleporterArtComplete(),
                 "the shared frame pipeline should consume the queued KosM workload");
-        assertFalse(isObjectPresent(CnzTeleporterBeamInstance.class),
-                "the object pass precedes the loop-tail art pump, so readiness is visible next frame");
-
-        fixture.stepIdleFrames(1);
         assertTrue(isObjectPresent(CnzTeleporterBeamInstance.class),
-                "Obj_CNZTeleporterMain should proceed once the teleporter renderer reports ready");
+                "the V-int art pump completes the preceding frame's request before Obj_CNZTeleporterMain polls readiness");
     }
 
     @Test

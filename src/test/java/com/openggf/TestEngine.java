@@ -172,6 +172,12 @@ class TestEngine {
         GameplayModeContext gameplayMode = mock(GameplayModeContext.class);
         GameStateManager gameState = new GameStateManager();
         when(gameplayMode.getGameStateManager()).thenReturn(gameState);
+        WorldSession world = mock(WorldSession.class);
+        GameModule module = mock(GameModule.class);
+        when(gameplayMode.getWorldSession()).thenReturn(world);
+        when(world.getGameModule()).thenReturn(module);
+        when(module.getSaveSnapshotProvider()).thenReturn(
+                new com.openggf.game.sonic3k.dataselect.S3kSaveSnapshotProvider());
 
         Engine.restoreGameplayModeFromDataSelectPayload(gameplayMode, Map.of(
                 "lives", 0, "continues", 2, "chaosEmeralds", List.of(), "superEmeralds", List.of()));

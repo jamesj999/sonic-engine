@@ -53,6 +53,7 @@ class TestProductionBk2AudioRunner {
 
     @BeforeEach
     void setUp() {
+        Engine.clearGlobalInstance();
         config = SonicConfigurationService.createStandalone();
         config.setConfigValue(SonicConfiguration.AUDIO_ENABLED, true);
         config.setConfigValue(

@@ -1,5 +1,7 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameRng;
 import com.openggf.game.PlayableEntity;
@@ -48,6 +50,7 @@ class TestFbzMinibossDefeatChildren {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     void subtypeZeroExplosionControllerAttemptsImmediatelyThenEveryThreeUpdates() {
         ControllerHarness h = new ControllerHarness(10, 0x12345678L, false);
 
@@ -91,6 +94,7 @@ class TestFbzMinibossDefeatChildren {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     void explosionControllerGenericRewindRestoresNativeCountdownPhase() {
         ControllerHarness h = new ControllerHarness(10, 0x2468ACE0L, false);
         h.step(0);

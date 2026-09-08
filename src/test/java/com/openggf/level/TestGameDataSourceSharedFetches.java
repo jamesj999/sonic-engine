@@ -111,6 +111,7 @@ class TestGameDataSourceSharedFetches {
     void levelModuleAndAudioNullPathsUseExactSourceWithoutRomManager() throws Exception {
         GameDataSource source = spy(missingSource());
         GameModule module = mock(GameModule.class);
+        when(module.getLevelInitProfile()).thenReturn(com.openggf.game.AbstractLevelInitProfile.EMPTY);
         Game game = mock(Game.class);
         when(module.getPlayableCharacterRegistry()).thenReturn(PlayableCharacterRegistry.empty());
         when(module.createGame(source)).thenReturn(game);
@@ -200,6 +201,7 @@ class TestGameDataSourceSharedFetches {
         Rom rom = mock(Rom.class);
         RomDataSource source = new RomDataSource(rom, "rom:equivalence");
         GameModule module = mock(GameModule.class);
+        when(module.getLevelInitProfile()).thenReturn(com.openggf.game.AbstractLevelInitProfile.EMPTY);
         when(module.getPlayableCharacterRegistry()).thenReturn(PlayableCharacterRegistry.empty());
         Game game = mock(Game.class);
         when(module.createGame(source)).thenReturn(game);

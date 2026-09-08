@@ -1,5 +1,7 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.Sonic3kPlcArtRegistry;
 import com.openggf.game.sonic3k.S3kSpriteDataLoader;
@@ -15,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -100,6 +101,7 @@ class TestFbzElevator {
     }
 
     @Test
+    @RequiresRom(SonicGame.SONIC_3K)
     void mappingAndLevelArtEntryAreExact() throws Exception {
         assertEquals(0x03CB0C, Sonic3kConstants.MAP_FBZ_ELEVATOR_ADDR);
         var entry = Sonic3kPlcArtRegistry.getPlan(4, 1).levelArt().stream()
@@ -108,7 +110,7 @@ class TestFbzElevator {
         assertEquals(Sonic3kConstants.ARTTILE_FBZ_MISC2, entry.artTileBase());
         assertEquals(2, entry.palette());
 
-        byte[] rom = Files.readAllBytes(Path.of("s3k.gen"));
+        byte[] rom = Files.readAllBytes(com.openggf.tests.RomTestUtils.ensureSonic3kRomAvailable().toPath());
         var frames = S3kSpriteDataLoader.loadMappingFrames(new RomByteReader(rom),
                 Sonic3kConstants.MAP_FBZ_ELEVATOR_ADDR);
         assertEquals(1, frames.size());

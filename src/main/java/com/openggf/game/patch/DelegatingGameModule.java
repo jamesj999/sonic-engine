@@ -439,4 +439,25 @@ public class DelegatingGameModule implements GameModule {
     public int resolveAnimationId(CanonicalAnimation canonical) {
         return base.resolveAnimationId(canonical);
     }
+
+    @Override
+    public GameOverFlowProvider getGameOverFlowProvider() {
+        return base.getGameOverFlowProvider();
+    }
+
+    @Override
+    public java.util.function.BiFunction<AbstractPlayableSprite, ShieldType,
+            com.openggf.level.objects.ShieldObjectInstance> getShieldFactory() {
+        return base.getShieldFactory();
+    }
+
+    @Override
+    public Function<AbstractPlayableSprite, AbstractObjectInstance> getInstaShieldFactory() {
+        return base.getInstaShieldFactory();
+    }
+
+    @Override
+    public java.util.function.BiFunction<Integer, Integer, AbstractObjectInstance> getWaterSplashFactory() {
+        return base.getWaterSplashFactory();
+    }
 }

@@ -30,14 +30,17 @@ class TestFbzObjectRegistryCompleteness {
             0x80, 0x85, 0xA8, 0xA9, 0xAA, 0xAB);
 
     @Test
-    void fbzProfileAllowlistMatchesTheCheckedConcreteFactoryInventory() {
+    void fbzProfileIncludesTheCheckedConcreteFactoryInventory() {
         Sonic3kObjectProfile profile = new Sonic3kObjectProfile();
         LevelConfig fbz1 = profile.getLevels().stream()
                 .filter(level -> level.levelData() == LevelData.S3K_FLYING_BATTERY_1)
                 .findFirst().orElseThrow();
 
-        assertEquals(CONCRETE_FBZ_IDS, profile.getImplementedIds(fbz1));
-        assertEquals(true, profile.getImplementedIds(fbz1).containsAll(Set.of(0xA8, 0xA9)));
+        // The profile describes every factory available in the S3KL zone set,
+        // including objects not placed on the FBZ route. The dedicated profile
+        // registry guard checks that full set exactly; this inventory checks FBZ.
+        assertTrue(profile.getImplementedIds(fbz1).containsAll(CONCRETE_FBZ_IDS),
+                "discovery must classify every checked FBZ factory as implemented");
     }
 
     @Test
