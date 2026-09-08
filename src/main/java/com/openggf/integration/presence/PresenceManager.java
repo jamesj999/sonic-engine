@@ -26,6 +26,8 @@ public final class PresenceManager implements AutoCloseable {
     private final PresenceFormatter formatter;
     private final PresenceClient client;
     private final LongSupplier clockMillis;
+    private final Duration closeTimeout;
+    private final LongSupplier nanoTime;
     private final ExecutorService worker;
     private final AtomicReference<PresencePayload> pendingPayload = new AtomicReference<>();
     private final AtomicBoolean workerScheduled = new AtomicBoolean();
@@ -45,6 +47,19 @@ public final class PresenceManager implements AutoCloseable {
                            PresenceFormatter formatter,
                            PresenceClient client,
                            LongSupplier clockMillis) {
+        this(configuredEnabled, showTimer, showZone, snapshotProvider, formatter, client,
+                clockMillis, CLOSE_TIMEOUT, System::nanoTime);
+    }
+
+    PresenceManager(boolean configuredEnabled,
+                    boolean showTimer,
+                    boolean showZone,
+                    PresenceSnapshotProvider snapshotProvider,
+                    PresenceFormatter formatter,
+                    PresenceClient client,
+                    LongSupplier clockMillis,
+                    Duration closeTimeout,
+                    LongSupplier nanoTime) {
         this.configuredEnabled = configuredEnabled;
         this.showTimer = showTimer;
         this.showZone = showZone;
@@ -52,6 +67,11 @@ public final class PresenceManager implements AutoCloseable {
         this.formatter = Objects.requireNonNull(formatter, "formatter");
         this.client = Objects.requireNonNull(client, "client");
         this.clockMillis = Objects.requireNonNull(clockMillis, "clockMillis");
+        this.closeTimeout = Objects.requireNonNull(closeTimeout, "closeTimeout");
+        if (closeTimeout.isZero() || closeTimeout.isNegative()) {
+            throw new IllegalArgumentException("closeTimeout must be positive");
+        }
+        this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
         this.enabledForRun = configuredEnabled;
         this.worker = newWorker();
     }
@@ -183,7 +203,7 @@ public final class PresenceManager implements AutoCloseable {
         }
         enabledForRun = false;
         pendingPayload.set(null);
-        long deadline = System.nanoTime() + CLOSE_TIMEOUT.toNanos();
+        long deadline = nanoTime.getAsLong() + closeTimeout.toNanos();
         startClientClose();
         awaitThread(clientCloseThread, deadline);
         worker.shutdownNow();
@@ -191,7 +211,7 @@ public final class PresenceManager implements AutoCloseable {
     }
 
     private void awaitWorker(long deadline) {
-        long remaining = deadline - System.nanoTime();
+        long remaining = deadline - nanoTime.getAsLong();
         if (remaining <= 0) {
             return;
         }
@@ -202,16 +222,18 @@ public final class PresenceManager implements AutoCloseable {
         }
     }
 
-    private static void awaitThread(Thread thread, long deadline) {
+    private void awaitThread(Thread thread, long deadline) {
         if (thread == null || thread == Thread.currentThread()) {
             return;
         }
-        long remaining = deadline - System.nanoTime();
+        long remaining = deadline - nanoTime.getAsLong();
         if (remaining <= 0) {
             return;
         }
         try {
-            thread.join(TimeUnit.NANOSECONDS.toMillis(remaining));
+            long millis = remaining / 1_000_000L;
+            int nanos = (int) (remaining % 1_000_000L);
+            thread.join(millis, nanos);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }

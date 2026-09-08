@@ -196,6 +196,26 @@ class TestPresenceManager {
         }
     }
 
+    @Test
+    void close_usesNanosecondJoinForSubMillisecondDeadline() throws Exception {
+        BlockingClient client = BlockingClient.failingUpdateAndStalledClose();
+        AtomicInteger nanoCalls = new AtomicInteger();
+        LongSupplier nanoTime = () -> nanoCalls.getAndIncrement();
+        PresenceManager manager = new PresenceManager(true, true, true,
+                new FakeProvider(PresenceSnapshot.menu()), new PresenceFormatter(), client,
+                new FakeClock(), Duration.ofNanos(500_000), nanoTime);
+        try {
+            manager.tick();
+            assertTrue(client.closeEntered.await(5, TimeUnit.SECONDS));
+            assertTimeoutPreemptively(Duration.ofMillis(250), manager::close);
+        } finally {
+            client.releaseClose();
+            assertTrue(client.closeFinished.await(5, TimeUnit.SECONDS),
+                    "stalled close helper did not finish after release");
+            manager.close();
+        }
+    }
+
     private static PresenceManager manager(boolean enabled,
                                            PresenceSnapshotProvider provider,
                                            PresenceClient client,
@@ -266,6 +286,7 @@ class TestPresenceManager {
         private final AtomicInteger closeCalls = new AtomicInteger();
         private final AtomicInteger updateCalls = new AtomicInteger();
         private final CountDownLatch operationEntered = new CountDownLatch(1);
+        private final CountDownLatch closeEntered = new CountDownLatch(1);
         private final CountDownLatch release = new CountDownLatch(1);
         private final CountDownLatch closeRelease = new CountDownLatch(1);
         private final CountDownLatch closeFinished = new CountDownLatch(1);
@@ -273,10 +294,16 @@ class TestPresenceManager {
         private final List<PresencePayload> updates = new java.util.concurrent.CopyOnWriteArrayList<>();
         private final boolean blockConnect;
         private final boolean blockClose;
+        private final boolean failUpdate;
 
         private BlockingClient(boolean blockConnect, boolean blockClose) {
+            this(blockConnect, blockClose, false);
+        }
+
+        private BlockingClient(boolean blockConnect, boolean blockClose, boolean failUpdate) {
             this.blockConnect = blockConnect;
             this.blockClose = blockClose;
+            this.failUpdate = failUpdate;
         }
 
         private static BlockingClient blockingConnectAndStalledClose() {
@@ -285,6 +312,10 @@ class TestPresenceManager {
 
         private static BlockingClient blockingUpdate() {
             return new BlockingClient(false, false);
+        }
+
+        private static BlockingClient failingUpdateAndStalledClose() {
+            return new BlockingClient(false, true, true);
         }
 
         @Override
@@ -299,6 +330,9 @@ class TestPresenceManager {
         @Override
         public void update(PresencePayload payload) throws IOException {
             updateCalls.incrementAndGet();
+            if (failUpdate) {
+                throw new IOException("blocked fake client update failure");
+            }
             if (blockConnect) {
                 return;
             }
@@ -315,6 +349,7 @@ class TestPresenceManager {
         @Override
         public void close() {
             closeCalls.incrementAndGet();
+            closeEntered.countDown();
             release.countDown();
             try {
                 if (blockClose) {

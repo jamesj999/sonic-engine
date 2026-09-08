@@ -9,6 +9,11 @@ import java.io.IOException;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Discord IPC client owned by one {@link com.openggf.integration.presence.PresenceManager}
+ * worker: that worker serializes connect and activity writes. {@link #close()} may run from the
+ * lifecycle cancellation thread and closes the current transport to release a blocked write.
+ */
 public final class DiscordIpcPresenceClient implements PresenceClient {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int OPCODE_HANDSHAKE = 0;
