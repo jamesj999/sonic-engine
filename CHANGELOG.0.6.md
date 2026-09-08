@@ -1488,6 +1488,13 @@ execution order, SST slot ownership, and routines that read their state once per
 
 #### Title, Level Select, Special Stages, and Ending
 
+- **Title screen copyright line:** the "@ 1992 SEGA" text is back on the title screen and on the
+  Sonic 2 preview of the master title. `TitleScreen` stamps the `CopyrightText` words into the
+  decoded emblem map at `planeLoc(40,28,26)` before uploading it to Plane A, indexing the standard
+  menu font at `ArtTile_ArtNem_FontStuff_TtlScr`; the engine loads that font alongside the emblem
+  art and writes the same words. The line uses palette line 0, which the ROM clears at setup and
+  only fills when `Obj0E_Sonic_LoadPalette` copies Sonic's palette in at frame 128, so the text
+  appears with Sonic rather than fading in with the emblem.
 - **Title card:** the wait loop exits on the ROM's own two-part test, the zone-name piece plus the
   art queue, instead of an invented sixty-frame minimum, and the `Obj34_WaitAndGoAway` tail is
   shared between the omitted and displayed presentation paths.

@@ -1619,7 +1619,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                     continue;
                 }
                 int word = map[idx];
-                if (word == 0) {
+                if (!planeATileVisible(word)) {
                     continue;
                 }
                 reusableDesc.set(word);
@@ -1627,6 +1627,24 @@ public class TitleScreenManager implements TitleScreenProvider {
                 gm.renderPatternWithId(patternId, reusableDesc, tx * 8 + ox, ty * 8);
             }
         }
+    }
+
+    /**
+     * Whether a Plane A map word draws this frame.
+     *
+     * <p>Word 0 is the blank tile. Palette line 0 words are the "@ 1992 SEGA"
+     * copyright line ({@link TitleScreenCopyrightText}); in the ROM that line
+     * is cleared by {@code clearRAM Normal_palette} during setup and stays black
+     * until {@code Obj0E_Sonic_LoadPalette} copies {@code Pal_133EC} into it at
+     * frame 128, so the text pops in together with Sonic's palette. The other
+     * palette lines fade through {@code ObjC9}, which the emblem gating models.
+     */
+    private boolean planeATileVisible(int word) {
+        if (word == 0) {
+            return false;
+        }
+        int paletteLine = (word >> 13) & 0x03;
+        return paletteLine != 0 || sonicPaletteLoaded;
     }
 
     /**
@@ -1680,7 +1698,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                 continue;
             }
             int word = map[idx];
-            if (word == 0) {
+            if (!planeATileVisible(word)) {
                 continue;
             }
             reusableDesc.set(word);

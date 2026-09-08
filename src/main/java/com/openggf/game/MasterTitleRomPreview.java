@@ -548,7 +548,15 @@ final class MasterTitleRomPreview {
         Pattern[] menuJunkPatterns = PatternDecompressor.nemesis(
                 rom, Sonic2Constants.ART_NEM_MENU_JUNK_ADDR, 1024, "MasterPreviewS2MenuJunk");
         Pattern[] combinedSpritePatterns = appendPatternsAt(spritePatterns, menuJunkPatterns, 0x2A2);
+        // TitleScreen uploads the standard font to ArtTile_ArtNem_FontStuff_TtlScr and copies
+        // the CopyrightText words ("@ 1992 SEGA", word_3E82) into the logo map at
+        // planeLoc(40,28,26) before it reaches Plane A.
+        Pattern[] fontPatterns = PatternDecompressor.nemesis(
+                rom, Sonic2Constants.ART_NEM_FONT_STUFF_ADDR, 4096, "MasterPreviewS2FontStuff");
+        patterns = appendPatternsAt(patterns, fontPatterns, Sonic2Constants.ART_TILE_FONT_STUFF_TITLE_SCREEN);
         int[] map = loadEnigmaMap(rom, Sonic2Constants.MAP_ENI_TITLE_LOGO_ADDR, 0xE000, 1024);
+        map = withSonic2CopyrightText(map, readWords(rom,
+                Sonic2Constants.TITLE_COPYRIGHT_TEXT_ADDR, Sonic2Constants.TITLE_COPYRIGHT_TEXT_WORDS));
         Palette[] palettes = loadSonic2TitlePalettes(rom);
         Image image = composeTilemapImage(patterns, palettes, map, S2_TITLE_WIDTH_TILES, S2_TITLE_HEIGHT_TILES);
         Image logo = composeTilemapImage(patterns, palettes, map, S2_TITLE_WIDTH_TILES, S2_TITLE_HEIGHT_TILES);
@@ -593,6 +601,25 @@ final class MasterTitleRomPreview {
         }
         overlaySonic2CurvedLogoOcclusion(image, logoOcclusion);
         return image;
+    }
+
+    static int[] withSonic2CopyrightText(int[] logoMap, int[] copyrightWords) {
+        int[] map = logoMap.clone();
+        int base = Sonic2Constants.TITLE_COPYRIGHT_PLANE_ROW * S2_TITLE_WIDTH_TILES
+                + Sonic2Constants.TITLE_COPYRIGHT_PLANE_COLUMN;
+        for (int i = 0; i < copyrightWords.length && base + i < map.length; i++) {
+            map[base + i] = copyrightWords[i];
+        }
+        return map;
+    }
+
+    private static int[] readWords(Rom rom, int address, int count) throws IOException {
+        byte[] bytes = rom.readBytes(address, count * 2);
+        int[] words = new int[count];
+        for (int i = 0; i < count; i++) {
+            words[i] = ((bytes[i * 2] & 0xFF) << 8) | (bytes[i * 2 + 1] & 0xFF);
+        }
+        return words;
     }
 
     private static PreviewSequence loadSonic3kSequence(Rom rom) throws IOException {
