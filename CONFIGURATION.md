@@ -18,6 +18,11 @@ it stays. On first run, a legacy `config.json` is migrated to `config.yaml` and 
 to `config.json.bak`. Keys are grouped into nested YAML sections rather than flat enum
 names.
 
+For development configurations where keeping the complete editable setting list is more
+useful, set `config.preserveExplicitDefaults: true` before starting the engine. The
+one-time sparse conversion will then retain every explicitly listed recognized setting.
+The flag defaults to `false`, preserving the release behavior described above.
+
 **Changing a default** (maintainers): change the `putDefault` line in
 `SonicConfigurationService`, the value in `src/main/resources/config.yaml`, and the row in
 this file. Nothing else: no migration, no version bump. `TestSparseUserConfig` fails if the
@@ -40,6 +45,7 @@ The `config.yaml` is organized into the following top-level sections:
 |---------|----------|
 | `display` | Aspect preset, window autosize, display shader library, deadzone mode, color profile, FPS |
 | `gameplay` | Normal-play hardware load-time simulation |
+| `config` | Configuration-file persistence behavior |
 | `input` | `player1` / `player2` key bindings, `pause` key |
 | `audio` | Enabled flag, region, DAC, FM6, PSG settings |
 | `characters` | Main character, sidekick, data select combos |
@@ -83,6 +89,7 @@ The `config.yaml` is organized into the following top-level sections:
 | `SCALE` | `debug.window.scale` | double | `1.0` | **DEPRECATED** additional rendering scale factor. |
 | `FPS` | `display.fps` | int | `60` | Target frames per second. Affects game speed — use `60` for NTSC, `50` for PAL. |
 | `LOAD_TIME_SIMULATION` | `gameplay.loadTimeSimulation` | enum | `FAST` | Normal-play ROM-load timing: `NONE` completes as soon as production preparation allows; `PROFILED` uses the generator-owned measured profile data; `FAST` (default) uses the hand-tuned copy of that data (`load-time-profiles/s3k-fast-v1.json`, which also carries the S3K title-screen Sonic frame decodes taken from the original hardware capture), and warns then behaves as `NONE` for a game without a FAST manifest; `REALISTIC` is a retained reserved alias that warns when the profile is resolved and returns `PROFILED`. Trace replay uses its recorded hardware-timing policy and does not consume this setting; queue-state trace diagnostics are comparison-only and never alter this configuration. |
+| `CONFIG_PRESERVE_EXPLICIT_DEFAULTS` | `config.preserveExplicitDefaults` | bool | `false` | Developer override: retain explicitly listed recognized settings, including values equal to defaults, when converting an older full configuration to sparse format. |
 | `DISPLAY_COLOR_PROFILE` | `display.colorProfile` | string | `"RAW_RGB"` | Palette presentation profile. `"RAW_RGB"` keeps the current direct 8-bit expansion, `"MD_ANALOG"` applies a darker Mega Drive-style analog ramp, and `"NTSC_SOFT"` applies the analog ramp plus mild desaturation. |
 | `DISPLAY_COLOR_PROFILE_TOGGLE_KEY` | `display.colorProfileToggleKey` | key | `V` | Runtime key used to cycle display color profiles. The selected profile is saved to `config.yaml` and shown briefly in the bottom-left corner. |
 | `DISPLAY_ASPECT` | `display.aspect` | string | `"NATIVE_4_3"` | Display aspect preset. Controls the native pixel width used by the renderer. Accepted values: `"NATIVE_4_3"` (320 px, default), `"WIDE_16_10"` (352 px), `"WIDE_16_9"` (400 px), `"ULTRA_21_9"` (528 px), `"SUPER_32_9"` (800 px). **EXPERIMENTAL / INCOMPLETE** — widescreen rendering (UI pillarbox, parallax column extension) is not finished; only `"NATIVE_4_3"` is fully supported. |

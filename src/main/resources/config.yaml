@@ -22,6 +22,10 @@ display:
 gameplay:
   loadTimeSimulation: "FAST"   # FAST (hand-tuned copy of the measured profile), PROFILED, NONE, or REALISTIC (warns; uses PROFILED)
 
+# ── Configuration ──
+config:
+  preserveExplicitDefaults: false   # Keep explicitly listed default-valued settings when converting an older full config
+
 # ── Input ──
 input:
   pause: ENTER   # Toggle pause; the gamepad Start button also toggles it

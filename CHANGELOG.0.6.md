@@ -345,7 +345,8 @@ object family now restores through shared machinery, and the remaining coverage 
 - **Override-only `config.yaml`:** defaults live in code and the example file, and an older
   file with every default written in converts once to format 2, dropping values still at default
   while keeping real changes. A failed YAML replacement leaves the legacy JSON source available
-  for the next startup instead of claiming a completed migration.
+  for the next startup instead of claiming a completed migration. Developers can set
+  `config.preserveExplicitDefaults: true` to retain a full explicitly listed test configuration.
 - **`gameplay.loadTimeSimulation: FAST`:** now a real mode and the new default. A hand-tuned
   manifest carries measured ROM hardware-load costs, and games without a FAST manifest fall back
   to `NONE` with a warning. The old default is dropped on conversion, so existing installs pick the

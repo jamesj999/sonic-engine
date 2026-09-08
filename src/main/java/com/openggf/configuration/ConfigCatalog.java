@@ -80,6 +80,10 @@ public final class ConfigCatalog {
                 "Normal-play simulation policy for ROM-backed load queues",
                 Set.of("NONE", "PROFILED", "FAST", "REALISTIC")));
 
+        // config
+        put(CONFIG_PRESERVE_EXPLICIT_DEFAULTS, of("config", "preserveExplicitDefaults", BOOL,
+                "Keep explicitly listed default-valued settings when converting an older full config"));
+
         // input (player-agnostic leaf first, then per-player subsections)
         put(PAUSE_KEY, of("input", "pause", KEY,
                 "Toggle pause; the gamepad Start button also toggles it"));
@@ -416,6 +420,7 @@ public final class ConfigCatalog {
         // Top-level normal sections only. debug.* sub-sections are intentionally untitled
         // (the writer fences the whole debug block with a single banner instead).
         SECTION_TITLES.put("display", "Display");
+        SECTION_TITLES.put("config", "Configuration");
         SECTION_TITLES.put("input", "Input");
         SECTION_TITLES.put("audio", "Audio");
         SECTION_TITLES.put("characters", "Characters");

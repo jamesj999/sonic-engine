@@ -140,6 +140,7 @@ public class SonicConfigurationService {
 		boolean renamedKeys = applyDefaults();
 		validateEnumeratedValues();
 		if (legacyMaterialisedFile
+				&& !getBoolean(SonicConfiguration.CONFIG_PRESERVE_EXPLICIT_DEFAULTS)
 				&& migrationService.convertMaterialisedDefaults(config, defaults)) {
 			configChanged = true;
 		}
@@ -713,6 +714,7 @@ public class SonicConfigurationService {
 		putDefaultKey(SonicConfiguration.DEBUG_MODE_KEY, GLFW_KEY_D);
 		putDefault(SonicConfiguration.FPS, 60);
 		putDefault(SonicConfiguration.LOAD_TIME_SIMULATION, "FAST");
+		putDefault(SonicConfiguration.CONFIG_PRESERVE_EXPLICIT_DEFAULTS, false);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_KEY, GLFW_KEY_TAB);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY, GLFW_KEY_END);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_FAIL_KEY, GLFW_KEY_DELETE);

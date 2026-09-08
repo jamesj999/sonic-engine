@@ -65,6 +65,28 @@ class TestSparseUserConfig {
     }
 
     @Test
+    void legacyMaterialisedFileCanPreserveExplicitDefaults(@TempDir Path dir) throws Exception {
+        Map<String, Object> nested = bundledNested();
+        ((Map<String, Object>) nested.get("config")).put("preserveExplicitDefaults", true);
+        new YAMLMapper().writeValue(dir.resolve("config.yaml").toFile(), nested);
+
+        SonicConfigurationService config = SonicConfigurationService.createStandalone(dir);
+
+        Map<String, Object> persisted = readFlat(dir.resolve("config.yaml"));
+        assertEquals(true, persisted.get(SonicConfiguration.CONFIG_PRESERVE_EXPLICIT_DEFAULTS.name()));
+        assertEquals(60, persisted.get(SonicConfiguration.FPS.name()),
+                "default-valued settings remain explicitly present");
+        assertEquals("FAST", persisted.get(SonicConfiguration.LOAD_TIME_SIMULATION.name()));
+        assertTrue(Files.readString(dir.resolve("config.yaml"))
+                .contains(ConfigYamlWriter.FORMAT_KEY + ": " + ConfigYamlWriter.SPARSE_FORMAT));
+
+        SonicConfigurationService reloaded = SonicConfigurationService.createStandalone(dir);
+        reloaded.saveConfig();
+        assertEquals(60, readFlat(dir.resolve("config.yaml")).get(SonicConfiguration.FPS.name()),
+                "later saves must not remove the preserved default-valued settings");
+    }
+
+    @Test
     void aFormerDefaultSetDeliberatelyAfterConversionIsKept(@TempDir Path dir) throws Exception {
         SonicConfigurationService config = SonicConfigurationService.createStandalone(dir);
         config.ensureConfigFileExists();
