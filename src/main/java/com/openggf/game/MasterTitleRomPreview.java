@@ -656,10 +656,11 @@ final class MasterTitleRomPreview {
                     S3K_PREVIEW_FINGER_X, S3K_PREVIEW_FINGER_Y, 0);
         }
         int bannerY = sonic3kPreviewBannerY();
-        overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createBannerFrames().get(0),
+        var bannerFrames = Sonic3kTitleScreenMappings.createBannerFrames();
+        overlaySpriteFrame(image, spritePatterns, palettes, bannerFrames.get(0),
                 0x120 - 128, bannerY, 0);
         // Settled title TM uses fixed VDP coordinates, as in the title-screen manager.
-        overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createBannerFrames().get(1),
+        overlaySpriteFrame(image, spritePatterns, palettes, bannerFrames.get(1),
                 0x188 - 128, 0xEC - 128, 0);
         overlaySpriteFrame(image, spritePatterns, palettes, Sonic3kTitleScreenMappings.createAndKnucklesFrames().get(0),
                 0x120 - 128, bannerY + 0x5C, 0);
