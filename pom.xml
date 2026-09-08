@@ -752,6 +752,7 @@
                                         <argument>${basedir}/src/packaging/assemble-macos-app.sh</argument>
                                         <argument>${project.build.directory}/OpenGGF</argument>
                                         <argument>${openggf.distribution.root}</argument>
+                                        <argument>${project.version}</argument>
                                     </arguments>
                                 </configuration>
                             </execution>

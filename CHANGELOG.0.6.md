@@ -69,6 +69,11 @@ Maven after an experiment with managed test sessions was withdrawn.
 
 #### Build and Packaging
 
+- **macOS native bundles launch correctly during prerelease builds:** the app assembler now converts
+  Maven versions such as `0.6.prerelease` to the numeric `0.6.0` format required by macOS
+  `Info.plist` metadata, avoiding an AppKit abort during `NSApplication` startup. The GraalVM
+  package passes the Maven version to the assembler, and release smoke validation checks the same
+  normalized value.
 - **Direct Maven builds:** builds and tests returned to plain Maven. The managed session
   coordinator, its wrappers, and scratch-storage enforcement were removed after causing unbounded
   storage growth.
