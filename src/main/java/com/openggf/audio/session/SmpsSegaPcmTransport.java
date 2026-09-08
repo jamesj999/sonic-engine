@@ -73,9 +73,10 @@ public record SmpsSegaPcmTransport(
     }
 
     /**
-     * The complete ordered write program for {@code pcm}: the enter block,
-     * one data-register write per byte, then the exit block. This is the
-     * whole transport as one service window sees it.
+     * The ordered write program for {@code pcm} with the default exit:
+     * the enter block, one write per byte, then the exit block. A driver
+     * restoring a music-dependent DAC disposition resolves its final block
+     * through {@link SmpsPhysicalPolicy#exitSegaPcmTransport(int)}.
      */
     public SmpsWriteProgram program(byte[] pcm) {
         Objects.requireNonNull(pcm, "pcm");

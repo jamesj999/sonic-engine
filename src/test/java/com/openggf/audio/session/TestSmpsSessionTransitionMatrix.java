@@ -29,6 +29,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TestSmpsSessionTransitionMatrix {
 
     @Test
+    void segaRestoresDacDispositionAfterCompletedMusicAndRewind() {
+        var writes = new SmpsSessionTestFixtures.RecordingObserver();
+        var policy = Sonic2SmpsCompatibilityPolicy.INSTANCE;
+        var settings = SmpsSessionTestFixtures.settings();
+        var session = new SmpsDriverSession(settings, policy, writes,
+                new SmpsSessionProfileFingerprint("s2", 1, policy.identity(), settings),
+                SmpsDriverSessionConfiguration.DEFAULT);
+        session.install();
+        // Empty tracks complete immediately; the prepared six-channel header
+        // still sets the driver's persistent FM6/DAC disposition on load.
+        var prepared = activation(0x81, SourcePolicy.S2, false);
+        session.queueActivation(new PreparedSmpsMusicActivation(
+                new SmpsMusicActivation(prepared.activation().source(), 6),
+                prepared.incomingMusic(), prepared.logicalPolicy(), prepared.selectedDac()));
+        session.serviceForward();
+        assertTrue(session.captureLogicalSnapshot().sequencers().isEmpty());
+        var snapshot = session.captureSnapshot();
+        var logical = session.captureLogicalSnapshot();
+        session.applyCommand(new SmpsSessionCommand.HardReset());
+        session.commitRestore(session.prepareRestore(snapshot, logical, ignored -> SmpsSessionTestFixtures.dac()));
+        session.beginSegaPcmTransport(new byte[] {(byte) 0x80});
+        writes.clear();
+        session.renderFrames(new short[64], 0, 32);
+        assertEquals("YM:0:2B:80", writes.events().getLast());
+    }
+
+    @Test
     void delayedLoadCrossingBecomesOneRewindableInFlightService() {
         SmpsSessionTestFixtures.RecordingObserver writes =
                 new SmpsSessionTestFixtures.RecordingObserver();

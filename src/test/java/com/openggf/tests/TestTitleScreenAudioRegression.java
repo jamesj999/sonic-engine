@@ -147,14 +147,14 @@ public class TestTitleScreenAudioRegression {
         audioManager.presentFrame(
                 com.openggf.audio.presentation.PresentationMode.SILENT);
         assertNotNull(audioManager.captureLogicalSnapshot()
-                .presentation().rawPcmVoiceId());
+                .presentation().smpsSession().segaPcmTransport());
 
         TitleScreenManager.getInstance().reset();
         audioManager.presentFrame(
                 com.openggf.audio.presentation.PresentationMode.SILENT);
 
         assertEquals(null, audioManager.captureLogicalSnapshot()
-                        .presentation().rawPcmVoiceId(),
+                        .presentation().smpsSession().segaPcmTransport(),
                 "Reset must stop any active SEGA PCM before returning to another title/game");
     }
 
