@@ -332,7 +332,8 @@ object family now restores through shared machinery, and the remaining coverage 
 
 - **Override-only `config.yaml`:** defaults live in code and the example file, and an older
   file with every default written in converts once to format 2, dropping values still at default
-  while keeping real changes.
+  while keeping real changes. A failed YAML replacement leaves the legacy JSON source available
+  for the next startup instead of claiming a completed migration.
 - **`gameplay.loadTimeSimulation: FAST`:** now a real mode and the new default. A hand-tuned
   manifest carries measured ROM hardware-load costs, and games without a FAST manifest fall back
   to `NONE` with a warning. The old default is dropped on conversion, so existing installs pick the
@@ -375,9 +376,10 @@ object family now restores through shared machinery, and the remaining coverage 
   always joins the build so state stays identical to a synchronous load. Kosinski archive
   inspections are memoized per ROM.
 - **Save writes and GPU uploads moved off the gameplay frame:** progression saves encode on the
-  issuing frame but write on a dedicated writer thread flushed by slot reads, deletes, and
-  shutdown, and the act hand-off pre-decodes collision tables off the frame and keeps unchanged
-  sprite sheets across the reload instead of re-uploading them.
+  issuing frame but write on a dedicated writer thread, with reads, deletes, synchronous writes,
+  and shutdown sharing its submission boundary so independent save managers cannot reorder a slot;
+  the act hand-off pre-decodes collision tables off the frame and keeps unchanged sprite sheets
+  across the reload instead of re-uploading them.
 - **Palette-cycling zones no longer accumulate unbounded palette writes in the headless frame
   path.** The per-frame drain was owned only by the windowed game loop, which headless replay and
   benchmark paths bypass, making the cost grow quadratically. Moving the drain into the shared
