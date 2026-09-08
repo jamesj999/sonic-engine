@@ -1176,11 +1176,13 @@ and special-stage transitions that gate a full route.
   a non-solid id until the animation restores it, instead of staying re-triggerable, and the
   fall-probe wall scan visits all four cells and keeps the last solid hit rather than stopping at
   the first, so an adjacent bumper's bounce is no longer masked by a wall hit.
-- **Special stage timing and angle math:** the stage palette cycle fires once during the instant
-  setup in addition to its per-frame call, angle transforms mask and add before negating to match
-  the ROM's byte-truncating `neg.b`, the stage angle and rotation variables initialize at the ROM's
-  instant-setup point after the white-out fade rather than at tick 0, and the engine models the
-  ROM's 44-tick hold before the first object pass.
+- **Special stage timing, audio, and angle math:** the entry sound now continues through the
+  white-out and into the special-stage theme, since Sonic 1 enters that fade without issuing the
+  sound driver's music-fade command that would stop the effect. The stage palette cycle fires once
+  during the instant setup in addition to its per-frame call, angle transforms mask and add before
+  negating to match the ROM's byte-truncating `neg.b`, the stage angle and rotation variables
+  initialize at the ROM's instant-setup point after the white-out fade rather than at tick 0, and
+  the engine models the ROM's 44-tick hold before the first object pass.
 - **Special stage blocks and results:** an UP or DOWN block rewrites itself to the opposite block
   only when it actually changed the stage's rotation speed, and the results card takes its full
   continue branch, jingle plus wait, at 50 or more rings instead of always the short path. The card

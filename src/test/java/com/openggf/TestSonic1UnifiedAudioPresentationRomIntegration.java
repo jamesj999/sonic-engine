@@ -7,10 +7,16 @@ import com.openggf.audio.GameSound;
 import com.openggf.audio.LiveCaptureAudioHandle;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.control.InputHandler;
+import com.openggf.game.GameMode;
+import com.openggf.game.GameStateManager;
 import com.openggf.game.GameServices;
 import com.openggf.game.SpecialStageProvider;
 import com.openggf.game.sonic1.Sonic1GameModule;
 import com.openggf.game.sonic1.audio.Sonic1Music;
+import com.openggf.game.sonic1.audio.Sonic1Sfx;
+import com.openggf.graphics.FadeManager;
+import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.rules.RequiresRom;
 import com.openggf.tests.rules.SonicGame;
@@ -25,6 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * ROM-backed final-PCM parity for Sonic 1: the real module, the real ROM SMPS
@@ -158,6 +166,45 @@ class TestSonic1UnifiedAudioPresentationRomIntegration {
                 "ROM special stage music must reach the final packet");
     }
 
+    @Test
+    void sonic1EntrySfxRemainsActiveAndAudibleAcrossRevealMusicReplacement()
+            throws Exception {
+        assertInstanceOf(Sonic1GameModule.class, GameServices.module(),
+                "the injected ROM must boot the real Sonic 1 module");
+        HeadlessTestFixture fixture = HeadlessTestFixture.builder()
+                .withZoneAndAct(ZONE, ACT)
+                .build();
+        speaker = AudioManagerTestDiagnostics.attachPresentationCapture(
+                audio, audio.presentationFrameRate());
+        recording = audio.beginLiveCaptureAudio(audio.presentationFrameRate());
+
+        audio.stopMusic();
+        assertTrue(presentUntilSilent(fixture),
+                "the entry starts from silence so its PCM is attributable");
+
+        GameLoop loop = new GameLoop(new InputHandler());
+        FadeManager fade = mock(FadeManager.class);
+        when(fade.isActive()).thenReturn(false);
+        setField(loop, "fadeManager", fade);
+        setField(loop, "audioManager", audio);
+        setField(loop, "spriteManager", new SpriteManager());
+        setField(loop, "gameState", new GameStateManager());
+        loop.setGameMode(GameMode.LEVEL);
+
+        loop.enterSpecialStage();
+        assertEquals(GameMode.SPECIAL_STAGE, loop.getCurrentGameMode());
+        assertTrue(presentFramesWithActiveSfx(
+                        fixture, 22, Sonic1Sfx.ENTER_SS.id),
+                "the isolated $CA entry SFX must be audible during white-out");
+
+        SpecialStageProvider specialStage = loop.getActiveSpecialStageProvider();
+        assertTrue(audio.playMusic(specialStage.getStageMusic()),
+                "the reveal must resolve Sonic 1's special-stage music");
+        assertTrue(presentUntilAudibleAndActiveSfx(
+                        fixture, Sonic1Sfx.ENTER_SS.id),
+                "S1 Sound_PlayBGM must retain the still-sounding $CA entry SFX");
+    }
+
     /**
      * Steps real outer frames until one presented packet carries non-zero final
      * PCM, asserting on every frame that the recorder and the speaker received
@@ -214,6 +261,61 @@ class TestSonic1UnifiedAudioPresentationRomIntegration {
             }
         }
         return false;
+    }
+
+    private boolean presentFramesWithActiveSfx(
+            HeadlessTestFixture fixture, int count, int sfxId) {
+        short[] speakerPacket = new short[speaker.maxStereoFramesPerPacket() * 2];
+        short[] recordedPacket =
+                new short[recording.maxStereoFramesPerPacket() * 2];
+        boolean audibleAndActive = false;
+        for (int frame = 0; frame < count; frame++) {
+            fixture.stepFrame(false, false, false, false, false);
+            Arrays.fill(speakerPacket, (short) 0);
+            Arrays.fill(recordedPacket, (short) 0);
+            int speakerFrames = speaker.drainPresentationFrame(speakerPacket);
+            int recordedFrames = recording.drainPresentationFrame(recordedPacket);
+            assertEquals(speakerFrames, recordedFrames);
+            assertArrayEquals(speakerPacket, recordedPacket,
+                    "speaker and recorder must receive the same entry packet");
+            audibleAndActive |= isSfxActive(sfxId) && !allZero(speakerPacket);
+        }
+        return audibleAndActive;
+    }
+
+    private boolean presentUntilAudibleAndActiveSfx(
+            HeadlessTestFixture fixture, int sfxId) {
+        short[] speakerPacket = new short[speaker.maxStereoFramesPerPacket() * 2];
+        short[] recordedPacket =
+                new short[recording.maxStereoFramesPerPacket() * 2];
+        for (int frame = 0; frame < MAX_FRAMES_PER_PHASE; frame++) {
+            fixture.stepFrame(false, false, false, false, false);
+            Arrays.fill(speakerPacket, (short) 0);
+            Arrays.fill(recordedPacket, (short) 0);
+            int speakerFrames = speaker.drainPresentationFrame(speakerPacket);
+            int recordedFrames = recording.drainPresentationFrame(recordedPacket);
+            assertEquals(speakerFrames, recordedFrames);
+            assertArrayEquals(speakerPacket, recordedPacket,
+                    "speaker and recorder must receive the same reveal packet");
+            if (isSfxActive(sfxId) && !allZero(speakerPacket)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isSfxActive(int sfxId) {
+        return audio.captureLogicalSnapshot().presentation()
+                .smpsLogical().sequencers().stream()
+                .anyMatch(entry -> entry.sfx()
+                        && entry.source().id() == sfxId);
+    }
+
+    private static void setField(Object target, String name, Object value)
+            throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     private static boolean allZero(short[] packet) {

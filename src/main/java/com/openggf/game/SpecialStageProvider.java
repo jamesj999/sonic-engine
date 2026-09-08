@@ -70,6 +70,16 @@ public interface SpecialStageProvider extends MiniGameProvider {
     }
 
     /**
+     * Returns whether this game's special-stage entry queues a music fade
+     * after its transition SFX. The default retains the shared entry behavior;
+     * providers whose ROM uses a different entry command override this
+     * semantic entry policy.
+     */
+    default boolean fadesMusicOnEntry() {
+        return true;
+    }
+
+    /**
      * Gets the music ID to play while the special stage is active.
      *
      * @return game-specific music ID, or -1 to use the engine fallback
