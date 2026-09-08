@@ -45,6 +45,14 @@ public final class Sonic1SpecialStageProvider implements SpecialStageProvider {
     }
 
     @Override
+    public boolean fadesMusicOnEntry() {
+        // GM_Special queues sfx_EnterSS and enters PaletteWhiteOut directly;
+        // unlike S2 SpecialStage, it issues no fade command in between
+        // (sonic.asm:3224-3227). S1 FadeOutMusic would stop $CA itself.
+        return false;
+    }
+
+    @Override
     public GameMusic getStageMusic() {
         return GameMusic.SPECIAL_STAGE;
     }

@@ -2291,9 +2291,12 @@ public class GameLoop {
             playSpecialStageTransitionSfx(ssProvider);
         }
 
-        // Fade out the current music gradually (ROM: MusID_FadeOut / zFadeOutMusic)
-        // This preserves the SFX we just started, unlike stopMusic() which silences all
-        audioManager.fadeOutMusic();
+        if (ssProvider.fadesMusicOnEntry()) {
+            // S2 SpecialStage queues MusID_FadeOut between its entry SFX and
+            // Pal_FadeToWhite (s2.asm:6542-6546). The provider owns whether
+            // this shared entry path submits that command.
+            audioManager.fadeOutMusic();
+        }
 
         // Determine which stage to enter
         final int stageIndex = ssProvider.consumeStageIndexForEntry(this.gameState);
