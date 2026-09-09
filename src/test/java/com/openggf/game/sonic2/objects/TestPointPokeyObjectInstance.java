@@ -249,6 +249,26 @@ class TestPointPokeyObjectInstance {
         assertEquals(0, active[0]);
     }
 
+    @Test
+    void ringPrizesRequestSecondarySoundForEveryAwardWithoutSpikeThrottle() {
+        var audio = org.mockito.Mockito.mock(com.openggf.audio.AudioManager.class);
+        ObjectManager objects = new ObjectManager(List.of(), null, 0, null, null, null,
+                GameServices.camera(), new StubObjectServices() {
+                    @Override public com.openggf.audio.AudioManager audioManager() { return audio; }
+                });
+        int[] active = {2};
+        var first = new RingPrizeObjectInstance(100, 100, 100, 100, 1, active);
+        var second = new RingPrizeObjectInstance(100, 100, 100, 100, 1, active);
+        objects.addDynamicObject(first);
+        objects.addDynamicObject(second);
+        first.update(10, null);
+        second.update(10, null);
+        org.mockito.Mockito.verify(audio, org.mockito.Mockito.times(2))
+                .playSecondarySfx(com.openggf.audio.GameSound.RING);
+        org.mockito.Mockito.verifyNoMoreInteractions(audio);
+        assertEquals(0, active[0]);
+    }
+
     private static void invokeCapture(PointPokeyObjectInstance pokey, TestablePlayableSprite player) throws Exception {
         Method capture = PointPokeyObjectInstance.class.getDeclaredMethod("capturePlayer", AbstractPlayableSprite.class);
         capture.setAccessible(true);

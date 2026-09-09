@@ -241,6 +241,10 @@ public final class S3kSlotBonusCageObjectInstance extends AbstractObjectInstance
             waitTimer = 8;
             cageState = 2;
             controller.setPaletteCycleEnabled(false);
+        } else if (!spawnRings) {
+            // loc_4C16C also runs on even frames, at the child limit, and while
+            // the last spikes are travelling. loc_4C23E (ejection) bypasses it.
+            controller.advanceSpikePayout();
         }
     }
 

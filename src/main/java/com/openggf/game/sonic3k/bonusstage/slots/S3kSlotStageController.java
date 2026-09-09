@@ -20,11 +20,26 @@ public class S3kSlotStageController {
     public void bootstrap() {
         stageState.setStatTable(0);
         stageState.setScalarIndex1(0x40);
+        stageState.setScalarIndex2(0);
         stageState.setPaletteCycleEnabled(false);
         stageState.clearCollision();
         stageState.setBounceTimer(0);
         stageState.resetRewardState();
         activeLayout = null;
+    }
+
+    /** ROM loc_4C16C: advance the shared word on every non-ejecting spike payout update. */
+    public void advanceSpikePayout() {
+        stageState.setScalarIndex2((stageState.scalarIndex2() + 1) & 0xFFFF);
+    }
+
+    /** ROM Obj_SlotSpike: unsigned word threshold, consumed at impact rather than spawn. */
+    public boolean consumeSpikeSound() {
+        if (stageState.scalarIndex2() < 5) {
+            return false;
+        }
+        stageState.setScalarIndex2(0);
+        return true;
     }
 
     /** Per-frame rotation: Stat_table += SStage_scalar_index_1 (lines 98776-98778). */

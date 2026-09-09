@@ -793,7 +793,8 @@ against measured recordings.
   timing, reward decrement, and release-launch axes read the ROM-derived counter and correct sine
   and cosine pairing, transient layout animations no longer advance a frame early, and the reel-wall
   flash runs at the ROM's two-frame-per-colour cadence. The reward cage no longer despawns off
-  camera, since the ROM's live routine has no unload path.
+  camera, since the ROM's live routine has no unload path. Spike impact sounds consume the ROM's
+  shared payout counter at five ticks instead of retriggering on every impact.
 - **Slot machine physics and exit:** ring and tile checks read the player's ground-projected
   position, ground-speed reversal is no longer clamped at zero, capture no longer zeroes the
   player's subpixel fraction, and the capture window is the ROM's half-open range rather than a
@@ -1366,7 +1367,8 @@ execution order, SST slot ownership, and routines that read their state once per
   paid out by linked Point Pokey cages. Reel graphics stay aligned with the cage when window
   resizing adds horizontal or vertical viewport borders. Robotnik spike prizes advance their shared
   sound counter on cage payout updates and use the secondary sound mailbox, preserving the ROM
-  impact-sound cadence across rewind.
+  impact-sound cadence across rewind. Ring prizes also use the secondary mailbox, requesting
+  the ring sound on every award.
 - **CNZ Point Pokey:** bumper angle math, capture and release, and linked-cage prize-counter timing
   match the ROM, and the cage bonus sound effect gates on the raw 16-frame `Vint_runcount` mask
   instead of a mis-derived offset constant.

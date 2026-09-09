@@ -120,6 +120,9 @@ public final class S3kSlotSpikeRewardObjectInstance extends AbstractObjectInstan
             return;
         }
 
+        if (controller.consumeSpikeSound()) {
+            services().playSfx(Sonic3kSfx.SPIKE_HIT.id);
+        }
         int carriedRingCount = resolveCarriedRingCount(playerEntity);
         if (controller.consumeRewardRing(carriedRingCount)) {
             if (carriedRingCount > 0) {
@@ -127,7 +130,6 @@ public final class S3kSlotSpikeRewardObjectInstance extends AbstractObjectInstan
             }
             services().addBonusStageRings(-1);
         }
-        services().playSfx(Sonic3kSfx.SPIKE_HIT.id);
         setDestroyed(true);
         active = false;
     }
