@@ -580,7 +580,8 @@ against measured recordings.
   sustained spindash still flings a landing sidekick. Monitors no longer unseat a rider who changes
   state on top of them, since that exemption is acquire-time only in the ROM. Platforms and spikes
   report their own ROM size to the on-screen render test, and collapsing bridges clear their
-  standing bit on a terrain handoff instead of force-releasing a grounded rider.
+  standing bit on a terrain handoff instead of force-releasing a grounded rider. Spiral descents
+  retain the ROM's vertical and entry-side horizontal flips for Sonic and Tails throughout the ride.
 - **MGZ drilling miniboss:** the ceiling probe uses the S3K ceiling-distance contract, fixing a one-
   pixel-low rumble ladder, and the rumble step reads the correct byte of `V_int_run_count`, which
   had inverted the vertical step. Thruster timing, music cadence, composite render order, and rumble

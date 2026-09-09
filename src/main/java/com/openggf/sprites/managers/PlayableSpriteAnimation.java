@@ -200,18 +200,20 @@ public class PlayableSpriteAnimation {
             restoreWaterTunnelPreviousAnimation(profile);
             if (sprite.isObjectMappingFrameControl()
                     && !selectedNonWalkScriptOverridesTumbleMapping()) {
-                applyDefaultFacingRenderFlips();
+                // Object-owned mappings retain their paired render flags.
+                // S3K loc_10C62/loc_138C8 skip Animate_Sonic/Animate_Tails
+                // entirely for object_control bit 1 (e.g. MGZ's spiral).
                 return;
             }
             updateScriptedAnimation(frameCounter);
             return;
         }
 
-        applyDefaultFacingRenderFlips();
-        if (profile == null) {
+        if (sprite.isObjectMappingFrameControl()) {
             return;
         }
-        if (sprite.isObjectMappingFrameControl()) {
+        applyDefaultFacingRenderFlips();
+        if (profile == null) {
             return;
         }
         int frameCount = sprite.getAnimationFrameCount();

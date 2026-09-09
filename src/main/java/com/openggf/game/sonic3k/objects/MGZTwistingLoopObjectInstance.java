@@ -193,12 +193,14 @@ public class MGZTwistingLoopObjectInstance extends AbstractObjectInstance implem
         if (dx < 0) {
             player.setAngle((byte) 0xC0);
             player.setDirection(Direction.LEFT);
-            player.setRenderFlips(false, false);
+            player.setRenderFlips(false, true);
         } else {
             player.setAngle((byte) 0x40);
             player.setDirection(Direction.RIGHT);
-            player.setRenderFlips(true, false);
+            player.setRenderFlips(true, true);
         }
+        // Obj_MGZTwistingLoop/loc_33D70 sets render_flags bit 1 for both
+        // entry sides; bit 0 above mirrors the right-side spiral mapping.
     }
 
     private void updateCapturedPlayer(int vIntRunCount, AbstractPlayableSprite player, PlayerState state) {
