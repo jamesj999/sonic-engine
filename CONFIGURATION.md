@@ -539,6 +539,10 @@ also use `ffprobe`. Live recording is distinct from the Shift+F9
 Live recording treats an unavailable or failed audio tap as an audio-only
 failure: video continues and the MKV retains a phase-correct stereo-silence
 track. Encoder, output-file, and mux failures still stop the whole recording.
+Stopping waits while queued frames continue encoding, then allows the encoder
+to finalize the recording under its own timeout. The five-second queue watchdog
+measures stalled frame progress, not total recording-finalization time. Application
+shutdown can still cancel an unfinished recording after its bounded wait.
 For development validation only, launch the JVM with
 `-Dopenggf.debug.liveCaptureAudioFailAfterFrames=N` to inject a tap failure
 before drain `N + 1`, after exactly `N` successful audio-frame drains. The

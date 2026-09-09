@@ -52,6 +52,47 @@ public class TestSonic3kLevelLoading {
     }
 
     @Test
+    public void preparedBuildUsesCapturedCharacterWithoutWorkerServiceLookups() throws Exception {
+        SonicConfigurationService config = SonicConfigurationService.getInstance();
+        Object oldMain = config.getConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE);
+        try {
+            SessionManager.clear();
+            config.setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "knuckles");
+            int levelIndex = LevelData.S3K_ANGEL_ISLAND_2.getLevelIndex();
+            Level expected = game.loadLevel(levelIndex);
+            var task = ((Sonic3k) game).prepareLevelBuildTask(levelIndex,
+                    com.openggf.game.sonic3k.events.S3kSeamlessMutationExecutor.MUTATION_AIZ1_POST_RELOAD_ACT2);
+            config.setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "sonic");
+
+            try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                var prepared = executor.submit(() -> {
+                    // Both mocks are thread-scoped. Any ambient access on the worker fails,
+                    // including a swallowed RuntimeException fallback inside a loader.
+                    try (var services = org.mockito.Mockito.mockStatic(
+                            com.openggf.game.GameServices.class, invocation -> {
+                                throw new AssertionError("Worker resolved GameServices." + invocation.getMethod().getName());
+                            });
+                         var sessions = org.mockito.Mockito.mockStatic(SessionManager.class, invocation -> {
+                             throw new AssertionError("Worker resolved SessionManager." + invocation.getMethod().getName());
+                         })) {
+                        return task.call();
+                    }
+                }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                assertEquals(expected.getPatternCount(), prepared.level().getPatternCount());
+                for (int color = 0; color < com.openggf.level.Palette.PALETTE_SIZE; color++) {
+                    var expectedColor = expected.getPalette(0).getColor(color);
+                    var actualColor = prepared.level().getPalette(0).getColor(color);
+                    assertEquals(expectedColor.r, actualColor.r, "captured character palette red " + color);
+                    assertEquals(expectedColor.g, actualColor.g, "captured character palette green " + color);
+                    assertEquals(expectedColor.b, actualColor.b, "captured character palette blue " + color);
+                }
+            }
+        } finally {
+            config.setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, oldMain != null ? oldMain : "sonic");
+        }
+    }
+
+    @Test
     public void aiz1UsesRomStartPosition() throws Exception {
         assertTrue(game instanceof DynamicStartPositionProvider);
         DynamicStartPositionProvider provider = (DynamicStartPositionProvider) game;

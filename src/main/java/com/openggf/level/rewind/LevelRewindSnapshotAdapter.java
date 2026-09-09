@@ -53,6 +53,7 @@ public final class LevelRewindSnapshotAdapter implements RewindSnapshottable<Lev
 
     @Override
     public void restore(LevelSnapshot snapshot) {
+        manager.discardPreparedLevelLoad();
         AbstractLevel level = currentAbstractLevel();
         boolean geometryReferencesChanged =
                 level.blocksReference() != snapshot.blocks()
