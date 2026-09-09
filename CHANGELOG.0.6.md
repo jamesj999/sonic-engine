@@ -1563,6 +1563,9 @@ execution order, SST slot ownership, and routines that read their state once per
 
 #### Player Physics and Collision
 
+- **Tails slope-running animation:** timer-held walk/run frames retain the selected mapping frame's
+  horizontal and vertical flip bits together, matching `TAnim_WalkRunZoom`'s early return and
+  preventing intermittent upside-down frames on slopes.
 - **Super Sonic transformation:** the transformation activates just past the jump apex rather than
   on the way up, because the ROM's test reads the high byte of a big-endian word, and Super speeds
   install on the transform frame itself instead of after the animation finishes. The freeze ends

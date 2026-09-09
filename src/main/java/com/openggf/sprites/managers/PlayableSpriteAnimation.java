@@ -317,8 +317,17 @@ public class PlayableSpriteAnimation {
 
     private boolean walkRunDelayLatchesRenderOrientation(SpriteAnimationScript script) {
         PlayerAnimationRules rules = playerAnimationRulesOrNull();
-        return rules != null
-                && rules.walkRunDelayLatchesRenderOrientation()
+        SpriteAnimationProfile profile = sprite.getAnimationProfile();
+        // TAnim_WalkRunZoom decrements anim_frame_duration and returns before
+        // reading angle or writing render_flags (s2.asm:41330-41355). Keep the
+        // selected slope mapping and its flips as one latched presentation on
+        // those timer-held frames. The publication-order profile distinguishes
+        // S2 Tails from S2 Sonic without a character/game-name carve-out.
+        boolean timerGatePrecedesOrientation =
+                profile instanceof ScriptedVelocityAnimationProfile velocityProfile
+                        && !velocityProfile.isWalkRunPublishesFrameBeforeTimerAdvance();
+        return (timerGatePrecedesOrientation
+                || (rules != null && rules.walkRunDelayLatchesRenderOrientation()))
                 && (script.delay() & 0xFF) == 0xFF
                 && sprite.getAnimationTick() > 0;
     }

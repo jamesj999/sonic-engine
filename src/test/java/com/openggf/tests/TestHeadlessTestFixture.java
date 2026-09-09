@@ -2,6 +2,8 @@ package com.openggf.tests;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
+import com.openggf.physics.Direction;
+import com.openggf.sprites.animation.ScriptedVelocityAnimationProfile;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.tests.rules.RequiresRom;
 import com.openggf.tests.rules.SonicGame;
@@ -77,6 +79,40 @@ public class TestHeadlessTestFixture {
         assertNotNull(tails.getCpuController(), "Configured sidekick should have an active CPU controller");
         assertEquals("tails", GameServices.sprites().getSidekickCharacterName(tails),
                 "Registered sidekick should preserve the configured character name");
+    }
+
+    @Test
+    public void sonic2LiveTailsRetainsRunSlopeFrameOrientationWhileTimerIsLive() {
+        HeadlessTestFixture.builder()
+                .withSharedLevel(shared)
+                .startPosition((short) 96, (short) 655)
+                .build();
+
+        AbstractPlayableSprite tails = GameServices.sprites().getSidekicks().getFirst();
+        assertInstanceOf(ScriptedVelocityAnimationProfile.class, tails.getAnimationProfile());
+        tails.setAnimationId(0);
+        tails.setMovementInputActive(true);
+        tails.setGSpeed((short) 0x600);
+        tails.setAngle((byte) 0x20);
+        tails.setDirection(Direction.RIGHT);
+
+        for (int frameIndex = 0; frameIndex < 4; frameIndex++) {
+            tails.setAnimationFrameIndex(frameIndex);
+            tails.setAnimationTick(0);
+            tails.getAnimationManager().update(frameIndex);
+            assertEquals(0x40 + frameIndex, tails.getMappingFrame(),
+                    "TAnim_WalkRunZoom must skip each interleaved two-frame HaulAss bank");
+            assertTrue(tails.getRenderHFlip());
+            assertTrue(tails.getRenderVFlip());
+
+            tails.getAnimationManager().update(frameIndex);
+            assertEquals(0x40 + frameIndex, tails.getMappingFrame(),
+                    "TAnim_WalkRunZoom must retain the selected slope frame while its timer is live");
+            assertTrue(tails.getRenderHFlip(),
+                    "the timer early-return must retain the slope frame's horizontal flip");
+            assertTrue(tails.getRenderVFlip(),
+                    "the timer early-return must retain the slope frame's vertical flip");
+        }
     }
 
     @Test
@@ -180,4 +216,3 @@ public class TestHeadlessTestFixture {
         assertNotSame(fixture1.sprite(), fixture2.sprite(), "Fixtures should have different sprite instances");
     }
 }
-
