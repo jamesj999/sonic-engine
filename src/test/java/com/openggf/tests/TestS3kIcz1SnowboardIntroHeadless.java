@@ -2,6 +2,7 @@ package com.openggf.tests;
 
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.game.CheckpointState;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
 import com.openggf.game.render.SpecialRenderEffectContext;
@@ -101,6 +102,33 @@ public class TestS3kIcz1SnowboardIntroHeadless {
         assertTrue(sawSlopeRegion, "Sonic should reach the snowboard slope handoff region");
         assertTrue(sawCrashHandoff, "Sonic should crash off the snowboard and hand control to the ICZ1 event");
         assertFalse(sonic.isObjectControlled(), "The snowboard intro should stop object-controlling Sonic after the crash");
+    }
+
+    @Test
+    public void checkpointRespawnDoesNotRestartSnowboardIntro() {
+        HeadlessTestFixture fixture = HeadlessTestFixture.builder()
+                .withZoneAndAct(ZONE_ICZ, ACT_1)
+                .build();
+        AbstractPlayableSprite sonic = fixture.sprite();
+        CheckpointState checkpoint = (CheckpointState) GameServices.level().getCheckpointState();
+
+        checkpoint.saveCheckpoint(7, 0x3A20, 0x0690, false);
+        GameServices.level().respawnPlayer();
+
+        assertEquals(0x3A20, sonic.getCentreX(), "respawn should restore the late ICZ1 checkpoint X");
+        assertEquals(0x0690, sonic.getCentreY(), "respawn should restore the late ICZ1 checkpoint Y");
+        assertFalse(hasSnowboardIntroObject(),
+                "ROM SpawnLevelMainSprites returns on nonzero Last_star_post_hit before Obj_LevelIntroICZ1");
+        assertFalse(sonic.isControlLocked(), "checkpoint respawn must leave Sonic input unlocked");
+        assertFalse(sonic.isObjectControlled(), "checkpoint respawn must leave Sonic out of intro object control");
+        assertFalse(sonic.isHidden(), "checkpoint respawn must leave Sonic visible");
+
+        for (int frame = 0; frame < 12; frame++) {
+            fixture.stepFrame(false, false, false, true, false);
+        }
+        assertFalse(sonic.isControlLocked(), "the first live frames must not reapply the snowboard input lock");
+        assertFalse(sonic.isObjectControlled(), "the first live frames must not reapply snowboard object control");
+        assertFalse(sonic.isHidden(), "the first live frames must keep Sonic visible");
     }
 
     @Test

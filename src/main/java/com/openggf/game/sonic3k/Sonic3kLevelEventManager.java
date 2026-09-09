@@ -657,6 +657,11 @@ public class Sonic3kLevelEventManager extends AbstractLevelEventManager
         }
         if (currentZone == Sonic3kZoneIds.ZONE_ICZ && currentAct == 0
                 && iczEvents != null && iczEvents.hasSonicSnowboardIntroPlayerMode()) {
+            // ROM SpawnLevelMainSprites tests Last_star_post_hit before reaching
+            // loc_690A, so checkpoint respawns never create Obj_LevelIntroICZ1.
+            // This must happen here, after RestoreCheckpoint, rather than from
+            // Sonic3kICZEvents.init() while the new checkpoint owner is empty.
+            iczEvents.spawnSonicSnowboardIntro();
             IczSnowboardIntroInstance.applyInitialPlayerLock(GameServices.camera().getFocusedSprite());
             applyIczIntroSidekickDormantMarkersAfterSpawn();
         }
