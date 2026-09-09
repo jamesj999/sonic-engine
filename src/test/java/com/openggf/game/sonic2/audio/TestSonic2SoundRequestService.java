@@ -78,6 +78,25 @@ class TestSonic2SoundRequestService {
                 "sealed diagnostics must publish at most once");
     }
 
+    @Test
+    void nativeTrackStopClearsPriorityButRollbackRestoresIt() {
+        Sonic2SoundRequestService service = new Sonic2SoundRequestService();
+        var pipeline = new Sonic2SoundRequestPipeline<Sonic2SoundRequestService.PendingRequest>();
+        pipeline.submitSound(0xBE, new Sonic2SoundRequestService.PendingRequest(0xBE, sfx(0xBE)));
+        pipeline.bridge();
+        pipeline.cycleQueue();
+        pipeline.dispatchQueuedRequest();
+        service.restore(new Sonic2SoundRequestService.Snapshot(pipeline.snapshot(), List.of()));
+        var before = service.snapshot();
+        var boundary = service.beginForwardBoundary();
+        boundary.service(ignored -> { });
+        assertEquals(0x70, service.snapshot().pipeline().sfxPriorityValue());
+        boundary.onSfxTrackStop();
+        assertEquals(0, service.snapshot().pipeline().sfxPriorityValue());
+        boundary.rollback();
+        assertEquals(before, service.snapshot());
+    }
+
     private static AudioCommand.PlayMusic music(int id) {
         return new AudioCommand.PlayMusic(id, AudioCommand.MusicRoute.BASE_SMPS, false, null);
     }

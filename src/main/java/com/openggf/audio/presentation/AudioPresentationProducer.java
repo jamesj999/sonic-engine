@@ -988,6 +988,9 @@ public final class AudioPresentationProducer {
                     ? mixSessionForwardResampled(stereoFrames)
                     : mixSessionForward(stereoFrames);
             registry.endRendering();
+            if (forwardBoundary != null && smpsSession.sfxTrackStoppedDuringService()) {
+                forwardBoundary.onSfxTrackStop();
+            }
             if (commandBatch != null) {
                 prepareSessionCommandCommit(
                         commandBatch, registryMutation, sessionMutation);

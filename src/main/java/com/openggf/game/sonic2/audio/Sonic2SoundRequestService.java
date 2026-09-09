@@ -221,6 +221,15 @@ public final class Sonic2SoundRequestService implements AudioRequestService {
         }
 
         @Override
+        public void onSfxTrackStop() {
+            requireOpen();
+            // cfStopTrack/zStoppedChannel (s2.sounddriver.asm): any FM/PSG
+            // SFX track reaching F2 clears SFXPriorityVal, even with live siblings.
+            // The boundary snapshot rolls this back if presentation fails.
+            pipeline.onSfxTrackStopped();
+        }
+
+        @Override
         public void prepareCommit() {
             requireOpen();
             if (prepared) {

@@ -43,7 +43,9 @@ class TestS1S2PlcSessionOwnership {
         sonic2.createGame(new Rom());
         Sonic2PlcService s2Service = sonic2.getGameService(Sonic2PlcService.class);
         assertFalse(s2Service.isBusy(), "the next session must start with an empty PLC FIFO");
-        assertEquals(2, sonic2.rewindAdapters().size());
+        assertEquals(3, sonic2.rewindAdapters().size());
+        assertSame(sonic2.getGameService(com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState.class),
+                sonic2.rewindAdapters().get(2));
         assertSame(s2Service, sonic2.rewindAdapters().get(0));
         var scheduler = sonic2.rewindAdapters().get(1);
         assertTrue(scheduler

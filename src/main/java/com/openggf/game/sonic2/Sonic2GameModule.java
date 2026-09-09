@@ -1,5 +1,6 @@
 package com.openggf.game.sonic2;
 
+import com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState;
 import com.openggf.audio.GameAudioProfile;
 import com.openggf.data.Game;
 import com.openggf.data.Rom;
@@ -16,7 +17,6 @@ import com.openggf.game.sonic2.dataselect.S2DataSelectImageCacheManager;
 import com.openggf.game.sonic2.debug.Sonic2DebugModeProvider;
 import com.openggf.game.sonic2.levelselect.LevelSelectManager;
 import com.openggf.game.sonic2.objects.BlueBallsObjectInstance;
-import com.openggf.game.sonic2.objects.BombPrizeObjectInstance;
 import com.openggf.game.sonic2.objects.BonusBlockObjectInstance;
 import com.openggf.game.sonic2.objects.LauncherBallObjectInstance;
 import com.openggf.game.sonic2.objects.MTZLongPlatformObjectInstance;
@@ -82,6 +82,8 @@ import java.util.Optional;
 import static java.security.MessageDigest.getInstance;
 
 public class Sonic2GameModule implements GameModule {
+    private final CNZPrizeSoundState cnzPrizeSoundState =
+            new CNZPrizeSoundState();
     private final GameAudioProfile audioProfile = new Sonic2AudioProfile();
     private final Sonic2LevelEventManager levelEventManager = new Sonic2LevelEventManager();
     private final Sonic2PlayerArtModeAuthority playerArtModeAuthority = () ->
@@ -140,8 +142,8 @@ public class Sonic2GameModule implements GameModule {
     @Override
     public List<com.openggf.game.rewind.RewindSnapshottable<?>> rewindAdapters() {
         return plcService == null
-                ? List.of(levelMusicScheduler)
-                : List.of(plcService, levelMusicScheduler);
+                ? List.of(levelMusicScheduler, cnzPrizeSoundState)
+                : List.of(plcService, levelMusicScheduler, cnzPrizeSoundState);
     }
 
     @Override
@@ -279,6 +281,7 @@ public class Sonic2GameModule implements GameModule {
     @SuppressWarnings("unchecked")
     @Override
     public <T> T getGameService(Class<T> type) {
+        if (type == CNZPrizeSoundState.class) return (T) cnzPrizeSoundState;
         if (type == S2DataSelectImageCacheManager.class) return (T) getDataSelectImageCacheManager();
         if (type == Sonic2LevelEventManager.class) return (T) levelEventManager;
         if (type == Sonic2ZoneRegistry.class) return (T) zoneRegistry;
@@ -311,7 +314,7 @@ public class Sonic2GameModule implements GameModule {
         ButtonVineTriggerManager.reset();
         SmashableGroundObjectInstance.resetGlobalState();
         MTZLongPlatformObjectInstance.resetGlobalState();
-        BombPrizeObjectInstance.resetGlobalState();
+        cnzPrizeSoundState.resetForMissingSnapshot();
     }
 
     @Override

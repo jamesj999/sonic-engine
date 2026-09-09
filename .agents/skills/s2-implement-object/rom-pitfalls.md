@@ -3531,6 +3531,28 @@ move-lock setter; keep any launch marker free of input semantics.
 
 **Originating commit.** `<pending: spring grounded control lock milestone>`.
 
+## P86 -- Shared sound counters follow their writer, not the consuming impacts
+
+**Symptom.** CNZ Robotnik-prize spike sounds repeat too slowly even though
+individual SFX use the correct ROM program and tick multiplier.
+
+**Cause.** ObjD3 tests and clears `Bonus_Countdown_3`; it does not increment
+it. ObjD6 `loc_2BD48` increments the shared word on every bomb-payout update
+that does not eject, including even frames, full child slots, allocation
+failure, and waiting for the last impacts. Counting five bomb impacts instead
+spaces requests about twice as far apart during the two-frame spawn cadence.
+
+**Correct pattern.** Trace both readers and writers of the RAM word. Keep
+its unsigned 16-bit state session-owned and rewindable. ObjD3 consumes it
+with `cmpi.w #5` / `blo` / `clr.w`, and submits `SndID_HurtBySpikes` through
+`PlaySound2` (the secondary mailbox), not `PlaySound`.
+
+**ROM citation.** `docs/s2disasm/s2.asm`: ObjD3 / `loc_2BC86` / `loc_2BD48`
+(58716-58742, 59104-59153 in the current reference).
+
+**Regression.** `TestPointPokeyObjectInstance` covers payout updates without
+spawns, terminal impacts, secondary requests, wrapping, and rewind.
+
 ## How to add a new entry
 
 When a trace-replay-bug-fixing iteration commits an object fix whose root

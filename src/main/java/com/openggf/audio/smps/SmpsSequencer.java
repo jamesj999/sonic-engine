@@ -2336,6 +2336,9 @@ public class SmpsSequencer implements CoordFlagContext {
         switch (cmd) {
             case 0xF2: // Stop
                 t.active = false;
+                if (t.type != TrackType.DAC) {
+                    host.onSfxTrackStop(this);
+                }
                 // tickTrack() owns the one terminal note-off after command
                 // parsing. Calling it here too emitted a duplicate write.
                 break;

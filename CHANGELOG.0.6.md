@@ -1364,7 +1364,9 @@ execution order, SST slot ownership, and routines that read their state once per
   preserves 16-bit reel-position underflow, and decodes and rewrites `slots_targ` with the ROM shift
   values instead of reversing the displayed reel order, so stopped reels line up with the reward
   paid out by linked Point Pokey cages. Reel graphics stay aligned with the cage when window
-  resizing adds horizontal or vertical viewport borders.
+  resizing adds horizontal or vertical viewport borders. Robotnik spike prizes advance their shared
+  sound counter on cage payout updates and use the secondary sound mailbox, preserving the ROM
+  impact-sound cadence across rewind.
 - **CNZ Point Pokey:** bumper angle math, capture and release, and linked-cage prize-counter timing
   match the ROM, and the cage bonus sound effect gates on the raw 16-frame `Vint_runcount` mask
   instead of a mis-derived offset constant.
@@ -1683,6 +1685,8 @@ request scheduling. Full parity and human listening sign-off remain open.
   music starts on the shipped level-entry cadence, and ring and shield monitor sounds route through
   the ROM's music-request slot rather than the effect queue, matching the documented quirk without
   changing what is audible.
+  Native SFX track stops clear the request priority latch, so lower-priority effects such as
+  Point Pokey's Casino Bonus and the ARZ splash remain audible after other effects end.
 - **Drowning recovery and substituted music:** surfacing from the drowning countdown resumes the
   track the ROM specifies, and invincibility, Super and Hyper forms, and boss fights each keep their
   own per-game music substitution instead of being cut off by the zone theme.
