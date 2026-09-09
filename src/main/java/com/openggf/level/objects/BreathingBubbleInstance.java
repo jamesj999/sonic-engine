@@ -8,6 +8,7 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.game.PlayableEntity;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 
@@ -94,6 +95,9 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
     /** Countdown number to display (-1 for regular bubble) */
     private int countdownNumber;
 
+    /** Obj0A's obj0a_character pointer; captured as a player reference for rewind. */
+    private AbstractPlayableSprite owner;
+
     /** Frame counter for countdown animation */
     private int countdownFrame;
 
@@ -158,6 +162,13 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
     public BreathingBubbleInstance(int x, int y, boolean startsFacingLeft, int countdownNumber,
                                    String artKey, int[] countdownFrameMap, int maxBubbleFrame,
                                    int riseVelocity, boolean skipFirstUpdate) {
+        this(x, y, startsFacingLeft, countdownNumber, artKey, countdownFrameMap,
+                maxBubbleFrame, riseVelocity, skipFirstUpdate, null);
+    }
+
+    public BreathingBubbleInstance(int x, int y, boolean startsFacingLeft, int countdownNumber,
+                                   String artKey, int[] countdownFrameMap, int maxBubbleFrame,
+                                   int riseVelocity, boolean skipFirstUpdate, AbstractPlayableSprite owner) {
         super(buildSpawn(x, y, startsFacingLeft, countdownNumber, artKey, riseVelocity),
                 "BreathingBubble");
         this.currentX = x;
@@ -167,6 +178,7 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
         this.riseVelocity = riseVelocity;
         this.wobbleAngle = startsFacingLeft ? 0x40 : 0;
         this.countdownNumber = countdownNumber;
+        this.owner = owner;
         this.countdownFrame = 0;
         this.numberFormed = false;
         this.lifetime = 0;
@@ -246,6 +258,15 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
 
         boolean observedRomRenderOnScreen = romRenderOnScreen;
         lifetime++;
+
+        // S2 Obj0A_AirLeft / Obj0A_DisplayNumber read air_left through
+        // obj0a_character, copied by Obj0A_MakeBubbleNow from the fixed slot.
+        // Recovery of one player must only clear that player's formed numbers.
+        if (numberFormed && owner != null && owner.getDrowningController() != null
+                && owner.getDrowningController().getRemainingAir() > 12) {
+            setDestroyed(true);
+            return;
+        }
 
         if (surfacePopUpdatesRemaining > 0) {
             surfacePopUpdatesRemaining--;
@@ -347,8 +368,10 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
         }
 
         Camera camera = services().camera();
-        int screenX = currentX - camera.getX();
-        int screenY = currentY - camera.getY();
+        // Obj0A_BecomeNumberMaybe clears level_fg: formed numbers use screen
+        // coordinates even if the camera moved after this object's update.
+        int screenX = numberFormed ? lockedScreenX : currentX - camera.getX();
+        int screenY = numberFormed ? lockedScreenY : currentY - camera.getY();
 
         // Only render if on screen
         if (screenX < -16 || screenX > camera.getWidth() + 16 ||
@@ -380,7 +403,7 @@ public class BreathingBubbleInstance extends AbstractObjectInstance implements R
         }
 
         // Render the sprite
-        renderer.drawFrameIndex(frameIndex, currentX, currentY, false, false);
+        renderer.drawFrameIndex(frameIndex, camera.getX() + screenX, camera.getY() + screenY, false, false);
     }
 
     @Override

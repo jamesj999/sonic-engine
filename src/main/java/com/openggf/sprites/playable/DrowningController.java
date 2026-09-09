@@ -302,7 +302,7 @@ public class DrowningController {
         BreathingBubbleInstance bubble = new BreathingBubbleInstance(
             bubbleX, bubbleY, startsFacingLeft, countdownNumber,
             bubbleArtKey, bubbleCountdownFrames, bubbleMaxFrame, riseVelocity,
-            skipFirstUpdate && deferFirstPass
+            skipFirstUpdate && deferFirstPass, player
         );
 
         if (deferFirstPass) {

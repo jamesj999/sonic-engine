@@ -1354,6 +1354,8 @@ execution order, SST slot ownership, and routines that read their state once per
 - **Drowning countdown digits:** Sonic 2's Obj0A bubble sheet now loads the six ROM number blocks
   used by `Obj0A_LoadCountdownArt`, and numbers 5 through 0 select mapping frames 8 through `$D`
   from `Ani_obj0A`, so the final-air warning displays digits instead of ordinary bubble frames.
+  Each player's numbers retain their own air-state owner and freeze in screen space when they
+  form, including when the camera moves between object updates and rendering.
 - **ARZ2 badniks and effects:** Whisp (Obj8C) chase cadence, ChopChop (Obj91) patrol bubbles,
   Grounder (Obj8D, Obj8F, Obj90) floor snap and debris, the arrow shooter (Obj22), leaf render
   bounds (Obj2C), the bubble generator (Obj24), breathing bubbles (Obj0A), lost rings (Obj37), skid
