@@ -26,6 +26,8 @@ uniform float ScreenWidth;   // Game screen width (320)
 uniform float ScreenHeight;  // Game screen height (224)
 
 // Actual viewport dimensions (for scaling from window to game coords)
+uniform float ViewportOffsetX;
+uniform float ViewportOffsetY;
 uniform float ViewportWidth;
 uniform float ViewportHeight;
 
@@ -45,14 +47,14 @@ out vec4 FragColor;
 void main()
 {
     // Convert from viewport coordinates to game screen coordinates
-    // gl_FragCoord is in viewport pixels (0 to ViewportWidth/Height)
+    // gl_FragCoord is framebuffer-relative; subtract the active viewport origin.
     // We need to scale to game pixels (0 to ScreenWidth/Height)
     float scaleX = ScreenWidth / ViewportWidth;
     float scaleY = ScreenHeight / ViewportHeight;
 
     // Convert viewport coords to game coords (Y=0 at top in game coords)
-    float pixelX = gl_FragCoord.x * scaleX;
-    float pixelY = ScreenHeight - (gl_FragCoord.y * scaleY);
+    float pixelX = (gl_FragCoord.x - ViewportOffsetX) * scaleX;
+    float pixelY = ScreenHeight - ((gl_FragCoord.y - ViewportOffsetY) * scaleY);
 
     // Check if pixel is within the slot display area (3 slots × 32 wide)
     float totalWidth = SLOT_WIDTH * 3.0 + SLOT_SPACING * 2.0;

@@ -1363,7 +1363,8 @@ execution order, SST slot ownership, and routines that read their state once per
 - **CNZ slot machines:** the slot machine runs after `RunObjects` on the current native V-int count,
   preserves 16-bit reel-position underflow, and decodes and rewrites `slots_targ` with the ROM shift
   values instead of reversing the displayed reel order, so stopped reels line up with the reward
-  paid out by linked Point Pokey cages.
+  paid out by linked Point Pokey cages. Reel graphics stay aligned with the cage when window
+  resizing adds horizontal or vertical viewport borders.
 - **CNZ Point Pokey:** bumper angle math, capture and release, and linked-cage prize-counter timing
   match the ROM, and the cage bonus sound effect gates on the raw 16-frame `Vint_runcount` mask
   instead of a mis-derived offset constant.

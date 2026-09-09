@@ -98,6 +98,8 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
     private int locScreenHeight = -1;
     private int locPaletteLine = -1;
     private int locTotalPaletteLines = -1;
+    private int locViewportOffsetX = -1;
+    private int locViewportOffsetY = -1;
     private int locViewportWidth = -1;
     private int locViewportHeight = -1;
 
@@ -420,6 +422,10 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
             glUniform1f(locTotalPaletteLines, (float) RenderContext.getTotalPaletteLines());
         }
 
+        // Fragment coordinates include the letterbox/pillarbox origin.
+        glUniform1f(locViewportOffsetX, viewportScratch[0]);
+        glUniform1f(locViewportOffsetY, viewportScratch[1]);
+
         // Pass actual viewport dimensions for coordinate conversion
         glUniform1f(locViewportWidth, viewportWidth);
         glUniform1f(locViewportHeight, viewportHeight);
@@ -486,6 +492,8 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
         locScreenHeight = glGetUniformLocation(programId, "ScreenHeight");
         locPaletteLine = glGetUniformLocation(programId, "PaletteLine");
         locTotalPaletteLines = glGetUniformLocation(programId, "TotalPaletteLines");
+        locViewportOffsetX = glGetUniformLocation(programId, "ViewportOffsetX");
+        locViewportOffsetY = glGetUniformLocation(programId, "ViewportOffsetY");
         locViewportWidth = glGetUniformLocation(programId, "ViewportWidth");
         locViewportHeight = glGetUniformLocation(programId, "ViewportHeight");
 
@@ -516,6 +524,8 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
         locScreenHeight = -1;
         locPaletteLine = -1;
         locTotalPaletteLines = -1;
+        locViewportOffsetX = -1;
+        locViewportOffsetY = -1;
         locViewportWidth = -1;
         locViewportHeight = -1;
     }
