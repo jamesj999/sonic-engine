@@ -539,13 +539,10 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * @return the loaded Level instance (also assigned to {@code this.level})
      */
     public Level loadLevelData(int levelIndex) throws IOException {
-        LevelLoadPreparer.Prepared prepared = takePreparedLevelLoad(levelIndex);
-        Level loaded = prepared != null
-                ? ((PreparableLevelLoader) game).installPreparedLevel(prepared.build())
-                : game.loadLevel(levelIndex);
+        discardPreparedLevelLoad();
+        Level loaded = game.loadLevel(levelIndex);
         writeCurrentLevel(loaded);
         rebuildLevelDerivedState();
-        adoptPreparedTilemaps(prepared);
         return loaded;
     }
 
@@ -574,17 +571,10 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
             return false;
         }
         int levelIndex = levels.get(zone).get(act).getLevelIndex();
-        ZoneFeatureProvider features = zoneFeatureProvider;
-        ParallaxManager parallax = parallaxManager;
-        boolean verticalWrap = verticalWrapEnabled;
-        GraphicsManager graphics = graphicsManager;
-        GameStateManager state = gameState;
-        loadPreparer.prepare(levelIndex, () -> {
-            PreparedLevelBuild build = loader.prepareLevelBuild(levelIndex, mutationKey);
-            PrebuiltTilemaps tilemaps = LevelTilemapPrebuilder.build(
-                    build.level(), graphics, state, features, zone, parallax, verticalWrap);
-            return new LevelLoadPreparer.Prepared(build, tilemaps);
-        });
+        // Resolve gameplay configuration on the frame thread. The submitted task
+        // owns its ROM and immutable load inputs, never a live feature provider.
+        var task = loader.prepareLevelBuildTask(levelIndex, mutationKey);
+        loadPreparer.prepare(loader, levelIndex, mutationKey, task);
         return true;
     }
 
@@ -598,37 +588,45 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         return loadPreparer.installedFromPreparedCount();
     }
 
-    private LevelLoadPreparer.Prepared takePreparedLevelLoad(int levelIndex) {
-        if (!(game instanceof PreparableLevelLoader)) {
-            return null;
-        }
-        LevelLoadPreparer.Prepared prepared = loadPreparer.take(levelIndex);
-        if (prepared == null) {
-            // Any build pending for another level is stale once this load runs.
-            loadPreparer.discard();
-        }
-        return prepared;
+    private PreparedLevelBuild takePreparedLevelLoad(int levelIndex, String mutationKey) {
+        return loadPreparer.take(game, levelIndex, mutationKey);
     }
 
-    private void adoptPreparedTilemaps(LevelLoadPreparer.Prepared prepared) {
-        if (prepared == null || prepared.tilemaps() == null || tilemapManager == null) {
+    private void adoptPreparedTilemaps(PreparedLevelBuild prepared) {
+        if (prepared == null || tilemapManager == null) {
             return;
         }
-        tilemapManager.adoptPrebuiltTilemaps(prepared.tilemaps());
+        // Wrapping policy belongs to the installed target and its live zone state.
+        // Build on the frame thread, after installation; ROM decoding remains async.
+        PrebuiltTilemaps tilemaps = LevelTilemapPrebuilder.build(
+                level, graphicsManager, gameState, zoneFeatureProvider, currentZone,
+                parallaxManager, verticalWrapEnabled);
+        if (tilemaps != null) {
+            tilemapManager.adoptPrebuiltTilemaps(tilemaps);
+        }
     }
 
     public Level loadLevelData(
             int levelIndex,
             DeferredLevelResourceTracker deferredResources)
             throws IOException {
+        discardPreparedLevelLoad();
+        return loadActTransitionLevelData(levelIndex, deferredResources, null);
+    }
+
+    Level loadActTransitionLevelData(
+            int levelIndex,
+            DeferredLevelResourceTracker deferredResources,
+            String mutationKey) throws IOException {
         DeferredLevelResourceTracker activeDeferredResources =
                 deferredResources != null
                         ? deferredResources
                         : DeferredLevelResourceTracker.none();
         Level loaded;
-        LevelLoadPreparer.Prepared prepared = null;
+        PreparedLevelBuild prepared = null;
         if (activeDeferredResources.hasExplicitPolicy()
                 && game instanceof DeferredLevelResourceLoader loader) {
+            discardPreparedLevelLoad();
             loaded = loader.loadLevelWithDeferredResources(
                     levelIndex, activeDeferredResources);
         } else {
@@ -637,9 +635,9 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                         game.getIdentifier()
                                 + " does not support deferred level resources");
             }
-            prepared = takePreparedLevelLoad(levelIndex);
+            prepared = takePreparedLevelLoad(levelIndex, mutationKey);
             loaded = prepared != null
-                    ? ((PreparableLevelLoader) game).installPreparedLevel(prepared.build())
+                    ? ((PreparableLevelLoader) game).installPreparedLevel(prepared)
                     : game.loadLevel(levelIndex);
         }
         writeCurrentLevel(loaded);
@@ -3295,6 +3293,7 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
             boolean showTitleCard, LevelLoadMode loadMode, boolean runtimeReload,
             boolean titleCardRequiredInHeadlessMode,
             boolean queueFreshLevelRuntimeArt) {
+        discardPreparedLevelLoad();
         try {
             // V_int_run_count is global work RAM, outside Dynamic_object_RAM.
             // A full death/results reload rebuilds ObjectManager just like the
@@ -4245,6 +4244,7 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
      * {@link com.openggf.game.session.WorldSession} level and zone metadata.
      */
     public void resetGameplayState() {
+        discardPreparedLevelLoad();
         discardInitialProcessSpritesLifecycle();
         com.openggf.game.session.GameplayModeContext gameplayMode =
                 com.openggf.game.session.SessionManager.getCurrentGameplayMode();

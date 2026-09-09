@@ -2,6 +2,7 @@ package com.openggf.level;
 
 import com.openggf.level.resources.PreparedLevelBuild;
 
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -30,11 +31,8 @@ final class LevelLoadPreparer {
     /** Test seam: when false, {@link #prepare} is a no-op and installs load synchronously. */
     private static volatile boolean enabled = true;
 
-    /** A completed build together with tilemaps built from it. */
-    record Prepared(PreparedLevelBuild build, PrebuiltTilemaps tilemaps) {
-    }
-
-    private record Pending(int levelIndex, Future<Prepared> future) {
+    private record Pending(Object owner, int levelIndex, String mutationKey,
+                           Future<PreparedLevelBuild> future) {
     }
 
     private Pending pending;
@@ -45,32 +43,34 @@ final class LevelLoadPreparer {
     }
 
     /** Starts (or restarts) preparation of {@code levelIndex}, discarding any other pending build. */
-    synchronized void prepare(int levelIndex, Callable<Prepared> task) {
+    synchronized void prepare(Object owner, int levelIndex, String mutationKey,
+                              Callable<PreparedLevelBuild> task) {
+        discard();
         if (!enabled) {
             return;
         }
-        discard();
-        pending = new Pending(levelIndex, EXECUTOR.submit(task));
-    }
-
-    /** True while a build for {@code levelIndex} is pending or complete but not yet taken. */
-    synchronized boolean hasPrepared(int levelIndex) {
-        return pending != null && pending.levelIndex() == levelIndex;
+        pending = new Pending(Objects.requireNonNull(owner), levelIndex, mutationKey,
+                EXECUTOR.submit(task));
     }
 
     /**
-     * Takes the build for {@code levelIndex}, joining it if still running.
+     * Takes only the owning loader's matching transition build, joining it if still running.
      * Returns {@code null} when nothing was prepared for that index or the
      * build failed; the caller then loads synchronously.
      */
-    synchronized Prepared take(int levelIndex) {
-        if (pending == null || pending.levelIndex() != levelIndex) {
+    synchronized PreparedLevelBuild take(Object owner, int levelIndex, String mutationKey) {
+        if (pending == null) {
+            return null;
+        }
+        if (pending.owner() != owner || pending.levelIndex() != levelIndex
+                || !Objects.equals(pending.mutationKey(), mutationKey)) {
+            discard();
             return null;
         }
         Pending taken = pending;
         pending = null;
         try {
-            Prepared prepared = taken.future().get();
+            PreparedLevelBuild prepared = taken.future().get();
             installedFromPreparedCount++;
             return prepared;
         } catch (InterruptedException e) {

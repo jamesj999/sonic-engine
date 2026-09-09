@@ -16,6 +16,10 @@ import com.openggf.tests.TestEnvironment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -201,6 +205,46 @@ class TestSessionManager {
         assertNull(SessionManager.getCurrentEditorMode());
         assertNull(SessionManager.getCurrentWorldSession());
         assertSame(bootstrapFade, graphics.getFadeManager());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"clear", "close", "replace", "reopen", "editor"})
+    void failedReplayCloseUnpublishesDisposedSessionAndAllowsFreshStart(String operation) {
+        GameplayModeContext gameplay = SessionManager.openGameplaySession(new Sonic2GameModule());
+        GraphicsManager graphics = EngineServices.current().graphics();
+        FadeManager bootstrapFade = graphics.getFadeManager();
+        graphics.bindRuntimeManagedReferences(
+                new Camera(EngineServices.current().configuration()), new FadeManager());
+        IllegalStateException failure = new IllegalStateException("Incomplete replay timing run");
+        AtomicInteger closeCalls = new AtomicInteger();
+        gameplay.setHardwareTimingReplayCloseHook(() -> {
+            closeCalls.incrementAndGet();
+            throw failure;
+        });
+        SessionManager.armNextGameplayAdmissionPolicy(HardwareReadinessAdmissionPolicy.RECORDED);
+
+        assertSame(failure, assertThrows(IllegalStateException.class, () -> {
+            switch (operation) {
+                case "clear" -> SessionManager.clear();
+                case "close" -> SessionManager.closeGameplaySession();
+                case "replace" -> SessionManager.openGameplaySession(new Sonic2GameModule());
+                case "reopen" -> SessionManager.reopenGameplaySession(HardwareReadinessAdmissionPolicy.RECORDED);
+                case "editor" -> SessionManager.enterEditorMode(new EditorCursorState(128, 256));
+                default -> fail("Unexpected operation: " + operation);
+            }
+        }));
+
+        assertNull(SessionManager.getCurrentGameplayMode());
+        assertNull(SessionManager.getCurrentEditorMode());
+        assertNull(SessionManager.getCurrentWorldSession());
+        assertSame(bootstrapFade, graphics.getFadeManager());
+        assertEquals(1, closeCalls.get());
+        GameplayModeContext fresh = SessionManager.openGameplaySession(new Sonic2GameModule());
+        assertNotSame(gameplay, fresh);
+        assertEquals(HardwareReadinessAdmissionPolicy.LIVE, fresh.hardwareTiming().admissionPolicy());
+        assertDoesNotThrow(SessionManager::clear);
+        assertDoesNotThrow(SessionManager::clear);
+        assertEquals(1, closeCalls.get());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.openggf.level.resources;
 import com.openggf.level.Level;
 
 import java.io.IOException;
+import java.util.concurrent.Callable;
 
 /**
  * A game whose level loads can be split into an off-thread build and a
@@ -15,9 +16,9 @@ import java.io.IOException;
  * install frame. Correctness contract:
  *
  * <ul>
- *   <li>{@link #prepareLevelBuild} reads only the ROM and immutable
- *       configuration; it must produce exactly what a synchronous load of the
- *       same level index would, minus graphics publication.</li>
+ *   <li>{@link #prepareLevelBuildTask} captures configuration on the frame thread.
+ *       Its returned task reads only the bound ROM and immutable inputs; it produces
+ *       the same data as a synchronous load for those inputs, minus graphics publication.</li>
  *   <li>{@link #installPreparedLevel} runs on the frame thread and performs
  *       everything the synchronous load does after construction (graphics
  *       publication, load-time palette overrides).</li>
@@ -29,7 +30,8 @@ import java.io.IOException;
 public interface PreparableLevelLoader {
 
     /**
-     * Builds level data for {@code levelIndex} off the frame thread.
+     * Captures load inputs on the frame thread and returns the ROM-only build task.
+     * The task must not resolve current-session services when it later executes.
      *
      * @param levelIndex  the game's level index
      * @param mutationKey the seamless-transition mutation the install will
@@ -37,7 +39,7 @@ public interface PreparableLevelLoader {
      *                    pre-apply the layout portion so tilemaps built from
      *                    this level already match the post-mutation layout
      */
-    PreparedLevelBuild prepareLevelBuild(int levelIndex, String mutationKey) throws IOException;
+    Callable<PreparedLevelBuild> prepareLevelBuildTask(int levelIndex, String mutationKey);
 
     /**
      * Installs a prepared build on the frame thread and returns the level
