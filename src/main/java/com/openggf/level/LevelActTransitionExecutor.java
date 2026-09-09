@@ -142,8 +142,8 @@ final class LevelActTransitionExecutor {
             levelManager.refreshZoneList();
         }
         LevelData levelData = levelManager.levels.get(levelManager.currentZone).get(levelManager.currentAct);
-        levelManager.loadLevelData(
-                levelData.getLevelIndex(), deferredResources);
+        levelManager.loadActTransitionLevelData(
+                levelData.getLevelIndex(), deferredResources, request.mutationKey());
         deferredResources.verifyFullyConsumed();
 
         if (request.mutationKey() != null && !request.mutationKey().isBlank()) {

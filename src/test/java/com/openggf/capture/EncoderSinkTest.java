@@ -205,6 +205,148 @@ class EncoderSinkTest {
 
     @Test
     @Timeout(5)
+    void healthyFinalizationCanOutlastTheFrameDrainTimeout() throws Exception {
+        GatedFinishEncoder encoder = new GatedFinishEncoder();
+        EncoderSink sink = new EncoderSink(encoder, BackpressurePolicy.BLOCK, 2, 100);
+        sink.open(Path.of("complete.mkv"), 1, 1, 60, 48000);
+        var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+        Thread stopper = new Thread(() -> {
+            try { result.set(sink.stop()); } catch (Throwable failure) { result.set(failure); }
+        });
+        stopper.start();
+        try {
+            assertTrue(encoder.enteredFinish.await(1, TimeUnit.SECONDS));
+            stopper.join(300);
+            assertTrue(stopper.isAlive(), "healthy finalization must not inherit the frame-drain deadline");
+            encoder.releaseFinish.countDown();
+            stopper.join(1_000);
+            assertFalse(stopper.isAlive());
+            assertEquals(Path.of("complete.mkv"), result.get());
+        } finally {
+            encoder.releaseFinish.countDown();
+            sink.abort();
+            stopper.join(1_000);
+        }
+    }
+
+    private static final class GatedFinishEncoder implements CaptureEncoder {
+        final CountDownLatch enteredFinish = new CountDownLatch(1);
+        final CountDownLatch releaseFinish = new CountDownLatch(1);
+
+        @Override public void open(Path output, int w, int h, int fps, int sr) { }
+        @Override public void encode(CapturedFrame frame) { }
+        @Override public Path finish() throws CaptureException {
+            enteredFinish.countDown();
+            try {
+                releaseFinish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new CaptureException("finalization interrupted", e);
+            }
+            return Path.of("complete.mkv");
+        }
+        @Override public void abort() { releaseFinish.countDown(); }
+    }
+
+    @Test
+    @Timeout(5)
+    void explicitAbortStillRejectsSuccessDuringFinalization() throws Exception {
+        GatedFinishEncoder encoder = new GatedFinishEncoder();
+        EncoderSink sink = new EncoderSink(encoder, BackpressurePolicy.BLOCK, 2, 500);
+        sink.open(Path.of("complete.mkv"), 1, 1, 60, 48000);
+        var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+        Thread stopper = new Thread(() -> {
+            try { result.set(sink.stop()); } catch (Throwable failure) { result.set(failure); }
+        });
+        stopper.start();
+        try {
+            assertTrue(encoder.enteredFinish.await(1, TimeUnit.SECONDS));
+            sink.abort();
+            stopper.join(1_000);
+            assertFalse(stopper.isAlive());
+            assertInstanceOf(CaptureException.class, result.get());
+        } finally {
+            encoder.releaseFinish.countDown();
+            sink.abort();
+            stopper.join(1_000);
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    void stopWaitsForWorkerFailureCleanupBeforeReportingFailure() throws Exception {
+        CountDownLatch enteredAbort = new CountDownLatch(1);
+        CountDownLatch releaseAbort = new CountDownLatch(1);
+        var cleaned = new java.util.concurrent.atomic.AtomicBoolean();
+        CaptureEncoder encoder = new CaptureEncoder() {
+            @Override public void open(Path output, int w, int h, int fps, int sr) { }
+            @Override public void encode(CapturedFrame frame) throws CaptureException {
+                throw new CaptureException("encoding failed");
+            }
+            @Override public Path finish() { return Path.of("never.mkv"); }
+            @Override public void abort() {
+                enteredAbort.countDown();
+                try {
+                    releaseAbort.await();
+                    cleaned.set(true);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+        EncoderSink sink = new EncoderSink(encoder, BackpressurePolicy.BLOCK, 2, 1_000);
+        sink.open(Path.of("never.mkv"), 1, 1, 60, 48000);
+        var result = new java.util.concurrent.atomic.AtomicReference<Object>();
+        Thread stopper = new Thread(() -> {
+            try { result.set(sink.stop()); } catch (Throwable failure) { result.set(failure); }
+        });
+        try {
+            sink.submit(frame(0));
+            assertTrue(enteredAbort.await(1, TimeUnit.SECONDS));
+            stopper.start();
+            stopper.join(100);
+            assertTrue(stopper.isAlive(), "stop must let the failing worker complete encoder cleanup");
+            releaseAbort.countDown();
+            stopper.join(1_000);
+            assertFalse(stopper.isAlive());
+            assertTrue(cleaned.get());
+            assertInstanceOf(CaptureException.class, result.get());
+        } finally {
+            releaseAbort.countDown();
+            sink.abort();
+            stopper.join(1_000);
+        }
+    }
+
+    @Test
+    @Timeout(10)
+    void drainProgressRenewsTheStallDeadline() throws Exception {
+        CaptureEncoder encoder = new CaptureEncoder() {
+            @Override public void open(Path output, int w, int h, int fps, int sr) { }
+            @Override public void encode(CapturedFrame frame) throws CaptureException {
+                try {
+                    Thread.sleep(150);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new CaptureException("encoding interrupted", e);
+                }
+            }
+            @Override public Path finish() { return Path.of("complete.mkv"); }
+            @Override public void abort() { }
+        };
+        EncoderSink sink = new EncoderSink(encoder, BackpressurePolicy.BLOCK, 8, 500);
+        sink.open(Path.of("complete.mkv"), 1, 1, 60, 48000);
+        try {
+            for (int i = 0; i < 8; i++) sink.submit(frame(i));
+            assertEquals(Path.of("complete.mkv"), sink.stop(),
+                    "a queue making steady progress must survive longer than one stall interval");
+        } finally {
+            sink.abort();
+        }
+    }
+
+    @Test
+    @Timeout(5)
     void concurrentAbortWakesStopAndAbortIsAuthoritative() throws Exception {
         BlockingEncoder enc = new BlockingEncoder();
         EncoderSink sink = new EncoderSink(enc, BackpressurePolicy.BLOCK, 2, 2_000);

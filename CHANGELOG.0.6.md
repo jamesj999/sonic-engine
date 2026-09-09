@@ -32,7 +32,8 @@ Maven after an experiment with managed test sessions was withdrawn.
 - **Runtime-owned zone frameworks:** typed zone state, palette ownership, animated tile channels,
   live layout mutation, scroll composition, staged render effects, and frame-level render-mode
   overrides are now supplied by shared runtime registries. Older zone-local paths remain where
-  migration has not yet paid for itself.
+  migration has not yet paid for itself. A failed replay close still clears the disposed session,
+  graphics bindings, and pending timing policy, allowing a fresh session to start safely.
 - **Level frame counter advances at the start of the frame** in all three games, matching the ROM.
   Roughly two dozen call sites that had compensated by reading one frame ahead were simplified, and
   a few that had never compensated are now correct.
@@ -363,7 +364,8 @@ object family now restores through shared machinery, and the remaining coverage 
 - **Capture encoding is configurable:** `capture.encoderPreset` exposes the speed preset and
   defaults to `fast`, `capture.encoderThreads` exposes the thread count, and lossless FFV1 is now
   sliced so threads apply to it too. An exhausted encoder queue logs a rate-limited warning rather
-  than silently stalling.
+  than silently stalling. Stopping allows a progressing queue to drain and gives finalization its
+  own encoder timeout; forced cancellation terminates ffmpeg before closing a blocked input pipe.
 - **Live and trace capture can target DaVinci Resolve on Linux** through DNxHR SQ video and
   lossless 24-bit PCM audio in a QuickTime container.
 - **Default ROM filenames simplified** to `s1.gen`, `s2.gen`, and `s3k.gen` across configuration,
@@ -384,9 +386,10 @@ object family now restores through shared machinery, and the remaining coverage 
   level load instead of rebuilding both full tilemaps, cutting the swap frame from about 25
   milliseconds to under one, and the fire-overlay art refreshes only the pattern atlas because it
   is pattern-only art.
-- **Angel Island act 2 hand-off:** it runs on a background preparer thread. The act 2 level decode,
-  object art sheets, and both tilemaps build across the fire event's rise and wait, and the reload
-  always joins the build so state stays identical to a synchronous load. Kosinski archive
+- **Angel Island act 2 hand-off:** the act 2 ROM decode runs on a background preparer thread across
+  the fire event's rise and wait, using captured bootstrap inputs. Art sheets and tilemaps build
+  on the frame thread during installation. Only the matching loader and transition may
+  consume a prepared build; ordinary loads, resets, and rewind discard it. Kosinski archive
   inspections are memoized per ROM.
 - **Save writes and GPU uploads moved off the gameplay frame:** progression saves encode on the
   issuing frame but write on a dedicated writer thread, with reads, deletes, synchronous writes,
