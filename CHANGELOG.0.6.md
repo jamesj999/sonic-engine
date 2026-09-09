@@ -642,6 +642,8 @@ against measured recordings.
 - **ICZ terrain and hazards:** Cork Floors and tension bridges use native height tables, edge
   bounds, and rope-bend phase, crushing columns use native edges and return rounding, and the
   segment column balances riders on its own 32-pixel width rather than the shared default.
+  Stalactites wait for their first camera appearance before enabling their proximity trigger,
+  preventing an earlier pass on another vertical route from making them fall out of sight.
 - **ICZ badniks and effects:** Penguinator off-screen gating and its floor-angle and slide-recovery
   script, Freezer placeholder lifecycle, snow emitter draw order, and ice cube rider release and
   roll-check timing all match the ROM.

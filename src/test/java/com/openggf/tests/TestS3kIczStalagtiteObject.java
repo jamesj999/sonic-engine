@@ -18,6 +18,7 @@ import com.openggf.level.objects.TouchCategoryDecodeMode;
 import com.openggf.level.objects.TouchOverlapStopPolicy;
 import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchShieldDeflectCapability;
+import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.tools.Sonic3kObjectProfile;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,53 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class TestS3kIczStalagtiteObject {
+
+    @Test
+    void passingBelowUnseenStalagtiteDoesNotTriggerItBeforeCameraArrives() {
+        TestableStalagtite stalagtite = new TestableStalagtite(
+                new ObjectSpawn(0x5460, 0x0190, Sonic3kObjectIds.ICZ_STALAGTITE, 0, 0, false, 0x0190));
+        PlayableEntity player = playerAt(0x5460);
+        try {
+            // Camera Y=$200 loads placements from $180 onward, but the
+            // placeholder at $190 is above its visible $20 half-height.
+            AbstractObjectInstance.updateCameraBounds(0x53C0, 0x0200, 0x5500, 0x02E0, 0x800);
+            for (int frame = 0; frame < 120; frame++) {
+                stalagtite.update(frame, player);
+                stalagtite.refreshPostCameraRenderState();
+            }
+            assertEquals(0x0190, stalagtite.getY(),
+                    "Obj_WaitOffscreen must keep an unseen stalagtite at its ceiling placement");
+            assertEquals(0, stalagtite.getYVelocityForTesting());
+            assertFalse(stalagtite.isSolidFor(player));
+            stalagtite.appendRenderCommands(new ArrayList<>());
+            org.mockito.Mockito.verifyNoInteractions(stalagtite.renderer);
+
+            AbstractObjectInstance.updateCameraBounds(0x53C0, 0x0100, 0x5500, 0x01E0, 0x800);
+            stalagtite.refreshPostCameraRenderState();
+            stalagtite.update(120, player); // loc_85B02 restores the initializer.
+            stalagtite.update(121, player); // Obj_ICZStalagtite sets attributes and returns.
+            assertFalse(stalagtite.isSolidFor(player));
+            stalagtite.appendRenderCommands(new ArrayList<>());
+            org.mockito.Mockito.verifyNoInteractions(stalagtite.renderer);
+            stalagtite.update(122, playerAt(0x5300));
+            assertTrue(stalagtite.isSolidFor(player));
+            assertEquals("WAITING", stalagtite.getPhaseNameForTesting());
+            stalagtite.appendRenderCommands(new ArrayList<>());
+            org.mockito.Mockito.verify(stalagtite.renderer).drawFrameIndex(
+                    7, 0x5460, 0x0190, false, false, 2);
+            stalagtite.update(123, player);
+            assertEquals("SHAKING", stalagtite.getPhaseNameForTesting());
+            // Once activated, the ROM continues even if the camera leaves vertically.
+            AbstractObjectInstance.updateCameraBounds(0x53C0, 0x0500, 0x5500, 0x05E0, 0x800);
+            for (int frame = 124; frame < 160; frame++) {
+                stalagtite.update(frame, player);
+                stalagtite.refreshPostCameraRenderState();
+            }
+            assertTrue(stalagtite.getY() > 0x0190);
+        } finally {
+            AbstractObjectInstance.resetCameraBoundsForTests();
+        }
+    }
 
     // ICZ objects only resolve in the S3KL zone set. Sonic3kObjectRegistry derives the
     // zone set from the global current level (GameServices.levelOrNull().getRomZoneId()).
@@ -169,8 +217,19 @@ class TestS3kIczStalagtiteObject {
     }
 
     private static IczStalagtiteObjectInstance createStalagtite(int x, int y) {
-        return new IczStalagtiteObjectInstance(
+        IczStalagtiteObjectInstance instance = new IczStalagtiteObjectInstance(
                 new ObjectSpawn(x, y, Sonic3kObjectIds.ICZ_STALAGTITE, 0, 0, false, 0));
+        try {
+            AbstractObjectInstance.updateCameraBounds(x - 160, y - 112, x + 160, y + 112, 0);
+            instance.update(0, null);
+            instance.refreshPostCameraRenderState();
+            instance.update(1, null);
+            instance.update(2, null);
+            instance.update(3, null);
+        } finally {
+            AbstractObjectInstance.resetCameraBoundsForTests();
+        }
+        return instance;
     }
 
     private static PlayableEntity playerAt(int x) {
@@ -181,6 +240,7 @@ class TestS3kIczStalagtiteObject {
 
     private static final class TestableStalagtite extends IczStalagtiteObjectInstance {
         private int ceilingDistance = 1;
+        private final PatternSpriteRenderer renderer = mock(PatternSpriteRenderer.class);
 
         private TestableStalagtite(ObjectSpawn spawn) {
             super(spawn);
@@ -189,6 +249,11 @@ class TestS3kIczStalagtiteObject {
         @Override
         protected int checkCeilingDistanceForTesting() {
             return ceilingDistance;
+        }
+
+        @Override
+        protected PatternSpriteRenderer getRenderer(String artKey) {
+            return renderer;
         }
     }
 

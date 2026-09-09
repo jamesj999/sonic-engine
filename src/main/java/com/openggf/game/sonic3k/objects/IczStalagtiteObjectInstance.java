@@ -36,8 +36,9 @@ import java.util.List;
 /**
  * Object 0xB5 - ICZ Stalagtite.
  *
- * <p>ROM reference: {@code Obj_ICZStalagtite} at sonic3k.asm:189428-189532.
- * The object starts as a full solid using {@code Map_ICZWallAndColumn} frame 7,
+ * <p>ROM reference: {@code Obj_ICZStalagtite} in sonic3k.asm.
+ * The object waits for its first camera appearance through {@code Obj_WaitOffscreen},
+ * then initializes as a full solid using {@code Map_ICZWallAndColumn} frame 7,
  * shakes for 16 frames when the nearest player is within {@code $70} pixels
  * horizontally, then falls with {@code MoveSprite} gravity and hurt collision
  * until {@code ObjCheckCeilingDist} reports impact.
@@ -93,6 +94,8 @@ public class IczStalagtiteObjectInstance extends AbstractObjectInstance
             TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_MAIN_ONLY);
 
     private enum Phase {
+        OFFSCREEN,
+        INITIALIZING,
         WAITING,
         SHAKING,
         FALLING,
@@ -101,7 +104,10 @@ public class IczStalagtiteObjectInstance extends AbstractObjectInstance
 
     private boolean hFlip;
     private final SubpixelMotion.State motion;
-    private Phase phase = Phase.WAITING;
+    private Phase phase = Phase.OFFSCREEN;
+    private boolean placeholderSubmitted;
+    private boolean placeholderRenderedOnscreen;
+    private boolean activeRoutineExecuted;
     private int timer;
 
     public IczStalagtiteObjectInstance(ObjectSpawn spawn) {
@@ -121,7 +127,22 @@ public class IczStalagtiteObjectInstance extends AbstractObjectInstance
             return;
         }
 
+        activeRoutineExecuted = phase != Phase.OFFSCREEN && phase != Phase.INITIALIZING;
         switch (phase) {
+            case OFFSCREEN -> {
+                // Obj_WaitOffscreen/loc_85AD2 queues an empty $20-by-$20
+                // placeholder. Its previous Render_Sprites bit 7, not player
+                // proximity, releases the saved initializer (loc_85B02).
+                if (placeholderRenderedOnscreen) {
+                    phase = Phase.INITIALIZING;
+                    placeholderSubmitted = false;
+                } else {
+                    placeholderSubmitted = true;
+                }
+            }
+            // Obj_ICZStalagtite sets attributes and returns; loc_8B1AE's
+            // proximity check first runs on the following object pass.
+            case INITIALIZING -> phase = Phase.WAITING;
             case WAITING -> updateWaiting(player);
             case SHAKING -> updateShaking(vIntRunCount);
             case FALLING -> updateFalling();
@@ -129,6 +150,18 @@ public class IczStalagtiteObjectInstance extends AbstractObjectInstance
                 // loc_8B228 returns to the solid idle body after impact.
             }
         }
+    }
+
+    @Override
+    public void refreshPostCameraRenderState() {
+        if (phase == Phase.OFFSCREEN && placeholderSubmitted) {
+            placeholderRenderedOnscreen = isWithinRenderSpriteBounds(0x20, 0x20);
+        }
+    }
+
+    @Override
+    public boolean publishesTouchResponseListEntryThisFrame() {
+        return activeRoutineExecuted;
     }
 
     private void updateWaiting(PlayableEntity player) {
@@ -215,7 +248,7 @@ public class IczStalagtiteObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity player) {
-        return phase == Phase.WAITING || phase == Phase.LANDED;
+        return activeRoutineExecuted && (phase == Phase.WAITING || phase == Phase.LANDED);
     }
 
     @Override
@@ -254,6 +287,9 @@ public class IczStalagtiteObjectInstance extends AbstractObjectInstance
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
+        if (!activeRoutineExecuted) {
+            return; // Map_Offscreen has no pieces; the initializer also returns without drawing.
+        }
         PatternSpriteRenderer renderer = getRenderer(ART_KEY);
         if (renderer != null) {
             renderer.drawFrameIndex(MAPPING_FRAME, motion.x, motion.y, hFlip, false, DRAW_PALETTE);
