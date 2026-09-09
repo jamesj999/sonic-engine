@@ -3414,3 +3414,25 @@ When porting a ROM block-write:
 
 **Originating commit.** S3K complete-emeralds segment 6, 8,940 -> 7,663 errors, frontier
 f3245 -> f3339. See `docs/status/trace-frontier-log.md`, 2026-08-20.
+
+## VDP windows replace Plane A; they do not inherit its scroll
+
+**Evidence:** S3&K `SpecialVInt_LBZ2WindowCopy`, `SpecialVInt_LBZ2ScrollAClear`,
+`SpecialVInt_LBZ2WindowClear`, and `LBZ2BGE_PlatformDetach`.
+
+An ending can scroll Plane A while keeping its standing platform fixed in the
+VDP window. Copying the terrain into a sprite overlay and giving that overlay
+the foreground scroll lifts the platform into a correctly grounded player.
+Read the VDP window-position registers and the actual source/destination
+nametable cells. The window replaces the foreground even where its pixels
+are transparent, and its priority bits must feed the sprite-occlusion mask.
+Count the row-copy VBlanks separately from subsequent clear/restore VBlanks.
+A captured nametable also needs rewind-safe dimensions and GPU invalidation
+when its contents are restored.
+
+LBZ2 uses 28 copies plus one clear, then a window starting at screen Y=40.
+Only the exposed upper strip takes the detach scroll; two final VBlanks clear
+Plane A and restore the hidden rows before disabling the window. See
+`docs/architecture/audits/2026-09-09-lbz2-ending-sequence.md` and the pixel test
+`TestForegroundWindowRendering`. The rendering principle also applies to S1/S2
+scenes that use the hardware window.

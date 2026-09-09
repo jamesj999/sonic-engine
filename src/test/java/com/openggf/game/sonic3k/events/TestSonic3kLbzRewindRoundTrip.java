@@ -21,6 +21,16 @@ class TestSonic3kLbzRewindRoundTrip {
         setField(original, "act2MinYAccumulator", 0x8000);
         setField(original, "act2MaxYAccumulator", 0x18000);
 
+        setField(original, "lbz2CopiedWindowActive", true);
+        setField(original, "lbz2WindowClearTimer", 1);
+        int[] window = new int[64 * 28];
+        window[5 * 64] = 0xE123;
+        window[27 * 64 + 39] = 0x87FF;
+        Field windowField = Sonic3kLBZEvents.class.getDeclaredField("lbz2CopiedWindowDescriptors");
+        windowField.setAccessible(true);
+        System.arraycopy(window, 0, (int[]) windowField.get(original), 0, window.length);
+        setField(original, "lbz2WindowCaptured", true);
+
         byte[] first = ZoneEventSchemaSidecar.capture(original);
         Sonic3kLBZEvents restored = new Sonic3kLBZEvents();
         ZoneEventSchemaSidecar.restore(restored, first);

@@ -941,6 +941,10 @@ public class Sonic3kConstants {
     // Lock-on S3 data, verified by ROM binary search at 0x26F460.
     public static final int LBZ_WATERLINE_SCROLL_DATA_ADDR = 0x26F460;
     public static final int LBZ_WATERLINE_SCROLL_DATA_SIZE = 0x1040;
+    // loc_549A4 LEA resolves to LBZ_WaterWaveArray2=$4F778. Its predecrement
+    // loop also reads 96 preceding words (including the adjacent AIZ table).
+    public static final int LBZ_DEATH_EGG_WAVE_DATA_ADDR = 0x4F778 - 96 * 2;
+    public static final int LBZ_DEATH_EGG_WAVE_DATA_SIZE = (96 + 64) * 2;
     public static final int ART_UNC_HCZ1_WATERLINE_BELOW1_ADDR = 0x2A6A60;
     public static final int ART_UNC_FIX_HCZ1_UPPER_BG1_ADDR = 0x2A6BE0;
     public static final int ART_UNC_HCZ1_WATERLINE_ABOVE1_ADDR = 0x2A6D60;

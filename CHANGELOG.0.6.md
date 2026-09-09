@@ -687,7 +687,11 @@ against measured recordings.
   runtime signals, loads the Death Egg replacement art and terrain, applies the launch deformation
   and pad-collapse mutation, and keeps the Knuckles cameo art in its ROM tile slot. The finale
   drives the look-up, hang-ride, cameo, explosion, smoke, and foreground-scroll phases from the ROM
-  sequence, and the pipe-plug exhaust uses ROM mapping pieces and art.
+  sequence, including the external-animation terminal callback, 23-piece debris burst and
+  fall-through wait, VBlank-gated smoke rotation, and effect palette/priority ordering. The
+  standing platform uses the fixed VDP window and matching sprite-priority mask while the
+  exposed upper strip scrolls; background deformation holds during the final fall. The
+  pipe-plug exhaust uses ROM mapping pieces and art.
 - **LBZ tunnels:** automatic tunnels apply final path velocity on the correct exit frame and
   preserve fractional position words instead of overwriting them. The tube subtype puffs exit smoke
   on launch, and the exhaust cadence gate reads the frame counter's low byte correctly.

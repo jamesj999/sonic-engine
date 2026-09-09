@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import static com.openggf.level.scroll.M68KMath.VISIBLE_LINES;
 import static com.openggf.level.scroll.M68KMath.unpackBG;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -259,7 +260,7 @@ class SwScrlLbzTest {
         TestEnvironment.activeGameplayMode();
         LbzZoneRuntimeState state = new LbzZoneRuntimeState(1, PlayerCharacter.SONIC_ALONE);
         state.setLaunchActive(true);
-        state.setFgAccum(0x0300_0000);
+        state.setFgAccum(0x0A00_0000);
         state.setBgLaunchSpeed(-1);
         GameServices.zoneRuntimeRegistry().install(state);
 
@@ -281,6 +282,68 @@ class SwScrlLbzTest {
 
         assertEquals(firstLatch, state.getDeathEggDeformWrapLatch(),
                 "wrap latch remains stable after the first frame instead of recomputing as frame-local floorMod");
+    }
+
+    @Test
+    void deathEggBackgroundOriginLatchIsDistinctFromLaunchDisplacement() {
+        TestEnvironment.activeGameplayMode();
+        LbzZoneRuntimeState state = new LbzZoneRuntimeState(1, PlayerCharacter.SONIC_ALONE);
+        state.setLaunchActive(true);
+        state.setFgAccum(0x0300_0000);
+        GameServices.zoneRuntimeRegistry().install(state);
+        SwScrlLbz handler = new SwScrlLbz();
+        int[] buffer = new int[VISIBLE_LINES];
+        handler.update(buffer, 0x4390, 0x668, 1, 1);
+        // d0=$668-$5F0-$300=-648; ASR/SUB gives floor(-648*27/64)=-274.
+        assertEquals(430, handler.getVscrollFactorBG());
+
+        handler.init(1, 0x4390, 0x1CB);
+        state.setFgAccum(0);
+        handler.update(buffer, 0x4390, 0x1CB, 2, 1);
+        assertEquals(0x100, handler.getVscrollFactorBG(), "the latch writes Events_fg_3 for the next dispatch");
+        handler.update(buffer, 0x4390, 0x1CB, 2, 1);
+        assertEquals(0x100, handler.getVscrollFactorBG(), "rebuilding the same frame must not consume the latch");
+        handler.update(buffer, 0x4390, 0x1CB, 3, 1);
+        assertEquals(0, handler.getVscrollFactorBG());
+    }
+
+    @Test
+    void deathEggWavesReadPrecedingRomWordsAndRetainUnwrittenTail() {
+        TestEnvironment.activeGameplayMode();
+        LbzZoneRuntimeState state = new LbzZoneRuntimeState(1, PlayerCharacter.SONIC_ALONE);
+        state.setLaunchActive(true);
+        state.setBgLaunchSpeed(-1);
+        GameServices.zoneRuntimeRegistry().install(state);
+        byte[] waveData = new byte[320];
+        for (int word = 0; word < 160; word++) {
+            waveData[word * 2] = (byte) ((1000 + word) >> 8);
+            waveData[word * 2 + 1] = (byte) (1000 + word);
+        }
+        SwScrlLbz handler = new SwScrlLbz(null, waveData);
+        int[] buffer = new int[VISIBLE_LINES];
+        handler.update(buffer, 0x4390, 0x668, 0, 1);
+        assertEquals(1095, handler.getLbz2HScrollWordForTest(117),
+                "-(a5) first reads the word BEFORE LBZ_WaterWaveArray2, even with d2=$7FFF");
+        handler.update(buffer, 0x4390, 0x668, 2, 1);
+        assertEquals(2190, handler.getLbz2HScrollWordForTest(117),
+                "the unfilled underwater tail retains its prior value; wave phase has not advanced at tick 2");
+        state.requestScreenShakeOffset(8);
+        handler.update(buffer, 0x4390, 0x668, 4, 1);
+        assertEquals(3286, handler.getLbz2HScrollWordForTest(117), "byte-offset phase advances at tick 4");
+
+        Object snapshot = handler.captureRewindState();
+        int[] expected = buffer.clone();
+        short expectedBgY = handler.getVscrollFactorBG();
+        handler.update(buffer, 0x4390, 0x668, 100, 1);
+        handler.restoreRewindState(snapshot);
+        handler.update(buffer, 0x4390, 0x668, 4, 1);
+        assertArrayEquals(expected, buffer, "rewind rebuild retains the consumed one-shot shake and scroll words");
+        state.setFinalFallActive(true);
+        handler.update(buffer, 0x4390, 0x666, 101, 1);
+        assertArrayEquals(expected, buffer, "LBZ2BGE_Falling retains the last deformation and cloud phase");
+        assertEquals(expectedBgY, handler.getVscrollFactorBG());
+        assertEquals(0x666, handler.getVscrollFactorFG(), "only the foreground camera continues to fall");
+        assertEquals(3286, handler.getLbz2HScrollWordForTest(117));
     }
 
     private static byte[] zeroWaterlineLookup() {

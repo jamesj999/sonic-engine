@@ -537,16 +537,22 @@ public class Sonic3kZoneFeatureProvider implements ZoneFeatureProvider {
     }
 
     @Override
+    public com.openggf.graphics.ForegroundWindow foregroundWindow() {
+        var levelManager = GameServices.levelOrNull();
+        if (levelManager != null && levelManager.getCurrentZone() == Sonic3kZoneIds.ZONE_LBZ
+                && levelManager.getFeatureActId() == 1
+                && GameServices.module().getLevelEventProvider() instanceof Sonic3kLevelEventManager manager
+                && manager.getLbzEvents() != null) {
+            return manager.getLbzEvents().foregroundWindow();
+        }
+        return null;
+    }
+
+    @Override
     public void renderAfterForeground(Camera camera) {
         var levelManager = GameServices.levelOrNull();
         if (levelManager == null) {
             return;
-        }
-        if (levelManager.getCurrentZone() == Sonic3kZoneIds.ZONE_LBZ
-                && levelManager.getFeatureActId() == 1
-                && GameServices.module().getLevelEventProvider() instanceof Sonic3kLevelEventManager manager
-                && manager.getLbzEvents() != null) {
-            manager.getLbzEvents().renderLbz2CopiedWindowPlatform(camera);
         }
         if (levelManager.getCurrentZone() != Sonic3kZoneIds.ZONE_SLOT_MACHINE) {
             return;

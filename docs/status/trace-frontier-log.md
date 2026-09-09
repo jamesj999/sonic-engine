@@ -115856,3 +115856,51 @@ The other three death arms remain coordinates only.
   -Ds3k.rom.path=<absolute-locked-on-ROM> test`.
 - The hard oracle advances to service 2357, `MUS_FM4.overridden`, reference
   `false`, engine `true`. Full-game audio parity and authenticity remain open.
+
+## 2026-09-09 — LBZ2 post-boss source audit; zone-slice frontier reproduced
+
+Direct `develop` working copy at base `192cbeaa0b0f03c9f8338b50683f63452d901d08`,
+with the LBZ2 ending changes described in
+[the ending audit](../architecture/audits/2026-09-09-lbz2-ending-sequence.md).
+No worktree or branch switch. Source/test diff SHA-256 at measurement:
+`ca2877557addd90da09b10ab408db21971ddaa9e5aa887ed4887859f0ab638a0`.
+
+Command (Java 21): `mvn -Dmse=off -Ptrace-replay -Dsurefire.forkCount=1
+-Dsurefire.runOrder=alphabetical -Dtest=TestS3kLbzZoneSliceTraceReplay
+"-Ds3k.rom.path=${PWD}/Sonic and Knuckles & Sonic 3 (W) [!].gen"
+-Dopenggf.surefire.reports=target/lbz-replay-reports test -B`.
+
+Completed class: **1 test, 1 failure, 0 errors, 0 skips**. Replay report:
+**4,585 comparison errors, 0 warnings, 46,075 total_frames**, no bootstrap
+errors. First error **row 23,533, `x_speed`, expected `$016F`, actual `$0200`**;
+animation also first differs there (`$02` versus hurt `$1A`). This reproduces
+the documented Ribot frontier and its 4,585-error total; it does not prove
+clean traversal of the revised post-boss ending. No frontier improvement is
+claimed and this was not a sweep to select a new target.
+
+Artifacts: `target/lbz-replay.log`, `target/lbz-replay-reports/`,
+`target/trace-reports/trace/s3k_lbz1-single-439d8056b9f465ee.json` and its
+`_context.txt`. The supplied S3&K image differs from the pinned reference ROM
+identity; reviewed ending table bytes match the disassembly. See the audit
+for exact identity, unit-test boundaries, and integration limitations.
+
+Final-source rerun after the fixed VDP window, background deformation, and
+shake/rewind corrections: same direct `develop` base, changed source/test file
+manifest SHA-256 `99687b0532d86227645bb28ca4d94f38e07c43ab5277c1954a20afb4803754f3`
+(`target/lbz-source-manifest.txt`, including new files).
+
+Command: `mvn -Dmse=off -Ptrace-replay -Dsurefire.forkCount=1
+-Dsurefire.runOrder=alphabetical -Dtest=TestS3kLbzZoneSliceTraceReplay
+"-Ds3k.rom.path=${PWD}/Sonic and Knuckles & Sonic 3 (W) [!].gen"
+-Dopenggf.surefire.reports=target/lbz-delivery-replay-reports test -B`.
+Completed **1 test, 1 failure, 0 errors/skips** on 2026-09-09 at 20:58:26 BST.
+Fresh report: **4,585 comparison errors, 0 warnings/bootstrap errors,
+46,075 total_frames**, first at **frame 23,533, `x_speed`, expected `$016F`,
+actual `$0200`**. The frontier and error total are unchanged. Logs:
+`target/lbz-delivery-replay.log` and `target/lbz-delivery-replay-reports/`;
+comparison JSON retains the path above. This does not certify the finale.
+The same source passes **141 focused checks (including native GL pixels and
+architecture), no skips**, and **613 structural guards, no skips**. The full
+suite completes with **17,126 tests, 7 failures, 32 errors, 108 skips**, with
+identical failing names/types/full messages to the preceding full run;
+see the audit for ROM/donor limitations and exact commands.

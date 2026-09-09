@@ -892,6 +892,8 @@ public final class LevelRenderer {
     }
 
     private void applyForegroundScrollFeatures(TilemapGpuRenderer tilemapRenderer) {
+        tilemapRenderer.setForegroundWindow(lm.zoneFeatureProvider == null
+                ? null : lm.zoneFeatureProvider.foregroundWindow());
         if (currentAdvancedRenderFrameState.enableForegroundHeatHaze()
                 || currentAdvancedRenderFrameState.enablePerLineForegroundScroll()) {
             tilemapRenderer.enablePerLineForegroundScroll(pendingFgHScrollView);

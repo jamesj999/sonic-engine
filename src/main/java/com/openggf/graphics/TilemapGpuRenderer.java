@@ -28,6 +28,14 @@ public class TilemapGpuRenderer {
     private TilemapShaderProgram shader;
     private final TilemapTexture backgroundTexture = new TilemapTexture();
     private final TilemapTexture foregroundTexture = new TilemapTexture();
+    private final TilemapTexture foregroundWindowTexture = new TilemapTexture();
+    private ForegroundWindow foregroundWindow;
+    private int[] uploadedWindowDescriptors;
+    private final int[] savedWindowScissor = new int[4];
+
+    public void setForegroundWindow(ForegroundWindow window) {
+        foregroundWindow = window;
+    }
     private final PatternLookupBuffer patternLookup = new PatternLookupBuffer();
     private final HScrollBuffer foregroundLineScrollBuffer = new HScrollBuffer(true);
     private VScrollBuffer columnVScrollBuffer;
@@ -574,12 +582,86 @@ public class TilemapGpuRenderer {
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_1D, boundColumnVScrollTexture);
 
-        quadRenderer.draw(0, 0, windowWidth, windowHeight);
+        if (layer == Layer.FOREGROUND && foregroundWindow != null) {
+            drawWithForegroundWindow(windowWidth, windowHeight, viewportX, viewportY, viewportWidth, viewportHeight);
+        } else {
+            quadRenderer.draw(0, 0, windowWidth, windowHeight);
+        }
 
         shader.stop();
     }
 
+    private void drawWithForegroundWindow(int width, int height, int viewportX, int viewportY,
+                                          int viewportWidth, int viewportHeight) {
+        var window = foregroundWindow;
+        if (!java.util.Arrays.equals(uploadedWindowDescriptors, window.descriptors())
+                || !foregroundWindowTexture.hasStorage(window.widthTiles(), window.heightTiles())) {
+            byte[] pixels = packWindowDescriptors(window.descriptors());
+            foregroundWindowTexture.upload(pixels, window.widthTiles(), window.heightTiles());
+            uploadedWindowDescriptors = window.descriptors().clone();
+        }
+        boolean scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        glGetIntegerv(GL_SCISSOR_BOX, savedWindowScissor);
+        glEnable(GL_SCISSOR_TEST);
+        int split = Math.min(viewportHeight, Math.max(0, window.top() * viewportHeight / height));
+        try {
+            setWindowScissor(viewportX, viewportY + viewportHeight - split,
+                    viewportWidth, split, scissorEnabled);
+            quadRenderer.draw(0, 0, width, height);
+
+            // The window replaces Plane A, including transparent texels. Use the
+            // same priority pass/mask output so visible tiles and sprite occlusion agree.
+            setWindowScissor(viewportX, viewportY, viewportWidth, viewportHeight - split, scissorEnabled);
+            shader.setTilemapDimensions(window.widthTiles(), window.heightTiles());
+            shader.setTilemapRingBase(0, 0);
+            shader.setWorldOffset(0, 0);
+            shader.setPerLineScroll(false);
+            shader.setPerColumnVScroll(false);
+            shader.setVdpWrapWidth(0);
+            shader.setVdpWrapHeight(0);
+            shader.setNametableBase(0);
+            shader.setWrapY(false);
+            shader.setShimmerParams(0, 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, foregroundWindowTexture.getTextureId());
+            quadRenderer.draw(0, 0, width, height);
+        } finally {
+            glScissor(savedWindowScissor[0], savedWindowScissor[1], savedWindowScissor[2], savedWindowScissor[3]);
+            if (!scissorEnabled) {
+                glDisable(GL_SCISSOR_TEST);
+            }
+        }
+    }
+
+    private void setWindowScissor(int x, int y, int width, int height, boolean intersect) {
+        if (intersect) {
+            int right = Math.min(x + width, savedWindowScissor[0] + savedWindowScissor[2]);
+            int top = Math.min(y + height, savedWindowScissor[1] + savedWindowScissor[3]);
+            x = Math.max(x, savedWindowScissor[0]);
+            y = Math.max(y, savedWindowScissor[1]);
+            width = Math.max(0, right - x);
+            height = Math.max(0, top - y);
+        }
+        glScissor(x, y, width, height);
+    }
+
+    static byte[] packWindowDescriptors(int[] descriptors) {
+        byte[] pixels = new byte[descriptors.length * 4];
+        for (int i = 0; i < descriptors.length; i++) {
+            int descriptor = descriptors[i];
+            pixels[i * 4] = (byte) descriptor;
+            pixels[i * 4 + 1] = (byte) (((descriptor >> 8) & 7)
+                    | (((descriptor >> 13) & 3) << 3)
+                    | ((descriptor & 0x800) != 0 ? 0x20 : 0)
+                    | ((descriptor & 0x1000) != 0 ? 0x40 : 0)
+                    | ((descriptor & 0x8000) != 0 ? 0x80 : 0));
+            pixels[i * 4 + 3] = (byte) 0xFF;
+        }
+        return pixels;
+    }
+
     private void resetOneShotRenderState() {
+        foregroundWindow = null;
         perLineScroll = false;
         perLineScrollSampleYOffsetPx = 0.0f;
         upperBandWrapHeightPx = 0.0f;
@@ -591,7 +673,7 @@ public class TilemapGpuRenderer {
     }
 
     protected boolean hasPendingOneShotRenderState() {
-        return perLineScroll || perColumnVScroll
+        return foregroundWindow != null || perLineScroll || perColumnVScroll
                 || perLineScrollSampleYOffsetPx != 0.0f
                 || upperBandWrapHeightPx != 0.0f
                 || upperBandWrapWidthTiles != 0.0f
@@ -895,6 +977,9 @@ public class TilemapGpuRenderer {
         foregroundLineScrollBuffer.cleanup();
         backgroundTexture.cleanup();
         foregroundTexture.cleanup();
+        foregroundWindowTexture.cleanup();
+        uploadedWindowDescriptors = null;
+        foregroundWindow = null;
         patternLookup.cleanup();
         quadRenderer.cleanup();
         backgroundData = null;
