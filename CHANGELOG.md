@@ -23,6 +23,8 @@ area rather than listed at the top.
 - [Release Summary](docs/changelog/v0.6-release-summary.md) — polished copy for
   the website and GitHub release page, including the measured validation status
   and known limitations. `RELEASE_NOTES_v0.6.prerelease.md` is a pointer to it.
+- [Raiscan's thoughts on 0.6](docs/changelog/raiscan-0.6-thoughts.md) — a personal
+  retrospective on traces, rewind, audio, capture, and the work behind the release.
 - [Archived 0.6 development ledger](docs/changelog/v0.6-development-ledger.md) —
   the unedited entry-by-entry history the changelog was condensed from.
 - [Detailed 0.6 development ledger](docs/changelog/v0.6-prerelease-detailed.md) —
