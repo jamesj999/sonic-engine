@@ -498,10 +498,29 @@ jobs:
             exit 1
           fi
 
-      - name: Download all artifacts
+      - name: Download Windows distribution
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: openggf-windows
+          path: artifacts/openggf-windows
+
+      - name: Download macOS distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-macos
+          path: artifacts/openggf-macos
+
+      - name: Download Linux distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-linux
+          path: artifacts/openggf-linux
+
+      - name: Download universal JVM jar
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-universal-jar
+          path: artifacts/openggf-universal-jar
 
       - name: Display artifacts
         run: ls -R artifacts
@@ -513,7 +532,11 @@ jobs:
           name: v${{ steps.version.outputs.version }}
           draft: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
-            artifacts/**/*
+            artifacts/openggf-windows/OpenGGF-windows.zip
+            artifacts/openggf-macos/OpenGGF-macos.zip
+            artifacts/openggf-linux/OpenGGF-linux.tar.gz
+            artifacts/openggf-universal-jar/OpenGGF-universal.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

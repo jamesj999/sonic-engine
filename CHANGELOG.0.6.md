@@ -1996,7 +1996,9 @@ stays comparison-only: nothing in this release hydrates gameplay from a recorded
   failing part way, run discovery excludes synthetic fixture subtrees, catalog validation uses
   compact run-segment descriptors, and release trace validation compares fresh candidate evidence
   against a reviewed baseline with an explicit source-backed skip policy that fails closed on
-  anything unclassified.
+  anything unclassified. Release attachments are limited to the three platform distributions
+  and universal JAR; validation evidence remains a workflow artifact, and missing distribution
+  files fail publication.
 - **Trace tooling owner:** the recording, emulator, and probe tooling described under Architecture
   and Runtime now lives in the TraceChaser submodule.
 
