@@ -99,7 +99,8 @@ Maven after an experiment with managed test sessions was withdrawn.
 - **Release and architecture guards tightened** across branch and release policy, trace and rewind
   invariants, ROM-only runtime asset rules, and singleton lifecycle, replacing diagnostic-only or
   tautological checks with behavioral oracles. The opt-in S3K rewind allocation measurement is
-  explicitly classified while unknown skips continue to fail closed.
+  explicitly classified while unknown skips continue to fail closed. Release pixel tests
+  use the runner's required native graphics display, including foreground-window rendering.
 - **Dead code removed** in an evidence-tiered sweep that checked callers, registries, reflection,
   resources, and service loading first. Casualties included unreferenced special-stage scalars,
   boss animation tables, debug primitive rendering, a superseded PSG chip class, an unreachable
