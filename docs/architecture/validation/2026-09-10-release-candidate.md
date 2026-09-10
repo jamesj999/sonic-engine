@@ -168,3 +168,23 @@ Completed logs, XML/trace evidence, JAR, screenshots, isolated configuration,
 save payload, and media inspection outputs are retained in the external
 `release-validation-20260910` task directory. Later runtime changes require
 new candidate evidence; historical results above keep their original SHA.
+
+## Integration verification
+
+The workflow/evidence change `e8cd7e653` merged into `develop` without conflicts
+at `0b81fbd4ea27d224db72e9b7061bd10fd626fc23`. On that integrated commit,
+the complete ordinary command above passed again at 01:40:29 BST:
+17,128 tests, zero failures/errors, and 24 policy-accepted skips. The separate
+guard command passed at 01:42:47 BST: 613 tests, no failures/errors/skips.
+These runs used report directories under
+`target/release-validation-20260910-integrated/` in the main checkout.
+
+Comparison retained all 15,999 distinct ordinary testcase identities with
+identical outcomes and skip reasons, and identical console suite execution
+summaries. XML testcase totals alone differed (17,125 versus 17,122): five
+passing nested-test identities had different duplicate-entry multiplicities,
+with no missing identity or changed console execution. All 613 guard identities
+and outcomes matched exactly. Runtime, tests, fixtures, and POM bytes remained
+identical to the trace/package candidate; the integration changed only the
+workflow flag and documentation. Existing dirty research submodules remained
+untouched. Independent review found no corrections to the gate or evidence.
