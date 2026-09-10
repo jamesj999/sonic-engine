@@ -83,6 +83,7 @@ jobs:
         shell: bash
         run: |
           mvn -Dmse=off test -B \
+            -Dopenggf.test.gl.native=true \
             -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
             -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
             -Ds3k.rom.path="${S3K_ROM_PATH}"

@@ -95,5 +95,7 @@ LUA_BIN=lua5.4 mvn -Dmse=off -Pguards "${rom_args[@]}" \
   -Dopenggf.surefire.reports=target/release-lifecycle-candidate-guards test -B
 ```
 
-This record covers pre-integration validation; integrated verification is
-reported separately at delivery.
+This record covers pre-integration validation. The repair was integrated at
+`d9136a15f`; the [September 10 candidate validation](2026-09-10-release-candidate.md)
+records subsequent graphics-enabled, packaged-app, and trace verification on
+`d2f1331b3`, including the repair and later gameplay fixes.
