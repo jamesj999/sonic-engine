@@ -180,6 +180,20 @@ The fast core passes all 178 supported register scripts, but has documented
 edge-case limitations. Full-game driver parity and release listening sign-off
 remain open. Live mid-track switching between cores is future work.
 
+## Saves, controllers, and the bits around the level
+
+0.6 adds persistent saves and S3K-backed data select. S1 and S2 can borrow that
+presentation when donation is enabled, allowing them to keep their own progression.
+Save writes use temporary files and atomic replacement where supported, with
+validation and recovery handling. Progression writes run off the gameplay thread.
+
+Controller support now feeds the same logical input layer as the keyboard,
+recordings, and rewind. Continue screens have their own ROM-backed countdowns
+and character sequences: S1/S2 restart from the act start, while S3K retains
+its checkpoint. Special- and bonus-stage returns also preserve more of the
+state you expect to find waiting when you get back.
+
+
 ## Recording and video capture
 
 We support video capture now. **Shift+O** starts a recording and the same chord
@@ -198,26 +212,9 @@ video shows what happened; an input recording gives us something we can run
 again. Both are useful when a bug report starts with “I did something weird
 and then this happened”. See the [capture settings](../../CONFIGURATION.md#capture).
 
-## Saves, controllers, and the bits around the level
-
-It is easy to spend so long on a collision bug that the ordinary experience of
-starting and continuing a game gets less attention than it deserves.
-
-0.6 adds persistent saves and S3K-backed data select. S1 and S2 can borrow that
-presentation while keeping their own progression. Save writes use temporary
-files and atomic replacement where supported, with validation and recovery
-handling. Progression writes run off the gameplay thread.
-
-Controller support now feeds the same logical input layer as the keyboard,
-recordings, and rewind. Continue screens have their own ROM-backed countdowns
-and character sequences: S1/S2 restart from the act start, while S3K retains
-its checkpoint. Special- and bonus-stage returns also preserve more of the
-state you expect to find waiting when you get back.
-
 ## config.yaml, actually
 
-Oh yeah! I moved us to YAML configuration. The filename is `config.yaml`, not
-`config.yml`.
+Oh yeah! I moved us to YAML configuration. The filename is `config.yaml`.
 
 Old `config.json` files migrate automatically. The current format stores your
 overrides rather than rewriting every default, and launch profiles can apply
@@ -232,12 +229,6 @@ audio, collision, rendering, and rewind; reused prepared art; moved screenshot
 encoding and save writes off the frame; and prebuilt tilemaps for Angel Island's
 terrain swap.
 
-Some improvements were much less glamorous than a faster synthesizer. A
-palette-write queue was drained in the windowed path but accumulated during
-headless play. Two ROM readers could race over a shared file position during
-loading. Those are exactly the kinds of problems a bigger, more heavily used
-engine exposes.
-
 We also learned when to undo an experiment. The managed test-session system
 grew storage without a useful bound and was removed. Builds use direct Maven
 again, with each worktree keeping its own output. Not every ambitious idea
@@ -250,10 +241,6 @@ correct it with better evidence, and make the result more pleasant to play.
 That includes the less visible work of getting objects, audio, saves, and
 transitions to agree about who owns state and when it changes.
 
-There is still plenty unfinished. The editor is experimental, S3K campaign
-completion is ahead of us, and modding and multiplayer racing are later-line
-work rather than 0.6 features. Even a large release needs somewhere to stop.
-
-Hopefully the next retrospective starts with “this one was a sensible size”.
+Maybe the next retrospective will start with “just a quick one this time”?
 
 [TraceChaser]: https://github.com/OpenGGF/TraceChaser
