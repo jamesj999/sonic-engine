@@ -172,9 +172,9 @@ whole mixed output.
 0.6 also gains two FM implementations: the accurate Java Nuked-OPN2 core and a
 clean-room fast core. New configurations choose `fast`; `accurate` remains
 available, and reference captures retain it. On the measured release-candidate
-content, the fast core took roughly 0.17–0.18 ms per audio frame versus
-0.94–0.99 ms for accurate. That is an audio measurement on those runs, not a
-fivefold speedup for the whole game.
+content, the fast core rendered audio roughly five to six times as fast as the
+accurate core, taking about 80% less processing time. That improvement applies
+to audio rendering on those runs; the whole game does not become five times faster.
 
 The fast core passes all 178 supported register scripts, but has documented
 edge-case limitations. Full-game driver parity and release listening sign-off
