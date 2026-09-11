@@ -24,6 +24,26 @@ Tests are configured for parallel execution across 4 JVM forks locally (`1` fork
 This significantly speeds up the full test suite but means tests must be independent of
 each other.
 
+## Release builds in GitHub
+
+The Release workflow builds Windows, macOS, Linux, and the universal JAR on
+GitHub-hosted runners. Its blocking `test` job runs the ordinary suite and
+structural guards on Ubuntu, installing Lua 5.4 first. Private ROMs are absent
+on these runners, so ROM-dependent skips remain visible in the uploaded test
+evidence; a successful cloud build does not establish ROM replay parity.
+
+A push to `master` builds artifacts without creating a tag. Manual dispatch on
+`master` also publishes a release and creates its version tag. When tagging
+manually, use the push-triggered run's artifacts.
+
+ROM-backed release evidence is collected locally with the existing release
+comparison and skip-classification tools. The optional `validate_roms` manual
+input also enables the unchanged strict checks on a separately configured
+`release-fixtures` runner. It defaults to false and is not a dependency of the
+cloud builds. The no-regression policy in
+[release 6 trace scope](../../status/trace-scope-release-6.md) still applies to
+ROM-backed sign-off.
+
 ## Rewind Tests And Benchmark
 
 The rewind system has both ordinary regression tests and an opt-in benchmark. See

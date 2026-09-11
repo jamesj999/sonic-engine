@@ -2002,7 +2002,9 @@ stays comparison-only: nothing in this release hydrates gameplay from a recorded
   against a reviewed baseline with an explicit source-backed skip policy that fails closed on
   anything unclassified. Release attachments are limited to the three platform distributions
   and universal JAR; validation evidence remains a workflow artifact, and missing distribution
-  files fail publication.
+  files fail publication. Native builds and their ordinary/guard validation run on GitHub-hosted
+  runners again; ROM-equipped validation is an opt-in evidence job rather than a prerequisite for
+  Windows, macOS, Linux, or universal-JAR builds.
 - **Trace tooling owner:** the recording, emulator, and probe tooling described under Architecture
   and Runtime now lives in the TraceChaser submodule.
 

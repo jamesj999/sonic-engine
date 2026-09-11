@@ -18,7 +18,8 @@ readable and historical versions can be referenced directly.
 
 [CHANGELOG.0.6.md](CHANGELOG.0.6.md) is the thematic 0.6 changelog, organised by
 area in the same shape as the 0.5 file. Newest changes are folded into their
-area rather than listed at the top.
+area rather than listed at the top. Release builds use GitHub-hosted validation
+and platform runners; ROM-backed evidence collection is separate.
 
 - [Release Summary](docs/changelog/v0.6-release-summary.md) — polished copy for
   the website and GitHub release page, including the measured validation status
