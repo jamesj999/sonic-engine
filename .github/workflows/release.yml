@@ -307,7 +307,9 @@ jobs:
         if: matrix.platform == 'linux'
         env:
           BUILD_ROOT: target
-          DISTRIBUTION_ROOT: target
+          # The native executable already occupies target/OpenGGF.
+          DISTRIBUTION_ROOT: target/linux-package
+          ARCHIVE_ROOT: target
         run: |
           mkdir -p "$DISTRIBUTION_ROOT/OpenGGF"
           cp "$BUILD_ROOT/OpenGGF" "$DISTRIBUTION_ROOT/OpenGGF/"
@@ -315,7 +317,7 @@ jobs:
           cp "$BUILD_ROOT"/native-libs/*.so "$DISTRIBUTION_ROOT/OpenGGF/"
           cp LICENSE NOTICE.md CREDITS.md "$DISTRIBUTION_ROOT/OpenGGF/"
           cp -R LICENSES "$DISTRIBUTION_ROOT/OpenGGF/LICENSES"
-          tar -czvf "$DISTRIBUTION_ROOT/OpenGGF-linux.tar.gz" -C "$DISTRIBUTION_ROOT" OpenGGF
+          tar -czvf "$ARCHIVE_ROOT/OpenGGF-linux.tar.gz" -C "$DISTRIBUTION_ROOT" OpenGGF
           rm -rf "$DISTRIBUTION_ROOT/OpenGGF"
 
       - name: Smoke validate packaged artifact
