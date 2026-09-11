@@ -312,8 +312,11 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance implements Rewi
         PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.SLICER);
         if (renderer == null || !renderer.isReady()) return;
 
-        // Sprite art faces left by default; flip when facing right
-        renderer.drawFrameIndex(animFrame, currentX, currentY, !facingLeft, false);
+        // LoadSubObject preserves placement flips; AnimateSprite copies status bits
+        // 0/1 back to render_flags. ObjA1 only toggles status.x_flip at an edge,
+        // so the placement's y_flip also survives windup and the body-only frame.
+        renderer.drawFrameIndex(animFrame, currentX, currentY, !facingLeft,
+                (spawn.renderFlags() & 0x02) != 0);
     }
 
     @Override
