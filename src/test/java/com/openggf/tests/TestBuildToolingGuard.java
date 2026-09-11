@@ -1144,12 +1144,39 @@ class TestBuildToolingGuard {
     }
 
     @Test
-    void releaseWorkflowShouldRunBroadTestsWithRomFixturesAfterPathVerification() throws Exception {
+    void nativeReleaseBuildsShouldUseHostedValidationWithoutPrivateFixtures() throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
+        Map<String, String> jobs = yamlJobBlocks(workflow);
+        String test = jobs.get("test");
+        assertNotNull(test);
+        assertTrue(test.contains("runs-on: ubuntu-latest"));
+        assertTrue(test.contains("mvn -Dmse=off test -B"));
+        assertTrue(test.contains("mvn -Dmse=off -Pguards test -B"));
+        assertTrue(test.contains("sudo apt-get install --yes lua5.4"));
+        assertFalse(test.contains("ROM_PATH"));
+        assertFalse(test.contains("self-hosted"));
+        assertFalse(test.contains("continue-on-error"));
+        for (String name : List.of("build", "universal-jar")) {
+            String build = jobs.get(name);
+            assertTrue(build.contains("needs: test"), name);
+            assertFalse(build.contains("rom-validation"), name);
+        }
+        for (String os : List.of("windows-latest", "macos-latest", "ubuntu-latest")) {
+            assertTrue(jobs.get("build").contains("os: " + os), os);
+        }
+        assertTrue(jobs.get("rom-validation").contains(
+                "if: github.event_name == 'workflow_dispatch' && inputs.validate_roms"));
+        assertTrue(workflow.contains("default: false"));
+    }
+
+    @Test
+    void releaseWorkflowShouldRunBroadTestsWithRomFixturesAfterPathVerification() throws Exception {
+        String workflow = yamlJobBlocks(Files.readString(Path.of(".github/workflows/release.yml"))).get("rom-validation");
+        assertNotNull(workflow);
         List<String> violations = new ArrayList<>();
 
-        if (!normalizeLineEndings(workflow).contains("test:\n    runs-on: [self-hosted, release-fixtures]")) {
-            violations.add(".github/workflows/release.yml test job must run on the self-hosted release fixture runner");
+        if (!normalizeLineEndings(workflow).contains("runs-on: [self-hosted, release-fixtures]")) {
+            violations.add(".github/workflows/release.yml ROM validation job must run on the configured fixture runner");
         }
         int verifyIndex = workflow.indexOf("Verify trace replay ROM paths");
         int broadTestIndex = workflow.indexOf("Run tests");
@@ -1831,7 +1858,8 @@ class TestBuildToolingGuard {
         Map<String, String> expectedConstants = Map.ofEntries(
                 Map.entry("GITHUB_FILE_SIZE_LIMIT_BYTES", "100000000"),
                 Map.entry("TRACE_COMPRESSION_THRESHOLD_BYTES", "1048576"),
-                Map.entry("RELEASE_TRAILER_CUTOVER_BASE", "677447024a08db9e25f3461588d661c23ba26848"),
+                Map.entry("RELEASE_TRAILER_CUTOVER_BASE", "45cecf566825aa50612f5e687b2682fc9681aed1"),
+                Map.entry("RELEASE_RESOURCE_BASELINE", "45cecf566825aa50612f5e687b2682fc9681aed1"),
                 Map.entry("RESOURCE_POLICY_CUTOVER", RESOURCE_POLICY_CUTOVER),
                 Map.entry("EMPTY_TREE_OID", "4b825dc642cb6eb9a060e54bf8d69288fbee4904"),
                 Map.entry("ALL_ZERO_OID", ALL_ZERO_OID),
@@ -1843,6 +1871,7 @@ class TestBuildToolingGuard {
                 Map.entry("GITHUB_FILE_SIZE_LIMIT_BYTES", "GithubFileSizeLimitBytes"),
                 Map.entry("TRACE_COMPRESSION_THRESHOLD_BYTES", "TraceCompressionThresholdBytes"),
                 Map.entry("RELEASE_TRAILER_CUTOVER_BASE", "ReleaseTrailerCutoverBase"),
+                Map.entry("RELEASE_RESOURCE_BASELINE", "ReleaseResourceBaseline"),
                 Map.entry("RESOURCE_POLICY_CUTOVER", "ResourcePolicyCutover"),
                 Map.entry("EMPTY_TREE_OID", "EmptyTreeOid"),
                 Map.entry("ALL_ZERO_OID", "AllZeroOid"),
@@ -3116,6 +3145,90 @@ class TestBuildToolingGuard {
 
         assertPolicyRejects(runPolicy(repository, "pre-commit"), "docs/skdisasm");
         assertPolicyRejects(runPolicy(repository, "commit-msg", message.toString()), "docs/skdisasm");
+    }
+
+    @Test
+    void trailerDebtBaselineMustNotHideLaterResourceViolations(
+            @TempDir Path temporaryDirectory) throws Exception {
+        Path repository = newRepository(temporaryDirectory, "trailer-debt-resource-check");
+        createInitialCommit(repository);
+        String resourceCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        String trace = "src/test/resources/traces/policy-debt/physics.csv";
+        writeAndStage(repository, trace, "x".repeat(1_048_576));
+        commit(repository, "historical trailer debt with a resource violation");
+        String trailerCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        deleteAndStage(repository, trace);
+        commit(repository, """
+                chore: remove trace
+
+                Changelog: n/a
+                Guide: n/a
+                Known-Discrepancies: n/a
+                S3K-Known-Discrepancies: n/a
+                Agent-Docs: n/a
+                Configuration-Docs: n/a
+                Skills: n/a
+                """);
+        String candidate = gitOutput(repository, "rev-parse", "HEAD").trim();
+        Path policy = temporaryDirectory.resolve("trailer-debt-policy.sh");
+        Files.writeString(policy, Files.readString(POLICY_SCRIPT)
+                .replace("RELEASE_TRAILER_CUTOVER_BASE=45cecf566825aa50612f5e687b2682fc9681aed1",
+                        "RELEASE_TRAILER_CUTOVER_BASE=" + trailerCutover)
+                .replace("RESOURCE_POLICY_CUTOVER=" + RESOURCE_POLICY_CUTOVER,
+                        "RESOURCE_POLICY_CUTOVER=" + resourceCutover));
+        assertPolicyRejects(run(repository, List.of("sh", policy.toString(), "ci-push",
+                resourceCutover, candidate, "master"), null), "uncompressed trace payload");
+    }
+
+    @Test
+    void resourceCutoverMustNotDiscardCommitsStillSubjectToTrailerChecks(
+            @TempDir Path temporaryDirectory) throws Exception {
+        Path repository = newRepository(temporaryDirectory, "independent-cutovers");
+        createInitialCommit(repository);
+        String trailerCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        writeAndStage(repository, "notes.txt", "requires trailers\n");
+        commit(repository, "missing trailers after their cutover");
+        String resourceCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        writeAndStage(repository, "later.txt", "valid later work\n");
+        commit(repository, """
+                chore: later work
+
+                Changelog: n/a
+                Guide: n/a
+                Known-Discrepancies: n/a
+                S3K-Known-Discrepancies: n/a
+                Agent-Docs: n/a
+                Configuration-Docs: n/a
+                Skills: n/a
+                """);
+        String candidate = gitOutput(repository, "rev-parse", "HEAD").trim();
+        Path policy = temporaryDirectory.resolve("cutover-policy.sh");
+        Files.writeString(policy, Files.readString(POLICY_SCRIPT)
+                .replace("RELEASE_TRAILER_CUTOVER_BASE=45cecf566825aa50612f5e687b2682fc9681aed1",
+                        "RELEASE_TRAILER_CUTOVER_BASE=" + trailerCutover)
+                .replace("RESOURCE_POLICY_CUTOVER=" + RESOURCE_POLICY_CUTOVER,
+                        "RESOURCE_POLICY_CUTOVER=" + resourceCutover));
+        assertPolicyRejects(run(repository, List.of("sh", policy.toString(), "ci-push",
+                trailerCutover, candidate, "master"), null), "documentation policy");
+    }
+
+    @Test
+    void releaseContentChecksShouldGrandfatherOnlyHistoryBeforeTheResourceCutover(
+            @TempDir Path temporaryDirectory) throws Exception {
+        Path repository = newCutoverRepository(temporaryDirectory, "release-history", "feature/release-history");
+        String legacyBase = gitOutput(repository, "rev-parse",
+                "978aadfe960b0b0b7f617b2b8ff3c266fdb46618^").trim();
+        assertPolicyAccepts(runPolicy(repository, "ci-push", legacyBase,
+                RESOURCE_POLICY_CUTOVER, "feature/release-history"));
+
+        String trace = "src/test/resources/traces/policy-regression/physics.csv";
+        writeAndStage(repository, trace, "x".repeat(1_048_576));
+        commit(repository, "introduce oversized trace after cutover");
+        deleteAndStage(repository, trace);
+        commit(repository, "remove trace from final tree");
+        String candidate = gitOutput(repository, "rev-parse", "HEAD").trim();
+        assertPolicyRejects(runPolicy(repository, "ci-push", legacyBase,
+                candidate, "feature/release-history"), "uncompressed trace payload");
     }
 
     @Test

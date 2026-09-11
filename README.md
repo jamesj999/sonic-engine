@@ -232,9 +232,9 @@ next to the launcher.
 
 ## Releases
 
-### v0.6.prerelease — Current development snapshot
+### v0.6.20260911
 
-OpenGGF 0.6 is the current development release focused on accurate, playable
+OpenGGF 0.6 is an accuracy and tooling release focused on accurate, playable
 routes through the main Sonic 3 & Knuckles slice and broad Sonic 1 and Sonic 2
 gameplay. The engine loads runtime data from user-supplied ROMs and validates
 behavior against the original games' disassemblies and recorded hardware
@@ -307,8 +307,10 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 
 #### Current release status
 
-0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
-still required before release sign-off.
+A push to `master` automatically tags and publishes the 0.6 release after
+GitHub validation and native/JAR builds succeed. Recorded validation and
+remaining limitations are maintained in the
+[release summary](docs/changelog/v0.6-release-summary.md).
 
 Level loads no longer intermittently fail or detect the wrong game. The ROM is
 read from two threads during a load, and the header readers and the Sonic 3 &
@@ -413,7 +415,7 @@ audio corrections and comparison tooling have landed, not complete parity or
 release listening approval. The release summary carries commit-stamped
 validation numbers, the guard and trace policy statements match
 `docs/status/trace-scope-release-6.md`, and
-`RELEASE_NOTES_v0.6.prerelease.md` is a pointer to the summary.
+`RELEASE_NOTES_v0.6.20260911.md` is a pointer to the summary.
 Contributor and player guides were corrected on August 28 (hook installation,
 config defaults, player-2 bindings, dead links), and the skill mirrors were
 resynchronised.

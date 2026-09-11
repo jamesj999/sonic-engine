@@ -8,6 +8,12 @@ on:
     branches:
       - master
   workflow_dispatch:
+    inputs:
+      validate_roms:
+        description: 'Also run ROM-backed validation on a configured fixture runner'
+        type: boolean
+        default: false
+
 
 jobs:
   policy:
@@ -27,7 +33,71 @@ jobs:
         if: github.event_name == 'push' && github.event.deleted == false
         run: bash .githooks/validate-policy.sh ci-push "${{ github.event.before }}" "${{ github.sha }}" "${{ github.ref_name }}"
 
+  # Cloud builds must not depend on private ROM fixtures or a personal runner.
   test:
+    runs-on: ubuntu-latest
+    env:
+      LUA_BIN: lua5.4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install Lua 5.4
+        run: sudo apt-get update && sudo apt-get install --yes lua5.4
+
+      - name: Verify Lua 5.4
+        run: |
+          command -v "$LUA_BIN"
+          "$LUA_BIN" -e 'assert(_VERSION == "Lua 5.4")'
+
+      - name: Run tests
+        run: mvn -Dmse=off test -B
+
+      - name: Assert cloud test coverage
+        run: |
+          python3 - <<'PYTEST'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          totals = dict(tests=0, failures=0, errors=0, skipped=0)
+          for report in Path("target/surefire-reports").glob("TEST-*.xml"):
+              root = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(root.get(key, "0"))
+          print(totals)
+          assert totals["tests"] - totals["skipped"] >= 10000, "Insufficient cloud test coverage"
+          assert totals["failures"] == totals["errors"] == 0
+          PYTEST
+
+      - name: Preserve ordinary test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-test-evidence
+          path: target/surefire-reports/
+
+      - name: Run structural guards in a fresh JVM
+        run: mvn -Dmse=off -Pguards test -B -Dopenggf.surefire.reports=target/guard-reports
+
+      - name: Preserve guard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-guard-evidence
+          path: target/guard-reports/
+
+  # Opt-in evidence collection retains strict ROM/skip/trace checks. It is
+  # separate from the hosted build graph; local validation uses the same tools.
+  rom-validation:
+    if: github.event_name == 'workflow_dispatch' && inputs.validate_roms
     runs-on: [self-hosted, release-fixtures]
     env:
       SONIC1_ROM_PATH: ${{ vars.SONIC1_ROM_PATH }}

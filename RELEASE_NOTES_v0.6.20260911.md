@@ -1,6 +1,6 @@
-# OpenGGF 0.6 prerelease notes
+# OpenGGF 0.6.20260911 release notes
 
-The release copy for `0.6.prerelease` lives in
+The release copy for `0.6.20260911` lives in
 [docs/changelog/v0.6-release-summary.md](docs/changelog/v0.6-release-summary.md).
 It carries the highlights, the measured validation status (stamped with the
 commit and date it was taken), the known limitations, and the trace

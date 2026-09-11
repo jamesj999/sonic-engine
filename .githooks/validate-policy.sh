@@ -4,8 +4,11 @@ set -eu
 
 GITHUB_FILE_SIZE_LIMIT_BYTES=100000000
 TRACE_COMPRESSION_THRESHOLD_BYTES=1048576
-RELEASE_TRAILER_CUTOVER_BASE=677447024a08db9e25f3461588d661c23ba26848
+# Maintainer-approved 0.6 trailer-debt baseline; all later incoming commits are checked.
+RELEASE_TRAILER_CUTOVER_BASE=45cecf566825aa50612f5e687b2682fc9681aed1
 RESOURCE_POLICY_CUTOVER=ccdd33edf4f9cd4a7937791f1d4c2f37cbeeb5e0
+RELEASE_RESOURCE_BASELINE=45cecf566825aa50612f5e687b2682fc9681aed1
+RELEASE_RANGE_BASE=
 ROM_LIKE_DENYLIST_EXTENSIONS=".gen .smd .bin .sms .gg .32x"
 EMPTY_TREE_OID=4b825dc642cb6eb9a060e54bf8d69288fbee4904
 ALL_ZERO_OID=0000000000000000000000000000000000000000
@@ -374,7 +377,7 @@ effective_base_for_ci_pr() {
     if ! git merge-base --is-ancestor "$RELEASE_TRAILER_CUTOVER_BASE" "$head_sha"; then
         die "release trailer cutover baseline $RELEASE_TRAILER_CUTOVER_BASE is not reachable from PR head $head_sha."
     fi
-    if git merge-base --is-ancestor "$base_sha" "$RELEASE_TRAILER_CUTOVER_BASE"; then
+    if ! git merge-base --is-ancestor "$RELEASE_TRAILER_CUTOVER_BASE" "$base_sha"; then
         printf '%s\n' "$RELEASE_TRAILER_CUTOVER_BASE"
         return 0
     fi
@@ -1002,12 +1005,36 @@ validate_tip_tree_links() {
 }
 
 validate_content_commit_list() {
-    commits=$1
+    content_list_commits=$1
     tip=$2
+    # The reviewed release snapshot bounds inherited history. Audit every
+    # delivered entry once, then retain the existing per-commit checks for
+    # every subsequent change (even one removed again before the tip).
+    content_cutover=$RESOURCE_POLICY_CUTOVER
+    if git merge-base --is-ancestor "$RELEASE_RESOURCE_BASELINE" "$tip" 2>/dev/null; then
+        content_cutover=$RELEASE_RESOURCE_BASELINE
+        if command -v python3 >/dev/null 2>&1; then
+            audit_python=python3
+        elif command -v python >/dev/null 2>&1; then
+            audit_python=python
+        else
+            die "Python 3 is required for the release snapshot audit."
+        fi
+        "$audit_python" "$POLICY_DIR/audit-release-tree.py" "$tip" ||
+            die "release snapshot audit rejected $tip."
+    fi
+    if git merge-base --is-ancestor "$content_cutover" "$tip" 2>/dev/null; then
+        legacy_commits=$(git rev-list "$content_cutover") ||
+            die "could not enumerate reviewed resource history."
+        content_list_commits=$(printf '%s\n' "$legacy_commits" -- "$content_list_commits" |
+            awk '$0 == "--" { incoming = 1; next }
+                 !incoming { legacy[$0] = 1; next }
+                 !($0 in legacy) { print }')
+    fi
     content_list_old_ifs=$IFS
     IFS='
 '
-    for commit in $commits; do
+    for commit in $content_list_commits; do
         [ -n "$commit" ] || continue
         if ! git cat-file -e "$commit^{commit}" 2>/dev/null; then
             die "required pushed commit $commit is not available."
@@ -1026,6 +1053,11 @@ commits_in_range() {
     fi
     if ! git cat-file -e "$head^{commit}" 2>/dev/null; then
         die "required range head $head is not available as a commit."
+    fi
+    if [ -n "$RELEASE_RANGE_BASE" ]; then
+        git rev-list --reverse "$base..$head" "^$RELEASE_RANGE_BASE" ||
+            die "could not enumerate release range $base..$head excluding $RELEASE_RANGE_BASE."
+        return
     fi
     git rev-list --reverse "$base..$head" ||
         die "could not enumerate commit range $base..$head."
@@ -1048,6 +1080,9 @@ validate_ci_pr() {
         return 0
     fi
 
+    if [ "$base_ref" = "master" ]; then
+        RELEASE_RANGE_BASE=$base_sha
+    fi
     effective_base=$(effective_base_for_ci_pr "$base_sha" "$head_sha" "$base_ref")
     range_files=$(git diff --name-only --diff-filter=ACMR "$effective_base...$head_sha")
 
@@ -1068,7 +1103,13 @@ validate_ci_commit_range() {
     head_sha=$2
 
     commits=$(commits_in_range "$effective_base" "$head_sha")
-    validate_content_commit_list "$commits" "$head_sha"
+    # Trailer debt never changes the independent resource-policy boundary.
+    if [ -n "$RELEASE_RANGE_BASE" ]; then
+        release_content_commits=$(commits_in_range "$RELEASE_RANGE_BASE" "$head_sha")
+        validate_content_commit_list "$release_content_commits" "$head_sha"
+    else
+        validate_content_commit_list "$commits" "$head_sha"
+    fi
 
     for commit in $commits; do
         parent_line=$(git rev-list --parents -n 1 "$commit")
@@ -1152,6 +1193,10 @@ validate_ci_push() {
         return 0
     fi
 
+    if [ "$ref_name" = "master" ]; then
+        RELEASE_RANGE_BASE=$before_sha
+        before_sha=$(effective_base_for_ci_pr "$before_sha" "$after_sha" master)
+    fi
     if [ "$ref_name" = "develop" ] || [ "$ref_name" = "master" ]; then
         validate_ci_commit_range "$before_sha" "$after_sha"
         return 0

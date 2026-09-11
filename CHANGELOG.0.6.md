@@ -1,6 +1,6 @@
 # OpenGGF v0.6 Changelog
 
-## v0.6.prerelease (Current development snapshot)
+## v0.6.20260911
 
 Analysis range: `v0.5.20260411..develop` at `77c244548` (`11653` commits, `9762` non-merge
 commits, `8331` files changed, `1562327` insertions, `332466` deletions). Net code growth is
@@ -2002,9 +2002,11 @@ stays comparison-only: nothing in this release hydrates gameplay from a recorded
   against a reviewed baseline with an explicit source-backed skip policy that fails closed on
   anything unclassified. Release attachments are limited to the three platform distributions
   and universal JAR; validation evidence remains a workflow artifact, and missing distribution
-  files fail publication. A push to `master` automatically publishes after validation and builds
-  succeed, tags the exact tested commit, and rejects an existing version tag. Manual dispatch
-  remains available for validation without publication.
+  files fail publication. Native builds and their ordinary/guard validation run on GitHub-hosted
+  runners again; ROM-equipped validation is an opt-in evidence job rather than a prerequisite for
+  Windows, macOS, Linux, or universal-JAR builds. A push to `master` automatically publishes after
+  validation and builds succeed, tags the exact tested commit, and rejects an existing version
+  tag. Manual dispatch remains available for validation without publication.
 - **Trace tooling owner:** the recording, emulator, and probe tooling described under Architecture
   and Runtime now lives in the TraceChaser submodule.
 
