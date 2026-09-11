@@ -1005,14 +1005,14 @@ validate_tip_tree_links() {
 }
 
 validate_content_commit_list() {
-    commits=$1
+    content_list_commits=$1
     tip=$2
     # The cutover already bounds new-ref delivery. Release merges also carry
     # pre-policy history; enforce current content rules only after that boundary.
     if git merge-base --is-ancestor "$RESOURCE_POLICY_CUTOVER" "$tip" 2>/dev/null; then
         legacy_commits=$(git rev-list "$RESOURCE_POLICY_CUTOVER") ||
             die "could not enumerate resource-policy cutover history."
-        commits=$(printf '%s\n' "$legacy_commits" -- "$commits" |
+        content_list_commits=$(printf '%s\n' "$legacy_commits" -- "$content_list_commits" |
             awk '$0 == "--" { incoming = 1; next }
                  !incoming { legacy[$0] = 1; next }
                  !($0 in legacy) { print }')
@@ -1020,7 +1020,7 @@ validate_content_commit_list() {
     content_list_old_ifs=$IFS
     IFS='
 '
-    for commit in $commits; do
+    for commit in $content_list_commits; do
         [ -n "$commit" ] || continue
         if ! git cat-file -e "$commit^{commit}" 2>/dev/null; then
             die "required pushed commit $commit is not available."

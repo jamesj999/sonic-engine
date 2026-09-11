@@ -3156,6 +3156,38 @@ class TestBuildToolingGuard {
     }
 
     @Test
+    void resourceCutoverMustNotDiscardCommitsStillSubjectToTrailerChecks(
+            @TempDir Path temporaryDirectory) throws Exception {
+        Path repository = newRepository(temporaryDirectory, "independent-cutovers");
+        createInitialCommit(repository);
+        String trailerCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        writeAndStage(repository, "notes.txt", "requires trailers\n");
+        commit(repository, "missing trailers after their cutover");
+        String resourceCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        writeAndStage(repository, "later.txt", "valid later work\n");
+        commit(repository, """
+                chore: later work
+
+                Changelog: n/a
+                Guide: n/a
+                Known-Discrepancies: n/a
+                S3K-Known-Discrepancies: n/a
+                Agent-Docs: n/a
+                Configuration-Docs: n/a
+                Skills: n/a
+                """);
+        String candidate = gitOutput(repository, "rev-parse", "HEAD").trim();
+        Path policy = temporaryDirectory.resolve("cutover-policy.sh");
+        Files.writeString(policy, Files.readString(POLICY_SCRIPT)
+                .replace("RELEASE_TRAILER_CUTOVER_BASE=b5c56bb5687a6ba5dcbb000fc2c9cd1544395884",
+                        "RELEASE_TRAILER_CUTOVER_BASE=" + trailerCutover)
+                .replace("RESOURCE_POLICY_CUTOVER=" + RESOURCE_POLICY_CUTOVER,
+                        "RESOURCE_POLICY_CUTOVER=" + resourceCutover));
+        assertPolicyRejects(run(repository, List.of("sh", policy.toString(), "ci-push",
+                trailerCutover, candidate, "master"), null), "documentation policy");
+    }
+
+    @Test
     void releaseContentChecksShouldGrandfatherOnlyHistoryBeforeTheResourceCutover(
             @TempDir Path temporaryDirectory) throws Exception {
         Path repository = newCutoverRepository(temporaryDirectory, "release-history", "feature/release-history");
