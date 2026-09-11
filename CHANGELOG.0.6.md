@@ -1,6 +1,6 @@
 # OpenGGF v0.6 Changelog
 
-## v0.6.prerelease (Current development snapshot)
+## v0.6.20260911
 
 Analysis range: `v0.5.20260411..develop` at `77c244548` (`11653` commits, `9762` non-merge
 commits, `8331` files changed, `1562327` insertions, `332466` deletions). Net code growth is
