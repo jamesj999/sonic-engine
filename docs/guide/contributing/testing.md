@@ -44,6 +44,11 @@ cloud builds. The no-regression policy in
 [release 6 trace scope](../../status/trace-scope-release-6.md) still applies to
 ROM-backed sign-off.
 
+Release policy checks exclude history already present on the target branch and
+apply the established trailer and resource-policy cutovers to older incoming
+history. All later incoming commits remain checked, including bad content
+introduced and subsequently removed. Delivered-tree symlink checks still run.
+
 ## Rewind Tests And Benchmark
 
 The rewind system has both ordinary regression tests and an opt-in benchmark. See

@@ -4,8 +4,10 @@ set -eu
 
 GITHUB_FILE_SIZE_LIMIT_BYTES=100000000
 TRACE_COMPRESSION_THRESHOLD_BYTES=1048576
-RELEASE_TRAILER_CUTOVER_BASE=677447024a08db9e25f3461588d661c23ba26848
+# Reachable counterpart of the original 677447024 cutover (identical tree).
+RELEASE_TRAILER_CUTOVER_BASE=b5c56bb5687a6ba5dcbb000fc2c9cd1544395884
 RESOURCE_POLICY_CUTOVER=ccdd33edf4f9cd4a7937791f1d4c2f37cbeeb5e0
+RELEASE_RANGE_BASE=
 ROM_LIKE_DENYLIST_EXTENSIONS=".gen .smd .bin .sms .gg .32x"
 EMPTY_TREE_OID=4b825dc642cb6eb9a060e54bf8d69288fbee4904
 ALL_ZERO_OID=0000000000000000000000000000000000000000
@@ -374,7 +376,8 @@ effective_base_for_ci_pr() {
     if ! git merge-base --is-ancestor "$RELEASE_TRAILER_CUTOVER_BASE" "$head_sha"; then
         die "release trailer cutover baseline $RELEASE_TRAILER_CUTOVER_BASE is not reachable from PR head $head_sha."
     fi
-    if git merge-base --is-ancestor "$base_sha" "$RELEASE_TRAILER_CUTOVER_BASE"; then
+    base_common=$(git merge-base "$base_sha" "$head_sha")
+    if git merge-base --is-ancestor "$base_common" "$RELEASE_TRAILER_CUTOVER_BASE"; then
         printf '%s\n' "$RELEASE_TRAILER_CUTOVER_BASE"
         return 0
     fi
@@ -1004,6 +1007,16 @@ validate_tip_tree_links() {
 validate_content_commit_list() {
     commits=$1
     tip=$2
+    # The cutover already bounds new-ref delivery. Release merges also carry
+    # pre-policy history; enforce current content rules only after that boundary.
+    if git merge-base --is-ancestor "$RESOURCE_POLICY_CUTOVER" "$tip" 2>/dev/null; then
+        legacy_commits=$(git rev-list "$RESOURCE_POLICY_CUTOVER") ||
+            die "could not enumerate resource-policy cutover history."
+        commits=$(printf '%s\n' "$legacy_commits" -- "$commits" |
+            awk '$0 == "--" { incoming = 1; next }
+                 !incoming { legacy[$0] = 1; next }
+                 !($0 in legacy) { print }')
+    fi
     content_list_old_ifs=$IFS
     IFS='
 '
@@ -1027,6 +1040,11 @@ commits_in_range() {
     if ! git cat-file -e "$head^{commit}" 2>/dev/null; then
         die "required range head $head is not available as a commit."
     fi
+    if [ -n "$RELEASE_RANGE_BASE" ]; then
+        git rev-list --reverse "$base..$head" "^$RELEASE_RANGE_BASE" ||
+            die "could not enumerate release range $base..$head excluding $RELEASE_RANGE_BASE."
+        return
+    fi
     git rev-list --reverse "$base..$head" ||
         die "could not enumerate commit range $base..$head."
 }
@@ -1048,6 +1066,9 @@ validate_ci_pr() {
         return 0
     fi
 
+    if [ "$base_ref" = "master" ]; then
+        RELEASE_RANGE_BASE=$base_sha
+    fi
     effective_base=$(effective_base_for_ci_pr "$base_sha" "$head_sha" "$base_ref")
     range_files=$(git diff --name-only --diff-filter=ACMR "$effective_base...$head_sha")
 
@@ -1152,6 +1173,10 @@ validate_ci_push() {
         return 0
     fi
 
+    if [ "$ref_name" = "master" ]; then
+        RELEASE_RANGE_BASE=$before_sha
+        before_sha=$(effective_base_for_ci_pr "$before_sha" "$after_sha" master)
+    fi
     if [ "$ref_name" = "develop" ] || [ "$ref_name" = "master" ]; then
         validate_ci_commit_range "$before_sha" "$after_sha"
         return 0

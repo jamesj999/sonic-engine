@@ -10,7 +10,9 @@ param(
 $ErrorActionPreference = "Stop"
 $script:GithubFileSizeLimitBytes = 100000000
 $script:TraceCompressionThresholdBytes = 1048576
-$script:ReleaseTrailerCutoverBase = "677447024a08db9e25f3461588d661c23ba26848"
+# Reachable counterpart of the original 677447024 cutover (identical tree).
+$script:ReleaseTrailerCutoverBase = "b5c56bb5687a6ba5dcbb000fc2c9cd1544395884"
+$script:ReleaseRangeBase = ""
 $script:ResourcePolicyCutover = "ccdd33edf4f9cd4a7937791f1d4c2f37cbeeb5e0"
 $script:RomLikeDenylistExtensions = @(".gen", ".smd", ".bin", ".sms", ".gg", ".32x")
 $script:EmptyTreeOid = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -964,12 +966,22 @@ function Validate-TipTreeLinks([string]$Tip) {
 }
 
 function Validate-ContentCommitList([string[]]$Commits, [string]$Tip) {
+    # Match the new-ref cutover when release merges carry pre-policy history.
+    $legacyCommits = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if (Test-GitSuccess @("merge-base", "--is-ancestor", $script:ResourcePolicyCutover, $Tip)) {
+        foreach ($legacy in (Invoke-GitLines @("rev-list", $script:ResourcePolicyCutover))) {
+            [void]$legacyCommits.Add($legacy)
+        }
+    }
     foreach ($commit in $Commits) {
         if ([string]::IsNullOrWhiteSpace($commit)) {
             continue
         }
         if (-not (Test-GitSuccess @("cat-file", "-e", "$commit^{commit}"))) {
             Fail "required pushed commit $commit is not available."
+        }
+        if ($legacyCommits.Contains($commit)) {
+            continue
         }
         Validate-CommitContent $commit
     }
@@ -984,6 +996,9 @@ function Get-CommitsInRange([string]$Base, [string]$Head) {
         Fail "required range head $Head is not available as a commit."
     }
     try {
+        if ($script:ReleaseRangeBase) {
+            return Invoke-GitLines @("rev-list", "--reverse", "$Base..$Head", "^$script:ReleaseRangeBase")
+        }
         return Invoke-GitLines @("rev-list", "--reverse", "$Base..$Head")
     } catch {
         Fail "could not enumerate commit range $Base..$Head."
@@ -1000,6 +1015,9 @@ function Validate-CiPr([string]$BaseSha, [string]$HeadSha, [string]$BaseRef, [st
         return
     }
 
+    if ($BaseRef -ceq "master") {
+        $script:ReleaseRangeBase = $BaseSha
+    }
     $effectiveBaseSha = Get-EffectiveBaseForCiPr $BaseSha $HeadSha $BaseRef $HeadRef
     $rangeFiles = Invoke-GitLines @("diff", "--name-only", "--diff-filter=ACMR", "$effectiveBaseSha...$HeadSha")
 
@@ -1123,6 +1141,10 @@ function Validate-CiPush(
         return
     }
 
+    if ($RefName -ceq "master") {
+        $script:ReleaseRangeBase = $BeforeSha
+        $BeforeSha = Get-EffectiveBaseForCiPr $BeforeSha $AfterSha "master" "develop"
+    }
     if ($RefName -ceq "develop" -or $RefName -ceq "master") {
         Validate-CiCommitRange $BeforeSha $AfterSha
         return
@@ -1140,7 +1162,8 @@ function Get-EffectiveBaseForCiPr([string]$BaseSha, [string]$HeadSha, [string]$B
     if (-not (Test-GitSuccess @("merge-base", "--is-ancestor", $script:ReleaseTrailerCutoverBase, $HeadSha))) {
         Fail "release trailer cutover baseline $script:ReleaseTrailerCutoverBase is not reachable from PR head $HeadSha."
     }
-    if (Test-GitSuccess @("merge-base", "--is-ancestor", $BaseSha, $script:ReleaseTrailerCutoverBase)) {
+    $baseCommon = Invoke-GitText @("merge-base", $BaseSha, $HeadSha)
+    if (Test-GitSuccess @("merge-base", "--is-ancestor", $baseCommon, $script:ReleaseTrailerCutoverBase)) {
         return $script:ReleaseTrailerCutoverBase
     }
     return $BaseSha
